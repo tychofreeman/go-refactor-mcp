@@ -1,0 +1,1 @@
+is a function; only local variables and constants can be inlined

@@ -1,10 +1,11 @@
 // Package refactorings is the registry of available refactorings. The CLI
-// and (later) the MCP server expose exactly this list as tools.
+// and the MCP server expose exactly this list as tools.
 package refactorings
 
 import (
 	"github.com/cwfreeman/gorefactor/internal/refactor"
 	"github.com/cwfreeman/gorefactor/internal/refactorings/extractvar"
+	"github.com/cwfreeman/gorefactor/internal/refactorings/inlinevar"
 	"github.com/cwfreeman/gorefactor/internal/refactorings/rename"
 )
 
@@ -13,7 +14,8 @@ func All() []refactor.Refactoring {
 	return []refactor.Refactoring{
 		rename.New(),
 		extractvar.New(),
-		// Next: inline_variable, invert_if, extract_function, ...
+		inlinevar.New(),
+		// Next: invert_if, extract_function, ...
 	}
 }
 

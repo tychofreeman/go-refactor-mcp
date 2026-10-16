@@ -1,0 +1,1 @@
+is the right operand of &&, which is only evaluated sometimes

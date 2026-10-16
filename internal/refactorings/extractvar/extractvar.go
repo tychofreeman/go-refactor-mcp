@@ -34,6 +34,7 @@ import (
 
 	"golang.org/x/tools/go/packages"
 
+	"github.com/cwfreeman/gorefactor/internal/analysis"
 	"github.com/cwfreeman/gorefactor/internal/edit"
 	"github.com/cwfreeman/gorefactor/internal/refactor"
 	"github.com/cwfreeman/gorefactor/internal/workspace"
@@ -90,9 +91,8 @@ type extraction struct {
 	src  []byte
 	name string
 
-	fn       ast.Node                  // outermost enclosing function (FuncDecl or FuncLit)
-	escaping map[*types.Var]bool       // locals whose address is taken or that closures capture
-	assigned map[*types.Var][]ast.Node // where each local is modified
+	fn ast.Node       // outermost enclosing function (FuncDecl or FuncLit)
+	fa *analysis.Func // facts about fn's locals
 }
 
 // Plan checks preconditions and computes the edits.
@@ -150,7 +150,7 @@ func checkName(name string) error {
 }
 
 func (x *extraction) plan(expr ast.Expr, all bool) (*refactor.Plan, error) {
-	path := pathTo(x.file, expr)
+	path := analysis.PathTo(x.file, expr)
 	if path == nil {
 		return nil, fmt.Errorf("internal error: expression not found in file syntax")
 	}
@@ -160,11 +160,11 @@ func (x *extraction) plan(expr ast.Expr, all bool) (*refactor.Plan, error) {
 	}
 	isConst := tv.Value != nil
 
-	x.fn = outermostFunc(path)
+	x.fn = analysis.OutermostFunc(path)
 	if x.fn == nil {
 		return nil, refactor.Refusef("%s is not inside a function body; only expressions in functions can be extracted", x.quote(expr))
 	}
-	x.analyzeFunc()
+	x.fa = analysis.AnalyzeFunc(x.info, x.fn)
 
 	stmt, container, cond, err := x.place(path)
 	if err != nil {
@@ -382,7 +382,7 @@ func (x *extraction) validate(expr ast.Expr, path []ast.Node) (types.TypeAndValu
 	if _, ok := tv.Type.(*types.Tuple); ok {
 		return tv, refactor.Refusef("%s returns multiple values; extract it with an explicit assignment instead", q)
 	}
-	if id := identOf(expr); id != nil {
+	if id := analysis.IdentOf(expr); id != nil {
 		if _, ok := x.info.Instances[id]; ok {
 			if _, isFunc := tv.Type.(*types.Signature); isFunc {
 				return tv, refactor.Refusef("%s is a generic function whose type arguments are inferred from the call; it cannot be stored without explicit type arguments", q)
@@ -445,11 +445,11 @@ func (x *extraction) usedAsVariable(path []ast.Node) string {
 			}
 			switch sel.Kind() {
 			case types.FieldVal:
-				if isPointer(x.info.TypeOf(p.X)) {
+				if analysis.IsPointer(x.info.TypeOf(p.X)) {
 					return "" // writes go through the pointer, which a copy shares
 				}
 			case types.MethodVal:
-				if ptrRecv(sel) && !isPointer(x.info.TypeOf(p.X)) && !types.IsInterface(x.info.TypeOf(p.X)) {
+				if analysis.PtrRecv(sel) && !analysis.IsPointer(x.info.TypeOf(p.X)) && !types.IsInterface(x.info.TypeOf(p.X)) {
 					return fmt.Sprintf("has its method %s called, which takes a pointer to it", sel.Obj().Name())
 				}
 				return ""
@@ -457,11 +457,11 @@ func (x *extraction) usedAsVariable(path []ast.Node) string {
 				return ""
 			}
 		case *ast.IndexExpr:
-			if p.X != cur || !isArray(x.info.TypeOf(p.X)) {
+			if p.X != cur || !analysis.IsArray(x.info.TypeOf(p.X)) {
 				return ""
 			}
 		case *ast.SliceExpr:
-			if p.X == cur && isArray(x.info.TypeOf(p.X)) {
+			if p.X == cur && analysis.IsArray(x.info.TypeOf(p.X)) {
 				return "is sliced, which refers to it rather than a copy"
 			}
 			return ""
@@ -610,7 +610,7 @@ func (x *extraction) blockScope(container ast.Node, path []ast.Node) *types.Scop
 // thing at the insertion point, e.g. not a variable declared in an if
 // statement's init.
 func (x *extraction) checkReferences(expr ast.Expr, stmt ast.Stmt, scope *types.Scope, insertPos token.Pos) error {
-	for _, id := range x.scopeRefs(expr) {
+	for _, id := range analysis.ScopeRefs(x.info, expr) {
 		obj := x.info.Uses[id]
 		if obj == nil || (obj.Pos() >= expr.Pos() && obj.Pos() < expr.End()) {
 			continue // declared inside the expression (function literal)
@@ -628,85 +628,19 @@ func (x *extraction) checkReferences(expr ast.Expr, stmt ast.Stmt, scope *types.
 	return nil
 }
 
-// scopeRefs lists the identifiers in expr that are resolved through
-// lexical scope: not field or method names after a dot, and not field keys
-// in struct literals.
-func (x *extraction) scopeRefs(expr ast.Expr) []*ast.Ident {
-	skip := map[*ast.Ident]bool{}
-	ast.Inspect(expr, func(n ast.Node) bool {
-		switch n := n.(type) {
-		case *ast.SelectorExpr:
-			skip[n.Sel] = true
-		case *ast.CompositeLit:
-			if isStruct(x.info.TypeOf(n)) {
-				for _, e := range n.Elts {
-					if kv, ok := e.(*ast.KeyValueExpr); ok {
-						if id, ok := kv.Key.(*ast.Ident); ok {
-							skip[id] = true
-						}
-					}
-				}
-			}
-		}
-		return true
-	})
-	var out []*ast.Ident
-	ast.Inspect(expr, func(n ast.Node) bool {
-		if id, ok := n.(*ast.Ident); ok && !skip[id] {
-			out = append(out, id)
-		}
-		return true
-	})
-	return out
-}
-
 // checkOrder refuses if hoisting the expression would make it run before
 // a call (or channel receive) that precedes it in the same statement,
 // unless the expression's value cannot depend on such calls.
 func (x *extraction) checkOrder(expr ast.Expr, stmt ast.Stmt) error {
-	var first ast.Node
-	ast.Inspect(stmt, func(n ast.Node) bool {
-		if n == nil || first != nil || n.Pos() >= expr.Pos() {
-			return false
-		}
-		if _, ok := n.(*ast.FuncLit); ok {
-			return false // defining a closure runs nothing
-		}
-		if n.End() <= expr.Pos() && x.hasEffect(n) {
-			first = n
-			return false
-		}
-		return true
-	})
+	first := analysis.FirstEffectBefore(x.info, stmt, expr.Pos(), nil)
 	if first == nil {
 		return nil
 	}
-	if culprit, ok := x.stable(expr, false); !ok {
+	if culprit, ok := x.fa.Stable(expr, false); !ok {
 		return refactor.Refusef("extracting %s would evaluate it before %s (at %s), which comes first in the statement and could change what %s computes; extract %s first, or choose another expression",
 			x.quote(expr), x.quote(first), x.ws.Position(first.Pos()), x.quote(culprit), x.quote(first))
 	}
 	return nil
-}
-
-// hasEffect reports whether n itself is a call with possible side effects
-// or a channel receive.
-func (x *extraction) hasEffect(n ast.Node) bool {
-	switch n := n.(type) {
-	case *ast.CallExpr:
-		if tv, ok := x.info.Types[n.Fun]; ok && tv.IsType() {
-			return false
-		}
-		if b, ok := x.info.Uses[identOf(n.Fun)].(*types.Builtin); ok {
-			switch b.Name() {
-			case "len", "cap", "min", "max", "real", "imag", "complex", "new", "make":
-				return false
-			}
-		}
-		return true
-	case *ast.UnaryExpr:
-		return n.Op == token.ARROW
-	}
-	return false
 }
 
 // checkGoto refuses when a goto jumps forward over the insertion point:
@@ -829,39 +763,13 @@ func needsExplicitType(x *extraction, expr ast.Expr, tv types.TypeAndValue) bool
 	return ok && b.Info()&types.IsUntyped != 0 && !types.Identical(types.Default(alone), tv.Type)
 }
 
-// typeString spells t as it must appear in this file, using the file's
-// import names.
+// typeString spells t as it must appear in this file.
 func (x *extraction) typeString(t types.Type) (string, error) {
-	names := map[string]string{}
-	for _, imp := range x.file.Imports {
-		path := strings.Trim(imp.Path.Value, `"`)
-		switch {
-		case imp.Name != nil && imp.Name.Name == "_":
-		case imp.Name != nil && imp.Name.Name == ".":
-			names[path] = ""
-		case imp.Name != nil:
-			names[path] = imp.Name.Name
-		default:
-			if p := x.pkg.Imports[path]; p != nil {
-				names[path] = p.Name
-			}
-		}
-	}
-	var missing string
-	s := types.TypeString(t, func(p *types.Package) string {
-		if p == x.pkg.Types {
-			return ""
-		}
-		if n, ok := names[p.Path()]; ok {
-			return n
-		}
-		missing = p.Path()
-		return p.Name()
-	})
+	str, missing := analysis.TypeString(t, x.file, x.pkg.Types, analysis.ImportMap(x.pkg.Types))
 	if missing != "" {
-		return "", refactor.Refusef("the new variable needs the explicit type %s, but this file does not import %q", s, missing)
+		return "", refactor.Refusef("the new variable needs the explicit type %s, but this file does not import %q", str, missing)
 	}
-	return s, nil
+	return str, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -871,16 +779,16 @@ func (x *extraction) typeString(t types.Type) (string, error) {
 // the end of its block, after checking that one shared value is
 // equivalent to recomputing it at each of them.
 func (x *extraction) occurrences(expr ast.Expr, tv types.TypeAndValue, container ast.Node, insertPos token.Pos) ([]ast.Expr, []string, error) {
-	if culprit, ok := x.stable(expr, true); !ok {
+	if culprit, ok := x.fa.Stable(expr, true); !ok {
 		return nil, nil, refactor.Refusef("all_occurrences requires an expression whose value cannot change between its occurrences, but %s could (it involves %s); extract a single occurrence instead (omit all_occurrences)",
 			x.quote(expr), x.quote(culprit))
 	}
-	for _, id := range x.scopeRefs(expr) {
+	for _, id := range analysis.ScopeRefs(x.info, expr) {
 		v, ok := x.info.Uses[id].(*types.Var)
 		if !ok {
 			continue
 		}
-		for _, w := range x.assigned[v] {
+		for _, w := range x.fa.Modified[v] {
 			if w.Pos() >= insertPos {
 				return nil, nil, refactor.Refusef("all_occurrences: %q is modified at %s, after the new variable would be declared, so later occurrences could have a different value; extract a single occurrence instead",
 					id.Name, x.ws.Position(w.Pos()))
@@ -895,7 +803,7 @@ func (x *extraction) occurrences(expr ast.Expr, tv types.TypeAndValue, container
 		if !ok || e.Pos() < insertPos || !x.same(e, expr, tv) {
 			return true
 		}
-		if why := x.usedAsVariable(pathTo(x.file, e)); why != "" {
+		if why := x.usedAsVariable(analysis.PathTo(x.file, e)); why != "" {
 			skippedWrites = append(skippedWrites, x.ws.Position(e.Pos()))
 			return false
 		}
@@ -928,7 +836,7 @@ func (x *extraction) occurrences(expr ast.Expr, tv types.TypeAndValue, container
 // laterCopies lists positions of other identical occurrences after the
 // insertion point that all_occurrences could replace, for a helpful note.
 func (x *extraction) laterCopies(expr ast.Expr, tv types.TypeAndValue, container ast.Node, insertPos token.Pos) []string {
-	if _, ok := x.stable(expr, true); !ok {
+	if _, ok := x.fa.Stable(expr, true); !ok {
 		return nil
 	}
 	var out []string
@@ -982,215 +890,6 @@ func idents(e ast.Expr) []*ast.Ident {
 }
 
 // ---------------------------------------------------------------------------
-// Stability: can the expression's value be affected by other code?
-
-// analyzeFunc records, for the enclosing function, which local variables
-// escape (address taken, captured by a closure, used as a pointer
-// receiver) and where each local is modified.
-func (x *extraction) analyzeFunc() {
-	x.escaping = map[*types.Var]bool{}
-	x.assigned = map[*types.Var][]ast.Node{}
-	mark := func(e ast.Expr) {
-		if v := x.rootVar(e); v != nil {
-			x.escaping[v] = true
-		}
-	}
-	modify := func(e ast.Expr) {
-		if v := x.rootVar(e); v != nil {
-			x.assigned[v] = append(x.assigned[v], e)
-		}
-	}
-	var lits []*ast.FuncLit
-	ast.Inspect(x.fn, func(n ast.Node) bool {
-		if n == nil {
-			return true
-		}
-		switch n := n.(type) {
-		case *ast.FuncLit:
-			lits = append(lits, n)
-		case *ast.UnaryExpr:
-			if n.Op == token.AND {
-				mark(n.X)
-			}
-		case *ast.SliceExpr:
-			if isArray(x.info.TypeOf(n.X)) {
-				mark(n.X)
-			}
-		case *ast.SelectorExpr:
-			if sel := x.info.Selections[n]; sel != nil && sel.Kind() == types.MethodVal && ptrRecv(sel) && !isPointer(x.info.TypeOf(n.X)) {
-				mark(n.X)
-			}
-		case *ast.AssignStmt:
-			for _, l := range n.Lhs {
-				if id, ok := l.(*ast.Ident); ok && n.Tok == token.DEFINE && x.info.Defs[id] != nil {
-					continue // a new variable, not a modification
-				}
-				modify(l)
-			}
-		case *ast.IncDecStmt:
-			modify(n.X)
-		case *ast.RangeStmt:
-			if n.Tok == token.ASSIGN {
-				if n.Key != nil {
-					modify(n.Key)
-				}
-				if n.Value != nil {
-					modify(n.Value)
-				}
-			}
-		}
-		return true
-	})
-	// A local used inside a closure but declared outside it is shared with
-	// the closure, which may run at any time.
-	for _, lit := range lits {
-		ast.Inspect(lit.Body, func(n ast.Node) bool {
-			if id, ok := n.(*ast.Ident); ok {
-				if v, ok := x.info.Uses[id].(*types.Var); ok && x.isLocal(v) && (v.Pos() < lit.Pos() || v.Pos() >= lit.End()) {
-					x.escaping[v] = true
-				}
-			}
-			return true
-		})
-	}
-}
-
-// rootVar returns the local variable that e is part of (through fields of
-// struct values and elements of arrays), or nil.
-func (x *extraction) rootVar(e ast.Expr) *types.Var {
-	switch e := ast.Unparen(e).(type) {
-	case *ast.Ident:
-		if v, ok := x.info.ObjectOf(e).(*types.Var); ok && x.isLocal(v) {
-			return v
-		}
-	case *ast.SelectorExpr:
-		if sel := x.info.Selections[e]; sel != nil && sel.Kind() == types.FieldVal && !isPointer(x.info.TypeOf(e.X)) {
-			return x.rootVar(e.X)
-		}
-	case *ast.IndexExpr:
-		if isArray(x.info.TypeOf(e.X)) {
-			return x.rootVar(e.X)
-		}
-	}
-	return nil
-}
-
-func (x *extraction) isLocal(v *types.Var) bool {
-	return !v.IsField() && v.Parent() != nil && v.Pkg() != nil && v.Parent() != v.Pkg().Scope() &&
-		v.Pos() >= x.fn.Pos() && v.Pos() < x.fn.End()
-}
-
-// stable reports whether e's value depends only on constants, functions
-// and local variables that no other code can reach (no calls, no pointer
-// or slice/map element reads, no globals, no escaping locals). With
-// sharing, e must also not create a new reference value (a slice or map
-// literal, say), because one shared value would then differ from many
-// fresh ones. It returns the first offending sub-expression.
-func (x *extraction) stable(e ast.Expr, sharing bool) (ast.Node, bool) {
-	ok := func(es ...ast.Expr) (ast.Node, bool) {
-		for _, s := range es {
-			if s == nil {
-				continue
-			}
-			if c, good := x.stable(s, sharing); !good {
-				return c, false
-			}
-		}
-		return nil, true
-	}
-	switch e := e.(type) {
-	case *ast.BasicLit:
-		return nil, true
-	case *ast.Ident:
-		switch o := x.info.Uses[e].(type) {
-		case *types.Const, *types.Nil, *types.Func:
-			return nil, true
-		case *types.Var:
-			if x.isLocal(o) && !x.escaping[o] {
-				return nil, true
-			}
-		}
-		return e, false
-	case *ast.ParenExpr:
-		return ok(e.X)
-	case *ast.UnaryExpr:
-		switch e.Op {
-		case token.ADD, token.SUB, token.NOT, token.XOR:
-			return ok(e.X)
-		}
-		return e, false
-	case *ast.BinaryExpr:
-		return ok(e.X, e.Y)
-	case *ast.SelectorExpr:
-		sel := x.info.Selections[e]
-		if sel == nil { // qualified identifier
-			switch x.info.Uses[e.Sel].(type) {
-			case *types.Const, *types.Func:
-				return nil, true
-			}
-			return e, false
-		}
-		if sel.Kind() == types.FieldVal && !sel.Indirect() && !isPointer(x.info.TypeOf(e.X)) {
-			return ok(e.X)
-		}
-		return e, false
-	case *ast.IndexExpr:
-		if t := x.info.TypeOf(e.X); isArray(t) || isString(t) {
-			return ok(e.X, e.Index)
-		}
-		return e, false
-	case *ast.SliceExpr:
-		if t := x.info.TypeOf(e.X); isString(t) || isSlice(t) {
-			return ok(e.X, e.Low, e.High, e.Max)
-		}
-		return e, false
-	case *ast.TypeAssertExpr:
-		if e.Type != nil {
-			return ok(e.X)
-		}
-		return e, false
-	case *ast.CallExpr:
-		if tv, isConv := x.info.Types[e.Fun]; isConv && tv.IsType() {
-			if sharing && isReference(x.info.TypeOf(e)) {
-				return e, false
-			}
-			return ok(e.Args...)
-		}
-		if b, isBuiltin := x.info.Uses[identOf(e.Fun)].(*types.Builtin); isBuiltin {
-			switch b.Name() {
-			case "len", "cap":
-				if len(e.Args) == 1 && !isMapOrChan(x.info.TypeOf(e.Args[0])) {
-					return ok(e.Args...)
-				}
-			case "min", "max", "real", "imag", "complex":
-				return ok(e.Args...)
-			}
-		}
-		return e, false
-	case *ast.CompositeLit:
-		t := x.info.TypeOf(e)
-		if sharing && !isStruct(t) && !isArray(t) {
-			return e, false
-		}
-		for _, el := range e.Elts {
-			if kv, isKV := el.(*ast.KeyValueExpr); isKV {
-				if !isStruct(t) {
-					if c, good := ok(kv.Key); !good {
-						return c, false
-					}
-				}
-				el = kv.Value
-			}
-			if c, good := ok(el); !good {
-				return c, false
-			}
-		}
-		return nil, true
-	}
-	return e, false
-}
-
-// ---------------------------------------------------------------------------
 // Helpers
 
 func (x *extraction) off(p token.Pos) int { return x.tf.Offset(p) }
@@ -1217,36 +916,10 @@ func (x *extraction) indentOf(p token.Pos) string {
 	return string(ws)
 }
 
-// pathTo returns the nodes enclosing target, innermost (target) first.
-func pathTo(root, target ast.Node) []ast.Node {
-	var stack, found []ast.Node
-	ast.Inspect(root, func(n ast.Node) bool {
-		if found != nil {
-			return false
-		}
-		if n == nil {
-			stack = stack[:len(stack)-1]
-			return false
-		}
-		if n.Pos() > target.Pos() || n.End() < target.End() {
-			return false
-		}
-		stack = append(stack, n)
-		if n == target {
-			for i := len(stack) - 1; i >= 0; i-- {
-				found = append(found, stack[i])
-			}
-			return false
-		}
-		return true
-	})
-	return found
-}
-
 // widenParens returns the outermost parenthesized expression whose only
 // content is e, or e itself.
 func (x *extraction) widenParens(e ast.Expr) ast.Expr {
-	path := pathTo(x.file, e)
+	path := analysis.PathTo(x.file, e)
 	out := e
 	for i := 1; i < len(path); i++ {
 		pe, ok := path[i].(*ast.ParenExpr)
@@ -1256,91 +929,6 @@ func (x *extraction) widenParens(e ast.Expr) ast.Expr {
 		out = pe
 	}
 	return out
-}
-
-func outermostFunc(path []ast.Node) ast.Node {
-	var fn ast.Node
-	for _, n := range path {
-		switch n.(type) {
-		case *ast.FuncDecl, *ast.FuncLit:
-			fn = n
-		}
-	}
-	return fn
-}
-
-func identOf(e ast.Expr) *ast.Ident {
-	switch e := ast.Unparen(e).(type) {
-	case *ast.Ident:
-		return e
-	case *ast.SelectorExpr:
-		return e.Sel
-	case *ast.IndexExpr:
-		return identOf(e.X)
-	case *ast.IndexListExpr:
-		return identOf(e.X)
-	}
-	return nil
-}
-
-func ptrRecv(sel *types.Selection) bool {
-	fn, ok := sel.Obj().(*types.Func)
-	if !ok {
-		return false
-	}
-	recv := fn.Signature().Recv()
-	return recv != nil && isPointer(recv.Type())
-}
-
-func isPointer(t types.Type) bool {
-	_, ok := under(t).(*types.Pointer)
-	return ok
-}
-
-func isArray(t types.Type) bool {
-	_, ok := under(t).(*types.Array)
-	return ok
-}
-
-func isSlice(t types.Type) bool {
-	_, ok := under(t).(*types.Slice)
-	return ok
-}
-
-func isStruct(t types.Type) bool {
-	if p, ok := under(t).(*types.Pointer); ok {
-		t = p.Elem()
-	}
-	_, ok := under(t).(*types.Struct)
-	return ok
-}
-
-func isString(t types.Type) bool {
-	b, ok := under(t).(*types.Basic)
-	return ok && b.Info()&types.IsString != 0
-}
-
-func isMapOrChan(t types.Type) bool {
-	switch under(t).(type) {
-	case *types.Map, *types.Chan:
-		return true
-	}
-	return false
-}
-
-func isReference(t types.Type) bool {
-	switch under(t).(type) {
-	case *types.Slice, *types.Map, *types.Chan, *types.Pointer, *types.Signature:
-		return true
-	}
-	return false
-}
-
-func under(t types.Type) types.Type {
-	if t == nil {
-		return nil
-	}
-	return t.Underlying()
 }
 
 func kindOf(o types.Object) string {

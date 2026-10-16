@@ -21,10 +21,9 @@ model reads before choosing the next refactoring. That loop is the iteration.
 - **Step 2:** MCP server (`cmd/refactor-mcp`) with `rename`, `inspect`,
   `undo` and `check`, usable from Claude Code.
 - **Step 3 (in progress):** refactorings that simplify code.
-  `extract_variable` is done.
+  `extract_variable` and `inline_variable` are done.
 
-Next: `inline_variable`, `invert_if` (guard clauses), `extract_function`;
-then an Ollama loop.
+Next: `invert_if` (guard clauses), `extract_function`; then an Ollama loop.
 
 ## Layout
 
@@ -32,6 +31,7 @@ then an Ollama loop.
 cmd/refactor/                 CLI: one refactoring step per invocation
 cmd/refactor-mcp/             MCP server (stdio) for Claude Code and other MCP clients
 internal/
+  analysis/                   shared facts: side effects, stable expressions, escaping/modified locals
   edit/                       TextEdit/FileEdit, Apply, unified diff (Myers)
   inspect/                    module overview, file outline + complexity, numbered source
   mcpserver/                  MCP tools: one per refactoring, plus inspect, undo, check
@@ -42,7 +42,8 @@ internal/
   refactorings/
     registry.go               the list of tools
     rename/                   rename + testdata/<case>/{in,out,args.json,refused.txt}
-    extractvar/               extract_variable + testdata
+    extractvar/               extract_variable + testdata + opt-in stress test
+    inlinevar/                inline_variable + testdata + opt-in stress test
 ```
 
 ## Getting started
@@ -87,7 +88,7 @@ Tools:
 | Tool | What it does |
 |---|---|
 | `inspect` | No args: module overview. `file`: outline (line ranges, complexity, nesting) + numbered source. `function` or `start_line`/`end_line` to narrow. |
-| `rename`, `extract_variable` (and every future refactoring) | Applies one step; returns `APPLIED` + diff, or `REFUSED` + reason (nothing changed). |
+| `rename`, `extract_variable`, `inline_variable` (and every future refactoring) | Applies one step; returns `APPLIED` + diff, or `REFUSED` + reason (nothing changed). |
 | `undo` | Reverts the last applied step; repeatable. |
 | `check` | Type-check status; `run_tests: true` also runs `go test`. |
 
@@ -108,6 +109,7 @@ refactor -C path/to/module -n rename file=main.go line=7 name=t new_name=total  
 refactor -C path/to/module    rename file=main.go line=7 name=t new_name=total   # apply
 refactor rename '{"file":"main.go","line":7,"name":"t","new_name":"total"}'      # JSON args, as a model sends them
 refactor -n extract_variable file=main.go line=12 expression='qty*unit' name=subtotal
+refactor -n inline_variable file=main.go line=12 name=subtotal
 ```
 
 Exit status: `0` applied/previewed, `2` refused, `1` error.
@@ -213,6 +215,67 @@ same statement would panic, which panic happens first can change (e.g. a
 division by zero instead of a nil dereference). Non-panicking behavior is
 preserved.
 
+## Inline variable: what it checks
+
+`inline_variable` replaces every use of a local variable or constant with
+its initializer and deletes the declaration (`x := e`, `var x [T] = e`,
+`const x [T] = e`, also from an `if`/`switch` header or a grouped `var (...)`).
+Identify it by `file`, `line` and `name`, at the declaration or any use.
+
+What it produces:
+
+- parentheses where grouping requires them: `sum := w + h; sum * 2` →
+  `(w + h) * 2`; `c - d` with `d := a - b` → `c - (a - b)`; a composite literal
+  in an `if` header → `if p == (Pt{0, 0})`;
+- a conversion where the variable's type differs from the expression's own:
+  `var scale float64 = 1; scale / 3` → `float64(1) / 3` (not integer
+  division), `n := 7; n / 2.0` → `int(7) / 2.0`,
+  `var r io.Reader = os.Stdin; r == nil` → `io.Reader(os.Stdin) == nil`; no
+  conversion where the context already gives the type (`io.Copy(w, os.Stdin)`).
+
+Refused (with an explanation):
+
+- the variable is assigned anywhere, its address is taken, it is sliced, or a
+  pointer-receiver method is called on it;
+- its initializer is not stable (it has calls, or reads globals, pointers,
+  slice/map elements or escaping variables) and the variable is used more than
+  once, or its one use is not evaluated exactly once right after the
+  declaration: inside a loop or closure, in a nested block, after `&&`/`||`, in
+  an `else if`, or with a call, write or `return` in between;
+- a variable the initializer reads is modified before a use (or anywhere in a
+  loop or closure that contains a use but not the declaration);
+- a name in the initializer would refer to something else at a use;
+- a constant would land somewhere Go treats constants differently: a
+  conversion that overflows (`int8(x)` with `x := 200`) or a division by 0;
+- parameters, range and type-switch variables, `for` headers, variables
+  declared together (`a, b := ...`), without an initializer, at package level,
+  or never used.
+
+A comment directly above the removed declaration is kept, and the result notes
+it so the model can decide whether to remove it.
+
+## Testing
+
+`go test ./...` runs the unit and golden tests. Three opt-in tests try the
+refactorings on real code; each modifies the module it is pointed at, so use
+a copy:
+
+```sh
+cp -r path/to/module /tmp/target
+# extract_variable on 400 random expressions:
+STRESS_DIR=/tmp/target go test ./internal/refactorings/extractvar -run TestStress -v -timeout 1h
+# inline_variable on every local variable:
+STRESS_DIR=/tmp/target STRESS_N=100000 go test ./internal/refactorings/inlinevar -run TestStress -v -timeout 1h
+# extract then inline back; the file must come back unchanged:
+STRESS_DIR=/tmp/target go test ./internal/refactorings/inlinevar -run TestRoundTrip -v -timeout 1h
+```
+
+Any rolled-back change is reported as a bug (a missing precondition). With
+`STRESS_TESTS=1` each applied change is also checked with the package's own
+`go test`, which catches behavior changes. `STRESS_N` and `STRESS_SEED` pick
+the sample; `STRESS_WORK` sets `GOWORK` for loading the target (`off` for a
+standalone module).
+
 ## Adding a refactoring
 
 1. Create `internal/refactorings/<name>/` implementing `refactor.Refactoring`.
@@ -222,6 +285,7 @@ preserved.
    `go.mod`), `args.json`, and either `out/` or `refused.txt`. Generate `out/`
    with `go test ./internal/refactorings/<name>/ -update` and review the diff.
    The harness also checks that undo restores `in/` exactly.
+   Then run a stress test against real code (see Testing).
 3. Register it in `internal/refactorings/registry.go`. It then appears as an
    MCP tool (named `Name()`, described by `Description()`) and in the CLI
    automatically.
