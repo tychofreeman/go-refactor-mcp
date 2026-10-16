@@ -30,9 +30,18 @@ import (
 
 var update = flag.Bool("update", false, "rewrite golden out/ directories")
 
-// Run executes every case under dir against r.
+// Run executes every case under dir against r, in parallel.
+//
+// After every applied refactoring, and again after undoing it, the
+// incrementally updated workspace is compared with a fresh load of the
+// same files: any difference means the incremental update is wrong. The
+// comparison is skipped with -short.
 func Run(t *testing.T, r refactor.Refactoring, dir string) {
 	t.Helper()
+	// Test modules are self-contained; don't let a developer's go.work leak
+	// in. Set for the whole process because the cases run in parallel, and
+	// t.Setenv cannot be combined with t.Parallel.
+	os.Setenv("GOWORK", "off")
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		t.Fatal(err)
@@ -44,7 +53,10 @@ func Run(t *testing.T, r refactor.Refactoring, dir string) {
 		}
 		ran++
 		caseDir := filepath.Join(dir, e.Name())
-		t.Run(e.Name(), func(t *testing.T) { runCase(t, r, caseDir) })
+		t.Run(e.Name(), func(t *testing.T) {
+			t.Parallel()
+			runCase(t, r, caseDir)
+		})
 	}
 	if ran == 0 {
 		t.Fatalf("no test cases in %s", dir)
@@ -52,9 +64,6 @@ func Run(t *testing.T, r refactor.Refactoring, dir string) {
 }
 
 func runCase(t *testing.T, r refactor.Refactoring, caseDir string) {
-	// Test modules are self-contained; don't let a developer's go.work leak in.
-	t.Setenv("GOWORK", "off")
-
 	args, err := os.ReadFile(filepath.Join(caseDir, "args.json"))
 	if err != nil {
 		t.Fatal(err)
@@ -103,12 +112,32 @@ func runCase(t *testing.T, r refactor.Refactoring, caseDir string) {
 		return
 	}
 	compareTrees(t, outDir, tmp)
+	matchesFreshLoad(t, ws, "after applying")
 
 	// Every applied step must be undoable back to the exact input.
 	if _, err := ws.Undo(); err != nil {
 		t.Fatalf("undo: %v", err)
 	}
 	compareTrees(t, inDir, tmp)
+	matchesFreshLoad(t, ws, "after undoing")
+}
+
+// matchesFreshLoad fails the test if the (incrementally updated) workspace
+// differs from a fresh load of the same files. It is skipped with -short,
+// since each comparison costs a full load.
+func matchesFreshLoad(t *testing.T, ws *workspace.Workspace, when string) {
+	t.Helper()
+	if testing.Short() {
+		return
+	}
+	fresh, err := workspace.Load(ws.Root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if diffs := workspace.Compare(ws, fresh, 15); len(diffs) > 0 {
+		t.Errorf("%s, the workspace differs from a fresh load (full loads %d, incremental updates %d):\n  %s",
+			when, ws.FullLoads, ws.IncrementalUpdates, strings.Join(diffs, "\n  "))
+	}
 }
 
 func readTree(t *testing.T, root string) map[string][]byte {

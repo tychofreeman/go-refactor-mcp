@@ -277,7 +277,14 @@ it so the model can decide whether to remove it.
 
 ## Testing
 
-`go test ./...` runs the unit and golden tests. Three opt-in tests try the
+`go test ./...` runs the unit and golden tests. The golden cases run in
+parallel, and after each applied refactoring and each undo they compare the
+incrementally updated workspace with a fresh load. `go test -short ./...`
+skips that comparison for a faster local loop; CI always runs it.
+`go test -bench . ./internal/workspace` measures an edit-and-undo cycle against
+a full load.
+
+Three opt-in tests try the
 refactorings on real code; each modifies the module it is pointed at, so use
 a copy:
 
