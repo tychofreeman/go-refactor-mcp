@@ -216,6 +216,10 @@ change behavior:
 - it would move ahead of a call or channel receive earlier in the same
   statement (`read() - read2()`), unless its value depends only on constants
   and local variables that nothing else can reach;
+- it would move ahead of an assignment or `++`/`--` earlier in the same
+  statement that could change its value (`!ok` in
+  `if v, ok = x.(T); !ok`): with only unreachable local variables, when
+  one of them is assigned; otherwise always;
 - it is assigned to, has its address taken, is sliced (arrays), or has a
   pointer-receiver method called on it: a new variable would be a copy;
 - it uses a variable declared by the statement itself (`if v := f(); v > 3`);

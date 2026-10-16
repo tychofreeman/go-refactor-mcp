@@ -1,0 +1,1 @@
+would evaluate it before `g = 2`
