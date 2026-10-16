@@ -55,4 +55,12 @@ jobs:
         run: go vet ./...
 
       - name: Test
-        run: go test -race ./...
+        run: |
+          set -o pipefail
+          if ! go test -race ./... 2>&1 | tee test.log; then
+            # Report the failures as an annotation on the PR.
+            failures=$(grep -E -A 25 -e '^--- FAIL' -e '^panic:' -e '^FAIL' test.log | head -150)
+            encoded=$(printf '%s' "$failures" | sed -e 's/%/%25/g' -e 's/\r/%0D/g' | awk 'BEGIN { ORS = "%0A" } 1')
+            echo "::error title=Tests failed on Go ${{ matrix.go }}::${encoded}"
+            exit 1
+          fi
