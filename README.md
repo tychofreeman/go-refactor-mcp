@@ -281,6 +281,9 @@ it so the model can decide whether to remove it.
 parallel, and after each applied refactoring and each undo they compare the
 incrementally updated workspace with a fresh load. `go test -short ./...`
 skips that comparison for a faster local loop; CI always runs it.
+`TestGoldenRoundTrip` checks that `inline_variable` undoes `extract_variable`:
+for every applying `extract_variable` golden case, extracting and then
+inlining the new variable must give back the original code (after gofmt).
 `go test -bench . ./internal/workspace` measures an edit-and-undo cycle against
 a full load.
 
