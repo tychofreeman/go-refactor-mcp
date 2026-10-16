@@ -32,6 +32,7 @@ import (
 	"go/types"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -108,6 +109,9 @@ type extraction struct {
 	exitValues []string // errorExit: the non-error values the early returns return
 
 	toks []tok // the file's tokens, scanned once
+
+	imported map[string]string // import path -> name in this file
+	added    map[string]string // imports to add: path -> name
 }
 
 // Plan checks preconditions and computes the edits.
@@ -936,12 +940,181 @@ func (x *extraction) typeString(name string, t types.Type) (string, error) {
 		return "", refactor.Refusef("%s uses %s %s declared inside %s; it cannot be named in a new package-level function",
 			what, kindOf(bad), bad.Name(), x.enclosingName())
 	}
-	s, missing := analysis.TypeString(t, x.file, x.pkg.Types, analysis.ImportMap(x.pkg.Types))
-	if missing != "" {
-		return "", refactor.Refusef("%s needs package %q; %s does not import it, and adding imports is not supported yet",
-			what, missing, x.rel)
+	var refusal error
+	s := types.TypeString(t, func(p *types.Package) string {
+		n, err := x.qualifier(p)
+		if err != nil && refusal == nil {
+			refusal = refactor.Refusef("%s needs package %q, %s", what, p.Path(), err)
+		}
+		return n
+	})
+	return s, refusal
+}
+
+// qualifiers returns the package names t is spelled with in this file
+// (after typeString has checked it).
+func (x *extraction) qualifiers(t types.Type) []string {
+	var out []string
+	types.TypeString(t, func(p *types.Package) string {
+		n, _ := x.qualifier(p)
+		if n != "" {
+			out = append(out, n)
+		}
+		return n
+	})
+	return out
+}
+
+// qualifier returns the name that refers to package p in this file,
+// adding an import of p if the file has none. The error says why p cannot
+// be imported.
+func (x *extraction) qualifier(p *types.Package) (string, error) {
+	if p == x.pkg.Types {
+		return "", nil
 	}
-	return s, nil
+	if x.imported == nil {
+		x.imported = map[string]string{}
+		for _, imp := range x.file.Imports {
+			path := strings.Trim(imp.Path.Value, `"`)
+			switch {
+			case imp.Name != nil && imp.Name.Name == "_":
+			case imp.Name != nil:
+				x.imported[path] = imp.Name.Name // "." for a dot import
+			default:
+				if q := analysis.ImportMap(x.pkg.Types)[path]; q != nil {
+					x.imported[path] = q.Name()
+				}
+			}
+		}
+		x.added = map[string]string{}
+	}
+	if n, ok := x.imported[p.Path()]; ok {
+		if n == "." {
+			return "", nil
+		}
+		return n, nil
+	}
+	if n, ok := x.added[p.Path()]; ok {
+		return n, nil
+	}
+	if reason := x.unimportable(p); reason != "" {
+		return p.Name(), fmt.Errorf("%s", reason)
+	}
+	name := p.Name()
+	for i := 2; !x.freeImportName(name); i++ {
+		name = fmt.Sprintf("%s%d", p.Name(), i)
+	}
+	x.added[p.Path()] = name
+	return name, nil
+}
+
+// unimportable explains why this file cannot import p, or returns "".
+func (x *extraction) unimportable(p *types.Package) string {
+	path := p.Path()
+	if p.Name() == "main" {
+		return "which is a main package and cannot be imported"
+	}
+	if i := strings.LastIndex(path, "/internal/"); i >= 0 || strings.HasSuffix(path, "/internal") || strings.HasPrefix(path, "internal/") || path == "internal" {
+		parent := ""
+		switch {
+		case i >= 0:
+			parent = path[:i]
+		case strings.HasSuffix(path, "/internal"):
+			parent = strings.TrimSuffix(path, "/internal")
+		}
+		if parent != "" && x.pkg.PkgPath != parent && !strings.HasPrefix(x.pkg.PkgPath, parent+"/") {
+			return fmt.Sprintf("which is internal to %s and cannot be imported from %s", parent, x.pkg.PkgPath)
+		}
+	}
+	return ""
+}
+
+// freeImportName reports whether a new import can use name in this file:
+// no import, package-level declaration (in any variant of the package) or
+// predeclared identifier uses it.
+func (x *extraction) freeImportName(name string) bool {
+	if types.Universe.Lookup(name) != nil {
+		return false
+	}
+	if s := x.info.Scopes[x.file]; s != nil && s.Lookup(name) != nil {
+		return false
+	}
+	for _, n := range x.added {
+		if n == name {
+			return false
+		}
+	}
+	for _, p := range x.ws.Pkgs {
+		if p.PkgPath == x.pkg.PkgPath && p.Types != nil && p.Types.Scope().Lookup(name) != nil {
+			return false
+		}
+	}
+	return true
+}
+
+// importEdits adds the imports that typeString needed.
+func (x *extraction) importEdits() []edit.TextEdit {
+	if len(x.added) == 0 {
+		return nil
+	}
+	var paths []string
+	for p := range x.added {
+		paths = append(paths, p)
+	}
+	sort.Strings(paths)
+	var specs []string
+	for _, p := range paths {
+		spec := strconv.Quote(p)
+		if n := x.added[p]; n != pathBase(p) {
+			spec = n + " " + spec
+		}
+		specs = append(specs, spec)
+	}
+	var group, single *ast.GenDecl
+	for _, d := range x.file.Decls {
+		if g, ok := d.(*ast.GenDecl); ok && g.Tok == token.IMPORT {
+			if g.Lparen.IsValid() && group == nil {
+				group = g
+			} else if !g.Lparen.IsValid() && single == nil {
+				single = g
+			}
+		}
+	}
+	switch {
+	case group != nil:
+		at := x.off(group.Rparen)
+		start := x.off(x.tf.LineStart(x.line(group.Rparen)))
+		text := ""
+		for _, sp := range specs {
+			text += "\t" + sp + "\n"
+		}
+		if strings.TrimSpace(string(x.src[start:at])) != "" {
+			text = "\n" + text // `"fmt")` on one line
+		}
+		return []edit.TextEdit{{Start: at, End: at, NewText: text}}
+	case single != nil:
+		text := "import (\n\t" + string(x.src[x.off(single.Specs[0].Pos()):x.off(single.Specs[0].End())]) + "\n"
+		for _, sp := range specs {
+			text += "\t" + sp + "\n"
+		}
+		return []edit.TextEdit{{Start: x.off(single.Pos()), End: x.off(single.End()), NewText: text + ")"}}
+	default:
+		at := x.off(x.file.Name.End())
+		text := "\n\nimport " + specs[0]
+		if len(specs) > 1 {
+			text = "\n\nimport (\n\t" + strings.Join(specs, "\n\t") + "\n)"
+		}
+		return []edit.TextEdit{{Start: at, End: at, NewText: text}}
+	}
+}
+
+// pathBase returns the last element of an import path, the name a
+// package is usually imported as.
+func pathBase(path string) string {
+	if i := strings.LastIndexByte(path, '/'); i >= 0 {
+		return path[i+1:]
+	}
+	return path
 }
 
 // localTypeIn returns a type name in t that cannot be written outside the
@@ -1109,6 +1282,9 @@ func (x *extraction) plan() (*refactor.Plan, error) {
 	}
 	_, _, sig := x.enclosingFunc()
 	indent := x.indentOf(x.stmts[0].Pos())
+	if err := x.checkSpelledTypes(); err != nil {
+		return nil, err
+	}
 
 	// The new function's results, and what the call site does with them.
 	var results []string
@@ -1225,6 +1401,7 @@ func (x *extraction) plan() (*refactor.Plan, error) {
 		{Start: x.start, End: x.end, NewText: site.String()},
 		{Start: at, End: at, NewText: fn.String()},
 	}
+	edits = append(edits, x.importEdits()...)
 
 	var notes []string
 	if len(f.params) > 0 || len(f.results) > 0 {
@@ -1235,6 +1412,14 @@ func (x *extraction) plan() (*refactor.Plan, error) {
 			return strings.Join(names(vs), ", ")
 		}
 		notes = append(notes, fmt.Sprintf("parameters: %s; results: %s", describe(f.params), describe(f.results)))
+	}
+	if len(x.added) > 0 {
+		var imps []string
+		for p := range x.added {
+			imps = append(imps, strconv.Quote(p))
+		}
+		sort.Strings(imps)
+		notes = append(notes, "added import "+strings.Join(imps, ", ")+" for the new function's types")
 	}
 	switch x.mode {
 	case terminal:
@@ -1253,6 +1438,71 @@ func (x *extraction) plan() (*refactor.Plan, error) {
 		Edits:   []edit.FileEdit{{Path: x.path, Edits: edits}},
 		Notes:   notes,
 	}, nil
+}
+
+// checkSpelledTypes refuses when a type written out in the function body
+// or at the call site would name a package through a name that something
+// else hides there: a parameter of the new function, a name the selected
+// statements declare, or a local of the enclosing function at the call
+// site. (In the new function's signature, package names cannot be hidden.)
+func (x *extraction) checkSpelledTypes() error {
+	f := x.flow
+	inBody := map[string]string{} // names visible in the new function's body
+	for _, v := range f.params {
+		inBody[v.Name()] = "parameter"
+	}
+	for id, obj := range x.info.Defs {
+		if obj != nil && x.inSelection(id) {
+			inBody[id.Name] = "name declared by the selected statements"
+		}
+	}
+	check := func(v *types.Var) error {
+		for _, q := range x.qualifiers(v.Type()) {
+			if kind, ok := inBody[q]; ok {
+				ts, _ := x.typeString("", v.Type())
+				return refactor.Refusef("the new function would declare %s with type %s, but in its body %s is a %s; rename it first",
+					v.Name(), ts, q, kind)
+			}
+		}
+		return nil
+	}
+	for _, v := range f.locals {
+		if err := check(v); err != nil {
+			return err
+		}
+	}
+	if x.mode == errorExit {
+		for _, v := range f.results {
+			if err := check(v); err != nil {
+				return err
+			}
+		}
+	}
+	// The call site declares the results it introduces with var when some
+	// results already exist, or when it also declares an error variable.
+	declares := x.mode == errorExit // var err error, and var for the others
+	for _, v := range f.results {
+		declares = declares || !f.fresh[v] // mixed results: var for the fresh ones
+	}
+	scope := x.innermostScope(x.stmts[0].Pos())
+	for _, v := range f.results {
+		if !declares || !f.fresh[v] || scope == nil {
+			continue
+		}
+		for _, q := range x.qualifiers(v.Type()) {
+			_, o := scope.LookupParent(q, x.stmts[0].Pos())
+			if _, isPkg := o.(*types.PkgName); isPkg {
+				continue
+			}
+			if o == nil {
+				continue // a new import
+			}
+			ts, _ := x.typeString("", v.Type())
+			return refactor.Refusef("the call site would declare %s with type %s, but there %s refers to the %s declared at line %d; rename it first",
+				v.Name(), ts, q, kindOf(o), x.line(o.Pos()))
+		}
+	}
+	return nil
 }
 
 // selectedText returns the selected lines with edits (at file offsets
