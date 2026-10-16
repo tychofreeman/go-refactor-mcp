@@ -337,17 +337,22 @@ func (x *extraction) errorName(results []*types.Var) string {
 }
 
 // rewriteExits returns the edits that turn each early return into
-// `return <zero results>, <error>` in the new function.
+// `return <zero results>, <error>` in the new function. It replaces the
+// values before the error and leaves the error expression itself alone,
+// so that other edits (pointer parameters) can still apply inside it.
 func (x *extraction) rewriteExits(zeros []string) []edit.TextEdit {
 	var edits []edit.TextEdit
 	for _, r := range x.returns {
 		n := len(r.Results)
-		vals := append(append([]string(nil), zeros...), string(x.src[x.off(r.Results[n-1].Pos()):x.off(r.Results[n-1].End())]))
-		edits = append(edits, edit.TextEdit{
-			Start:   x.off(r.Results[0].Pos()),
-			End:     x.off(r.Results[n-1].End()),
-			NewText: strings.Join(vals, ", "),
-		})
+		text := strings.Join(zeros, ", ")
+		if text != "" {
+			text += ", "
+		}
+		start, end := x.off(r.Results[0].Pos()), x.off(r.Results[n-1].Pos())
+		if start == end && text == "" {
+			continue
+		}
+		edits = append(edits, edit.TextEdit{Start: start, End: end, NewText: text})
 	}
 	return edits
 }
