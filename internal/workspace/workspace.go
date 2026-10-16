@@ -204,7 +204,7 @@ func (w *Workspace) Reload() error {
 func (w *Workspace) Errors() []string {
 	seen := map[string]bool{}
 	var out []string
-	for _, p := range w.Pkgs {
+	for _, p := range w.sourcePackages() {
 		// `go list` repeats compile errors as a ListError; prefer the precise
 		// parse/type errors when a package has them.
 		hasPrecise := false

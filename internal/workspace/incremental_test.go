@@ -223,3 +223,88 @@ func copyMap(m map[string]string) map[string]string {
 	}
 	return out
 }
+
+// variantModule has an external test package (a_test) that imports a
+// package (h) which imports the package under test. go/packages then
+// builds a variant "h [a.test]", compiled against "a [a.test]", which is
+// not one of the loaded root packages but is reached through Imports.
+var variantModule = map[string]string{
+	"a/a.go": `package a
+
+type T struct{ N int }
+
+func New(n int) T { return T{N: n} }
+`,
+	"a/a_internal_test.go": `package a
+
+import "testing"
+
+func TestNew(t *testing.T) {
+	if New(1).N != 1 {
+		t.Fatal("bad")
+	}
+}
+`,
+	"a/a_test.go": `package a_test
+
+import (
+	"testing"
+
+	"example.com/m/a"
+	"example.com/m/h"
+)
+
+func TestHelper(t *testing.T) {
+	var v a.T = h.Make()
+	if v.N != 2 {
+		t.Fatal("bad")
+	}
+}
+`,
+	"h/h.go": `package h
+
+import "example.com/m/a"
+
+// Make returns a test value.
+func Make() a.T { return a.New(2) }
+`,
+}
+
+// Editing a must also re-check "h [a.test]"; otherwise a_test sees two
+// different versions of a.T ("a.T does not implement a.T"-style errors).
+func TestIncrementalTestVariantOfDependency(t *testing.T) {
+	w, err := Load(writeModule(t, copyMap(variantModule)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if errs := w.Errors(); len(errs) > 0 {
+		t.Fatalf("input does not type-check: %v", errs)
+	}
+	replace(t, w, "a/a.go", "return T{N: n}", "return T{N: n * 1}")
+	counts(t, w, 1, 1)
+	if errs := w.Errors(); len(errs) > 0 {
+		t.Fatalf("unexpected errors after editing a: %v", errs)
+	}
+	mustMatchFresh(t, w)
+	if _, err := w.Undo(); err != nil {
+		t.Fatal(err)
+	}
+	if errs := w.Errors(); len(errs) > 0 {
+		t.Fatalf("unexpected errors after undo: %v", errs)
+	}
+	mustMatchFresh(t, w)
+}
+
+// Editing h must update "h [a.test]" too, not only the root package h.
+func TestIncrementalEditInTestVariantOfDependency(t *testing.T) {
+	w, err := Load(writeModule(t, copyMap(variantModule)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	replace(t, w, "h/h.go", "return a.New(2)", "n := 2\n\treturn a.New(n)")
+	counts(t, w, 1, 1)
+	if errs := w.Errors(); len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	mustMatchFresh(t, w)
+}

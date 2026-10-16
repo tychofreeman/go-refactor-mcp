@@ -144,7 +144,9 @@ updated; exported renames add a note saying so.
   happening.
 - **Incremental updates.** After an edit, only the changed files are
   re-parsed, and only the packages containing them and the workspace packages
-  that import those are re-type-checked, in process, configured exactly as
+  that import those (including test variants such as `h [a.test]`, which
+  go/packages builds when `a_test` imports `h` and `h` imports `a`) are
+  re-type-checked, in process, configured exactly as
   `go/packages` does it. A full load (`go list` plus type-checking everything)
   happens only when package metadata could change: files added or removed,
   `go.mod`/`go.sum`/`go.work` edited, or a file's package name, imports or build

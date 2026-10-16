@@ -61,10 +61,12 @@ func (w *Workspace) update(changed []string) error {
 }
 
 func (w *Workspace) updateIncrementally(changed []string) error {
+	pkgs := w.sourcePackages()
+
 	// Which packages contain each file, and its current syntax tree.
 	owners := map[string][]*packages.Package{}
 	oldSyntax := map[string]*ast.File{}
-	for _, p := range w.Pkgs {
+	for _, p := range pkgs {
 		for _, f := range p.CompiledGoFiles {
 			owners[f] = append(owners[f], p)
 		}
@@ -117,10 +119,10 @@ func (w *Workspace) updateIncrementally(changed []string) error {
 	// and, transitively, the workspace packages that import them.
 	inWorkspace := map[*packages.Package]bool{}
 	importers := map[*packages.Package][]*packages.Package{}
-	for _, p := range w.Pkgs {
+	for _, p := range pkgs {
 		inWorkspace[p] = true
 	}
-	for _, p := range w.Pkgs {
+	for _, p := range pkgs {
 		for _, imp := range p.Imports {
 			if inWorkspace[imp] {
 				importers[imp] = append(importers[imp], p)
@@ -181,10 +183,50 @@ func (w *Workspace) updateIncrementally(changed []string) error {
 		visit(p)
 	}
 
+	roots := map[*packages.Package]bool{}
+	for _, p := range w.Pkgs {
+		roots[p] = true
+	}
 	for _, p := range order {
-		w.recheck(p, newSyntax, parseErrs)
+		w.recheck(p, !roots[p], newSyntax, parseErrs)
 	}
 	return nil
+}
+
+// sourcePackages returns the root packages (w.Pkgs) followed by every
+// other package of the module that they import, directly or indirectly.
+//
+// The others are test variants of dependencies: when an external test
+// package a_test imports a package h that imports a, go/packages builds
+// "h [a.test]", compiled from source against "a [a.test]". It is not a root
+// package, but an edit to a (or to h) must re-check it, or a_test would see
+// two different versions of a's types.
+func (w *Workspace) sourcePackages() []*packages.Package {
+	out := append([]*packages.Package(nil), w.Pkgs...)
+	seen := map[*packages.Package]bool{}
+	for _, p := range w.Pkgs {
+		seen[p] = true
+	}
+	var extra []*packages.Package
+	var visit func(p *packages.Package)
+	visit = func(p *packages.Package) {
+		for _, imp := range p.Imports {
+			if seen[imp] {
+				continue
+			}
+			seen[imp] = true
+			if len(imp.CompiledGoFiles) == 0 || !w.Contains(imp.CompiledGoFiles[0]) {
+				continue // standard library or another module: never edited
+			}
+			extra = append(extra, imp)
+			visit(imp)
+		}
+	}
+	for _, p := range w.Pkgs {
+		visit(p)
+	}
+	sort.Slice(extra, func(i, j int) bool { return extra[i].ID < extra[j].ID })
+	return append(out, extra...)
 }
 
 // canRecheck reports whether p's metadata lets it be re-type-checked from
@@ -212,7 +254,10 @@ func canRecheck(p *packages.Package) bool {
 
 // recheck re-type-checks p with the new syntax for changed files, replacing
 // its Syntax, Types, TypesInfo and errors, configured as go/packages does.
-func (w *Workspace) recheck(p *packages.Package, newSyntax map[string]*ast.File, parseErrs map[string]error) {
+// Like go/packages, it skips function bodies in packages that are not roots
+// (dep is true): only their declarations matter to the packages importing
+// them.
+func (w *Workspace) recheck(p *packages.Package, dep bool, newSyntax map[string]*ast.File, parseErrs map[string]error) {
 	files := make([]*ast.File, len(p.Syntax))
 	replaced := map[string]bool{}
 	for i, f := range p.Syntax {
@@ -270,7 +315,8 @@ func (w *Workspace) recheck(p *packages.Package, newSyntax map[string]*ast.File,
 				})
 			}
 		},
-		Sizes: p.TypesSizes,
+		Sizes:            p.TypesSizes,
+		IgnoreFuncBodies: dep,
 	}
 	if p.Module != nil && p.Module.GoVersion != "" {
 		tc.GoVersion = "go" + p.Module.GoVersion
