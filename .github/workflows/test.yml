@@ -42,8 +42,12 @@ jobs:
 
       - name: Check go.mod and go.sum are tidy
         run: |
-          if ! go mod tidy -diff; then
-            echo "::error::go.mod or go.sum is out of date. Run 'go mod tidy' and commit the result (the diff above shows what changes)."
+          if ! diff=$(go mod tidy -diff); then
+            echo "$diff"
+            # Also show the needed change as an annotation on the PR.
+            # Workflow commands must escape %, CR and LF.
+            encoded=$(printf '%s' "$diff" | sed -e 's/%/%25/g' -e 's/\r/%0D/g' | awk 'BEGIN { ORS = "%0A" } 1')
+            echo "::error title=go.mod or go.sum is not tidy::Run 'go mod tidy' and commit the result. Needed change:%0A${encoded}"
             exit 1
           fi
 
