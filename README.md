@@ -21,9 +21,11 @@ model reads before choosing the next refactoring. That loop is the iteration.
 - **Step 2:** MCP server (`cmd/refactor-mcp`) with `rename`, `inspect`,
   `undo` and `check`, usable from Claude Code.
 - **Step 3 (in progress):** refactorings that simplify code.
-  `extract_variable` and `inline_variable` are done.
+  `extract_variable` and `inline_variable` are done; `extract_function` is in
+  progress (statements that need no parameters or results).
 
-Next: `invert_if` (guard clauses), `extract_function`; then an Ollama loop.
+Next: parameters and results for `extract_function`, `invert_if` (guard
+clauses); then an Ollama loop.
 
 ## Layout
 
@@ -44,6 +46,7 @@ internal/
     rename/                   rename + testdata/<case>/{in,out,args.json,refused.txt}
     extractvar/               extract_variable + testdata + opt-in stress test
     inlinevar/                inline_variable + testdata + opt-in stress test
+    extractfunc/              extract_function + testdata + opt-in stress test
 ```
 
 ## Getting started
@@ -99,7 +102,7 @@ Tools:
 | Tool | What it does |
 |---|---|
 | `inspect` | No args: module overview. `file`: outline (line ranges, complexity, nesting) + numbered source. `function` or `start_line`/`end_line` to narrow. |
-| `rename`, `extract_variable`, `inline_variable` (and every future refactoring) | Applies one step; returns `APPLIED` + diff, or `REFUSED` + reason (nothing changed). |
+| `rename`, `extract_variable`, `inline_variable`, `extract_function` (and every future refactoring) | Applies one step; returns `APPLIED` + diff, or `REFUSED` + reason (nothing changed). |
 | `undo` | Reverts the last applied step; repeatable. |
 | `check` | Type-check status; `run_tests: true` also runs `go test`. |
 
@@ -121,6 +124,7 @@ refactor -C path/to/module    rename file=main.go line=7 name=t new_name=total  
 refactor rename '{"file":"main.go","line":7,"name":"t","new_name":"total"}'      # JSON args, as a model sends them
 refactor -n extract_variable file=main.go line=12 expression='qty*unit' name=subtotal
 refactor -n inline_variable file=main.go line=12 name=subtotal
+refactor -n extract_function file=main.go start_line=20 end_line=31 name=printReport
 ```
 
 Exit status: `0` applied/previewed, `2` refused, `1` error.
@@ -281,6 +285,42 @@ Refused (with an explanation):
 A comment directly above the removed declaration is kept, and the result notes
 it so the model can decide whether to remove it.
 
+## Extract function: what it checks
+
+`extract_function` moves a run of complete statements into a new function,
+declared after the enclosing top-level declaration, and calls it in their
+place. Identify the statements by `file`, `start_line` and `end_line`
+(inclusive, as `inspect` numbers them). The original text moves, so comments
+come along; it is re-indented, except inside multi-line raw strings and
+comments.
+
+The lines must cover whole statements of one block (a function body, a `{}`
+block, or one `case`); comments and blank lines in the range are allowed.
+Selecting all of an `if` extracts the `if`; selecting only its body extracts
+the body. A range that cuts a statement or crosses a block boundary is
+refused, and the refusal lists the statement lines nearby.
+
+In this version the statements may only use package-level names and the
+variables, constants and types they declare themselves, and those must not
+be used after the selection. Parameters and results come next.
+
+Refused (with an explanation):
+
+- a local variable, constant, type, type parameter, parameter or receiver
+  declared outside the selection is used in it, or one declared in it is used
+  after it;
+- `return`, `defer`, `recover()` or `fallthrough` in the selection (outside
+  function literals);
+- a `break`, `continue` or `goto` that leaves the selection, or a jump from
+  outside to a label inside it;
+- the selection ends with what makes a function with results end without
+  a `return` (a `panic`, a `for` without condition, ...): a call to the new
+  function is not a terminating statement, so the code would not compile;
+- the name is invalid, `init`, predeclared (`len`), already declared in the
+  package (including its test files), an import name, hidden at the call site
+  by a local declaration, or in a `_test.go` file looks like a test
+  (`TestX`, `BenchmarkX`, ...).
+
 ## Testing
 
 `go test ./...` runs the unit and golden tests. The golden cases run in
@@ -293,7 +333,7 @@ inlining the new variable must give back the original code (after gofmt).
 `go test -bench . ./internal/workspace` measures an edit-and-undo cycle against
 a full load.
 
-Three opt-in tests try the
+Four opt-in tests try the
 refactorings on real code; each modifies the module it is pointed at, so use
 a copy:
 
@@ -305,6 +345,8 @@ STRESS_DIR=/tmp/target go test ./internal/refactorings/extractvar -run TestStres
 STRESS_DIR=/tmp/target STRESS_N=100000 go test ./internal/refactorings/inlinevar -run TestStress -v -timeout 1h
 # extract then inline back; the file must come back unchanged:
 STRESS_DIR=/tmp/target go test ./internal/refactorings/inlinevar -run TestRoundTrip -v -timeout 1h
+# extract_function on runs of 1-4 statements and random line ranges:
+STRESS_DIR=/tmp/target go test ./internal/refactorings/extractfunc -run TestStress -v -timeout 1h
 ```
 
 Any rolled-back change is reported as a bug (a missing precondition). With
