@@ -1,0 +1,1 @@
+line 9 declares a new x while the selected lines also use the x declared at line 6

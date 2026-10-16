@@ -10,10 +10,11 @@
 //   - control flow: return, defer, recover, fallthrough, and break,
 //     continue or goto that leave the selection behave differently (or not
 //     at all) in another function;
-//   - data flow: in this version the statements may only use their own
-//     variables and package-level names. Local variables declared outside
-//     the selection would have to become parameters or results, which comes
-//     later;
+//   - data flow: local variables the statements use become parameters, and
+//     variables they change or declare that are used afterwards become
+//     results. Parameters and results are copies, so variables that other
+//     code can reach while the statements run (address taken, captured by
+//     a closure) are refused;
 //   - names: the new function must not clash with or hide another name in
 //     the package, and must not be hidden at the call site.
 //
@@ -54,8 +55,8 @@ func (*ExtractFunction) Description() string {
 	return `Move a run of complete statements into a new function, declared after the enclosing function, and call it in their place.
 Use it to split a long function into named steps.
 Identify the statements by file, start_line and end_line (inclusive, as shown by inspect). The lines must cover whole statements of one block; comments and blank lines in the range are allowed and comments move with the code.
-Currently the statements may only use package-level names and variables they declare themselves (and those variables must not be used after them): passing values in or out of the new function is not supported yet.
-Refuses if the statements contain return, defer, recover() or fallthrough, or a break, continue or goto that leaves the selected lines.`
+Local variables the statements use become parameters; variables they change or declare that are used afterwards become results, assigned at the call site. The result notes the parameters and results chosen.
+Refuses if the statements contain return, defer, recover() or fallthrough, or a break, continue or goto that leaves the selected lines; if a variable they share with the rest of the function has its address taken or is used by a function literal (the new function would work on a copy); or if they use constants or types declared inside the function.`
 }
 
 func (*ExtractFunction) InputSchema() json.RawMessage {
@@ -96,6 +97,9 @@ type extraction struct {
 	block ast.Node   // the node owning list: *ast.BlockStmt, *ast.CaseClause or *ast.CommClause
 
 	start, end int // byte range of the selected text: whole lines, from the first to the last token
+
+	fa   *analysis.Func // facts about the outermost enclosing function's locals
+	flow *flow
 }
 
 // Plan checks preconditions and computes the edits.
@@ -140,7 +144,7 @@ func (*ExtractFunction) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 	if err := x.checkControlFlow(); err != nil {
 		return nil, err
 	}
-	if err := x.checkDataFlow(); err != nil {
+	if err := x.analyzeDataFlow(); err != nil {
 		return nil, err
 	}
 	if err := x.checkNewName(); err != nil {
@@ -585,11 +589,35 @@ func (x *extraction) checkBranch(b *ast.BranchStmt, stack []ast.Node) error {
 // ---------------------------------------------------------------------------
 // Data flow
 
-// checkDataFlow refuses statements that use local names declared outside
-// the selection, or declare names used after it. Both need parameters or
-// results, which this version does not create.
-func (x *extraction) checkDataFlow() error {
-	var ins []string
+// flow is what the selected statements exchange with the rest of the
+// enclosing function.
+type flow struct {
+	params []*types.Var // passed in, in order of first use
+	locals []*types.Var // declared at the top of the new function: only assigned before being read
+	// results are returned, in declaration order: variables declared
+	// outside the selection that it changes and that are used afterwards
+	// (updated), and variables it declares that are used after it (fresh).
+	results []*types.Var
+	fresh   map[*types.Var]bool
+	// loopCarried lists results that are only returned because the
+	// selection is in a loop, for the notes.
+	loopCarried []string
+}
+
+// analyzeDataFlow works out the parameters and results of the new
+// function, and refuses what passing copies in and out cannot preserve.
+//
+// Parameters and results are copies, so a variable that other code can
+// reach while the statements run (its address is taken, or a closure
+// captures it) would no longer be the same variable: such statements are
+// refused. Whether a changed variable is used afterwards is decided
+// conservatively: any use outside the selection counts, and so does being
+// read in the selection when the selection is in a loop.
+func (x *extraction) analyzeDataFlow() error {
+	x.fa = analysis.AnalyzeFunc(x.info, x.outermostFunc())
+	refs := map[*types.Var][]*ast.Ident{} // outside variables, by reference
+	var order []*types.Var
+	var bad []string
 	seen := map[types.Object]bool{}
 	for _, s := range x.stmts {
 		ast.Inspect(s, func(n ast.Node) bool {
@@ -598,45 +626,374 @@ func (x *extraction) checkDataFlow() error {
 				return true
 			}
 			obj := x.info.Uses[id]
-			if obj == nil || seen[obj] || !isLocal(obj) || x.inSelectionPos(obj.Pos()) {
+			if obj == nil || !isLocal(obj) || x.inSelectionPos(obj.Pos()) {
 				return true
 			}
-			seen[obj] = true
-			ins = append(ins, fmt.Sprintf("%s (%s declared at line %d)", obj.Name(), kindOf(obj), x.line(obj.Pos())))
+			if v, ok := obj.(*types.Var); ok {
+				if refs[v] == nil {
+					order = append(order, v)
+				}
+				refs[v] = append(refs[v], id)
+				return true
+			}
+			if !seen[obj] {
+				seen[obj] = true
+				bad = append(bad, fmt.Sprintf("%s (%s declared at line %d)", obj.Name(), kindOf(obj), x.line(obj.Pos())))
+			}
 			return true
 		})
 	}
-	if len(ins) > 0 {
-		return refactor.Refusef("the selected lines use %s, declared outside them in %s. Passing values into the new function as parameters is not supported yet; select statements that only use package-level names and variables they declare themselves",
-			strings.Join(ins, ", "), x.enclosingName())
+	if len(bad) > 0 {
+		return refactor.Refusef("the selected lines use %s, declared outside them in %s; only variables can be passed to the new function, so constants, types and type parameters declared in the function are not supported yet",
+			strings.Join(bad, ", "), x.enclosingName())
 	}
 
-	// Uses after the selection of names it declares.
-	var outs []string
-	type use struct {
-		obj  types.Object
-		line int
-	}
-	var later []use
-	for id, obj := range x.info.Uses {
-		if isLocal(obj) && x.inSelectionPos(obj.Pos()) && !x.inSelection(id) {
-			later = append(later, use{obj, x.line(id.Pos())})
+	f := &flow{fresh: map[*types.Var]bool{}}
+	for _, v := range order {
+		switch {
+		case x.fa.Addressed[v]:
+			return refactor.Refusef("%s (declared at line %d) has its address taken in %s, or a pointer method is called on it; the new function would get a copy, so code holding the address would no longer see the same variable. Passing pointers is not supported yet",
+				v.Name(), x.line(v.Pos()), x.enclosingName())
+		case x.fa.Captured[v]:
+			return refactor.Refusef("%s (declared at line %d) is used by a function literal in %s; the new function would get a copy, so the function literal and the new function would no longer share it",
+				v.Name(), x.line(v.Pos()), x.enclosingName())
+		}
+		written, read := x.writtenIn(v), x.readIn(v)
+		usedOutside := x.usedOutside(v)
+		inLoop := x.loopAround(v)
+		out := written && (usedOutside || inLoop && read)
+		switch {
+		case out && x.assignedFirst(v, refs[v]):
+			f.locals = append(f.locals, v)
+		default:
+			f.params = append(f.params, v)
+		}
+		if out {
+			f.results = append(f.results, v)
+			if !usedOutside {
+				f.loopCarried = append(f.loopCarried, v.Name())
+			}
 		}
 	}
-	sort.Slice(later, func(i, j int) bool { return later[i].line < later[j].line })
+
+	// Names declared by the selection and used after it.
+	var later []*types.Var
+	var badLater []string
 	done := map[types.Object]bool{}
-	for _, u := range later {
-		if done[u.obj] {
+	for id, obj := range x.info.Uses {
+		if done[obj] || !isLocal(obj) || !x.inSelectionPos(obj.Pos()) || x.inSelection(id) {
 			continue
 		}
-		done[u.obj] = true
-		outs = append(outs, fmt.Sprintf("%s (used at line %d)", u.obj.Name(), u.line))
+		done[obj] = true
+		if v, ok := obj.(*types.Var); ok && x.declaredAtTop(v) {
+			later = append(later, v)
+			continue
+		}
+		badLater = append(badLater, fmt.Sprintf("%s (used at line %d)", obj.Name(), x.line(id.Pos())))
 	}
-	if len(outs) > 0 {
-		return refactor.Refusef("the selected lines declare %s, used after them. Returning values from the new function is not supported yet; include those uses in the selection, or select fewer statements",
-			strings.Join(outs, ", "))
+	if len(badLater) > 0 {
+		sort.Strings(badLater)
+		return refactor.Refusef("the selected lines declare %s, used after them, which cannot be returned from the new function (only variables declared directly in the selected statements can); include those uses in the selection, or select fewer statements",
+			strings.Join(badLater, ", "))
+	}
+	sort.Slice(later, func(i, j int) bool { return later[i].Pos() < later[j].Pos() })
+	for _, v := range later {
+		switch {
+		case x.fa.Addressed[v]:
+			return refactor.Refusef("%s (declared at line %d) has its address taken, or a pointer method is called on it, and is used after the selected lines; returning it would return a copy, so anything holding its address would no longer see the same variable (some types, like strings.Builder, also refuse to be copied). Include its later uses in the selection",
+				v.Name(), x.line(v.Pos()))
+		case x.fa.Captured[v]:
+			return refactor.Refusef("%s (declared at line %d) is used by a function literal and after the selected lines; returning it would return a copy that the function literal no longer shares. Include its later uses in the selection",
+				v.Name(), x.line(v.Pos()))
+		}
+		f.results = append(f.results, v)
+		f.fresh[v] = true
+	}
+	sort.Slice(f.results, func(i, j int) bool { return f.results[i].Pos() < f.results[j].Pos() })
+
+	for _, list := range [][]*types.Var{f.params, f.locals, f.results} {
+		for _, v := range list {
+			if _, err := x.typeString(v); err != nil {
+				return err
+			}
+		}
+	}
+	// A selected statement that declares a name the new function already
+	// declares (a parameter or a local) would redeclare it.
+	taken := map[string]*types.Var{}
+	for _, v := range append(append([]*types.Var(nil), f.params...), f.locals...) {
+		taken[v.Name()] = v
+	}
+	for _, s := range x.stmts {
+		var ids []*ast.Ident
+		switch s := s.(type) {
+		case *ast.AssignStmt:
+			if s.Tok == token.DEFINE {
+				for _, l := range s.Lhs {
+					if id, ok := l.(*ast.Ident); ok {
+						ids = append(ids, id)
+					}
+				}
+			}
+		case *ast.DeclStmt:
+			ast.Inspect(s, func(n ast.Node) bool {
+				if id, ok := n.(*ast.Ident); ok && x.info.Defs[id] != nil {
+					ids = append(ids, id)
+				}
+				return true
+			})
+		}
+		for _, id := range ids {
+			if v := taken[id.Name]; v != nil && x.info.Defs[id] != nil {
+				return refactor.Refusef("line %d declares a new %s while the selected lines also use the %s declared at line %d; in the new function both would be in the same scope. Rename one of them first",
+					x.line(id.Pos()), id.Name, id.Name, x.line(v.Pos()))
+			}
+		}
+	}
+
+	x.flow = f
+	return nil
+}
+
+// writtenIn reports whether the selection assigns v (or part of it).
+func (x *extraction) writtenIn(v *types.Var) bool {
+	for _, m := range x.fa.Modified[v] {
+		if x.inSelection(m) {
+			return true
+		}
+	}
+	return false
+}
+
+// readIn reports whether the selection reads v: any reference that is not
+// the whole target of a plain assignment.
+func (x *extraction) readIn(v *types.Var) bool {
+	for _, s := range x.stmts {
+		read := false
+		ast.Inspect(s, func(n ast.Node) bool {
+			id, ok := n.(*ast.Ident)
+			if read || !ok || x.info.Uses[id] != v {
+				return !read
+			}
+			if !x.isAssignTarget(id) {
+				read = true
+			}
+			return false
+		})
+		if read {
+			return true
+		}
+	}
+	return false
+}
+
+// isAssignTarget reports whether id is a whole left-hand operand of = or
+// := (which writes without reading).
+func (x *extraction) isAssignTarget(id *ast.Ident) bool {
+	path := analysis.PathTo(x.file, id)
+	if len(path) < 2 {
+		return false
+	}
+	as, ok := path[1].(*ast.AssignStmt)
+	if !ok || (as.Tok != token.ASSIGN && as.Tok != token.DEFINE) {
+		return false
+	}
+	for _, l := range as.Lhs {
+		if l == id {
+			return true
+		}
+	}
+	return false
+}
+
+// usedOutside reports whether v is referenced outside the selection,
+// other than where it is declared. A named result always counts: a bare
+// return reads it without naming it.
+func (x *extraction) usedOutside(v *types.Var) bool {
+	for _, n := range analysis.PathTo(x.file, x.stmts[0]) {
+		var ft *ast.FuncType
+		switch n := n.(type) {
+		case *ast.FuncDecl:
+			ft = n.Type
+		case *ast.FuncLit:
+			ft = n.Type
+		}
+		if ft != nil && ft.Results != nil {
+			for _, fld := range ft.Results.List {
+				for _, name := range fld.Names {
+					if x.info.Defs[name] == v {
+						return true
+					}
+				}
+			}
+		}
+	}
+	for id, obj := range x.info.Uses {
+		if obj == v && !x.inSelection(id) {
+			return true
+		}
+	}
+	return false
+}
+
+// loopAround reports whether the selection is inside a loop (or a function
+// that jumps backwards with goto) that v is declared outside of, so that a
+// value the selection stores can be read by the selection itself in the
+// next iteration.
+func (x *extraction) loopAround(v *types.Var) bool {
+	for _, n := range analysis.PathTo(x.file, x.stmts[0]) {
+		switch n := n.(type) {
+		case *ast.ForStmt, *ast.RangeStmt:
+			if v.Pos() < n.Pos() {
+				return true
+			}
+		case *ast.FuncDecl, *ast.FuncLit:
+			has := false
+			ast.Inspect(n, func(c ast.Node) bool {
+				if b, ok := c.(*ast.BranchStmt); ok && b.Tok == token.GOTO {
+					has = true
+				}
+				return !has
+			})
+			return has
+		}
+	}
+	return false
+}
+
+// assignedFirst reports whether the selection's first reference to v is a
+// plain assignment to all of v by one of the selected statements (not a
+// nested one, which might not run), whose right-hand side does not read v.
+// Such a variable need not be passed in; the new function declares it.
+func (x *extraction) assignedFirst(v *types.Var, refs []*ast.Ident) bool {
+	first := refs[0]
+	if !x.isAssignTarget(first) {
+		return false
+	}
+	as := analysis.PathTo(x.file, first)[1].(*ast.AssignStmt)
+	top := false
+	for _, s := range x.stmts {
+		top = top || s == as
+	}
+	if !top {
+		return false
+	}
+	for _, r := range as.Rhs {
+		for _, id := range analysis.ScopeRefs(x.info, r) {
+			if x.info.Uses[id] == v {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// declaredAtTop reports whether v is declared directly by one of the
+// selected statements (so it is in scope after them), not in a nested
+// block.
+func (x *extraction) declaredAtTop(v *types.Var) bool {
+	for _, s := range x.stmts {
+		if v.Pos() >= s.Pos() && v.Pos() < s.End() {
+			switch s := s.(type) {
+			case *ast.AssignStmt:
+				return s.Tok == token.DEFINE
+			case *ast.DeclStmt:
+				return true
+			}
+			return false
+		}
+	}
+	return false
+}
+
+// typeString spells v's type for the new function's signature, or refuses
+// if it cannot be written there: a type declared inside the function, a
+// type parameter, or a type from a package the file does not import.
+func (x *extraction) typeString(v *types.Var) (string, error) {
+	if bad := localTypeIn(v.Type(), x.pkg.Types, map[types.Type]bool{}); bad != nil {
+		return "", refactor.Refusef("%s has type %s, which uses %s %s declared inside %s; it cannot be named in a new package-level function",
+			v.Name(), types.TypeString(v.Type(), types.RelativeTo(x.pkg.Types)), kindOf(bad), bad.Name(), x.enclosingName())
+	}
+	s, missing := analysis.TypeString(v.Type(), x.file, x.pkg.Types, analysis.ImportMap(x.pkg.Types))
+	if missing != "" {
+		return "", refactor.Refusef("%s has type %s, which needs package %q; %s does not import it, and adding imports is not supported yet",
+			v.Name(), s, missing, x.rel)
+	}
+	return s, nil
+}
+
+// localTypeIn returns a type name in t that cannot be written outside the
+// function: a type parameter or a type declared in a function body.
+func localTypeIn(t types.Type, pkg *types.Package, seen map[types.Type]bool) *types.TypeName {
+	if seen[t] {
+		return nil
+	}
+	seen[t] = true
+	switch t := t.(type) {
+	case *types.TypeParam:
+		return t.Obj()
+	case *types.Named:
+		if o := t.Obj(); o.Parent() != nil && o.Pkg() != nil && o.Parent() != o.Pkg().Scope() && o.Parent() != types.Universe {
+			return o
+		}
+		for i := 0; i < t.TypeArgs().Len(); i++ {
+			if b := localTypeIn(t.TypeArgs().At(i), pkg, seen); b != nil {
+				return b
+			}
+		}
+	case *types.Alias:
+		if o := t.Obj(); o.Parent() != nil && o.Pkg() != nil && o.Parent() != o.Pkg().Scope() && o.Parent() != types.Universe {
+			return o
+		}
+		return localTypeIn(types.Unalias(t), pkg, seen)
+	case *types.Pointer:
+		return localTypeIn(t.Elem(), pkg, seen)
+	case *types.Slice:
+		return localTypeIn(t.Elem(), pkg, seen)
+	case *types.Array:
+		return localTypeIn(t.Elem(), pkg, seen)
+	case *types.Chan:
+		return localTypeIn(t.Elem(), pkg, seen)
+	case *types.Map:
+		if b := localTypeIn(t.Key(), pkg, seen); b != nil {
+			return b
+		}
+		return localTypeIn(t.Elem(), pkg, seen)
+	case *types.Signature:
+		if b := localTypeIn(t.Params(), pkg, seen); b != nil {
+			return b
+		}
+		return localTypeIn(t.Results(), pkg, seen)
+	case *types.Tuple:
+		for i := 0; i < t.Len(); i++ {
+			if b := localTypeIn(t.At(i).Type(), pkg, seen); b != nil {
+				return b
+			}
+		}
+	case *types.Struct:
+		for i := 0; i < t.NumFields(); i++ {
+			if b := localTypeIn(t.Field(i).Type(), pkg, seen); b != nil {
+				return b
+			}
+		}
+	case *types.Interface:
+		for i := 0; i < t.NumMethods(); i++ {
+			if b := localTypeIn(t.Method(i).Type(), pkg, seen); b != nil {
+				return b
+			}
+		}
+		for i := 0; i < t.NumEmbeddeds(); i++ {
+			if b := localTypeIn(t.EmbeddedType(i), pkg, seen); b != nil {
+				return b
+			}
+		}
 	}
 	return nil
+}
+
+// outermostFunc returns the outermost function containing the selection.
+func (x *extraction) outermostFunc() ast.Node {
+	return analysis.OutermostFunc(analysis.PathTo(x.file, x.stmts[0]))
 }
 
 // isLocal reports whether obj is declared inside a function: not at
@@ -716,9 +1073,72 @@ func (x *extraction) plan() (*refactor.Plan, error) {
 	if decl == nil {
 		return nil, fmt.Errorf("internal error: no declaration encloses line %d", x.line(x.stmts[0].Pos()))
 	}
+	f := x.flow
+	ts := func(v *types.Var) string {
+		s, _ := x.typeString(v) // checked by analyzeDataFlow
+		return s
+	}
+	names := func(vs []*types.Var) []string {
+		var out []string
+		for _, v := range vs {
+			out = append(out, v.Name())
+		}
+		return out
+	}
 
+	// The new function.
+	var params, results []string
+	for _, v := range f.params {
+		params = append(params, v.Name()+" "+ts(v))
+	}
+	for _, v := range f.results {
+		results = append(results, ts(v))
+	}
+	sig := fmt.Sprintf("func %s(%s)", x.name, strings.Join(params, ", "))
+	switch len(results) {
+	case 0:
+	case 1:
+		sig += " " + results[0]
+	default:
+		sig += " (" + strings.Join(results, ", ") + ")"
+	}
+	var fn strings.Builder
+	fmt.Fprintf(&fn, "\n\n%s {\n", sig)
+	for _, v := range f.locals {
+		fmt.Fprintf(&fn, "\tvar %s %s\n", v.Name(), ts(v))
+	}
 	indent := x.indentOf(x.stmts[0].Pos())
-	body := x.reindent(indent, "\t")
+	fn.WriteString(x.reindent(indent, "\t"))
+	if len(f.results) > 0 && !x.terminatingList(x.stmts, false) {
+		fmt.Fprintf(&fn, "\n\treturn %s", strings.Join(names(f.results), ", "))
+	}
+	fn.WriteString("\n}")
+
+	// The call.
+	call := fmt.Sprintf("%s(%s)", x.name, strings.Join(names(f.params), ", "))
+	var fresh, updated []*types.Var
+	for _, v := range f.results {
+		if f.fresh[v] {
+			fresh = append(fresh, v)
+		} else {
+			updated = append(updated, v)
+		}
+	}
+	var site strings.Builder
+	lhs := strings.Join(names(f.results), ", ")
+	switch {
+	case len(f.results) == 0:
+		site.WriteString(indent + call)
+	case len(updated) == 0:
+		fmt.Fprintf(&site, "%s%s := %s", indent, lhs, call)
+	default:
+		// := could declare a new variable instead of assigning one
+		// declared in an outer scope, so declare the new ones first.
+		for _, v := range fresh {
+			fmt.Fprintf(&site, "%svar %s %s\n", indent, v.Name(), ts(v))
+		}
+		fmt.Fprintf(&site, "%s%s = %s", indent, lhs, call)
+	}
 
 	// Insert after the line on which the enclosing declaration ends, so a
 	// trailing comment there stays with it.
@@ -728,18 +1148,46 @@ func (x *extraction) plan() (*refactor.Plan, error) {
 	} else {
 		at = len(x.src)
 	}
-	fn := fmt.Sprintf("\n\nfunc %s() {\n%s\n}", x.name, body)
-
 	edits := []edit.TextEdit{
-		{Start: x.start, End: x.end, NewText: indent + x.name + "()"},
-		{Start: at, End: at, NewText: fn},
+		{Start: x.start, End: x.end, NewText: site.String()},
+		{Start: at, End: at, NewText: fn.String()},
+	}
+
+	var notes []string
+	if len(f.params) > 0 || len(f.results) > 0 {
+		describe := func(vs []*types.Var) string {
+			if len(vs) == 0 {
+				return "none"
+			}
+			return strings.Join(names(vs), ", ")
+		}
+		notes = append(notes, fmt.Sprintf("parameters: %s; results: %s", describe(f.params), describe(f.results)))
+	}
+	if len(f.loopCarried) > 0 {
+		notes = append(notes, fmt.Sprintf("%s %s returned because the selected lines are in a loop and may read %s in the next iteration; if not, the result can be dropped",
+			strings.Join(f.loopCarried, ", "), isAre(len(f.loopCarried)), itThem(len(f.loopCarried))))
 	}
 	first, last := x.line(x.tf.Pos(x.start)), x.line(x.tf.Pos(x.end))
 	n := len(x.stmts)
 	return &refactor.Plan{
 		Summary: fmt.Sprintf("extracted lines %d-%d (%d statement%s) into function %s", first, last, n, plural(n), x.name),
 		Edits:   []edit.FileEdit{{Path: x.path, Edits: edits}},
+		Notes:   notes,
 	}, nil
+}
+
+func isAre(n int) string {
+	if n == 1 {
+		return "is"
+	}
+	return "are"
+}
+
+func itThem(n int) string {
+	if n == 1 {
+		return "it"
+	}
+	return "them"
 }
 
 // reindent returns the selected text with each line's leading from

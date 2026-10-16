@@ -1,0 +1,1 @@
+b (declared at line 9) has its address taken in run, or a pointer method is called on it

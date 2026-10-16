@@ -1,0 +1,1 @@
+b (declared at line 9) has its address taken, or a pointer method is called on it, and is used after the selected lines
