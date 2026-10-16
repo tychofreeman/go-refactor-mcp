@@ -22,10 +22,10 @@ model reads before choosing the next refactoring. That loop is the iteration.
   `undo` and `check`, usable from Claude Code.
 - **Step 3 (in progress):** refactorings that simplify code.
   `extract_variable` and `inline_variable` are done; `extract_function` is in
-  progress (statements that need no parameters or results).
+  progress (parameters and results done; `return` in the selection next).
 
-Next: parameters and results for `extract_function`, `invert_if` (guard
-clauses); then an Ollama loop.
+Next: `return` support for `extract_function`, `invert_if` (guard clauses);
+then an Ollama loop.
 
 ## Layout
 
@@ -300,15 +300,44 @@ Selecting all of an `if` extracts the `if`; selecting only its body extracts
 the body. A range that cuts a statement or crosses a block boundary is
 refused, and the refusal lists the statement lines nearby.
 
-In this version the statements may only use package-level names and the
-variables, constants and types they declare themselves, and those must not
-be used after the selection. Parameters and results come next.
+Local variables the statements use become parameters, in order of first
+use. Variables they change and that are used afterwards, and variables they
+declare and that are used after them, become results, assigned at the call
+site:
+
+```go
+total := 0                         total := 0
+for _, x := range xs {             total = sumDoubled(xs, total)
+    total += x             =>      fmt.Println(total)
+}                                  ...
+total *= 2                         func sumDoubled(xs []int, total int) int {
+fmt.Println(total)                     for _, x := range xs { total += x }
+                                       total *= 2
+                                       return total
+                                   }
+```
+
+- A variable the statements assign before reading it is declared in the new
+  function rather than passed in.
+- Results declared by the statements use `:=` at the call site; when some
+  results already exist, the new ones are declared with `var` first, since
+  `:=` could shadow a variable from an outer scope.
+- "Used afterwards" is conservative: any use outside the selection, a named
+  result (a bare `return` reads it), or being read by the statements when
+  they are in a loop. A result kept only because of the loop is noted.
+- Writes through slices, maps and pointers need no result; arrays and
+  structs are values, so a changed one is returned.
 
 Refused (with an explanation):
 
-- a local variable, constant, type, type parameter, parameter or receiver
-  declared outside the selection is used in it, or one declared in it is used
-  after it;
+- a variable passed in or out has its address taken (`&x`, slicing an
+  array, a pointer method on a value) or is used by a function literal: the
+  new function would work on a copy (some types, like `strings.Builder`,
+  also refuse to be copied);
+- a constant, type or type parameter declared in the function is used by the
+  statements, or one they declare is used after them; a variable's type
+  needs a package the file does not import;
+- a statement redeclares a name that is also passed in;
 - `return`, `defer`, `recover()` or `fallthrough` in the selection (outside
   function literals);
 - a `break`, `continue` or `goto` that leaves the selection, or a jump from
