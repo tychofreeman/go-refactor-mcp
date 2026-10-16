@@ -107,7 +107,7 @@ The server sends instructions to the model at startup (one refactoring per
 call, re-inspect after each step, stop when nothing clearly improves). It
 keeps one workspace per session so `undo` works across calls, and it
 re-checks the files on disk before every call: if the model or you edit a
-file directly in between, it reloads instead of applying edits at stale
+file directly in between, it updates instead of applying edits at stale
 offsets, and `undo` refuses to clobber those edits.
 
 ## Using the CLI
@@ -142,6 +142,16 @@ updated; exported renames add a note saying so.
   rolls back if anything broke. A rollback is reported as a bug in that
   refactoring's preconditions; the golden tests exist to keep that from
   happening.
+- **Incremental updates.** After an edit, only the changed files are
+  re-parsed, and only the packages containing them and the workspace packages
+  that import those are re-type-checked, in process, configured exactly as
+  `go/packages` does it. A full load (`go list` plus type-checking everything)
+  happens only when package metadata could change: files added or removed,
+  `go.mod`/`go.sum`/`go.work` edited, or a file's package name, imports or build
+  constraints changed. An edit and its undo take about 10 ms on a 20-package
+  module, where two full reloads took about 370 ms. The golden tests check
+  that every incremental update matches a fresh load exactly
+  (`workspace.Compare`).
 - **Refusals are results, not errors.** A `*refactor.Refusal` is written for
   the model: what is wrong and what to try instead. Internal failures are
   ordinary errors.
