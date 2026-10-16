@@ -7,9 +7,10 @@
 //
 //   - selection: the lines must cover whole statements of a single block,
 //     plus optional comments; nothing else;
-//   - control flow: return, defer, recover, fallthrough, and break,
-//     continue or goto that leave the selection behave differently (or not
-//     at all) in another function;
+//   - control flow: defer, recover, fallthrough, and break, continue or
+//     goto that leave the selection behave differently (or not at all) in
+//     another function; return statements are passed on by the call site
+//     in the two shapes described in returns.go, and refused otherwise;
 //   - data flow: local variables the statements use become parameters, and
 //     variables they change or declare that are used afterwards become
 //     results. Parameters and results are copies, so variables that other
@@ -56,7 +57,8 @@ func (*ExtractFunction) Description() string {
 Use it to split a long function into named steps.
 Identify the statements by file, start_line and end_line (inclusive, as shown by inspect). The lines must cover whole statements of one block; comments and blank lines in the range are allowed and comments move with the code.
 Local variables the statements use become parameters; variables they change or declare that are used afterwards become results, assigned at the call site. The result notes the parameters and results chosen.
-Refuses if the statements contain return, defer, recover() or fallthrough, or a break, continue or goto that leaves the selected lines; if a variable they share with the rest of the function has its address taken or is used by a function literal (the new function would work on a copy); or if they use constants or types declared inside the function.`
+Return statements are supported in two shapes: if every path through the statements returns, the call site becomes "return f(...)"; if the enclosing function returns an error and every return in the statements is an early exit with a non-nil error (like "if err != nil { return nil, err }"), the new function also returns an error and the call site checks it.
+Refuses other returns (for example an early return of a success value), defer, recover() or fallthrough, or a break, continue or goto that leaves the selected lines; if a variable they share with the rest of the function has its address taken or is used by a function literal (the new function would work on a copy); or if they use constants or types declared inside the function.`
 }
 
 func (*ExtractFunction) InputSchema() json.RawMessage {
@@ -100,6 +102,12 @@ type extraction struct {
 
 	fa   *analysis.Func // facts about the outermost enclosing function's locals
 	flow *flow
+
+	returns    []*ast.ReturnStmt // in the selection, outside function literals
+	mode       returnMode
+	exitValues []string // errorExit: the non-error values the early returns return
+
+	toks []tok // the file's tokens, scanned once
 }
 
 // Plan checks preconditions and computes the edits.
@@ -141,6 +149,7 @@ func (*ExtractFunction) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 	if err := x.selectStatements(a.StartLine, a.EndLine); err != nil {
 		return nil, err
 	}
+	x.fa = analysis.AnalyzeFunc(x.info, x.outermostFunc())
 	if err := x.checkControlFlow(); err != nil {
 		return nil, err
 	}
@@ -302,10 +311,18 @@ type tok struct {
 
 // tokens scans the whole file, including comments.
 func (x *extraction) tokens() []tok {
+	if x.toks == nil {
+		x.toks = scanTokens(x.src)
+	}
+	return x.toks
+}
+
+// scanTokens scans src, including comments.
+func scanTokens(src []byte) []tok {
 	fs := token.NewFileSet()
-	f := fs.AddFile("", -1, len(x.src))
+	f := fs.AddFile("", -1, len(src))
 	var s scanner.Scanner
-	s.Init(f, x.src, nil, scanner.ScanComments)
+	s.Init(f, src, nil, scanner.ScanComments)
 	var out []tok
 	for {
 		pos, t, lit := s.Scan()
@@ -348,7 +365,7 @@ func (x *extraction) checkControlFlow() error {
 			case *ast.FuncLit:
 				return false // its body is its own function and moves with it
 			case *ast.ReturnStmt:
-				err = refactor.Refusef("the selected lines contain a return statement at line %d; in a new function it would return from that function instead. Returning from the selected code is not supported yet", x.line(n.Pos()))
+				x.returns = append(x.returns, n)
 			case *ast.DeferStmt:
 				err = refactor.Refusef("the selected lines contain a defer statement at line %d; in a new function the deferred call would run when the new function returns, not when %s does", x.line(n.Pos()), x.enclosingName())
 			case *ast.CallExpr:
@@ -391,9 +408,7 @@ func (x *extraction) checkControlFlow() error {
 			return err
 		}
 	}
-	// Checked last: a selection containing a return is refused above with
-	// a clearer reason.
-	return x.checkTermination()
+	return x.decideReturns()
 }
 
 // checkTermination refuses a selection whose last statement is what makes
@@ -614,7 +629,6 @@ type flow struct {
 // conservatively: any use outside the selection counts, and so does being
 // read in the selection when the selection is in a loop.
 func (x *extraction) analyzeDataFlow() error {
-	x.fa = analysis.AnalyzeFunc(x.info, x.outermostFunc())
 	refs := map[*types.Var][]*ast.Ident{} // outside variables, by reference
 	var order []*types.Var
 	var bad []string
@@ -661,7 +675,8 @@ func (x *extraction) analyzeDataFlow() error {
 		written, read := x.writtenIn(v), x.readIn(v)
 		usedOutside := x.usedOutside(v)
 		inLoop := x.loopAround(v)
-		out := written && (usedOutside || inLoop && read)
+		// After statements that always return, nothing reads a result.
+		out := x.mode != terminal && written && (usedOutside || inLoop && read)
 		switch {
 		case out && x.assignedFirst(v, refs[v]):
 			f.locals = append(f.locals, v)
@@ -697,6 +712,9 @@ func (x *extraction) analyzeDataFlow() error {
 			strings.Join(badLater, ", "))
 	}
 	sort.Slice(later, func(i, j int) bool { return later[i].Pos() < later[j].Pos() })
+	if x.mode == terminal && len(later) > 0 {
+		return refactor.Refusef("the selected lines always return, but declare %s, which unreachable code after them uses; remove that code first", later[0].Name())
+	}
 	for _, v := range later {
 		switch {
 		case x.fa.Addressed[v]:
@@ -713,7 +731,7 @@ func (x *extraction) analyzeDataFlow() error {
 
 	for _, list := range [][]*types.Var{f.params, f.locals, f.results} {
 		for _, v := range list {
-			if _, err := x.typeString(v); err != nil {
+			if _, err := x.typeString(v.Name(), v.Type()); err != nil {
 				return err
 			}
 		}
@@ -909,15 +927,19 @@ func (x *extraction) declaredAtTop(v *types.Var) bool {
 // typeString spells v's type for the new function's signature, or refuses
 // if it cannot be written there: a type declared inside the function, a
 // type parameter, or a type from a package the file does not import.
-func (x *extraction) typeString(v *types.Var) (string, error) {
-	if bad := localTypeIn(v.Type(), x.pkg.Types, map[types.Type]bool{}); bad != nil {
-		return "", refactor.Refusef("%s has type %s, which uses %s %s declared inside %s; it cannot be named in a new package-level function",
-			v.Name(), types.TypeString(v.Type(), types.RelativeTo(x.pkg.Types)), kindOf(bad), bad.Name(), x.enclosingName())
+func (x *extraction) typeString(name string, t types.Type) (string, error) {
+	what := "the result type " + types.TypeString(t, types.RelativeTo(x.pkg.Types))
+	if name != "" {
+		what = fmt.Sprintf("%s has type %s, which", name, types.TypeString(t, types.RelativeTo(x.pkg.Types)))
 	}
-	s, missing := analysis.TypeString(v.Type(), x.file, x.pkg.Types, analysis.ImportMap(x.pkg.Types))
+	if bad := localTypeIn(t, x.pkg.Types, map[types.Type]bool{}); bad != nil {
+		return "", refactor.Refusef("%s uses %s %s declared inside %s; it cannot be named in a new package-level function",
+			what, kindOf(bad), bad.Name(), x.enclosingName())
+	}
+	s, missing := analysis.TypeString(t, x.file, x.pkg.Types, analysis.ImportMap(x.pkg.Types))
 	if missing != "" {
-		return "", refactor.Refusef("%s has type %s, which needs package %q; %s does not import it, and adding imports is not supported yet",
-			v.Name(), s, missing, x.rel)
+		return "", refactor.Refusef("%s needs package %q; %s does not import it, and adding imports is not supported yet",
+			what, missing, x.rel)
 	}
 	return s, nil
 }
@@ -1074,8 +1096,8 @@ func (x *extraction) plan() (*refactor.Plan, error) {
 		return nil, fmt.Errorf("internal error: no declaration encloses line %d", x.line(x.stmts[0].Pos()))
 	}
 	f := x.flow
-	ts := func(v *types.Var) string {
-		s, _ := x.typeString(v) // checked by analyzeDataFlow
+	ts := func(name string, t types.Type) string {
+		s, _ := x.typeString(name, t) // checked by analyzeDataFlow and decideReturns
 		return s
 	}
 	names := func(vs []*types.Var) []string {
@@ -1085,59 +1107,110 @@ func (x *extraction) plan() (*refactor.Plan, error) {
 		}
 		return out
 	}
+	_, _, sig := x.enclosingFunc()
+	indent := x.indentOf(x.stmts[0].Pos())
+
+	// The new function's results, and what the call site does with them.
+	var results []string
+	var bodyEdits []edit.TextEdit
+	var tail, errName string // tail: the new function's final return
+	switch x.mode {
+	case terminal:
+		for i := 0; i < sig.Results().Len(); i++ {
+			results = append(results, ts("", sig.Results().At(i).Type()))
+		}
+	case errorExit:
+		var zeros []string
+		for _, v := range f.results {
+			results = append(results, ts(v.Name(), v.Type()))
+			z, err := x.zeroValue(v.Type())
+			if err != nil {
+				return nil, err
+			}
+			zeros = append(zeros, z)
+		}
+		results = append(results, "error")
+		bodyEdits = x.rewriteExits(zeros)
+		tail = strings.Join(append(names(f.results), "nil"), ", ")
+		errName = x.errorName(f.results)
+	default:
+		for _, v := range f.results {
+			results = append(results, ts(v.Name(), v.Type()))
+		}
+		if len(f.results) > 0 && !x.terminatingList(x.stmts, false) {
+			tail = strings.Join(names(f.results), ", ")
+		}
+	}
 
 	// The new function.
-	var params, results []string
+	var params []string
 	for _, v := range f.params {
-		params = append(params, v.Name()+" "+ts(v))
+		params = append(params, v.Name()+" "+ts(v.Name(), v.Type()))
 	}
-	for _, v := range f.results {
-		results = append(results, ts(v))
-	}
-	sig := fmt.Sprintf("func %s(%s)", x.name, strings.Join(params, ", "))
+	sigText := fmt.Sprintf("func %s(%s)", x.name, strings.Join(params, ", "))
 	switch len(results) {
 	case 0:
 	case 1:
-		sig += " " + results[0]
+		sigText += " " + results[0]
 	default:
-		sig += " (" + strings.Join(results, ", ") + ")"
+		sigText += " (" + strings.Join(results, ", ") + ")"
 	}
 	var fn strings.Builder
-	fmt.Fprintf(&fn, "\n\n%s {\n", sig)
+	fmt.Fprintf(&fn, "\n\n%s {\n", sigText)
 	for _, v := range f.locals {
-		fmt.Fprintf(&fn, "\tvar %s %s\n", v.Name(), ts(v))
+		fmt.Fprintf(&fn, "\tvar %s %s\n", v.Name(), ts(v.Name(), v.Type()))
 	}
-	indent := x.indentOf(x.stmts[0].Pos())
-	fn.WriteString(x.reindent(indent, "\t"))
-	if len(f.results) > 0 && !x.terminatingList(x.stmts, false) {
-		fmt.Fprintf(&fn, "\n\treturn %s", strings.Join(names(f.results), ", "))
+	text, err := x.selectedText(bodyEdits)
+	if err != nil {
+		return nil, err
+	}
+	fn.WriteString(reindent(text, indent, "\t"))
+	if tail != "" {
+		fmt.Fprintf(&fn, "\n\treturn %s", tail)
 	}
 	fn.WriteString("\n}")
 
 	// The call.
 	call := fmt.Sprintf("%s(%s)", x.name, strings.Join(names(f.params), ", "))
-	var fresh, updated []*types.Var
-	for _, v := range f.results {
-		if f.fresh[v] {
-			fresh = append(fresh, v)
-		} else {
-			updated = append(updated, v)
-		}
-	}
 	var site strings.Builder
-	lhs := strings.Join(names(f.results), ", ")
-	switch {
-	case len(f.results) == 0:
-		site.WriteString(indent + call)
-	case len(updated) == 0:
-		fmt.Fprintf(&site, "%s%s := %s", indent, lhs, call)
-	default:
-		// := could declare a new variable instead of assigning one
-		// declared in an outer scope, so declare the new ones first.
-		for _, v := range fresh {
-			fmt.Fprintf(&site, "%svar %s %s\n", indent, v.Name(), ts(v))
+	switch x.mode {
+	case terminal:
+		if sig.Results().Len() > 0 {
+			fmt.Fprintf(&site, "%sreturn %s", indent, call)
+		} else {
+			fmt.Fprintf(&site, "%s%s\n%sreturn", indent, call, indent)
 		}
-		fmt.Fprintf(&site, "%s%s = %s", indent, lhs, call)
+	default:
+		lhs := names(f.results)
+		var fresh, updated []string // fresh: declared by this statement
+		for _, v := range f.results {
+			if f.fresh[v] {
+				fresh = append(fresh, fmt.Sprintf("var %s %s", v.Name(), ts(v.Name(), v.Type())))
+			} else {
+				updated = append(updated, v.Name())
+			}
+		}
+		if errName != "" {
+			lhs = append(lhs, errName)
+			fresh = append(fresh, fmt.Sprintf("var %s error", errName))
+		}
+		switch {
+		case len(lhs) == 0:
+			site.WriteString(indent + call)
+		case len(updated) == 0:
+			fmt.Fprintf(&site, "%s%s := %s", indent, strings.Join(lhs, ", "), call)
+		default:
+			// := could declare a new variable instead of assigning one
+			// declared in an outer scope, so declare the new ones first.
+			for _, d := range fresh {
+				fmt.Fprintf(&site, "%s%s\n", indent, d)
+			}
+			fmt.Fprintf(&site, "%s%s = %s", indent, strings.Join(lhs, ", "), call)
+		}
+		if errName != "" {
+			vals := strings.Join(append(append([]string(nil), x.exitValues...), errName), ", ")
+			fmt.Fprintf(&site, "\n%sif %s != nil {\n%s\treturn %s\n%s}", indent, errName, indent, vals, indent)
+		}
 	}
 
 	// Insert after the line on which the enclosing declaration ends, so a
@@ -1163,6 +1236,12 @@ func (x *extraction) plan() (*refactor.Plan, error) {
 		}
 		notes = append(notes, fmt.Sprintf("parameters: %s; results: %s", describe(f.params), describe(f.results)))
 	}
+	switch x.mode {
+	case terminal:
+		notes = append(notes, "the selected lines always return, so the call site returns what the new function returns")
+	case errorExit:
+		notes = append(notes, fmt.Sprintf("the early returns now return their error from %s, and the call site returns it when it is not nil", x.name))
+	}
 	if len(f.loopCarried) > 0 {
 		notes = append(notes, fmt.Sprintf("%s %s returned because the selected lines are in a loop and may read %s in the next iteration; if not, the result can be dropped",
 			strings.Join(f.loopCarried, ", "), isAre(len(f.loopCarried)), itThem(len(f.loopCarried))))
@@ -1174,6 +1253,17 @@ func (x *extraction) plan() (*refactor.Plan, error) {
 		Edits:   []edit.FileEdit{{Path: x.path, Edits: edits}},
 		Notes:   notes,
 	}, nil
+}
+
+// selectedText returns the selected lines with edits (at file offsets
+// inside them) applied.
+func (x *extraction) selectedText(edits []edit.TextEdit) (string, error) {
+	shifted := make([]edit.TextEdit, len(edits))
+	for i, e := range edits {
+		shifted[i] = edit.TextEdit{Start: e.Start - x.start, End: e.End - x.start, NewText: e.NewText}
+	}
+	out, err := edit.Apply(x.src[x.start:x.end], shifted)
+	return string(out), err
 }
 
 func isAre(n int) string {
@@ -1190,14 +1280,14 @@ func itThem(n int) string {
 	return "them"
 }
 
-// reindent returns the selected text with each line's leading from
-// replaced by to. Lines that start inside a multi-line string literal or
-// comment are left alone, since changing them would change the string.
-func (x *extraction) reindent(from, to string) string {
+// reindent returns text (whole lines of statements) with each line's
+// leading from replaced by to. Lines that start inside a multi-line string
+// literal or comment are left alone, since changing them would change the
+// string.
+func reindent(text, from, to string) string {
 	var spans [][2]int // multi-line tokens
-	for _, t := range x.tokens() {
-		if t.end > x.start && t.off < x.end && (t.tok == token.STRING || t.tok == token.COMMENT) &&
-			strings.Contains(string(x.src[t.off:t.end]), "\n") {
+	for _, t := range scanTokens([]byte(text)) {
+		if (t.tok == token.STRING || t.tok == token.COMMENT) && strings.Contains(text[t.off:t.end], "\n") {
 			spans = append(spans, [2]int{t.off, t.end})
 		}
 	}
@@ -1210,8 +1300,8 @@ func (x *extraction) reindent(from, to string) string {
 		return false
 	}
 	var sb strings.Builder
-	off := x.start
-	for i, line := range strings.Split(string(x.src[x.start:x.end]), "\n") {
+	off := 0
+	for i, line := range strings.Split(text, "\n") {
 		if i > 0 {
 			sb.WriteByte('\n')
 		}

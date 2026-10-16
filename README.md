@@ -22,10 +22,10 @@ model reads before choosing the next refactoring. That loop is the iteration.
   `undo` and `check`, usable from Claude Code.
 - **Step 3 (in progress):** refactorings that simplify code.
   `extract_variable` and `inline_variable` are done; `extract_function` is in
-  progress (parameters and results done; `return` in the selection next).
+  progress (parameters, results and `return` statements done; adding
+  imports, local constants and generics next).
 
-Next: `return` support for `extract_function`, `invert_if` (guard clauses);
-then an Ollama loop.
+Next: `invert_if` (guard clauses); then an Ollama loop.
 
 ## Layout
 
@@ -328,6 +328,39 @@ fmt.Println(total)                     for _, x := range xs { total += x }
 - Writes through slices, maps and pointers need no result; arrays and
   structs are values, so a changed one is returned.
 
+`return` statements in the selection would return from the new function,
+so the call site passes them on. Two shapes are supported:
+
+- **Every path returns** (or ends in another terminating statement, such as
+  `panic`): the new function gets the enclosing function's results, the
+  statements move unchanged, and the call site becomes `return f(...)`.
+- **Early exits with an error**: the enclosing function's last result is an
+  `error`, and every `return` in the selection returns an error known to be
+  non-nil, with the same constant-like values for the other results. The
+  new function returns its own results plus an `error`:
+
+  ```go
+  f, err := open(path)               data, err := openAndRead(path)
+  if err != nil {                    if err != nil {
+      return nil, err        =>          return nil, err
+  }                                  }
+  data := read(f)                    return data, nil
+  return data, nil
+  ```
+
+  Inside it, the early returns become `return <zero values>, err`, and
+  falling off the end returns `..., nil`. An error counts as non-nil when
+  the return is inside `if v != nil` (possibly `&&` other conditions) with no
+  write to `v` in between, when it comes from `errors.New` or `fmt.Errorf`,
+  or when it is a non-pointer value or `&T{...}`. The call site uses `err`,
+  or `err2` and so on if `err` is taken.
+
+Other returns are refused: an early return of a success value (`return v,
+nil`) looks the same to the caller as falling off the end. So are returns
+that use the enclosing function's named results, bare returns in a function
+with results, and `return f()` of a multi-value call in the early-exit
+shape.
+
 Refused (with an explanation):
 
 - a variable passed in or out has its address taken (`&x`, slicing an
@@ -338,8 +371,8 @@ Refused (with an explanation):
   statements, or one they declare is used after them; a variable's type
   needs a package the file does not import;
 - a statement redeclares a name that is also passed in;
-- `return`, `defer`, `recover()` or `fallthrough` in the selection (outside
-  function literals);
+- a `return` that does not fit the two shapes below, or `defer`, `recover()`
+  or `fallthrough` in the selection (outside function literals);
 - a `break`, `continue` or `goto` that leaves the selection, or a jump from
   outside to a label inside it;
 - the selection ends with what makes a function with results end without
