@@ -1,0 +1,1 @@
+pair (type declared at line 6)

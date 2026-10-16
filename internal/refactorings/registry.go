@@ -4,6 +4,7 @@ package refactorings
 
 import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/extractfunc"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/extractvar"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/inlinevar"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/rename"
@@ -15,7 +16,8 @@ func All() []refactor.Refactoring {
 		rename.New(),
 		extractvar.New(),
 		inlinevar.New(),
-		// Next: invert_if, extract_function, ...
+		extractfunc.New(),
+		// Next: invert_if, ...
 	}
 }
 
