@@ -1,0 +1,1 @@
+type Base is embedded in a struct at m.go:6:2

@@ -1,0 +1,1 @@
+type Square implements interface example.com/m.Shape through method Area
