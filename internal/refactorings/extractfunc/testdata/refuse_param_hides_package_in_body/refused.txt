@@ -1,0 +1,1 @@
+the new function would declare t with type b.T, but in its body b is a parameter

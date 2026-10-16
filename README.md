@@ -325,6 +325,9 @@ fmt.Println(total)                     for _, x := range xs { total += x }
 - "Used afterwards" is conservative: any use outside the selection, a named
   result (a bare `return` reads it), or being read by the statements when
   they are in a loop. A result kept only because of the loop is noted.
+- If a parameter or result type needs a package the file does not import,
+  the import is added (with an alias such as `b2` when the package name is
+  already used in the file or package), and the result notes it.
 - Writes through slices, maps and pointers need no result; arrays and
   structs are values, so a changed one is returned.
 
@@ -368,8 +371,11 @@ Refused (with an explanation):
   new function would work on a copy (some types, like `strings.Builder`,
   also refuse to be copied);
 - a constant, type or type parameter declared in the function is used by the
-  statements, or one they declare is used after them; a variable's type
-  needs a package the file does not import;
+  statements, or one they declare is used after them;
+- a type needs a package that cannot be imported here (an `internal`
+  package of another tree, or a `main` package), or a package name the new
+  code writes is hidden where it is written (by a parameter, or by a local
+  at the call site);
 - a statement redeclares a name that is also passed in;
 - a `return` that does not fit the two shapes below, or `defer`, `recover()`
   or `fallthrough` in the selection (outside function literals);
