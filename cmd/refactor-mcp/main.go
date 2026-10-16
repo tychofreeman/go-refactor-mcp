@@ -21,7 +21,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/cwfreeman/gorefactor/internal/mcpserver"
+	"github.com/tychofreeman/go-refactor-mcp/internal/mcpserver"
 )
 
 func main() {

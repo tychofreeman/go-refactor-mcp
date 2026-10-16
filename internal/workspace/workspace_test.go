@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cwfreeman/gorefactor/internal/edit"
+	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 )
 
 func writeModule(t *testing.T, files map[string]string) string {

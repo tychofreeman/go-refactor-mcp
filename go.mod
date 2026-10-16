@@ -1,4 +1,4 @@
-module github.com/cwfreeman/gorefactor
+module github.com/tychofreeman/go-refactor-mcp
 
 go 1.24.0
 

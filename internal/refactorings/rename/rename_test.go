@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cwfreeman/gorefactor/internal/refactor"
-	"github.com/cwfreeman/gorefactor/internal/refactor/refactortest"
-	"github.com/cwfreeman/gorefactor/internal/workspace"
+	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/refactor/refactortest"
+	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
 
 func TestGolden(t *testing.T) {

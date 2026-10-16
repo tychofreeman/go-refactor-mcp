@@ -1,4 +1,4 @@
-# gorefactor
+# go-refactor-mcp
 
 Behavior-preserving Go refactorings exposed as tools for an LLM (Claude or a
 local model through Ollama). The model decides *what* to change; this tool
@@ -48,7 +48,18 @@ internal/
 
 ## Getting started
 
+Install the MCP server and the CLI:
+
 ```sh
+go install github.com/tychofreeman/go-refactor-mcp/cmd/refactor-mcp@latest
+go install github.com/tychofreeman/go-refactor-mcp/cmd/refactor@latest
+```
+
+Or work from a clone:
+
+```sh
+git clone https://github.com/tychofreeman/go-refactor-mcp
+cd go-refactor-mcp
 go mod tidy          # fetches dependencies and updates go.sum
 go test ./...
 go install ./cmd/refactor ./cmd/refactor-mcp

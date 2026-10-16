@@ -24,10 +24,10 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/cwfreeman/gorefactor/internal/inspect"
-	"github.com/cwfreeman/gorefactor/internal/refactor"
-	"github.com/cwfreeman/gorefactor/internal/refactorings"
-	"github.com/cwfreeman/gorefactor/internal/workspace"
+	"github.com/tychofreeman/go-refactor-mcp/internal/inspect"
+	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings"
+	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
 
 // Version is reported to MCP clients.

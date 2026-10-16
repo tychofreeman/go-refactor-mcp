@@ -13,8 +13,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cwfreeman/gorefactor/internal/edit"
-	"github.com/cwfreeman/gorefactor/internal/workspace"
+	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
+	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
 
 // Refactoring is one behavior-preserving code transformation.

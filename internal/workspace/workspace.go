@@ -21,7 +21,7 @@ import (
 
 	"golang.org/x/tools/go/packages"
 
-	"github.com/cwfreeman/gorefactor/internal/edit"
+	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 )
 
 const loadMode = packages.NeedName |

@@ -23,9 +23,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cwfreeman/gorefactor/internal/edit"
-	"github.com/cwfreeman/gorefactor/internal/refactor"
-	"github.com/cwfreeman/gorefactor/internal/workspace"
+	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
+	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
 
 var update = flag.Bool("update", false, "rewrite golden out/ directories")

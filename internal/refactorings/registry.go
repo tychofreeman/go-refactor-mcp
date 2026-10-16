@@ -3,10 +3,10 @@
 package refactorings
 
 import (
-	"github.com/cwfreeman/gorefactor/internal/refactor"
-	"github.com/cwfreeman/gorefactor/internal/refactorings/extractvar"
-	"github.com/cwfreeman/gorefactor/internal/refactorings/inlinevar"
-	"github.com/cwfreeman/gorefactor/internal/refactorings/rename"
+	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/extractvar"
+	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/inlinevar"
+	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/rename"
 )
 
 // All returns every available refactoring.

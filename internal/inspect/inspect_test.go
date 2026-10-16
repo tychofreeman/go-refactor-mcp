@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cwfreeman/gorefactor/internal/refactor"
-	"github.com/cwfreeman/gorefactor/internal/workspace"
+	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
 
 const shapes = `package shapes

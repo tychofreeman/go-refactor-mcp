@@ -3,7 +3,7 @@ package extractvar
 import (
 	"testing"
 
-	"github.com/cwfreeman/gorefactor/internal/refactor/refactortest"
+	"github.com/tychofreeman/go-refactor-mcp/internal/refactor/refactortest"
 )
 
 func TestGolden(t *testing.T) {

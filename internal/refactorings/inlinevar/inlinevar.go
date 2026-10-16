@@ -32,11 +32,11 @@ import (
 
 	"golang.org/x/tools/go/packages"
 
-	"github.com/cwfreeman/gorefactor/internal/analysis"
-	"github.com/cwfreeman/gorefactor/internal/edit"
-	"github.com/cwfreeman/gorefactor/internal/locate"
-	"github.com/cwfreeman/gorefactor/internal/refactor"
-	"github.com/cwfreeman/gorefactor/internal/workspace"
+	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
+	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
+	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
+	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
 
 // InlineVariable is the "inline_variable" refactoring.
