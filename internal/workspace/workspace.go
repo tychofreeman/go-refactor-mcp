@@ -2,8 +2,10 @@
 // and applies edits to them, keeping an undo stack.
 //
 // A Workspace is the unit a refactoring session operates on: the model asks
-// for one refactoring, the workspace applies it and reloads, and the next
-// refactoring sees the updated code.
+// for one refactoring, the workspace applies it and updates, and the next
+// refactoring sees the updated code. Updates after edits are incremental
+// (see incremental.go): only the changed files are re-parsed and only the
+// packages that can be affected are re-type-checked.
 package workspace
 
 import (
@@ -12,7 +14,6 @@ import (
 	"go/ast"
 	"go/format"
 	"go/token"
-	"hash/fnv"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -31,6 +32,7 @@ const loadMode = packages.NeedName |
 	packages.NeedSyntax |
 	packages.NeedTypes |
 	packages.NeedTypesInfo |
+	packages.NeedTypesSizes |
 	packages.NeedModule
 
 // Workspace is a loaded, type-checked set of packages rooted at Root.
@@ -46,31 +48,61 @@ type Workspace struct {
 	// package; refactorings must deduplicate by file position.
 	Pkgs []*packages.Package
 
-	undo []Change
-	fp   uint64 // fingerprint of the module's files at the last load
+	// FullLoads and IncrementalUpdates count how the workspace has been
+	// brought up to date, for tests and benchmarks.
+	FullLoads, IncrementalUpdates int
+
+	undo   []Change
+	stamps map[string]stamp // size and mtime of each relevant file at the last update
 }
 
-// Refresh reloads the workspace if any Go source, go.mod, go.sum or go.work
-// file under the root was added, removed or modified since the last load.
-// A long-running server must call it before every operation: the model (or
-// a person) may edit files directly between tool calls, and edits computed
-// against stale syntax trees would land at the wrong byte offsets.
-func (w *Workspace) Refresh() (reloaded bool, err error) {
-	fp, err := fingerprint(w.Root)
+// Refresh brings the workspace up to date with the files on disk, if any
+// Go source, go.mod, go.sum or go.work file under the root was added,
+// removed or modified since the last update. A long-running server must
+// call it before every operation: the model (or a person) may edit files
+// directly between tool calls, and edits computed against stale syntax
+// trees would land at the wrong byte offsets.
+//
+// Edits to existing Go files are applied incrementally (see update);
+// anything else triggers a full reload.
+func (w *Workspace) Refresh() (changed bool, err error) {
+	now, err := snapshot(w.Root)
 	if err != nil {
 		return false, err
 	}
-	if fp == w.fp {
+	var edited []string
+	structural := len(now) != len(w.stamps)
+	for p, st := range now {
+		old, ok := w.stamps[p]
+		switch {
+		case !ok:
+			structural = true
+		case old != st:
+			if !strings.HasSuffix(p, ".go") {
+				structural = true // go.mod, go.sum or go.work
+			}
+			edited = append(edited, p)
+		}
+	}
+	switch {
+	case structural:
+		return true, w.Reload()
+	case len(edited) == 0:
 		return false, nil
 	}
-	return true, w.Reload()
+	return true, w.update(edited)
 }
 
-// fingerprint hashes the path, size and modification time of every file
-// that affects package loading. Walking a module this way is far cheaper
-// than re-type-checking it.
-func fingerprint(root string) (uint64, error) {
-	h := fnv.New64a()
+// stamp identifies a version of a file cheaply.
+type stamp struct {
+	size, mtime int64
+}
+
+// snapshot records the size and modification time of every file that
+// affects package loading. Walking a module this way is far cheaper than
+// type-checking it.
+func snapshot(root string) (map[string]stamp, error) {
+	out := map[string]stamp{}
 	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -90,10 +122,10 @@ func fingerprint(root string) (uint64, error) {
 		if err != nil {
 			return nil // vanished during the walk; the next refresh will see it
 		}
-		fmt.Fprintf(h, "%s\x00%d\x00%d\n", p, fi.Size(), fi.ModTime().UnixNano())
+		out[p] = stamp{fi.Size(), fi.ModTime().UnixNano()}
 		return nil
 	})
-	return h.Sum64(), err
+	return out, err
 }
 
 // Change records one applied set of edits, enough to show it and undo it.
@@ -141,13 +173,12 @@ func Load(dir string, patterns ...string) (*Workspace, error) {
 
 // Reload re-reads and re-type-checks all packages from disk.
 func (w *Workspace) Reload() error {
-	// Fingerprint before loading: if a file changes during the load, the
-	// next Refresh sees a different fingerprint and loads again.
-	fp, err := fingerprint(w.Root)
+	// Snapshot before loading: if a file changes during the load, the next
+	// Refresh sees a different stamp and updates again.
+	stamps, err := snapshot(w.Root)
 	if err != nil {
 		return err
 	}
-	w.fp = fp
 	fset := token.NewFileSet()
 	cfg := &packages.Config{
 		Mode:  loadMode,
@@ -162,7 +193,8 @@ func (w *Workspace) Reload() error {
 	if len(pkgs) == 0 {
 		return fmt.Errorf("no Go packages found in %s matching %v", w.Root, w.Patterns)
 	}
-	w.Fset, w.Pkgs = fset, pkgs
+	w.Fset, w.Pkgs, w.stamps = fset, pkgs, stamps
+	w.FullLoads++
 	return nil
 }
 
@@ -306,7 +338,7 @@ func (w *Workspace) Apply(label string, fes []edit.FileEdit) (Change, error) {
 		return Change{}, err
 	}
 	w.undo = append(w.undo, c)
-	return c, w.Reload()
+	return c, w.update(paths(c.After))
 }
 
 // CanUndo reports whether there is a change to undo.
@@ -338,7 +370,7 @@ func (w *Workspace) Undo() (Change, error) {
 	}
 	sort.Strings(diffs)
 	inverse := Change{Label: "undo " + c.Label, Diff: strings.Join(diffs, ""), Before: c.After, After: c.Before}
-	return inverse, w.Reload()
+	return inverse, w.update(paths(c.Before))
 }
 
 // gofmtIfClean formats the edited file, but only if the original was
@@ -356,6 +388,15 @@ func gofmtIfClean(path string, before, after []byte) []byte {
 		return fa
 	}
 	return after
+}
+
+func paths(files map[string][]byte) []string {
+	var out []string
+	for p := range files {
+		out = append(out, p)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func writeAll(files map[string][]byte) error {
