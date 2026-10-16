@@ -58,6 +58,12 @@ refactor rename '{"file":"main.go","line":7,"name":"t","new_name":"total"}'     
 
 Exit status: `0` applied/previewed, `2` refused, `1` error.
 
+`-C` can be any directory inside a module: the tool always loads the whole
+enclosing module (nearest `go.mod`), so references in every package are
+updated. `file` is resolved relative to `-C` first, then to the module root.
+References in *other* modules (e.g. siblings in a `go.work`) are not
+updated; exported renames add a note saying so.
+
 ## Design decisions
 
 - **Text edits, not AST reprinting.** Refactorings compute byte-range

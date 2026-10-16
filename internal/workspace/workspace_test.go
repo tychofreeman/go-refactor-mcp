@@ -77,6 +77,29 @@ func TestUndoRefusesAfterExternalEdit(t *testing.T) {
 	}
 }
 
+func TestLoadFromSubdirUsesModuleRoot(t *testing.T) {
+	dir := writeModule(t, map[string]string{
+		"a/a.go": "package a\n\nvar X = 1\n",
+		"b/b.go": "package b\n\nimport \"example.com/m/a\"\n\nvar Y = a.X\n",
+	})
+	w, err := Load(filepath.Join(dir, "a"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w.Root != dir {
+		t.Errorf("Root = %s, want module root %s", w.Root, dir)
+	}
+	if _, f := w.FileSyntax(filepath.Join(dir, "b", "b.go")); f == nil {
+		t.Error("sibling package b was not loaded")
+	}
+	if got, want := w.Abs("a.go"), filepath.Join(dir, "a", "a.go"); got != want {
+		t.Errorf("Abs(a.go) = %s, want %s (relative to the given dir)", got, want)
+	}
+	if got, want := w.Abs("b/b.go"), filepath.Join(dir, "b", "b.go"); got != want {
+		t.Errorf("Abs(b/b.go) = %s, want %s (fallback to module root)", got, want)
+	}
+}
+
 func TestRefusesOutsideRoot(t *testing.T) {
 	dir := writeModule(t, map[string]string{"m.go": "package m\n"})
 	w, err := Load(dir)

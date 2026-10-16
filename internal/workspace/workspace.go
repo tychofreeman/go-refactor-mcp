@@ -34,8 +34,9 @@ const loadMode = packages.NeedName |
 // Workspace is a loaded, type-checked set of packages rooted at Root.
 // It is not safe for concurrent use.
 type Workspace struct {
-	Root     string   // absolute directory; only files under it are edited
-	Patterns []string // package patterns, e.g. "./..."
+	Root     string   // module root (absolute); only files under it are edited
+	Base     string   // directory the caller pointed at; relative paths resolve here first
+	Patterns []string // package patterns relative to Root, e.g. "./..."
 
 	Fset *token.FileSet
 	// Pkgs holds every loaded package, including test variants
@@ -64,17 +65,25 @@ func (c Change) Files(root string) []string {
 	return out
 }
 
-// Load loads and type-checks the packages matching patterns (default
-// "./...") in dir, including tests.
+// Load loads and type-checks the module containing dir, including tests.
+//
+// The root is always the enclosing module (the nearest directory with a
+// go.mod), not dir itself: a rename must see every package that might
+// reference the symbol, or it would silently miss those references and the
+// post-change type check would not notice. Patterns (default "./...") are
+// relative to the module root. Relative file paths given to Abs are
+// resolved against dir first, so callers can keep using paths relative to
+// where they pointed the tool.
 func Load(dir string, patterns ...string) (*Workspace, error) {
-	root, err := filepath.Abs(dir)
+	base, err := filepath.Abs(dir)
 	if err != nil {
 		return nil, err
 	}
+	root := moduleRoot(base)
 	if len(patterns) == 0 {
 		patterns = []string{"./..."}
 	}
-	w := &Workspace{Root: root, Patterns: patterns}
+	w := &Workspace{Root: root, Base: base, Patterns: patterns}
 	if err := w.Reload(); err != nil {
 		return nil, err
 	}
@@ -141,12 +150,38 @@ func (w *Workspace) Contains(path string) bool {
 	return err == nil && r != ".." && !strings.HasPrefix(r, ".."+string(filepath.Separator))
 }
 
-// Abs resolves a path given relative to the root (or already absolute).
+// Abs resolves a path given relative to Base (where the caller pointed the
+// tool) or, failing that, to the module root. Absolute paths are cleaned.
 func (w *Workspace) Abs(path string) string {
 	if filepath.IsAbs(path) {
 		return filepath.Clean(path)
 	}
+	if w.Base != "" && w.Base != w.Root {
+		if p := filepath.Join(w.Base, path); fileExists(p) {
+			return p
+		}
+	}
 	return filepath.Join(w.Root, path)
+}
+
+// moduleRoot returns the nearest ancestor of dir (inclusive) containing a
+// go.mod, or dir itself if there is none.
+func moduleRoot(dir string) string {
+	for d := dir; ; {
+		if fileExists(filepath.Join(d, "go.mod")) {
+			return d
+		}
+		parent := filepath.Dir(d)
+		if parent == d {
+			return dir
+		}
+		d = parent
+	}
+}
+
+func fileExists(p string) bool {
+	fi, err := os.Stat(p)
+	return err == nil && !fi.IsDir()
 }
 
 // Rel returns path relative to the workspace root, for display.
