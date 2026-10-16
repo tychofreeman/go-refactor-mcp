@@ -1,0 +1,1 @@
+the goto at m.go:5:3 jumps over the place where the variable would be declared

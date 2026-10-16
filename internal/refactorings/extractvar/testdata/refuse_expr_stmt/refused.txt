@@ -1,0 +1,1 @@
+is a whole statement whose value is discarded

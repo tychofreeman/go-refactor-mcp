@@ -1,0 +1,1 @@
+dividing by the constant 0 is a compile error

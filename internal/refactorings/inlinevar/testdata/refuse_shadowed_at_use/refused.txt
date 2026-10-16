@@ -1,0 +1,1 @@
+"a" (used by its initializer `a * 2`) refers to the variable declared at m.go:6:3 instead

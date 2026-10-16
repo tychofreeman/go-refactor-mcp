@@ -1,0 +1,1 @@
+the reference at m.go:7:10 would refer to the variable "b" declared at m.go:6:3 instead

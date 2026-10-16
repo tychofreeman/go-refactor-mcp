@@ -1,0 +1,1 @@
+`fmt.Println("loaded")` (at m.go:10:2) runs between the declaration of "v" and its use

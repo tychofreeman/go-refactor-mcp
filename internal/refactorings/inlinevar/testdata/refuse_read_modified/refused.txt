@@ -1,0 +1,1 @@
+"a", which the initializer of "b" reads, is modified at m.go:5:2 before a use

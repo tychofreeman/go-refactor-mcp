@@ -1,0 +1,1 @@
+is modified at m.go:8:3 inside the loop or function literal that uses it

@@ -1,0 +1,1 @@
+is not inside a function body

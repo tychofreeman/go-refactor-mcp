@@ -1,0 +1,1 @@
+"x" is modified at m.go:5:2, after the new variable would be declared

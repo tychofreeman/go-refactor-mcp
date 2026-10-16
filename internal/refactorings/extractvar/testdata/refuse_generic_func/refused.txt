@@ -1,0 +1,1 @@
+generic function whose type arguments are inferred

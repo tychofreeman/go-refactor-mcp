@@ -1,0 +1,1 @@
+"v" is used 2 times, and its initializer `load()` could give a different value

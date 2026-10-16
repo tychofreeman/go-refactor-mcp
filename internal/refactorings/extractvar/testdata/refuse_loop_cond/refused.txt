@@ -1,0 +1,1 @@
+loop condition, which is evaluated before every iteration

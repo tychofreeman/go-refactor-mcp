@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "gorefactor": {
+      "command": "refactor-mcp"
+    }
+  }
+}

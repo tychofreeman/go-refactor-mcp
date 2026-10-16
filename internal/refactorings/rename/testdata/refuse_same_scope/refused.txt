@@ -1,0 +1,1 @@
+"b" is already declared in the same scope, at m.go:5:2

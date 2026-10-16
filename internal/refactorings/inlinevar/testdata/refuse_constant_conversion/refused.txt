@@ -1,0 +1,1 @@
+would make it a constant conversion, which Go rejects

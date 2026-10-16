@@ -1,0 +1,1 @@
+"sum" is already declared in this block, at m.go:4:2
