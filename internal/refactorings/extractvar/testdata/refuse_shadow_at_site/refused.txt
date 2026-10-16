@@ -1,0 +1,1 @@
+at m.go:7:17, "sum" already refers to the variable declared at m.go:6:3

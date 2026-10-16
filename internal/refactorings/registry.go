@@ -4,6 +4,7 @@ package refactorings
 
 import (
 	"github.com/cwfreeman/gorefactor/internal/refactor"
+	"github.com/cwfreeman/gorefactor/internal/refactorings/extractvar"
 	"github.com/cwfreeman/gorefactor/internal/refactorings/rename"
 )
 
@@ -11,7 +12,8 @@ import (
 func All() []refactor.Refactoring {
 	return []refactor.Refactoring{
 		rename.New(),
-		// Step 3: extract_variable, inline_variable, invert_if, extract_function, ...
+		extractvar.New(),
+		// Next: inline_variable, invert_if, extract_function, ...
 	}
 }
 

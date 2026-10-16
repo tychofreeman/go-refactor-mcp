@@ -20,9 +20,11 @@ model reads before choosing the next refactoring. That loop is the iteration.
   type-aware `rename`, golden tests and a CLI.
 - **Step 2:** MCP server (`cmd/refactor-mcp`) with `rename`, `inspect`,
   `undo` and `check`, usable from Claude Code.
+- **Step 3 (in progress):** refactorings that simplify code.
+  `extract_variable` is done.
 
-Next: `extract_variable`, `inline_variable`, `invert_if` (guard clauses),
-`extract_function`; then an Ollama loop.
+Next: `inline_variable`, `invert_if` (guard clauses), `extract_function`;
+then an Ollama loop.
 
 ## Layout
 
@@ -40,6 +42,7 @@ internal/
   refactorings/
     registry.go               the list of tools
     rename/                   rename + testdata/<case>/{in,out,args.json,refused.txt}
+    extractvar/               extract_variable + testdata
 ```
 
 ## Getting started
@@ -84,7 +87,7 @@ Tools:
 | Tool | What it does |
 |---|---|
 | `inspect` | No args: module overview. `file`: outline (line ranges, complexity, nesting) + numbered source. `function` or `start_line`/`end_line` to narrow. |
-| `rename` (and every future refactoring) | Applies one step; returns `APPLIED` + diff, or `REFUSED` + reason (nothing changed). |
+| `rename`, `extract_variable` (and every future refactoring) | Applies one step; returns `APPLIED` + diff, or `REFUSED` + reason (nothing changed). |
 | `undo` | Reverts the last applied step; repeatable. |
 | `check` | Type-check status; `run_tests: true` also runs `go test`. |
 
@@ -104,6 +107,7 @@ refactor list
 refactor -C path/to/module -n rename file=main.go line=7 name=t new_name=total   # preview
 refactor -C path/to/module    rename file=main.go line=7 name=t new_name=total   # apply
 refactor rename '{"file":"main.go","line":7,"name":"t","new_name":"total"}'      # JSON args, as a model sends them
+refactor -n extract_variable file=main.go line=12 expression='qty*unit' name=subtotal
 ```
 
 Exit status: `0` applied/previewed, `2` refused, `1` error.
@@ -131,7 +135,7 @@ updated; exported renames add a note saying so.
 - **Model-friendly addressing.** Symbols are found by `file` + `line` + `name`;
   `column` is only needed when the same name means different things on one
   line, and the refusal says which columns to choose from. No byte offsets.
-- **One tool per refactoring** (when the MCP server lands), each with its own
+- **One tool per refactoring**, each with its own
   JSON schema and a description that says *when* to use it. Unknown argument
   fields are rejected so a misspelled parameter isn't silently ignored.
 - **Test variants.** Packages are loaded with tests, so a file can appear in
@@ -159,6 +163,55 @@ Refused (with an explanation):
 Not supported yet: imports, labels, embedded fields (and types that are
 embedded), interface methods. Comments mentioning the old name are not
 changed; the result includes a note listing them so the model can decide.
+
+## Extract variable: what it checks
+
+`extract_variable` inserts `name := <expression>` before the statement that
+contains the expression and uses `name` in its place. The expression is
+identified by `file`, the `line` it starts on and its source text (whitespace
+may differ; `column` disambiguates repeats on one line). `all_occurrences`
+also replaces identical occurrences later in the same block.
+
+What it produces:
+
+- constant expressions become `const` (so untyped constants stay untyped:
+  `n * (1 << 10)` → `const kib = 1 << 10` and `n * kib`);
+- when `:=` would infer a different type than the context gave the
+  expression, it declares the type: `var m uint8 = 1 << n` →
+  `var bit uint8 = 1 << n`, not `bit := 1 << n` (which would be an `int`);
+- an extraction from an `if`/`switch` init, `if` condition or `range`
+  expression is placed before that statement.
+
+Refused (with an explanation), because hoisting the expression could
+change behavior:
+
+- it is evaluated conditionally or repeatedly: right operand of `&&`/`||`,
+  `for` condition or post statement, `else if`, `case` expression, `select` case
+  (constants are exempt);
+- it would move ahead of a call or channel receive earlier in the same
+  statement (`read() - read2()`), unless its value depends only on constants
+  and local variables that nothing else can reach;
+- it is assigned to, has its address taken, is sliced (arrays), or has a
+  pointer-receiver method called on it: a new variable would be a copy;
+- it uses a variable declared by the statement itself (`if v := f(); v > 3`);
+- it is a type, package, builtin, `nil`, a void or multi-value call, a whole
+  expression statement, a `defer`/`go` call, uses `iota`, or is a generic
+  function whose type arguments are inferred;
+- the new name is already declared in the block, would hide a name used later
+  in the block, or is itself hidden at a replacement site;
+- a `goto` jumps forward over the new declaration.
+
+`all_occurrences` additionally requires an expression with no calls (other
+than conversions and `len`/`cap`/`min`/`max`), no pointer, slice or map
+element reads, no globals, no new slices or maps, and no local variable that
+escapes (address taken, captured by a closure) or is modified after the
+declaration. Without `all_occurrences`, the result notes other occurrences
+that could be replaced.
+
+Known limitation: if both the hoisted expression and an earlier part of the
+same statement would panic, which panic happens first can change (e.g. a
+division by zero instead of a nil dereference). Non-panicking behavior is
+preserved.
 
 ## Adding a refactoring
 

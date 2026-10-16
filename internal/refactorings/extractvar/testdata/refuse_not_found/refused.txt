@@ -1,0 +1,1 @@
+no expression "qty * price" starts on m.go:4; that line is: return qty*unit - discount

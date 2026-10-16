@@ -1,0 +1,1 @@
+would hide the package-level variable "total" declared at m.go:3:5, which is used at m.go:7:13

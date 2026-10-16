@@ -97,7 +97,7 @@ func TestToolsAndInstructions(t *testing.T) {
 	for _, tool := range res.Tools {
 		names[tool.Name] = tool
 	}
-	for _, want := range []string{"rename", "inspect", "undo", "check"} {
+	for _, want := range []string{"rename", "extract_variable", "inspect", "undo", "check"} {
 		if names[want] == nil {
 			t.Errorf("tool %q not listed", want)
 		}
