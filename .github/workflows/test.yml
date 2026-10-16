@@ -22,7 +22,7 @@ jobs:
         # The minimum version in go.mod through the newest release. The
         # newest matters most: golang.org/x/tools must be recent enough to
         # read the package data of the Go version users have installed.
-        go: ["1.25.x", "1.26.x", "stable"]
+        go: ["1.26.x", "stable"]
     env:
       # Use exactly the Go version from the matrix, not one go.mod asks for.
       GOTOOLCHAIN: local
