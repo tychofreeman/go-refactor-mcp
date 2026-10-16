@@ -16,20 +16,23 @@ model reads before choosing the next refactoring. That loop is the iteration.
 
 ## Status
 
-**Step 1 (this scaffold):** workspace loading, edits, diffs, undo, the safety
-engine, a type-aware `rename`, golden tests and a CLI.
+- **Step 1:** workspace loading, edits, diffs, undo, the safety engine, a
+  type-aware `rename`, golden tests and a CLI.
+- **Step 2:** MCP server (`cmd/refactor-mcp`) with `rename`, `inspect`,
+  `undo` and `check`, usable from Claude Code.
 
-Next steps: MCP server (`cmd/refactor-mcp`) exposing each refactoring as a
-tool plus `inspect` and `undo`; then `extract_variable`, `inline_variable`,
-`invert_if`, `extract_function`; then `go test` verification and an Ollama
-loop.
+Next: `extract_variable`, `inline_variable`, `invert_if` (guard clauses),
+`extract_function`; then an Ollama loop.
 
 ## Layout
 
 ```
 cmd/refactor/                 CLI: one refactoring step per invocation
+cmd/refactor-mcp/             MCP server (stdio) for Claude Code and other MCP clients
 internal/
   edit/                       TextEdit/FileEdit, Apply, unified diff (Myers)
+  inspect/                    module overview, file outline + complexity, numbered source
+  mcpserver/                  MCP tools: one per refactoring, plus inspect, undo, check
   workspace/                  go/packages loading (incl. tests), apply, undo, errors
   locate/                     file+line+name (+column) → *ast.Ident
   refactor/                   Refactoring interface, Refusal, Run (the safety engine)
@@ -42,12 +45,59 @@ internal/
 ## Getting started
 
 ```sh
-go mod tidy          # fetches golang.org/x/tools and writes go.sum
+go mod tidy          # fetches dependencies and updates go.sum
 go test ./...
-go install ./cmd/refactor
+go install ./cmd/refactor ./cmd/refactor-mcp
 ```
 
-Try it on any module:
+`go install` puts binaries in `$(go env GOPATH)/bin` (usually `~/go/bin`);
+add that to your `PATH`, or install elsewhere with `GOBIN=~/bin go install ...`.
+
+## Using it from Claude Code
+
+Register the server once for all your projects (user scope):
+
+```sh
+claude mcp add --scope user gorefactor -- refactor-mcp
+```
+
+Or share it with a project by committing a `.mcp.json` at its root (see
+`examples/mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "gorefactor": { "command": "refactor-mcp" }
+  }
+}
+```
+
+If `refactor-mcp` is not on the `PATH` Claude Code sees, use its absolute
+path as the command. The server works on the module containing `-C`, or
+`$CLAUDE_PROJECT_DIR` (which Claude Code sets), or its working directory.
+
+Then, in a Go project, ask something like *"use the gorefactor tools to
+simplify calc/calc.go"*. Run `/mcp` in Claude Code to see the server's status.
+
+Tools:
+
+| Tool | What it does |
+|---|---|
+| `inspect` | No args: module overview. `file`: outline (line ranges, complexity, nesting) + numbered source. `function` or `start_line`/`end_line` to narrow. |
+| `rename` (and every future refactoring) | Applies one step; returns `APPLIED` + diff, or `REFUSED` + reason (nothing changed). |
+| `undo` | Reverts the last applied step; repeatable. |
+| `check` | Type-check status; `run_tests: true` also runs `go test`. |
+
+The server sends instructions to the model at startup (one refactoring per
+call, re-inspect after each step, stop when nothing clearly improves). It
+keeps one workspace per session so `undo` works across calls, and it
+re-checks the files on disk before every call: if the model or you edit a
+file directly in between, it reloads instead of applying edits at stale
+offsets, and `undo` refuses to clobber those edits.
+
+## Using the CLI
+
+The CLI runs one step with the same engine and arguments as the MCP tools:
 
 ```sh
 refactor list
@@ -119,4 +169,6 @@ changed; the result includes a note listing them so the model can decide.
    `go.mod`), `args.json`, and either `out/` or `refused.txt`. Generate `out/`
    with `go test ./internal/refactorings/<name>/ -update` and review the diff.
    The harness also checks that undo restores `in/` exactly.
-3. Register it in `internal/refactorings/registry.go`.
+3. Register it in `internal/refactorings/registry.go`. It then appears as an
+   MCP tool (named `Name()`, described by `Description()`) and in the CLI
+   automatically.

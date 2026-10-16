@@ -12,6 +12,8 @@ import (
 	"go/ast"
 	"go/format"
 	"go/token"
+	"hash/fnv"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -45,6 +47,53 @@ type Workspace struct {
 	Pkgs []*packages.Package
 
 	undo []Change
+	fp   uint64 // fingerprint of the module's files at the last load
+}
+
+// Refresh reloads the workspace if any Go source, go.mod, go.sum or go.work
+// file under the root was added, removed or modified since the last load.
+// A long-running server must call it before every operation: the model (or
+// a person) may edit files directly between tool calls, and edits computed
+// against stale syntax trees would land at the wrong byte offsets.
+func (w *Workspace) Refresh() (reloaded bool, err error) {
+	fp, err := fingerprint(w.Root)
+	if err != nil {
+		return false, err
+	}
+	if fp == w.fp {
+		return false, nil
+	}
+	return true, w.Reload()
+}
+
+// fingerprint hashes the path, size and modification time of every file
+// that affects package loading. Walking a module this way is far cheaper
+// than re-type-checking it.
+func fingerprint(root string) (uint64, error) {
+	h := fnv.New64a()
+	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		name := d.Name()
+		if d.IsDir() {
+			if p != root && (strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") ||
+				name == "testdata" || name == "vendor" || name == "node_modules") {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(name, ".go") && name != "go.mod" && name != "go.sum" && name != "go.work" {
+			return nil
+		}
+		fi, err := d.Info()
+		if err != nil {
+			return nil // vanished during the walk; the next refresh will see it
+		}
+		fmt.Fprintf(h, "%s\x00%d\x00%d\n", p, fi.Size(), fi.ModTime().UnixNano())
+		return nil
+	})
+	return h.Sum64(), err
 }
 
 // Change records one applied set of edits, enough to show it and undo it.
@@ -92,6 +141,13 @@ func Load(dir string, patterns ...string) (*Workspace, error) {
 
 // Reload re-reads and re-type-checks all packages from disk.
 func (w *Workspace) Reload() error {
+	// Fingerprint before loading: if a file changes during the load, the
+	// next Refresh sees a different fingerprint and loads again.
+	fp, err := fingerprint(w.Root)
+	if err != nil {
+		return err
+	}
+	w.fp = fp
 	fset := token.NewFileSet()
 	cfg := &packages.Config{
 		Mode:  loadMode,

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cwfreeman/gorefactor/internal/edit"
 )
@@ -97,6 +98,37 @@ func TestLoadFromSubdirUsesModuleRoot(t *testing.T) {
 	}
 	if got, want := w.Abs("b/b.go"), filepath.Join(dir, "b", "b.go"); got != want {
 		t.Errorf("Abs(b/b.go) = %s, want %s (fallback to module root)", got, want)
+	}
+}
+
+func TestRefresh(t *testing.T) {
+	dir := writeModule(t, map[string]string{"m.go": "package m\n\nvar X = 1\n"})
+	w, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reloaded, err := w.Refresh(); err != nil || reloaded {
+		t.Fatalf("Refresh with no changes: reloaded=%v err=%v", reloaded, err)
+	}
+
+	// An external edit (e.g. the model editing a file directly) must be
+	// picked up, even if it keeps the size and lands in the same mtime tick.
+	path := filepath.Join(dir, "m.go")
+	os.WriteFile(path, []byte("package m\n\nvar Y = 2\n"), 0o644)
+	future := time.Now().Add(2 * time.Second)
+	os.Chtimes(path, future, future)
+	if reloaded, err := w.Refresh(); err != nil || !reloaded {
+		t.Fatalf("Refresh after edit: reloaded=%v err=%v", reloaded, err)
+	}
+	_, f := w.FileSyntax(path)
+	if f == nil || f.Scope.Lookup("Y") == nil {
+		t.Error("reloaded syntax does not contain the edit")
+	}
+
+	// A new file is also a change.
+	os.WriteFile(filepath.Join(dir, "n.go"), []byte("package m\n"), 0o644)
+	if reloaded, _ := w.Refresh(); !reloaded {
+		t.Error("adding a file did not trigger a reload")
 	}
 }
 

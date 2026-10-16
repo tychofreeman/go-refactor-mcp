@@ -427,6 +427,9 @@ func (r *renamer) checkInterfaces(recv *types.Named) error {
 	}
 	// Any workspace type whose method set reaches our method (directly or
 	// through embedding) must not be relying on it for an interface.
+	// Candidates are checked in source order so messages are deterministic.
+	var candidates []*types.Named
+	seen := map[string]bool{}
 	for _, p := range r.ws.Pkgs {
 		if p.TypesInfo == nil {
 			continue
@@ -437,22 +440,29 @@ func (r *renamer) checkInterfaces(recv *types.Named) error {
 				continue
 			}
 			named, ok := tn.Type().(*types.Named)
-			if !ok {
+			if !ok || seen[keyOf(r.ws.Fset, tn)] {
 				continue
 			}
 			m, _, _ := types.LookupFieldOrMethod(types.NewPointer(named), false, r.first.Pkg(), r.old)
 			if m == nil || keyOf(r.ws.Fset, m) != r.key {
 				continue
 			}
-			if named.TypeParams().Len() > 0 {
-				return refactor.Refusef("method %s is on generic type %s and an interface with a method %q exists (%s); cannot prove renaming is safe",
-					r.old, named.Obj().Name(), r.old, ifaces[0].name)
-			}
-			for _, it := range ifaces {
-				if types.Implements(named, it.iface) || types.Implements(types.NewPointer(named), it.iface) {
-					return refactor.Refusef("type %s implements interface %s through method %s; renaming the method would break that (rename the interface method instead, which is not supported yet)",
-						named.Obj().Name(), it.name, r.old)
-				}
+			seen[keyOf(r.ws.Fset, tn)] = true
+			candidates = append(candidates, named)
+		}
+	}
+	sort.Slice(candidates, func(i, j int) bool {
+		return keyOf(r.ws.Fset, candidates[i].Obj()) < keyOf(r.ws.Fset, candidates[j].Obj())
+	})
+	for _, named := range candidates {
+		if named.TypeParams().Len() > 0 {
+			return refactor.Refusef("method %s is on generic type %s and an interface with a method %q exists (%s); cannot prove renaming is safe",
+				r.old, named.Obj().Name(), r.old, ifaces[0].name)
+		}
+		for _, it := range ifaces {
+			if types.Implements(named, it.iface) || types.Implements(types.NewPointer(named), it.iface) {
+				return refactor.Refusef("type %s implements interface %s through method %s; renaming the method would break that (rename the interface method instead, which is not supported yet)",
+					named.Obj().Name(), it.name, r.old)
 			}
 		}
 	}
@@ -462,55 +472,75 @@ func (r *renamer) checkInterfaces(recv *types.Named) error {
 type namedIface struct {
 	name  string
 	iface *types.Interface
+	named bool // name is a declared type name, not the interface literal
 }
 
 // interfacesWithMethod collects every interface type reachable from the
 // workspace's types (named interfaces, interface parameters of called
-// functions, anonymous interfaces) that has a method called name.
+// functions, anonymous interfaces) that has a method called name. Named
+// interfaces are listed first and an interface reached both through its
+// name and directly is reported by its name, so messages are stable
+// regardless of map iteration order.
 func (r *renamer) interfacesWithMethod(name string) []namedIface {
 	var out []namedIface
+	index := map[*types.Interface]int{}
+	record := func(it *types.Interface, label string, named bool) {
+		hasMethod := false
+		for i := 0; i < it.NumMethods(); i++ {
+			if it.Method(i).Name() == name {
+				hasMethod = true
+				break
+			}
+		}
+		if !hasMethod {
+			return
+		}
+		if i, ok := index[it]; ok {
+			if named && !out[i].named {
+				out[i].name, out[i].named = label, true
+			}
+			return
+		}
+		index[it] = len(out)
+		out = append(out, namedIface{label, it, named})
+	}
 	seen := map[types.Type]bool{}
-	var visit func(t types.Type, label string)
-	visit = func(t types.Type, label string) {
+	var visit func(t types.Type)
+	visit = func(t types.Type) {
 		if t == nil || seen[t] {
 			return
 		}
 		seen[t] = true
 		switch t := t.(type) {
 		case *types.Alias:
-			visit(types.Unalias(t), label)
+			visit(types.Unalias(t))
 		case *types.Named:
-			visit(t.Underlying(), t.String())
-		case *types.Interface:
-			for i := 0; i < t.NumMethods(); i++ {
-				if t.Method(i).Name() == name {
-					if label == "" {
-						label = t.String()
-					}
-					out = append(out, namedIface{label, t})
-					break
-				}
+			if it, ok := t.Underlying().(*types.Interface); ok {
+				record(it, t.String(), true)
 			}
+			visit(t.Underlying())
+		case *types.Interface:
+			record(t, t.String(), false)
 		case *types.Pointer:
-			visit(t.Elem(), "")
+			visit(t.Elem())
 		case *types.Slice:
-			visit(t.Elem(), "")
+			visit(t.Elem())
 		case *types.Array:
-			visit(t.Elem(), "")
+			visit(t.Elem())
 		case *types.Chan:
-			visit(t.Elem(), "")
+			visit(t.Elem())
 		case *types.Map:
-			visit(t.Key(), "")
-			visit(t.Elem(), "")
+			visit(t.Key())
+			visit(t.Elem())
 		case *types.Signature:
 			for _, tup := range []*types.Tuple{t.Params(), t.Results()} {
 				for i := 0; i < tup.Len(); i++ {
-					visit(tup.At(i).Type(), "")
+					visit(tup.At(i).Type())
 				}
 			}
 		case *types.Struct:
 			for i := 0; i < t.NumFields(); i++ {
-				visit(t.Field(i).Type(), "")
+				visit(t.Field(i).Type())
 			}
 		}
 	}
@@ -519,14 +549,20 @@ func (r *renamer) interfacesWithMethod(name string) []namedIface {
 			continue
 		}
 		for _, tv := range p.TypesInfo.Types {
-			visit(tv.Type, "")
+			visit(tv.Type)
 		}
 		for _, o := range p.TypesInfo.Defs {
 			if o != nil {
-				visit(o.Type(), "")
+				visit(o.Type())
 			}
 		}
 	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].named != out[j].named {
+			return out[i].named
+		}
+		return out[i].name < out[j].name
+	})
 	return out
 }
 
