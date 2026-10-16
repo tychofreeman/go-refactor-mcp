@@ -1,0 +1,1 @@
+returns run's named results implicitly

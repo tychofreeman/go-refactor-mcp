@@ -1,1 +1,1 @@
-return statement at line 5
+the selected lines return at line 5, but not on every path, and run does not return an error
