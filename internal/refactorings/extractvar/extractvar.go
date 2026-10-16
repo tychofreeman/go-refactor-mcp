@@ -186,6 +186,9 @@ func (x *extraction) plan(expr ast.Expr, all bool) (*refactor.Plan, error) {
 		if err := x.checkOrder(expr, stmt); err != nil {
 			return nil, err
 		}
+		if err := x.checkWritesBefore(expr, stmt); err != nil {
+			return nil, err
+		}
 		if err := x.checkGoto(insertPos); err != nil {
 			return nil, err
 		}
@@ -639,6 +642,65 @@ func (x *extraction) checkOrder(expr ast.Expr, stmt ast.Stmt) error {
 	if culprit, ok := x.fa.Stable(expr, false); !ok {
 		return refactor.Refusef("extracting %s would evaluate it before %s (at %s), which comes first in the statement and could change what %s computes; extract %s first, or choose another expression",
 			x.quote(expr), x.quote(first), x.ws.Position(first.Pos()), x.quote(culprit), x.quote(first))
+	}
+	return nil
+}
+
+// checkWritesBefore refuses if hoisting the expression would make it run
+// before an assignment or ++/-- that precedes it in the same statement,
+// such as the init of `if v, ok = m[k]; !ok`, and that could change its
+// value. If the expression reads only local variables that nothing else
+// can reach, only writes to those variables count; otherwise any earlier
+// write does, as any earlier call does in checkOrder.
+//
+// A write in the same assignment as the expression does not count: the
+// right-hand side is evaluated before anything is assigned.
+func (x *extraction) checkWritesBefore(expr ast.Expr, stmt ast.Stmt) error {
+	var writes []ast.Stmt // assignments and ++/-- before expr
+	ast.Inspect(stmt, func(n ast.Node) bool {
+		if n == nil || n.Pos() >= expr.Pos() {
+			return false
+		}
+		switch n := n.(type) {
+		case *ast.FuncLit:
+			return false // runs only when called, which checkOrder covers
+		case *ast.AssignStmt:
+			if n.End() <= expr.Pos() {
+				writes = append(writes, n)
+			}
+		case *ast.IncDecStmt:
+			if n.End() <= expr.Pos() {
+				writes = append(writes, n)
+			}
+		}
+		return true
+	})
+	if len(writes) == 0 {
+		return nil
+	}
+	_, stable := x.fa.Stable(expr, false)
+	reads := map[*types.Var]bool{}
+	for _, v := range x.fa.LocalsRead(expr) {
+		reads[v] = true
+	}
+	for _, w := range writes {
+		var lhs []ast.Expr
+		switch w := w.(type) {
+		case *ast.AssignStmt:
+			lhs = w.Lhs
+		case *ast.IncDecStmt:
+			lhs = []ast.Expr{w.X}
+		}
+		affects := !stable
+		for _, l := range lhs {
+			if v := x.fa.RootVar(l); v != nil && reads[v] {
+				affects = true
+			}
+		}
+		if affects {
+			return refactor.Refusef("extracting %s would evaluate it before %s (at %s), which comes first in the statement and could change its value; extract from a statement that does not assign first, or choose another expression",
+				x.quote(expr), x.quote(w), x.ws.Position(w.Pos()))
+		}
 	}
 	return nil
 }
