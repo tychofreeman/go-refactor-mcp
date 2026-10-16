@@ -307,6 +307,9 @@ Refused (with an explanation):
   function literals);
 - a `break`, `continue` or `goto` that leaves the selection, or a jump from
   outside to a label inside it;
+- the selection ends with what makes a function with results end without
+  a `return` (a `panic`, a `for` without condition, ...): a call to the new
+  function is not a terminating statement, so the code would not compile;
 - the name is invalid, `init`, predeclared (`len`), already declared in the
   package (including its test files), an import name, hidden at the call site
   by a local declaration, or in a `_test.go` file looks like a test
