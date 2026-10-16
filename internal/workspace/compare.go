@@ -11,7 +11,8 @@ import (
 )
 
 // Compare reports how two workspaces of the same module differ in what
-// refactorings can observe: packages, files, errors, and type information
+// refactorings can observe: packages (including test variants of
+// dependencies, see sourcePackages), files, errors, and type information
 // (definitions, uses, implicit objects, expression types and constant
 // values, selections, instantiations, scopes). Everything is described by
 // source positions and type strings, so a workspace that was updated
@@ -74,7 +75,7 @@ func (w *Workspace) describe() map[string][]string {
 		}
 		return fmt.Sprintf("%T %s @%s", o, types.ObjectString(o, nil), at)
 	}
-	for _, p := range w.Pkgs {
+	for _, p := range w.sourcePackages() {
 		var facts []string
 		f := func(format string, args ...any) { facts = append(facts, fmt.Sprintf(format, args...)) }
 		f("name %s path %s", p.Name, p.PkgPath)
