@@ -703,6 +703,15 @@ func (x *inliner) contextType(use *ast.Ident, parent ast.Node) types.Type {
 		if t := x.info.TypeOf(other); t != nil && !x.maybeUntyped(other) {
 			return t
 		}
+	case *ast.IndexExpr:
+		// A map index converts its key to the key type. (A slice, array or
+		// string index does not: an untyped value there becomes int, which
+		// can change the arithmetic, e.g. 1 << n no longer wraps at 8 bits.)
+		if p.Index == ast.Expr(use) {
+			if m, ok := under(x.info.TypeOf(p.X)).(*types.Map); ok {
+				return m.Key()
+			}
+		}
 	case *ast.SendStmt:
 		if p.Value == ast.Expr(use) {
 			if ch, ok := under(x.info.TypeOf(p.Chan)).(*types.Chan); ok {
