@@ -194,6 +194,13 @@ func (x *inliner) plan() (*refactor.Plan, error) {
 		notes = append(notes, fmt.Sprintf("kept parameter%s %s as variable%s declared at the top of the inlined code, because using the argument directly could change what the body sees; rename if the name does not fit the caller",
 			plural(len(bound)), strings.Join(bound, ", "), plural(len(bound))))
 	}
+	if deleted && x.decl.Doc != nil {
+		doc := strings.TrimSpace(x.decl.Doc.Text())
+		if i := strings.IndexByte(doc, '\n'); i >= 0 {
+			doc = doc[:i] + " ..."
+		}
+		notes = append(notes, fmt.Sprintf("the deleted function's doc comment (%q) went with it; add a comment at the call if it explained something", doc))
+	}
 	if !deleted && why != "" {
 		notes = append(notes, fmt.Sprintf("kept %s: %s", x.fn.Name(), why))
 	}
@@ -628,10 +635,7 @@ func (x *inliner) decideMerges() error {
 			continue
 		}
 		if id.Name == "_" {
-			if _, stable := x.calleeFA.Stable(x.results[i], false); stable {
-				x.dropped[i] = true
-			}
-			continue
+			continue // resultLines decides
 		}
 		v := x.localVar(x.results[i])
 		if v == nil || returned[v] != 1 || v.Parent() != x.fnScope || x.calleeFA.Escapes(v) {

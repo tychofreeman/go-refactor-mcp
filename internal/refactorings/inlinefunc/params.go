@@ -6,6 +6,7 @@ import (
 	"go/constant"
 	"go/token"
 	"go/types"
+	"strings"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
@@ -31,7 +32,8 @@ type param struct {
 const (
 	stableArg = iota // cannot change and has no effects
 	readArg          // a variable read: no effects, but other code may change it
-	effectArg        // calls, receives, or reads that may panic
+	panicArg         // reads through pointers, indexes: no effects, but may panic
+	effectArg        // calls or receives
 	constArg         // a constant: substituting it can change constant arithmetic
 )
 
@@ -119,7 +121,7 @@ func (x *inliner) decideParams() error {
 		}
 	}
 	for _, p := range x.params {
-		if effects && p.subst && p.addr == nil && x.classify(p) == readArg {
+		if c := x.classify(p); effects && p.subst && p.addr == nil && (c == readArg || c == panicArg) {
 			p.subst, p.bind = false, true
 		}
 	}
@@ -139,10 +141,109 @@ func (x *inliner) decideParams() error {
 			}
 		}
 	}
+	for p := x.vetClash(); p != nil; p = x.vetClash() {
+		if x.shape == expr {
+			return refactor.Refusef("%q gets the same argument %s for two parameters, and inlining would write expressions that go vet rejects (identical operands of && or ||, or a self-assignment); assign the argument to a variable first",
+				x.fn.Name(), x.quote(p.arg))
+		}
+		p.subst, p.bind = false, true
+	}
 	if x.shape == expr {
 		return x.checkExprOrder()
 	}
 	return nil
+}
+
+// vetClash returns a substituted parameter that should stay a variable
+// because it gets the same argument as another one and substituting both
+// would produce code go vet rejects: "a && a", "a || a" (also in longer
+// chains) or "x = x". Returns nil if there is none.
+func (x *inliner) vetClash() *param {
+	byText := map[string]*param{}
+	var dup []*param
+	for _, p := range x.params {
+		if !p.subst || p.arg == nil {
+			continue
+		}
+		t := strings.Join(strings.Fields(p.text), "")
+		if byText[t] != nil {
+			dup = append(dup, p)
+		}
+		byText[t] = p
+	}
+	if len(dup) == 0 {
+		return nil
+	}
+	norm := func(n ast.Node) string {
+		return strings.Join(strings.Fields(x.rewrite(x.doff(n.Pos()), x.doff(n.End()))), "")
+	}
+	orig := func(n ast.Node) string { return strings.Join(strings.Fields(x.dtext(n)), "") }
+	bad := false
+	ast.Inspect(x.decl.Body, func(n ast.Node) bool {
+		if bad {
+			return false
+		}
+		switch n := n.(type) {
+		case *ast.BinaryExpr:
+			if n.Op != token.LAND && n.Op != token.LOR {
+				return true
+			}
+			ops := flatten(n, n.Op)
+			seen, seenOrig := map[string]bool{}, map[string]bool{}
+			for _, o := range ops {
+				t, ot := norm(o), orig(o)
+				if seen[t] && !seenOrig[ot] {
+					bad = true
+				}
+				seen[t], seenOrig[ot] = true, true
+			}
+			// vet's "suspect or/and": x != c1 || x != c2, x == c1 && x == c2.
+			cmp := token.NEQ
+			if n.Op == token.LAND {
+				cmp = token.EQL
+			}
+			consts, constsOrig := map[string]string{}, map[string]string{}
+			for _, o := range ops {
+				b, ok := ast.Unparen(o).(*ast.BinaryExpr)
+				if !ok || b.Op != cmp {
+					continue
+				}
+				e, c := b.X, b.Y
+				if x.info.Types[e].Value != nil {
+					e, c = c, e
+				}
+				if x.info.Types[c].Value == nil {
+					continue
+				}
+				t, ot, ct := norm(e), orig(e), x.info.Types[c].Value.ExactString()
+				if prev, ok := consts[t]; ok && prev != ct && constsOrig[ot] == "" {
+					bad = true
+				}
+				consts[t], constsOrig[ot] = ct, ct
+			}
+		case *ast.AssignStmt:
+			if len(n.Lhs) == len(n.Rhs) {
+				for i := range n.Lhs {
+					if norm(n.Lhs[i]) == norm(n.Rhs[i]) && orig(n.Lhs[i]) != orig(n.Rhs[i]) {
+						bad = true
+					}
+				}
+			}
+		}
+		return !bad
+	})
+	if !bad {
+		return nil
+	}
+	return dup[len(dup)-1]
+}
+
+// flatten returns the operands of a chain of op (a && b && c).
+func flatten(e ast.Expr, op token.Token) []ast.Expr {
+	if b, ok := ast.Unparen(e).(*ast.BinaryExpr); ok && b.Op == op {
+		return append(flatten(b.X, op), flatten(b.Y, op)...)
+	}
+	return []ast.Expr{e}
 }
 
 // decideParam chooses between substituting, binding and dropping.
@@ -213,6 +314,14 @@ func (x *inliner) decideParam(p *param) error {
 			}
 		}
 		p.subst = true
+	case panicArg:
+		if x.effectBefore(p) == nil && x.firstUseUnconditional(p) {
+			p.subst = true
+		} else if x.shape == expr {
+			return refactor.Refusef("the argument %s could change or fail differently once moved into %q (the body has calls before using it, or uses it conditionally); assign it to a variable first", x.quote(p.arg), x.fn.Name())
+		} else {
+			p.bind = true
+		}
 	case effectArg:
 		if x.shape != expr {
 			p.bind = true
@@ -344,7 +453,56 @@ func (x *inliner) classify(p *param) int {
 	if x.isVarPath(p.arg) {
 		return readArg
 	}
+	if x.pureRead(p.arg) {
+		return panicArg
+	}
 	return effectArg
+}
+
+// pureRead reports whether evaluating e only reads memory: no calls (other
+// than conversions and len/cap), receives, function literals or composite
+// literals. It may still panic (a nil pointer, an index out of range).
+func (x *inliner) pureRead(e ast.Expr) bool {
+	ok := true
+	ast.Inspect(e, func(n ast.Node) bool {
+		switch n := n.(type) {
+		case *ast.FuncLit, *ast.CompositeLit:
+			ok = false
+		case *ast.CallExpr:
+			if tv, isT := x.info.Types[n.Fun]; isT && tv.IsType() {
+				return ok
+			}
+			if b, isB := x.info.Uses[analysis.IdentOf(n.Fun)].(*types.Builtin); isB && (b.Name() == "len" || b.Name() == "cap") {
+				return ok
+			}
+			ok = false
+		case *ast.UnaryExpr:
+			if n.Op == token.ARROW {
+				ok = false
+			}
+		}
+		return ok
+	})
+	return ok
+}
+
+// firstUseUnconditional reports whether p's first use in the body is
+// evaluated whenever the body runs (not in a nested block, a function
+// literal or the right side of && or ||), so a panic the argument would
+// have raised at the call still happens, before anything else.
+func (x *inliner) firstUseUnconditional(p *param) bool {
+	path := analysis.PathTo(x.decl.Body, p.uses[0])
+	for i := 1; i < len(path)-1; i++ {
+		switch n := path[i].(type) {
+		case *ast.BlockStmt, *ast.CaseClause, *ast.CommClause, *ast.FuncLit:
+			return false
+		case *ast.BinaryExpr:
+			if (n.Op == token.LAND || n.Op == token.LOR) && path[i-1] == n.Y {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // isVarPath reports whether e is a variable or a field of one reached
@@ -367,6 +525,7 @@ func (x *inliner) isVarPath(e ast.Expr) bool {
 // nil.
 func (x *inliner) effectBefore(p *param) ast.Node {
 	last := token.NoPos
+	var once []*ast.Ident // uses not in a loop: evaluated once, in place
 	for _, u := range p.uses {
 		end := u.End()
 		for _, n := range analysis.PathTo(x.decl.Body, u) {
@@ -375,9 +534,51 @@ func (x *inliner) effectBefore(p *param) ast.Node {
 				end = max(end, n.End())
 			}
 		}
+		if end == u.End() {
+			once = append(once, u)
+		}
 		last = max(last, end)
 	}
+	// A call around a use runs after its arguments are evaluated, so it
+	// does not count; any other call in the use's statement does, since Go
+	// does not order a plain read against a call next to it.
+	encloses := func(n ast.Node) bool {
+		for _, u := range once {
+			if n.Pos() <= u.Pos() && u.End() <= n.End() {
+				return true
+			}
+		}
+		return false
+	}
 	var bad ast.Node
+	for _, u := range once {
+		path := analysis.PathTo(x.decl.Body, u)
+		var stmt ast.Node
+		for _, n := range path {
+			if _, ok := n.(ast.Stmt); ok {
+				stmt = n
+				break
+			}
+		}
+		if stmt == nil {
+			continue
+		}
+		ast.Inspect(stmt, func(n ast.Node) bool {
+			if n == nil || bad != nil {
+				return false
+			}
+			if _, ok := n.(*ast.FuncLit); ok {
+				return false
+			}
+			if analysis.HasEffect(x.info, n) && !encloses(n) {
+				bad = n
+			}
+			return bad == nil
+		})
+		if bad != nil {
+			return bad
+		}
+	}
 	ast.Inspect(x.decl.Body, func(n ast.Node) bool {
 		if n == nil || bad != nil || n.Pos() >= last {
 			return false
@@ -410,7 +611,7 @@ func (x *inliner) effectBefore(p *param) ast.Node {
 				}
 			}
 		default:
-			if analysis.HasEffect(x.info, n) {
+			if analysis.HasEffect(x.info, n) && !encloses(n) {
 				bad = n
 			}
 		}
@@ -473,7 +674,7 @@ func (x *inliner) checkExprOrder() error {
 		return nil
 	}
 	for _, p := range x.params {
-		if p.subst && x.classify(p) == readArg {
+		if c := x.classify(p); p.subst && (c == readArg || c == panicArg) {
 			return refactor.Refusef("the argument %s reads a variable that the argument %s could change; inlining would change the order. Assign the call to a variable first",
 				x.quote(p.arg), x.quote(effectful[0].arg))
 		}
@@ -538,8 +739,14 @@ func (x *inliner) wholeOperand(path []ast.Node) bool {
 		if tv, ok := x.info.Types[p.Fun]; ok && tv.IsType() {
 			return false
 		}
-		_, builtin := x.info.Uses[analysis.IdentOf(p.Fun)].(*types.Builtin)
-		return !builtin
+		if b, ok := x.info.Uses[analysis.IdentOf(p.Fun)].(*types.Builtin); ok {
+			switch b.Name() {
+			case "append", "copy", "delete", "print", "println", "panic", "clear", "close", "len", "cap":
+				return true // no constant folding of a whole argument there
+			}
+			return false // make, new, min, max, complex, real, imag
+		}
+		return true
 	}
 	return false
 }
