@@ -3,10 +3,10 @@ package m
 type counter struct{ n int }
 
 func (c *counter) Inc() {
-	bump(c)
+	c.bump()
 }
 
-func bump(c *counter) {
+func (c *counter) bump() {
 	c.n++
 	c.n *= 2
 }

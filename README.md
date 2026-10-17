@@ -333,6 +333,16 @@ fmt.Println(total)                     for _, x := range xs { total += x }
   other uses become `*v`, or `(*v)` where Go does not dereference
   (`(*v)[i]`, `(*v)(args)`, methods of interfaces). For example,
   `json.Unmarshal(data, &cfg)` moves as `json.Unmarshal(data, cfg)`.
+- If the statements use the receiver of the method they are in, the new
+  function is a method of the same type, called as `c.bump()`; generic
+  receivers (`(s *Stack[T])`) keep their type parameters. A value receiver
+  whose address is taken gets a pointer receiver. The name must be
+  unexported, must not clash with a field or method (including promoted
+  ones), and must not make the type, or a type embedding it, implement an
+  interface of the package it did not implement before. Statements inside
+  a function literal in a method become a function instead.
+- A variable that function literals use but nothing ever assigns cannot
+  change, so it is passed by value, not by pointer.
 - If a parameter or result type needs a package the file does not import,
   the import is added (with an alias such as `b2` when the package name is
   already used in the file or package), and the result notes it.

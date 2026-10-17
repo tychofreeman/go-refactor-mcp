@@ -1,0 +1,1 @@
+Bump is exported; a new exported method could make counter satisfy interfaces

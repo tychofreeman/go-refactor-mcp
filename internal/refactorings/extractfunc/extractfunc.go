@@ -59,7 +59,8 @@ Use it to split a long function into named steps.
 Identify the statements by file, start_line and end_line (inclusive, as shown by inspect). The lines must cover whole statements of one block; comments and blank lines in the range are allowed and comments move with the code.
 Local variables the statements use become parameters; variables they change or declare that are used afterwards become results, assigned at the call site. The result notes the parameters and results chosen.
 Return statements are supported in two shapes: if every path through the statements returns, the call site becomes "return f(...)"; if the enclosing function returns an error and every return in the statements is an early exit with a non-nil error (like "if err != nil { return nil, err }"), the new function also returns an error and the call site checks it.
-Variables whose address is taken or that a function literal uses are passed as pointers, so both functions share them.
+Variables whose address is taken or that a function literal changes are passed as pointers, so both functions share them.
+If the statements use the receiver of the method they are in, the new function is a method of the same type; its name must then be unexported and not clash with a field or method.
 Refuses other returns (for example an early return of a success value), defer, recover() or fallthrough, or a break, continue or goto that leaves the selected lines; if a variable they declare has its address taken or is used by a function literal and is used after them; or if they use constants or types declared inside the function.`
 }
 
@@ -113,6 +114,14 @@ type extraction struct {
 
 	imported map[string]string // import path -> name in this file
 	added    map[string]string // imports to add: path -> name
+
+	// recv is the enclosing method's receiver when the statements use it:
+	// the new function is then a method on the same type.
+	recv     *types.Var
+	recvType string // the receiver's type as written, e.g. "*Stack[T]"
+	// typeParams are type parameters the new function declares (through
+	// its receiver), so its signature may use them.
+	typeParams map[*types.TypeName]bool
 }
 
 // Plan checks preconditions and computes the edits.
@@ -637,6 +646,7 @@ type flow struct {
 // conservatively: any use outside the selection counts, and so does being
 // read in the selection when the selection is in a loop.
 func (x *extraction) analyzeDataFlow() error {
+	x.findReceiver()
 	refs := map[*types.Var][]*ast.Ident{} // outside variables, by reference
 	var order []*types.Var
 	var bad []string
@@ -658,6 +668,9 @@ func (x *extraction) analyzeDataFlow() error {
 				refs[v] = append(refs[v], id)
 				return true
 			}
+			if tn, ok := obj.(*types.TypeName); ok && x.typeParams[tn] {
+				return true // declared by the new method's receiver
+			}
 			if !seen[obj] {
 				seen[obj] = true
 				bad = append(bad, fmt.Sprintf("%s (%s declared at line %d)", obj.Name(), kindOf(obj), x.line(obj.Pos())))
@@ -673,9 +686,14 @@ func (x *extraction) analyzeDataFlow() error {
 	f := &flow{fresh: map[*types.Var]bool{}, pointers: map[*types.Var]bool{}}
 	for _, v := range order {
 		switch {
-		case x.fa.Addressed[v], x.fa.Captured[v]:
+		case x.fa.Addressed[v], x.fa.Captured[v] && len(x.fa.Modified[v]) > 0:
 			// Other code can reach v while the statements run: pass a
-			// pointer, so that both work on the same variable.
+			// pointer, so that both work on the same variable. (A variable
+			// that function literals use but nothing ever assigns cannot
+			// change, so a copy of it is just as good.)
+			if v == x.recv && analysis.IsPointer(v.Type()) {
+				return refactor.Refusef("the receiver %s is a pointer whose own address is taken, or a function literal uses it; a method cannot have a pointer-to-pointer receiver", v.Name())
+			}
 			for _, id := range refs[v] {
 				if x.isDefineTarget(id) {
 					return refactor.Refusef("line %d redeclares %s with :=, which is passed to the new function as a pointer (its address is taken, or a function literal uses it); in the new function, := would assign the pointer. Use = there first",
@@ -692,7 +710,7 @@ func (x *extraction) analyzeDataFlow() error {
 		// After statements that always return, nothing reads a result.
 		out := x.mode != terminal && written && (usedOutside || inLoop && read)
 		switch {
-		case out && x.assignedFirst(v, refs[v]):
+		case out && v != x.recv && x.assignedFirst(v, refs[v]):
 			f.locals = append(f.locals, v)
 		default:
 			f.params = append(f.params, v)
@@ -785,6 +803,172 @@ func (x *extraction) analyzeDataFlow() error {
 
 	x.flow = f
 	return nil
+}
+
+// findReceiver makes the new function a method when the statements use the
+// receiver of the method they are directly in (not a function literal in
+// it): x.recv, x.recvType and the receiver's type parameters.
+func (x *extraction) findReceiver() {
+	x.typeParams = map[*types.TypeName]bool{}
+	var fd *ast.FuncDecl
+	for _, n := range analysis.PathTo(x.file, x.stmts[0]) {
+		if _, ok := n.(*ast.FuncLit); ok {
+			return // a function literal's statements cannot become a method
+		}
+		if d, ok := n.(*ast.FuncDecl); ok {
+			fd = d
+			break
+		}
+	}
+	if fd == nil || fd.Recv == nil || len(fd.Recv.List) != 1 || len(fd.Recv.List[0].Names) != 1 {
+		return
+	}
+	v, ok := x.info.Defs[fd.Recv.List[0].Names[0]].(*types.Var)
+	if !ok || v.Name() == "_" {
+		return
+	}
+	used := false
+	for id, obj := range x.info.Uses {
+		if obj == v && x.inSelection(id) {
+			used = true
+			break
+		}
+	}
+	if !used {
+		return
+	}
+	x.recv = v
+	rt := fd.Recv.List[0].Type
+	x.recvType = string(x.src[x.off(rt.Pos()):x.off(rt.End())])
+	if fn, ok := x.info.Defs[fd.Name].(*types.Func); ok {
+		tps := fn.Signature().RecvTypeParams()
+		for i := 0; i < tps.Len(); i++ {
+			x.typeParams[tps.At(i).Obj()] = true
+		}
+	}
+}
+
+// checkMethodName refuses a method name that would clash with a field or
+// method of the receiver's type, or could change which interfaces it (or
+// a type embedding it) implements.
+func (x *extraction) checkMethodName() error {
+	t := x.recv.Type()
+	if p, ok := t.(*types.Pointer); ok {
+		t = p.Elem()
+	}
+	named, ok := t.(*types.Named)
+	if !ok {
+		return refactor.Refusef("cannot add a method to the receiver type %s", t)
+	}
+	named = named.Origin()
+	if token.IsExported(x.name) {
+		return refactor.Refusef("%s is exported; a new exported method could make %s satisfy interfaces elsewhere (fmt.Stringer, say) and change behavior. Choose an unexported name",
+			x.name, named.Obj().Name())
+	}
+	if o, _, _ := types.LookupFieldOrMethod(types.NewPointer(named), false, x.pkg.Types, x.name); o != nil {
+		return refactor.Refusef("%s already has a %s named %s (at %s); choose another name",
+			named.Obj().Name(), kindOf(o), x.name, x.ws.Position(o.Pos()))
+	}
+	// An unexported method can only matter to interfaces in this package.
+	var scopes []*types.Scope
+	for _, p := range x.ws.Pkgs {
+		if p.PkgPath == x.pkg.PkgPath && p.Types != nil {
+			scopes = append(scopes, p.Types.Scope())
+		}
+	}
+	gains := []*types.Named{named} // types whose method sets would gain the method
+	for changed := true; changed; {
+		changed = false
+		for _, sc := range scopes {
+			for _, n := range sc.Names() {
+				tn, ok := sc.Lookup(n).(*types.TypeName)
+				if !ok {
+					continue
+				}
+				cand, ok := tn.Type().(*types.Named)
+				if !ok || containsNamed(gains, cand) {
+					continue
+				}
+				if st, ok := cand.Underlying().(*types.Struct); ok && embedsAny(st, gains) {
+					gains = append(gains, cand)
+					changed = true
+				}
+			}
+		}
+	}
+	for _, sc := range scopes {
+		for _, n := range sc.Names() {
+			tn, ok := sc.Lookup(n).(*types.TypeName)
+			if !ok {
+				continue
+			}
+			iface, ok := tn.Type().Underlying().(*types.Interface)
+			if !ok {
+				continue
+			}
+			has := false
+			for i := 0; i < iface.NumMethods(); i++ {
+				if m := iface.Method(i); m.Name() == x.name && m.Pkg() == x.pkg.Types {
+					has = true
+				}
+			}
+			if !has {
+				continue
+			}
+			for _, g := range gains {
+				if implementsExcept(g, iface, x.name) {
+					return refactor.Refusef("adding method %s to %s would make %s implement interface %s, which could change behavior; choose another name",
+						x.name, named.Obj().Name(), g.Obj().Name(), tn.Name())
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func containsNamed(list []*types.Named, t *types.Named) bool {
+	for _, l := range list {
+		if l == t.Origin() || l == t {
+			return true
+		}
+	}
+	return false
+}
+
+// embedsAny reports whether st has an embedded field of one of the types
+// (or a pointer to one).
+func embedsAny(st *types.Struct, types_ []*types.Named) bool {
+	for i := 0; i < st.NumFields(); i++ {
+		f := st.Field(i)
+		if !f.Embedded() {
+			continue
+		}
+		t := f.Type()
+		if p, ok := t.(*types.Pointer); ok {
+			t = p.Elem()
+		}
+		if n, ok := t.(*types.Named); ok && containsNamed(types_, n.Origin()) {
+			return true
+		}
+	}
+	return false
+}
+
+// implementsExcept reports whether *t has every method of iface other than
+// the one named except.
+func implementsExcept(t *types.Named, iface *types.Interface, except string) bool {
+	for i := 0; i < iface.NumMethods(); i++ {
+		m := iface.Method(i)
+		if m.Name() == except {
+			continue
+		}
+		if o, _, _ := types.LookupFieldOrMethod(types.NewPointer(t), false, m.Pkg(), m.Name()); o == nil {
+			return false
+		} else if _, isFunc := o.(*types.Func); !isFunc {
+			return false
+		}
+	}
+	return true
 }
 
 // writtenIn reports whether the selection assigns v (or part of it).
@@ -1039,7 +1223,7 @@ func (x *extraction) typeString(name string, t types.Type) (string, error) {
 	if name != "" {
 		what = fmt.Sprintf("%s has type %s, which", name, types.TypeString(t, types.RelativeTo(x.pkg.Types)))
 	}
-	if bad := localTypeIn(t, x.pkg.Types, map[types.Type]bool{}); bad != nil {
+	if bad := localTypeIn(t, x.typeParams, map[types.Type]bool{}); bad != nil {
 		return "", refactor.Refusef("%s uses %s %s declared inside %s; it cannot be named in a new package-level function",
 			what, kindOf(bad), bad.Name(), x.enclosingName())
 	}
@@ -1222,20 +1406,23 @@ func pathBase(path string) string {
 
 // localTypeIn returns a type name in t that cannot be written outside the
 // function: a type parameter or a type declared in a function body.
-func localTypeIn(t types.Type, pkg *types.Package, seen map[types.Type]bool) *types.TypeName {
+func localTypeIn(t types.Type, allowed map[*types.TypeName]bool, seen map[types.Type]bool) *types.TypeName {
 	if seen[t] {
 		return nil
 	}
 	seen[t] = true
 	switch t := t.(type) {
 	case *types.TypeParam:
+		if allowed[t.Obj()] {
+			return nil
+		}
 		return t.Obj()
 	case *types.Named:
 		if o := t.Obj(); o.Parent() != nil && o.Pkg() != nil && o.Parent() != o.Pkg().Scope() && o.Parent() != types.Universe {
 			return o
 		}
 		for i := 0; i < t.TypeArgs().Len(); i++ {
-			if b := localTypeIn(t.TypeArgs().At(i), pkg, seen); b != nil {
+			if b := localTypeIn(t.TypeArgs().At(i), allowed, seen); b != nil {
 				return b
 			}
 		}
@@ -1243,45 +1430,45 @@ func localTypeIn(t types.Type, pkg *types.Package, seen map[types.Type]bool) *ty
 		if o := t.Obj(); o.Parent() != nil && o.Pkg() != nil && o.Parent() != o.Pkg().Scope() && o.Parent() != types.Universe {
 			return o
 		}
-		return localTypeIn(types.Unalias(t), pkg, seen)
+		return localTypeIn(types.Unalias(t), allowed, seen)
 	case *types.Pointer:
-		return localTypeIn(t.Elem(), pkg, seen)
+		return localTypeIn(t.Elem(), allowed, seen)
 	case *types.Slice:
-		return localTypeIn(t.Elem(), pkg, seen)
+		return localTypeIn(t.Elem(), allowed, seen)
 	case *types.Array:
-		return localTypeIn(t.Elem(), pkg, seen)
+		return localTypeIn(t.Elem(), allowed, seen)
 	case *types.Chan:
-		return localTypeIn(t.Elem(), pkg, seen)
+		return localTypeIn(t.Elem(), allowed, seen)
 	case *types.Map:
-		if b := localTypeIn(t.Key(), pkg, seen); b != nil {
+		if b := localTypeIn(t.Key(), allowed, seen); b != nil {
 			return b
 		}
-		return localTypeIn(t.Elem(), pkg, seen)
+		return localTypeIn(t.Elem(), allowed, seen)
 	case *types.Signature:
-		if b := localTypeIn(t.Params(), pkg, seen); b != nil {
+		if b := localTypeIn(t.Params(), allowed, seen); b != nil {
 			return b
 		}
-		return localTypeIn(t.Results(), pkg, seen)
+		return localTypeIn(t.Results(), allowed, seen)
 	case *types.Tuple:
 		for i := 0; i < t.Len(); i++ {
-			if b := localTypeIn(t.At(i).Type(), pkg, seen); b != nil {
+			if b := localTypeIn(t.At(i).Type(), allowed, seen); b != nil {
 				return b
 			}
 		}
 	case *types.Struct:
 		for i := 0; i < t.NumFields(); i++ {
-			if b := localTypeIn(t.Field(i).Type(), pkg, seen); b != nil {
+			if b := localTypeIn(t.Field(i).Type(), allowed, seen); b != nil {
 				return b
 			}
 		}
 	case *types.Interface:
 		for i := 0; i < t.NumMethods(); i++ {
-			if b := localTypeIn(t.Method(i).Type(), pkg, seen); b != nil {
+			if b := localTypeIn(t.Method(i).Type(), allowed, seen); b != nil {
 				return b
 			}
 		}
 		for i := 0; i < t.NumEmbeddeds(); i++ {
-			if b := localTypeIn(t.EmbeddedType(i), pkg, seen); b != nil {
+			if b := localTypeIn(t.EmbeddedType(i), allowed, seen); b != nil {
 				return b
 			}
 		}
@@ -1314,6 +1501,9 @@ func isLocal(obj types.Object) bool {
 // name, would hide a builtin, would be hidden at the call site, or would
 // turn the function into a test.
 func (x *extraction) checkNewName() error {
+	if x.recv != nil {
+		return x.checkMethodName()
+	}
 	if o := types.Universe.Lookup(x.name); o != nil {
 		return refactor.Refusef("%s is a predeclared %s; a package-level function with that name would hide it in the whole package. Choose another name", x.name, kindOf(o))
 	}
@@ -1424,6 +1614,9 @@ func (x *extraction) plan() (*refactor.Plan, error) {
 	// The new function.
 	var params []string
 	for _, v := range f.params {
+		if v == x.recv {
+			continue
+		}
 		t := ts(v.Name(), v.Type())
 		if f.pointers[v] {
 			t = "*" + t
@@ -1431,6 +1624,13 @@ func (x *extraction) plan() (*refactor.Plan, error) {
 		params = append(params, v.Name()+" "+t)
 	}
 	sigText := fmt.Sprintf("func %s(%s)", x.name, strings.Join(params, ", "))
+	if x.recv != nil {
+		rt := x.recvType
+		if f.pointers[x.recv] {
+			rt = "*" + rt // a value receiver whose address is taken
+		}
+		sigText = fmt.Sprintf("func (%s %s) %s(%s)", x.recv.Name(), rt, x.name, strings.Join(params, ", "))
+	}
 	switch len(results) {
 	case 0:
 	case 1:
@@ -1456,6 +1656,9 @@ func (x *extraction) plan() (*refactor.Plan, error) {
 	// The call.
 	var args []string
 	for _, v := range f.params {
+		if v == x.recv {
+			continue
+		}
 		if f.pointers[v] {
 			args = append(args, "&"+v.Name())
 		} else {
@@ -1463,6 +1666,9 @@ func (x *extraction) plan() (*refactor.Plan, error) {
 		}
 	}
 	call := fmt.Sprintf("%s(%s)", x.name, strings.Join(args, ", "))
+	if x.recv != nil {
+		call = x.recv.Name() + "." + call // Go takes the address if needed
+	}
 	var site strings.Builder
 	switch x.mode {
 	case terminal:
@@ -1519,18 +1725,27 @@ func (x *extraction) plan() (*refactor.Plan, error) {
 	edits = append(edits, x.importEdits()...)
 
 	var notes []string
-	if len(f.params) > 0 || len(f.results) > 0 {
+	if x.recv != nil {
+		notes = append(notes, fmt.Sprintf("the selected lines use the receiver %s, so %s is a method of %s", x.recv.Name(), x.name, strings.TrimPrefix(x.recvType, "*")))
+	}
+	var shown []*types.Var
+	for _, v := range f.params {
+		if v != x.recv {
+			shown = append(shown, v)
+		}
+	}
+	if len(shown) > 0 || len(f.results) > 0 {
 		describe := func(vs []*types.Var) string {
 			if len(vs) == 0 {
 				return "none"
 			}
 			return strings.Join(names(vs), ", ")
 		}
-		notes = append(notes, fmt.Sprintf("parameters: %s; results: %s", describe(f.params), describe(f.results)))
+		notes = append(notes, fmt.Sprintf("parameters: %s; results: %s", describe(shown), describe(f.results)))
 	}
 	var ptrs []string
 	for _, v := range f.params {
-		if f.pointers[v] {
+		if f.pointers[v] && v != x.recv {
 			ptrs = append(ptrs, v.Name())
 		}
 	}
