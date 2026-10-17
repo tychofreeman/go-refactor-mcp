@@ -25,7 +25,7 @@ model reads before choosing the next refactoring. That loop is the iteration.
   (`extract_function` with parameters and results, `return` statements,
   pointers for shared variables, methods, imports, local constants and
   types, and generics). `invert_if` (with guard clauses) and `remove_else`
-  are done.
+  are done. `inline_function` has a first version (see the roadmap).
 
 ## Roadmap
 
@@ -41,7 +41,10 @@ model reads before choosing the next refactoring. That loop is the iteration.
    of the rest.
 3. **`inline_function`**, the inverse of `extract_function`: a way back from
    over-extraction, and an extract-then-inline round-trip test like the one
-   for `extract_variable` and `inline_variable`.
+   for `extract_variable` and `inline_variable`. *First version done (see
+   "Inline function: what it checks"); next: the error-exit shape
+   (`x, err := f(); if err != nil { return ..., err }`), generic and variadic
+   functions, inlining every call at once, and callees from other packages.*
 4. **`rename` gaps:** imports, labels, embedded fields and interface methods
    (see "Rename: what it checks").
 5. **Larger structural moves:** moving a declaration to another file or
@@ -61,6 +64,7 @@ internal/
   analysis/                   shared facts: side effects, stable expressions, escaping/modified locals
   edit/                       TextEdit/FileEdit, Apply, unified diff (Myers)
   textutil/                   token scanning and re-indenting for moved source text
+  imports/                    a file's import names; adding the imports moved code needs
   inspect/                    module overview, file outline + complexity, numbered source
   mcpserver/                  MCP tools: one per refactoring, plus inspect, undo, check
   workspace/                  go/packages loading (incl. tests), apply, undo, errors
@@ -73,6 +77,7 @@ internal/
     extractvar/               extract_variable + testdata + opt-in stress test
     inlinevar/                inline_variable + testdata + opt-in stress test
     extractfunc/              extract_function + testdata + opt-in stress test
+    inlinefunc/               inline_function + testdata + opt-in stress and round-trip tests
     invertif/                 invert_if, remove_else + testdata + opt-in stress test
 ```
 
@@ -130,7 +135,7 @@ Tools:
 | Tool | What it does |
 |---|---|
 | `inspect` | No args: module overview. `file`: outline (line ranges, complexity, nesting) + numbered source. `function` or `start_line`/`end_line` to narrow. |
-| `rename`, `extract_variable`, `inline_variable`, `extract_function`, `invert_if`, `remove_else` (and every future refactoring) | Applies one step; returns `APPLIED` + diff, or `REFUSED` + reason (nothing changed). |
+| `rename`, `extract_variable`, `inline_variable`, `extract_function`, `inline_function`, `invert_if`, `remove_else` (and every future refactoring) | Applies one step; returns `APPLIED` + diff, or `REFUSED` + reason (nothing changed). |
 | `undo` | Reverts the last applied step; repeatable. |
 | `check` | Type-check status; `run_tests: true` also runs `go test`. |
 
@@ -191,6 +196,7 @@ refactor rename '{"file":"main.go","line":7,"name":"t","new_name":"total"}'     
 refactor -n extract_variable file=main.go line=12 expression='qty*unit' name=subtotal
 refactor -n inline_variable file=main.go line=12 name=subtotal
 refactor -n extract_function file=main.go start_line=20 end_line=31 name=printReport
+refactor -n inline_function file=main.go line=20 name=printReport
 refactor -n invert_if file=main.go line=14
 refactor -n remove_else file=main.go line=20
 ```
@@ -491,6 +497,71 @@ Refused (with an explanation):
   by a local declaration, or in a `_test.go` file looks like a test
   (`TestX`, `BenchmarkX`, ...).
 
+## Inline function: what it checks
+
+`inline_function` replaces a call with the body of the function it calls,
+and deletes the function when nothing else uses it. It is the inverse of
+`extract_function`. Identify the call by `file`, `line` and the called
+function's `name` (`column` only if the name appears more than once on the
+line).
+
+What replaces the call depends on how it is used:
+
+- **a statement,** `f(a)`: the body's statements;
+- **an assignment or declaration,** `x, err := f(a)`, `x = f(a)`,
+  `var x = f(a)`: the body's statements, then the returned values assigned.
+  When a returned value is a local the body declares at its top level, that
+  local becomes the variable: `a, b := pair()` comes back as the statements
+  that declared `a` and `b`, not as `a, b := a, b`. This also works for an
+  existing variable (`err, key = f(k)`): the body's `var key T` is dropped
+  when the body assigns it before reading it, its `:=` becomes `=`, or, if
+  the caller declared `var key T` just for the call, that declaration goes
+  and the body's declares it instead;
+- **a return,** `return f(a)`, when the result types are identical, or a
+  call the caller returns right after: the body as it is, returns included,
+  so only here may the body return early;
+- **part of an expression,** `g(f(a)) + 1`, when the body is a single
+  `return e`: `e`, converted to the result type and parenthesized where
+  needed.
+
+Parameters are replaced by their arguments when that cannot change what the
+body sees, and otherwise declared at the top with the arguments' values
+(`p := arg`, one statement for all, which keeps the evaluation order):
+
+- **replaced:** a constant used as a whole value; an expression that cannot
+  change (locals no other code reaches, no calls); a variable read when the
+  body changes nothing before using it, or the variable is never assigned;
+  `&v` (uses of `*p` and `p.f` become `v` and `v.f`); a parameter the body
+  assigns, if its argument is a variable of the same name that the caller
+  assigns the result back to (`v = step(v)`) or never reads again; and, in
+  an expression, an argument with calls used exactly once, unconditionally,
+  in argument order;
+- **declared:** everything else, such as an argument with calls, or a
+  parameter the body assigns or captures in a closure while the argument
+  could still change. Unused parameters drop their argument unless it has
+  effects (`_ = arg`).
+
+Refused:
+
+- **the callee:** generic or variadic; from another package; an interface
+  method, method expression or promoted method; a function value; using
+  `defer` or `recover`, which belong to its own frame; named results;
+  returning early outside the return shape; labels that clash with the
+  caller's;
+- **names:** a name the body uses that would mean something else at the
+  call (a package name the caller's file spells differently is renamed, and
+  a missing import is added); a name the inlined code declares that the
+  calling block already declares, or that would hide a name used later in
+  it; any declaration when the caller uses `goto`;
+- **the call:** in a `go` or `defer` statement; in an if, for or switch
+  header, unless the body is a single return; an argument whose name a
+  local of the body would capture, inside an expression.
+
+The function is deleted only if it is unexported, nothing else refers to it
+(tests included), it does not call itself, and, for a method, no interface
+in the package has a method of that name. Imports that only it used go with
+it. `keep_function` keeps it anyway.
+
 ## Invert if and remove else: what they check
 
 `invert_if` negates an if statement's condition and swaps its branches,
@@ -578,7 +649,7 @@ inlining the new variable must give back the original code (after gofmt).
 `go test -bench . ./internal/workspace` measures an edit-and-undo cycle against
 a full load.
 
-Five opt-in tests try the
+Seven opt-in tests try the
 refactorings on real code; each modifies the module it is pointed at, so use
 a copy:
 
@@ -594,6 +665,10 @@ STRESS_DIR=/tmp/target go test ./internal/refactorings/inlinevar -run TestRoundT
 STRESS_DIR=/tmp/target go test ./internal/refactorings/extractfunc -run TestStress -v -timeout 1h
 # invert_if and remove_else on every if statement:
 STRESS_DIR=/tmp/target STRESS_N=100000 go test ./internal/refactorings/invertif -run TestStress -v -timeout 1h
+# inline_function on calls to the module's own functions (STRESS_DIFFS=n logs n diffs to read):
+STRESS_DIR=/tmp/target go test ./internal/refactorings/inlinefunc -run TestStress -v -timeout 1h
+# extract_function then inline_function back; the file must come back unchanged:
+STRESS_DIR=/tmp/target go test ./internal/refactorings/inlinefunc -run TestRoundTrip -v -timeout 1h
 ```
 
 Any rolled-back change is reported as a bug (a missing precondition). With

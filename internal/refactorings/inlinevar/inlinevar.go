@@ -574,7 +574,7 @@ func (x *inliner) replacement(use *ast.Ident) (string, bool, error) {
 		}
 		return t + "(" + strings.TrimSpace(string(x.text(ast.Unparen(x.init)))) + ")", true, nil
 	}
-	if needsParens(ast.Unparen(x.init), parent, use) || x.inControlHeader(path) {
+	if analysis.NeedsParens(ast.Unparen(x.init), parent, use) || analysis.InControlHeader(x.init, path) {
 		return "(" + text + ")", false, nil
 	}
 	return text, false, nil
@@ -618,26 +618,7 @@ func (x *inliner) needsConversion(use *ast.Ident, parent ast.Node) bool {
 // ownType is the type the initializer has on its own, before any context
 // converts it (untyped constants and comparisons stay untyped).
 func (x *inliner) ownType() types.Type {
-	tv := x.info.Types[x.init]
-	b, basic := tv.Type.Underlying().(*types.Basic)
-	if !basic || b.Info()&types.IsUntyped != 0 {
-		return tv.Type // only basic types can come from untyped expressions
-	}
-	hasFuncLit := false
-	ast.Inspect(x.init, func(n ast.Node) bool {
-		_, ok := n.(*ast.FuncLit)
-		hasFuncLit = hasFuncLit || ok
-		return !hasFuncLit
-	})
-	if hasFuncLit {
-		return tv.Type
-	}
-	e := ast.Unparen(x.init)
-	info := &types.Info{Types: map[ast.Expr]types.TypeAndValue{}}
-	if err := types.CheckExpr(x.ws.Fset, x.pkg.Types, e.Pos(), e, info); err != nil {
-		return tv.Type
-	}
-	return info.Types[e].Type
+	return analysis.OwnType(x.ws.Fset, x.pkg.Types, x.info, x.init)
 }
 
 // contextType returns the type a value at use is converted to by its
@@ -818,57 +799,6 @@ func isZero(v constant.Value) bool {
 	switch v.Kind() {
 	case constant.Int, constant.Float, constant.Complex:
 		return constant.Sign(v) == 0
-	}
-	return false
-}
-
-// needsParens reports whether init, written in place of use, must be
-// parenthesized to keep its grouping.
-func needsParens(init ast.Expr, parent ast.Node, use ast.Expr) bool {
-	switch init.(type) {
-	case *ast.Ident, *ast.BasicLit, *ast.CompositeLit, *ast.CallExpr, *ast.SelectorExpr, *ast.IndexExpr,
-		*ast.IndexListExpr, *ast.SliceExpr, *ast.TypeAssertExpr, *ast.ParenExpr, *ast.FuncLit:
-		return false // primary expressions bind tightest
-	}
-	switch p := parent.(type) {
-	case *ast.BinaryExpr:
-		b, ok := init.(*ast.BinaryExpr)
-		if !ok {
-			return false // unary operators bind tighter than any binary one
-		}
-		pp, ip := p.Op.Precedence(), b.Op.Precedence()
-		return ip < pp || (ip == pp && p.Y == use)
-	case *ast.UnaryExpr, *ast.StarExpr:
-		return true
-	case *ast.SelectorExpr:
-		return p.X == use
-	case *ast.IndexExpr:
-		return p.X == use
-	case *ast.IndexListExpr:
-		return p.X == use
-	case *ast.SliceExpr:
-		return p.X == use
-	case *ast.TypeAssertExpr:
-		return p.X == use
-	case *ast.CallExpr:
-		return p.Fun == use
-	}
-	return false
-}
-
-// inControlHeader reports whether a composite literal initializer would
-// land in an if/for/switch header, where Go requires parentheses around it.
-func (x *inliner) inControlHeader(path []ast.Node) bool {
-	if _, ok := ast.Unparen(x.init).(*ast.CompositeLit); !ok {
-		return false
-	}
-	for i := 1; i < len(path); i++ {
-		switch path[i].(type) {
-		case *ast.ParenExpr, *ast.CallExpr, *ast.IndexExpr, *ast.CompositeLit, *ast.FuncLit, *ast.BlockStmt:
-			return false // bracketed: no ambiguity
-		case *ast.IfStmt, *ast.ForStmt, *ast.SwitchStmt, *ast.TypeSwitchStmt, *ast.RangeStmt:
-			return true
-		}
 	}
 	return false
 }
