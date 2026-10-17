@@ -10,6 +10,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/inlinefunc"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/inlinevar"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/invertif"
+	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/movedecl"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/rename"
 )
 
@@ -26,6 +27,7 @@ func All() []refactor.Refactoring {
 		changesig.NewAddParameter(),
 		changesig.NewRemoveParameter(),
 		changesig.NewMoveParameter(),
+		movedecl.New(),
 	}
 }
 
