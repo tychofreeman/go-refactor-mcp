@@ -1,5 +1,6 @@
 // Package invertif implements "invert if": negate an if statement's
-// condition and swap its branches.
+// condition and swap its branches, and the guard clauses that this
+// enables (see flatten.go); and "remove else".
 //
 //	if a == b {        if a != b {
 //		A                  B
@@ -23,6 +24,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
@@ -37,11 +39,13 @@ func New() *InvertIf { return &InvertIf{} }
 func (*InvertIf) Name() string { return "invert_if" }
 
 func (*InvertIf) Description() string {
-	return `Invert an if/else statement: negate its condition and swap the two branches.
-Use it to put the short or exceptional branch first, which usually reads better and prepares for removing nesting.
+	return `Invert an if statement: negate its condition and swap its branches, turning nested code into guard clauses where possible.
+Use it to reduce nesting and put the short or exceptional case first.
+- if/else: the branches swap. If the new first branch cannot fall through (it ends in return, continue, break, goto or panic), the else is removed and the other branch follows the if, un-nested: "if c { A } else { return }" becomes "if !c { return }" then A. Pass keep_else to only swap.
+- if without else, as the last statement of a function without results or of a loop body: becomes a guard clause, "if !c { return }" (or continue) followed by the body, un-nested.
 Identify the if by file and the line of its "if" keyword (as shown by inspect); add column only if that line has more than one if.
 The negated condition is simplified where that is exact: == and != swap, <, <=, >, >= flip for integers and strings (not floats, where NaN makes !(a < b) differ from a >= b), !x becomes x, and && and || use De Morgan's laws (evaluation order is unchanged).
-Refuses an if without an else, and an else-if chain in the else branch.`
+Refuses an else-if chain in the else branch, and an if without else that is not the last statement of a function or loop body. Un-nesting is refused (or, for if/else, the else is kept, with a note) when the moved statements use variables from the if's init statement, or declare names that the enclosing block or the code after the if also uses.`
 }
 
 func (*InvertIf) InputSchema() json.RawMessage {
@@ -50,7 +54,8 @@ func (*InvertIf) InputSchema() json.RawMessage {
   "properties": {
     "file":   {"type": "string",  "description": "Path of the file, relative to the module root."},
     "line":   {"type": "integer", "description": "1-based line of the if keyword."},
-    "column": {"type": "integer", "description": "Optional 1-based column of the if keyword, only needed if the line has more than one if."}
+    "column": {"type": "integer", "description": "Optional 1-based column of the if keyword, only needed if the line has more than one if."},
+    "keep_else": {"type": "boolean", "description": "Only swap the branches of an if/else; do not remove the else even if the new first branch exits."}
   },
   "required": ["file", "line"],
   "additionalProperties": false
@@ -58,9 +63,10 @@ func (*InvertIf) InputSchema() json.RawMessage {
 }
 
 type args struct {
-	File   string `json:"file"`
-	Line   int    `json:"line"`
-	Column int    `json:"column,omitempty"`
+	File     string `json:"file"`
+	Line     int    `json:"line"`
+	Column   int    `json:"column,omitempty"`
+	KeepElse bool   `json:"keep_else,omitempty"`
 }
 
 type inversion struct {
@@ -79,27 +85,36 @@ func (*InvertIf) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.P
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
+	x, s, err := load(ws, a)
+	if err != nil {
+		return nil, err
+	}
+	return x.plan(s, a.KeepElse)
+}
+
+// load finds the if statement the arguments identify.
+func load(ws *workspace.Workspace, a args) (*inversion, *ast.IfStmt, error) {
 	switch {
 	case a.File == "":
-		return nil, refactor.Refusef("file is required")
+		return nil, nil, refactor.Refusef("file is required")
 	case a.Line < 1:
-		return nil, refactor.Refusef("line is required (1-based)")
+		return nil, nil, refactor.Refusef("line is required (1-based)")
 	}
 	path := ws.Abs(a.File)
 	pkg, file := ws.FileSyntax(path)
 	if file == nil {
-		return nil, refactor.Refusef("file %s is not part of the module's packages", a.File)
+		return nil, nil, refactor.Refusef("file %s is not part of the module's packages", a.File)
 	}
 	src, err := os.ReadFile(path)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	x := &inversion{ws: ws, info: pkg.TypesInfo, file: file, tf: ws.Fset.File(file.Pos()), src: src, path: path, rel: a.File}
 	s, err := x.find(a)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return x.plan(s)
+	return x, s, nil
 }
 
 // find returns the if statement whose if keyword is at the line (and
@@ -132,18 +147,43 @@ func (x *inversion) find(a args) (*ast.IfStmt, error) {
 	return nil, refactor.Refusef("no if statement starts on line %d of %s; give the line of the if keyword%s", a.Line, a.File, x.lineHint(a.Line))
 }
 
-func (x *inversion) plan(s *ast.IfStmt) (*refactor.Plan, error) {
+func (x *inversion) plan(s *ast.IfStmt, keepElse bool) (*refactor.Plan, error) {
 	line := x.tf.Line(s.If)
 	var els *ast.BlockStmt
 	switch e := s.Else.(type) {
 	case nil:
-		return nil, refactor.Refusef("the if at line %d has no else branch, so there is nothing to swap. (Turning it into a guard clause is not supported yet.)", line)
+		return x.guard(s)
 	case *ast.IfStmt:
 		return nil, refactor.Refusef("the if at line %d is followed by an else-if chain; swapping it in would add nesting. Invert one of the ifs in the chain that has a plain else instead", line)
 	case *ast.BlockStmt:
 		els = e
 	}
 	neg := negate(x, s.Cond)
+	var notes []string
+	if !keepElse && analysis.EndsFlow(x.info, els.List) {
+		// The else branch becomes the if branch and cannot fall through,
+		// so the old if branch can follow the if, un-nested.
+		p, err := x.placeOf(s)
+		if err == nil {
+			err = x.noCommentsBetween(s)
+		}
+		if err == nil {
+			err = x.checkMove(s, s.Body, p)
+		}
+		if err == nil {
+			indent := x.indentOf(s.Pos())
+			text := then(x.header(s)+neg.text+" {"+x.blockText(els)+"}", x.dedented(s.Body, indent))
+			return &refactor.Plan{
+				Summary: fmt.Sprintf("inverted the if at line %d into a guard clause: condition %s is now %s, and since that branch exits, the else is removed and the former if branch follows, un-nested",
+					line, quote(x.text(s.Cond)), quote(neg.text)),
+				Edits: []edit.FileEdit{{Path: x.path, Edits: []edit.TextEdit{{Start: x.off(s.Pos()), End: x.off(s.End()), NewText: text}}}},
+			}, nil
+		}
+		if !refactor.IsRefusal(err) {
+			return nil, err
+		}
+		notes = append(notes, "the else was kept because "+lowerFirst(err.Error()))
+	}
 	thenIn := x.inner(s.Body)
 	elseIn := x.inner(els)
 	edits := []edit.TextEdit{
@@ -155,7 +195,78 @@ func (x *inversion) plan(s *ast.IfStmt) (*refactor.Plan, error) {
 		Summary: fmt.Sprintf("inverted the if at line %d: condition %s is now %s, and the branches are swapped",
 			line, quote(x.text(s.Cond)), quote(neg.text)),
 		Edits: []edit.FileEdit{{Path: x.path, Edits: edits}},
+		Notes: notes,
 	}, nil
+}
+
+// guard turns an if without else, the last statement of a function
+// without results or of a loop body, into a guard clause.
+func (x *inversion) guard(s *ast.IfStmt) (*refactor.Plan, error) {
+	line := x.tf.Line(s.If)
+	p, err := x.placeOf(s)
+	if err != nil {
+		return nil, err
+	}
+	if !p.last() {
+		return nil, refactor.Refusef("the if at line %d has no else, and it is not the last statement of its block, so it cannot become a guard clause: the code after it runs whether or not the condition holds", line)
+	}
+	exit := ""
+	if b, ok := p.owner.(*ast.BlockStmt); ok {
+		switch f := p.fn.(type) {
+		case *ast.FuncDecl:
+			if f.Body == b {
+				exit = x.returnFrom(f.Type)
+			}
+		case *ast.FuncLit:
+			if f.Body == b {
+				exit = x.returnFrom(f.Type)
+			}
+		}
+		if exit == "" {
+			switch l := analysis.PathTo(x.file, b)[1].(type) {
+			case *ast.ForStmt:
+				if l.Body == b {
+					exit = "continue"
+				}
+			case *ast.RangeStmt:
+				if l.Body == b {
+					exit = "continue"
+				}
+			}
+		}
+	}
+	if exit == "" {
+		return nil, refactor.Refusef("the if at line %d has no else, and it is not the last statement of a function without results or of a loop body, so there is no return or continue to exit with", line)
+	}
+	if len(s.Body.List) == 0 {
+		return nil, refactor.Refusef("the if at line %d has an empty body; remove it instead", line)
+	}
+	if err := x.checkMove(s, s.Body, p); err != nil {
+		return nil, err
+	}
+	neg := negate(x, s.Cond)
+	indent := x.indentOf(s.Pos())
+	text := then(x.header(s)+neg.text+" {\n"+indent+"\t"+exit+"\n"+indent+"}", x.dedented(s.Body, indent))
+	return &refactor.Plan{
+		Summary: fmt.Sprintf("turned the if at line %d into a guard clause: if %s { %s }, followed by its former body, un-nested",
+			line, neg.text, exit),
+		Edits: []edit.FileEdit{{Path: x.path, Edits: []edit.TextEdit{{Start: x.off(s.Pos()), End: x.off(s.End()), NewText: text}}}},
+	}, nil
+}
+
+// returnFrom returns "return" for a function without results, or "".
+func (x *inversion) returnFrom(ft *ast.FuncType) string {
+	if ft.Results == nil || len(ft.Results.List) == 0 {
+		return "return"
+	}
+	return ""
+}
+
+func lowerFirst(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToLower(s[:1]) + s[1:]
 }
 
 // inner returns the text between a block's braces.

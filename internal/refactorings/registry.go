@@ -19,6 +19,7 @@ func All() []refactor.Refactoring {
 		inlinevar.New(),
 		extractfunc.New(),
 		invertif.New(),
+		invertif.NewRemoveElse(),
 	}
 }
 

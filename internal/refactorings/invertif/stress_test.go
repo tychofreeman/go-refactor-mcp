@@ -1,6 +1,7 @@
 package invertif
 
-// Opt-in stress test: inverts if statements of a real module and reports
+// Opt-in stress test: applies invert_if and remove_else to the if
+// statements of a real module (each separately) and reports
 // every change that broke the build (a rollback means a precondition is
 // missing) or, with STRESS_TESTS=1, made the package's own tests fail (a
 // behavior change). It modifies STRESS_DIR, so point it at a copy:
@@ -63,36 +64,42 @@ func TestStress(t *testing.T) {
 	}
 	rand.New(rand.NewSource(int64(envInt("STRESS_SEED", 1)))).Shuffle(len(cands), func(i, j int) { cands[i], cands[j] = cands[j], cands[i] })
 	n := min(envInt("STRESS_N", 400), len(cands))
-	applied, refused := 0, map[string]int{}
+	applied, refused := map[string]int{}, map[string]int{}
 	var bugs []string
 	for _, c := range cands[:n] {
-		args, _ := json.Marshal(map[string]any{"file": c.file, "line": c.line, "column": c.col})
-		res, err := refactor.Run(ws, New(), args, refactor.Options{})
-		if err != nil {
-			bugs = append(bugs, fmt.Sprintf("ERROR %s:%d:%d: %v", c.file, c.line, c.col, err))
-			continue
-		}
-		switch {
-		case res.Applied:
-			applied++
-			if os.Getenv("STRESS_TESTS") != "" {
-				cmd := exec.Command("go", "test", "-count=1", "./"+filepath.Dir(c.file))
-				cmd.Dir = ws.Root
-				if out, err := cmd.CombinedOutput(); err != nil {
-					bugs = append(bugs, fmt.Sprintf("TESTS FAIL %s:%d:%d:\n%s\n%s", c.file, c.line, c.col, res.Diff, tailLines(string(out), 15)))
+		for _, r := range []refactor.Refactoring{New(), NewRemoveElse()} {
+			args, _ := json.Marshal(map[string]any{"file": c.file, "line": c.line, "column": c.col})
+			res, err := refactor.Run(ws, r, args, refactor.Options{})
+			if err != nil {
+				bugs = append(bugs, fmt.Sprintf("ERROR %s %s:%d:%d: %v", r.Name(), c.file, c.line, c.col, err))
+				continue
+			}
+			switch {
+			case res.Applied:
+				kind := r.Name()
+				if strings.Contains(res.Summary, "guard clause") || strings.Contains(res.Summary, "removed the else") {
+					kind += " (un-nested)"
 				}
+				applied[kind]++
+				if os.Getenv("STRESS_TESTS") != "" {
+					cmd := exec.Command("go", "test", "-count=1", "./"+filepath.Dir(c.file))
+					cmd.Dir = ws.Root
+					if out, err := cmd.CombinedOutput(); err != nil {
+						bugs = append(bugs, fmt.Sprintf("TESTS FAIL %s %s:%d:%d:\n%s\n%s", r.Name(), c.file, c.line, c.col, res.Diff, tailLines(string(out), 15)))
+					}
+				}
+				if _, err := ws.Undo(); err != nil {
+					t.Fatalf("undo: %v", err)
+				}
+			case strings.Contains(res.Refused, "rolled back"):
+				bugs = append(bugs, fmt.Sprintf("ROLLBACK %s %s:%d:%d:\n%s", r.Name(), c.file, c.line, c.col, res.Refused))
+			default:
+				why := res.Refused
+				if i := strings.IndexAny(why, "`\"0123456789"); i > 0 {
+					why = why[:i]
+				}
+				refused[r.Name()+": "+why]++
 			}
-			if _, err := ws.Undo(); err != nil {
-				t.Fatalf("undo: %v", err)
-			}
-		case strings.Contains(res.Refused, "rolled back"):
-			bugs = append(bugs, fmt.Sprintf("ROLLBACK %s:%d:%d:\n%s", c.file, c.line, c.col, res.Refused))
-		default:
-			r := res.Refused
-			if i := strings.IndexAny(r, "`\"0123456789"); i > 0 {
-				r = r[:i]
-			}
-			refused[r]++
 		}
 	}
 	var keys []string
@@ -100,7 +107,10 @@ func TestStress(t *testing.T) {
 		keys = append(keys, k)
 	}
 	sort.Slice(keys, func(i, j int) bool { return refused[keys[i]] > refused[keys[j]] })
-	t.Logf("tried %d if statements: applied %d, bugs %d", n, applied, len(bugs))
+	t.Logf("tried %d if statements with each tool: bugs %d", n, len(bugs))
+	for _, k := range []string{"invert_if", "invert_if (un-nested)", "remove_else (un-nested)"} {
+		t.Logf("  %4d applied: %s", applied[k], k)
+	}
 	for _, k := range keys {
 		t.Logf("  %4d refused: %s", refused[k], k)
 	}

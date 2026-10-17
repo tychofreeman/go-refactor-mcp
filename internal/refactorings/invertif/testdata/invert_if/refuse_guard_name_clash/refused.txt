@@ -1,0 +1,1 @@
+declare n, which the enclosing block already declares (line 6)

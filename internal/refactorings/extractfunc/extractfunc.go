@@ -27,7 +27,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"go/ast"
-	"go/scanner"
 	"go/token"
 	"go/types"
 	"os"
@@ -42,6 +41,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
 
@@ -349,28 +349,11 @@ func (x *extraction) tokens() []tok {
 
 // scanTokens scans src, including comments.
 func scanTokens(src []byte) []tok {
-	fs := token.NewFileSet()
-	f := fs.AddFile("", -1, len(src))
-	var s scanner.Scanner
-	s.Init(f, src, nil, scanner.ScanComments)
 	var out []tok
-	for {
-		pos, t, lit := s.Scan()
-		if t == token.EOF {
-			return out
-		}
-		off := f.Offset(pos)
-		var n int
-		switch {
-		case t == token.SEMICOLON && lit == "\n":
-			n = 0 // inserted automatically at a line end
-		case lit != "":
-			n = len(lit)
-		default:
-			n = len(t.String())
-		}
-		out = append(out, tok{off, off + n, t})
+	for _, t := range textutil.Scan(src) {
+		out = append(out, tok{t.Off, t.End, t.Tok})
 	}
+	return out
 }
 
 // ---------------------------------------------------------------------------
@@ -2118,44 +2101,8 @@ func itThem(n int) string {
 	return "them"
 }
 
-// reindent returns text (whole lines of statements) with each line's
-// leading from replaced by to. Lines that start inside a multi-line string
-// literal or comment are left alone, since changing them would change the
-// string.
-func reindent(text, from, to string) string {
-	var spans [][2]int // multi-line tokens
-	for _, t := range scanTokens([]byte(text)) {
-		if (t.tok == token.STRING || t.tok == token.COMMENT) && strings.Contains(text[t.off:t.end], "\n") {
-			spans = append(spans, [2]int{t.off, t.end})
-		}
-	}
-	inside := func(off int) bool {
-		for _, s := range spans {
-			if s[0] < off && off < s[1] {
-				return true
-			}
-		}
-		return false
-	}
-	var sb strings.Builder
-	off := 0
-	for i, line := range strings.Split(text, "\n") {
-		if i > 0 {
-			sb.WriteByte('\n')
-		}
-		switch {
-		case inside(off):
-			sb.WriteString(line)
-		case strings.TrimSpace(line) == "":
-		case strings.HasPrefix(line, from):
-			sb.WriteString(to + line[len(from):])
-		default:
-			sb.WriteString(to + strings.TrimLeft(line, " \t"))
-		}
-		off += len(line) + 1
-	}
-	return sb.String()
-}
+// reindent re-indents text; see textutil.Reindent.
+func reindent(text, from, to string) string { return textutil.Reindent(text, from, to) }
 
 // topDecl returns the top-level declaration containing the selection.
 func (x *extraction) topDecl() ast.Decl {
