@@ -1,0 +1,1 @@
+but other.go is imported as strings

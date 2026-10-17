@@ -90,7 +90,7 @@ func TestStress(t *testing.T) {
 	}
 	rng.Shuffle(len(cands), func(i, j int) { cands[i], cands[j] = cands[j], cands[i] })
 	n := min(envInt("STRESS_N", 400), len(cands))
-	applied, refused := 0, map[string]int{}
+	applied, refused, kinds := 0, map[string]int{}, map[string]int{}
 	var bugs []string
 	for i, c := range cands[:n] {
 		args, _ := json.Marshal(map[string]any{"file": c.file, "start_line": c.first, "end_line": c.last, "name": fmt.Sprintf("zzExtracted%d", i)})
@@ -102,6 +102,13 @@ func TestStress(t *testing.T) {
 		switch {
 		case res.Applied:
 			applied++
+			for _, n := range res.Notes {
+				for _, k := range []string{"to package level", "passed as a pointer", "is a method of", "added import", "always return", "early returns"} {
+					if strings.Contains(n, k) {
+						kinds[k]++
+					}
+				}
+			}
 			if os.Getenv("STRESS_TESTS") != "" {
 				cmd := exec.Command("go", "test", "-count=1", "./"+filepath.Dir(c.file))
 				cmd.Dir = ws.Root
@@ -131,6 +138,11 @@ func TestStress(t *testing.T) {
 	}
 	sort.Slice(keys, func(i, j int) bool { return refused[keys[i]] > refused[keys[j]] })
 	t.Logf("tried %d selections: applied %d, bugs %d", n, applied, len(bugs))
+	for _, k := range []string{"always return", "early returns", "passed as a pointer", "is a method of", "added import", "to package level"} {
+		if kinds[k] > 0 {
+			t.Logf("  %4d applied with a note containing %q", kinds[k], k)
+		}
+	}
 	for _, k := range keys {
 		t.Logf("  %4d refused: %s", refused[k], k)
 	}
