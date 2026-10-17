@@ -27,7 +27,26 @@ model reads before choosing the next refactoring. That loop is the iteration.
   types, and generics). `invert_if` (with guard clauses) and `remove_else`
   are done.
 
-Next: an Ollama loop.
+## Roadmap
+
+1. **An Ollama loop.** A local model drives the same tools end to end:
+   inspect, refactor one step at a time, check.
+2. **Measure whether the tools help.** Use the loop as an evaluation
+   harness on real code: does complexity and nesting go down, do tests still
+   pass, which tools does the model use or misuse? The stress tests prove
+   steps preserve behavior; they cannot tell when code got worse (reading
+   `invert_if` diffs found such a case). The results should decide the order
+   of the rest.
+3. **`inline_function`**, the inverse of `extract_function`: a way back from
+   over-extraction, and an extract-then-inline round-trip test like the one
+   for `extract_variable` and `inline_variable`.
+4. **`rename` gaps:** imports, labels, embedded fields and interface methods
+   (see "Rename: what it checks").
+5. **Larger structural moves:** moving a declaration to another file or
+   package, and changing a function's signature (adding, removing or
+   reordering parameters at every call site).
+6. **Packaging:** tagged releases, so `go install ...@latest` gets a stable
+   version, and possibly a Claude Code plugin for a one-step install.
 
 ## Layout
 
@@ -37,6 +56,7 @@ cmd/refactor-mcp/             MCP server (stdio) for Claude Code and other MCP c
 internal/
   analysis/                   shared facts: side effects, stable expressions, escaping/modified locals
   edit/                       TextEdit/FileEdit, Apply, unified diff (Myers)
+  textutil/                   token scanning and re-indenting for moved source text
   inspect/                    module overview, file outline + complexity, numbered source
   mcpserver/                  MCP tools: one per refactoring, plus inspect, undo, check
   workspace/                  go/packages loading (incl. tests), apply, undo, errors
