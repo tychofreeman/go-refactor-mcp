@@ -1,5 +1,6 @@
 // Package changesig implements refactorings that change a function's
-// signature and update every call to match: add_parameter, so far.
+// signature and update every call to match: add_parameter and
+// remove_parameter, so far.
 //
 // They share one requirement: every reference to the function must be a
 // call. A function value (`f := fn`, passing fn as an argument) has the
@@ -206,6 +207,17 @@ func (t *target) collectCalls() error {
 		}
 		return a.Offset < b.Offset
 	})
+	return nil
+}
+
+// checkNoSpread refuses a call like f(g()), whose arguments are another
+// call's results.
+func checkNoSpread(c call, where string) error {
+	if len(c.expr.Args) == 1 {
+		if _, multi := c.pkg.TypesInfo.Types[c.expr.Args[0]].Type.(*types.Tuple); multi {
+			return refactor.Refusef("the call at %s passes the results of another call as its arguments, so its arguments cannot change; assign them to variables first", where)
+		}
+	}
 	return nil
 }
 

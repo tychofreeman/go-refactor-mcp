@@ -41,3 +41,24 @@ results") would cost little and help any model judge its own step.
 **Follow-up:** `add_parameter` now covers the first entry: the `copyModule`
 change is one call, `parameter=skip type=string value=cfg.OutDir`, and the
 new parameter joins the group (`src, dst, skip string`).
+
+## 2026-10-17: adding `remove_parameter`
+
+**A red test blocks every refactoring.** Under TDD the new test referred to
+`NewRemoveParameter` before it existed, so the module did not type-check
+and `extract_function` refused to run. A stub that refuses everything made
+the code compile while the tests stayed red. Gap: none in the tools (they
+must verify against compiling code), but the workflow needs the stub step:
+write the test, add a compiling stub, then refactor, then implement.
+
+**`extract_function` leaves an `err2`.** Extracting the "passes another
+call's results" check from `checkValue` gave `err2 := checkNoSpread(c,
+where); if err2 != nil { return err2 }`, because `err` is declared later in
+the function. Folded into `if err := ...; err != nil` by hand. Gap: the
+call site could use the `if` initializer form when the error is used only
+by the check.
+
+**Move a declaration to another file.** The extracted `checkNoSpread` was
+shared by both refactorings, so it moved from `addparam.go` to `common.go`
+by hand. Gap: the move-declaration refactoring (roadmap item 2) within a
+package, too.
