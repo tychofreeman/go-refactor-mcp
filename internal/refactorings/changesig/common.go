@@ -1,6 +1,6 @@
 // Package changesig implements refactorings that change a function's
-// signature and update every call to match: add_parameter and
-// remove_parameter, so far.
+// signature and update every call to match: add_parameter,
+// remove_parameter and move_parameter, so far.
 //
 // They share one requirement: every reference to the function must be a
 // call. A function value (`f := fn`, passing fn as an argument) has the
@@ -18,6 +18,7 @@ import (
 
 	"golang.org/x/tools/go/packages"
 
+	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
@@ -219,6 +220,24 @@ func checkNoSpread(c call, where string) error {
 		}
 	}
 	return nil
+}
+
+// newPlan merges the edits into a plan whose summary is what, followed by
+// how many calls and files changed.
+func (t *target) newPlan(what string, fes []edit.FileEdit) *refactor.Plan {
+	files := map[string]bool{}
+	for _, fe := range fes {
+		files[fe.Path] = true
+	}
+	plan := &refactor.Plan{
+		Summary: fmt.Sprintf("%s (%d call%s updated, %d file%s)",
+			what, len(t.calls), plural(len(t.calls)), len(files), plural(len(files))),
+		Edits: edit.Merge(fes),
+	}
+	if t.obj.Exported() {
+		plan.Notes = append(plan.Notes, fmt.Sprintf("%s is exported: calls in other modules are not updated", t.obj.Name()))
+	}
+	return plan
 }
 
 func (t *target) is(o types.Object) bool {

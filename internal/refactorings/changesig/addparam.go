@@ -121,21 +121,11 @@ func (*AddParameter) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refact
 	}
 
 	fes := []edit.FileEdit{{Path: ws.Fset.Position(t.decl.Pos()).Filename, Edits: []edit.TextEdit{t.paramEdit(at, a.Parameter, a.Type)}}}
-	files := map[string]bool{fes[0].Path: true}
 	for _, c := range t.calls {
 		path := ws.Fset.Position(c.expr.Pos()).Filename
-		files[path] = true
 		fes = append(fes, edit.FileEdit{Path: path, Edits: []edit.TextEdit{t.argEdit(c.expr, at, value)}})
 	}
-	plan := &refactor.Plan{
-		Summary: fmt.Sprintf("added parameter %q to %s (%d call%s updated, %d file%s)",
-			a.Parameter+" "+a.Type, t.obj.Name(), len(t.calls), plural(len(t.calls)), len(files), plural(len(files))),
-		Edits: edit.Merge(fes),
-	}
-	if t.obj.Exported() {
-		plan.Notes = append(plan.Notes, fmt.Sprintf("%s is exported: calls in other modules are not updated", t.obj.Name()))
-	}
-	return plan, nil
+	return t.newPlan(fmt.Sprintf("added parameter %q to %s", a.Parameter+" "+a.Type, t.obj.Name()), fes), nil
 }
 
 // insertIndex returns the position in the flattened parameter list where
