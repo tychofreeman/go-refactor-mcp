@@ -1,0 +1,1 @@
+uses k, declared in the body of f

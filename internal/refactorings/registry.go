@@ -28,6 +28,7 @@ func All() []refactor.Refactoring {
 		changesig.NewAddParameter(),
 		changesig.NewRemoveParameter(),
 		changesig.NewMoveParameter(),
+		changesig.NewIntroduceParameter(),
 		movedecl.New(),
 		createfile.New(),
 	}

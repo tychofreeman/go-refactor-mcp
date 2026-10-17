@@ -30,7 +30,8 @@ model reads before choosing the next refactoring. That loop is the iteration.
   are done. `inline_function` has a first version (see the roadmap).
 - **Step 4 (in progress):** refactorings that prepare a feature change.
   `add_parameter`, `remove_parameter` and `move_parameter` are done, for
-  functions and methods, exported or not. `move_declaration` moves a
+  functions and methods, exported or not; `introduce_parameter` has a
+  first version, for expressions over a function's parameters. `move_declaration` moves a
   declaration (with the helpers it uses, if asked) to another file, of its
   package or another one.
 - **Step 5 (later):** edits, steps that change behavior on purpose (see
@@ -49,6 +50,9 @@ hand or a tool got in the way.
    step so far. *`add_parameter`, `remove_parameter` and `move_parameter`
    done, for exported methods too (see "Add parameter", "Remove parameter",
    "Move parameter: what it checks" and "Changing a method: interfaces").
+   `introduce_parameter` turns an expression of the body into a parameter
+   (see "Introduce parameter: what it checks"); next: expressions that use
+   the receiver, and reads through a pointer the body dereferences anyway.
    Left: methods of generic types that an interface could match, and
    interface methods with all their implementations.*
 2. **Moving a declaration** to another file or package, updating its
@@ -824,6 +828,42 @@ parameter, which must stay last; a parameter that is already in that
 position; a call that passes another call's results; and a moved argument
 that contains another call of the same function (`f(1, f(2, 3))`), whose
 own edit would have to move with it.
+
+## Introduce parameter: what it checks
+
+`introduce_parameter` replaces an expression in a function's body with a
+new parameter, and passes that expression at every call, written in terms
+of the call's arguments: introducing `p.x` as `x` in `label(p point)`
+turns `label(pts[0])` into `label(pts[0], pts[0].x)`. An argument that is
+not a simple operand is parenthesized (`(a+b)*2`). Identify the expression
+as for `extract_variable`, by file, line and source text; the parameter
+goes at the end (or before a variadic one) with the expression's type.
+Followed by `remove_parameter`, it narrows a parameter to the part the
+body uses.
+
+The expression is now evaluated once, at the call, instead of wherever
+(and however often) the body evaluated it. That keeps behavior when its
+value is the same at both points and evaluating it does nothing:
+
+- it reads only parameters, and the body never assigns them, changes a
+  field or element of them, or takes their address; a variable declared
+  in the body is refused;
+- it has no side effects and cannot panic (no calls, pointer
+  dereferences, indexing, slicing, type assertions or non-constant
+  division), since the call now evaluates it even where the body would
+  not have;
+- it is not assigned to, addressed, or the receiver of a pointer method,
+  since the parameter is a copy;
+- at each call, no argument has side effects: the new argument repeats
+  parts of the others, and Go does not order its evaluation against their
+  calls (assign such an argument to a variable first);
+- every other name it uses (constants, package variables, imports) means
+  the same at each call, so a name hidden by a local at the call, or
+  unexported in another package, is refused.
+
+Refused for now: an expression using the receiver. Besides that, the
+function checks of `add_parameter` apply (only called, not an interface
+method, interfaces kept, the new name free).
 
 ## Changing a method: interfaces
 

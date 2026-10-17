@@ -25,8 +25,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"go/ast"
-	"go/parser"
-	"go/scanner"
 	"go/token"
 	"go/types"
 	"os"
@@ -36,6 +34,7 @@ import (
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
+	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
@@ -126,11 +125,11 @@ func (*ExtractVariable) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 		tf: ws.Fset.File(file.Pos()),
 	}
 
-	want, err := exprTokens(a.Expression)
+	want, err := locate.ExprTokens(a.Expression)
 	if err != nil {
 		return nil, err
 	}
-	expr, err := x.find(want, a)
+	expr, err := locate.FindExpr(ws, file, src, want, a.Line, a.Column, a.AllOccurrences)
 	if err != nil {
 		return nil, err
 	}
@@ -247,113 +246,8 @@ func (x *extraction) plan(expr ast.Expr, all bool) (*refactor.Plan, error) {
 // ---------------------------------------------------------------------------
 // Finding the expression
 
-// exprTokens tokenizes the expression text the model supplied, after
-// checking that it parses as an expression.
-func exprTokens(text string) ([]string, error) {
-	text = strings.TrimSpace(strings.TrimRight(strings.TrimSpace(text), ";"))
-	if _, err := parser.ParseExpr(text); err != nil {
-		return nil, refactor.Refusef("%q is not a Go expression: %v", text, err)
-	}
-	return tokens([]byte(text))
-}
-
-// tokens returns the token sequence of src, ignoring whitespace, comments
-// and automatically inserted semicolons, so that "a+b" matches "a + b".
-func tokens(src []byte) ([]string, error) {
-	var s scanner.Scanner
-	fset := token.NewFileSet()
-	var scanErr error
-	s.Init(fset.AddFile("", -1, len(src)), src, func(_ token.Position, msg string) { scanErr = fmt.Errorf("%s", msg) }, 0)
-	var out []string
-	for {
-		_, tok, lit := s.Scan()
-		if tok == token.EOF {
-			break
-		}
-		if tok == token.SEMICOLON && lit == "\n" {
-			continue
-		}
-		if lit != "" && tok != token.SEMICOLON {
-			out = append(out, lit)
-		} else {
-			out = append(out, tok.String())
-		}
-	}
-	return out, scanErr
-}
-
-func equalTokens(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
-}
-
-func (x *extraction) find(want []string, a args) (ast.Expr, error) {
-	var matches []ast.Expr
-	ast.Inspect(x.file, func(n ast.Node) bool {
-		if n == nil {
-			return false
-		}
-		start, end := x.tf.Line(n.Pos()), x.tf.Line(n.End())
-		if start > a.Line || end < a.Line {
-			return false
-		}
-		if e, ok := n.(ast.Expr); ok && start == a.Line && x.matches(e, want) {
-			if a.Column == 0 || x.tf.Position(e.Pos()).Column == a.Column {
-				matches = append(matches, e)
-			}
-		}
-		return true
-	})
-	where := fmt.Sprintf("%s:%d", x.ws.Rel(x.tf.Name()), a.Line)
-	text := strings.Join(want, " ")
-	switch {
-	case len(matches) == 1:
-		return matches[0], nil
-	case len(matches) > 1 && a.AllOccurrences:
-		return matches[0], nil
-	case len(matches) > 1:
-		var cols []string
-		for _, m := range matches {
-			cols = append(cols, fmt.Sprint(x.tf.Position(m.Pos()).Column))
-		}
-		return nil, refactor.Refusef("the expression occurs %d times on %s (columns %s); pass column to choose one, or all_occurrences to replace them all",
-			len(matches), where, strings.Join(cols, ", "))
-	case a.Column != 0:
-		return nil, refactor.Refusef("no expression %q starts at %s:%d%s", text, where, a.Column, x.lineHint(a.Line))
-	}
-	// Not on this line: say where it is, if anywhere.
-	var lines []string
-	ast.Inspect(x.file, func(n ast.Node) bool {
-		if e, ok := n.(ast.Expr); ok && len(lines) < 5 && x.matches(e, want) {
-			lines = append(lines, fmt.Sprint(x.tf.Line(e.Pos())))
-		}
-		return len(lines) < 5
-	})
-	if len(lines) > 0 {
-		return nil, refactor.Refusef("no expression %q starts on line %d, but it starts on line(s) %s of that file", text, a.Line, strings.Join(lines, ", "))
-	}
-	return nil, refactor.Refusef("no expression %q starts on %s%s", text, where, x.lineHint(a.Line))
-}
-
 func (x *extraction) matches(e ast.Expr, want []string) bool {
-	got, err := tokens(x.text(e))
-	return err == nil && equalTokens(got, want)
-}
-
-func (x *extraction) lineHint(line int) string {
-	start := x.tf.LineStart(line)
-	s := x.src[x.off(start):]
-	if i := strings.IndexByte(string(s), '\n'); i >= 0 {
-		s = s[:i]
-	}
-	return fmt.Sprintf("; that line is: %s", strings.TrimSpace(string(s)))
+	return locate.TokensMatch(x.tf, x.src, e, want)
 }
 
 // ---------------------------------------------------------------------------
@@ -409,7 +303,7 @@ func (x *extraction) validate(expr ast.Expr, path []ast.Node) (types.TypeAndValu
 	if usesIota {
 		return tv, refactor.Refusef("%s uses iota, whose value depends on its position in the const declaration", q)
 	}
-	if why := x.usedAsVariable(path); why != "" {
+	if why := analysis.UsedAsVariable(x.info, path); why != "" {
 		return tv, refactor.Refusef("%s %s; a new variable would be a copy, so the change would no longer reach the original", q, why)
 	}
 	if len(path) > 1 {
@@ -427,72 +321,6 @@ func (x *extraction) validate(expr ast.Expr, path []ast.Node) (types.TypeAndValu
 		}
 	}
 	return tv, nil
-}
-
-// usedAsVariable reports how the expression at path[0] is used as a
-// variable (written to, addressed, or used as a pointer receiver), or "".
-// Writes through fields and array elements count, since they modify the
-// containing value.
-func (x *extraction) usedAsVariable(path []ast.Node) string {
-	cur := path[0]
-	for i := 1; i < len(path); i++ {
-		switch p := path[i].(type) {
-		case *ast.ParenExpr:
-		case *ast.SelectorExpr:
-			if p.X != cur {
-				return ""
-			}
-			sel := x.info.Selections[p]
-			if sel == nil {
-				return ""
-			}
-			switch sel.Kind() {
-			case types.FieldVal:
-				if analysis.IsPointer(x.info.TypeOf(p.X)) {
-					return "" // writes go through the pointer, which a copy shares
-				}
-			case types.MethodVal:
-				if analysis.PtrRecv(sel) && !analysis.IsPointer(x.info.TypeOf(p.X)) && !types.IsInterface(x.info.TypeOf(p.X)) {
-					return fmt.Sprintf("has its method %s called, which takes a pointer to it", sel.Obj().Name())
-				}
-				return ""
-			default:
-				return ""
-			}
-		case *ast.IndexExpr:
-			if p.X != cur || !analysis.IsArray(x.info.TypeOf(p.X)) {
-				return ""
-			}
-		case *ast.SliceExpr:
-			if p.X == cur && analysis.IsArray(x.info.TypeOf(p.X)) {
-				return "is sliced, which refers to it rather than a copy"
-			}
-			return ""
-		case *ast.UnaryExpr:
-			if p.Op == token.AND {
-				return "has its address taken"
-			}
-			return ""
-		case *ast.AssignStmt:
-			for _, l := range p.Lhs {
-				if l == cur {
-					return "is assigned to"
-				}
-			}
-			return ""
-		case *ast.IncDecStmt:
-			return "is incremented or decremented"
-		case *ast.RangeStmt:
-			if p.Key == cur || p.Value == cur {
-				return "is assigned to by the range loop"
-			}
-			return ""
-		default:
-			return ""
-		}
-		cur = path[i]
-	}
-	return ""
 }
 
 // ---------------------------------------------------------------------------
@@ -865,7 +693,7 @@ func (x *extraction) occurrences(expr ast.Expr, tv types.TypeAndValue, container
 		if !ok || e.Pos() < insertPos || !x.same(e, expr, tv) {
 			return true
 		}
-		if why := x.usedAsVariable(analysis.PathTo(x.file, e)); why != "" {
+		if why := analysis.UsedAsVariable(x.info, analysis.PathTo(x.file, e)); why != "" {
 			skippedWrites = append(skippedWrites, x.ws.Position(e.Pos()))
 			return false
 		}
@@ -936,7 +764,7 @@ func (x *extraction) same(e, expr ast.Expr, tv types.TypeAndValue) bool {
 }
 
 func mustTokens(src []byte) []string {
-	t, _ := tokens(src)
+	t, _ := locate.Tokens(src)
 	return t
 }
 

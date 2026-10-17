@@ -143,3 +143,30 @@ would need to prove the loop runs once).
 **What the tools did.** `extract_function` pulled the per-declaration
 checks out of `checkOtherPackage` into `checkCanLeave`, which then gained
 the parameter and the loop by hand.
+
+## 2026-10-17: adding `introduce_parameter`
+
+**Methods turned into functions, by hand, so they could move.** Finding an
+expression by its source text lived in `extract_variable` as methods of
+its `extraction` (`find`, `matches`, `lineHint`), and so did
+`usedAsVariable`, though each used only a field or two of the receiver.
+Each was rewritten as a function taking those fields, by hand; then
+`move_declaration` moved them to `locate` and `analysis`, five moves with
+no by-hand work. Gap: a refactoring that turns a method into a function
+(the receiver, or just the fields it uses, become parameters), the
+reverse of the function-into-method gap logged earlier.
+
+**`move_declaration` put module imports in the standard library group.**
+Moving code into `locate/expr.go` added `internal/refactor` and
+`internal/workspace` among `fmt`, `go/ast` and the rest, not in a group of
+their own. Regrouped by hand. Also: `equalTokens`, which had no doc
+comment, became the exported `EqualTokens` without one. Gaps: new imports
+should go in the group they belong to; a move that exports a name could
+note that it has no doc comment.
+
+**What the tools did.** `create_file` wrote the stub and the test file,
+`move_declaration` shared six declarations between the two refactorings.
+The refactoring itself was written by hand (no `replace_declaration`
+edit yet), mostly from `add_parameter`'s pieces: `findTarget`,
+`insertIndex`, `checkNewName`, `checkInterfaces`, `paramEdit`, `argEdit`,
+`unsafeValue` and `newPlan`.

@@ -77,6 +77,8 @@ form can come first, while the focus is on refactorings.
   type, variable or constant (deleting one is `delete_statement`).
   - 2026-10-17, adding `remove_parameter`: a stub declared so a test written
     first compiled.
+  - 2026-10-17, adding `introduce_parameter`: the stub's `Plan` replaced by
+    the real one, and the new checks added beside it.
 - `add_field` (struct) and `add_method` (interface).
 
 ## Suggested, without evidence yet

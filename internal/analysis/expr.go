@@ -1,6 +1,7 @@
 package analysis
 
 import (
+	"fmt"
 	"go/ast"
 	"go/token"
 	"go/types"
@@ -82,4 +83,70 @@ func InControlHeader(e ast.Expr, path []ast.Node) bool {
 		}
 	}
 	return false
+}
+
+// UsedAsVariable reports how the expression at path[0] is used as a
+// variable (written to, addressed, or used as a pointer receiver), or "".
+// Writes through fields and array elements count, since they modify the
+// containing value.
+func UsedAsVariable(info *types.Info, path []ast.Node) string {
+	cur := path[0]
+	for i := 1; i < len(path); i++ {
+		switch p := path[i].(type) {
+		case *ast.ParenExpr:
+		case *ast.SelectorExpr:
+			if p.X != cur {
+				return ""
+			}
+			sel := info.Selections[p]
+			if sel == nil {
+				return ""
+			}
+			switch sel.Kind() {
+			case types.FieldVal:
+				if IsPointer(info.TypeOf(p.X)) {
+					return "" // writes go through the pointer, which a copy shares
+				}
+			case types.MethodVal:
+				if PtrRecv(sel) && !IsPointer(info.TypeOf(p.X)) && !types.IsInterface(info.TypeOf(p.X)) {
+					return fmt.Sprintf("has its method %s called, which takes a pointer to it", sel.Obj().Name())
+				}
+				return ""
+			default:
+				return ""
+			}
+		case *ast.IndexExpr:
+			if p.X != cur || !IsArray(info.TypeOf(p.X)) {
+				return ""
+			}
+		case *ast.SliceExpr:
+			if p.X == cur && IsArray(info.TypeOf(p.X)) {
+				return "is sliced, which refers to it rather than a copy"
+			}
+			return ""
+		case *ast.UnaryExpr:
+			if p.Op == token.AND {
+				return "has its address taken"
+			}
+			return ""
+		case *ast.AssignStmt:
+			for _, l := range p.Lhs {
+				if l == cur {
+					return "is assigned to"
+				}
+			}
+			return ""
+		case *ast.IncDecStmt:
+			return "is incremented or decremented"
+		case *ast.RangeStmt:
+			if p.Key == cur || p.Value == cur {
+				return "is assigned to by the range loop"
+			}
+			return ""
+		default:
+			return ""
+		}
+		cur = path[i]
+	}
+	return ""
 }
