@@ -1737,29 +1737,7 @@ func (x *extraction) plan() (*refactor.Plan, error) {
 	fn.WriteString("\n}")
 
 	// The call.
-	var args []string
-	for _, v := range f.params {
-		if v == x.recv {
-			continue
-		}
-		if f.pointers[v] {
-			args = append(args, "&"+v.Name())
-		} else {
-			args = append(args, v.Name())
-		}
-	}
-	inst := ""
-	if x.generic {
-		var tpNames []string
-		for _, tp := range x.tparams {
-			tpNames = append(tpNames, tp.Name())
-		}
-		inst = "[" + strings.Join(tpNames, ", ") + "]"
-	}
-	call := fmt.Sprintf("%s%s(%s)", x.name, inst, strings.Join(args, ", "))
-	if x.recv != nil {
-		call = x.recv.Name() + "." + call // Go takes the address if needed
-	}
+	call := x.callExpr(f)
 	var site strings.Builder
 	switch x.mode {
 	case terminal:
@@ -1801,14 +1779,7 @@ func (x *extraction) plan() (*refactor.Plan, error) {
 		}
 	}
 
-	// Insert after the line on which the enclosing declaration ends, so a
-	// trailing comment there stays with it.
-	at := x.off(decl.End())
-	if i := strings.IndexByte(string(x.src[at:]), '\n'); i >= 0 {
-		at += i
-	} else {
-		at = len(x.src)
-	}
+	at := x.insertOffset(decl)
 	edits := []edit.TextEdit{
 		{Start: x.start, End: x.end, NewText: site.String()},
 		{Start: at, End: at, NewText: fn.String()},
@@ -1816,6 +1787,17 @@ func (x *extraction) plan() (*refactor.Plan, error) {
 	edits = append(edits, x.importEdits()...)
 	edits = append(edits, hoistFile...)
 
+	notes := x.notes(f, names)
+	first, last := x.line(x.tf.Pos(x.start)), x.line(x.tf.Pos(x.end))
+	n := len(x.stmts)
+	return &refactor.Plan{
+		Summary: fmt.Sprintf("extracted lines %d-%d (%d statement%s) into function %s", first, last, n, plural(n), x.name),
+		Edits:   []edit.FileEdit{{Path: x.path, Edits: edits}},
+		Notes:   notes,
+	}, nil
+}
+
+func (x *extraction) notes(f *flow, names func(vs []*types.Var) []string) []string {
 	var notes []string
 	if x.recv != nil {
 		notes = append(notes, fmt.Sprintf("the selected lines use the receiver %s, so %s is a method of %s", x.recv.Name(), x.name, strings.TrimPrefix(x.recvType, "*")))
@@ -1868,13 +1850,46 @@ func (x *extraction) plan() (*refactor.Plan, error) {
 		notes = append(notes, fmt.Sprintf("%s %s returned because the selected lines are in a loop and may read %s in the next iteration; if not, the result can be dropped",
 			strings.Join(f.loopCarried, ", "), isAre(len(f.loopCarried)), itThem(len(f.loopCarried))))
 	}
-	first, last := x.line(x.tf.Pos(x.start)), x.line(x.tf.Pos(x.end))
-	n := len(x.stmts)
-	return &refactor.Plan{
-		Summary: fmt.Sprintf("extracted lines %d-%d (%d statement%s) into function %s", first, last, n, plural(n), x.name),
-		Edits:   []edit.FileEdit{{Path: x.path, Edits: edits}},
-		Notes:   notes,
-	}, nil
+	return notes
+}
+
+func (x *extraction) callExpr(f *flow) string {
+	var args []string
+	for _, v := range f.params {
+		if v == x.recv {
+			continue
+		}
+		if f.pointers[v] {
+			args = append(args, "&"+v.Name())
+		} else {
+			args = append(args, v.Name())
+		}
+	}
+	inst := ""
+	if x.generic {
+		var tpNames []string
+		for _, tp := range x.tparams {
+			tpNames = append(tpNames, tp.Name())
+		}
+		inst = "[" + strings.Join(tpNames, ", ") + "]"
+	}
+	call := fmt.Sprintf("%s%s(%s)", x.name, inst, strings.Join(args, ", "))
+	if x.recv != nil {
+		call = x.recv.Name() + "." + call // Go takes the address if needed
+	}
+	return call
+}
+
+func (x *extraction) insertOffset(decl ast.Decl) int {
+	// Insert after the line on which the enclosing declaration ends, so a
+	// trailing comment there stays with it.
+	at := x.off(decl.End())
+	if i := strings.IndexByte(string(x.src[at:]), '\n'); i >= 0 {
+		at += i
+	} else {
+		at = len(x.src)
+	}
+	return at
 }
 
 // checkSpelledTypes refuses when a type written out in the function body
