@@ -1,0 +1,1 @@
+where err refers to the variable from the if's init statement

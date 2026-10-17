@@ -2,10 +2,13 @@ package m
 
 import "fmt"
 
-func run(m map[string]int) {
-	if v, ok := m["k"]; !ok {
+var v = 1
+
+func run(ok bool) {
+	if v := 2; !ok {
 		return
 	} else {
 		fmt.Println(v)
 	}
+	fmt.Println(v)
 }

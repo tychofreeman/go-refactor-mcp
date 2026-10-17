@@ -25,7 +25,8 @@ func (*RemoveElse) Description() string {
 	return `Remove a redundant else: when the if branch cannot fall through (it ends in return, continue, break, goto or panic), "if c { X; return } else { B }" becomes "if c { X; return }" followed by B, un-nested. An else-if becomes a separate if statement.
 Use it to flatten code after an early exit. (If it is the else branch that exits, use invert_if instead.)
 Identify the if by file and the line of its "if" keyword (as shown by inspect); add column only if that line has more than one if.
-Refuses if the if branch can fall through, if the moved statements use variables from the if's init statement, or if they declare names that the enclosing block or the code after the if also uses.`
+If the moved statements use variables of the if's init statement, the init statement moves before the if.
+Refuses if the if branch can fall through, or if the moved statements (or a moved init statement) declare names that the enclosing block or the code after the if also uses.`
 }
 
 func (*RemoveElse) InputSchema() json.RawMessage {
@@ -70,24 +71,31 @@ func (*RemoveElse) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor
 	}
 	indent := x.indentOf(s.Pos())
 	var moved, what string
+	var hoist bool
 	switch e := s.Else.(type) {
 	case *ast.BlockStmt:
-		if err := x.checkMove(s, e, p); err != nil {
+		if hoist, err = x.checkMove(s, e, p); err != nil {
 			return nil, err
 		}
 		moved, what = x.dedented(e, indent), "the else branch follows, un-nested"
 	case *ast.IfStmt:
 		// The else-if becomes its own statement at the same depth; its
-		// declarations stay in its own scope, but it may not use the
-		// first if's init variables any more.
-		if err := x.checkInitUse(s, e); err != nil {
+		// declarations stay in its own scope, but if it uses the first
+		// if's init variables, that init statement must move before it.
+		if hoist, err = x.prepareInit(s, p, e, nil); err != nil {
 			return nil, err
 		}
 		moved, what = indent+x.text(e), "the else-if is now a separate if statement"
 	}
-	text := then(string(x.src[x.off(s.Pos()):x.off(s.Body.End())]), moved)
+	ifText := string(x.src[x.off(s.Cond.Pos()):x.off(s.Body.End())])
+	text := then(x.head(s, hoist, indent)+ifText, moved)
+	var notes []string
+	if hoist {
+		notes = append(notes, "the if's init statement moved before it, because the code after it uses its variables")
+	}
 	return &refactor.Plan{
 		Summary: fmt.Sprintf("removed the else of the if at line %d: its branch always exits, so %s", line, what),
 		Edits:   []edit.FileEdit{{Path: x.path, Edits: []edit.TextEdit{{Start: x.off(s.Pos()), End: x.off(s.End()), NewText: text}}}},
+		Notes:   notes,
 	}, nil
 }

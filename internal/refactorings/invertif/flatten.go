@@ -108,91 +108,164 @@ func (p *place) last() bool {
 }
 
 // checkMove refuses moving the statements of block (a branch of s) after
-// s when that could change what names mean or break a goto.
-func (x *inversion) checkMove(s *ast.IfStmt, block *ast.BlockStmt, p *place) error {
+// s when that could change what names mean or break a goto. It reports
+// whether s's init statement must move before s, because the moved
+// statements use its variables (see prepareInit).
+func (x *inversion) checkMove(s *ast.IfStmt, block *ast.BlockStmt, p *place) (hoist bool, err error) {
 	line := x.tf.Line(s.If)
-	if err := x.checkInitUse(s, block); err != nil {
-		return err
+	if hoist, err = x.prepareInit(s, p, block, block); err != nil {
+		return false, err
 	}
-
 	// The branch's own declarations move to the enclosing block.
 	inner := x.info.Scopes[block]
 	if inner == nil {
-		return nil // declares nothing
+		return hoist, nil // declares nothing
 	}
 	declaresVar := false
 	for _, name := range inner.Names() {
-		o := inner.Lookup(name)
-		if _, ok := o.(*types.Var); ok {
+		if _, ok := inner.Lookup(name).(*types.Var); ok {
 			declaresVar = true
 		}
 		if other := p.scope.Lookup(name); other != nil {
-			return refactor.Refusef("the statements that would move out of the if at line %d declare %s, which the enclosing block already declares (line %d); rename one first",
+			return false, refactor.Refusef("the statements that would move out of the if at line %d declare %s, which the enclosing block already declares (line %d); rename one first",
 				line, name, x.tf.Line(other.Pos()))
 		}
-		// Later statements must not start seeing the moved declaration.
-		for _, st := range p.following() {
-			var err error
-			ast.Inspect(st, func(n ast.Node) bool {
-				id, ok := n.(*ast.Ident)
-				if !ok || err != nil || id.Name != name {
-					return err == nil
-				}
-				if u := x.info.Uses[id]; u != nil && (u.Pos() < st.Pos() || u.Pos() >= st.End()) {
-					err = refactor.Refusef("the statements that would move out of the if at line %d declare %s, and the code after the if uses another %s (line %d), which the moved declaration would hide; rename one first",
-						line, name, name, x.tf.Line(id.Pos()))
-				}
-				return err == nil
-			})
-			if err != nil {
-				return err
-			}
+		if err := x.laterUse(name, p, fmt.Sprintf("the statements that would move out of the if at line %d declare %s", line, name)); err != nil {
+			return false, err
 		}
 	}
-	// Go forbids a goto that jumps over a variable declaration into its
-	// scope; moved declarations could create one.
-	if declaresVar && p.fn != nil {
-		labels := map[types.Object]token.Pos{}
-		var gotos []*ast.BranchStmt
-		ast.Inspect(p.fn, func(n ast.Node) bool {
-			switch n := n.(type) {
-			case *ast.LabeledStmt:
-				labels[x.info.Defs[n.Label]] = n.Pos()
-			case *ast.BranchStmt:
-				if n.Tok == token.GOTO {
-					gotos = append(gotos, n)
-				}
+	if declaresVar {
+		if err := x.gotoOver(s, p, "moving declarations out of the if"); err != nil {
+			return false, err
+		}
+	}
+	return hoist, nil
+}
+
+// prepareInit decides whether s's init statement must move before s:
+// when moved (code moving out of the if) uses its variables, which are
+// only in scope inside the if. Moving it widens their scope to the rest of
+// the enclosing block, so it is refused when one of its names is already
+// declared there (a := would then assign that variable instead of
+// declaring a new one), is declared by movedBlock too, or would hide
+// something the code after the if uses.
+func (x *inversion) prepareInit(s *ast.IfStmt, p *place, moved ast.Node, movedBlock *ast.BlockStmt) (bool, error) {
+	if s.Init == nil || !x.usesInit(s, moved) {
+		return false, nil
+	}
+	line := x.tf.Line(s.If)
+	sc := x.info.Scopes[s]
+	if sc == nil {
+		return false, fmt.Errorf("internal error: no scope for the if at line %d", line)
+	}
+	var inner *types.Scope
+	if movedBlock != nil {
+		inner = x.info.Scopes[movedBlock]
+	}
+	declaresVar := false
+	for _, name := range sc.Names() {
+		o := sc.Lookup(name)
+		if o.Pos() < s.Init.Pos() || o.Pos() >= s.Init.End() {
+			continue
+		}
+		declaresVar = true
+		what := fmt.Sprintf("the code moving out of the if at line %d uses %s from its init statement, so the init statement has to move before the if", line, name)
+		if other := p.scope.Lookup(name); other != nil {
+			return false, refactor.Refusef("%s, but the enclosing block already declares %s (line %d): a := there would assign that variable instead of declaring a new one. Rename one first", what, name, x.tf.Line(other.Pos()))
+		}
+		if inner != nil && inner.Lookup(name) != nil {
+			return false, refactor.Refusef("%s, but the moved statements declare another %s; rename one first", what, name)
+		}
+		if err := x.laterUse(name, p, what); err != nil {
+			return false, err
+		}
+	}
+	if declaresVar {
+		if err := x.gotoOver(s, p, "moving the init statement before the if"); err != nil {
+			return false, err
+		}
+	}
+	return true, nil
+}
+
+// laterUse refuses when the code after the if uses name for something
+// declared outside it, which a declaration moving into the enclosing
+// block would hide. what describes that declaration.
+func (x *inversion) laterUse(name string, p *place, what string) error {
+	for _, st := range p.following() {
+		var err error
+		ast.Inspect(st, func(n ast.Node) bool {
+			id, ok := n.(*ast.Ident)
+			if !ok || err != nil || id.Name != name {
+				return err == nil
 			}
-			return true
+			if u := x.info.Uses[id]; u != nil && (u.Pos() < st.Pos() || u.Pos() >= st.End()) {
+				err = refactor.Refusef("%s, and the code after the if uses another %s (line %d), which the moved declaration would hide; rename one first",
+					what, name, x.tf.Line(id.Pos()))
+			}
+			return err == nil
 		})
-		for _, g := range gotos {
-			if at, ok := labels[x.info.Uses[g.Label]]; ok && g.Pos() < s.Pos() && at > s.End() {
-				return refactor.Refusef("the goto at line %d jumps over the if at line %d; moving declarations out of the if would make it jump over them, which Go does not allow", x.tf.Line(g.Pos()), line)
-			}
+		if err != nil {
+			return err
 		}
 	}
 	return nil
 }
 
-// checkInitUse refuses when n, which is moving out of the if s, uses
-// variables of s's init statement: they are only in scope inside the if.
-func (x *inversion) checkInitUse(s *ast.IfStmt, n ast.Node) error {
-	if s.Init == nil {
+// gotoOver refuses when a goto jumps over the if: Go forbids jumping over
+// a variable declaration into its scope, and doing (what) would create
+// one.
+func (x *inversion) gotoOver(s *ast.IfStmt, p *place, doing string) error {
+	if p.fn == nil {
 		return nil
 	}
-	var err error
-	ast.Inspect(n, func(c ast.Node) bool {
-		id, ok := c.(*ast.Ident)
-		if !ok || err != nil {
-			return err == nil
+	labels := map[types.Object]token.Pos{}
+	var gotos []*ast.BranchStmt
+	ast.Inspect(p.fn, func(n ast.Node) bool {
+		switch n := n.(type) {
+		case *ast.LabeledStmt:
+			labels[x.info.Defs[n.Label]] = n.Pos()
+		case *ast.BranchStmt:
+			if n.Tok == token.GOTO {
+				gotos = append(gotos, n)
+			}
 		}
-		if o := x.info.Uses[id]; o != nil && o.Pos() >= s.Init.Pos() && o.Pos() < s.Init.End() {
-			err = refactor.Refusef("the statements that would move out of the if at line %d use %s, declared by its init statement, which is only in scope inside the if. Move the init statement before the if first",
-				x.tf.Line(s.If), id.Name)
-		}
-		return err == nil
+		return true
 	})
-	return err
+	for _, g := range gotos {
+		if at, ok := labels[x.info.Uses[g.Label]]; ok && g.Pos() < s.Pos() && at > s.End() {
+			return refactor.Refusef("the goto at line %d jumps over the if at line %d; %s would make it jump over variable declarations, which Go does not allow", x.tf.Line(g.Pos()), x.tf.Line(s.If), doing)
+		}
+	}
+	return nil
+}
+
+// usesInit reports whether n uses a variable declared by s's init
+// statement.
+func (x *inversion) usesInit(s *ast.IfStmt, n ast.Node) bool {
+	if s.Init == nil {
+		return false
+	}
+	found := false
+	ast.Inspect(n, func(c ast.Node) bool {
+		if id, ok := c.(*ast.Ident); ok && !found {
+			if o := x.info.Uses[id]; o != nil && o.Pos() >= s.Init.Pos() && o.Pos() < s.Init.End() {
+				found = true
+			}
+		}
+		return !found
+	})
+	return found
+}
+
+// head returns the start of the new text for s, up to its condition:
+// "if " or "if init; ", or, when the init statement moves before the if,
+// "init\n<indent>if ".
+func (x *inversion) head(s *ast.IfStmt, hoist bool, indent string) string {
+	if !hoist {
+		return x.header(s)
+	}
+	return x.text(s.Init) + "\n" + indent + "if "
 }
 
 // noCommentsBetween refuses when comments sit between the end of the if
