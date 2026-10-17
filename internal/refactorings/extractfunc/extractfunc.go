@@ -40,6 +40,7 @@ import (
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
+	"github.com/tychofreeman/go-refactor-mcp/internal/imports"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
@@ -114,8 +115,7 @@ type extraction struct {
 
 	toks []tok // the file's tokens, scanned once
 
-	imported map[string]string // import path -> name in this file
-	added    map[string]string // imports to add: path -> name
+	imp *imports.Adder // the file's imports and the ones to add
 
 	// recv is the enclosing method's receiver when the statements use it:
 	// the new function is then a method on the same type.
@@ -1447,152 +1447,18 @@ func (x *extraction) qualifiers(t types.Type) []string {
 // adding an import of p if the file has none. The error says why p cannot
 // be imported.
 func (x *extraction) qualifier(p *types.Package) (string, error) {
-	if p == x.pkg.Types {
-		return "", nil
+	if x.imp == nil {
+		x.imp = imports.New(x.ws, x.pkg, x.file, x.src)
 	}
-	if x.imported == nil {
-		x.imported = map[string]string{}
-		for _, imp := range x.file.Imports {
-			path := strings.Trim(imp.Path.Value, `"`)
-			switch {
-			case imp.Name != nil && imp.Name.Name == "_":
-			case imp.Name != nil:
-				x.imported[path] = imp.Name.Name // "." for a dot import
-			default:
-				if q := analysis.ImportMap(x.pkg.Types)[path]; q != nil {
-					x.imported[path] = q.Name()
-				}
-			}
-		}
-		x.added = map[string]string{}
-	}
-	if n, ok := x.imported[p.Path()]; ok {
-		if n == "." {
-			return "", nil
-		}
-		return n, nil
-	}
-	if n, ok := x.added[p.Path()]; ok {
-		return n, nil
-	}
-	if reason := x.unimportable(p); reason != "" {
-		return p.Name(), fmt.Errorf("%s", reason)
-	}
-	name := p.Name()
-	for i := 2; !x.freeImportName(name); i++ {
-		name = fmt.Sprintf("%s%d", p.Name(), i)
-	}
-	x.added[p.Path()] = name
-	return name, nil
-}
-
-// unimportable explains why this file cannot import p, or returns "".
-func (x *extraction) unimportable(p *types.Package) string {
-	path := p.Path()
-	if p.Name() == "main" {
-		return "which is a main package and cannot be imported"
-	}
-	if i := strings.LastIndex(path, "/internal/"); i >= 0 || strings.HasSuffix(path, "/internal") || strings.HasPrefix(path, "internal/") || path == "internal" {
-		parent := ""
-		switch {
-		case i >= 0:
-			parent = path[:i]
-		case strings.HasSuffix(path, "/internal"):
-			parent = strings.TrimSuffix(path, "/internal")
-		}
-		if parent != "" && x.pkg.PkgPath != parent && !strings.HasPrefix(x.pkg.PkgPath, parent+"/") {
-			return fmt.Sprintf("which is internal to %s and cannot be imported from %s", parent, x.pkg.PkgPath)
-		}
-	}
-	return ""
-}
-
-// freeImportName reports whether a new import can use name in this file:
-// no import, package-level declaration (in any variant of the package) or
-// predeclared identifier uses it.
-func (x *extraction) freeImportName(name string) bool {
-	if types.Universe.Lookup(name) != nil {
-		return false
-	}
-	if s := x.info.Scopes[x.file]; s != nil && s.Lookup(name) != nil {
-		return false
-	}
-	for _, n := range x.added {
-		if n == name {
-			return false
-		}
-	}
-	for _, p := range x.ws.Pkgs {
-		if p.PkgPath == x.pkg.PkgPath && p.Types != nil && p.Types.Scope().Lookup(name) != nil {
-			return false
-		}
-	}
-	return true
+	return x.imp.Name(p)
 }
 
 // importEdits adds the imports that typeString needed.
 func (x *extraction) importEdits() []edit.TextEdit {
-	if len(x.added) == 0 {
+	if x.imp == nil {
 		return nil
 	}
-	var paths []string
-	for p := range x.added {
-		paths = append(paths, p)
-	}
-	sort.Strings(paths)
-	var specs []string
-	for _, p := range paths {
-		spec := strconv.Quote(p)
-		if n := x.added[p]; n != pathBase(p) {
-			spec = n + " " + spec
-		}
-		specs = append(specs, spec)
-	}
-	var group, single *ast.GenDecl
-	for _, d := range x.file.Decls {
-		if g, ok := d.(*ast.GenDecl); ok && g.Tok == token.IMPORT {
-			if g.Lparen.IsValid() && group == nil {
-				group = g
-			} else if !g.Lparen.IsValid() && single == nil {
-				single = g
-			}
-		}
-	}
-	switch {
-	case group != nil:
-		at := x.off(group.Rparen)
-		start := x.off(x.tf.LineStart(x.line(group.Rparen)))
-		text := ""
-		for _, sp := range specs {
-			text += "\t" + sp + "\n"
-		}
-		if strings.TrimSpace(string(x.src[start:at])) != "" {
-			text = "\n" + text // `"fmt")` on one line
-		}
-		return []edit.TextEdit{{Start: at, End: at, NewText: text}}
-	case single != nil:
-		text := "import (\n\t" + string(x.src[x.off(single.Specs[0].Pos()):x.off(single.Specs[0].End())]) + "\n"
-		for _, sp := range specs {
-			text += "\t" + sp + "\n"
-		}
-		return []edit.TextEdit{{Start: x.off(single.Pos()), End: x.off(single.End()), NewText: text + ")"}}
-	default:
-		at := x.off(x.file.Name.End())
-		text := "\n\nimport " + specs[0]
-		if len(specs) > 1 {
-			text = "\n\nimport (\n\t" + strings.Join(specs, "\n\t") + "\n)"
-		}
-		return []edit.TextEdit{{Start: at, End: at, NewText: text}}
-	}
-}
-
-// pathBase returns the last element of an import path, the name a
-// package is usually imported as.
-func pathBase(path string) string {
-	if i := strings.LastIndexByte(path, '/'); i >= 0 {
-		return path[i+1:]
-	}
-	return path
+	return x.imp.Edits()
 }
 
 // localTypeIn returns a type name in t that cannot be written outside the
@@ -1985,12 +1851,11 @@ func (x *extraction) plan() (*refactor.Plan, error) {
 	if x.generic {
 		notes = append(notes, fmt.Sprintf("the selected lines use type parameters of %s, so the new function declares them too and the call passes them explicitly", x.enclosingName()))
 	}
-	if len(x.added) > 0 {
+	if x.imp != nil && len(x.imp.Paths()) > 0 {
 		var imps []string
-		for p := range x.added {
+		for _, p := range x.imp.Paths() {
 			imps = append(imps, strconv.Quote(p))
 		}
-		sort.Strings(imps)
 		notes = append(notes, "added import "+strings.Join(imps, ", ")+" for the new function's types")
 	}
 	switch x.mode {
