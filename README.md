@@ -27,8 +27,8 @@ model reads before choosing the next refactoring. That loop is the iteration.
   types, and generics). `invert_if` (with guard clauses) and `remove_else`
   are done. `inline_function` has a first version (see the roadmap).
 - **Step 4 (in progress):** refactorings that prepare a feature change.
-  `add_parameter`, `remove_parameter` and `move_parameter` are done;
-  exported methods are next.
+  `add_parameter`, `remove_parameter` and `move_parameter` are done, for
+  functions and methods, exported or not.
 
 ## Roadmap
 
@@ -41,9 +41,10 @@ hand or a tool got in the way.
 
 1. **Changing a signature** at every call site. The most common by-hand
    step so far. *`add_parameter`, `remove_parameter` and `move_parameter`
-   done (see "Add parameter", "Remove parameter" and "Move parameter: what
-   it checks"); next: exported methods (which needs checking every
-   interface they could implement).*
+   done, for exported methods too (see "Add parameter", "Remove parameter",
+   "Move parameter: what it checks" and "Changing a method: interfaces").
+   Left: methods of generic types that an interface could match, and
+   interface methods with all their implementations.*
 2. **Moving a declaration** to another file or package, updating its
    references (and renaming it on the way when it changes package).
 3. **Evidence from real use.** Keep the friction log during normal work.
@@ -699,7 +700,7 @@ fall through.
 
 ## Add parameter: what it checks
 
-`add_parameter` adds a parameter to a function or unexported method and
+`add_parameter` adds a parameter to a function or method and
 passes a given value for it at every call in the workspace (test files
 included). Identify the function by `file`, `line` and `name`, at its
 declaration or any call. `parameter` and `type` give the new parameter;
@@ -725,10 +726,9 @@ Constants are always fine.
 Refused:
 
 - **the function:** used other than by calling it (a function value, a
-  method expression), since its type would change; an exported method, or
-  an unexported one whose name an interface in its package has, since its
-  type could stop implementing the interface (an exported method could do so
-  silently, through an interface in another package); an interface method;
+  method expression), since its type would change; a method that would stop
+  or start implementing an interface (see "Changing a method: interfaces");
+  an interface method;
   `init`, or `main` in package `main`; declared outside the module; without
   a body; unnamed parameters;
 - **the name:** already a parameter, result, receiver or type parameter; a
@@ -747,7 +747,7 @@ says so.
 ## Remove parameter: what it checks
 
 `remove_parameter` is the reverse: it removes a parameter from a function
-or unexported method and drops its argument from every call in the
+or method and drops its argument from every call in the
 workspace. Identify the function as for `add_parameter`, and the parameter
 by `parameter`. Removing a variadic parameter drops all of its arguments
 (and a spread `xs...`). The rest of the parameter list keeps its grouping
@@ -759,7 +759,7 @@ not to evaluate, by the same rules as an added value: no side effects and
 no possible panic.
 
 Refused, besides the function checks `add_parameter` makes (function
-values, method expressions, exported and interface methods, and so on):
+values, method expressions, interfaces, and so on):
 
 - **the parameter:** not found, more than one with that name (`_`), used by
   the body, or of a type that mentions one of the function's type
@@ -798,6 +798,36 @@ parameter, which must stay last; a parameter that is already in that
 position; a call that passes another call's results; and a moved argument
 that contains another call of the same function (`f(1, f(2, 3))`), whose
 own edit would have to move with it.
+
+## Changing a method: interfaces
+
+Changing a method's signature can change which interfaces its type
+implements. Where the program converts the type to an interface, that is a
+compile error; but a type assertion (`v.(fmt.Stringer)`, or `errors.As`, or
+`fmt` checking for `String() string`) just quietly gives a different answer.
+So `add_parameter`, `remove_parameter` and `move_parameter` compute the
+method's new signature and refuse the change if any type whose method set
+includes the method, the receiver type, a pointer to it, or a type that
+embeds it, would
+
+- **stop implementing** an interface it implements now (`T implements
+  fmt.Stringer`), or
+- **start implementing** one it does not (removing `force` from
+  `Close(force bool) error` would make the type an `io.Closer`).
+
+The interfaces checked are every one the program can see that has a method
+of that name: the predeclared `error`; every interface type written in the
+module's code, named or not (`v.(interface{ Size() int })`); and every
+interface declared at package level in any dependency, the standard library
+included. A change that keeps the signature (moving a parameter among
+parameters of the same type) is allowed even when the type implements an
+interface with that method.
+
+Not seen: interfaces declared inside functions of other modules, like the
+`interface{ Unwrap() error }` that `errors.Is` checks for; the result of an
+exported method's change says so. And code in other modules, which could
+declare its own interfaces, is never seen. Methods of generic types are
+refused whenever an interface has a method of that name.
 
 ## Testing
 

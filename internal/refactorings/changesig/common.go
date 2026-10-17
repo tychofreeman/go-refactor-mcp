@@ -2,10 +2,11 @@
 // signature and update every call to match: add_parameter,
 // remove_parameter and move_parameter, so far.
 //
-// They share one requirement: every reference to the function must be a
-// call. A function value (`f := fn`, passing fn as an argument) has the
-// function's type, which the change would alter, and a method that
-// implements an interface would stop implementing it, possibly silently.
+// They share two requirements. Every reference to the function must be a
+// call: a function value (`f := fn`, passing fn as an argument) has the
+// function's type, which the change would alter. And a method must not
+// stop or start implementing any interface (see checkInterfaces), which
+// could change what a type assertion does without a compile error.
 package changesig
 
 import (
@@ -51,7 +52,8 @@ type call struct {
 
 // findTarget resolves the function at the given position and checks that
 // its signature can change: a function or unexported method declared in
-// the workspace, with a body, only ever called.
+// the workspace, with a body, only ever called. (Each refactoring then
+// checks interfaces against the new signature.)
 func findTarget(ws *workspace.Workspace, q locate.IdentQuery) (*target, error) {
 	pkg, id, err := locate.Ident(ws, q)
 	if err != nil {
@@ -69,9 +71,6 @@ func findTarget(ws *workspace.Workspace, q locate.IdentQuery) (*target, error) {
 	if recv := fn.Signature().Recv(); recv != nil {
 		if types.IsInterface(recv.Type()) {
 			return nil, refactor.Refusef("%s is an interface method; changing interface methods (and every implementation) is not supported yet", fn.Name())
-		}
-		if fn.Exported() {
-			return nil, refactor.Refusef("%s is an exported method; exported methods are not supported yet: its type could stop implementing an interface, possibly in another package, without a compile error", fn.Name())
 		}
 	}
 	if fn.Parent() == fn.Pkg().Scope() && (fn.Name() == "init" || (fn.Name() == "main" && fn.Pkg().Name() == "main")) {
@@ -105,39 +104,10 @@ func findTarget(ws *workspace.Workspace, q locate.IdentQuery) (*target, error) {
 			t.params = append(t.params, param{field: f, index: i, name: n.Name})
 		}
 	}
-	if fn.Signature().Recv() != nil {
-		if err := t.checkNoInterface(); err != nil {
-			return nil, err
-		}
-	}
 	if err := t.collectCalls(); err != nil {
 		return nil, err
 	}
 	return t, nil
-}
-
-// checkNoInterface refuses an unexported method whose name some interface
-// in its package also has: the type might implement it. (Only interfaces
-// in the same package can have unexported methods.)
-func (t *target) checkNoInterface() error {
-	for _, p := range t.ws.Pkgs {
-		if p.Types == nil || p.Types.Path() != t.obj.Pkg().Path() {
-			continue
-		}
-		for _, tv := range p.TypesInfo.Types {
-			it, ok := tv.Type.Underlying().(*types.Interface)
-			if !ok {
-				continue
-			}
-			for i := 0; i < it.NumMethods(); i++ {
-				if m := it.Method(i); m.Name() == t.obj.Name() {
-					return refactor.Refusef("an interface in package %s has a method %s (at %s), which the type of %s may implement; changing such methods is not supported yet",
-						p.Types.Name(), m.Name(), t.ws.Position(m.Pos()), t.obj.FullName())
-				}
-			}
-		}
-	}
-	return nil
 }
 
 // collectCalls finds every call of the target in every package variant,
@@ -236,6 +206,9 @@ func (t *target) newPlan(what string, fes []edit.FileEdit) *refactor.Plan {
 	}
 	if t.obj.Exported() {
 		plan.Notes = append(plan.Notes, fmt.Sprintf("%s is exported: calls in other modules are not updated", t.obj.Name()))
+		if t.obj.Signature().Recv() != nil {
+			plan.Notes = append(plan.Notes, "interfaces declared inside functions outside this module (such as the ones errors.Is and errors.As look for) cannot be checked")
+		}
 	}
 	return plan
 }

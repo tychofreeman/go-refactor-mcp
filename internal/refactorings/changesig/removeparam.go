@@ -6,6 +6,7 @@ import (
 	"go/ast"
 	"go/token"
 	"go/types"
+	"slices"
 
 	"golang.org/x/tools/go/packages"
 
@@ -24,11 +25,11 @@ func NewRemoveParameter() *RemoveParameter { return &RemoveParameter{} }
 func (*RemoveParameter) Name() string { return "remove_parameter" }
 
 func (*RemoveParameter) Description() string {
-	return `Remove a parameter the body does not use from a function or unexported method, and drop its argument from every call in the workspace.
+	return `Remove a parameter the body does not use from a function or method, and drop its argument from every call in the workspace.
 Use it to finish removing a feature: first change the body so it no longer uses the parameter, then remove it.
 Identify the function by file, line and name, at its declaration or any call, and give the parameter's name. Removing a variadic parameter drops all of its arguments.
 Each dropped argument must have no side effects and must not be able to panic (no calls, pointer dereferences, indexing or non-constant division), so that not evaluating it changes nothing.
-Refuses if the body uses the parameter, if the function is used other than by calling it, if it is an exported or interface method, if a dropped argument would leave a local variable or an import unused, or if the parameter's type is all that lets calls infer a type parameter.`
+Refuses if the body uses the parameter, if the function is used other than by calling it, if it is an interface method, if a method would stop or start implementing an interface the program can see (which could silently change a type assertion), if a dropped argument would leave a local variable or an import unused, or if the parameter's type is all that lets calls infer a type parameter.`
 }
 
 func (*RemoveParameter) InputSchema() json.RawMessage {
@@ -75,6 +76,9 @@ func (*RemoveParameter) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 		return nil, err
 	}
 	if err := t.checkUnused(t.params[at]); err != nil {
+		return nil, err
+	}
+	if err := t.checkInterfaces(func(ps []string) []string { return slices.Delete(ps, at, at+1) }); err != nil {
 		return nil, err
 	}
 	variadic := t.obj.Signature().Variadic() && at == len(t.params)-1

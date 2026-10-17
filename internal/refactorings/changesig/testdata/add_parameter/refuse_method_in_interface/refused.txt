@@ -1,1 +1,1 @@
-an interface in package m has a method grow
+*box implements grower

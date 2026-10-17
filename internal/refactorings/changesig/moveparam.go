@@ -6,6 +6,7 @@ import (
 	"go/ast"
 	"go/types"
 	"os"
+	"slices"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
@@ -23,11 +24,11 @@ func NewMoveParameter() *MoveParameter { return &MoveParameter{} }
 func (*MoveParameter) Name() string { return "move_parameter" }
 
 func (*MoveParameter) Description() string {
-	return `Move a parameter of a function or unexported method to another position, and move its argument to match at every call in the workspace.
+	return `Move a parameter of a function or method to another position, and move its argument to match at every call in the workspace.
 Use it to prepare a feature change, for example to put parameters in the order a new caller or an interface wants.
 Identify the function by file, line and name, at its declaration or any call. Give the parameter to move and optionally before: the parameter it should go just before (default: the end, or just before a variadic parameter).
 Moving an argument changes the order in which a call evaluates its arguments, so this is refused at any call where that order could matter: the moved argument and one it passes over where one has side effects and the other reads a variable, or both could have side effects or panic.
-Refuses if the function is used other than by calling it (as a function value or method expression), if it is an exported or interface method, if the parameter is variadic, or if a moved argument contains another call of the function.`
+Refuses if the function is used other than by calling it (as a function value or method expression), if it is an interface method, if a method would stop or start implementing an interface the program can see (which could silently change a type assertion), if the parameter is variadic, or if a moved argument contains another call of the function.`
 }
 
 func (*MoveParameter) InputSchema() json.RawMessage {
@@ -80,6 +81,16 @@ func (*MoveParameter) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refac
 		return nil, refactor.Refusef("%s is already there: nothing to move", a.Parameter)
 	}
 
+	if err := t.checkInterfaces(func(ps []string) []string {
+		k := ps[from]
+		ps = slices.Delete(ps, from, from+1)
+		if to > from {
+			return slices.Insert(ps, to-1, k)
+		}
+		return slices.Insert(ps, to, k)
+	}); err != nil {
+		return nil, err
+	}
 	p := t.params[from]
 	fes := []edit.FileEdit{t.paramCut(p).fileEdit(), {Path: t.ws.Fset.Position(t.decl.Pos()).Filename, Edits: []edit.TextEdit{t.paramEdit(to, p.name, t.text(p.field.Type))}}}
 	srcs := map[string][]byte{}
