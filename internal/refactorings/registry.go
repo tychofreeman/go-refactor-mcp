@@ -4,6 +4,7 @@ package refactorings
 
 import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/changesig"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/extractfunc"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/extractvar"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/inlinefunc"
@@ -22,6 +23,7 @@ func All() []refactor.Refactoring {
 		inlinefunc.New(),
 		invertif.New(),
 		invertif.NewRemoveElse(),
+		changesig.NewAddParameter(),
 	}
 }
 

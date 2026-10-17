@@ -26,6 +26,8 @@ model reads before choosing the next refactoring. That loop is the iteration.
   pointers for shared variables, methods, imports, local constants and
   types, and generics). `invert_if` (with guard clauses) and `remove_else`
   are done. `inline_function` has a first version (see the roadmap).
+- **Step 4 (in progress):** refactorings that prepare a feature change.
+  `add_parameter` is done; `remove_parameter` and `move_parameter` are next.
 
 ## Roadmap
 
@@ -36,8 +38,10 @@ feature. The order below follows what that workflow needed in practice;
 `docs/friction-log.md` records each time a refactoring had to be done by
 hand or a tool got in the way.
 
-1. **`change_signature`:** add, remove or reorder a function's parameters at
-   every call site. The most common by-hand step so far.
+1. **Changing a signature** at every call site. The most common by-hand
+   step so far. *`add_parameter` done (see "Add parameter: what it
+   checks"); next: `remove_parameter`, `move_parameter`, and exported
+   methods (which needs checking every interface they could implement).*
 2. **Moving a declaration** to another file or package, updating its
    references (and renaming it on the way when it changes package).
 3. **Evidence from real use.** Keep the friction log during normal work.
@@ -88,6 +92,7 @@ internal/
     extractfunc/              extract_function + testdata + opt-in stress test
     inlinefunc/               inline_function + testdata + opt-in stress and round-trip tests
     invertif/                 invert_if, remove_else + testdata + opt-in stress test
+    changesig/                add_parameter + testdata
 ```
 
 ## Getting started
@@ -144,7 +149,7 @@ Tools:
 | Tool | What it does |
 |---|---|
 | `inspect` | No args: module overview. `file`: outline (line ranges, complexity, nesting) + numbered source. `function` or `start_line`/`end_line` to narrow. |
-| `rename`, `extract_variable`, `inline_variable`, `extract_function`, `inline_function`, `invert_if`, `remove_else` (and every future refactoring) | Applies one step; returns `APPLIED` + diff, or `REFUSED` + reason (nothing changed). |
+| `rename`, `extract_variable`, `inline_variable`, `extract_function`, `inline_function`, `invert_if`, `remove_else`, `add_parameter` (and every future refactoring) | Applies one step; returns `APPLIED` + diff, or `REFUSED` + reason (nothing changed). |
 | `undo` | Reverts the last applied step; repeatable. |
 | `check` | Type-check status; `run_tests: true` also runs `go test`. |
 
@@ -235,6 +240,7 @@ refactor -n extract_function file=main.go start_line=20 end_line=31 name=printRe
 refactor -n inline_function file=main.go line=20 name=printReport
 refactor -n invert_if file=main.go line=14
 refactor -n remove_else file=main.go line=20
+refactor -n add_parameter file=main.go line=9 name=copyTree parameter=skip type=string value=cfg.OutDir
 ```
 
 Exit status: `0` applied/previewed, `2` refused, `1` error.
@@ -686,6 +692,53 @@ else in any other position (code after it runs either way); a repeated
 return that would mean something else inside the if (a name it uses is
 hidden by the if's init statement); and `remove_else` when the if branch can
 fall through.
+
+## Add parameter: what it checks
+
+`add_parameter` adds a parameter to a function or unexported method and
+passes a given value for it at every call in the workspace (test files
+included). Identify the function by `file`, `line` and `name`, at its
+declaration or any call. `parameter` and `type` give the new parameter;
+`value` is the Go expression every call passes, checked at each call, so it
+can name something in the caller's scope (`cfg.OutDir`). `before` puts it
+ahead of an existing parameter; by default it goes at the end, or just
+before a variadic parameter. Next to parameters of the same type it joins
+their group (`src, dst, skip string`); inside a group of another type it
+splits it (`lo int, label string, hi int`).
+
+The body does not use the new parameter yet; using it is the edit that
+follows. So that the step changes nothing, the value must be safe to
+evaluate where nothing evaluated before:
+
+- **no side effects:** no calls other than conversions and `len`, `cap`,
+  `min`, `max`, `new`, `make` and the like, and no channel receives;
+- **no panics:** no pointer dereference (explicit, or a field read through a
+  pointer), no indexing other than of a map, no slicing or type assertion,
+  and no division by a non-constant.
+
+Constants are always fine.
+
+Refused:
+
+- **the function:** used other than by calling it (a function value, a
+  method expression), since its type would change; an exported method, or
+  an unexported one whose name an interface in its package has, since its
+  type could stop implementing the interface (an exported method could do so
+  silently, through an interface in another package); an interface method;
+  `init`, or `main` in package `main`; declared outside the module; without
+  a body; unnamed parameters;
+- **the name:** already a parameter, result, receiver or type parameter; a
+  local declared at the top of the body, which shares the parameters'
+  scope; a name the body uses for something declared outside the function,
+  which the parameter would hide;
+- **the type:** not valid in the declaring file;
+- **the value:** not valid at some call, not assignable to the type, or
+  unsafe as above;
+- **a call** that passes another call's results as its arguments
+  (`f(pair())`).
+
+An exported function's calls in other modules are not updated; the result
+says so.
 
 ## Testing
 

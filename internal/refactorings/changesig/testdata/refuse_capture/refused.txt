@@ -1,0 +1,1 @@
+the body of clamp uses the constant "limit" declared at
