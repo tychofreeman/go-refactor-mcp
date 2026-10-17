@@ -1853,19 +1853,20 @@ func (x *extraction) plan() (*refactor.Plan, error) {
 	default:
 		sigText += " (" + strings.Join(results, ", ") + ")"
 	}
+	unit := x.indentUnit(decl)
 	var fn strings.Builder
 	fmt.Fprintf(&fn, "\n\n%s {\n", sigText)
 	for _, v := range f.locals {
-		fmt.Fprintf(&fn, "\tvar %s %s\n", v.Name(), ts(v.Name(), v.Type()))
+		fmt.Fprintf(&fn, "%svar %s %s\n", unit, v.Name(), ts(v.Name(), v.Type()))
 	}
 	hoistFile, hoistBody := x.hoistEdits(decl)
 	text, err := x.selectedText(append(append(bodyEdits, x.pointerEdits()...), hoistBody...))
 	if err != nil {
 		return nil, err
 	}
-	fn.WriteString(reindent(text, indent, "\t"))
+	fn.WriteString(reindent(text, indent, unit))
 	if tail != "" {
-		fmt.Fprintf(&fn, "\n\treturn %s", tail)
+		fmt.Fprintf(&fn, "\n%sreturn %s", unit, tail)
 	}
 	fn.WriteString("\n}")
 
@@ -2157,6 +2158,22 @@ func quoteText(s string) string {
 		s = s[:37] + "..."
 	}
 	return "`" + s + "`"
+}
+
+// indentUnit is one level of indentation in this file: a tab, as gofmt
+// writes, unless the enclosing function's body is indented with spaces
+// (the file is not gofmt'd); then the new function uses the same spaces,
+// so its body does not mix tabs and spaces.
+func (x *extraction) indentUnit(decl ast.Decl) string {
+	fd, ok := decl.(*ast.FuncDecl)
+	if !ok || fd.Body == nil || len(fd.Body.List) == 0 {
+		return "\t"
+	}
+	u := x.indentOf(fd.Body.List[0].Pos())
+	if u == "" || strings.Trim(u, " ") != "" {
+		return "\t"
+	}
+	return u
 }
 
 func (x *extraction) indentOf(p token.Pos) string {

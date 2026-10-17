@@ -35,7 +35,8 @@ jobs:
 
       - name: Check formatting
         run: |
-          unformatted=$(gofmt -l .)
+          # testdata may hold deliberately unformatted inputs
+          unformatted=$(gofmt -l $(git ls-files '*.go' | grep -v '/testdata/'))
           if [ -n "$unformatted" ]; then
             echo "These files are not gofmt-formatted:"
             echo "$unformatted"
