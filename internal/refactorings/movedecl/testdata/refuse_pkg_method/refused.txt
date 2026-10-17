@@ -1,0 +1,1 @@
+a method must stay in the package of its type

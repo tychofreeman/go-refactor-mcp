@@ -19,7 +19,8 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
 
-// Adder knows the imports of one file and collects the ones to add.
+// Adder knows the imports of one file and collects the ones to add and to
+// remove.
 type Adder struct {
 	ws   *workspace.Workspace
 	pkg  *packages.Package
@@ -29,12 +30,13 @@ type Adder struct {
 
 	imported map[string]string // import path -> name in this file ("." for a dot import)
 	added    map[string]string // imports to add: path -> name
+	removed  map[*ast.ImportSpec]bool
 }
 
 // New returns an Adder for file (with contents src) of pkg.
 func New(ws *workspace.Workspace, pkg *packages.Package, file *ast.File, src []byte) *Adder {
 	a := &Adder{ws: ws, pkg: pkg, file: file, tf: ws.Fset.File(file.Pos()), src: src,
-		imported: map[string]string{}, added: map[string]string{}}
+		imported: map[string]string{}, added: map[string]string{}, removed: map[*ast.ImportSpec]bool{}}
 	for _, imp := range file.Imports {
 		path := strings.Trim(imp.Path.Value, `"`)
 		switch {
@@ -157,25 +159,45 @@ func (a *Adder) spec(p string) string {
 	return s
 }
 
-// Edits adds the imports that Name needed.
+// Remove drops one of the file's imports: Edits deletes its line, or the
+// whole import declaration when none of its imports remain.
+func (a *Adder) Remove(spec *ast.ImportSpec) { a.removed[spec] = true }
+
+// Edits adds the imports that Name needed and deletes the removed ones.
 func (a *Adder) Edits() []edit.TextEdit {
+	var edits []edit.TextEdit
+	off := func(p token.Pos) int { return a.tf.Offset(p) }
+	var group, single *ast.GenDecl // where added imports go
+	for _, d := range a.file.Decls {
+		g, ok := d.(*ast.GenDecl)
+		if !ok || g.Tok != token.IMPORT {
+			continue
+		}
+		var gone []ast.Spec
+		for _, s := range g.Specs {
+			if a.removed[s.(*ast.ImportSpec)] {
+				gone = append(gone, s)
+			}
+		}
+		if len(gone) > 0 && len(gone) == len(g.Specs) {
+			edits = append(edits, a.deleteLines(g.Pos(), g.End()))
+			continue
+		}
+		for _, s := range gone {
+			edits = append(edits, a.deleteLines(s.Pos(), s.End()))
+		}
+		if g.Lparen.IsValid() && group == nil {
+			group = g
+		} else if !g.Lparen.IsValid() && single == nil {
+			single = g
+		}
+	}
 	if len(a.added) == 0 {
-		return nil
+		return edits
 	}
 	var specs []string
 	for _, p := range a.paths() {
 		specs = append(specs, a.spec(p))
-	}
-	off := func(p token.Pos) int { return a.tf.Offset(p) }
-	var group, single *ast.GenDecl
-	for _, d := range a.file.Decls {
-		if g, ok := d.(*ast.GenDecl); ok && g.Tok == token.IMPORT {
-			if g.Lparen.IsValid() && group == nil {
-				group = g
-			} else if !g.Lparen.IsValid() && single == nil {
-				single = g
-			}
-		}
 	}
 	switch {
 	case group != nil:
@@ -188,21 +210,32 @@ func (a *Adder) Edits() []edit.TextEdit {
 		if strings.TrimSpace(string(a.src[start:at])) != "" {
 			text = "\n" + text // `"fmt")` on one line
 		}
-		return []edit.TextEdit{{Start: at, End: at, NewText: text}}
+		return append(edits, edit.TextEdit{Start: at, End: at, NewText: text})
 	case single != nil:
 		text := "import (\n\t" + string(a.src[off(single.Specs[0].Pos()):off(single.Specs[0].End())]) + "\n"
 		for _, sp := range specs {
 			text += "\t" + sp + "\n"
 		}
-		return []edit.TextEdit{{Start: off(single.Pos()), End: off(single.End()), NewText: text + ")"}}
+		return append(edits, edit.TextEdit{Start: off(single.Pos()), End: off(single.End()), NewText: text + ")"})
 	default:
 		at := off(a.file.Name.End())
 		text := "\n\nimport " + specs[0]
 		if len(specs) > 1 {
 			text = "\n\nimport (\n\t" + strings.Join(specs, "\n\t") + "\n)"
 		}
-		return []edit.TextEdit{{Start: at, End: at, NewText: text}}
+		return append(edits, edit.TextEdit{Start: at, End: at, NewText: text})
 	}
+}
+
+// deleteLines deletes the whole lines from the one holding from to the one
+// holding to.
+func (a *Adder) deleteLines(from, to token.Pos) edit.TextEdit {
+	start := a.tf.Offset(a.tf.LineStart(a.tf.Line(from)))
+	end := len(a.src)
+	if i := strings.IndexByte(string(a.src[a.tf.Offset(to):]), '\n'); i >= 0 {
+		end = a.tf.Offset(to) + i + 1
+	}
+	return edit.TextEdit{Start: start, End: end}
 }
 
 // PathBase returns the last element of an import path, the name a package

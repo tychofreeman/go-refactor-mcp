@@ -1,0 +1,1 @@
+{"file": "cmd/tool/main.go", "line": 6, "name": "defaultHost", "to_file": "internal/agent/agent.go", "new_name": "DefaultHost"}

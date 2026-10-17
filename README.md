@@ -31,7 +31,7 @@ model reads before choosing the next refactoring. That loop is the iteration.
 - **Step 4 (in progress):** refactorings that prepare a feature change.
   `add_parameter`, `remove_parameter` and `move_parameter` are done, for
   functions and methods, exported or not. `move_declaration` moves a
-  declaration to another file of its package; to another package is next.
+  declaration to another file, of its package or another one.
 - **Step 5 (started):** edits, steps that change behavior on purpose (see
   "Edits"). `create_file` is done.
 
@@ -52,8 +52,10 @@ hand or a tool got in the way.
    interface methods with all their implementations.*
 2. **Moving a declaration** to another file or package, updating its
    references (and renaming it on the way when it changes package).
-   *`move_declaration` within a package done (see "Move declaration: what
-   it checks"); next: to another package, then grouped declarations.*
+   *`move_declaration` done, within a package and to another one (see
+   "Move declaration: what it checks"); next: grouped declarations, a type
+   with its methods, several declarations at once (so code that uses its
+   neighbours can move with them), and creating the package.*
 3. **Edits**, so the change itself is a tool call too, aiming at nearly all
    coding without editing files by hand. *`create_file` done (see
    "Edits").* Proposed next, smallest first, each checked to parse and
@@ -865,8 +867,9 @@ refused whenever an interface has a method of that name.
 
 `move_declaration` moves a top-level declaration (a function, method, type,
 variable or constant, with its doc comment and a comment ending its last
-line) to another file of the same package, creating the file if it does
-not exist. Identify it by `file`, `line` and `name`, at the declaration or
+line) to another file, creating the file if it does not exist. This
+section covers a file of the same package; "To another package" below
+covers the rest. Identify it by `file`, `line` and `name`, at the declaration or
 any use; `to_file` is the destination, relative to the module root.
 
 Top-level names live in the package scope, so no reference changes. What
@@ -890,9 +893,32 @@ Refused as well:
   could change what runs first;
 - a declaration grouped with others in parentheses (`var ( a = 1; b = 2 )`);
 - a `//go:embed` variable;
-- code that uses a dot import;
-- a destination in another directory: moving to another package is next on
-  the roadmap.
+- code that uses a dot import.
+
+### To another package
+
+When `to_file` is in another directory, the declaration moves to the
+package there, and every reference changes: uses outside that package
+become `q.Name`, importing `q` where needed; uses inside it lose their
+`p.` qualifier; and the moved code's own references to `q` lose theirs.
+Imports left unused anywhere are removed. `new_name` renames it on the
+way, together with the first word of its doc comment; an unexported
+declaration used outside its new package needs one, since it must become
+exported (`defaultHost` in a command becomes `agent.DefaultHost`).
+
+Refused, besides the checks above:
+
+- **what moves:** a method (it must stay with its type), a type with
+  methods, a declaration of several names (`var a, b = 1, 2`), and code
+  that uses other top-level declarations of its package: the new package
+  would have to import the old one, which imports it (move those first);
+- **where:** a directory without a Go package (creating one is not
+  supported yet), a test file on either side, a file with build
+  constraints, a name the package already declares;
+- **who uses it:** a package that would then import the destination while
+  the destination (or the moved code's imports) already depends on it,
+  which is an import cycle; a package that cannot import the destination
+  (`internal`); a use through a dot import.
 
 ## Edits
 

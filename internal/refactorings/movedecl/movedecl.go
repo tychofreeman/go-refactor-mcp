@@ -1,5 +1,6 @@
 // Package movedecl implements move_declaration: move a top-level
-// declaration to another file of the same package.
+// declaration to another file of the same package, or to another package
+// (see otherpkg.go).
 //
 // Within a package, top-level names are in the package scope, so no
 // reference changes. What does change is per file: the imports the moved
@@ -20,6 +21,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"golang.org/x/tools/go/packages"
@@ -41,11 +43,12 @@ func New() *MoveDeclaration { return &MoveDeclaration{} }
 func (*MoveDeclaration) Name() string { return "move_declaration" }
 
 func (*MoveDeclaration) Description() string {
-	return `Move a top-level declaration (function, method, type, variable or constant, with its doc comment) to another file of the same package, creating the file if needed.
-Use it to put code where it belongs before a change, e.g. a helper that two files now share.
-Identify the declaration by file, line and name, at the declaration or any use, and give to_file: the destination, relative to the workspace root, in the same directory.
-Imports the moved code needs are added to the destination (keeping an alias, or using the destination's name for the package); imports only it used are removed from the source.
-Refuses moving to another directory (package), between a test file and a non-test file, to or from a file with build constraints, a declaration grouped with others in parentheses, an init function or a variable whose initializer has side effects (initialization order follows the files), a //go:embed variable, and code that uses a dot import.`
+	return `Move a top-level declaration (function, method, type, variable or constant, with its doc comment) to another file, of the same package or of another one, creating the file if needed.
+Use it to put code where it belongs before a change, e.g. a helper that two files or two packages now share.
+Identify the declaration by file, line and name, at the declaration or any use, and give to_file: the destination, relative to the workspace root.
+Imports the moved code needs are added to the destination (keeping an alias, or using the destination's name for the package); imports left unused are removed.
+To another package (to_file in another directory, which must hold a package): every reference is updated (q.Name outside that package, Name inside it), and new_name renames it on the way; an unexported declaration used outside the new package needs an exported new_name (defaultHost -> DefaultHost).
+Refuses between a test file and a non-test file, to or from a file with build constraints, a declaration grouped with others in parentheses, an init function or a variable whose initializer has side effects (initialization order follows the files), a //go:embed variable, and code that uses a dot import. To another package it also refuses methods and types with methods, code that uses other top-level declarations of its package (move those first), test files, and moves that would make an import cycle or need an internal package a user cannot import.`
 }
 
 func (*MoveDeclaration) InputSchema() json.RawMessage {
@@ -56,7 +59,8 @@ func (*MoveDeclaration) InputSchema() json.RawMessage {
     "line":    {"type": "integer", "description": "1-based line of that occurrence."},
     "name":    {"type": "string",  "description": "The declared name (for a method, just the method name)."},
     "column":  {"type": "integer", "description": "Optional 1-based column, only needed to disambiguate."},
-    "to_file": {"type": "string",  "description": "Destination file, relative to the workspace root, in the same directory; created if it does not exist."}
+    "to_file": {"type": "string",  "description": "Destination file, relative to the workspace root; created if it does not exist. In another directory, the declaration moves to that package."},
+    "new_name": {"type": "string", "description": "Optional, when moving to another package: the name in the new package (required for an unexported declaration used outside it, e.g. defaultHost -> DefaultHost)."}
   },
   "required": ["file", "line", "name", "to_file"],
   "additionalProperties": false
@@ -64,11 +68,12 @@ func (*MoveDeclaration) InputSchema() json.RawMessage {
 }
 
 type moveArgs struct {
-	File   string `json:"file"`
-	Line   int    `json:"line"`
-	Column int    `json:"column,omitempty"`
-	Name   string `json:"name"`
-	ToFile string `json:"to_file"`
+	File    string `json:"file"`
+	Line    int    `json:"line"`
+	Column  int    `json:"column,omitempty"`
+	Name    string `json:"name"`
+	ToFile  string `json:"to_file"`
+	NewName string `json:"new_name,omitempty"`
 }
 
 // mover holds what one move needs.
@@ -79,9 +84,28 @@ type mover struct {
 	path    string
 	src     []byte
 	decl    ast.Decl
-	start   int // the declaration's text, with its doc comment
-	end     int // and a comment that ends its last line
+	obj     types.Object // the (first) name it declares
+	start   int          // the declaration's text, with its doc comment
+	end     int          // and a comment that ends its last line
 	imports []*ast.ImportSpec
+
+	// Moving to another package:
+	newName string
+	dest    *packages.Package
+	files   map[string]*fileEdits
+}
+
+// fileEdits collects the edits to one file and the imports to add or
+// remove; cuts are the ranges whose package references go away, which
+// can leave an import unused, and needs the import paths that new
+// references use.
+type fileEdits struct {
+	pkg   *packages.Package
+	file  *ast.File
+	adder *imports.Adder
+	edits []edit.TextEdit
+	cuts  [][2]int
+	needs map[string]bool
 }
 
 // Plan checks preconditions and computes the edits.
@@ -101,6 +125,16 @@ func (*MoveDeclaration) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 		return nil, err
 	}
 	to := ws.Abs(a.ToFile)
+	m.newName = m.obj.Name()
+	if filepath.Dir(to) != filepath.Dir(m.path) {
+		if a.NewName != "" {
+			m.newName = a.NewName
+		}
+		return m.planOtherPackage(to)
+	}
+	if a.NewName != "" && a.NewName != m.obj.Name() {
+		return nil, refactor.Refusef("within a package the name does not change; use rename for that")
+	}
 	dst, err := m.checkDestination(to)
 	if err != nil {
 		return nil, err
@@ -108,20 +142,17 @@ func (*MoveDeclaration) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 	if err := m.collectImports(); err != nil {
 		return nil, err
 	}
-
-	fes := []edit.FileEdit{{Path: m.path, Edits: append(m.removeEdits(), edit.TextEdit{Start: m.lineStart(m.start), End: m.nextLine(m.end)})}}
+	m.files = map[string]*fileEdits{}
+	m.deleteDecl()
+	same := func(pn *types.PkgName) string { return pn.Name() }
 	if dst == nil {
-		fes = append(fes, edit.FileEdit{Path: to, Edits: []edit.TextEdit{{NewText: m.newFile()}}})
-	} else {
-		fe, err := m.appendTo(to, dst)
-		if err != nil {
-			return nil, err
-		}
-		fes = append(fes, fe)
+		m.files[to] = &fileEdits{edits: []edit.TextEdit{{NewText: m.newFile(same)}}}
+	} else if err := m.appendTo(to, ""); err != nil {
+		return nil, err
 	}
 	return &refactor.Plan{
 		Summary: fmt.Sprintf("moved %s from %s to %s", a.Name, ws.Rel(m.path), ws.Rel(to)),
-		Edits:   edit.Merge(fes),
+		Edits:   m.fileEdits(),
 	}, nil
 }
 
@@ -150,7 +181,7 @@ func find(ws *workspace.Workspace, q locate.IdentQuery) (*mover, error) {
 					if err != nil {
 						return nil, err
 					}
-					return &mover{ws: ws, pkg: p, file: f, path: pos.Filename, src: src, decl: d}, nil
+					return &mover{ws: ws, pkg: p, file: f, path: pos.Filename, src: src, decl: d, obj: obj}, nil
 				}
 			}
 			return nil, refactor.Refusef("%s (declared at %s) is not a top-level declaration", id.Name, ws.Position(obj.Pos()))
@@ -187,15 +218,12 @@ func declares(fset *token.FileSet, d ast.Decl, offset int) bool {
 // checkDecl refuses declarations that cannot move, and finds the text to
 // move.
 func (m *mover) checkDecl() error {
-	var doc *ast.CommentGroup
 	switch d := m.decl.(type) {
 	case *ast.FuncDecl:
-		doc = d.Doc
 		if d.Recv == nil && d.Name.Name == "init" {
 			return refactor.Refusef("init functions run in the order of their files, so moving one could change behavior; this is not supported")
 		}
 	case *ast.GenDecl:
-		doc = d.Doc
 		if len(d.Specs) > 1 {
 			return refactor.Refusef("the declaration is part of a grouped declaration (at %s) with %d others; moving one out of a group is not supported yet",
 				m.ws.Position(d.Pos()), len(d.Specs)-1)
@@ -210,7 +238,7 @@ func (m *mover) checkDecl() error {
 		}
 	}
 	m.start = m.off(m.decl.Pos())
-	if doc != nil {
+	if doc := docOf(m.decl); doc != nil {
 		m.start = m.off(doc.Pos())
 	}
 	m.end = m.off(m.decl.End())
@@ -288,75 +316,187 @@ func (m *mover) collectImports() error {
 		return true
 	})
 	for _, imp := range m.file.Imports {
-		if pn := m.pkgName(imp); pn != nil && used[pn] {
+		if pn := pkgNameOf(m.pkg.TypesInfo, imp); pn != nil && used[pn] {
 			m.imports = append(m.imports, imp)
 		}
 	}
 	return err
 }
 
-func (m *mover) pkgName(imp *ast.ImportSpec) *types.PkgName {
+// pkgNameOf returns the name an import declares (nil for a blank or dot
+// import).
+func pkgNameOf(info *types.Info, imp *ast.ImportSpec) *types.PkgName {
 	var o types.Object
 	if imp.Name != nil {
-		o = m.pkg.TypesInfo.Defs[imp.Name]
+		o = info.Defs[imp.Name]
 	} else {
-		o = m.pkg.TypesInfo.Implicits[imp]
+		o = info.Implicits[imp]
 	}
 	pn, _ := o.(*types.PkgName)
+	if pn != nil && (pn.Name() == "_" || pn.Name() == ".") {
+		return nil
+	}
 	return pn
 }
 
-// removeEdits deletes the source's imports that only the moved code uses:
-// each such spec's line, or the whole import declaration when none of its
-// specs remain.
-func (m *mover) removeEdits() []edit.TextEdit {
-	inMoved := func(p token.Pos) bool { o := m.off(p); return m.start <= o && o < m.end }
-	unused := map[*ast.ImportSpec]bool{}
-	for _, imp := range m.imports {
-		pn := m.pkgName(imp)
-		kept := false
-		for id, o := range m.pkg.TypesInfo.Uses {
-			if o == pn && !inMoved(id.Pos()) {
+// is reports whether o is the moved declaration's object, in any package
+// variant.
+func (m *mover) is(o types.Object) bool {
+	return o != nil && keyOf(m.ws.Fset, o) == keyOf(m.ws.Fset, m.obj)
+}
+
+// keyOf identifies an object by its declaration position, which a
+// package's variants share.
+func keyOf(fset *token.FileSet, o types.Object) string {
+	p := fset.Position(o.Pos())
+	return fmt.Sprintf("%s:%d:%s", p.Filename, p.Offset, o.Name())
+}
+
+// fileFor returns the edits to the file at path, which must be in a
+// loaded package.
+func (m *mover) fileFor(path string) (*fileEdits, error) {
+	if fe := m.files[path]; fe != nil {
+		return fe, nil
+	}
+	pkg, f := m.ws.FileSyntax(path)
+	if f == nil {
+		return nil, refactor.Refusef("%s is not part of any loaded package", m.ws.Rel(path))
+	}
+	src, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	fe := &fileEdits{pkg: pkg, file: f, adder: imports.New(m.ws, pkg, f, src), needs: map[string]bool{}}
+	m.files[path] = fe
+	return fe, nil
+}
+
+// deleteDecl deletes the declaration's lines from the source file.
+func (m *mover) deleteDecl() {
+	fe, _ := m.fileFor(m.path) // the source file is loaded
+	fe.edits = append(fe.edits, edit.TextEdit{Start: m.lineStart(m.start), End: m.nextLine(m.end)})
+	fe.cuts = append(fe.cuts, [2]int{m.start, m.end})
+}
+
+// fileEdits removes the imports the cuts leave unused and returns every
+// file's edits.
+func (m *mover) fileEdits() []edit.FileEdit {
+	var fes []edit.FileEdit
+	for path, fe := range m.files {
+		if fe.adder != nil {
+			fe.dropUnused(m.ws)
+			fe.edits = append(fe.edits, fe.adder.Edits()...)
+		}
+		fes = append(fes, edit.FileEdit{Path: path, Edits: fe.edits})
+	}
+	sort.Slice(fes, func(i, j int) bool { return fes[i].Path < fes[j].Path })
+	return edit.Merge(fes)
+}
+
+// dropUnused removes the file's imports that are used only inside cuts.
+func (fe *fileEdits) dropUnused(ws *workspace.Workspace) {
+	info := fe.pkg.TypesInfo
+	cut := func(p token.Pos) bool {
+		o := ws.Fset.Position(p).Offset
+		for _, c := range fe.cuts {
+			if c[0] <= o && o < c[1] {
+				return true
+			}
+		}
+		return false
+	}
+	fileStart, fileEnd := fe.file.FileStart, fe.file.FileEnd
+	for _, imp := range fe.file.Imports {
+		pn := pkgNameOf(info, imp)
+		if pn == nil || fe.needs[pn.Imported().Path()] {
+			continue
+		}
+		used, kept := false, false
+		for id, o := range info.Uses {
+			if o != pn || id.Pos() < fileStart || id.Pos() >= fileEnd {
+				continue
+			}
+			if cut(id.Pos()) {
+				used = true
+			} else {
 				kept = true
-				break
 			}
 		}
-		if !kept {
-			unused[imp] = true
+		if used && !kept {
+			fe.adder.Remove(imp)
 		}
 	}
+}
+
+// code returns the moved declaration's text for its destination: qual
+// gives the name there of each package it refers to ("" for the
+// destination's own package, whose qualifier goes), and references to the
+// declaration itself use m.newName.
+func (m *mover) code(qual func(*types.PkgName) string) (string, error) {
+	info := m.pkg.TypesInfo
 	var edits []edit.TextEdit
-	for _, d := range m.file.Decls {
-		g, ok := d.(*ast.GenDecl)
-		if !ok || g.Tok != token.IMPORT {
-			continue
-		}
-		var gone []ast.Spec
-		for _, s := range g.Specs {
-			if unused[s.(*ast.ImportSpec)] {
-				gone = append(gone, s)
+	rel := func(p token.Pos) int { return m.off(p) - m.start }
+	ast.Inspect(m.decl, func(n ast.Node) bool {
+		switch n := n.(type) {
+		case *ast.SelectorExpr:
+			x, ok := n.X.(*ast.Ident)
+			if !ok {
+				return true
+			}
+			pn, ok := info.Uses[x].(*types.PkgName)
+			if !ok {
+				return true
+			}
+			switch q := qual(pn); {
+			case q == "":
+				edits = append(edits, edit.TextEdit{Start: rel(x.Pos()), End: rel(n.Sel.Pos())})
+			case q != pn.Name():
+				edits = append(edits, edit.TextEdit{Start: rel(x.Pos()), End: rel(x.End()), NewText: q})
+			}
+			return false
+		case *ast.Ident:
+			if m.newName != m.obj.Name() && n.Name == m.obj.Name() && (info.Defs[n] == m.obj || m.is(info.Uses[n])) {
+				edits = append(edits, edit.TextEdit{Start: rel(n.Pos()), End: rel(n.End()), NewText: m.newName})
 			}
 		}
-		if len(gone) == len(g.Specs) && len(gone) > 0 {
-			edits = append(edits, edit.TextEdit{Start: m.lineStart(m.off(g.Pos())), End: m.nextLine(m.off(g.End()))})
-			continue
-		}
-		for _, s := range gone {
-			edits = append(edits, edit.TextEdit{Start: m.lineStart(m.off(s.Pos())), End: m.nextLine(m.off(s.End()))})
+		return true
+	})
+	if doc := docOf(m.decl); doc != nil && m.newName != m.obj.Name() {
+		// The doc comment names the declaration first, by convention.
+		if c := doc.List[0]; strings.HasPrefix(c.Text, "// "+m.obj.Name()+" ") {
+			at := rel(c.Pos()) + len("// ")
+			edits = append(edits, edit.TextEdit{Start: at, End: at + len(m.obj.Name()), NewText: m.newName})
 		}
 	}
-	return edits
+	out, err := edit.Apply(m.src[m.start:m.end], edits)
+	return string(out), err
+}
+
+func docOf(d ast.Decl) *ast.CommentGroup {
+	switch d := d.(type) {
+	case *ast.FuncDecl:
+		return d.Doc
+	case *ast.GenDecl:
+		return d.Doc
+	}
+	return nil
 }
 
 // newFile is the destination's contents when it does not exist: the
 // package clause, the imports the code needs as the source writes them,
 // and the code.
-func (m *mover) newFile() string {
+func (m *mover) newFile(qual func(*types.PkgName) string) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "package %s\n\n", m.file.Name.Name)
+	name := m.file.Name.Name
+	if m.dest != nil {
+		name = m.dest.Name
+	}
+	fmt.Fprintf(&b, "package %s\n\n", name)
 	var specs []string
 	for _, imp := range m.imports {
-		specs = append(specs, string(m.src[m.off(imp.Pos()):m.off(imp.End())]))
+		if qual(pkgNameOf(m.pkg.TypesInfo, imp)) != "" {
+			specs = append(specs, string(m.src[m.off(imp.Pos()):m.off(imp.End())]))
+		}
 	}
 	switch len(specs) {
 	case 0:
@@ -365,57 +505,44 @@ func (m *mover) newFile() string {
 	default:
 		fmt.Fprintf(&b, "import (\n\t%s\n)\n\n", strings.Join(specs, "\n\t"))
 	}
-	b.WriteString(string(m.src[m.start:m.end]))
+	code, _ := m.code(qual) // its edits come from its own syntax, so they apply
+	b.WriteString(code)
 	b.WriteString("\n")
 	return b.String()
 }
 
 // appendTo adds the code at the end of an existing file, with the imports
 // it needs. Where the file imports a package under another name, the
-// code's qualifiers change to match.
-func (m *mover) appendTo(to string, dst *ast.File) (edit.FileEdit, error) {
-	dstPkg, _ := m.ws.FileSyntax(to)
-	dstSrc, err := os.ReadFile(to)
+// code's qualifiers change to match; the package destPath (if any) is the
+// file's own, so its qualifier goes.
+func (m *mover) appendTo(to, destPath string) error {
+	fe, err := m.fileFor(to)
 	if err != nil {
-		return edit.FileEdit{}, err
+		return err
 	}
-	adder := imports.New(m.ws, dstPkg, dst, dstSrc)
 	names := map[*types.PkgName]string{}
 	for _, imp := range m.imports {
-		pn := m.pkgName(imp)
-		q, err := adder.Name(pn.Imported())
+		pn := pkgNameOf(m.pkg.TypesInfo, imp)
+		if pn.Imported().Path() == destPath {
+			names[pn] = ""
+			continue
+		}
+		q, err := fe.adder.Name(pn.Imported())
 		if err != nil {
-			return edit.FileEdit{}, refactor.Refusef("%s cannot import %s: %v", m.ws.Rel(to), pn.Imported().Path(), err)
+			return refactor.Refusef("%s cannot import %s: %v", m.ws.Rel(to), pn.Imported().Path(), err)
 		}
 		names[pn] = q
 	}
-	var renames []edit.TextEdit
-	ast.Inspect(m.decl, func(n ast.Node) bool {
-		s, ok := n.(*ast.SelectorExpr)
-		if !ok {
-			return true
-		}
-		x, ok := s.X.(*ast.Ident)
-		if !ok {
-			return true
-		}
-		pn, ok := m.pkg.TypesInfo.Uses[x].(*types.PkgName)
-		if !ok || names[pn] == pn.Name() {
-			return true
-		}
-		if q := names[pn]; q == "" { // a dot import in the destination
-			renames = append(renames, edit.TextEdit{Start: m.off(x.Pos()) - m.start, End: m.off(s.Sel.Pos()) - m.start})
-		} else {
-			renames = append(renames, edit.TextEdit{Start: m.off(x.Pos()) - m.start, End: m.off(x.End()) - m.start, NewText: q})
-		}
-		return true
-	})
-	code, err := edit.Apply(m.src[m.start:m.end], renames)
+	code, err := m.code(func(pn *types.PkgName) string { return names[pn] })
 	if err != nil {
-		return edit.FileEdit{}, err
+		return err
 	}
-	edits := append(adder.Edits(), edit.TextEdit{Start: len(dstSrc), End: len(dstSrc), NewText: "\n" + string(code) + "\n"})
-	return edit.FileEdit{Path: to, Edits: edits}, nil
+	src, err := os.ReadFile(to)
+	if err != nil {
+		return err
+	}
+	fe.edits = append(fe.edits, edit.TextEdit{Start: len(src), End: len(src), NewText: "\n" + code + "\n"})
+	return nil
 }
 
 func (m *mover) off(p token.Pos) int { return m.ws.Fset.Position(p).Offset }
