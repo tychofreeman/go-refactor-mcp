@@ -24,10 +24,10 @@ model reads before choosing the next refactoring. That loop is the iteration.
   `extract_variable`, `inline_variable` and `extract_function` are done
   (`extract_function` with parameters and results, `return` statements,
   pointers for shared variables, methods, imports, local constants and
-  types, and generics). `invert_if` is in progress (inverting if/else done;
-  guard clauses next).
+  types, and generics). `invert_if` (with guard clauses) and `remove_else`
+  are done; hoisting `if` init statements and `switch`-case guards are next.
 
-Next: guard clauses for `invert_if`; then an Ollama loop.
+Next: an Ollama loop.
 
 ## Layout
 
@@ -49,7 +49,7 @@ internal/
     extractvar/               extract_variable + testdata + opt-in stress test
     inlinevar/                inline_variable + testdata + opt-in stress test
     extractfunc/              extract_function + testdata + opt-in stress test
-    invertif/                 invert_if + testdata + opt-in stress test
+    invertif/                 invert_if, remove_else + testdata + opt-in stress test
 ```
 
 ## Getting started
@@ -105,7 +105,7 @@ Tools:
 | Tool | What it does |
 |---|---|
 | `inspect` | No args: module overview. `file`: outline (line ranges, complexity, nesting) + numbered source. `function` or `start_line`/`end_line` to narrow. |
-| `rename`, `extract_variable`, `inline_variable`, `extract_function`, `invert_if` (and every future refactoring) | Applies one step; returns `APPLIED` + diff, or `REFUSED` + reason (nothing changed). |
+| `rename`, `extract_variable`, `inline_variable`, `extract_function`, `invert_if`, `remove_else` (and every future refactoring) | Applies one step; returns `APPLIED` + diff, or `REFUSED` + reason (nothing changed). |
 | `undo` | Reverts the last applied step; repeatable. |
 | `check` | Type-check status; `run_tests: true` also runs `go test`. |
 
@@ -129,6 +129,7 @@ refactor -n extract_variable file=main.go line=12 expression='qty*unit' name=sub
 refactor -n inline_variable file=main.go line=12 name=subtotal
 refactor -n extract_function file=main.go start_line=20 end_line=31 name=printReport
 refactor -n invert_if file=main.go line=14
+refactor -n remove_else file=main.go line=20
 ```
 
 Exit status: `0` applied/previewed, `2` refused, `1` error.
@@ -427,12 +428,33 @@ Refused (with an explanation):
   by a local declaration, or in a `_test.go` file looks like a test
   (`TestX`, `BenchmarkX`, ...).
 
-## Invert if: what it checks
+## Invert if and remove else: what they check
 
-`invert_if` negates an if statement's condition and swaps its branches.
-Identify the if by `file` and the `line` of its `if` keyword (`column` only if
-the line has more than one). The branch contents move as text, so comments
-come along; an init statement stays.
+`invert_if` negates an if statement's condition and swaps its branches,
+turning nested code into guard clauses where it can. Identify the if by
+`file` and the `line` of its `if` keyword (`column` only if the line has more
+than one).
+
+- **if/else:** the branches swap. If the new first branch cannot fall through
+  (it ends in `return`, `continue`, `break`, `goto`, `panic` or another
+  terminating statement), the else is removed and the other branch follows
+  the if, un-nested. `keep_else` only swaps.
+
+  ```go
+  if ok {                          if !ok {
+      work()                           log("skipped")
+  } else {                 =>          return
+      log("skipped")               }
+      return                       work()
+  }
+  ```
+- **if without else**, as the last statement of a function without results
+  or of a loop body, becomes a guard clause: `if !c { return }` (or
+  `continue`), followed by the former body, un-nested.
+
+`remove_else` handles the case where the *if* branch already exits:
+`if c { return x } else { B }` becomes `if c { return x }` followed by `B`; an
+`else if` becomes a separate `if`.
 
 The negated condition is simplified only where that is exact:
 
@@ -446,11 +468,27 @@ The negated condition is simplified only where that is exact:
   Operands are still evaluated left to right, the right one only when the
   left one does not decide the result.
 
-Anything else becomes `!x` or `!(...)`.
+Anything else becomes `!x` or `!(...)`. Branch contents move as text, so
+comments come along; un-nested statements are re-indented, except inside
+multi-line raw strings. An init statement stays on the if.
 
-Refused (with an explanation): an if without an else (guard clauses are not
-supported yet), and an else-if chain in the else branch (swapping it in would
-add nesting).
+Un-nesting moves the branch's declarations into the enclosing block, so it
+is refused (for an if/else, `invert_if` then only swaps and says why in a
+note) when:
+
+- the moved statements use variables declared by the if's init statement
+  (only in scope inside the if);
+- they declare a name the enclosing block already declares, or that the
+  code after the if uses for something else (it would now see the moved
+  declaration);
+- a `goto` jumps over the if (it would jump over the moved declarations);
+- there is a comment between the branches, or the if is an else-if, labeled,
+  or does not start its own line.
+
+Also refused: an else-if chain in the else branch of `invert_if` (swapping
+it in would add nesting); an if without else that is not the last statement
+of a function without results or of a loop body (code after it runs either
+way); and `remove_else` when the if branch can fall through.
 
 ## Testing
 
@@ -478,7 +516,7 @@ STRESS_DIR=/tmp/target STRESS_N=100000 go test ./internal/refactorings/inlinevar
 STRESS_DIR=/tmp/target go test ./internal/refactorings/inlinevar -run TestRoundTrip -v -timeout 1h
 # extract_function on runs of 1-4 statements and random line ranges:
 STRESS_DIR=/tmp/target go test ./internal/refactorings/extractfunc -run TestStress -v -timeout 1h
-# invert_if on every if statement:
+# invert_if and remove_else on every if statement:
 STRESS_DIR=/tmp/target STRESS_N=100000 go test ./internal/refactorings/invertif -run TestStress -v -timeout 1h
 ```
 
