@@ -325,6 +325,14 @@ fmt.Println(total)                     for _, x := range xs { total += x }
 - "Used afterwards" is conservative: any use outside the selection, a named
   result (a bare `return` reads it), or being read by the statements when
   they are in a loop. A result kept only because of the loop is noted.
+- A variable that other code can reach while the statements run (its
+  address is taken, a pointer method is called on it, an array of it is
+  sliced, or a function literal uses it) is passed as `&v`, so both
+  functions work on the same variable; it is never a result. Inside the
+  new function, `&v` becomes `v`, `v.f` and `v.M()` stay as they are, and
+  other uses become `*v`, or `(*v)` where Go does not dereference
+  (`(*v)[i]`, `(*v)(args)`, methods of interfaces). For example,
+  `json.Unmarshal(data, &cfg)` moves as `json.Unmarshal(data, cfg)`.
 - If a parameter or result type needs a package the file does not import,
   the import is added (with an alias such as `b2` when the package name is
   already used in the file or package), and the result notes it.
@@ -366,10 +374,10 @@ shape.
 
 Refused (with an explanation):
 
-- a variable passed in or out has its address taken (`&x`, slicing an
-  array, a pointer method on a value) or is used by a function literal: the
-  new function would work on a copy (some types, like `strings.Builder`,
-  also refuse to be copied);
+- a variable the statements declare has its address taken or is used by a
+  function literal, and is used after them: returning it would return a
+  copy (some types, like `strings.Builder`, also refuse to be copied);
+- a `:=` in the statements redeclares a variable passed as a pointer;
 - a constant, type or type parameter declared in the function is used by the
   statements, or one they declare is used after them;
 - a type needs a package that cannot be imported here (an `internal`

@@ -13,9 +13,9 @@
 //     in the two shapes described in returns.go, and refused otherwise;
 //   - data flow: local variables the statements use become parameters, and
 //     variables they change or declare that are used afterwards become
-//     results. Parameters and results are copies, so variables that other
-//     code can reach while the statements run (address taken, captured by
-//     a closure) are refused;
+//     results. Variables that other code can reach while the statements
+//     run (address taken, captured by a closure) are passed as pointers
+//     so both functions share them;
 //   - names: the new function must not clash with or hide another name in
 //     the package, and must not be hidden at the call site.
 //
@@ -59,7 +59,8 @@ Use it to split a long function into named steps.
 Identify the statements by file, start_line and end_line (inclusive, as shown by inspect). The lines must cover whole statements of one block; comments and blank lines in the range are allowed and comments move with the code.
 Local variables the statements use become parameters; variables they change or declare that are used afterwards become results, assigned at the call site. The result notes the parameters and results chosen.
 Return statements are supported in two shapes: if every path through the statements returns, the call site becomes "return f(...)"; if the enclosing function returns an error and every return in the statements is an early exit with a non-nil error (like "if err != nil { return nil, err }"), the new function also returns an error and the call site checks it.
-Refuses other returns (for example an early return of a success value), defer, recover() or fallthrough, or a break, continue or goto that leaves the selected lines; if a variable they share with the rest of the function has its address taken or is used by a function literal (the new function would work on a copy); or if they use constants or types declared inside the function.`
+Variables whose address is taken or that a function literal uses are passed as pointers, so both functions share them.
+Refuses other returns (for example an early return of a success value), defer, recover() or fallthrough, or a break, continue or goto that leaves the selected lines; if a variable they declare has its address taken or is used by a function literal and is used after them; or if they use constants or types declared inside the function.`
 }
 
 func (*ExtractFunction) InputSchema() json.RawMessage {
@@ -618,6 +619,9 @@ type flow struct {
 	// (updated), and variables it declares that are used after it (fresh).
 	results []*types.Var
 	fresh   map[*types.Var]bool
+	// pointers are parameters passed as &v: other code can reach them
+	// (their address is taken, or a function literal uses them).
+	pointers map[*types.Var]bool
 	// loopCarried lists results that are only returned because the
 	// selection is in a loop, for the notes.
 	loopCarried []string
@@ -666,15 +670,21 @@ func (x *extraction) analyzeDataFlow() error {
 			strings.Join(bad, ", "), x.enclosingName())
 	}
 
-	f := &flow{fresh: map[*types.Var]bool{}}
+	f := &flow{fresh: map[*types.Var]bool{}, pointers: map[*types.Var]bool{}}
 	for _, v := range order {
 		switch {
-		case x.fa.Addressed[v]:
-			return refactor.Refusef("%s (declared at line %d) has its address taken in %s, or a pointer method is called on it; the new function would get a copy, so code holding the address would no longer see the same variable. Passing pointers is not supported yet",
-				v.Name(), x.line(v.Pos()), x.enclosingName())
-		case x.fa.Captured[v]:
-			return refactor.Refusef("%s (declared at line %d) is used by a function literal in %s; the new function would get a copy, so the function literal and the new function would no longer share it",
-				v.Name(), x.line(v.Pos()), x.enclosingName())
+		case x.fa.Addressed[v], x.fa.Captured[v]:
+			// Other code can reach v while the statements run: pass a
+			// pointer, so that both work on the same variable.
+			for _, id := range refs[v] {
+				if x.isDefineTarget(id) {
+					return refactor.Refusef("line %d redeclares %s with :=, which is passed to the new function as a pointer (its address is taken, or a function literal uses it); in the new function, := would assign the pointer. Use = there first",
+						x.line(id.Pos()), v.Name())
+				}
+			}
+			f.params = append(f.params, v)
+			f.pointers[v] = true
+			continue
 		}
 		written, read := x.writtenIn(v), x.readIn(v)
 		usedOutside := x.usedOutside(v)
@@ -807,6 +817,99 @@ func (x *extraction) readIn(v *types.Var) bool {
 		}
 	}
 	return false
+}
+
+// isDefineTarget reports whether id is on the left of :=.
+func (x *extraction) isDefineTarget(id *ast.Ident) bool {
+	path := analysis.PathTo(x.file, id)
+	if len(path) < 2 {
+		return false
+	}
+	as, ok := path[1].(*ast.AssignStmt)
+	if !ok || as.Tok != token.DEFINE {
+		return false
+	}
+	for _, l := range as.Lhs {
+		if l == id {
+			return true
+		}
+	}
+	return false
+}
+
+// pointerEdits rewrites the selection's uses of variables passed by
+// pointer: &v becomes v, v.f and v.M() stay (Go dereferences them), and
+// other uses become *v, or (*v) where an operand needs parentheses.
+func (x *extraction) pointerEdits() []edit.TextEdit {
+	var edits []edit.TextEdit
+	for _, s := range x.stmts {
+		ast.Inspect(s, func(n ast.Node) bool {
+			id, ok := n.(*ast.Ident)
+			if !ok {
+				return true
+			}
+			v, ok := x.info.Uses[id].(*types.Var)
+			if !ok || !x.flow.pointers[v] {
+				return true
+			}
+			path := analysis.PathTo(x.file, id)
+			// The operand id is part of, skipping parentheses.
+			var operand ast.Node = id
+			i := 1
+			for ; i < len(path); i++ {
+				if _, paren := path[i].(*ast.ParenExpr); !paren {
+					break
+				}
+				operand = path[i]
+			}
+			var parent ast.Node
+			if i < len(path) {
+				parent = path[i]
+			}
+			star := "*" + v.Name()
+			paren := "(*" + v.Name() + ")"
+			repl := star
+			switch p := parent.(type) {
+			case *ast.UnaryExpr:
+				if p.Op == token.AND {
+					edits = append(edits, edit.TextEdit{Start: x.off(p.Pos()), End: x.off(p.End()), NewText: v.Name()})
+					return true
+				}
+			case *ast.SelectorExpr:
+				if p.X == operand {
+					switch v.Type().Underlying().(type) {
+					case *types.Pointer, *types.Interface:
+						repl = paren
+					default:
+						return true // the selector dereferences the pointer
+					}
+				}
+			case *ast.IndexExpr:
+				if p.X == operand {
+					repl = paren
+				}
+			case *ast.IndexListExpr:
+				if p.X == operand {
+					repl = paren
+				}
+			case *ast.SliceExpr:
+				if p.X == operand {
+					repl = paren
+				}
+			case *ast.CallExpr:
+				if p.Fun == operand {
+					repl = paren
+				}
+			case *ast.TypeAssertExpr:
+				if p.X == operand {
+					repl = paren
+				}
+			}
+			edits = append(edits, edit.TextEdit{Start: x.off(id.Pos()), End: x.off(id.End()), NewText: repl})
+			return true
+		})
+	}
+	return edits
 }
 
 // isAssignTarget reports whether id is a whole left-hand operand of = or
@@ -1321,7 +1424,11 @@ func (x *extraction) plan() (*refactor.Plan, error) {
 	// The new function.
 	var params []string
 	for _, v := range f.params {
-		params = append(params, v.Name()+" "+ts(v.Name(), v.Type()))
+		t := ts(v.Name(), v.Type())
+		if f.pointers[v] {
+			t = "*" + t
+		}
+		params = append(params, v.Name()+" "+t)
 	}
 	sigText := fmt.Sprintf("func %s(%s)", x.name, strings.Join(params, ", "))
 	switch len(results) {
@@ -1336,7 +1443,7 @@ func (x *extraction) plan() (*refactor.Plan, error) {
 	for _, v := range f.locals {
 		fmt.Fprintf(&fn, "\tvar %s %s\n", v.Name(), ts(v.Name(), v.Type()))
 	}
-	text, err := x.selectedText(bodyEdits)
+	text, err := x.selectedText(append(bodyEdits, x.pointerEdits()...))
 	if err != nil {
 		return nil, err
 	}
@@ -1347,7 +1454,15 @@ func (x *extraction) plan() (*refactor.Plan, error) {
 	fn.WriteString("\n}")
 
 	// The call.
-	call := fmt.Sprintf("%s(%s)", x.name, strings.Join(names(f.params), ", "))
+	var args []string
+	for _, v := range f.params {
+		if f.pointers[v] {
+			args = append(args, "&"+v.Name())
+		} else {
+			args = append(args, v.Name())
+		}
+	}
+	call := fmt.Sprintf("%s(%s)", x.name, strings.Join(args, ", "))
 	var site strings.Builder
 	switch x.mode {
 	case terminal:
@@ -1412,6 +1527,16 @@ func (x *extraction) plan() (*refactor.Plan, error) {
 			return strings.Join(names(vs), ", ")
 		}
 		notes = append(notes, fmt.Sprintf("parameters: %s; results: %s", describe(f.params), describe(f.results)))
+	}
+	var ptrs []string
+	for _, v := range f.params {
+		if f.pointers[v] {
+			ptrs = append(ptrs, v.Name())
+		}
+	}
+	if len(ptrs) > 0 {
+		notes = append(notes, fmt.Sprintf("%s %s passed as a pointer, because %s address is taken or a function literal uses %s; the new function changes the same variable",
+			strings.Join(ptrs, ", "), isAre(len(ptrs)), map[bool]string{true: "its", false: "their"}[len(ptrs) == 1], itThem(len(ptrs))))
 	}
 	if len(x.added) > 0 {
 		var imps []string
