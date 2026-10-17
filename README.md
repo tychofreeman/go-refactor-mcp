@@ -53,7 +53,9 @@ model reads before choosing the next refactoring. That loop is the iteration.
 ```
 cmd/refactor/                 CLI: one refactoring step per invocation
 cmd/refactor-mcp/             MCP server (stdio) for Claude Code and other MCP clients
+cmd/refactor-agent/           a local model (Ollama) refactoring a module with the same tools
 internal/
+  agent/                      the model loop: in-process MCP client, Ollama client, transcript
   analysis/                   shared facts: side effects, stable expressions, escaping/modified locals
   edit/                       TextEdit/FileEdit, Apply, unified diff (Myers)
   textutil/                   token scanning and re-indenting for moved source text
@@ -79,6 +81,7 @@ Install the MCP server and the CLI:
 ```sh
 go install github.com/tychofreeman/go-refactor-mcp/cmd/refactor-mcp@latest
 go install github.com/tychofreeman/go-refactor-mcp/cmd/refactor@latest
+go install github.com/tychofreeman/go-refactor-mcp/cmd/refactor-agent@latest   # optional: local models
 ```
 
 Or work from a clone:
@@ -135,6 +138,41 @@ keeps one workspace per session so `undo` works across calls, and it
 re-checks the files on disk before every call: if the model or you edit a
 file directly in between, it updates instead of applying edits at stale
 offsets, and `undo` refuses to clobber those edits.
+
+## Using a local model (Ollama)
+
+`refactor-agent` lets a model served by [Ollama](https://ollama.com) refactor a
+module with the same tools. It starts the MCP server in-process and connects
+to it as a client, so the tools, their descriptions and the instructions are
+exactly what Claude Code sees.
+
+```sh
+ollama pull qwen2.5-coder:14b      # any model with tool calling
+refactor-agent -C path/to/module -model qwen2.5-coder:14b -file calc/calc.go -tests
+refactor-agent -model qwen2.5-coder:14b -goal "Reduce nesting in parse in calc/calc.go" \
+  -revert -transcript run.jsonl   # try it without keeping the changes
+```
+
+The model inspects the code, applies one refactoring per turn and stops when
+nothing clearly improves (or after `-max-steps` tool calls, or
+`-max-failures` failed or refused calls in a row). Every step type-checks and
+is undoable. With `-tests`, `go test ./...` runs before and after; if it
+passed before and fails after, every step is undone (unless `-keep`).
+`-revert` undoes everything at the end, to try a model without keeping its
+changes. The run ends with a summary and the combined diff;
+`-transcript` writes every model message and tool call as JSON lines.
+
+Small models need help with tool calling, so the agent:
+
+- runs only the first tool call of a turn (the others get "NOT RUN": line
+  numbers may be stale after a change);
+- fixes argument types the schema makes unambiguous (`"12"` for an integer,
+  a JSON object sent as a string), and nothing else;
+- sets the context window with `-ctx` (default 16384; Ollama's own default is
+  too small for `inspect` output).
+
+`-host` defaults to `$OLLAMA_HOST`, then `http://localhost:11434`; `-model`
+defaults to `$OLLAMA_MODEL`.
 
 ## Using the CLI
 
