@@ -35,15 +35,21 @@ const Version = "0.2.0"
 
 // Instructions are sent to the client at initialization; MCP clients such
 // as Claude Code show them to the model. They set the pace of the loop.
-const Instructions = `Behavior-preserving refactoring tools for the Go module in this project.
+const Instructions = `Refactoring and editing tools for the Go module in this project.
 
-How to simplify code with these tools:
-1. Call inspect (no arguments) for an overview, then inspect a file or function to read it with line numbers. The outline shows each function's complexity and nesting; high values are good candidates.
-2. Apply exactly ONE refactoring per call. Each call returns APPLIED with a diff, or REFUSED with the reason; a refusal changes nothing, so read it and pick a different name or refactoring.
-3. After each applied step, re-inspect the affected code before choosing the next step. Line numbers change after edits; never reuse old ones.
-4. Stop when no remaining refactoring clearly improves readability. Use check (with run_tests) at the end, and undo if a step made the code worse.
+Two kinds of tool:
+- Refactorings (rename, extract_function, add_parameter, move_declaration, ...) preserve behavior. They find every reference with the type checker, refuse changes that would alter behavior, and run only on code that type-checks; each applied step is verified to compile.
+- Edits (create_file, ...) change behavior on purpose: the step that adds or changes a feature.
+Every step, refactoring or edit, starts from code that type-checks and must leave code that type-checks; a step that would not is refused with the errors, and nothing changes. To write a failing test first, first add a stub for what it calls.
 
-Prefer these tools over editing code by hand for the transformations they cover: they find every reference with the type checker and refuse changes that would alter behavior. Every applied step is verified to compile and can be undone.`
+How to work with them:
+1. Call inspect (no arguments) for an overview, then inspect a file or function to read it with line numbers. The outline shows each function's complexity and nesting.
+2. To change a feature, first refactor so the change is easy, then make the change with an edit: "make the change easy, then make the easy change".
+3. Apply exactly ONE tool per call. Each call returns APPLIED with a diff, or REFUSED with the reason; a refusal changes nothing, so read it and choose differently.
+4. After each applied step, re-inspect the affected code before choosing the next step. Line numbers change after edits; never reuse old ones.
+5. Use check (with run_tests) at the end, and undo if a step made the code worse. Every step can be undone.
+
+Prefer these tools over editing files by hand for everything they cover.`
 
 // Server is the refactoring MCP server for one module.
 type Server struct {
@@ -102,7 +108,7 @@ func (s *Server) MCP() *mcp.Server {
 
 	srv.AddTool(&mcp.Tool{
 		Name:        "undo",
-		Description: "Revert the most recent refactoring applied in this session and return the reverting diff. Can be called repeatedly to step further back. Refuses if a changed file was edited since.",
+		Description: "Revert the most recent refactoring or edit applied in this session and return the reverting diff. Can be called repeatedly to step further back. Refuses if a changed file was edited since.",
 		InputSchema: json.RawMessage(`{"type": "object", "properties": {}, "additionalProperties": false}`),
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: &notDestructive},
 	}, func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {

@@ -85,3 +85,40 @@ func TestDryRunWritesNothing(t *testing.T) {
 		t.Error("dry run modified the file")
 	}
 }
+
+// breakingEdit is buggy as an edit: a step that may change behavior, but
+// must still leave code that type-checks.
+type breakingEdit struct{ buggy }
+
+func (breakingEdit) ChangesBehavior() {}
+
+func TestEditThatBreaksTheBuildIsRefused(t *testing.T) {
+	ws, path := setup(t, src)
+	res, err := refactor.Run(ws, breakingEdit{}, nil, refactor.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Applied || !strings.Contains(res.Refused, "does not type-check") || !strings.Contains(res.Refused, "undefined: F") {
+		t.Fatalf("want a refusal listing the error, got %+v", res)
+	}
+	if strings.Contains(res.Refused, "bug") {
+		t.Errorf("an edit's type error comes from its input, not a bug in the tool: %s", res.Refused)
+	}
+	if got, _ := os.ReadFile(path); string(got) != src {
+		t.Errorf("file not restored:\n%s", got)
+	}
+	if ws.CanUndo() {
+		t.Error("rolled-back edit left on the undo stack")
+	}
+}
+
+func TestEditRefusesBrokenInput(t *testing.T) {
+	ws, _ := setup(t, "package m\n\nvar X int = \"s\"\n")
+	res, err := refactor.Run(ws, breakingEdit{}, nil, refactor.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Applied || !strings.Contains(res.Refused, "does not type-check") {
+		t.Fatalf("want a refusal on code that does not type-check, got %+v", res)
+	}
+}

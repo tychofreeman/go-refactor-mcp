@@ -1,5 +1,5 @@
 // Command refactor-mcp is an MCP server (stdio) that gives an LLM
-// behavior-preserving refactoring tools for one Go module.
+// refactoring and editing tools for one Go module.
 //
 // The module is the one containing, in order of precedence: the -C flag,
 // $CLAUDE_PROJECT_DIR (set by Claude Code for the servers it starts), or

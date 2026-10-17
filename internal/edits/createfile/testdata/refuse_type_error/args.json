@@ -1,0 +1,1 @@
+{"file": "a_test.go", "content": "package m\n\nimport \"testing\"\n\nfunc TestDouble(t *testing.T) {\n\tif Double(2) != 4 {\n\t\tt.Fatal()\n\t}\n}\n"}

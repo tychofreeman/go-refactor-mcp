@@ -2,6 +2,10 @@
 // runs one refactoring step safely: check preconditions, apply, re-type-check,
 // and roll back if anything broke.
 //
+// An Edit is a step that may change behavior (creating a file, changing an
+// expression). It is held to the same rule: the code type-checks before
+// and after every step.
+//
 // Every refactoring is exposed to the model as its own tool. The model picks
 // one, the engine applies it, and the returned Result (diff + status) is what
 // the model looks at before choosing the next step.
@@ -17,7 +21,8 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
 
-// Refactoring is one behavior-preserving code transformation.
+// Refactoring is one code transformation: behavior-preserving, unless it
+// is also an Edit.
 type Refactoring interface {
 	// Name is the tool name, e.g. "rename".
 	Name() string
@@ -29,6 +34,15 @@ type Refactoring interface {
 	// Plan checks preconditions and computes the edits. It must not write
 	// anything. A precondition failure is returned as a *Refusal.
 	Plan(ws *workspace.Workspace, args json.RawMessage) (*Plan, error)
+}
+
+// Edit marks a Refactoring that may change behavior, as the step that adds
+// or changes a feature does. Like any step, it must leave code that
+// type-checks; when it would not, the errors come from the code it was
+// given, so the refusal lists them rather than reporting a bug.
+type Edit interface {
+	Refactoring
+	ChangesBehavior()
 }
 
 // Plan is the outcome of a successful precondition check.
@@ -142,6 +156,10 @@ func Run(ws *workspace.Workspace, r Refactoring, args json.RawMessage, opts Opti
 		}
 		res.Refused = fmt.Sprintf("the change would not compile, so it was rolled back. This is a bug in the %q precondition checks; errors were:\n  %s",
 			r.Name(), strings.Join(limit(errs, 10), "\n  "))
+		if _, isEdit := r.(Edit); isEdit {
+			res.Refused = fmt.Sprintf("the result does not type-check, so it was not applied; change the code you gave so that it compiles. Errors were:\n  %s",
+				strings.Join(limit(errs, 10), "\n  "))
+		}
 		res.Summary = ""
 		return res, nil
 	}

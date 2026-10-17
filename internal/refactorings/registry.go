@@ -1,8 +1,9 @@
-// Package refactorings is the registry of available refactorings. The CLI
-// and the MCP server expose exactly this list as tools.
+// Package refactorings is the registry of available refactorings and
+// edits. The CLI and the MCP server expose exactly this list as tools.
 package refactorings
 
 import (
+	"github.com/tychofreeman/go-refactor-mcp/internal/edits/createfile"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/changesig"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/extractfunc"
@@ -14,7 +15,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/rename"
 )
 
-// All returns every available refactoring.
+// All returns every available refactoring and edit.
 func All() []refactor.Refactoring {
 	return []refactor.Refactoring{
 		rename.New(),
@@ -28,6 +29,7 @@ func All() []refactor.Refactoring {
 		changesig.NewRemoveParameter(),
 		changesig.NewMoveParameter(),
 		movedecl.New(),
+		createfile.New(),
 	}
 }
 
