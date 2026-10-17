@@ -19,6 +19,7 @@ import (
 
 	"golang.org/x/tools/go/packages"
 
+	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
@@ -239,4 +240,55 @@ func plural(n int) string {
 		return ""
 	}
 	return "s"
+}
+
+// unsafeValue returns the first part of e whose evaluation could have a
+// side effect or panic, and what it could do.
+func unsafeValue(info *types.Info, e ast.Expr) (ast.Node, string) {
+	if tv := info.Types[e]; tv.Value != nil {
+		return nil, "" // a constant
+	}
+	var bad ast.Node
+	var why string
+	ast.Inspect(e, func(n ast.Node) bool {
+		if bad != nil {
+			return false
+		}
+		if _, ok := n.(*ast.FuncLit); ok {
+			return false // defining a closure runs nothing
+		}
+		if ex, ok := n.(ast.Expr); ok && info.Types[ex].Value != nil {
+			return false
+		}
+		switch n := n.(type) {
+		case *ast.StarExpr:
+			if !info.Types[n].IsType() {
+				bad, why = n, "could panic: it dereferences a pointer"
+			}
+		case *ast.SelectorExpr:
+			if sel := info.Selections[n]; sel != nil && sel.Kind() == types.FieldVal && sel.Indirect() {
+				bad, why = n, "could panic: it reads a field through a pointer"
+			}
+		case *ast.IndexExpr:
+			if tv := info.Types[n.X]; !tv.IsType() {
+				if _, isMap := tv.Type.Underlying().(*types.Map); !isMap {
+					bad, why = n, "could panic: it indexes"
+				}
+			}
+		case *ast.SliceExpr:
+			bad, why = n, "could panic: it slices"
+		case *ast.TypeAssertExpr:
+			bad, why = n, "could panic: it is a type assertion"
+		case *ast.BinaryExpr:
+			if (n.Op == token.QUO || n.Op == token.REM) && info.Types[n.Y].Value == nil {
+				bad, why = n, "could panic: it divides by a value that could be zero"
+			}
+		default:
+			if analysis.HasEffect(info, n) {
+				bad, why = n, "has side effects"
+			}
+		}
+		return bad == nil
+	})
+	return bad, why
 }
