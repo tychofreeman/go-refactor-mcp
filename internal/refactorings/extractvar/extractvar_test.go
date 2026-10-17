@@ -3,6 +3,7 @@ package extractvar
 import (
 	"testing"
 
+	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor/refactortest"
 )
 
@@ -11,17 +12,17 @@ func TestGolden(t *testing.T) {
 }
 
 func TestTokens(t *testing.T) {
-	a, err := tokens([]byte("a+b*\n\tc"))
+	a, err := locate.Tokens([]byte("a+b*\n\tc"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, _ := tokens([]byte("a + b * c"))
-	if !equalTokens(a, b) {
+	b, _ := locate.Tokens([]byte("a + b * c"))
+	if !locate.EqualTokens(a, b) {
 		t.Errorf("whitespace should not matter: %q vs %q", a, b)
 	}
-	c, _ := tokens([]byte(`"a b"`))
-	d, _ := tokens([]byte(`"ab"`))
-	if equalTokens(c, d) {
+	c, _ := locate.Tokens([]byte(`"a b"`))
+	d, _ := locate.Tokens([]byte(`"ab"`))
+	if locate.EqualTokens(c, d) {
 		t.Error("whitespace inside string literals must matter")
 	}
 }
