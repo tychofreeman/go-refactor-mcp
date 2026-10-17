@@ -5,9 +5,9 @@ import "fmt"
 type T struct{ n int }
 
 func (t T) Run() {
-	step(t)
+	t.step()
 }
 
-func step(t T) {
+func (t T) step() {
 	fmt.Println(t.n)
 }

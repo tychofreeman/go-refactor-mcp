@@ -333,6 +333,22 @@ fmt.Println(total)                     for _, x := range xs { total += x }
   other uses become `*v`, or `(*v)` where Go does not dereference
   (`(*v)[i]`, `(*v)(args)`, methods of interfaces). For example,
   `json.Unmarshal(data, &cfg)` moves as `json.Unmarshal(data, cfg)`.
+- If the statements use the receiver of the method they are in, the new
+  function is a method of the same type, called as `c.bump()`; generic
+  receivers (`(s *Stack[T])`) keep their type parameters. A value receiver
+  whose address is taken gets a pointer receiver. The name must be
+  unexported, must not clash with a field or method (including promoted
+  ones), and must not make the type, or a type embedding it, implement an
+  interface of the package it did not implement before. Statements inside
+  a function literal in a method become a function instead.
+- A variable that function literals use but nothing ever assigns cannot
+  change, so it is passed by value, not by pointer.
+- Local constants and types the statements use but do not declare (or
+  declare and code after them uses, or that appear in the new function's
+  signature) move to package level, just above the enclosing declaration,
+  so both functions share one declaration: a copied type would be a
+  different type, and a constant passed as a parameter would stop being a
+  constant. Local constants and types they depend on move with them.
 - If a parameter or result type needs a package the file does not import,
   the import is added (with an alias such as `b2` when the package name is
   already used in the file or package), and the result notes it.
@@ -378,8 +394,13 @@ Refused (with an explanation):
   function literal, and is used after them: returning it would return a
   copy (some types, like `strings.Builder`, also refuse to be copied);
 - a `:=` in the statements redeclares a variable passed as a pointer;
-- a constant, type or type parameter declared in the function is used by the
-  statements, or one they declare is used after them;
+- a type parameter of the function is used by the statements (directly or
+  through a variable's type), unless it belongs to the receiver of a method
+  the statements become;
+- a local constant or type has to move to package level (see above) but
+  cannot: it is part of a grouped declaration, uses a local variable or
+  type parameter, its name is taken at package level or by an import in
+  any file, or some use of it would then refer to something else;
 - a type needs a package that cannot be imported here (an `internal`
   package of another tree, or a `main` package), or a package name the new
   code writes is hidden where it is written (by a parameter, or by a local

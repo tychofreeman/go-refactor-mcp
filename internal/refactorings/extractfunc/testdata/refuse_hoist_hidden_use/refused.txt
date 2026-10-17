@@ -1,0 +1,1 @@
+but its use at line 9 is also inside the scope of the variable k declared at line 6
