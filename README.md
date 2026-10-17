@@ -416,7 +416,16 @@ fmt.Println(total)                     for _, x := range xs { total += x }
   interface of the package it did not implement before. Statements inside
   a function literal in a method become a function instead.
 - A variable that function literals use but nothing ever assigns cannot
-  change, so it is passed by value, not by pointer.
+  change, so it is passed by value, not by pointer. So is one that only
+  synchronous function literals use: ones called on the spot
+  (`func() { ... }()`, but not with `go` or `defer`), or passed directly to
+  a function known to call them only before it returns and not keep them
+  (`sort.Slice`, `ast.Inspect`, `slices.SortFunc`, `strings.FieldsFunc`,
+  `filepath.WalkDir`, ...). Such a literal outside the selection runs
+  before or after the call, never during it, and one inside it uses the
+  new function's copy. `sort.Slice(out, func(i, j int) bool { ... })`
+  elsewhere in the function no longer makes `out = addAll(in, out)` a
+  pointer parameter.
 - Local constants and types the statements use but do not declare (or
   declare and code after them uses, or that appear in the new function's
   signature) move to package level, just above the enclosing declaration,
@@ -457,7 +466,12 @@ so the call site passes them on. Two shapes are supported:
   falling off the end returns `..., nil`. An error counts as non-nil when
   the return is inside `if v != nil` (possibly `&&` other conditions) with no
   write to `v` in between, when it comes from `errors.New` or `fmt.Errorf`,
-  or when it is a non-pointer value or `&T{...}`. The call site uses `err`,
+  when it is a non-pointer value or `&T{...}`, or when it comes from a
+  function in the loaded source (in any package of the module) whose every
+  `return` passes such a value, like a `refusef` helper that returns
+  `&Refusal{...}`. Such a function must have unnamed results (a deferred
+  function could change named ones), and calling itself proves nothing.
+  Interface methods and function values never count. The call site uses `err`,
   or `err2` and so on if `err` is taken.
 
 Other returns are refused: an early return of a success value (`return v,
