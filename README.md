@@ -161,8 +161,11 @@ nothing clearly improves (or after `-max-steps` tool calls, or
 is undoable. With `-tests`, `go test ./...` runs before and after; if it
 passed before and fails after, every step is undone (unless `-keep`).
 `-revert` undoes everything at the end, to try a model without keeping its
-changes. The run ends with a summary and the combined diff;
-`-transcript` writes every model message and tool call as JSON lines.
+changes. `-timeout` (default 2h) stops asking the model; local models can
+take minutes per turn, and the clean-up (tests, `-revert`) still runs after
+it. If an undo fails, the summary says so and the exit status is 1. The run
+ends with a summary and the combined diff; `-transcript` writes every model
+message (with how long it took) and tool call as JSON lines.
 
 Small models need help with tool calling, so the agent:
 
