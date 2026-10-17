@@ -28,7 +28,8 @@ model reads before choosing the next refactoring. That loop is the iteration.
   are done. `inline_function` has a first version (see the roadmap).
 - **Step 4 (in progress):** refactorings that prepare a feature change.
   `add_parameter`, `remove_parameter` and `move_parameter` are done, for
-  functions and methods, exported or not.
+  functions and methods, exported or not. `move_declaration` moves a
+  declaration to another file of its package; to another package is next.
 
 ## Roadmap
 
@@ -47,6 +48,8 @@ hand or a tool got in the way.
    interface methods with all their implementations.*
 2. **Moving a declaration** to another file or package, updating its
    references (and renaming it on the way when it changes package).
+   *`move_declaration` within a package done (see "Move declaration: what
+   it checks"); next: to another package, then grouped declarations.*
 3. **Evidence from real use.** Keep the friction log during normal work.
    Later, a comparison: the same small stories done with and without the
    tools, comparing the size of the hand-written edits, test failures and
@@ -96,6 +99,7 @@ internal/
     inlinefunc/               inline_function + testdata + opt-in stress and round-trip tests
     invertif/                 invert_if, remove_else + testdata + opt-in stress test
     changesig/                add/remove/move_parameter + testdata/<tool>/
+    movedecl/                 move_declaration + testdata
 ```
 
 ## Getting started
@@ -152,7 +156,7 @@ Tools:
 | Tool | What it does |
 |---|---|
 | `inspect` | No args: module overview. `file`: outline (line ranges, complexity, nesting) + numbered source. `function` or `start_line`/`end_line` to narrow. |
-| `rename`, `extract_variable`, `inline_variable`, `extract_function`, `inline_function`, `invert_if`, `remove_else`, `add_parameter`, `remove_parameter`, `move_parameter` (and every future refactoring) | Applies one step; returns `APPLIED` + diff, or `REFUSED` + reason (nothing changed). |
+| `rename`, `extract_variable`, `inline_variable`, `extract_function`, `inline_function`, `invert_if`, `remove_else`, `add_parameter`, `remove_parameter`, `move_parameter`, `move_declaration` (and every future refactoring) | Applies one step; returns `APPLIED` + diff, or `REFUSED` + reason (nothing changed). |
 | `undo` | Reverts the last applied step; repeatable. |
 | `check` | Type-check status; `run_tests: true` also runs `go test`. |
 
@@ -246,6 +250,7 @@ refactor -n remove_else file=main.go line=20
 refactor -n add_parameter file=main.go line=9 name=copyTree parameter=skip type=string value=cfg.OutDir
 refactor -n remove_parameter file=main.go line=9 name=copyTree parameter=skip
 refactor -n move_parameter file=main.go line=9 name=copyTree parameter=dst before=src
+refactor -n move_declaration file=main.go line=40 name=copyTree to_file=copy.go
 ```
 
 Exit status: `0` applied/previewed, `2` refused, `1` error.
@@ -828,6 +833,39 @@ Not seen: interfaces declared inside functions of other modules, like the
 exported method's change says so. And code in other modules, which could
 declare its own interfaces, is never seen. Methods of generic types are
 refused whenever an interface has a method of that name.
+
+## Move declaration: what it checks
+
+`move_declaration` moves a top-level declaration (a function, method, type,
+variable or constant, with its doc comment and a comment ending its last
+line) to another file of the same package, creating the file if it does
+not exist. Identify it by `file`, `line` and `name`, at the declaration or
+any use; `to_file` is the destination, relative to the module root.
+
+Top-level names live in the package scope, so no reference changes. What
+changes is per file:
+
+- **imports:** the destination gets the imports the moved code uses. A new
+  file copies them as the source writes them (aliases included); an
+  existing one keeps its own name for a package it already imports, and
+  the moved code's qualifiers change to match (`str.ToUpper` becomes
+  `strings.ToUpper`). Imports that only the moved code used are removed
+  from the source;
+- **which builds see the code:** both files must be built everywhere (no
+  `//go:build` line, no GOOS or GOARCH in the name, no cgo), and both must
+  be test files or neither, in the same package clause (not `p` and
+  `p_test`).
+
+Refused as well:
+
+- an `init` function, or a variable whose initializer has side effects:
+  package initialization follows the order of the files, so moving one
+  could change what runs first;
+- a declaration grouped with others in parentheses (`var ( a = 1; b = 2 )`);
+- a `//go:embed` variable;
+- code that uses a dot import;
+- a destination in another directory: moving to another package is next on
+  the roadmap.
 
 ## Testing
 

@@ -60,6 +60,54 @@ func TestApplyAndUndo(t *testing.T) {
 	}
 }
 
+func TestApplyCreatesFileAndUndoRemovesIt(t *testing.T) {
+	dir := writeModule(t, map[string]string{"m.go": "package m\n\nfunc F() int { return G() }\n\nfunc G() int { return 1 }\n"})
+	w, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := filepath.Join(dir, "m.go")
+	src, _ := os.ReadFile(m)
+	i := strings.Index(string(src), "\nfunc G")
+	g := filepath.Join(dir, "sub", "g.go")
+	_, err = w.Apply("move G", []edit.FileEdit{
+		{Path: m, Edits: []edit.TextEdit{{Start: i, End: len(src)}}},
+		{Path: g, Edits: []edit.TextEdit{{NewText: "package m\nfunc G() int { return 1 }\n"}}},
+	})
+	if err == nil {
+		t.Fatal("creating a file in a missing directory should fail")
+	}
+	g = filepath.Join(dir, "g.go")
+	c, err := w.Apply("move G", []edit.FileEdit{
+		{Path: m, Edits: []edit.TextEdit{{Start: i, End: len(src)}}},
+		{Path: g, Edits: []edit.TextEdit{{NewText: "package m\nfunc G() int { return 1 }\n"}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(g); string(got) != "package m\n\nfunc G() int { return 1 }\n" {
+		t.Errorf("new file not written (and gofmt-ed): %q", got)
+	}
+	if !strings.Contains(c.Diff, "+package m") {
+		t.Errorf("diff does not show the new file:\n%s", c.Diff)
+	}
+	if errs := w.Errors(); len(errs) != 0 {
+		t.Fatalf("errors after creating the file: %v", errs)
+	}
+	if _, err := w.Undo(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(g); !os.IsNotExist(err) {
+		t.Errorf("undo did not remove the new file: %v", err)
+	}
+	if got, _ := os.ReadFile(m); string(got) != string(src) {
+		t.Errorf("undo did not restore m.go: %s", got)
+	}
+	if errs := w.Errors(); len(errs) != 0 {
+		t.Fatalf("errors after undo: %v", errs)
+	}
+}
+
 func TestUndoRefusesAfterExternalEdit(t *testing.T) {
 	src := "package m\n\nvar X = 1\n"
 	dir := writeModule(t, map[string]string{"m.go": src})

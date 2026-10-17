@@ -134,6 +134,9 @@ type Change struct {
 	Diff   string            // unified diff, paths relative to Root
 	Before map[string][]byte // absolute path -> contents before the change
 	After  map[string][]byte // absolute path -> contents after the change
+	// Created holds the files the change creates: their Before is nil,
+	// and undoing the change removes them.
+	Created map[string]bool
 }
 
 // Files returns the changed paths, relative to root, sorted.
@@ -299,21 +302,34 @@ func (w *Workspace) FileSyntax(path string) (*packages.Package, *ast.File) {
 
 // Preview computes the change the edits would make without writing it.
 func (w *Workspace) Preview(label string, fes []edit.FileEdit) (Change, error) {
-	c := Change{Label: label, Before: map[string][]byte{}, After: map[string][]byte{}}
+	c := Change{Label: label, Before: map[string][]byte{}, After: map[string][]byte{}, Created: map[string]bool{}}
 	var diffs []string
 	for _, fe := range edit.Merge(fes) {
 		if !w.Contains(fe.Path) {
 			return Change{}, fmt.Errorf("refusing to edit %s: outside workspace %s", fe.Path, w.Root)
 		}
 		before, err := os.ReadFile(fe.Path)
-		if err != nil {
+		created := os.IsNotExist(err)
+		if created {
+			// A new file, in a directory that must exist.
+			if fi, err := os.Stat(filepath.Dir(fe.Path)); err != nil || !fi.IsDir() {
+				return Change{}, fmt.Errorf("cannot create %s: its directory does not exist", w.Rel(fe.Path))
+			}
+		} else if err != nil {
 			return Change{}, err
 		}
 		after, err := edit.Apply(before, fe.Edits)
 		if err != nil {
 			return Change{}, fmt.Errorf("%s: %w", w.Rel(fe.Path), err)
 		}
-		after = gofmtIfClean(fe.Path, before, after)
+		if created {
+			c.Created[fe.Path] = true
+			if fa, err := format.Source(after); err == nil {
+				after = fa
+			}
+		} else {
+			after = gofmtIfClean(fe.Path, before, after)
+		}
 		if bytes.Equal(before, after) {
 			continue
 		}
@@ -334,7 +350,7 @@ func (w *Workspace) Apply(label string, fes []edit.FileEdit) (Change, error) {
 	}
 	if err := writeAll(c.After); err != nil {
 		// Best effort to restore what was already written.
-		_ = writeAll(c.Before)
+		_ = c.restore()
 		return Change{}, err
 	}
 	w.undo = append(w.undo, c)
@@ -360,7 +376,7 @@ func (w *Workspace) Undo() (Change, error) {
 			return Change{}, fmt.Errorf("cannot undo %q: %s was modified since", c.Label, w.Rel(p))
 		}
 	}
-	if err := writeAll(c.Before); err != nil {
+	if err := c.restore(); err != nil {
 		return Change{}, err
 	}
 	w.undo = w.undo[:len(w.undo)-1]
@@ -397,6 +413,20 @@ func paths(files map[string][]byte) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// restore puts back the files as they were before the change, removing
+// the ones it created.
+func (c Change) restore() error {
+	before := map[string][]byte{}
+	for p, data := range c.Before {
+		if !c.Created[p] {
+			before[p] = data
+		} else if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+	return writeAll(before)
 }
 
 func writeAll(files map[string][]byte) error {

@@ -79,3 +79,17 @@ and argument came from `remove_parameter`, the insertion from
 `add_parameter`; the new code is the evaluation-order check. The earlier
 refactorings (`checkNoSpread`, `paramCut`/`argCut`, `newPlan`) made the
 third tool cheap, which is the workflow working as intended.
+
+## 2026-10-17: adding `move_declaration`
+
+**The workspace could not create a file.** Every edit was to an existing
+file, so moving a declaration to a new file first needed `Preview` to accept
+a missing file, `Apply` to create it and `Undo` to delete it. A small
+workspace change, test first; the incremental update already fell back to a
+full reload for a new or deleted file.
+
+**First use on this repo.** `move_declaration` previews the move the
+`remove_parameter` work did by hand (`checkNoSpread` to `common.go`), and
+also shows one still waiting: `unsafeValue`, now used by all three parameter
+refactorings, lives in `addparam.go`. Moving it carries its `analysis`
+import along and drops it from `addparam.go`.
