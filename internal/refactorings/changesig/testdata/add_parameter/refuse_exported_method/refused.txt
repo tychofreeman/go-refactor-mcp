@@ -1,1 +1,1 @@
-exported methods are not supported yet
+T implements fmt.Stringer

@@ -7,6 +7,7 @@ import (
 	"go/parser"
 	"go/token"
 	"go/types"
+	"slices"
 	"strings"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
@@ -25,11 +26,11 @@ func NewAddParameter() *AddParameter { return &AddParameter{} }
 func (*AddParameter) Name() string { return "add_parameter" }
 
 func (*AddParameter) Description() string {
-	return `Add a parameter to a function or unexported method, and pass the given value for it at every call in the workspace.
+	return `Add a parameter to a function or method, and pass the given value for it at every call in the workspace.
 Use it to prepare a feature change: add the parameter first, then change the body to use it.
 Identify the function by file, line and name, at its declaration or any call. Give the new parameter's name and type, the value every call passes (written as Go source, e.g. "", nil, 0, or a name in scope at each call such as cfg.OutDir), and optionally before: the existing parameter to insert it ahead of (default: at the end, or just before a variadic parameter).
 The body does not use the new parameter yet, so behavior is unchanged; the value must therefore have no side effects and must not be able to panic (no calls, pointer dereferences, indexing or non-constant division).
-Refuses if the function is used other than by calling it (as a function value or method expression), if it is an exported or interface method, if the new name clashes with a parameter, result or top-level local or would hide a name the body uses, or if the value does not type-check at some call.`
+Refuses if the function is used other than by calling it (as a function value or method expression), if it is an interface method, if a method would stop or start implementing an interface the program can see (which could silently change a type assertion), if the new name clashes with a parameter, result or top-level local or would hide a name the body uses, or if the value does not type-check at some call.`
 }
 
 func (*AddParameter) InputSchema() json.RawMessage {
@@ -112,6 +113,9 @@ func (*AddParameter) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refact
 	}
 	typ, err := t.evalType(a.Type)
 	if err != nil {
+		return nil, err
+	}
+	if err := t.checkInterfaces(func(ps []string) []string { return slices.Insert(ps, at, typeKey(typ)) }); err != nil {
 		return nil, err
 	}
 	for _, c := range t.calls {
