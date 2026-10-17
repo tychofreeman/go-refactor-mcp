@@ -61,7 +61,8 @@ Local variables the statements use become parameters; variables they change or d
 Return statements are supported in two shapes: if every path through the statements returns, the call site becomes "return f(...)"; if the enclosing function returns an error and every return in the statements is an early exit with a non-nil error (like "if err != nil { return nil, err }"), the new function also returns an error and the call site checks it.
 Variables whose address is taken or that a function literal changes are passed as pointers, so both functions share them.
 If the statements use the receiver of the method they are in, the new function is a method of the same type; its name must then be unexported and not clash with a field or method.
-Refuses other returns (for example an early return of a success value), defer, recover() or fallthrough, or a break, continue or goto that leaves the selected lines; if a variable they declare has its address taken or is used by a function literal and is used after them; or if they use constants or types declared inside the function.`
+Refuses other returns (for example an early return of a success value), defer, recover() or fallthrough, or a break, continue or goto that leaves the selected lines; if a variable they declare has its address taken or is used by a function literal and is used after them.
+Local constants and types the statements need move to package level, so both functions share them; this is refused if one is part of a grouped declaration, uses local variables or type parameters, or its name is taken at package level.`
 }
 
 func (*ExtractFunction) InputSchema() json.RawMessage {
@@ -119,9 +120,12 @@ type extraction struct {
 	// the new function is then a method on the same type.
 	recv     *types.Var
 	recvType string // the receiver's type as written, e.g. "*Stack[T]"
-	// typeParams are type parameters the new function declares (through
-	// its receiver), so its signature may use them.
-	typeParams map[*types.TypeName]bool
+	// nameable are type names the new function may write although they
+	// are not package-level: type parameters it declares (through its
+	// receiver), and local types moved to package level.
+	nameable map[*types.TypeName]bool
+
+	hoists []hoist // local constants and types moved to package level
 }
 
 // Plan checks preconditions and computes the edits.
@@ -646,10 +650,12 @@ type flow struct {
 // conservatively: any use outside the selection counts, and so does being
 // read in the selection when the selection is in a loop.
 func (x *extraction) analyzeDataFlow() error {
+	x.nameable = map[*types.TypeName]bool{}
 	x.findReceiver()
 	refs := map[*types.Var][]*ast.Ident{} // outside variables, by reference
 	var order []*types.Var
 	var bad []string
+	var hoistObjs []types.Object
 	seen := map[types.Object]bool{}
 	for _, s := range x.stmts {
 		ast.Inspect(s, func(n ast.Node) bool {
@@ -668,18 +674,22 @@ func (x *extraction) analyzeDataFlow() error {
 				refs[v] = append(refs[v], id)
 				return true
 			}
-			if tn, ok := obj.(*types.TypeName); ok && x.typeParams[tn] {
+			if tn, ok := obj.(*types.TypeName); ok && x.nameable[tn] {
 				return true // declared by the new method's receiver
 			}
 			if !seen[obj] {
 				seen[obj] = true
-				bad = append(bad, fmt.Sprintf("%s (%s declared at line %d)", obj.Name(), kindOf(obj), x.line(obj.Pos())))
+				if hoistable(obj) {
+					hoistObjs = append(hoistObjs, obj)
+				} else {
+					bad = append(bad, fmt.Sprintf("%s (%s declared at line %d)", obj.Name(), kindOf(obj), x.line(obj.Pos())))
+				}
 			}
 			return true
 		})
 	}
 	if len(bad) > 0 {
-		return refactor.Refusef("the selected lines use %s, declared outside them in %s; only variables can be passed to the new function, so constants, types and type parameters declared in the function are not supported yet",
+		return refactor.Refusef("the selected lines use %s, declared outside them in %s; only variables can be passed to the new function, and local constants and types moved to package level, so type parameters of the function are not supported yet",
 			strings.Join(bad, ", "), x.enclosingName())
 	}
 
@@ -736,12 +746,36 @@ func (x *extraction) analyzeDataFlow() error {
 			later = append(later, v)
 			continue
 		}
+		if hoistable(obj) && x.declaredAtTopObj(obj) {
+			hoistObjs = append(hoistObjs, obj)
+			continue
+		}
 		badLater = append(badLater, fmt.Sprintf("%s (used at line %d)", obj.Name(), x.line(id.Pos())))
 	}
 	if len(badLater) > 0 {
 		sort.Strings(badLater)
 		return refactor.Refusef("the selected lines declare %s, used after them, which cannot be returned from the new function (only variables declared directly in the selected statements can); include those uses in the selection, or select fewer statements",
 			strings.Join(badLater, ", "))
+	}
+	// Local types in the new function's signature (or at the call site)
+	// must move too, even when the statements never write their names.
+	have := map[types.Object]bool{}
+	for _, o := range hoistObjs {
+		have[o] = true
+	}
+	for _, list := range [][]*types.Var{f.params, f.locals, f.results, later} {
+		for _, v := range list {
+			for _, tn := range localTypeNames(v.Type(), map[types.Type]bool{}) {
+				if !have[tn] {
+					have[tn] = true
+					hoistObjs = append(hoistObjs, tn)
+				}
+			}
+		}
+	}
+	sort.Slice(hoistObjs, func(i, j int) bool { return hoistObjs[i].Pos() < hoistObjs[j].Pos() })
+	if err := x.planHoists(hoistObjs); err != nil {
+		return err
 	}
 	sort.Slice(later, func(i, j int) bool { return later[i].Pos() < later[j].Pos() })
 	if x.mode == terminal && len(later) > 0 {
@@ -809,7 +843,6 @@ func (x *extraction) analyzeDataFlow() error {
 // receiver of the method they are directly in (not a function literal in
 // it): x.recv, x.recvType and the receiver's type parameters.
 func (x *extraction) findReceiver() {
-	x.typeParams = map[*types.TypeName]bool{}
 	var fd *ast.FuncDecl
 	for _, n := range analysis.PathTo(x.file, x.stmts[0]) {
 		if _, ok := n.(*ast.FuncLit); ok {
@@ -843,7 +876,7 @@ func (x *extraction) findReceiver() {
 	if fn, ok := x.info.Defs[fd.Name].(*types.Func); ok {
 		tps := fn.Signature().RecvTypeParams()
 		for i := 0; i < tps.Len(); i++ {
-			x.typeParams[tps.At(i).Obj()] = true
+			x.nameable[tps.At(i).Obj()] = true
 		}
 	}
 }
@@ -1197,6 +1230,30 @@ func (x *extraction) assignedFirst(v *types.Var, refs []*ast.Ident) bool {
 	return true
 }
 
+// hoistable reports whether obj is a local constant or type (not a type
+// parameter), which can move to package level.
+func hoistable(obj types.Object) bool {
+	switch o := obj.(type) {
+	case *types.Const:
+		return true
+	case *types.TypeName:
+		_, tp := o.Type().(*types.TypeParam)
+		return !tp
+	}
+	return false
+}
+
+// declaredAtTopObj reports whether obj is declared by a declaration
+// statement that is one of the selected statements.
+func (x *extraction) declaredAtTopObj(obj types.Object) bool {
+	for _, s := range x.stmts {
+		if ds, ok := s.(*ast.DeclStmt); ok && obj.Pos() >= ds.Pos() && obj.Pos() < ds.End() {
+			return true
+		}
+	}
+	return false
+}
+
 // declaredAtTop reports whether v is declared directly by one of the
 // selected statements (so it is in scope after them), not in a nested
 // block.
@@ -1223,7 +1280,7 @@ func (x *extraction) typeString(name string, t types.Type) (string, error) {
 	if name != "" {
 		what = fmt.Sprintf("%s has type %s, which", name, types.TypeString(t, types.RelativeTo(x.pkg.Types)))
 	}
-	if bad := localTypeIn(t, x.typeParams, map[types.Type]bool{}); bad != nil {
+	if bad := localTypeIn(t, x.nameable, map[types.Type]bool{}); bad != nil {
 		return "", refactor.Refusef("%s uses %s %s declared inside %s; it cannot be named in a new package-level function",
 			what, kindOf(bad), bad.Name(), x.enclosingName())
 	}
@@ -1418,8 +1475,11 @@ func localTypeIn(t types.Type, allowed map[*types.TypeName]bool, seen map[types.
 		}
 		return t.Obj()
 	case *types.Named:
-		if o := t.Obj(); o.Parent() != nil && o.Pkg() != nil && o.Parent() != o.Pkg().Scope() && o.Parent() != types.Universe {
+		if o := t.Obj(); !allowed[o] && o.Parent() != nil && o.Pkg() != nil && o.Parent() != o.Pkg().Scope() && o.Parent() != types.Universe {
 			return o
+		}
+		if b := localTypeIn(t.Underlying(), allowed, seen); b != nil && allowed[t.Obj()] {
+			return b // a moved type must not use other local types either
 		}
 		for i := 0; i < t.TypeArgs().Len(); i++ {
 			if b := localTypeIn(t.TypeArgs().At(i), allowed, seen); b != nil {
@@ -1427,7 +1487,7 @@ func localTypeIn(t types.Type, allowed map[*types.TypeName]bool, seen map[types.
 			}
 		}
 	case *types.Alias:
-		if o := t.Obj(); o.Parent() != nil && o.Pkg() != nil && o.Parent() != o.Pkg().Scope() && o.Parent() != types.Universe {
+		if o := t.Obj(); !allowed[o] && o.Parent() != nil && o.Pkg() != nil && o.Parent() != o.Pkg().Scope() && o.Parent() != types.Universe {
 			return o
 		}
 		return localTypeIn(types.Unalias(t), allowed, seen)
@@ -1474,6 +1534,23 @@ func localTypeIn(t types.Type, allowed map[*types.TypeName]bool, seen map[types.
 		}
 	}
 	return nil
+}
+
+// localTypeNames returns the types declared in a function body that t
+// uses (not type parameters).
+func localTypeNames(t types.Type, seen map[types.Type]bool) []*types.TypeName {
+	var out []*types.TypeName
+	allowed := map[*types.TypeName]bool{}
+	for {
+		tn := localTypeIn(t, allowed, map[types.Type]bool{})
+		if tn == nil {
+			return out
+		}
+		if _, tp := tn.Type().(*types.TypeParam); !tp {
+			out = append(out, tn)
+		}
+		allowed[tn] = true
+	}
 }
 
 // outermostFunc returns the outermost function containing the selection.
@@ -1643,7 +1720,8 @@ func (x *extraction) plan() (*refactor.Plan, error) {
 	for _, v := range f.locals {
 		fmt.Fprintf(&fn, "\tvar %s %s\n", v.Name(), ts(v.Name(), v.Type()))
 	}
-	text, err := x.selectedText(append(bodyEdits, x.pointerEdits()...))
+	hoistFile, hoistBody := x.hoistEdits(decl)
+	text, err := x.selectedText(append(append(bodyEdits, x.pointerEdits()...), hoistBody...))
 	if err != nil {
 		return nil, err
 	}
@@ -1723,6 +1801,7 @@ func (x *extraction) plan() (*refactor.Plan, error) {
 		{Start: at, End: at, NewText: fn.String()},
 	}
 	edits = append(edits, x.importEdits()...)
+	edits = append(edits, hoistFile...)
 
 	var notes []string
 	if x.recv != nil {
@@ -1752,6 +1831,9 @@ func (x *extraction) plan() (*refactor.Plan, error) {
 	if len(ptrs) > 0 {
 		notes = append(notes, fmt.Sprintf("%s %s passed as a pointer, because %s address is taken or a function literal uses %s; the new function changes the same variable",
 			strings.Join(ptrs, ", "), isAre(len(ptrs)), map[bool]string{true: "its", false: "their"}[len(ptrs) == 1], itThem(len(ptrs))))
+	}
+	if len(x.hoists) > 0 {
+		notes = append(notes, x.hoistNote())
 	}
 	if len(x.added) > 0 {
 		var imps []string
