@@ -21,9 +21,10 @@ model reads before choosing the next refactoring. That loop is the iteration.
 - **Step 2:** MCP server (`cmd/refactor-mcp`) with `rename`, `inspect`,
   `undo` and `check`, usable from Claude Code.
 - **Step 3 (in progress):** refactorings that simplify code.
-  `extract_variable` and `inline_variable` are done; `extract_function` is in
-  progress (parameters, results and `return` statements done; adding
-  imports, local constants and generics next).
+  `extract_variable`, `inline_variable` and `extract_function` are done
+  (`extract_function` with parameters and results, `return` statements,
+  pointers for shared variables, methods, imports, local constants and
+  types, and generics).
 
 Next: `invert_if` (guard clauses); then an Ollama loop.
 
@@ -349,6 +350,10 @@ fmt.Println(total)                     for _, x := range xs { total += x }
   so both functions share one declaration: a copied type would be a
   different type, and a constant passed as a parameter would stop being a
   constant. Local constants and types they depend on move with them.
+- If the statements (or the variables they pass in and out) use the
+  enclosing function's type parameters, the new function declares all of
+  them, with their constraints as written, and the call instantiates them
+  explicitly: `add[T](xs, total)`. Nothing depends on type inference.
 - If a parameter or result type needs a package the file does not import,
   the import is added (with an alias such as `b2` when the package name is
   already used in the file or package), and the result notes it.
@@ -394,9 +399,10 @@ Refused (with an explanation):
   function literal, and is used after them: returning it would return a
   copy (some types, like `strings.Builder`, also refuse to be copied);
 - a `:=` in the statements redeclares a variable passed as a pointer;
-- a type parameter of the function is used by the statements (directly or
-  through a variable's type), unless it belongs to the receiver of a method
-  the statements become;
+- the function has a type parameter named `_`, or one whose name a local
+  type hides at the call site, and the statements use its type parameters;
+  or the statements are in a function literal inside a generic method and
+  use the receiver's type parameters;
 - a local constant or type has to move to package level (see above) but
   cannot: it is part of a grouped declaration, uses a local variable or
   type parameter, its name is taken at package level or by an import in

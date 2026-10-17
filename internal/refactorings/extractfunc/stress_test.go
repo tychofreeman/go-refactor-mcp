@@ -103,7 +103,7 @@ func TestStress(t *testing.T) {
 		case res.Applied:
 			applied++
 			for _, n := range res.Notes {
-				for _, k := range []string{"to package level", "passed as a pointer", "is a method of", "added import", "always return", "early returns"} {
+				for _, k := range []string{"to package level", "passed as a pointer", "is a method of", "added import", "always return", "early returns", "type parameters"} {
 					if strings.Contains(n, k) {
 						kinds[k]++
 					}
@@ -138,7 +138,7 @@ func TestStress(t *testing.T) {
 	}
 	sort.Slice(keys, func(i, j int) bool { return refused[keys[i]] > refused[keys[j]] })
 	t.Logf("tried %d selections: applied %d, bugs %d", n, applied, len(bugs))
-	for _, k := range []string{"always return", "early returns", "passed as a pointer", "is a method of", "added import", "to package level"} {
+	for _, k := range []string{"always return", "early returns", "passed as a pointer", "is a method of", "added import", "to package level", "type parameters"} {
 		if kinds[k] > 0 {
 			t.Logf("  %4d applied with a note containing %q", kinds[k], k)
 		}

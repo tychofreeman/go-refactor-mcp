@@ -61,6 +61,7 @@ Local variables the statements use become parameters; variables they change or d
 Return statements are supported in two shapes: if every path through the statements returns, the call site becomes "return f(...)"; if the enclosing function returns an error and every return in the statements is an early exit with a non-nil error (like "if err != nil { return nil, err }"), the new function also returns an error and the call site checks it.
 Variables whose address is taken or that a function literal changes are passed as pointers, so both functions share them.
 If the statements use the receiver of the method they are in, the new function is a method of the same type; its name must then be unexported and not clash with a field or method.
+If the statements use the enclosing function's type parameters, the new function declares them too and the call passes them explicitly.
 Refuses other returns (for example an early return of a success value), defer, recover() or fallthrough, or a break, continue or goto that leaves the selected lines; if a variable they declare has its address taken or is used by a function literal and is used after them.
 Local constants and types the statements need move to package level, so both functions share them; this is refused if one is part of a grouped declaration, uses local variables or type parameters, or its name is taken at package level.`
 }
@@ -126,6 +127,13 @@ type extraction struct {
 	nameable map[*types.TypeName]bool
 
 	hoists []hoist // local constants and types moved to package level
+
+	// tparams are the enclosing function's type parameters, and
+	// tparamText their declaration as written ("T any, S ~[]T"). generic
+	// reports whether the new function uses them, and so declares them all.
+	tparams    []*types.TypeName
+	tparamText string
+	generic    bool
 }
 
 // Plan checks preconditions and computes the edits.
@@ -168,6 +176,10 @@ func (*ExtractFunction) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 		return nil, err
 	}
 	x.fa = analysis.AnalyzeFunc(x.info, x.outermostFunc())
+	// What the new function can name: before any check spells a type.
+	x.nameable = map[*types.TypeName]bool{}
+	x.findReceiver()
+	x.findTypeParams()
 	if err := x.checkControlFlow(); err != nil {
 		return nil, err
 	}
@@ -650,8 +662,6 @@ type flow struct {
 // conservatively: any use outside the selection counts, and so does being
 // read in the selection when the selection is in a loop.
 func (x *extraction) analyzeDataFlow() error {
-	x.nameable = map[*types.TypeName]bool{}
-	x.findReceiver()
 	refs := map[*types.Var][]*ast.Ident{} // outside variables, by reference
 	var order []*types.Var
 	var bad []string
@@ -836,7 +846,148 @@ func (x *extraction) analyzeDataFlow() error {
 	}
 
 	x.flow = f
+	return x.decideGeneric(later)
+}
+
+// findTypeParams records the type parameters of the function declaration
+// containing the selection (methods have none of their own), which the
+// new function may then use.
+func (x *extraction) findTypeParams() {
+	var fd *ast.FuncDecl
+	for _, n := range analysis.PathTo(x.file, x.stmts[0]) {
+		if d, ok := n.(*ast.FuncDecl); ok {
+			fd = d
+		}
+	}
+	if fd == nil || fd.Recv != nil || fd.Type.TypeParams == nil || len(fd.Type.TypeParams.List) == 0 {
+		return
+	}
+	tl := fd.Type.TypeParams
+	x.tparamText = string(x.src[x.off(tl.Opening)+1 : x.off(tl.Closing)])
+	for _, fld := range tl.List {
+		for _, name := range fld.Names {
+			if tn, ok := x.info.Defs[name].(*types.TypeName); ok {
+				x.tparams = append(x.tparams, tn)
+				x.nameable[tn] = true
+			}
+		}
+	}
+}
+
+// decideGeneric makes the new function generic if the statements, or the
+// types it passes in and out, use the enclosing function's type
+// parameters. It then declares all of them (constraints may refer to each
+// other) and the call instantiates them explicitly, so nothing depends on
+// inference.
+func (x *extraction) decideGeneric(later []*types.Var) error {
+	if len(x.tparams) == 0 {
+		return nil
+	}
+	set := map[*types.TypeName]bool{}
+	for _, tp := range x.tparams {
+		set[tp] = true
+	}
+	used := false
+	for id, obj := range x.info.Uses {
+		if tn, ok := obj.(*types.TypeName); ok && set[tn] && x.inSelection(id) {
+			used = true
+			break
+		}
+	}
+	f := x.flow
+	for _, list := range [][]*types.Var{f.params, f.locals, f.results, later} {
+		for _, v := range list {
+			used = used || usesTypeParam(v.Type(), set, map[types.Type]bool{})
+		}
+	}
+	if _, _, sig := x.enclosingFunc(); x.mode == terminal && sig != nil {
+		used = used || usesTypeParam(sig.Results(), set, map[types.Type]bool{})
+	}
+	if !used {
+		return nil
+	}
+	scope := x.innermostScope(x.stmts[0].Pos())
+	for _, tp := range x.tparams {
+		if tp.Name() == "_" {
+			return refactor.Refusef("%s has a type parameter named _, which the call could not pass on; name it first", x.enclosingName())
+		}
+		if scope != nil {
+			if _, o := scope.LookupParent(tp.Name(), x.stmts[0].Pos()); o != tp {
+				return refactor.Refusef("the call would pass the type parameter %s, but at the call site %s refers to the %s declared at line %d; rename it first",
+					tp.Name(), tp.Name(), kindOf(o), x.line(o.Pos()))
+			}
+		}
+	}
+	x.generic = true
 	return nil
+}
+
+// usesTypeParam reports whether t mentions one of the type parameters.
+func usesTypeParam(t types.Type, set map[*types.TypeName]bool, seen map[types.Type]bool) bool {
+	if t == nil || seen[t] {
+		return false
+	}
+	seen[t] = true
+	any := func(ts ...types.Type) bool {
+		for _, e := range ts {
+			if usesTypeParam(e, set, seen) {
+				return true
+			}
+		}
+		return false
+	}
+	switch t := t.(type) {
+	case *types.TypeParam:
+		return set[t.Obj()]
+	case *types.Named:
+		for i := 0; i < t.TypeArgs().Len(); i++ {
+			if any(t.TypeArgs().At(i)) {
+				return true
+			}
+		}
+		// A local type's underlying type can mention them too.
+		if o := t.Obj(); o.Pkg() != nil && o.Parent() != o.Pkg().Scope() {
+			return any(t.Underlying())
+		}
+	case *types.Alias:
+		return any(types.Unalias(t))
+	case *types.Pointer:
+		return any(t.Elem())
+	case *types.Slice:
+		return any(t.Elem())
+	case *types.Array:
+		return any(t.Elem())
+	case *types.Chan:
+		return any(t.Elem())
+	case *types.Map:
+		return any(t.Key(), t.Elem())
+	case *types.Signature:
+		return any(t.Params(), t.Results())
+	case *types.Tuple:
+		for i := 0; i < t.Len(); i++ {
+			if any(t.At(i).Type()) {
+				return true
+			}
+		}
+	case *types.Struct:
+		for i := 0; i < t.NumFields(); i++ {
+			if any(t.Field(i).Type()) {
+				return true
+			}
+		}
+	case *types.Interface:
+		for i := 0; i < t.NumMethods(); i++ {
+			if any(t.Method(i).Type()) {
+				return true
+			}
+		}
+		for i := 0; i < t.NumEmbeddeds(); i++ {
+			if any(t.EmbeddedType(i)) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // findReceiver makes the new function a method when the statements use the
@@ -1700,7 +1851,11 @@ func (x *extraction) plan() (*refactor.Plan, error) {
 		}
 		params = append(params, v.Name()+" "+t)
 	}
-	sigText := fmt.Sprintf("func %s(%s)", x.name, strings.Join(params, ", "))
+	tps := ""
+	if x.generic {
+		tps = "[" + x.tparamText + "]"
+	}
+	sigText := fmt.Sprintf("func %s%s(%s)", x.name, tps, strings.Join(params, ", "))
 	if x.recv != nil {
 		rt := x.recvType
 		if f.pointers[x.recv] {
@@ -1743,7 +1898,15 @@ func (x *extraction) plan() (*refactor.Plan, error) {
 			args = append(args, v.Name())
 		}
 	}
-	call := fmt.Sprintf("%s(%s)", x.name, strings.Join(args, ", "))
+	inst := ""
+	if x.generic {
+		var tpNames []string
+		for _, tp := range x.tparams {
+			tpNames = append(tpNames, tp.Name())
+		}
+		inst = "[" + strings.Join(tpNames, ", ") + "]"
+	}
+	call := fmt.Sprintf("%s%s(%s)", x.name, inst, strings.Join(args, ", "))
 	if x.recv != nil {
 		call = x.recv.Name() + "." + call // Go takes the address if needed
 	}
@@ -1834,6 +1997,9 @@ func (x *extraction) plan() (*refactor.Plan, error) {
 	}
 	if len(x.hoists) > 0 {
 		notes = append(notes, x.hoistNote())
+	}
+	if x.generic {
+		notes = append(notes, fmt.Sprintf("the selected lines use type parameters of %s, so the new function declares them too and the call passes them explicitly", x.enclosingName()))
 	}
 	if len(x.added) > 0 {
 		var imps []string
