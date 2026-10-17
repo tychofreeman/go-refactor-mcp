@@ -27,7 +27,7 @@ model reads before choosing the next refactoring. That loop is the iteration.
   types, and generics). `invert_if` (with guard clauses) and `remove_else`
   are done. `inline_function` has a first version (see the roadmap).
 - **Step 4 (in progress):** refactorings that prepare a feature change.
-  `add_parameter` is done; `remove_parameter` and `move_parameter` are next.
+  `add_parameter` and `remove_parameter` are done; `move_parameter` is next.
 
 ## Roadmap
 
@@ -39,8 +39,9 @@ feature. The order below follows what that workflow needed in practice;
 hand or a tool got in the way.
 
 1. **Changing a signature** at every call site. The most common by-hand
-   step so far. *`add_parameter` done (see "Add parameter: what it
-   checks"); next: `remove_parameter`, `move_parameter`, and exported
+   step so far. *`add_parameter` and `remove_parameter` done (see "Add
+   parameter: what it checks" and "Remove parameter: what it checks");
+   next: `move_parameter`, and exported
    methods (which needs checking every interface they could implement).*
 2. **Moving a declaration** to another file or package, updating its
    references (and renaming it on the way when it changes package).
@@ -92,7 +93,7 @@ internal/
     extractfunc/              extract_function + testdata + opt-in stress test
     inlinefunc/               inline_function + testdata + opt-in stress and round-trip tests
     invertif/                 invert_if, remove_else + testdata + opt-in stress test
-    changesig/                add_parameter + testdata
+    changesig/                add_parameter, remove_parameter + testdata/<tool>/
 ```
 
 ## Getting started
@@ -149,7 +150,7 @@ Tools:
 | Tool | What it does |
 |---|---|
 | `inspect` | No args: module overview. `file`: outline (line ranges, complexity, nesting) + numbered source. `function` or `start_line`/`end_line` to narrow. |
-| `rename`, `extract_variable`, `inline_variable`, `extract_function`, `inline_function`, `invert_if`, `remove_else`, `add_parameter` (and every future refactoring) | Applies one step; returns `APPLIED` + diff, or `REFUSED` + reason (nothing changed). |
+| `rename`, `extract_variable`, `inline_variable`, `extract_function`, `inline_function`, `invert_if`, `remove_else`, `add_parameter`, `remove_parameter` (and every future refactoring) | Applies one step; returns `APPLIED` + diff, or `REFUSED` + reason (nothing changed). |
 | `undo` | Reverts the last applied step; repeatable. |
 | `check` | Type-check status; `run_tests: true` also runs `go test`. |
 
@@ -241,6 +242,7 @@ refactor -n inline_function file=main.go line=20 name=printReport
 refactor -n invert_if file=main.go line=14
 refactor -n remove_else file=main.go line=20
 refactor -n add_parameter file=main.go line=9 name=copyTree parameter=skip type=string value=cfg.OutDir
+refactor -n remove_parameter file=main.go line=9 name=copyTree parameter=skip
 ```
 
 Exit status: `0` applied/previewed, `2` refused, `1` error.
@@ -739,6 +741,33 @@ Refused:
 
 An exported function's calls in other modules are not updated; the result
 says so.
+
+## Remove parameter: what it checks
+
+`remove_parameter` is the reverse: it removes a parameter from a function
+or unexported method and drops its argument from every call in the
+workspace. Identify the function as for `add_parameter`, and the parameter
+by `parameter`. Removing a variadic parameter drops all of its arguments
+(and a spread `xs...`). The rest of the parameter list keeps its grouping
+(`w, h, unused int` becomes `w, h int`).
+
+The body must not use the parameter: change the body first, then remove
+it. So that the step changes nothing, each dropped argument must be safe
+not to evaluate, by the same rules as an added value: no side effects and
+no possible panic.
+
+Refused, besides the function checks `add_parameter` makes (function
+values, method expressions, exported and interface methods, and so on):
+
+- **the parameter:** not found, more than one with that name (`_`), used by
+  the body, or of a type that mentions one of the function's type
+  parameters, since calls may infer it from that argument;
+- **an argument:** unsafe as above; a call that passes another call's
+  results (`f(pair())`);
+- **what it leaves behind:** a local variable or an import whose only use
+  is a dropped argument (or, for an import, the removed parameter's type),
+  since it would then be unused and not compile. Removing the import too is
+  a possible follow-up.
 
 ## Testing
 

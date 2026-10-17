@@ -214,10 +214,8 @@ func (t *target) evalType(src string) (types.Type, error) {
 // change nothing.
 func (t *target) checkValue(c call, value string, typ types.Type) error {
 	where := t.ws.Position(c.expr.Pos())
-	if len(c.expr.Args) == 1 {
-		if _, multi := c.pkg.TypesInfo.Types[c.expr.Args[0]].Type.(*types.Tuple); multi {
-			return refactor.Refusef("the call at %s passes the results of another call as its arguments, so no argument can be added; assign them to variables first", where)
-		}
+	if err := checkNoSpread(c, where); err != nil {
+		return err
 	}
 	e, err := parser.ParseExpr(value)
 	if err != nil {
