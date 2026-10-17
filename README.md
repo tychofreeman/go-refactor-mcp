@@ -24,9 +24,10 @@ model reads before choosing the next refactoring. That loop is the iteration.
   `extract_variable`, `inline_variable` and `extract_function` are done
   (`extract_function` with parameters and results, `return` statements,
   pointers for shared variables, methods, imports, local constants and
-  types, and generics).
+  types, and generics). `invert_if` is in progress (inverting if/else done;
+  guard clauses next).
 
-Next: `invert_if` (guard clauses); then an Ollama loop.
+Next: guard clauses for `invert_if`; then an Ollama loop.
 
 ## Layout
 
@@ -48,6 +49,7 @@ internal/
     extractvar/               extract_variable + testdata + opt-in stress test
     inlinevar/                inline_variable + testdata + opt-in stress test
     extractfunc/              extract_function + testdata + opt-in stress test
+    invertif/                 invert_if + testdata + opt-in stress test
 ```
 
 ## Getting started
@@ -103,7 +105,7 @@ Tools:
 | Tool | What it does |
 |---|---|
 | `inspect` | No args: module overview. `file`: outline (line ranges, complexity, nesting) + numbered source. `function` or `start_line`/`end_line` to narrow. |
-| `rename`, `extract_variable`, `inline_variable`, `extract_function` (and every future refactoring) | Applies one step; returns `APPLIED` + diff, or `REFUSED` + reason (nothing changed). |
+| `rename`, `extract_variable`, `inline_variable`, `extract_function`, `invert_if` (and every future refactoring) | Applies one step; returns `APPLIED` + diff, or `REFUSED` + reason (nothing changed). |
 | `undo` | Reverts the last applied step; repeatable. |
 | `check` | Type-check status; `run_tests: true` also runs `go test`. |
 
@@ -126,6 +128,7 @@ refactor rename '{"file":"main.go","line":7,"name":"t","new_name":"total"}'     
 refactor -n extract_variable file=main.go line=12 expression='qty*unit' name=subtotal
 refactor -n inline_variable file=main.go line=12 name=subtotal
 refactor -n extract_function file=main.go start_line=20 end_line=31 name=printReport
+refactor -n invert_if file=main.go line=14
 ```
 
 Exit status: `0` applied/previewed, `2` refused, `1` error.
@@ -424,6 +427,31 @@ Refused (with an explanation):
   by a local declaration, or in a `_test.go` file looks like a test
   (`TestX`, `BenchmarkX`, ...).
 
+## Invert if: what it checks
+
+`invert_if` negates an if statement's condition and swaps its branches.
+Identify the if by `file` and the `line` of its `if` keyword (`column` only if
+the line has more than one). The branch contents move as text, so comments
+come along; an init statement stays.
+
+The negated condition is simplified only where that is exact:
+
+- `!x` becomes `x`;
+- `==` and `!=` swap (exact for every type, NaN included);
+- `<`, `<=`, `>`, `>=` flip only for integers and strings; for floats (and
+  type parameters, whose type sets usually include floats) `!(a < b)` is
+  kept, because with NaN both `a < b` and `a >= b` are false;
+- `&&` and `||` use De Morgan's laws, with parentheses only where precedence
+  needs them: `a == 1 || b == 2 && ok` becomes `a != 1 && (b != 2 || !ok)`.
+  Operands are still evaluated left to right, the right one only when the
+  left one does not decide the result.
+
+Anything else becomes `!x` or `!(...)`.
+
+Refused (with an explanation): an if without an else (guard clauses are not
+supported yet), and an else-if chain in the else branch (swapping it in would
+add nesting).
+
 ## Testing
 
 `go test ./...` runs the unit and golden tests. The golden cases run in
@@ -436,7 +464,7 @@ inlining the new variable must give back the original code (after gofmt).
 `go test -bench . ./internal/workspace` measures an edit-and-undo cycle against
 a full load.
 
-Four opt-in tests try the
+Five opt-in tests try the
 refactorings on real code; each modifies the module it is pointed at, so use
 a copy:
 
@@ -450,6 +478,8 @@ STRESS_DIR=/tmp/target STRESS_N=100000 go test ./internal/refactorings/inlinevar
 STRESS_DIR=/tmp/target go test ./internal/refactorings/inlinevar -run TestRoundTrip -v -timeout 1h
 # extract_function on runs of 1-4 statements and random line ranges:
 STRESS_DIR=/tmp/target go test ./internal/refactorings/extractfunc -run TestStress -v -timeout 1h
+# invert_if on every if statement:
+STRESS_DIR=/tmp/target STRESS_N=100000 go test ./internal/refactorings/invertif -run TestStress -v -timeout 1h
 ```
 
 Any rolled-back change is reported as a bug (a missing precondition). With
