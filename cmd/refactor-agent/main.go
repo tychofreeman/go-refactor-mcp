@@ -24,13 +24,14 @@ import (
 	"time"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/agent"
+	"github.com/tychofreeman/go-refactor-mcp/internal/metrics"
 )
 
 func main() {
 	dir := flag.String("C", ".", "directory inside the Go module to refactor")
 	pattern := flag.String("p", "./...", "package pattern to load, relative to the module root")
 	model := flag.String("model", os.Getenv("OLLAMA_MODEL"), "Ollama model name (default $OLLAMA_MODEL)")
-	host := flag.String("host", defaultHost(), "Ollama server URL (default $OLLAMA_HOST, else http://localhost:11434)")
+	host := flag.String("host", agent.DefaultHost(), "Ollama server URL (default $OLLAMA_HOST, else http://localhost:11434)")
 	numCtx := flag.Int("ctx", 16384, "context window in tokens (Ollama's own default is too small for inspect output)")
 	goal := flag.String("goal", "", "what to do, e.g. \"Simplify the function parse in calc/calc.go\"")
 	file := flag.String("file", "", "shorthand for -goal \"Simplify the code in FILE...\"")
@@ -87,16 +88,6 @@ func main() {
 	}
 }
 
-func defaultHost() string {
-	if h := os.Getenv("OLLAMA_HOST"); h != "" {
-		if len(h) < 7 || (h[:7] != "http://" && (len(h) < 8 || h[:8] != "https://")) {
-			h = "http://" + h // OLLAMA_HOST is often host:port
-		}
-		return h
-	}
-	return "http://localhost:11434"
-}
-
 func printReport(w io.Writer, rep *agent.Report) {
 	fmt.Fprintf(w, "stopped: %s\n", rep.StopReason)
 	fmt.Fprintf(w, "tool calls: %d (errors: %d)\n", rep.Steps, rep.Errors)
@@ -105,6 +96,11 @@ func printReport(w io.Writer, rep *agent.Report) {
 	}
 	for _, line := range counts("refused", rep.Refused) {
 		fmt.Fprintln(w, line)
+	}
+	if len(rep.FuncsBefore)+len(rep.FuncsAfter) > 0 {
+		b, a := metrics.Summarize(rep.FuncsBefore), metrics.Summarize(rep.FuncsAfter)
+		fmt.Fprintf(w, "changed files: functions %d -> %d, highest complexity %d -> %d, deepest nesting %d -> %d\n",
+			b.Funcs, a.Funcs, b.MaxComplexity, a.MaxComplexity, b.MaxNesting, a.MaxNesting)
 	}
 	if rep.TestsBefore != "" {
 		fmt.Fprintf(w, "tests: %s before, %s after\n", rep.TestsBefore, rep.TestsAfter)

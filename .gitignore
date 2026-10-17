@@ -35,3 +35,6 @@ go.work.sum
 # Binaries built from cmd/ in the repository root
 /refactor
 /refactor-mcp
+
+# refactor-eval output
+eval-runs/

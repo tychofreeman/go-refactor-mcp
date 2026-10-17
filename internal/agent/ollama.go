@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 )
 
@@ -124,4 +125,16 @@ func snippet(b []byte) string {
 		s = s[:300] + "..."
 	}
 	return s
+}
+
+// DefaultHost is the Ollama server URL from $OLLAMA_HOST, else the local
+// default.
+func DefaultHost() string {
+	if h := os.Getenv("OLLAMA_HOST"); h != "" {
+		if len(h) < 7 || (h[:7] != "http://" && (len(h) < 8 || h[:8] != "https://")) {
+			h = "http://" + h // OLLAMA_HOST is often host:port
+		}
+		return h
+	}
+	return "http://localhost:11434"
 }

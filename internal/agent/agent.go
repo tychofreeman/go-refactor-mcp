@@ -25,6 +25,7 @@ import (
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/mcpserver"
+	"github.com/tychofreeman/go-refactor-mcp/internal/metrics"
 )
 
 // Rules are added to the server's instructions in the system prompt. They
@@ -63,6 +64,7 @@ type Report struct {
 	Applied    map[string]int // tool -> applied steps
 	Refused    map[string]int // tool -> refused calls
 	Errors     int            // tool errors, unknown tools, bad arguments
+	Failures   []Failure      // every refused or failed call, in order
 	StopReason string
 	Summary    string // the model's final message, if it gave one
 
@@ -70,6 +72,17 @@ type Report struct {
 	RolledBack              bool   // every applied step was undone
 	UndoFailed              string // why undoing failed (the files may still be changed), or ""
 	Diff                    string // the combined change, against the starting files
+
+	// The functions in the files the run changed (test files excluded),
+	// at the start and at the end; file paths are relative to the module.
+	FuncsBefore, FuncsAfter []metrics.Func
+}
+
+// Failure is a tool call that was refused or failed.
+type Failure struct {
+	Tool   string
+	Status string // "refused" or "error"
+	Reason string // the first line of the result
 }
 
 // Run runs the loop.
@@ -122,8 +135,16 @@ func Run(ctx context.Context, cfg Config) (*Report, error) {
 	if cfg.Revert && !r.rep.RolledBack && r.rep.UndoFailed == "" {
 		r.undoAll(cleanup, "revert requested")
 	}
-	r.rep.Diff, err = diffSince(root, before)
+	after, err := snapshot(root)
 	if err != nil {
+		return nil, err
+	}
+	changed := changedFiles(root, before, after)
+	r.rep.Diff = diff(changed, before, after)
+	if r.rep.FuncsBefore, err = metrics.Measure(changed.contents(before)); err != nil {
+		return nil, err
+	}
+	if r.rep.FuncsAfter, err = metrics.Measure(changed.contents(after)); err != nil {
 		return nil, err
 	}
 	r.event("end", map[string]any{"stop_reason": r.rep.StopReason, "steps": r.rep.Steps, "applied": r.rep.Applied,
@@ -247,9 +268,11 @@ func (r *runner) loop(ctx context.Context) {
 				failures = 0
 			case "refused":
 				r.rep.Refused[name]++
+				r.rep.Failures = append(r.rep.Failures, Failure{Tool: name, Status: status, Reason: strings.SplitN(text, "\n", 2)[0]})
 				failures++
 			case "error":
 				r.rep.Errors++
+				r.rep.Failures = append(r.rep.Failures, Failure{Tool: name, Status: status, Reason: strings.SplitN(text, "\n", 2)[0]})
 				failures++
 			default:
 				failures = 0
@@ -440,30 +463,47 @@ func snapshot(root string) (map[string][]byte, error) {
 	return files, err
 }
 
-// diffSince returns the unified diff of the Go files under root against
-// the snapshot.
-func diffSince(root string, before map[string][]byte) (string, error) {
-	after, err := snapshot(root)
-	if err != nil {
-		return "", err
-	}
-	var paths []string
-	for p := range before {
-		paths = append(paths, p)
-	}
-	for p := range after {
-		if _, ok := before[p]; !ok {
-			paths = append(paths, p)
+// changed maps the module-relative path of each changed Go file to its
+// absolute path, which keys the snapshots.
+type changed map[string]string
+
+// changedFiles returns the Go files under root that differ between the
+// snapshots, including files added or removed.
+func changedFiles(root string, before, after map[string][]byte) changed {
+	c := changed{}
+	for _, files := range []map[string][]byte{before, after} {
+		for p := range files {
+			if string(before[p]) != string(after[p]) {
+				rel, _ := filepath.Rel(root, p)
+				c[filepath.ToSlash(rel)] = p
+			}
 		}
 	}
-	sort.Strings(paths)
+	return c
+}
+
+// contents returns the changed files' contents in snap, by relative path;
+// a file missing from snap is left out.
+func (c changed) contents(snap map[string][]byte) map[string][]byte {
+	out := map[string][]byte{}
+	for rel, p := range c {
+		if b, ok := snap[p]; ok {
+			out[rel] = b
+		}
+	}
+	return out
+}
+
+// diff returns the unified diff of the changed files.
+func diff(c changed, before, after map[string][]byte) string {
+	var rels []string
+	for rel := range c {
+		rels = append(rels, rel)
+	}
+	sort.Strings(rels)
 	var sb strings.Builder
-	for _, p := range paths {
-		if string(before[p]) == string(after[p]) {
-			continue
-		}
-		rel, _ := filepath.Rel(root, p)
-		sb.WriteString(edit.Unified(filepath.ToSlash(rel), before[p], after[p]))
+	for _, rel := range rels {
+		sb.WriteString(edit.Unified(rel, before[c[rel]], after[c[rel]]))
 	}
-	return sb.String(), nil
+	return sb.String()
 }

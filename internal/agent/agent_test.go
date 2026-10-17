@@ -6,9 +6,12 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/tychofreeman/go-refactor-mcp/internal/metrics"
 )
 
 // script is a fake model: each turn calls the next function with the
@@ -226,5 +229,48 @@ func TestRunRevertAfterTimeout(t *testing.T) {
 	}
 	if !strings.Contains(rep.StopReason, "ran out of time") {
 		t.Errorf("stop reason = %q", rep.StopReason)
+	}
+}
+
+// The report measures the functions in the files the run changed, before
+// and after, so a run can be judged by its effect on complexity.
+func TestRunMeasuresChangedFiles(t *testing.T) {
+	dir := module(t, map[string]string{"other.go": "package m\n\nfunc other() {}\n"})
+	model := &script{t: t, turns: []func([]Message) Message{calls(call("invert_if", `{"file":"m.go","line":6}`))}}
+	rep, err := Run(context.Background(), Config{Dir: dir, Goal: "x", Model: model})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []metrics.Func{{File: "m.go", Name: "run", Lines: 5, Complexity: 2, Nesting: 1}}
+	if !reflect.DeepEqual(rep.FuncsBefore, want) {
+		t.Errorf("FuncsBefore = %+v, want %+v", rep.FuncsBefore, want)
+	}
+	want[0].Lines = 6
+	if !reflect.DeepEqual(rep.FuncsAfter, want) {
+		t.Errorf("FuncsAfter = %+v, want %+v", rep.FuncsAfter, want)
+	}
+}
+
+// Every failed or refused call is kept with its reason, to see which tools
+// a model misuses and how.
+func TestRunRecordsFailures(t *testing.T) {
+	dir := module(t, nil)
+	model := &script{t: t, turns: []func([]Message) Message{
+		calls(call("frobnicate", `{}`)),
+		calls(call("invert_if", `{"file":"m.go","line":1}`)),
+		calls(call("inspect", `{}`)),
+	}}
+	rep, err := Run(context.Background(), Config{Dir: dir, Goal: "x", Model: model})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rep.Failures) != 2 {
+		t.Fatalf("failures = %+v", rep.Failures)
+	}
+	if f := rep.Failures[0]; f.Tool != "frobnicate" || f.Status != "error" || !strings.HasPrefix(f.Reason, "ERROR: there is no tool") {
+		t.Errorf("failure 0 = %+v", f)
+	}
+	if f := rep.Failures[1]; f.Tool != "invert_if" || f.Status != "refused" || !strings.HasPrefix(f.Reason, "REFUSED") || strings.Contains(f.Reason, "\n") {
+		t.Errorf("failure 1 = %+v", f)
 	}
 }

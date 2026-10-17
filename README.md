@@ -38,7 +38,8 @@ model reads before choosing the next refactoring. That loop is the iteration.
    pass, which tools does the model use or misuse? The stress tests prove
    steps preserve behavior; they cannot tell when code got worse (reading
    `invert_if` diffs found such a case). The results should decide the order
-   of the rest.
+   of the rest. *Harness done (`refactor-eval`, see "Measuring whether the
+   tools help"); next: runs on real code, and acting on what they show.*
 3. **`inline_function`**, the inverse of `extract_function`: a way back from
    over-extraction, and an extract-then-inline round-trip test like the one
    for `extract_variable` and `inline_variable`. *First version done (see
@@ -59,8 +60,11 @@ model reads before choosing the next refactoring. That loop is the iteration.
 cmd/refactor/                 CLI: one refactoring step per invocation
 cmd/refactor-mcp/             MCP server (stdio) for Claude Code and other MCP clients
 cmd/refactor-agent/           a local model (Ollama) refactoring a module with the same tools
+cmd/refactor-eval/            runs the agent on a module's most complex functions and measures the results
 internal/
   agent/                      the model loop: in-process MCP client, Ollama client, transcript
+  eval/                       evaluation: pick targets, run the agent on copies, summarize
+  metrics/                    per-function complexity, nesting and length, and summaries
   analysis/                   shared facts: side effects, stable expressions, escaping/modified locals
   edit/                       TextEdit/FileEdit, Apply, unified diff (Myers)
   textutil/                   token scanning and re-indenting for moved source text
@@ -183,6 +187,33 @@ Small models need help with tool calling, so the agent:
 
 `-host` defaults to `$OLLAMA_HOST`, then `http://localhost:11434`; `-model`
 defaults to `$OLLAMA_MODEL`.
+
+## Measuring whether the tools help
+
+`refactor-eval` runs the agent loop on the most complex functions of a module
+and measures what happened. Each run works on a fresh copy of the module, so
+the module itself never changes:
+
+```sh
+refactor-eval -C path/to/module -model qwen3.5:9b -n 5            # the 5 most complex functions
+refactor-eval -model qwen3.5:9b -target internal/eval/eval.go:Markdown -max-steps 10
+```
+
+For each target the model is asked to simplify that one function. The
+output directory (default `eval-runs/<model>-<time>`) gets:
+
+- `results.jsonl`: one line per run, written as each run ends: the target's
+  complexity and nesting before and after, the same summed over the changed
+  files, tests before and after (with `-tests`, on by default), applied and
+  refused calls per tool, and every refusal or error with its reason;
+- `summary.md`: overall outcomes (runs that changed code, tests broken,
+  targets improved or made worse, mean changes), a row per run, tool usage,
+  and the most common refusal and error reasons (numbers replaced by `N`, so
+  reasons that differ only in line numbers group together);
+- `NN-<file>-<func>.jsonl` and `.diff`: the run's transcript and its change.
+
+`-timeout` limits each run (default 45m). `refactor-agent` prints the same
+before/after numbers for the files it changed.
 
 ## Using the CLI
 
