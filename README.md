@@ -30,7 +30,9 @@ model reads before choosing the next refactoring. That loop is the iteration.
 ## Roadmap
 
 1. **An Ollama loop.** A local model drives the same tools end to end:
-   inspect, refactor one step at a time, check.
+   inspect, refactor one step at a time, check. *First version done
+   (`refactor-agent`, see "Using a local model"); next: fixes from real runs
+   with local models.*
 2. **Measure whether the tools help.** Use the loop as an evaluation
    harness on real code: does complexity and nesting go down, do tests still
    pass, which tools does the model use or misuse? The stress tests prove
