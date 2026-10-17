@@ -1,0 +1,1 @@
+the enclosing block already declares err (line 11): a := there would assign that variable

@@ -1,1 +1,1 @@
-it is not the last statement of its block
+the code after it is not just the function's final return

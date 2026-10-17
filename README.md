@@ -25,7 +25,7 @@ model reads before choosing the next refactoring. That loop is the iteration.
   (`extract_function` with parameters and results, `return` statements,
   pointers for shared variables, methods, imports, local constants and
   types, and generics). `invert_if` (with guard clauses) and `remove_else`
-  are done; hoisting `if` init statements and `switch`-case guards are next.
+  are done.
 
 Next: an Ollama loop.
 
@@ -448,9 +448,17 @@ than one).
       return                       work()
   }
   ```
-- **if without else**, as the last statement of a function without results
-  or of a loop body, becomes a guard clause: `if !c { return }` (or
-  `continue`), followed by the former body, un-nested.
+- **if without else** becomes a guard clause, followed by its former body,
+  un-nested, when it is
+  - the last statement of a function without results: `if !c { return }`;
+  - the last statement of a loop body: `if !c { continue }`;
+  - the last statement of a `switch` or `select` case: `if !c { break }`;
+  - followed only by the function's final `return`, which the guard repeats
+    (`if err != nil { return err }`, then the body, then `return err`):
+    every path still evaluates it exactly once.
+
+  An if whose body already ends in an exit is already a guard clause and is
+  left alone.
 
 `remove_else` handles the case where the *if* branch already exits:
 `if c { return x } else { B }` becomes `if c { return x }` followed by `B`; an
@@ -470,15 +478,18 @@ The negated condition is simplified only where that is exact:
 
 Anything else becomes `!x` or `!(...)`. Branch contents move as text, so
 comments come along; un-nested statements are re-indented, except inside
-multi-line raw strings. An init statement stays on the if.
+multi-line raw strings. An init statement stays on the if, unless the
+un-nested statements use its variables: then it moves before the if
+(`v, ok := m[k]` then `if !ok { return }` then the code using `v`), after the
+same name checks as moved declarations, plus one: a name the enclosing block
+already declares would turn `:=` into an assignment to it.
 
 Un-nesting moves the branch's declarations into the enclosing block, so it
 is refused (for an if/else, `invert_if` then only swaps and says why in a
 note) when:
 
-- the moved statements use variables declared by the if's init statement
-  (only in scope inside the if);
-- they declare a name the enclosing block already declares, or that the
+- the moved statements, or the if's init statement when it has to move,
+  declare a name the enclosing block already declares, or that the
   code after the if uses for something else (it would now see the moved
   declaration);
 - a `goto` jumps over the if (it would jump over the moved declarations);
@@ -486,9 +497,11 @@ note) when:
   or does not start its own line.
 
 Also refused: an else-if chain in the else branch of `invert_if` (swapping
-it in would add nesting); an if without else that is not the last statement
-of a function without results or of a loop body (code after it runs either
-way); and `remove_else` when the if branch can fall through.
+it in would add nesting; `remove_else` splits chains instead); an if without
+else in any other position (code after it runs either way); a repeated
+return that would mean something else inside the if (a name it uses is
+hidden by the if's init statement); and `remove_else` when the if branch can
+fall through.
 
 ## Testing
 

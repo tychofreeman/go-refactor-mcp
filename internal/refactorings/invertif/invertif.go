@@ -27,6 +27,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
 
@@ -42,10 +43,11 @@ func (*InvertIf) Description() string {
 	return `Invert an if statement: negate its condition and swap its branches, turning nested code into guard clauses where possible.
 Use it to reduce nesting and put the short or exceptional case first.
 - if/else: the branches swap. If the new first branch cannot fall through (it ends in return, continue, break, goto or panic), the else is removed and the other branch follows the if, un-nested: "if c { A } else { return }" becomes "if !c { return }" then A. Pass keep_else to only swap.
-- if without else, as the last statement of a function without results or of a loop body: becomes a guard clause, "if !c { return }" (or continue) followed by the body, un-nested.
+- if without else: becomes a guard clause followed by the body, un-nested, when it is the last statement of a function without results ("if !c { return }"), of a loop body (continue) or of a switch/select case (break), or when only the function's final return follows it (the guard repeats that return). An if whose body already exits is left alone.
+If the un-nested statements use variables of the if's init statement, the init statement moves before the if.
 Identify the if by file and the line of its "if" keyword (as shown by inspect); add column only if that line has more than one if.
 The negated condition is simplified where that is exact: == and != swap, <, <=, >, >= flip for integers and strings (not floats, where NaN makes !(a < b) differ from a >= b), !x becomes x, and && and || use De Morgan's laws (evaluation order is unchanged).
-Refuses an else-if chain in the else branch, and an if without else that is not the last statement of a function or loop body. Un-nesting is refused (or, for if/else, the else is kept, with a note) when the moved statements use variables from the if's init statement, or declare names that the enclosing block or the code after the if also uses.`
+Refuses an else-if chain in the else branch, and an if without else in any other position. Un-nesting is refused (or, for if/else, the else is kept, with a note) when the moved statements (or a moved init statement) declare names that the enclosing block or the code after the if also uses.`
 }
 
 func (*InvertIf) InputSchema() json.RawMessage {
@@ -167,12 +169,13 @@ func (x *inversion) plan(s *ast.IfStmt, keepElse bool) (*refactor.Plan, error) {
 		if err == nil {
 			err = x.noCommentsBetween(s)
 		}
+		hoist := false
 		if err == nil {
-			err = x.checkMove(s, s.Body, p)
+			hoist, err = x.checkMove(s, s.Body, p)
 		}
 		if err == nil {
 			indent := x.indentOf(s.Pos())
-			text := then(x.header(s)+neg.text+" {"+x.blockText(els)+"}", x.dedented(s.Body, indent))
+			text := then(x.head(s, hoist, indent)+neg.text+" {"+x.blockText(els)+"}", x.dedented(s.Body, indent))
 			return &refactor.Plan{
 				Summary: fmt.Sprintf("inverted the if at line %d into a guard clause: condition %s is now %s, and since that branch exits, the else is removed and the former if branch follows, un-nested",
 					line, quote(x.text(s.Cond)), quote(neg.text)),
@@ -207,51 +210,130 @@ func (x *inversion) guard(s *ast.IfStmt) (*refactor.Plan, error) {
 	if err != nil {
 		return nil, err
 	}
-	if !p.last() {
-		return nil, refactor.Refusef("the if at line %d has no else, and it is not the last statement of its block, so it cannot become a guard clause: the code after it runs whether or not the condition holds", line)
+	if analysis.EndsFlow(x.info, s.Body.List) {
+		return nil, refactor.Refusef("the if at line %d already exits (its body ends in return, continue, break, goto or panic), so it is already a guard clause; inverting it would only move the code after it inside", line)
 	}
-	exit := ""
-	if b, ok := p.owner.(*ast.BlockStmt); ok {
-		switch f := p.fn.(type) {
-		case *ast.FuncDecl:
-			if f.Body == b {
-				exit = x.returnFrom(f.Type)
-			}
-		case *ast.FuncLit:
-			if f.Body == b {
-				exit = x.returnFrom(f.Type)
-			}
-		}
-		if exit == "" {
-			switch l := analysis.PathTo(x.file, b)[1].(type) {
-			case *ast.ForStmt:
-				if l.Body == b {
-					exit = "continue"
-				}
-			case *ast.RangeStmt:
-				if l.Body == b {
-					exit = "continue"
-				}
-			}
-		}
-	}
-	if exit == "" {
-		return nil, refactor.Refusef("the if at line %d has no else, and it is not the last statement of a function without results or of a loop body, so there is no return or continue to exit with", line)
+	indent := x.indentOf(s.Pos())
+	exit, exitText, err := x.exit(s, p, indent)
+	if err != nil {
+		return nil, err
 	}
 	if len(s.Body.List) == 0 {
 		return nil, refactor.Refusef("the if at line %d has an empty body; remove it instead", line)
 	}
-	if err := x.checkMove(s, s.Body, p); err != nil {
+	hoist, err := x.checkMove(s, s.Body, p)
+	if err != nil {
 		return nil, err
 	}
 	neg := negate(x, s.Cond)
-	indent := x.indentOf(s.Pos())
-	text := then(x.header(s)+neg.text+" {\n"+indent+"\t"+exit+"\n"+indent+"}", x.dedented(s.Body, indent))
+	text := then(x.head(s, hoist, indent)+neg.text+" {\n"+exitText+"\n"+indent+"}", x.dedented(s.Body, indent))
+	var notes []string
+	if hoist {
+		notes = append(notes, "the if's init statement moved before it, because the former body uses its variables")
+	}
 	return &refactor.Plan{
 		Summary: fmt.Sprintf("turned the if at line %d into a guard clause: if %s { %s }, followed by its former body, un-nested",
 			line, neg.text, exit),
 		Edits: []edit.FileEdit{{Path: x.path, Edits: []edit.TextEdit{{Start: x.off(s.Pos()), End: x.off(s.End()), NewText: text}}}},
+		Notes: notes,
 	}, nil
+}
+
+// exit returns how a guard clause for s leaves early (for the summary),
+// and the guard's body text, indented one level deeper than indent:
+//
+//   - return, when s is the last statement of a function without results;
+//   - continue, when it is the last statement of a loop body;
+//   - break, when it is the last statement of a switch or select case;
+//   - a copy of the return statement, when s is followed only by a return
+//     at the end of a function: every path still evaluates it once.
+func (x *inversion) exit(s *ast.IfStmt, p *place, indent string) (string, string, error) {
+	line := x.tf.Line(s.If)
+	simple := func(e string) (string, string, error) { return e, indent + "\t" + e, nil }
+	body := x.funcBody(p)
+	if p.last() {
+		switch o := p.owner.(type) {
+		case *ast.CaseClause, *ast.CommClause:
+			return simple("break")
+		case *ast.BlockStmt:
+			if body == o {
+				if x.funcResults(p) == 0 {
+					return simple("return")
+				}
+				break // a function with results cannot end with this if
+			}
+			switch l := analysis.PathTo(x.file, o)[1].(type) {
+			case *ast.ForStmt:
+				if l.Body == o {
+					return simple("continue")
+				}
+			case *ast.RangeStmt:
+				if l.Body == o {
+					return simple("continue")
+				}
+			}
+		}
+		return "", "", refactor.Refusef("the if at line %d has no else, and it is not the last statement of a function, loop body or case, so there is no return, continue or break to exit with", line)
+	}
+	// Followed only by the function's final return: copy it into the guard.
+	var rest []ast.Stmt
+	for _, st := range p.following() {
+		if _, empty := st.(*ast.EmptyStmt); !empty {
+			rest = append(rest, st)
+		}
+	}
+	ret, isRet := rest[0].(*ast.ReturnStmt)
+	if len(rest) != 1 || !isRet || body == nil || body != p.owner {
+		return "", "", refactor.Refusef("the if at line %d has no else, and the code after it is not just the function's final return, so it cannot become a guard clause: that code runs whether or not the condition holds", line)
+	}
+	// Inside the if, the copied return must mean the same: the init
+	// statement's variables would hide outer names it uses.
+	if s.Init != nil {
+		var err error
+		ast.Inspect(ret, func(n ast.Node) bool {
+			if id, ok := n.(*ast.Ident); ok && err == nil {
+				if sc := x.info.Scopes[s]; sc != nil {
+					if o := sc.Lookup(id.Name); o != nil && x.info.Uses[id] != o {
+						err = refactor.Refusef("the guard clause would repeat the return at line %d inside the if at line %d, where %s refers to the variable from the if's init statement, not the one the return uses; rename one first",
+							x.tf.Line(ret.Pos()), line, id.Name)
+					}
+				}
+			}
+			return err == nil
+		})
+		if err != nil {
+			return "", "", err
+		}
+	}
+	ls := x.off(x.tf.LineStart(x.tf.Line(ret.Pos())))
+	text := textutil.Reindent(string(x.src[ls:x.off(ret.End())]), indent, indent+"\t")
+	return "return (repeating the final return)", text, nil
+}
+
+// funcBody returns the body of the innermost function containing the if.
+func (x *inversion) funcBody(p *place) *ast.BlockStmt {
+	switch f := p.fn.(type) {
+	case *ast.FuncDecl:
+		return f.Body
+	case *ast.FuncLit:
+		return f.Body
+	}
+	return nil
+}
+
+// funcResults returns how many results the innermost function has.
+func (x *inversion) funcResults(p *place) int {
+	var ft *ast.FuncType
+	switch f := p.fn.(type) {
+	case *ast.FuncDecl:
+		ft = f.Type
+	case *ast.FuncLit:
+		ft = f.Type
+	}
+	if ft == nil || ft.Results == nil {
+		return 0
+	}
+	return ft.Results.NumFields()
 }
 
 // returnFrom returns "return" for a function without results, or "".
