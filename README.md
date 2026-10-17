@@ -29,30 +29,35 @@ model reads before choosing the next refactoring. That loop is the iteration.
 
 ## Roadmap
 
-1. **An Ollama loop.** A local model drives the same tools end to end:
-   inspect, refactor one step at a time, check. *First version done
-   (`refactor-agent`, see "Using a local model"); next: fixes from real runs
-   with local models.*
-2. **Measure whether the tools help.** Use the loop as an evaluation
-   harness on real code: does complexity and nesting go down, do tests still
-   pass, which tools does the model use or misuse? The stress tests prove
-   steps preserve behavior; they cannot tell when code got worse (reading
-   `invert_if` diffs found such a case). The results should decide the order
-   of the rest. *Harness done (`refactor-eval`, see "Measuring whether the
-   tools help"); next: runs on real code, and acting on what they show.*
-3. **`inline_function`**, the inverse of `extract_function`: a way back from
-   over-extraction, and an extract-then-inline round-trip test like the one
-   for `extract_variable` and `inline_variable`. *First version done (see
-   "Inline function: what it checks"); next: the error-exit shape
+The goal is a workflow for AI-driven development: during a story, Claude
+picks the refactorings that make the change easy, the tools perform them
+deterministically, and Claude makes the small edit that adds or removes the
+feature. The order below follows what that workflow needed in practice;
+`docs/friction-log.md` records each time a refactoring had to be done by
+hand or a tool got in the way.
+
+1. **`change_signature`:** add, remove or reorder a function's parameters at
+   every call site. The most common by-hand step so far.
+2. **Moving a declaration** to another file or package, updating its
+   references (and renaming it on the way when it changes package).
+3. **Evidence from real use.** Keep the friction log during normal work.
+   Later, a comparison: the same small stories done with and without the
+   tools, comparing the size of the hand-written edits, test failures and
+   review effort. `refactor-eval`'s metrics and throwaway copies can carry
+   over (see "Measuring whether the tools help"); its first runs showed that
+   complexity alone rewards bad extractions, and that applied counts must
+   subtract undos.
+4. **`inline_function`:** the error-exit shape
    (`x, err := f(); if err != nil { return ..., err }`), generic and variadic
-   functions, inlining every call at once, and callees from other packages.*
-4. **`rename` gaps:** imports, labels, embedded fields and interface methods
+   functions, inlining every call at once, and callees from other packages
+   (see "Inline function: what it checks").
+5. **`rename` gaps:** imports, labels, embedded fields and interface methods
    (see "Rename: what it checks").
-5. **Larger structural moves:** moving a declaration to another file or
-   package, and changing a function's signature (adding, removing or
-   reordering parameters at every call site).
 6. **Packaging:** tagged releases, so `go install ...@latest` gets a stable
    version, and possibly a Claude Code plugin for a one-step install.
+
+Parked: the Ollama loop (`refactor-agent`). It works and stays, but Claude
+through MCP is the priority.
 
 ## Layout
 
