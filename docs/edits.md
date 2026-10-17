@@ -68,6 +68,8 @@ form can come first, while the focus is on refactorings.
   they declare is used after the block.
 - `introduce_if`: wrap statements in `if cond { }`, with a given condition.
 - `introduce_loop`: wrap statements in a `for` loop, with a given clause.
+  - 2026-10-17, moving several declarations at once: the checks on one
+    declaration became loops over all of them.
 
 **Declarations**
 
@@ -80,8 +82,8 @@ form can come first, while the focus is on refactorings.
 ## Suggested, without evidence yet
 
 `delete_statement` (including declarations), `move_statement_up/down`,
-`move_statement_in/out`, `introduce_block`, `introduce_if` and
-`introduce_loop` were suggested on 2026-10-17 and have no friction-log
+`move_statement_in/out`, `introduce_block` and `introduce_if` were
+suggested on 2026-10-17 and have no friction-log
 entries yet. More will be added here as they come up.
 
 ## Not yet logged

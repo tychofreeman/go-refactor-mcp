@@ -34,17 +34,24 @@ func (m *mover) planOtherPackage(to string) (*refactor.Plan, error) {
 	if err != nil {
 		return nil, err
 	}
-	if !token.IsExported(m.newName) && len(users) > 0 {
-		if m.newName != m.obj.Name() {
-			return nil, refactor.Refusef("the new name %s must be exported: %s is used outside package %s", m.newName, m.obj.Name(), m.dest.Name)
+	for _, d := range m.decls {
+		if token.IsExported(d.newName) || !d.usedOutside {
+			continue
 		}
-		return nil, refactor.Refusef("%s is unexported and used outside package %s, so it must become exported; give new_name (e.g. %s)",
-			m.obj.Name(), m.dest.Name, strings.ToUpper(m.newName[:1])+m.newName[1:])
+		if d.newName != d.obj.Name() {
+			return nil, refactor.Refusef("the new name %s must be exported: %s is used outside package %s", d.newName, d.obj.Name(), m.dest.Name)
+		}
+		how := "give new_name"
+		if d != m.moved {
+			how = "rename it first"
+		}
+		return nil, refactor.Refusef("%s is unexported and used outside package %s, so it must become exported; %s (e.g. %s)",
+			d.obj.Name(), m.dest.Name, how, strings.ToUpper(d.newName[:1])+d.newName[1:])
 	}
 	if err := m.checkNoCycle(users); err != nil {
 		return nil, err
 	}
-	m.deleteDecl()
+	m.deleteDecls()
 	if _, err := os.Stat(to); os.IsNotExist(err) {
 		m.files[to] = &fileEdits{edits: []edit.TextEdit{{NewText: m.newFile(func(pn *types.PkgName) string {
 			if pn.Imported().Path() == m.dest.PkgPath {
@@ -57,12 +64,14 @@ func (m *mover) planOtherPackage(to string) (*refactor.Plan, error) {
 	}
 
 	plan := &refactor.Plan{
-		Summary: fmt.Sprintf("moved %s from %s to %s as %s.%s (%d reference%s updated)",
-			m.obj.Name(), m.ws.Rel(m.path), m.ws.Rel(to), m.dest.Name, m.newName, refs, plural(refs)),
+		Summary: fmt.Sprintf("moved %s from %s to %s as %s.%s%s (%d reference%s updated)",
+			m.obj.Name(), m.ws.Rel(m.path), m.ws.Rel(to), m.dest.Name, m.newName, m.withAlso(), refs, plural(refs)),
 		Edits: m.fileEdits(),
 	}
-	if m.obj.Exported() {
-		plan.Notes = append(plan.Notes, fmt.Sprintf("%s was exported: references in other modules are not updated", m.obj.Name()))
+	for _, d := range m.decls {
+		if d.obj.Exported() {
+			plan.Notes = append(plan.Notes, fmt.Sprintf("%s was exported: references in other modules are not updated", d.obj.Name()))
+		}
 	}
 	return plan, nil
 }
@@ -102,13 +111,26 @@ func (m *mover) checkOtherPackage(to string) error {
 			return refactor.Refusef("%s has build constraints, so it is not built everywhere; moving into it is not supported", m.ws.Rel(to))
 		}
 		for _, imp := range dst.Imports {
-			if imp.Name != nil && imp.Name.Name == m.newName {
-				return refactor.Refusef("%s imports a package as %s, the declaration's name", m.ws.Rel(to), m.newName)
+			for _, d := range m.decls {
+				if imp.Name != nil && imp.Name.Name == d.newName {
+					return refactor.Refusef("%s imports a package as %s, the declaration's name", m.ws.Rel(to), d.newName)
+				}
 			}
 		}
 	}
 
-	switch d := m.decl.(type) {
+	for _, d := range m.decls {
+		if err := m.checkCanLeave(d); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// checkCanLeave refuses a declaration that cannot move to the destination
+// package.
+func (m *mover) checkCanLeave(md *moved) error {
+	switch d := md.decl.(type) {
 	case *ast.FuncDecl:
 		if d.Recv != nil {
 			return refactor.Refusef("%s is a method, and a method must stay in the package of its type", d.Name.Name)
@@ -116,7 +138,7 @@ func (m *mover) checkOtherPackage(to string) error {
 	case *ast.GenDecl:
 		switch s := d.Specs[0].(type) {
 		case *ast.TypeSpec:
-			if n, ok := m.obj.Type().(*types.Named); ok && n.NumMethods() > 0 {
+			if n, ok := md.obj.Type().(*types.Named); ok && n.NumMethods() > 0 {
 				return refactor.Refusef("%s has methods, which must stay in its package; moving a type with methods is not supported yet", s.Name.Name)
 			}
 		case *ast.ValueSpec:
@@ -125,11 +147,11 @@ func (m *mover) checkOtherPackage(to string) error {
 			}
 		}
 	}
-	if !token.IsIdentifier(m.newName) {
-		return refactor.Refusef("new_name %q is not a valid Go identifier", m.newName)
+	if !token.IsIdentifier(md.newName) {
+		return refactor.Refusef("new_name %q is not a valid Go identifier", md.newName)
 	}
-	if o := m.dest.Types.Scope().Lookup(m.newName); o != nil {
-		return refactor.Refusef("package %s already declares %s (at %s)", m.dest.Name, m.newName, m.ws.Position(o.Pos()))
+	if o := m.dest.Types.Scope().Lookup(md.newName); o != nil {
+		return refactor.Refusef("package %s already declares %s (at %s)", m.dest.Name, md.newName, m.ws.Position(o.Pos()))
 	}
 	return nil
 }
@@ -157,17 +179,19 @@ func (m *mover) checkNoSourceRefs() error {
 	info := m.pkg.TypesInfo
 	scope := m.pkg.Types.Scope()
 	var err error
-	ast.Inspect(m.decl, func(n ast.Node) bool {
-		id, ok := n.(*ast.Ident)
-		if !ok || err != nil {
-			return err == nil
-		}
-		if o := info.Uses[id]; o != nil && o.Parent() == scope && !m.is(o) {
-			err = refactor.Refusef("%s refers to %s, declared in package %s at %s; move that first (or with it), since package %s cannot import %s back",
-				m.obj.Name(), o.Name(), m.pkg.Name, m.ws.Position(o.Pos()), m.dest.Name, m.pkg.Name)
-		}
-		return true
-	})
+	for _, d := range m.decls {
+		ast.Inspect(d.decl, func(n ast.Node) bool {
+			id, ok := n.(*ast.Ident)
+			if !ok || err != nil {
+				return err == nil
+			}
+			if o := info.Uses[id]; o != nil && o.Parent() == scope && !m.is(o) {
+				err = refactor.Refusef("%s refers to %s, declared in package %s at %s; move that first (or with it), since package %s cannot import %s back",
+					d.obj.Name(), o.Name(), m.pkg.Name, m.ws.Position(o.Pos()), m.dest.Name, m.pkg.Name)
+			}
+			return true
+		})
+	}
 	return err
 }
 
@@ -197,10 +221,11 @@ func (m *mover) updateReferences() (map[string]bool, int, error) {
 				return true
 			})
 			for id, o := range p.TypesInfo.Uses {
-				if !m.is(o) || id.Pos() < f.FileStart || id.Pos() >= f.FileEnd {
+				d := m.movedOf(o)
+				if d == nil || id.Pos() < f.FileStart || id.Pos() >= f.FileEnd {
 					continue
 				}
-				if off := m.off(id.Pos()); path == m.path && m.start <= off && off < m.end {
+				if path == m.path && m.inMoved(m.off(id.Pos())) {
 					continue // inside the moved code
 				}
 				fe, err := m.fileFor(path)
@@ -224,21 +249,32 @@ func (m *mover) updateReferences() (map[string]bool, int, error) {
 					from = sel.Pos()
 					fe.cuts = append(fe.cuts, [2]int{m.off(sel.X.Pos()), m.off(sel.X.End())})
 				}
-				text := m.newName
+				text := d.newName
 				if !inDest {
 					users[p.PkgPath] = true
+					d.usedOutside = true
 					q, err := fe.adder.Name(m.dest.Types)
 					if err != nil {
-						return nil, 0, refactor.Refusef("%s refers to %s, but cannot import package %s, %v", m.ws.Rel(path), m.obj.Name(), m.dest.PkgPath, err)
+						return nil, 0, refactor.Refusef("%s refers to %s, but cannot import package %s, %v", m.ws.Rel(path), d.obj.Name(), m.dest.PkgPath, err)
 					}
 					fe.needs[m.dest.PkgPath] = true
-					text = q + "." + m.newName
+					text = q + "." + d.newName
 				}
 				fe.edits = append(fe.edits, edit.TextEdit{Start: m.off(from), End: m.off(id.End()), NewText: text})
 			}
 		}
 	}
 	return users, refs, nil
+}
+
+// inMoved reports whether a source file offset is in the moved code.
+func (m *mover) inMoved(off int) bool {
+	for _, d := range m.decls {
+		if d.start <= off && off < d.end {
+			return true
+		}
+	}
+	return false
 }
 
 // checkNoCycle refuses a move after which the destination would depend on

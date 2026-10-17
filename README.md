@@ -31,7 +31,8 @@ model reads before choosing the next refactoring. That loop is the iteration.
 - **Step 4 (in progress):** refactorings that prepare a feature change.
   `add_parameter`, `remove_parameter` and `move_parameter` are done, for
   functions and methods, exported or not. `move_declaration` moves a
-  declaration to another file, of its package or another one.
+  declaration (with the helpers it uses, if asked) to another file, of its
+  package or another one.
 - **Step 5 (later):** edits, steps that change behavior on purpose (see
   "Edits"). `create_file` is done; the candidates are in `docs/edits.md`.
 
@@ -53,9 +54,9 @@ hand or a tool got in the way.
 2. **Moving a declaration** to another file or package, updating its
    references (and renaming it on the way when it changes package).
    *`move_declaration` done, within a package and to another one (see
-   "Move declaration: what it checks"); next: grouped declarations, a type
-   with its methods, several declarations at once (so code that uses its
-   neighbours can move with them), and creating the package.*
+   "Move declaration: what it checks"), with several declarations of a file
+   at once (`also`); next: grouped declarations, a type with its methods,
+   declarations from several files, and creating the package.*
 3. **Evidence from real use.** Keep the friction log during normal work.
    Later, a comparison: the same small stories done with and without the
    tools, comparing the size of the hand-written edits, test failures and
@@ -886,6 +887,19 @@ Refused as well:
 - a `//go:embed` variable;
 - code that uses a dot import.
 
+### Several declarations at once
+
+`also` names other top-level declarations of the same file (functions,
+types, variables and constants, not methods) to move with it, e.g. the
+helpers it calls. They go to the destination together, in their source
+order, each held to the same checks; they keep their names. To another
+package this lets code that uses its neighbours move: references among the
+moved declarations stay unqualified. A declaration in `also` that stays
+unexported but is still used outside the new package is refused; rename it
+first. Refused: a name the package does not declare at top level, and one
+declared in another file (moving from several files at once is not
+supported yet).
+
 ### To another package
 
 When `to_file` is in another directory, the declaration moves to the
@@ -902,7 +916,8 @@ Refused, besides the checks above:
 - **what moves:** a method (it must stay with its type), a type with
   methods, a declaration of several names (`var a, b = 1, 2`), and code
   that uses other top-level declarations of its package: the new package
-  would have to import the old one, which imports it (move those first);
+  would have to import the old one, which imports it (move those first,
+  or with it in `also`);
 - **where:** a directory without a Go package (creating one is not
   supported yet), a test file on either side, a file with build
   constraints, a name the package already declares;

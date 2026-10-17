@@ -114,3 +114,32 @@ that uses its neighbours.
 **Three statements replaced by a call, by hand.** After adding `docOf`,
 `checkDecl` still computed the same doc comment in three places. Replacing
 them was a hand edit. Gap: `replace_statements`, proposed among the edits.
+
+## 2026-10-17: moving several declarations at once (`also`)
+
+**Splitting a struct in two, by hand.** `mover` held one declaration's
+fields (`decl`, `obj`, `start`, `end`, `newName`) next to the move's. They
+moved into a new `moved` type, embedded in `mover` so every `m.obj` kept
+compiling, with `decls []*moved` beside it. Gap: no tool extracts fields
+into a new type (an "extract struct" / introduce parameter object
+refactoring); embedding made it a two-line hand edit here, but in general
+it touches every use.
+
+**`add_parameter` refused a value the body reads anyway.** Giving
+`checkDecl`, `deleteDecl` and `code` a `d *moved` parameter, passing
+`m.moved`, was refused: `m.moved` reads through a pointer and could panic.
+True, but each body dereferences `m` at once, so the panic would happen
+anyway. Done by hand, along with the body's switch from `m.decl` to
+`d.decl`. Gaps: `add_parameter` could accept a field read through a
+pointer the body dereferences before any effect; and no tool turns a
+use of state (`m.decl`) into a parameter that is passed that state
+(introduce parameter).
+
+**Wrapping code in a loop, by hand.** Each check that handled the one
+declaration became a `for _, d := range m.decls` loop around the same
+statements. Gap: `introduce_loop`, among the edits (as a refactoring it
+would need to prove the loop runs once).
+
+**What the tools did.** `extract_function` pulled the per-declaration
+checks out of `checkOtherPackage` into `checkCanLeave`, which then gained
+the parameter and the loop by hand.
