@@ -1,8 +1,10 @@
 # go-refactor-mcp
 
-Behavior-preserving Go refactorings exposed as tools for an LLM (Claude or a
-local model through Ollama). The model decides *what* to change; this tool
-guarantees *how* it's changed safely, one step at a time.
+Behavior-preserving Go refactorings, and edits that change behavior on
+purpose, exposed as tools for an LLM (Claude or a local model through
+Ollama). The model decides *what* to change; this tool guarantees *how*
+it's changed safely, one step at a time. The aim is to do nearly all coding
+through these typed steps instead of editing files by hand.
 
 ```
 model ──(tool call: rename {...})──▶ engine: check preconditions
@@ -30,6 +32,8 @@ model reads before choosing the next refactoring. That loop is the iteration.
   `add_parameter`, `remove_parameter` and `move_parameter` are done, for
   functions and methods, exported or not. `move_declaration` moves a
   declaration to another file of its package; to another package is next.
+- **Step 5 (started):** edits, steps that change behavior on purpose (see
+  "Edits"). `create_file` is done.
 
 ## Roadmap
 
@@ -50,20 +54,39 @@ hand or a tool got in the way.
    references (and renaming it on the way when it changes package).
    *`move_declaration` within a package done (see "Move declaration: what
    it checks"); next: to another package, then grouped declarations.*
-3. **Evidence from real use.** Keep the friction log during normal work.
+3. **Edits**, so the change itself is a tool call too, aiming at nearly all
+   coding without editing files by hand. *`create_file` done (see
+   "Edits").* Proposed next, smallest first, each checked to parse and
+   placed by line and name like the refactorings:
+   - `replace_expression`: replace one expression (found as
+     `extract_variable` finds one) with new Go source, reporting a change
+     of type;
+   - `introduce_constant` / `introduce_variable`: declare a new package
+     constant or variable, or a local `name := value` before a statement;
+   - `add_declaration`, `replace_declaration`, `delete_declaration`: a
+     whole top-level function, type, variable or constant;
+   - `insert_statements`, `replace_statements`, `delete_statements`: whole
+     statements of one block, the general case inside a body;
+   - `add_field` (struct) and `add_method` (interface).
+
+   New code that names a package gets its import added, and imports left
+   unused are removed, so no edit needs a separate import step. The
+   friction log records each change still made by hand, which decides the
+   order.
+4. **Evidence from real use.** Keep the friction log during normal work.
    Later, a comparison: the same small stories done with and without the
    tools, comparing the size of the hand-written edits, test failures and
    review effort. `refactor-eval`'s metrics and throwaway copies can carry
    over (see "Measuring whether the tools help"); its first runs showed that
    complexity alone rewards bad extractions, and that applied counts must
    subtract undos.
-4. **`inline_function`:** the error-exit shape
+5. **`inline_function`:** the error-exit shape
    (`x, err := f(); if err != nil { return ..., err }`), generic and variadic
    functions, inlining every call at once, and callees from other packages
    (see "Inline function: what it checks").
-5. **`rename` gaps:** imports, labels, embedded fields and interface methods
+6. **`rename` gaps:** imports, labels, embedded fields and interface methods
    (see "Rename: what it checks").
-6. **Packaging:** tagged releases, so `go install ...@latest` gets a stable
+7. **Packaging:** tagged releases, so `go install ...@latest` gets a stable
    version, and possibly a Claude Code plugin for a one-step install.
 
 Parked: the Ollama loop (`refactor-agent`). It works and stays, but Claude
@@ -100,6 +123,8 @@ internal/
     invertif/                 invert_if, remove_else + testdata + opt-in stress test
     changesig/                add/remove/move_parameter + testdata/<tool>/
     movedecl/                 move_declaration + testdata
+  edits/
+    createfile/               create_file + testdata
 ```
 
 ## Getting started
@@ -157,6 +182,7 @@ Tools:
 |---|---|
 | `inspect` | No args: module overview. `file`: outline (line ranges, complexity, nesting) + numbered source. `function` or `start_line`/`end_line` to narrow. |
 | `rename`, `extract_variable`, `inline_variable`, `extract_function`, `inline_function`, `invert_if`, `remove_else`, `add_parameter`, `remove_parameter`, `move_parameter`, `move_declaration` (and every future refactoring) | Applies one step; returns `APPLIED` + diff, or `REFUSED` + reason (nothing changed). |
+| `create_file` (and every future edit) | Applies one step that may change behavior; like a refactoring, it must leave code that type-checks. Returns `APPLIED` + diff, or `REFUSED` + reason (nothing changed). |
 | `undo` | Reverts the last applied step; repeatable. |
 | `check` | Type-check status; `run_tests: true` also runs `go test`. |
 
@@ -251,6 +277,7 @@ refactor -n add_parameter file=main.go line=9 name=copyTree parameter=skip type=
 refactor -n remove_parameter file=main.go line=9 name=copyTree parameter=skip
 refactor -n move_parameter file=main.go line=9 name=copyTree parameter=dst before=src
 refactor -n move_declaration file=main.go line=40 name=copyTree to_file=copy.go
+refactor -n create_file file=half_test.go content="$(cat half_test.go.draft)"
 ```
 
 Exit status: `0` applied/previewed, `2` refused, `1` error.
@@ -866,6 +893,31 @@ Refused as well:
 - code that uses a dot import;
 - a destination in another directory: moving to another package is next on
   the roadmap.
+
+## Edits
+
+A refactoring keeps behavior; an edit changes it, on purpose: it is the
+step that adds or changes a feature. Edits implement `refactor.Edit`, and
+the engine holds them to the same rule as refactorings: the code
+type-checks before every step and after it. An edit whose result would not
+type-check is rolled back and refused, listing the errors (which come from
+the code it was given, so the message asks for different code rather than
+reporting a bug in the tool). Every edit can be undone.
+
+So writing a failing test first takes two steps: declare what the test
+calls (a stub that compiles), then create the test, which compiles and
+fails.
+
+### create_file
+
+`create_file` creates a file with the given `content` at `file`, relative
+to the module root. A Go file must parse, and its package clause must match
+the other Go files in its directory (a test file may use the `_test`
+package; any name is fine in a directory without Go files); it is gofmt-ed.
+Other files are written as given. Refused: a file that exists (change it
+with the other tools), a directory that does not exist, a path outside the
+module, or a file whose code does not type-check (a test that calls
+something not declared yet). Undo deletes the file.
 
 ## Testing
 

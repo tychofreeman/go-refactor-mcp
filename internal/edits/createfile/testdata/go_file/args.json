@@ -1,0 +1,1 @@
+{"file": "b.go", "content": "package m\nfunc B() int {return A()+1}\n"}

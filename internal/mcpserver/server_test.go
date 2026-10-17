@@ -86,7 +86,7 @@ func mustContain(t *testing.T, label, got string, wants ...string) {
 
 func TestToolsAndInstructions(t *testing.T) {
 	cs, _ := setup(t)
-	if !strings.Contains(cs.InitializeResult().Instructions, "ONE refactoring per call") {
+	if !strings.Contains(cs.InitializeResult().Instructions, "ONE tool per call") {
 		t.Error("server instructions not sent")
 	}
 	res, err := cs.ListTools(context.Background(), nil)
@@ -97,7 +97,7 @@ func TestToolsAndInstructions(t *testing.T) {
 	for _, tool := range res.Tools {
 		names[tool.Name] = tool
 	}
-	for _, want := range []string{"rename", "extract_variable", "inline_variable", "inspect", "undo", "check"} {
+	for _, want := range []string{"rename", "extract_variable", "inline_variable", "move_declaration", "create_file", "inspect", "undo", "check"} {
 		if names[want] == nil {
 			t.Errorf("tool %q not listed", want)
 		}
@@ -193,4 +193,27 @@ func TestBrokenCodeIsReported(t *testing.T) {
 	mustContain(t, "check", out, "TYPE-CHECK FAILED", "calc/calc.go:3")
 	out, _ = call(t, cs, "rename", map[string]any{"file": "calc/calc.go", "line": 3, "name": "Rate", "new_name": "Factor"})
 	mustContain(t, "rename on broken code", out, "REFUSED", "does not type-check")
+}
+
+func TestCreateFileThenUndo(t *testing.T) {
+	cs, dir := setup(t)
+	path := filepath.Join(dir, "calc/half_test.go")
+	broken := "package calc\n\nimport \"testing\"\n\nfunc TestHalf(t *testing.T) {\n\tif Half(4) != 2 {\n\t\tt.Fatal()\n\t}\n}\n"
+	out, _ := call(t, cs, "create_file", map[string]any{"file": "calc/half_test.go", "content": broken})
+	if !strings.Contains(out, "REFUSED create_file") || !strings.Contains(out, "undefined: Half") {
+		t.Fatalf("want a file that does not type-check refused with its error, got:\n%s", out)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("refused file was left on disk: %v", err)
+	}
+	ok := strings.ReplaceAll(broken, "Half(4) != 2", "Apply(2) != 2*Rate")
+	if out, _ := call(t, cs, "create_file", map[string]any{"file": "calc/half_test.go", "content": ok}); !strings.Contains(out, "APPLIED create_file") {
+		t.Fatalf("want the file created, got:\n%s", out)
+	}
+	if out, _ := call(t, cs, "undo", map[string]any{}); !strings.Contains(out, "half_test.go") {
+		t.Errorf("want undo to remove the file, got:\n%s", out)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Errorf("file still there after undo: %v", err)
+	}
 }
