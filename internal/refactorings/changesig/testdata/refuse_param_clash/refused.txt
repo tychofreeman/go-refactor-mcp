@@ -1,0 +1,1 @@
+inc already has a parameter or result named "n"

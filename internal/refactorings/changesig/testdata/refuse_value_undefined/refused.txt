@@ -1,0 +1,1 @@
+the value cfg.OutDir does not work at the call at a.go:9:29: undefined: cfg
