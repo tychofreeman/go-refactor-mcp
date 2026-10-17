@@ -27,7 +27,8 @@ model reads before choosing the next refactoring. That loop is the iteration.
   types, and generics). `invert_if` (with guard clauses) and `remove_else`
   are done. `inline_function` has a first version (see the roadmap).
 - **Step 4 (in progress):** refactorings that prepare a feature change.
-  `add_parameter` and `remove_parameter` are done; `move_parameter` is next.
+  `add_parameter`, `remove_parameter` and `move_parameter` are done;
+  exported methods are next.
 
 ## Roadmap
 
@@ -39,10 +40,10 @@ feature. The order below follows what that workflow needed in practice;
 hand or a tool got in the way.
 
 1. **Changing a signature** at every call site. The most common by-hand
-   step so far. *`add_parameter` and `remove_parameter` done (see "Add
-   parameter: what it checks" and "Remove parameter: what it checks");
-   next: `move_parameter`, and exported
-   methods (which needs checking every interface they could implement).*
+   step so far. *`add_parameter`, `remove_parameter` and `move_parameter`
+   done (see "Add parameter", "Remove parameter" and "Move parameter: what
+   it checks"); next: exported methods (which needs checking every
+   interface they could implement).*
 2. **Moving a declaration** to another file or package, updating its
    references (and renaming it on the way when it changes package).
 3. **Evidence from real use.** Keep the friction log during normal work.
@@ -93,7 +94,7 @@ internal/
     extractfunc/              extract_function + testdata + opt-in stress test
     inlinefunc/               inline_function + testdata + opt-in stress and round-trip tests
     invertif/                 invert_if, remove_else + testdata + opt-in stress test
-    changesig/                add_parameter, remove_parameter + testdata/<tool>/
+    changesig/                add/remove/move_parameter + testdata/<tool>/
 ```
 
 ## Getting started
@@ -150,7 +151,7 @@ Tools:
 | Tool | What it does |
 |---|---|
 | `inspect` | No args: module overview. `file`: outline (line ranges, complexity, nesting) + numbered source. `function` or `start_line`/`end_line` to narrow. |
-| `rename`, `extract_variable`, `inline_variable`, `extract_function`, `inline_function`, `invert_if`, `remove_else`, `add_parameter`, `remove_parameter` (and every future refactoring) | Applies one step; returns `APPLIED` + diff, or `REFUSED` + reason (nothing changed). |
+| `rename`, `extract_variable`, `inline_variable`, `extract_function`, `inline_function`, `invert_if`, `remove_else`, `add_parameter`, `remove_parameter`, `move_parameter` (and every future refactoring) | Applies one step; returns `APPLIED` + diff, or `REFUSED` + reason (nothing changed). |
 | `undo` | Reverts the last applied step; repeatable. |
 | `check` | Type-check status; `run_tests: true` also runs `go test`. |
 
@@ -243,6 +244,7 @@ refactor -n invert_if file=main.go line=14
 refactor -n remove_else file=main.go line=20
 refactor -n add_parameter file=main.go line=9 name=copyTree parameter=skip type=string value=cfg.OutDir
 refactor -n remove_parameter file=main.go line=9 name=copyTree parameter=skip
+refactor -n move_parameter file=main.go line=9 name=copyTree parameter=dst before=src
 ```
 
 Exit status: `0` applied/previewed, `2` refused, `1` error.
@@ -768,6 +770,34 @@ values, method expressions, exported and interface methods, and so on):
   is a dropped argument (or, for an import, the removed parameter's type),
   since it would then be unused and not compile. Removing the import too is
   a possible follow-up.
+
+## Move parameter: what it checks
+
+`move_parameter` moves a parameter to another position and moves its
+argument to match at every call in the workspace. Identify the function as
+for `add_parameter`; `parameter` is the one to move, and `before` the one it
+should go just before (by default the end, or just before a variadic
+parameter). Next to parameters of the same type it joins their group, as
+`add_parameter` does.
+
+Go evaluates a call's arguments left to right, so moving an argument
+changes when it is evaluated relative to the arguments it passes over. The
+move is refused at a call where that could matter, for the moved argument
+and any argument it passes over:
+
+- one has side effects (a call, a channel receive) and the other reads a
+  variable, whose value the effect could change;
+- both could have side effects or panic, which would then happen in the
+  other order.
+
+So `f(next(), 2)` can become `f(2, next())`, and `f(x, *p)` can become
+`f(*p, x)`, but `f(next(), count)` cannot change order.
+
+Refused, besides the function checks `add_parameter` makes: a variadic
+parameter, which must stay last; a parameter that is already in that
+position; a call that passes another call's results; and a moved argument
+that contains another call of the same function (`f(1, f(2, 3))`), whose
+own edit would have to move with it.
 
 ## Testing
 

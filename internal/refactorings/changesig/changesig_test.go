@@ -13,3 +13,7 @@ func TestGoldenAddParameter(t *testing.T) {
 func TestGoldenRemoveParameter(t *testing.T) {
 	refactortest.Run(t, NewRemoveParameter(), "testdata/remove_parameter")
 }
+
+func TestGoldenMoveParameter(t *testing.T) {
+	refactortest.Run(t, NewMoveParameter(), "testdata/move_parameter")
+}

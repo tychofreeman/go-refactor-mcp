@@ -105,20 +105,10 @@ func (*RemoveParameter) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 	}
 
 	var fes []edit.FileEdit
-	files := map[string]bool{}
 	for _, c := range cuts {
-		files[c.path] = true
-		fes = append(fes, edit.FileEdit{Path: c.path, Edits: []edit.TextEdit{{Start: c.start, End: c.end}}})
+		fes = append(fes, c.fileEdit())
 	}
-	plan := &refactor.Plan{
-		Summary: fmt.Sprintf("removed parameter %q from %s (%d call%s updated, %d file%s)",
-			a.Parameter, t.obj.Name(), len(t.calls), plural(len(t.calls)), len(files), plural(len(files))),
-		Edits: edit.Merge(fes),
-	}
-	if t.obj.Exported() {
-		plan.Notes = append(plan.Notes, fmt.Sprintf("%s is exported: calls in other modules are not updated", t.obj.Name()))
-	}
-	return plan, nil
+	return t.newPlan(fmt.Sprintf("removed parameter %q from %s", a.Parameter, t.obj.Name()), fes), nil
 }
 
 // paramIndex returns the index of the named parameter in the flattened
@@ -205,6 +195,10 @@ func (t *target) argCut(ce *ast.CallExpr, at int, variadic bool) cut {
 
 func (t *target) cut(from, to token.Pos) cut {
 	return cut{path: t.ws.Fset.Position(from).Filename, start: t.off(from), end: t.off(to)}
+}
+
+func (c cut) fileEdit() edit.FileEdit {
+	return edit.FileEdit{Path: c.path, Edits: []edit.TextEdit{{Start: c.start, End: c.end}}}
 }
 
 // checkNothingLeftUnused refuses cuts that delete every use of a local

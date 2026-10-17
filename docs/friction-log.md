@@ -62,3 +62,20 @@ by the check.
 shared by both refactorings, so it moved from `addparam.go` to `common.go`
 by hand. Gap: the move-declaration refactoring (roadmap item 2) within a
 package, too.
+
+## 2026-10-17: adding `move_parameter`
+
+**Merging two similar function endings.** `add_parameter` and
+`remove_parameter` both ended `Plan` the same way (count the files, write
+the summary, merge the edits, note an exported function), differing only
+in the summary's first words. Moving that into a shared `newPlan(what,
+edits)` was done by hand: `extract_function` takes one run of statements,
+and the file count was computed inline from data each built differently.
+Gap: none of the tools parameterize and merge near-duplicate code; an
+extract that turns a differing expression into a parameter would cover it.
+
+**`move_parameter` is mostly the other two.** The cut of the old parameter
+and argument came from `remove_parameter`, the insertion from
+`add_parameter`; the new code is the evaluation-order check. The earlier
+refactorings (`checkNoSpread`, `paramCut`/`argCut`, `newPlan`) made the
+third tool cheap, which is the workflow working as intended.

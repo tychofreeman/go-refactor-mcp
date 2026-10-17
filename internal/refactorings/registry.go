@@ -25,6 +25,7 @@ func All() []refactor.Refactoring {
 		invertif.NewRemoveElse(),
 		changesig.NewAddParameter(),
 		changesig.NewRemoveParameter(),
+		changesig.NewMoveParameter(),
 	}
 }
 
