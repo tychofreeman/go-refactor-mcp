@@ -93,3 +93,21 @@ full reload for a new or deleted file.
 also shows one still waiting: `unsafeValue`, now used by all three parameter
 refactorings, lives in `addparam.go`. Moving it carries its `analysis`
 import along and drops it from `addparam.go`.
+
+## 2026-10-17: moving a declaration to another package
+
+**First real `move_declaration`.** `unsafeValue`, shared by the three
+parameter refactorings, moved from `addparam.go` to `common.go` in one MCP
+call, its import with it. No by-hand work.
+
+**Import removal moved into `imports.Adder` by hand.** A cross-package move
+edits imports in many files, and one file can lose an import and gain
+another in the same block, so removal had to join addition in one place
+(`Adder.Remove`, with `Edits` producing both). That turned a function of
+`movedecl` into a method of a type in another package. Gap: no tool turns
+a function into a method, and `move_declaration` does not yet move code
+that uses its neighbours.
+
+**Three statements replaced by a call, by hand.** After adding `docOf`,
+`checkDecl` still computed the same doc comment in three places. Replacing
+them was a hand edit. Gap: `replace_statements`, proposed among the edits.
