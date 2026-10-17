@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // script is a fake model: each turn calls the next function with the
@@ -193,5 +194,37 @@ func TestUnchanged(t *testing.T) {
 	got, _ := os.ReadFile(filepath.Join(dir, "m.go"))
 	if rep.TestsBefore != "passed" || rep.TestsAfter != "failed" || !rep.RolledBack || rep.Diff != "" || string(got) != src {
 		t.Errorf("report = %+v\nm.go:\n%s", rep, got)
+	}
+}
+
+// slowModel applies one step, then blocks until the run's context ends,
+// like a local model that takes longer than -timeout.
+type slowModel struct{ n int }
+
+func (m *slowModel) Chat(ctx context.Context, msgs []Message, tools []ToolDef) (Message, error) {
+	m.n++
+	if m.n == 1 {
+		return Message{Role: "assistant", ToolCalls: []ToolCall{call("invert_if", `{"file":"m.go","line":6}`)}}, nil
+	}
+	<-ctx.Done()
+	return Message{}, ctx.Err()
+}
+
+// When the run times out, -revert must still undo the applied steps: the
+// clean-up cannot use the expired context.
+func TestRunRevertAfterTimeout(t *testing.T) {
+	dir := module(t, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	rep, err := Run(ctx, Config{Dir: dir, Goal: "x", Model: &slowModel{}, Revert: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(filepath.Join(dir, "m.go"))
+	if rep.Applied["invert_if"] != 1 || !rep.RolledBack || rep.UndoFailed != "" || string(got) != src {
+		t.Errorf("report = %+v\nm.go:\n%s", rep, got)
+	}
+	if !strings.Contains(rep.StopReason, "ran out of time") {
+		t.Errorf("stop reason = %q", rep.StopReason)
 	}
 }

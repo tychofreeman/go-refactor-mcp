@@ -11,6 +11,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -67,6 +68,7 @@ type Report struct {
 
 	TestsBefore, TestsAfter string // "passed", "failed" or "" (not run)
 	RolledBack              bool   // every applied step was undone
+	UndoFailed              string // why undoing failed (the files may still be changed), or ""
 	Diff                    string // the combined change, against the starting files
 }
 
@@ -91,7 +93,10 @@ func Run(ctx context.Context, cfg Config) (*Report, error) {
 	}
 	r := &runner{cfg: cfg, rep: &Report{Applied: map[string]int{}, Refused: map[string]int{}}}
 
-	cs, closeAll, err := connect(ctx, cfg.Dir, cfg.Patterns)
+	// The session and the clean-up at the end (tests, undo) must outlive a
+	// cancelled or timed-out run: only the model loop stops with ctx.
+	cleanup := context.WithoutCancel(ctx)
+	cs, closeAll, err := connect(cleanup, cfg.Dir, cfg.Patterns)
 	if err != nil {
 		return nil, err
 	}
@@ -106,16 +111,16 @@ func Run(ctx context.Context, cfg Config) (*Report, error) {
 	}
 	r.loop(ctx)
 	if cfg.Tests {
-		r.rep.TestsAfter = r.runTests(ctx, "after")
+		tctx, cancel := context.WithTimeout(cleanup, 15*time.Minute)
+		r.rep.TestsAfter = r.runTests(tctx, "after")
+		cancel()
 		if r.rep.TestsBefore == "passed" && r.rep.TestsAfter != "passed" && !cfg.Keep {
 			r.logf("tests passed before and fail now; undoing every applied step")
-			r.undoAll(ctx, "tests failed after the run")
-			r.rep.RolledBack = true
+			r.undoAll(cleanup, "tests failed after the run")
 		}
 	}
-	if cfg.Revert && !r.rep.RolledBack {
-		r.undoAll(ctx, "revert requested")
-		r.rep.RolledBack = true
+	if cfg.Revert && !r.rep.RolledBack && r.rep.UndoFailed == "" {
+		r.undoAll(cleanup, "revert requested")
 	}
 	r.rep.Diff, err = diffSince(root, before)
 	if err != nil {
@@ -123,7 +128,7 @@ func Run(ctx context.Context, cfg Config) (*Report, error) {
 	}
 	r.event("end", map[string]any{"stop_reason": r.rep.StopReason, "steps": r.rep.Steps, "applied": r.rep.Applied,
 		"refused": r.rep.Refused, "errors": r.rep.Errors, "tests_before": r.rep.TestsBefore, "tests_after": r.rep.TestsAfter,
-		"rolled_back": r.rep.RolledBack})
+		"rolled_back": r.rep.RolledBack, "undo_failed": r.rep.UndoFailed})
 	return r.rep, nil
 }
 
@@ -201,6 +206,16 @@ func (r *runner) loop(ctx context.Context) {
 		}
 		start := time.Now()
 		reply, err := r.cfg.Model.Chat(ctx, msgs, r.tools)
+		if err != nil && errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			r.rep.StopReason = "ran out of time (the -timeout limit) while waiting for the model"
+			r.event("model_error", map[string]any{"error": err.Error(), "seconds": time.Since(start).Seconds()})
+			return
+		}
+		if err != nil && ctx.Err() != nil {
+			r.rep.StopReason = "cancelled"
+			r.event("model_error", map[string]any{"error": err.Error(), "seconds": time.Since(start).Seconds()})
+			return
+		}
 		if err != nil {
 			r.rep.StopReason = "model error: " + err.Error()
 			r.event("model_error", map[string]any{"error": err.Error()})
@@ -208,7 +223,9 @@ func (r *runner) loop(ctx context.Context) {
 		}
 		reply.Role = "assistant"
 		msgs = append(msgs, reply)
-		r.event("model", map[string]any{"content": reply.Content, "tool_calls": reply.ToolCalls, "seconds": time.Since(start).Seconds()})
+		secs := time.Since(start).Seconds()
+		r.event("model", map[string]any{"content": reply.Content, "tool_calls": reply.ToolCalls, "seconds": secs})
+		r.logf("   model replied in %.0fs", secs)
 		if len(reply.ToolCalls) == 0 {
 			r.rep.StopReason = "the model finished"
 			r.rep.Summary = strings.TrimSpace(reply.Content)
@@ -325,20 +342,30 @@ func (r *runner) runTests(ctx context.Context, when string) string {
 	return result
 }
 
-// undoAll undoes applied steps until there is nothing left to undo.
+// undoAll undoes applied steps until there is nothing left to undo, and
+// records whether that worked.
 func (r *runner) undoAll(ctx context.Context, why string) {
 	for i := 0; i < 1000; i++ {
-		res, err := r.cs.CallTool(ctx, &mcp.CallToolParams{Name: "undo", Arguments: map[string]any{}})
+		cctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+		res, err := r.cs.CallTool(cctx, &mcp.CallToolParams{Name: "undo", Arguments: map[string]any{}})
+		cancel()
 		if err != nil {
 			r.event("undo", map[string]any{"why": why, "error": err.Error()})
+			r.rep.UndoFailed = err.Error()
 			return
 		}
 		text := contentText(res)
 		r.event("undo", map[string]any{"why": why, "result": firstLine(text)})
 		if !strings.HasPrefix(text, "UNDONE") {
+			if strings.HasPrefix(text, "Nothing to undo") {
+				r.rep.RolledBack = true
+			} else {
+				r.rep.UndoFailed = firstLine(text)
+			}
 			return
 		}
 	}
+	r.rep.UndoFailed = "gave up after 1000 undo steps"
 }
 
 func (r *runner) event(kind string, fields map[string]any) {

@@ -41,7 +41,7 @@ func main() {
 	revert := flag.Bool("revert", false, "undo every applied step at the end (to try a model without changing the code)")
 	transcript := flag.String("transcript", "", "write a JSON-lines transcript of the run to this file")
 	quiet := flag.Bool("q", false, "do not print progress")
-	timeout := flag.Duration("timeout", 30*time.Minute, "give up after this long")
+	timeout := flag.Duration("timeout", 2*time.Hour, "stop asking the model after this long (local models can take minutes per turn); clean-up (tests, -revert) still runs")
 	flag.Parse()
 
 	if *model == "" {
@@ -82,7 +82,7 @@ func main() {
 		log.Fatalf("refactor-agent: %v", err)
 	}
 	printReport(os.Stdout, rep)
-	if rep.RolledBack && !*revert {
+	if rep.UndoFailed != "" || (rep.RolledBack && !*revert) {
 		os.Exit(1)
 	}
 }
@@ -111,6 +111,9 @@ func printReport(w io.Writer, rep *agent.Report) {
 	}
 	if rep.RolledBack {
 		fmt.Fprintln(w, "all applied steps were undone")
+	}
+	if rep.UndoFailed != "" {
+		fmt.Fprintf(w, "WARNING: undoing the applied steps failed (%s); the files below may still be changed\n", rep.UndoFailed)
 	}
 	if rep.Summary != "" {
 		fmt.Fprintf(w, "\nmodel's summary:\n%s\n", rep.Summary)

@@ -91,6 +91,9 @@ func (o *Ollama) Chat(ctx context.Context, messages []Message, tools []ToolDef) 
 	}
 	resp, err := client.Do(hr)
 	if err != nil {
+		if ctx.Err() != nil {
+			return Message{}, fmt.Errorf("ollama: %w", err)
+		}
 		return Message{}, fmt.Errorf("ollama: %w (is it running at %s?)", err, o.Host)
 	}
 	defer resp.Body.Close()
