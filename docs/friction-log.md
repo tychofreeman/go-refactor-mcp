@@ -9,6 +9,9 @@ the way, or a tool result that was correct but awkward. It is the evidence
 for what to build next, and for whether the workflow helps.
 
 Each entry: the story, the refactoring wanted, what happened, and the gap.
+A hand edit that changed behavior on purpose (new code, a changed
+statement) is logged too, with the edit that would have covered it; the
+candidates and their evidence are collected in `docs/edits.md`.
 
 ## 2026-10-17: adding `refactor-eval`
 
