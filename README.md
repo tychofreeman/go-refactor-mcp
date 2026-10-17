@@ -32,8 +32,8 @@ model reads before choosing the next refactoring. That loop is the iteration.
   `add_parameter`, `remove_parameter` and `move_parameter` are done, for
   functions and methods, exported or not. `move_declaration` moves a
   declaration to another file, of its package or another one.
-- **Step 5 (started):** edits, steps that change behavior on purpose (see
-  "Edits"). `create_file` is done.
+- **Step 5 (later):** edits, steps that change behavior on purpose (see
+  "Edits"). `create_file` is done; the candidates are in `docs/edits.md`.
 
 ## Roadmap
 
@@ -56,40 +56,31 @@ hand or a tool got in the way.
    "Move declaration: what it checks"); next: grouped declarations, a type
    with its methods, several declarations at once (so code that uses its
    neighbours can move with them), and creating the package.*
-3. **Edits**, so the change itself is a tool call too, aiming at nearly all
-   coding without editing files by hand. *`create_file` done (see
-   "Edits").* Proposed next, smallest first, each checked to parse and
-   placed by line and name like the refactorings:
-   - `replace_expression`: replace one expression (found as
-     `extract_variable` finds one) with new Go source, reporting a change
-     of type;
-   - `introduce_constant` / `introduce_variable`: declare a new package
-     constant or variable, or a local `name := value` before a statement;
-   - `add_declaration`, `replace_declaration`, `delete_declaration`: a
-     whole top-level function, type, variable or constant;
-   - `insert_statements`, `replace_statements`, `delete_statements`: whole
-     statements of one block, the general case inside a body;
-   - `add_field` (struct) and `add_method` (interface).
-
-   New code that names a package gets its import added, and imports left
-   unused are removed, so no edit needs a separate import step. The
-   friction log records each change still made by hand, which decides the
-   order.
-4. **Evidence from real use.** Keep the friction log during normal work.
+3. **Evidence from real use.** Keep the friction log during normal work.
    Later, a comparison: the same small stories done with and without the
    tools, comparing the size of the hand-written edits, test failures and
    review effort. `refactor-eval`'s metrics and throwaway copies can carry
    over (see "Measuring whether the tools help"); its first runs showed that
    complexity alone rewards bad extractions, and that applied counts must
    subtract undos.
-5. **`inline_function`:** the error-exit shape
+4. **`inline_function`:** the error-exit shape
    (`x, err := f(); if err != nil { return ..., err }`), generic and variadic
    functions, inlining every call at once, and callees from other packages
    (see "Inline function: what it checks").
+5. **Statement refactorings**, the behavior-preserving forms of edits in
+   `docs/edits.md`: slide a statement up or down past an independent one,
+   introduce a plain block, and move a statement into or out of one; and
+   `remove_dead_code`, which deletes only what cannot matter (an unused
+   declaration, a statement with no effect). Deleting a statement for its
+   effect is the edit `delete_statement`.
 6. **`rename` gaps:** imports, labels, embedded fields and interface methods
    (see "Rename: what it checks").
 7. **Packaging:** tagged releases, so `go install ...@latest` gets a stable
    version, and possibly a Claude Code plugin for a one-step install.
+
+Later: **edits**, steps that change behavior on purpose, so the change
+itself is a tool call too. `create_file` is done; `docs/edits.md` lists the
+candidates and the evidence for each, gathered from the friction log.
 
 Parked: the Ollama loop (`refactor-agent`). It works and stays, but Claude
 through MCP is the priority.
