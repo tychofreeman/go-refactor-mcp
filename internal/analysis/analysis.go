@@ -27,18 +27,66 @@ type Func struct {
 	// Captured holds locals referenced inside a closure that does not
 	// declare them; the closure may read or write them at any time.
 	Captured map[*types.Var]bool
+	// CapturedAsync holds the locals in Captured that some closure not
+	// known to be synchronous references. A synchronous closure (see
+	// SyncLit) runs only while the statement creating it runs, so it
+	// cannot touch the variable while other code runs.
+	CapturedAsync map[*types.Var]bool
 	// Modified lists where each local is written: assignment (also of a
 	// field or array element of it), ++/--, or a range loop with =.
 	Modified map[*types.Var][]ast.Node
+}
+
+// syncCallees call a function argument only before they return, and
+// never keep it.
+var syncCallees = map[string]bool{
+	"go/ast.Inspect": true,
+	"sort.Slice":     true, "sort.SliceStable": true, "sort.Search": true, "sort.SliceIsSorted": true,
+	"slices.SortFunc": true, "slices.SortStableFunc": true, "slices.IsSortedFunc": true,
+	"slices.IndexFunc": true, "slices.ContainsFunc": true, "slices.DeleteFunc": true,
+	"slices.CompactFunc": true, "slices.EqualFunc": true, "slices.MaxFunc": true, "slices.MinFunc": true,
+	"slices.BinarySearchFunc": true, "slices.CompareFunc": true,
+	"maps.DeleteFunc": true,
+	"strings.Map":     true, "strings.IndexFunc": true, "strings.LastIndexFunc": true, "strings.ContainsFunc": true,
+	"strings.FieldsFunc": true, "strings.TrimFunc": true, "strings.TrimLeftFunc": true, "strings.TrimRightFunc": true,
+	"bytes.Map": true, "bytes.IndexFunc": true, "bytes.LastIndexFunc": true, "bytes.ContainsFunc": true,
+	"bytes.FieldsFunc": true, "bytes.TrimFunc": true, "bytes.TrimLeftFunc": true, "bytes.TrimRightFunc": true,
+	"path/filepath.Walk": true, "path/filepath.WalkDir": true, "io/fs.WalkDir": true,
+}
+
+// SyncLit reports whether lit, whose parent node is parent, only runs
+// while the statement creating it runs: it is called immediately (not by
+// go or defer), or passed directly to a function known to call it only
+// before returning (sort.Slice, ast.Inspect, ...). goDefer holds the calls
+// of go and defer statements.
+func SyncLit(info *types.Info, lit *ast.FuncLit, parent ast.Node, goDefer map[*ast.CallExpr]bool) bool {
+	call, ok := parent.(*ast.CallExpr)
+	if !ok || goDefer[call] {
+		return false
+	}
+	if ast.Unparen(call.Fun) == lit {
+		return true
+	}
+	fn, ok := info.Uses[IdentOf(call.Fun)].(*types.Func)
+	if !ok || fn.Pkg() == nil || fn.Signature().Recv() != nil {
+		return false
+	}
+	for _, a := range call.Args {
+		if ast.Unparen(a) == lit {
+			return syncCallees[fn.Pkg().Path()+"."+fn.Name()]
+		}
+	}
+	return false
 }
 
 // AnalyzeFunc computes the facts for fn.
 func AnalyzeFunc(info *types.Info, fn ast.Node) *Func {
 	f := &Func{
 		Node: fn, Info: info,
-		Addressed: map[*types.Var]bool{},
-		Captured:  map[*types.Var]bool{},
-		Modified:  map[*types.Var][]ast.Node{},
+		Addressed:     map[*types.Var]bool{},
+		Captured:      map[*types.Var]bool{},
+		CapturedAsync: map[*types.Var]bool{},
+		Modified:      map[*types.Var][]ast.Node{},
 	}
 	address := func(e ast.Expr) {
 		if v := f.RootVar(e); v != nil {
@@ -51,10 +99,32 @@ func AnalyzeFunc(info *types.Info, fn ast.Node) *Func {
 		}
 	}
 	var lits []*ast.FuncLit
+	sync := map[*ast.FuncLit]bool{}
+	goDefer := map[*ast.CallExpr]bool{}
+	var stack []ast.Node
 	ast.Inspect(fn, func(n ast.Node) bool {
+		if n == nil {
+			stack = stack[:len(stack)-1]
+			return false
+		}
+		var parent ast.Node
+		if len(stack) > 0 {
+			parent = stack[len(stack)-1]
+		}
+		stack = append(stack, n)
 		switch n := n.(type) {
+		case *ast.GoStmt:
+			goDefer[n.Call] = true
+		case *ast.DeferStmt:
+			goDefer[n.Call] = true
+		case *ast.ParenExpr:
+			// SyncLit looks through parentheses; keep the call as the parent.
+			if len(stack) > 1 {
+				stack[len(stack)-1] = parent
+			}
 		case *ast.FuncLit:
 			lits = append(lits, n)
+			sync[n] = SyncLit(info, n, parent, goDefer)
 		case *ast.UnaryExpr:
 			if n.Op == token.AND {
 				address(n.X)
@@ -93,6 +163,9 @@ func AnalyzeFunc(info *types.Info, fn ast.Node) *Func {
 			if id, ok := n.(*ast.Ident); ok {
 				if v, ok := info.Uses[id].(*types.Var); ok && f.IsLocal(v) && (v.Pos() < lit.Pos() || v.Pos() >= lit.End()) {
 					f.Captured[v] = true
+					if !sync[lit] {
+						f.CapturedAsync[v] = true
+					}
 				}
 			}
 			return true

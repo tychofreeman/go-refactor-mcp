@@ -149,7 +149,7 @@ func (x *extraction) checkErrorExits(sig *types.Signature) error {
 			return refactor.Refusef("the returns at lines %d and %d return different values besides the error; the call site can only return one set of values", x.line(first.Pos()), x.line(r.Pos()))
 		}
 		if !x.nonNilError(r.Results[n-1], r) {
-			return refactor.Refusef("the return at line %d returns %s, which might be nil; the call site tells an early return from falling through by a non-nil error. Only errors that are known to be non-nil can be passed on: a variable checked with `!= nil` around the return, or a value from errors.New or fmt.Errorf",
+			return refactor.Refusef("the return at line %d returns %s, which might be nil; the call site tells an early return from falling through by a non-nil error. Only errors that are known to be non-nil can be passed on: a variable checked with `!= nil` around the return, a value from errors.New or fmt.Errorf, or a call of a function whose every return passes such a value",
 				x.line(r.Pos()), x.quoteNode(r.Results[n-1]))
 		}
 	}
@@ -196,30 +196,36 @@ func (x *extraction) notConstantLike(e ast.Expr) string {
 }
 
 // nonNilError reports whether e, returned by r as an error, is certainly
-// not nil.
+// not nil: a variable checked against nil around the return, or a value
+// nonNilValue accepts.
 func (x *extraction) nonNilError(e ast.Expr, r *ast.ReturnStmt) bool {
 	e = ast.Unparen(e)
-	if call, ok := e.(*ast.CallExpr); ok {
-		if fn, ok := x.info.Uses[analysis.IdentOf(call.Fun)].(*types.Func); ok && fn.Pkg() != nil {
-			switch fn.Pkg().Path() + "." + fn.Name() {
-			case "errors.New", "fmt.Errorf":
-				return true
-			}
+	if id, ok := e.(*ast.Ident); ok {
+		if v, ok := x.info.Uses[id].(*types.Var); ok && types.IsInterface(v.Type()) && x.checkedNonNil(v, r) {
+			return true
 		}
 	}
-	tv, ok := x.info.Types[e]
+	return x.nonNilValue(x.info, e)
+}
+
+// nonNilValue reports whether e (type-checked in info), converted to an
+// error, is certainly not nil without looking at the code around it: a
+// call of a function that always returns a non-nil error (see
+// alwaysNonNil), a pointer to a composite literal, or a value that is not
+// a pointer, interface or other nilable type.
+func (x *extraction) nonNilValue(info *types.Info, e ast.Expr) bool {
+	e = ast.Unparen(e)
+	if call, ok := e.(*ast.CallExpr); ok {
+		if fn, ok := info.Uses[analysis.IdentOf(call.Fun)].(*types.Func); ok && x.alwaysNonNil(fn) {
+			return true
+		}
+	}
+	tv, ok := info.Types[e]
 	if !ok || tv.IsNil() || tv.Type == nil {
 		return false // the untyped nil is not a "non-pointer value"
 	}
-	t := tv.Type
-	switch t.Underlying().(type) {
+	switch tv.Type.Underlying().(type) {
 	case *types.Interface:
-		// A variable checked against nil around the return.
-		if id, ok := e.(*ast.Ident); ok {
-			if v, ok := x.info.Uses[id].(*types.Var); ok {
-				return x.checkedNonNil(v, r)
-			}
-		}
 		return false
 	case *types.Pointer:
 		if u, ok := e.(*ast.UnaryExpr); ok && u.Op == token.AND {
@@ -231,6 +237,87 @@ func (x *extraction) nonNilError(e ast.Expr, r *ast.ReturnStmt) bool {
 		return false
 	}
 	return true // a non-pointer value converted to error is never nil
+}
+
+// alwaysNonNil reports whether every call of fn returns a non-nil error as
+// its last result: errors.New and fmt.Errorf do, and so does a function in
+// the loaded source whose results are unnamed (a deferred function could
+// otherwise change them) and whose every return passes a value that
+// nonNilValue accepts, such as `return &Refusal{...}`. A function that
+// calls itself proves nothing by doing so.
+func (x *extraction) alwaysNonNil(fn *types.Func) bool {
+	fn = fn.Origin()
+	if fn.Pkg() == nil {
+		return false
+	}
+	sig := fn.Signature()
+	if sig.Recv() == nil {
+		switch fn.Pkg().Path() + "." + fn.Name() {
+		case "errors.New", "fmt.Errorf":
+			return true
+		}
+	}
+	if known, ok := x.nonNilFuncs[fn]; ok {
+		return known
+	}
+	if x.nonNilFuncs == nil {
+		x.nonNilFuncs = map[*types.Func]bool{}
+	}
+	x.nonNilFuncs[fn] = false // while deciding: a recursive call does not count
+	n := sig.Results().Len()
+	if n == 0 || !types.Identical(sig.Results().At(n-1).Type(), types.Universe.Lookup("error").Type()) {
+		return false
+	}
+	info, decl := x.funcDecl(fn)
+	if decl == nil || decl.Body == nil {
+		return false
+	}
+	for _, f := range decl.Type.Results.List {
+		if len(f.Names) > 0 {
+			return false
+		}
+	}
+	ok := true
+	ast.Inspect(decl.Body, func(node ast.Node) bool {
+		switch node := node.(type) {
+		case *ast.FuncLit:
+			return false
+		case *ast.ReturnStmt:
+			// `return g()` with several results is not looked into.
+			if len(node.Results) != n || !x.nonNilValue(info, node.Results[n-1]) {
+				ok = false
+			}
+		}
+		return ok
+	})
+	x.nonNilFuncs[fn] = ok
+	return ok
+}
+
+// funcDecl finds fn's declaration in the loaded source, and the type
+// information for the package that declares it.
+func (x *extraction) funcDecl(fn *types.Func) (*types.Info, *ast.FuncDecl) {
+	posn := x.ws.Fset.Position(fn.Pos())
+	if !posn.IsValid() {
+		return nil, nil
+	}
+	for _, p := range x.ws.Pkgs {
+		if p.PkgPath != fn.Pkg().Path() || p.TypesInfo == nil {
+			continue
+		}
+		for _, f := range p.Syntax {
+			if x.ws.Fset.File(f.Pos()).Name() != posn.Filename {
+				continue
+			}
+			for _, d := range f.Decls {
+				fd, ok := d.(*ast.FuncDecl)
+				if ok && fd.Name.Name == fn.Name() && x.ws.Fset.Position(fd.Name.Pos()).Line == posn.Line {
+					return p.TypesInfo, fd
+				}
+			}
+		}
+	}
+	return nil, nil
 }
 
 // checkedNonNil reports whether r is inside the body of an if statement

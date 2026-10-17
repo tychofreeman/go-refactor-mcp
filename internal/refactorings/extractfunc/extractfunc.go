@@ -113,6 +113,8 @@ type extraction struct {
 	mode       returnMode
 	exitValues []string // errorExit: the non-error values the early returns return
 
+	nonNilFuncs map[*types.Func]bool // alwaysNonNil's answers
+
 	toks []tok // the file's tokens, scanned once
 
 	imp *imports.Adder // the file's imports and the ones to add
@@ -689,11 +691,19 @@ func (x *extraction) analyzeDataFlow() error {
 	f := &flow{fresh: map[*types.Var]bool{}, pointers: map[*types.Var]bool{}}
 	for _, v := range order {
 		switch {
-		case x.fa.Addressed[v], x.fa.Captured[v] && len(x.fa.Modified[v]) > 0:
+		case x.fa.Addressed[v], (x.fa.CapturedAsync[v] || x.declaredOutsideLit(v)) && len(x.fa.Modified[v]) > 0:
 			// Other code can reach v while the statements run: pass a
 			// pointer, so that both work on the same variable. (A variable
 			// that function literals use but nothing ever assigns cannot
-			// change, so a copy of it is just as good.)
+			// change, so a copy of it is just as good. Neither can a
+			// function literal that only runs during the statement that
+			// creates it, like a sort.Slice comparison, reach v while the
+			// new function runs: outside the selection it runs before or
+			// after the call, and inside it it uses the new function's v.
+			// That does not hold for a literal containing the selection:
+			// v outlives each call of it, and code after the literal reads
+			// v even when the selection ends in a return, which would
+			// leave no result to assign back.)
 			if v == x.recv && analysis.IsPointer(v.Type()) {
 				return refactor.Refusef("the receiver %s is a pointer whose own address is taken, or a function literal uses it; a method cannot have a pointer-to-pointer receiver", v.Name())
 			}
@@ -1316,6 +1326,18 @@ func (x *extraction) usedOutside(v *types.Var) bool {
 // that jumps backwards with goto) that v is declared outside of, so that a
 // value the selection stores can be read by the selection itself in the
 // next iteration.
+// declaredOutsideLit reports whether the selection is inside a function
+// literal and v is declared outside the innermost one: the literal
+// captures v, which outlives each call of it.
+func (x *extraction) declaredOutsideLit(v *types.Var) bool {
+	for _, n := range analysis.PathTo(x.file, x.stmts[0]) {
+		if lit, ok := n.(*ast.FuncLit); ok {
+			return v.Pos() < lit.Pos() || v.Pos() >= lit.End()
+		}
+	}
+	return false
+}
+
 func (x *extraction) loopAround(v *types.Var) bool {
 	for _, n := range analysis.PathTo(x.file, x.stmts[0]) {
 		switch n := n.(type) {
