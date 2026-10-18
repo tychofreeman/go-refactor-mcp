@@ -63,7 +63,7 @@ hand or a tool got in the way.
    *`move_declaration` done, within a package and to another one (see
    "Move declaration: what it checks"), with several declarations at once,
    from any files of the package (`also`), out of a grouped declaration,
-   and a type with its methods; next: creating the package.*
+   a type with its methods, and into a new package.*
 3. **Evidence from real use.** Keep the friction log during normal work.
    Later, a comparison: the same small stories done with and without the
    tools, comparing the size of the hand-written edits, test failures and
@@ -1084,13 +1084,20 @@ Refused, besides the checks above:
   that uses other top-level declarations of its package: the new package
   would have to import the old one, which imports it (move those first,
   or with it in `also`);
-- **where:** a directory without a Go package (creating one is not
-  supported yet), a test file on either side, a file with build
-  constraints, a name the package already declares;
+- **where:** a test file on either side, a file with build constraints, a
+  name the package already declares;
 - **who uses it:** a package that would then import the destination while
   the destination (or the moved code's imports) already depends on it,
   which is an import cycle; a package that cannot import the destination
   (`internal`); a use through a dot import.
+
+A directory without a Go package gets one, created by the move (the
+directories too, if missing; undo removes them): it is named after the
+directory, with the import path of the module plus the directory, and the
+result notes it. Refused: a directory the go command ignores (`testdata`,
+or a name starting with `_` or `.`), one whose name is not a valid
+package name (`my-text`) or is `main`, and one that has Go files no
+loaded package covers (all behind build constraints, say).
 
 A type takes its methods along, since a method must be in its type's
 package, from whichever files of the package they are in. A method call (`c.Inc()`) does not change, but what code left

@@ -78,6 +78,9 @@ func (m *mover) planOtherPackage(to string) (*refactor.Plan, error) {
 			m.obj.Name(), m.fromFiles(), m.ws.Rel(to), m.dest.Name, m.newName, m.withAlso(), refs, plural(refs)),
 		Edits: m.fileEdits(),
 	}
+	if m.created {
+		plan.Notes = append(plan.Notes, fmt.Sprintf("created package %s (%s)", m.dest.Name, m.dest.PkgPath))
+	}
 	for _, d := range m.decls {
 		if d.obj.Exported() {
 			plan.Notes = append(plan.Notes, fmt.Sprintf("%s was exported: references in other modules are not updated", d.obj.Name()))
@@ -103,7 +106,11 @@ func (m *mover) checkOtherPackage(to string) error {
 	dir := filepath.Dir(to)
 	m.dest = packageIn(m.ws.Pkgs, dir)
 	if m.dest == nil {
-		return refactor.Refusef("%s has no Go package; creating a package is not supported yet", m.ws.Rel(dir))
+		dest, err := m.newPackage(dir)
+		if err != nil {
+			return err
+		}
+		m.dest, m.created = dest, true
 	}
 	if _, err := os.Stat(to); os.IsNotExist(err) {
 		if !buildsEverywhere(to) {
@@ -161,6 +168,45 @@ func (m *mover) checkCanLeave(md *moved) error {
 		return refactor.Refusef("package %s already declares %s (at %s)", m.dest.Name, md.newName, m.ws.Position(o.Pos()))
 	}
 	return nil
+}
+
+// newPackage describes the package a move into dir, which has none,
+// creates: named after the directory, with the import path of the module
+// it is in. Its scope is empty.
+func (m *mover) newPackage(dir string) (*packages.Package, error) {
+	rel := m.ws.Rel(dir)
+	if !m.ws.Contains(dir) {
+		return nil, refactor.Refusef("%s is outside the workspace", rel)
+	}
+	for _, elem := range strings.Split(filepath.ToSlash(rel), "/") {
+		if elem == "testdata" || strings.HasPrefix(elem, "_") || strings.HasPrefix(elem, ".") && elem != "." && elem != ".." {
+			return nil, refactor.Refusef("the go command ignores %s (a testdata directory, or a name starting with _ or .), so it cannot hold a package", rel)
+		}
+	}
+	if entries, err := os.ReadDir(dir); err == nil {
+		for _, e := range entries {
+			if !e.IsDir() && strings.HasSuffix(e.Name(), ".go") {
+				return nil, refactor.Refusef("%s has Go files, but none in a package this build loads (build constraints?); moving into it is not supported", rel)
+			}
+		}
+	}
+	name := filepath.Base(dir)
+	switch {
+	case !token.IsIdentifier(name):
+		return nil, refactor.Refusef("%s is not a valid package name, so %s cannot hold a new package; choose a directory named like an identifier", name, rel)
+	case name == "main":
+		return nil, refactor.Refusef("a package named main is a command, which cannot be imported; choose another directory")
+	}
+	mod := m.pkg.Module
+	if mod == nil {
+		return nil, refactor.Refusef("package %s is not in a module, so the new package's import path is unknown", m.pkg.Name)
+	}
+	r, err := filepath.Rel(mod.Dir, dir)
+	if err != nil || strings.HasPrefix(r, "..") {
+		return nil, refactor.Refusef("%s is outside module %s", rel, mod.Path)
+	}
+	path := mod.Path + "/" + filepath.ToSlash(r)
+	return &packages.Package{ID: path, PkgPath: path, Name: name, Types: types.NewPackage(path, name), Imports: map[string]*packages.Package{}}, nil
 }
 
 // packageIn returns the (non-test) package whose files are in dir.

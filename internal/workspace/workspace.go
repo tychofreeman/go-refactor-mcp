@@ -17,6 +17,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -137,6 +138,9 @@ type Change struct {
 	// Created holds the files the change creates: their Before is nil,
 	// and undoing the change removes them.
 	Created map[string]bool
+	// Dirs holds the directories the change creates for them, each
+	// before the ones inside it; undoing the change removes them.
+	Dirs []string
 }
 
 // Files returns the changed paths, relative to root, sorted.
@@ -311,9 +315,9 @@ func (w *Workspace) Preview(label string, fes []edit.FileEdit) (Change, error) {
 		before, err := os.ReadFile(fe.Path)
 		created := os.IsNotExist(err)
 		if created {
-			// A new file, in a directory that must exist.
-			if fi, err := os.Stat(filepath.Dir(fe.Path)); err != nil || !fi.IsDir() {
-				return Change{}, fmt.Errorf("cannot create %s: its directory does not exist", w.Rel(fe.Path))
+			// A new file, in a directory that may have to be created too.
+			if err := c.addDirs(filepath.Dir(fe.Path)); err != nil {
+				return Change{}, fmt.Errorf("cannot create %s: %w", w.Rel(fe.Path), err)
 			}
 		} else if err != nil {
 			return Change{}, err
@@ -347,6 +351,12 @@ func (w *Workspace) Apply(label string, fes []edit.FileEdit) (Change, error) {
 	c, err := w.Preview(label, fes)
 	if err != nil {
 		return Change{}, err
+	}
+	for _, d := range c.Dirs {
+		if err := os.Mkdir(d, 0o755); err != nil && !os.IsExist(err) {
+			_ = c.restore()
+			return Change{}, err
+		}
 	}
 	if err := writeAll(c.After); err != nil {
 		// Best effort to restore what was already written.
@@ -426,7 +436,37 @@ func (c Change) restore() error {
 			return err
 		}
 	}
+	for i := len(c.Dirs) - 1; i >= 0; i-- {
+		if err := os.Remove(c.Dirs[i]); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
 	return writeAll(before)
+}
+
+// addDirs records the directories from dir up that do not exist yet,
+// outermost first. A path in the way that is not a directory is an error.
+func (c *Change) addDirs(dir string) error {
+	var missing []string
+	for d := dir; ; d = filepath.Dir(d) {
+		fi, err := os.Stat(d)
+		if err == nil {
+			if !fi.IsDir() {
+				return fmt.Errorf("%s is not a directory", d)
+			}
+			break
+		}
+		if !os.IsNotExist(err) {
+			return err
+		}
+		missing = append(missing, d)
+	}
+	for i := len(missing) - 1; i >= 0; i-- {
+		if !slices.Contains(c.Dirs, missing[i]) {
+			c.Dirs = append(c.Dirs, missing[i])
+		}
+	}
+	return nil
 }
 
 func writeAll(files map[string][]byte) error {

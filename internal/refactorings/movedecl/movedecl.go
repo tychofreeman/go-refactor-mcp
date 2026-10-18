@@ -49,7 +49,7 @@ Use it to put code where it belongs before a change, e.g. a helper that two file
 Identify the declaration by file, line and name, at the declaration or any use, and give to_file: the destination, relative to the workspace root.
 Imports the moved code needs are added to the destination (keeping an alias, or using the destination's name for the package); imports left unused are removed.
 also names other top-level declarations of the package, in any of its files, to move with it (not methods), e.g. the helpers it uses; they keep their names.
-To another package (to_file in another directory, which must hold a package): every reference is updated (q.Name outside that package, Name inside it), and new_name renames it on the way; an unexported declaration used outside the new package needs an exported new_name (defaultHost -> DefaultHost).
+To another package (to_file in another directory; a directory without a package gets a new one, named after it, creating missing directories): every reference is updated (q.Name outside that package, Name inside it), and new_name renames it on the way; an unexported declaration used outside the new package needs an exported new_name (defaultHost -> DefaultHost).
 A declaration grouped with others in parentheses (var ( a = 1; b = 2 )) moves out as its own (var b = 2); naming every spec of the group moves the group. Taking a constant out of its group is refused when it, or a later one, uses iota or has no values (its value would change).
 Refuses between a test file and a non-test file, to or from a file with build constraints, an init function or a variable whose initializer has side effects (initialization order follows the files), a //go:embed variable, and code that uses a dot import. To another package a type takes its methods along, from any file; it refuses a method on its own, an unexported field or method of a moved type used by code left behind, an interface naming an unexported method of it (the type would quietly stop implementing it), code that uses other top-level declarations of its package (move those first, or with it in also), test files, and moves that would make an import cycle or need an internal package a user cannot import.`
 }
@@ -94,9 +94,10 @@ type mover struct {
 	*source
 	sources []*source
 
-	// Moving to another package:
-	dest  *packages.Package
-	files map[string]*fileEdits
+	// Moving to another package (which created means the move creates):
+	dest    *packages.Package
+	created bool
+	files   map[string]*fileEdits
 }
 
 // source is a file that declarations move from.
