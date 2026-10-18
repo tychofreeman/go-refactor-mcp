@@ -1,0 +1,1 @@
+m.decl reads memory that m.reset() (at a.go:11:2) could change before it
