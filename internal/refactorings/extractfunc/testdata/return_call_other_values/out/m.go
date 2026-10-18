@@ -10,8 +10,7 @@ func check(n int) error {
 }
 
 func count(ns []int) (int, error) {
-	err := checkEach(ns)
-	if err != nil {
+	if err := checkEach(ns); err != nil {
 		return -1, err
 	}
 	return len(ns), nil

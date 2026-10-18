@@ -59,7 +59,8 @@ call's results" check from `checkValue` gave `err2 := checkNoSpread(c,
 where); if err2 != nil { return err2 }`, because `err` is declared later in
 the function. Folded into `if err := ...; err != nil` by hand. Gap: the
 call site could use the `if` initializer form when the error is used only
-by the check.
+by the check. *Follow-up: done; with no other results the call site is
+`if err := f(...); err != nil {`.*
 
 **Move a declaration to another file.** The extracted `checkNoSpread` was
 shared by both refactorings, so it moved from `addparam.go` to `common.go`

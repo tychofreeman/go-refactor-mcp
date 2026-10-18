@@ -500,3 +500,14 @@ func (x *extraction) finalReturn(f *flow) *ast.ReturnStmt {
 	}
 	return r
 }
+
+// identsIn returns the identifiers in the Go source src.
+func identsIn(src string) []string {
+	var out []string
+	for _, t := range scanTokens([]byte(src)) {
+		if t.tok == token.IDENT {
+			out = append(out, src[t.off:t.end])
+		}
+	}
+	return out
+}

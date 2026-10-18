@@ -13,8 +13,7 @@ func refusef(format string, args ...any) error {
 
 func plan(name string) (string, error) {
 	fmt.Println("planning")
-	err := checkName(name)
-	if err != nil {
+	if err := checkName(name); err != nil {
 		return "", err
 	}
 	return name + "!", nil
