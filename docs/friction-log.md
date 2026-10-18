@@ -170,3 +170,33 @@ The refactoring itself was written by hand (no `replace_declaration`
 edit yet), mostly from `add_parameter`'s pieces: `findTarget`,
 `insertIndex`, `checkNewName`, `checkInterfaces`, `paramEdit`, `argEdit`,
 `unsafeValue` and `newPlan`.
+
+## 2026-10-17: `introduce_parameter` through the receiver and pointers
+
+**`extract_function` refused a variable used by a synchronous closure.**
+Extracting the `effect := false; ast.Inspect(arg, func ... { effect = ...
+})` lines from `checkCall` was refused: `effect` is used by a function
+literal and after the lines, so returning it "would return a copy that the
+function literal no longer shares". But `ast.Inspect` calls the literal
+only before it returns (`analysis.SyncLit` already knows this), so the
+copy is the final value. Extracted the whole loop instead. Gap: treat
+variables of synchronous closures that finish inside the selection as
+plain results.
+
+**`extract_function` at the end of a function.** Extracting the last
+statements before `return nil` gave `err := f(); if err != nil { return
+err }; return nil`, where `return f()` would do. Folded by hand. Gap:
+recognize the trailing `return nil` (see the `err2` entry above too).
+
+**First real use: the case that motivated the tool.** On this repo,
+`introduce_parameter` with `d.decl` at the top of `movedecl`'s
+`checkDecl` gives `checkDecl(d, d.decl)`, the step the earlier entry did
+by hand. The later `d.decl` uses are refused, correctly by the rule but
+only because a `refactor.Refusef(...)` call comes earlier, on a path that
+returns before reaching them. Gaps: a flow-aware "before" (calls on paths
+that return first cannot change anything), and introducing every
+occurrence at once, which for the later uses needs to know no call in
+between writes `d.decl`.
+
+**Found by the real use:** a type switch guard (`decl := d.decl.(type)`)
+was counted as a write and a possible panic. Fixed, test first.

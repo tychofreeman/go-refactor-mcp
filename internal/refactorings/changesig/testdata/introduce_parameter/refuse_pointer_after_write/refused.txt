@@ -1,0 +1,1 @@
+m.decl reads memory that m.n++ (at a.go:9:2) could change before it

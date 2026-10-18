@@ -29,9 +29,9 @@ model reads before choosing the next refactoring. That loop is the iteration.
   types, and generics). `invert_if` (with guard clauses) and `remove_else`
   are done. `inline_function` has a first version (see the roadmap).
 - **Step 4 (in progress):** refactorings that prepare a feature change.
-  `add_parameter`, `remove_parameter` and `move_parameter` are done, for
-  functions and methods, exported or not; `introduce_parameter` has a
-  first version, for expressions over a function's parameters. `move_declaration` moves a
+  `add_parameter`, `remove_parameter`, `move_parameter` and
+  `introduce_parameter` are done, for functions and methods, exported or
+  not. `move_declaration` moves a
   declaration (with the helpers it uses, if asked) to another file, of its
   package or another one.
 - **Step 5 (later):** edits, steps that change behavior on purpose (see
@@ -51,8 +51,9 @@ hand or a tool got in the way.
    done, for exported methods too (see "Add parameter", "Remove parameter",
    "Move parameter: what it checks" and "Changing a method: interfaces").
    `introduce_parameter` turns an expression of the body into a parameter
-   (see "Introduce parameter: what it checks"); next: expressions that use
-   the receiver, and reads through a pointer the body dereferences anyway.
+   (see "Introduce parameter: what it checks"), also through the receiver
+   or a pointer read at entry; next: every occurrence at once, and calls
+   on paths that return before the expression.
    Left: methods of generic types that an interface could match, and
    interface methods with all their implementations.*
 2. **Moving a declaration** to another file or package, updating its
@@ -841,29 +842,54 @@ goes at the end (or before a variadic one) with the expression's type.
 Followed by `remove_parameter`, it narrows a parameter to the part the
 body uses.
 
+The receiver counts as a parameter: introducing `m.decl` in a method of
+`m` passes `mv.decl` at the call `mv.check()`. Where the receiver is used
+other than through a selector, the address the call takes or the copy it
+makes is written out (`(&v)`, `(*q)`).
+
 The expression is now evaluated once, at the call, instead of wherever
 (and however often) the body evaluated it. That keeps behavior when its
-value is the same at both points and evaluating it does nothing:
+value is the same at both points and evaluating it does the same:
 
-- it reads only parameters, and the body never assigns them, changes a
-  field or element of them, or takes their address; a variable declared
-  in the body is refused;
-- it has no side effects and cannot panic (no calls, pointer
-  dereferences, indexing, slicing, type assertions or non-constant
-  division), since the call now evaluates it even where the body would
-  not have;
+- it reads only parameters and the receiver, and the body never assigns
+  them, changes a field or element of them, or takes their address; a
+  variable declared in the body is refused;
+- it has no side effects;
 - it is not assigned to, addressed, or the receiver of a pointer method,
   since the parameter is a copy;
-- at each call, no argument has side effects: the new argument repeats
-  parts of the others, and Go does not order its evaluation against their
-  calls (assign such an argument to a variable first);
+- at each call, no argument (nor the receiver) has side effects: the new
+  argument repeats parts of the others, and Go does not order its
+  evaluation against their calls (assign such an argument to a variable
+  first);
 - every other name it uses (constants, package variables, imports) means
   the same at each call, so a name hidden by a local at the call, or
   unexported in another package, is refused.
 
-Refused for now: an expression using the receiver. Besides that, the
-function checks of `add_parameter` apply (only called, not an interface
-method, interfaces kept, the new name free).
+An expression that could panic (a read through a pointer, indexing,
+slicing, a type assertion, division by a variable), or that reads memory
+other code can change (through a pointer, a slice or map element, the
+length of a map, a package variable), is allowed only when it is
+evaluated *at entry*, which is what `m.decl` at the top of a method
+usually is:
+
+- on every call: not inside an `if` or `else`, a `case`, the right
+  operand of `&&` or `||`, nor (once per call) a loop, a function
+  literal, or a function with `goto`;
+- after nothing that could change it or the outcome: no call or channel
+  operation before it, no write to anything but a local variable whose
+  address is never taken, and no possible panic, unless both could only
+  be nil dereferences, which panic alike.
+
+So `switch m.decl {` as a method's first statement can become a
+parameter, as can `len(m.decl)` after `k := m.n`; `len(m.decl)` after
+`m.n++`, a call, `xs[0]`, or inside `if m.n > 0 { ... }` cannot. The check
+is by position, not control flow: a call on a path that returns before
+the expression still counts.
+
+Refused besides: a method called through an embedded field (`n.label()`
+for a method of `n`'s embedded `point`). The function checks of
+`add_parameter` apply too (only called, not an interface method,
+interfaces kept, the new name free).
 
 ## Changing a method: interfaces
 
