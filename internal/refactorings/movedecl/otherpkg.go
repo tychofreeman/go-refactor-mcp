@@ -136,7 +136,11 @@ func (m *mover) checkCanLeave(md *moved) error {
 			return refactor.Refusef("%s is a method, and a method must stay in the package of its type", d.Name.Name)
 		}
 	case *ast.GenDecl:
-		switch s := d.Specs[0].(type) {
+		spec := d.Specs[0]
+		if md.spec != nil {
+			spec = md.spec
+		}
+		switch s := spec.(type) {
 		case *ast.TypeSpec:
 			if n, ok := md.obj.Type().(*types.Named); ok && n.NumMethods() > 0 {
 				return refactor.Refusef("%s has methods, which must stay in its package; moving a type with methods is not supported yet", s.Name.Name)
@@ -180,7 +184,7 @@ func (m *mover) checkNoSourceRefs() error {
 	scope := m.pkg.Types.Scope()
 	var err error
 	for _, d := range m.decls {
-		ast.Inspect(d.decl, func(n ast.Node) bool {
+		ast.Inspect(d.node(), func(n ast.Node) bool {
 			id, ok := n.(*ast.Ident)
 			if !ok || err != nil {
 				return err == nil

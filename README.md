@@ -62,8 +62,8 @@ hand or a tool got in the way.
    references (and renaming it on the way when it changes package).
    *`move_declaration` done, within a package and to another one (see
    "Move declaration: what it checks"), with several declarations of a file
-   at once (`also`); next: grouped declarations, a type with its methods,
-   declarations from several files, and creating the package.*
+   at once (`also`) and out of a grouped declaration; next: a type with its
+   methods, declarations from several files, and creating the package.*
 3. **Evidence from real use.** Keep the friction log during normal work.
    Later, a comparison: the same small stories done with and without the
    tools, comparing the size of the hand-written edits, test failures and
@@ -1033,9 +1033,22 @@ Refused as well:
 - an `init` function, or a variable whose initializer has side effects:
   package initialization follows the order of the files, so moving one
   could change what runs first;
-- a declaration grouped with others in parentheses (`var ( a = 1; b = 2 )`);
 - a `//go:embed` variable;
 - code that uses a dot import.
+
+### Out of a group
+
+A declaration grouped with others in parentheses (`var ( a = 1; b = 2 )`)
+moves out of the group as a declaration of its own, `var b = 2`, with its
+doc comment and trailing comment, one level less indented; the rest of the
+group stays. Naming every spec of a group (the name and `also`) moves the
+group as it is.
+
+In a `const` group a spec's position can matter: `iota` is its index, and
+a spec without values repeats the previous expression (with its own
+`iota`). So taking a constant out of its group is refused when it has no
+values or uses `iota`, and when a later spec in the group does either,
+since its value would shift; move the whole group instead.
 
 ### Several declarations at once
 

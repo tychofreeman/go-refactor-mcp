@@ -251,3 +251,23 @@ one function there that takes the extraction as a parameter, became the
 method `x.needsExplicitType(expr, tv)` in one call. A round trip
 (`method_to_function` then `function_to_method` on `Adder.nextLine`)
 gives back the file byte for byte.
+
+## 2026-10-17: story, `move_declaration` out of a grouped declaration
+
+**What the tools did.** `extract_function` pulled the text-range code out
+of `checkDecl` into `setRange`, which then learned to find a spec's range.
+The rest was the feature itself, by hand: a `spec` (and `whole`) on each
+moved declaration, `node()` for what the inspections walk, and the
+`const` group checks.
+
+**By hand that a tool could have done.** Six `ast.Inspect(d.decl, ...)`
+became `ast.Inspect(d.node(), ...)`: replacing one expression by another
+at several places is `replace_expression` (in `docs/edits.md`), with an
+all-occurrences option. And `docOf` took an `ast.Decl` and now takes an
+`ast.Node`: no tool changes a parameter's type (a `change_signature`
+gap; widening to an interface the arguments satisfy keeps behavior).
+
+**A test of mine was wrong, and the tool said so.** The first test moved
+`b = strings.ToUpper("x")` out of a `var` group; the existing rule refused
+it, rightly: a call in an initializer could run in another order once in
+another file.
