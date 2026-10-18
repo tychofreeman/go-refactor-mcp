@@ -30,6 +30,8 @@ a candidate without evidence stays at the bottom.
   into a block (an empty body too), with the imports they need.
 - **`add_declaration`:** new top-level declarations in a file, at its end
   or next to a named one, with the imports they need.
+- **`replace_expression`:** one expression, or every one in the file that
+  means the same, replaced by a new one, parenthesized as needed.
 
 ## Candidates
 
@@ -42,9 +44,7 @@ form can come first, while the focus is on refactorings.
 
 **Expressions**
 
-- `replace_expression`: replace one expression (found as
-  `extract_variable` finds one) with new Go source, reporting a change of
-  type.
+- `replace_expression` is done (see Done).
   - 2026-10-17, moving a declaration out of a group: six
     `ast.Inspect(d.decl, ...)` became `ast.Inspect(d.node(), ...)`; an
     all-occurrences option would have done them in one call.

@@ -1,0 +1,1 @@
+new is not a Go expression
