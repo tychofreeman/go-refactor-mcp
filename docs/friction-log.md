@@ -465,7 +465,8 @@ deleted by hand (gap: `delete_statement`). *Follow-up:
 `remove_dead_code` covers it.* Small gaps: a constant pattern
 for `regexp.MustCompile` could count as having no effect; and the move
 left `version.go` with only its package clause (a move that empties a file
-could delete it).
+could delete it). *Follow-up: done; `move_declaration` deletes a source
+file it leaves with only a package clause.*
 
 **A bug the move showed.** `move_declaration` wrote a *new* file's imports
 in one unsorted group; the earlier grouping fix had been in `imports.Adder`
@@ -530,3 +531,18 @@ first draft.
 expression's type changes from untyped bool to bool" for
 `f(...) != nil` → `g(...)`: a comparison's untyped bool becomes `bool`
 wherever it is used, so that is no change. Fixed in `replace_expression`.
+
+## 2026-10-18: `move_declaration` deletes a file it empties
+
+**All with the tools.** `add_field` gave `edit.FileEdit` a `Delete` flag
+(so the workspace test written first compiled) and `workspace.Change` a
+`Deleted` set; `insert_statements`, `replace_statements`,
+`replace_expression` and `add_declaration` wrote the rest. By hand: only
+the testdata, the docs, and one line of the tool's description (a string
+literal; `replace_expression` could have done it, but a long raw string
+is awkward to restate).
+
+**`after` cannot name a method.** `add_declaration` with `after:
+"fileEdits"` put the new methods after the *type* `fileEdits`, not the
+method `mover.fileEdits` beside which they belonged. Gap: accept
+`Type.Method` in `after`/`before`, as `inspect` does.

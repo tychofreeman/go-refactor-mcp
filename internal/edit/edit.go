@@ -22,6 +22,8 @@ type TextEdit struct {
 type FileEdit struct {
 	Path  string     `json:"path"`
 	Edits []TextEdit `json:"edits"`
+	// Delete deletes the file instead; Edits must then be empty.
+	Delete bool `json:"delete,omitempty"`
 }
 
 // Apply returns src with edits applied. Edits may be given in any order.
@@ -81,6 +83,7 @@ func Merge(fes []FileEdit) []FileEdit {
 			i = len(out) - 1
 		}
 		out[i].Edits = append(out[i].Edits, fe.Edits...)
+		out[i].Delete = out[i].Delete || fe.Delete
 	}
 	for i := range out {
 		out[i].Edits = Normalize(out[i].Edits)

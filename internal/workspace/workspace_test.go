@@ -100,6 +100,48 @@ func TestApplyCreatesFileAndUndoRemovesIt(t *testing.T) {
 	}
 }
 
+func TestApplyDeletesFileAndUndoRestoresIt(t *testing.T) {
+	gSrc := "package m\n\nfunc G() int { return 1 }\n"
+	dir := writeModule(t, map[string]string{
+		"m.go": "package m\n\nfunc F() int { return 1 }\n",
+		"g.go": gSrc,
+	})
+	w, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g := filepath.Join(dir, "g.go")
+	c, err := w.Apply("delete g.go", []edit.FileEdit{{Path: g, Delete: true}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(g); !os.IsNotExist(err) {
+		t.Errorf("g.go was not deleted: %v", err)
+	}
+	if !strings.Contains(c.Diff, "-func G() int { return 1 }") {
+		t.Errorf("diff does not show the deleted file:\n%s", c.Diff)
+	}
+	if errs := w.Errors(); len(errs) != 0 {
+		t.Fatalf("errors after deleting the file: %v", errs)
+	}
+	if fresh, err := Load(dir); err != nil {
+		t.Fatal(err)
+	} else if diffs := Compare(w, fresh, 5); len(diffs) > 0 {
+		t.Errorf("after deleting, the workspace differs from a fresh load:\n  %s", strings.Join(diffs, "\n  "))
+	}
+	if _, err := w.Undo(); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(g); string(got) != gSrc {
+		t.Errorf("undo did not restore g.go: %q", got)
+	}
+	if fresh, err := Load(dir); err != nil {
+		t.Fatal(err)
+	} else if diffs := Compare(w, fresh, 5); len(diffs) > 0 {
+		t.Errorf("after undoing, the workspace differs from a fresh load:\n  %s", strings.Join(diffs, "\n  "))
+	}
+}
+
 func TestApplyCreatesDirectoriesAndUndoRemovesThem(t *testing.T) {
 	dir := writeModule(t, map[string]string{"m.go": "package m\n\nfunc F() int { return 1 }\n"})
 	w, err := Load(dir)

@@ -33,6 +33,17 @@ func TestApplyOutOfRange(t *testing.T) {
 	}
 }
 
+func TestMergeKeepsDelete(t *testing.T) {
+	got := Merge([]FileEdit{
+		{Path: "a.go", Edits: []TextEdit{{Start: 0, End: 1}}},
+		{Path: "a.go", Delete: true},
+		{Path: "b.go", Edits: []TextEdit{{Start: 0, End: 1}}},
+	})
+	if len(got) != 2 || !got[0].Delete || got[1].Delete {
+		t.Errorf("Merge = %+v, want a.go deleted and b.go not", got)
+	}
+}
+
 func TestUnified(t *testing.T) {
 	before := "a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk\n"
 	after := "a\nB\nc\nd\ne\nf\ng\nh\ni\nj\nk\nl\n"

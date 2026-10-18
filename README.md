@@ -91,8 +91,8 @@ hand or a tool got in the way.
 7. **Packaging:** tagged releases, so `go install ...@latest` gets a stable
    version, and possibly a Claude Code plugin for a one-step install.
 
-Later: **edits**, steps that change behavior on purpose, so the change
-itself is a tool call too. `create_file` is done; `docs/edits.md` lists the
+Alongside: **edits**, steps that change behavior on purpose, so the
+change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
 candidates and the evidence for each, gathered from the friction log.
 
 Parked: the Ollama loop (`refactor-agent`). It works and stays, but Claude
@@ -1149,7 +1149,11 @@ changes is per file:
 - **which builds see the code:** both files must be built everywhere (no
   `//go:build` line, no GOOS or GOARCH in the name, no cgo), and both must
   be test files or neither, in the same package clause (not `p` and
-  `p_test`).
+  `p_test`);
+- **a source file left empty:** when the move leaves a file with nothing
+  but its package clause (no declarations, imports or comments), the file
+  is deleted, and a note says so; undo writes it back. A file that keeps
+  a comment (a copyright line, a package doc) stays.
 
 Refused as well:
 
