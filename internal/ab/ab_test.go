@@ -11,6 +11,22 @@ import (
 	"time"
 )
 
+// allowedTools are the tools args allows, one argument each.
+func allowedTools(args []string) []string {
+	i := slices.Index(args, "--allowedTools")
+	if i < 0 {
+		return nil
+	}
+	var out []string
+	for _, a := range args[i+1:] {
+		if strings.HasPrefix(a, "--") {
+			break
+		}
+		out = append(out, a)
+	}
+	return out
+}
+
 func TestClaudeArgs(t *testing.T) {
 	cfg := Config{MCPServer: "/bin/refactor-mcp", Model: "sonnet", BudgetUSD: 0.5}
 	common := []string{"-p", "do it", "--output-format", "stream-json", "--verbose", "--strict-mcp-config",
@@ -39,7 +55,7 @@ func TestClaudeArgs(t *testing.T) {
 	if slices.Contains(manual, "--mcp-config") {
 		t.Errorf("manual arm has an MCP server: %q", manual)
 	}
-	if i := slices.Index(manual, "--allowedTools"); i < 0 || !strings.Contains(manual[i+1], "Edit") {
+	if !slices.Contains(allowedTools(manual), "Edit") {
 		t.Errorf("manual arm: Edit not allowed in %q", manual)
 	}
 }
@@ -55,7 +71,7 @@ func fakeClaude(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "stream.jsonl"), []byte(stream), 0o644)
-	script := "#!/bin/sh\ntest ! -f CLAUDE.md || exit 3\ntest ! -f hidden.txt || exit 4\necho done >> notes.txt\ncat " + filepath.Join(dir, "stream.jsonl") + "\n"
+	script := "#!/bin/sh\ntest ! -f CLAUDE.md || grep -q arm-guidance CLAUDE.md || exit 3\ntest ! -f hidden.txt || exit 4\necho done >> notes.txt\ncat " + filepath.Join(dir, "stream.jsonl") + "\n"
 	path := filepath.Join(dir, "claude")
 	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
@@ -193,8 +209,7 @@ func TestHybridArm(t *testing.T) {
 	if !slices.Contains(args, "--mcp-config") {
 		t.Errorf("hybrid arm has no MCP server: %q", args)
 	}
-	i := slices.Index(args, "--allowedTools")
-	if i < 0 || !strings.Contains(args[i+1], "mcp__gorefactor") || !strings.Contains(args[i+1], "Edit") {
+	if tools := allowedTools(args); !slices.Contains(tools, "mcp__gorefactor") || !slices.Contains(tools, "Edit") {
 		t.Errorf("hybrid arm should allow gorefactor and Edit: %q", args)
 	}
 	if i := slices.Index(args, "--disallowedTools"); i >= 0 && strings.Contains(args[i+1], "Edit") {
@@ -202,5 +217,44 @@ func TestHybridArm(t *testing.T) {
 	}
 	if _, err := RunAll(context.Background(), Config{Arms: []string{"hybrid"}, OutDir: t.TempDir()}, nil); err != nil {
 		t.Errorf("hybrid should be a known arm: %v", err)
+	}
+}
+
+// An arm can start from its own CLAUDE.md, part of the starting state and
+// so not of the run's diff.
+func TestClaudeMDPerArm(t *testing.T) {
+	src := t.TempDir()
+	os.WriteFile(filepath.Join(src, "notes.txt"), []byte("start\n"), 0o644)
+	os.WriteFile(filepath.Join(src, "CLAUDE.md"), []byte("use the MCP\n"), 0o644)
+	guidance := map[string]string{"manual": "arm-guidance: refactor by hand\n"}
+	for arm, check := range map[string]string{
+		"manual": `grep -q 'by hand' CLAUDE.md && ! grep -q 'use the MCP' CLAUDE.md`,
+		"hybrid": `test ! -f CLAUDE.md`, // no guidance for it: the module's is still removed
+	} {
+		cfg := Config{Claude: fakeClaude(t), Timeout: time.Minute, Runs: 1, Arms: []string{arm}, OutDir: t.TempDir(), ClaudeMD: guidance}
+		results, err := RunAll(context.Background(), cfg, []Task{{Name: "md", Prompt: "p", Dir: src, Check: check}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if r := results[0]; !r.Passed || r.DiffLines != 1 || r.Error != "" {
+			t.Errorf("%s: %+v (check output %q)", arm, r, r.Check)
+		}
+	}
+}
+
+// The mcp arm's Bash can build, test and look, but not edit files.
+func TestMCPArmBashCannotEdit(t *testing.T) {
+	allowed := func(arm string) []string {
+		args := claudeArgs(Config{MCPServer: "m"}, arm, "/work", "p")
+		return allowedTools(args)
+	}
+	mcp := allowed("mcp")
+	if slices.Contains(mcp, "Bash") || !slices.Contains(mcp, "Bash(go test:*)") || !slices.Contains(mcp, "mcp__gorefactor") {
+		t.Errorf("mcp arm tools: %q", mcp)
+	}
+	for _, arm := range []string{"hybrid", "manual"} {
+		if got := allowed(arm); !slices.Contains(got, "Bash") || !slices.Contains(got, "Edit") {
+			t.Errorf("%s arm tools: %q", arm, got)
+		}
 	}
 }
