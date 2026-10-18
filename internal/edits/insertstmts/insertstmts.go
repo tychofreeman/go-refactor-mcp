@@ -107,7 +107,7 @@ func (*InsertStatements) Plan(ws *workspace.Workspace, raw json.RawMessage) (*re
 		Edits:   []edit.FileEdit{{Path: path, Edits: append([]edit.TextEdit{{Start: p.at, End: p.end, NewText: p.text(a.Content, code.Raw)}}, adder.Edits()...)}},
 	}
 	if len(added) > 0 {
-		plan.Notes = append(plan.Notes, fmt.Sprintf("added import %q", added))
+		plan.Notes = append(plan.Notes, gocode.ImportNote("added", added))
 	}
 	return plan, nil
 }

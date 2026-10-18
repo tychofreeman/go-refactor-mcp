@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -25,8 +26,9 @@ import (
 
 // Code is the parsed new code an edit was given.
 type Code struct {
-	Body *ast.BlockStmt
-	Raw  bool // a raw string spans lines, so the text must not be re-indented
+	Body *ast.BlockStmt // the statements, as a block (for statements)
+	Raw  bool           // a raw string spans lines, so the text must not be re-indented
+	node ast.Node       // what was parsed: Body, or the declarations' file
 }
 
 // ParseStatements parses text as a list of statements.
@@ -36,7 +38,8 @@ func ParseStatements(text string) (*Code, error) {
 	if err != nil {
 		return nil, refactor.Refusef("content is not a list of Go statements: %v", err)
 	}
-	c := &Code{Body: f.Decls[0].(*ast.FuncDecl).Body}
+	body := f.Decls[0].(*ast.FuncDecl).Body
+	c := &Code{Body: body, node: body}
 	ast.Inspect(c.Body, func(n ast.Node) bool {
 		if b, ok := n.(*ast.BasicLit); ok && strings.HasPrefix(b.Value, "`") && strings.Contains(b.Value, "\n") {
 			c.Raw = true
@@ -55,8 +58,10 @@ func (c *Code) declared() map[string]bool {
 			names[id.Name] = true
 		}
 	}
-	ast.Inspect(c.Body, func(n ast.Node) bool {
+	ast.Inspect(c.node, func(n ast.Node) bool {
 		switch n := n.(type) {
+		case *ast.FuncDecl:
+			add(n.Name)
 		case *ast.AssignStmt:
 			if n.Tok == token.DEFINE {
 				for _, l := range n.Lhs {
@@ -94,7 +99,7 @@ func (c *Code) packageRefs() []string {
 	declared := c.declared()
 	seen := map[string]bool{}
 	var out []string
-	ast.Inspect(c.Body, func(n ast.Node) bool {
+	ast.Inspect(c.node, func(n ast.Node) bool {
 		if sel, ok := n.(*ast.SelectorExpr); ok {
 			if id, ok := sel.X.(*ast.Ident); ok && !declared[id.Name] && !seen[id.Name] {
 				seen[id.Name] = true
@@ -270,6 +275,16 @@ func RemoveImports(pkg *packages.Package, file *ast.File, adder *imports.Adder, 
 		}
 	}
 	return removed
+}
+
+// ImportNote describes, for a result's notes, the imports an edit added
+// or removed: "added import \"fmt\", \"os\"".
+func ImportNote(verb string, paths []string) string {
+	var quoted []string
+	for _, p := range paths {
+		quoted = append(quoted, strconv.Quote(p))
+	}
+	return verb + " import " + strings.Join(quoted, ", ")
 }
 
 func pkgNameOf(info *types.Info, imp *ast.ImportSpec) *types.PkgName {

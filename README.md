@@ -39,8 +39,8 @@ model reads before choosing the next refactoring. That loop is the iteration.
   declaration (with the helpers it uses, if asked) to another file, of its
   package or another one.
 - **Step 5 (in progress):** edits, steps that change behavior on purpose
-  (see "Edits"). `create_file`, `replace_statements` and
-  `insert_statements` are done; the candidates are in `docs/edits.md`.
+  (see "Edits"). `create_file`, `replace_statements`, `insert_statements`
+  and `add_declaration` are done; the candidates are in `docs/edits.md`.
 
 ## Roadmap
 
@@ -1262,6 +1262,16 @@ its imports are added as for `replace_statements`. Refused: a line where no
 statement starts or ends (or no block opens), a line with other code
 before or after the statement, a non-empty block written on one line (use
 `replace_statements`), and a result that does not type-check.
+
+### add_declaration
+
+`add_declaration` adds top-level declarations (functions, methods, types,
+variables, constants, with their doc comments) to an existing file: at its
+end, or just `after` or `before` the top-level declaration of that name.
+The `content` has no package clause and no imports: packages it names are
+imported as for `replace_statements`, and an `import` in it is refused. A
+name the package already declares is refused by the type check, whose
+message names both places.
 
 ## Testing
 

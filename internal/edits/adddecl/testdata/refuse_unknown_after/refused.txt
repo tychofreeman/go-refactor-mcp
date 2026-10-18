@@ -1,0 +1,1 @@
+a.go has no top-level declaration nothing
