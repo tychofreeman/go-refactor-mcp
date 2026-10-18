@@ -549,8 +549,10 @@ so the call site passes them on. Two shapes are supported:
   `return` passes such a value, like a `refusef` helper that returns
   `&Refusal{...}`. Such a function must have unnamed results (a deferred
   function could change named ones), and calling itself proves nothing.
-  Interface methods and function values never count. The call site uses `err`,
-  or `err2` and so on if `err` is taken.
+  Interface methods and function values never count. With no other
+  results, the call site declares the error in the `if` that checks it
+  (`if err := f(...); err != nil {`), where it hides nothing; otherwise it
+  uses `err`, or `err2` and so on if `err` is taken.
 
   When the selection has no other results and is followed (in its block,
   with no comment in between) by `return <the same values>, nil`, the call,

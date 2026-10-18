@@ -10,8 +10,7 @@ type config struct{ Name string }
 func load(data []byte) (string, error) {
 	var cfg config
 	p := &cfg
-	err := decode(data, p, &cfg)
-	if err != nil {
+	if err := decode(data, p, &cfg); err != nil {
 		return "", err
 	}
 	return cfg.Name, nil

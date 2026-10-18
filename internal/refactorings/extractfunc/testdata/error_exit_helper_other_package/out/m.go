@@ -7,8 +7,7 @@ import (
 )
 
 func plan(name string) (string, error) {
-	err := checkName(name)
-	if err != nil {
+	if err := checkName(name); err != nil {
 		return "", err
 	}
 	fmt.Println("name ok")

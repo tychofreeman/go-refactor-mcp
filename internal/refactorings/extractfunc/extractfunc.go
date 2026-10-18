@@ -30,6 +30,7 @@ import (
 	"go/token"
 	"go/types"
 	"os"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -59,7 +60,7 @@ func (*ExtractFunction) Description() string {
 Use it to split a long function into named steps.
 Identify the statements by file, start_line and end_line (inclusive, as shown by inspect). The lines must cover whole statements of one block; comments and blank lines in the range are allowed and comments move with the code.
 Local variables the statements use become parameters; variables they change or declare that are used afterwards become results, assigned at the call site. The result notes the parameters and results chosen.
-Return statements are supported in two shapes: if every path through the statements returns, the call site becomes "return f(...)"; if the enclosing function returns an error and every return in the statements is an early exit with a non-nil error (like "if err != nil { return nil, err }"), the new function also returns an error and the call site checks it (or, when the lines are followed by "return nil" or "return <the same values>, nil", the call site is "return f(...)" in its place).
+Return statements are supported in two shapes: if every path through the statements returns, the call site becomes "return f(...)"; if the enclosing function returns an error and every return in the statements is an early exit with a non-nil error (like "if err != nil { return nil, err }"), the new function also returns an error and the call site checks it ("if err := f(...); err != nil" when there are no other results; or, when the lines are followed by "return nil" or "return <the same values>, nil", the call site is "return f(...)" in its place).
 Variables whose address is taken or that a function literal changes are passed as pointers, so both functions share them.
 If the statements use the receiver of the method they are in, the new function is a method of the same type; its name must then be unexported and not clash with a field or method.
 If the statements use the enclosing function's type parameters, the new function declares them too and the call passes them explicitly.
@@ -1789,12 +1790,23 @@ func (x *extraction) plan() (*refactor.Plan, error) {
 
 // callSite writes the statements that replace the selection. With final,
 // the return after the selection, the call site returns the exit values
-// and the new function's error in its place.
+// and the new function's error in its place; an error that is only checked
+// is declared in the if that checks it.
 func (x *extraction) callSite(f *flow, sig *types.Signature, indent string, names func(vs []*types.Var) []string, ts func(name string, t types.Type) string, errName string, final *ast.ReturnStmt) string {
 	call := x.callExpr(f)
 	var site strings.Builder
 	if final != nil {
 		return fmt.Sprintf("%sreturn %s", indent, strings.Join(append(append([]string(nil), x.exitValues...), call), ", "))
+	}
+	if errName != "" && len(f.results) == 0 {
+		// The error is only checked: declare it in the if, where it hides
+		// nothing the call or the return needs.
+		name := "err"
+		if slices.ContainsFunc(x.exitValues, func(v string) bool { return slices.Contains(identsIn(v), name) }) {
+			name = errName
+		}
+		vals := strings.Join(append(append([]string(nil), x.exitValues...), name), ", ")
+		return fmt.Sprintf("%sif %s := %s; %s != nil {\n%s\treturn %s\n%s}", indent, name, call, name, indent, vals, indent)
 	}
 	switch x.mode {
 	case terminal:

@@ -7,9 +7,8 @@ import (
 
 func run(x int) error {
 	var err error
-	err2 := validate(x)
-	if err2 != nil {
-		return err2
+	if err := validate(x); err != nil {
+		return err
 	}
 	return err
 }
