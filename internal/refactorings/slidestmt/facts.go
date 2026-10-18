@@ -50,7 +50,7 @@ func overlaps(a, b string) bool {
 }
 
 // factsOf computes the facts for s, a statement of f's body.
-func factsOf(f *analysis.Func, tf *token.File, s ast.Stmt) *facts {
+func factsOf(f *analysis.Func, tf *token.File, s ast.Stmt, effects *analysis.Effects) *facts {
 	info := f.Info
 	ft := &facts{
 		line:     tf.Line(s.Pos()),
@@ -89,7 +89,7 @@ func factsOf(f *analysis.Func, tf *token.File, s ast.Stmt) *facts {
 	}
 	sort.Slice(ft.writes, func(i, j int) bool { return ft.writes[i].v.Pos() < ft.writes[j].v.Pos() })
 	ft.jump, ft.crossable = leaves(s)
-	ft.addEffects(f, s)
+	ft.addEffects(f, s, effects)
 	return ft
 }
 
@@ -246,7 +246,7 @@ func encloses(stack []ast.Node, tok token.Token) bool {
 // addEffects records s's first side effect, read of shared state, and
 // operation that could panic or not finish. Defining a function literal
 // runs nothing, so their bodies are skipped.
-func (ft *facts) addEffects(f *analysis.Func, s ast.Stmt) {
+func (ft *facts) addEffects(f *analysis.Func, s ast.Stmt, effects *analysis.Effects) {
 	info := f.Info
 	commaOK := commaOKAssertions(s)
 	set := func(field *string, what string) {
@@ -302,13 +302,10 @@ func (ft *facts) addEffects(f *analysis.Func, s ast.Stmt) {
 		case *ast.IncDecStmt:
 			assigns(n.X)
 		case *ast.CallExpr:
-			if known, panics := analysis.KnownCall(info, n); known {
-				if panics != analysis.NoPanic {
-					set(&ft.unsafe, "calls "+types.ExprString(n.Fun))
-				}
-			} else if analysis.HasEffect(info, n) {
-				set(&ft.effect, "calls "+types.ExprString(n.Fun))
-			}
+			c := effects.Call(info, n)
+			set(&ft.effect, c.Effect)
+			set(&ft.shared, c.Reads)
+			set(&ft.unsafe, c.Unsafe)
 		case *ast.UnaryExpr:
 			if n.Op == token.ARROW {
 				set(&ft.effect, "receives from a channel")

@@ -600,3 +600,32 @@ child's environment; the other stress tests (`extractvar`, `inlinevar`,
 `extractfunc`, `inlinefunc`, `invertif`) have the same flaw when run with
 `STRESS_TESTS=1`. *Follow-up: all six now use one helper,
 `refactortest.GoTestCommand`, that leaves them out.*
+
+## 2026-10-18: summaries of the module's own functions
+
+**Built with the tools, three hand edits.** `create_file` wrote the stub
+and the test, `add_declaration` the analysis, `add_parameter` threaded
+`*analysis.Effects` through `factsOf` and `addEffects` (passing `nil`,
+then the real value with `replace_expression`). By hand:
+
+- **a one-line function body:** the stub's `func (e *Effects) Func(...)
+  *Summary { return nil }` could not be replaced: `replace_statements`
+  needs whole statements on their own lines. Split by hand. Gap:
+  `replace_declaration` (its entries predate `replace_statements`; this one
+  does not).
+- **a case clause's body:** replacing every statement of a `case` clause
+  was refused ("cut the case clause"), since the last statement ends on
+  the clause's last line; replacing the whole clause is refused too
+  (`case` is not a statement). A bug in `replace_statements`.
+- **an elided composite literal:** `replace_expression` cannot take
+  `{true, false, true}` (a map value with its type left out), which does
+  not parse alone. Gap: parse the expression in its context.
+
+**Measured, and it barely helped.** On the same 5,569 statements of this
+module, `move_statement_up` applied 521 times before and 526 after. The
+remaining side-effect refusals: about 500 are calls into the standard
+library, interface methods or function values; about 275 are module
+functions that call such code; about 390 are writes through pointers or to
+package variables. The module's own functions were not the bottleneck;
+the standard library is. A breakdown of the refusals by callee before
+building would have shown it.
