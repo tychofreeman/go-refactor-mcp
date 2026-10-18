@@ -444,7 +444,10 @@ declared after the enclosing top-level declaration, and calls it in their
 place. Identify the statements by `file`, `start_line` and `end_line`
 (inclusive, as `inspect` numbers them). The original text moves, so comments
 come along; it is re-indented, except inside multi-line raw strings and
-comments.
+comments. The result notes the parameters and results chosen, and warns
+when there are many (more than five parameters or three results): a
+selection that cuts through code sharing many variables gives a function
+no one would write, and a different range usually reads better.
 
 The lines must cover whole statements of one block (a function body, a `{}`
 block, or one `case`); comments and blank lines in the range are allowed.
@@ -1076,7 +1079,9 @@ standalone module).
    `Plan` must not write anything; return `refactor.Refusef(...)` for every
    precondition failure.
 2. Add golden cases under `testdata/<case>/`: `in/` (a complete module with
-   `go.mod`), `args.json`, and either `out/` or `refused.txt`. Generate `out/`
+   `go.mod`), `args.json`, and either `out/` or `refused.txt`; with `out/`,
+   an optional `notes.txt` lists substrings the result's notes must contain,
+   one per line. Generate `out/`
    with `go test ./internal/refactorings/<name>/ -update` and review the diff.
    The harness also checks that undo restores `in/` exactly.
    Then run a stress test against real code (see Testing).

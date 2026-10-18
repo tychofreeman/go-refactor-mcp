@@ -7,6 +7,8 @@
 //	  in/           a complete Go module (with go.mod) before the change
 //	  out/          the expected module after the change, or
 //	  refused.txt   a substring expected in the refusal message
+//	  notes.txt     optional, when applied: substrings expected in the
+//	                result's notes, one per line
 //
 // Run `go test ./... -update` to (re)write out/ directories from the
 // current behavior; review the diff before committing.
@@ -104,6 +106,14 @@ func runCase(t *testing.T, r refactor.Refactoring, caseDir string) {
 
 	if res.Refused != "" {
 		t.Fatalf("unexpected refusal: %s", res.Refused)
+	}
+	if want, err := os.ReadFile(filepath.Join(caseDir, "notes.txt")); err == nil {
+		got := strings.Join(res.Notes, "\n")
+		for _, line := range strings.Split(strings.TrimSpace(string(want)), "\n") {
+			if !strings.Contains(got, line) {
+				t.Errorf("no note contains %q; notes:\n%s", line, got)
+			}
+		}
 	}
 	outDir := filepath.Join(caseDir, "out")
 	if *update {
