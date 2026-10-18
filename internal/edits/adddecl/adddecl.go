@@ -87,8 +87,9 @@ func (*AddDeclaration) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refa
 	}
 	text := pre + strings.Trim(a.Content, "\n") + "\n" + post
 	plan := &refactor.Plan{
-		Summary: fmt.Sprintf("added %d declaration%s to %s", len(decls), textutil.Plural(len(decls)), a.File),
-		Edits:   []edit.FileEdit{{Path: path, Edits: append([]edit.TextEdit{{Start: at, End: at, NewText: text}}, adder.Edits()...)}},
+		Summary:  fmt.Sprintf("added %d declaration%s to %s", len(decls), textutil.Plural(len(decls)), a.File),
+		Edits:    []edit.FileEdit{{Path: path, Edits: append([]edit.TextEdit{{Start: at, End: at, NewText: text}}, adder.Edits()...)}},
+		Supplied: a.Content,
 	}
 	if len(added) > 0 {
 		plan.Notes = append(plan.Notes, gocode.ImportNote("added", added))

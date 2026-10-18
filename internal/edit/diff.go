@@ -40,6 +40,72 @@ func Unified(name string, before, after []byte) string {
 	return sb.String()
 }
 
+// ElideSupplied shortens a unified diff of a change whose new code the
+// model wrote itself: each run of two or more added lines that repeat
+// supplied (ignoring whitespace) is replaced by one line saying how many
+// lines were added and where they are now. Added lines the model did not
+// write, such as imports, are kept.
+func ElideSupplied(diff, supplied string) string {
+	if supplied == "" {
+		return diff
+	}
+	written := map[string]bool{"": true}
+	for _, l := range strings.Split(supplied, "\n") {
+		written[squash(l)] = true
+	}
+	var sb strings.Builder
+	var run []string
+	line, start := 0, 0 // the next added or context line's number in the new file; the run's first
+	flush := func() {
+		if len(run) >= 2 {
+			fmt.Fprintf(&sb, "[%d lines added as written: lines %d-%d]\n", len(run), start, start+len(run)-1)
+		} else {
+			sb.WriteString(strings.Join(run, ""))
+		}
+		run = nil
+	}
+	for _, l := range strings.SplitAfter(diff, "\n") {
+		header := strings.HasPrefix(l, "--- a/") || strings.HasPrefix(l, "+++ b/")
+		if !header && strings.HasPrefix(l, "+") && written[squash(l[1:])] {
+			if run == nil {
+				start = line
+			}
+			run = append(run, l)
+			line++
+			continue
+		}
+		flush()
+		switch {
+		case header:
+		case strings.HasPrefix(l, "@@ "):
+			line = newStart(l)
+		case strings.HasPrefix(l, "+"), strings.HasPrefix(l, " "):
+			line++
+		}
+		sb.WriteString(l)
+	}
+	flush()
+	return sb.String()
+}
+
+// newStart is the first line in the new file of the hunk whose header is
+// h ("@@ -a,b +c,d @@").
+func newStart(h string) int {
+	_, after, _ := strings.Cut(h, " +")
+	n := 0
+	for _, c := range after {
+		if c < '0' || c > '9' {
+			break
+		}
+		n = n*10 + int(c-'0')
+	}
+	return n
+}
+
+// squash drops the whitespace from a line, so a line gofmt re-spaced still
+// matches the one the model wrote.
+func squash(s string) string { return strings.Join(strings.Fields(s), "") }
+
 func rng(start, n int) string {
 	// Unified format: 1-based start; an empty range points at the line before.
 	if n == 0 {
