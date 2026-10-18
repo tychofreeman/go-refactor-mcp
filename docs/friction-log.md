@@ -713,3 +713,15 @@ every tool).
 **The lookup itself was written by hand.** The `symbol` function and the
 branch in `locate.Ident` that calls it were a hand edit; `add_declaration`
 and `insert_statements` would have covered them, and should have been used.
+
+## 2026-10-18: a token baseline (`refactor-tokens`)
+
+**New files written with Write.** `internal/tokens` and its test were
+written by hand; `create_file` covers both and was used for the command.
+
+**First baseline (10 sessions of this project).** Bash is most of the
+by-hand cost (reading code with cat/sed/grep as well as running tests).
+Among the MCP tools, `create_file` and `add_declaration` return about as
+many tokens as they were sent: the diff echoes the new code back. Gap: an
+edit's result could summarize code the model just wrote instead of
+repeating it.
