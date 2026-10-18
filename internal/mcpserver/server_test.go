@@ -122,7 +122,7 @@ func TestRefactoringLoop(t *testing.T) {
 	mustContain(t, "overview", out, "calc/  (package calc)", "app/  (package app)", "calc_test.go")
 
 	out, _ = call(t, cs, "inspect", map[string]any{"file": "calc/calc.go", "function": "Apply"})
-	mustContain(t, "inspect function", out, "func Apply(n int) int   [1 line, complexity 1, nesting 0]", "6  func Apply")
+	mustContain(t, "inspect function", out, "func Apply(n int) int   [1 line, complexity 1, nesting 0, no side effects]", "6  func Apply")
 
 	out, isErr := call(t, cs, "rename", map[string]any{"file": "calc/calc.go", "line": 4, "name": "Rate", "new_name": "Factor"})
 	if isErr {

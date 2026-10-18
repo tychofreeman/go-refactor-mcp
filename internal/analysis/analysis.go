@@ -516,6 +516,15 @@ func IdentOf(e ast.Expr) *ast.Ident {
 	return nil
 }
 
+// Defines reports whether id is defined where it appears, rather than
+// assigned: a new variable of :=, or the symbolic variable of a type
+// switch (switch v := x.(type)), whose Defs entry is nil. A variable that
+// := redeclares is in Uses instead.
+func Defines(info *types.Info, id *ast.Ident) bool {
+	_, ok := info.Defs[id]
+	return ok
+}
+
 // PtrRecv reports whether the selected method has a pointer receiver.
 func PtrRecv(sel *types.Selection) bool {
 	fn, ok := sel.Obj().(*types.Func)

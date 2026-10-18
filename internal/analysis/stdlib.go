@@ -63,7 +63,7 @@ var stdFuncs = map[string]stdEffect{
 	"(*go/token.FileSet).File": contents,
 	"go/token.NewFileSet":      {}, "(go/token.Position).String": {}, "(go/token.Position).IsValid": {},
 
-	"go/ast.Unparen": {reads: "%1"}, "go/types.ExprString": {reads: "%1"},
+	"go/ast.Unparen": {reads: "%1"}, "go/ast.NewIdent": {}, "go/types.ExprString": {reads: "%1"},
 
 	"(*go/types.object).Name": getter, "(*go/types.object).Pkg": getter,
 	"(*go/types.object).Pos": getter, "(*go/types.object).Type": getter,

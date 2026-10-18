@@ -112,7 +112,7 @@ func TestFileFunction(t *testing.T) {
 	}
 	for _, want := range []string{
 		"shapes.go  (package shapes, 35 lines)",
-		"18-33   func Classify(n int) string   [16 lines, complexity 6, nesting 3]",
+		"18-33   func Classify(n int) string   [16 lines, complexity 6, nesting 3, no side effects]",
 		"source (lines 18-33):",
 		"18  // Classify buckets n.",
 		"33  }",
@@ -127,6 +127,50 @@ func TestFileFunction(t *testing.T) {
 	// A bare method name resolves when unambiguous.
 	if out, err := Run(ws, Query{File: "shapes.go", Function: "Area"}); err != nil || !strings.Contains(out, "35  func (c Circle) Area()") {
 		t.Errorf("method lookup failed: %v\n%s", err, out)
+	}
+}
+
+func TestFileEffects(t *testing.T) {
+	t.Setenv("GOWORK", "off")
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example.com/e\n\ngo 1.22\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, "e.go"), []byte(`package e
+
+import "fmt"
+
+var counter int
+
+func Log(s string) { fmt.Println(s) }
+
+func Twice(n int) int { return 2 * n }
+
+func Count() int { return counter }
+
+func Bump() { counter++ }
+
+func LogTwice(s string) {
+	Log(s)
+	Log(s)
+}
+`), 0o644)
+	ws, err := workspace.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := Run(ws, Query{File: "e.go"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"func Log(s string)   [1 line, complexity 1, nesting 0, side effects: calls fmt.Println]",
+		"func Twice(n int) int   [1 line, complexity 1, nesting 0, no side effects]",
+		"func Count() int   [1 line, complexity 1, nesting 0, no side effects]",
+		"func Bump()   [1 line, complexity 1, nesting 0, side effects: assigns to counter]",
+		"func LogTwice(s string)   [4 lines, complexity 1, nesting 0, side effects: calls Log, which calls fmt.Println]",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("outline lacks %q:\n%s", want, out)
+		}
 	}
 }
 

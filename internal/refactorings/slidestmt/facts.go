@@ -304,7 +304,7 @@ func (ft *facts) addEffects(f *analysis.Func, s ast.Stmt, effects *analysis.Effe
 			}
 		case *ast.AssignStmt:
 			for _, l := range n.Lhs {
-				if id, ok := l.(*ast.Ident); ok && n.Tok == token.DEFINE && info.Defs[id] != nil {
+				if id, ok := l.(*ast.Ident); ok && n.Tok == token.DEFINE && analysis.Defines(info, id) {
 					continue
 				}
 				assigns(l)
