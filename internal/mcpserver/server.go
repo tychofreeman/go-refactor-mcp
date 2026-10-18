@@ -3,7 +3,7 @@
 // Tools:
 //   - one tool per registered refactoring (rename, ...), which applies a
 //     single step and returns the diff or the reason it was refused;
-//   - inspect: module overview, file outline with complexity, numbered source;
+//   - inspect: module overview, file outline with complexity and side effects, numbered source;
 //   - undo: revert the last applied refactoring;
 //   - check: report type errors and optionally run go test.
 //
@@ -43,7 +43,7 @@ Two kinds of tool:
 Every step, refactoring or edit, starts from code that type-checks and must leave code that type-checks; a step that would not is refused with the errors, and nothing changes. To write a failing test first, first add a stub for what it calls.
 
 How to work with them:
-1. Call inspect (no arguments) for an overview, then inspect a file or function to read it with line numbers. The outline shows each function's complexity and nesting.
+1. Call inspect (no arguments) for an overview, then inspect a file or function to read it with line numbers. The outline shows each function's complexity, nesting, and whether calling it has side effects (calls of a function without them are easier to move or reorder).
 2. To change a feature, first refactor so the change is easy, then make the change with an edit: "make the change easy, then make the easy change".
 3. Apply exactly ONE tool per call. Each call returns APPLIED with a diff, or REFUSED with the reason; a refusal changes nothing, so read it and choose differently.
 4. After each applied step, re-inspect the affected code before choosing the next step. Line numbers change after edits; never reuse old ones.
@@ -88,7 +88,7 @@ func (s *Server) MCP() *mcp.Server {
 		Name: "inspect",
 		Description: `Read Go code with line numbers. Use it before every refactoring to get exact line numbers, and again after each change.
 - No arguments: overview of the module's packages and files.
-- file: outline of the file (each declaration's line range; for functions also length, cyclomatic complexity and nesting depth) followed by its source.
+- file: outline of the file (each declaration's line range; for functions also length, cyclomatic complexity, nesting depth, and whether calling it has side effects, with the first reason) followed by its source.
 - file + function ("Name" or "Type.Method"): the outline plus that function's source.
 - file + start_line/end_line: the outline plus those lines.`,
 		InputSchema: json.RawMessage(`{

@@ -126,6 +126,15 @@ func ptrFresh() int {
 }
 
 func callsGet(c *counterT) int { return c.get() }
+
+func kind(x any) string {
+	switch v := x.(type) {
+	case int:
+		_ = v
+		return "int"
+	}
+	return "other"
+}
 `
 
 func TestEffectsFunc(t *testing.T) {
@@ -173,6 +182,7 @@ func TestEffectsFunc(t *testing.T) {
 		"get":        {false, true, true},
 		"inc":        {true, true, true},
 		"incCopy":    {false, false, false},
+		"kind":       {false, false, false},
 	}
 	counterT := pkg.Scope().Lookup("counterT").Type()
 	for name, w := range want {
@@ -244,6 +254,7 @@ func f(path string, xs []string, n ast.Node, tf *token.File, fset *token.FileSet
 	_ = fi.IsDir()
 	tt.Helper()
 	_ = filepath.Join(xs...)
+	_ = ast.NewIdent("x")
 }
 
 func builder(names []string) string {
@@ -312,6 +323,7 @@ func TestEffectsCallStandardLibrary(t *testing.T) {
 		"fi.IsDir()":                    {false, false, true},
 		"tt.Helper()":                   {false, false, true},
 		"filepath.Join(xs...)":          {false, true, false},
+		`ast.NewIdent("x")`:             {false, false, false},
 	}
 	seen := map[string]bool{}
 	ast.Inspect(f, func(n ast.Node) bool {

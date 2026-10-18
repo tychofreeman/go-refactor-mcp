@@ -12,11 +12,15 @@ import (
 	"go/ast"
 	"go/printer"
 	"go/token"
+	"go/types"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 
+	"golang.org/x/tools/go/packages"
+
+	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
@@ -109,15 +113,16 @@ type Decl struct {
 	Kind       string // func, method, type, var, const
 	Name       string // "Name" or "Type.Method"
 	Signature  string
-	Start, End int // lines, including the doc comment
-	Complexity int // cyclomatic complexity (functions only)
-	Nesting    int // maximum control-flow nesting depth (functions only)
+	Start, End int    // lines, including the doc comment
+	Complexity int    // cyclomatic complexity (functions only)
+	Nesting    int    // maximum control-flow nesting depth (functions only)
+	Effects    string // functions: "no side effects", or "side effects: <why>"; "" when not known
 }
 
 // File renders the outline of q.File and its source (or the requested part).
 func File(ws *workspace.Workspace, q Query) (string, error) {
 	path := ws.Abs(q.File)
-	_, file := ws.FileSyntax(path)
+	pkg, file := ws.FileSyntax(path)
 	if file == nil {
 		return "", refactor.Refusef("file %s is not part of the module's packages (call inspect without arguments to list files)", q.File)
 	}
@@ -126,6 +131,7 @@ func File(ws *workspace.Workspace, q Query) (string, error) {
 		return "", err
 	}
 	decls := Outline(ws.Fset, file)
+	addEffects(ws, pkg, file, decls)
 	lines := strings.SplitAfter(string(src), "\n")
 	if len(lines) > 0 && lines[len(lines)-1] == "" {
 		lines = lines[:len(lines)-1]
@@ -133,15 +139,7 @@ func File(ws *workspace.Workspace, q Query) (string, error) {
 
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "%s  (package %s, %d lines)\n\n", ws.Rel(path), file.Name.Name, len(lines))
-	sb.WriteString("outline:\n")
-	for _, d := range decls {
-		metrics := ""
-		if d.Kind == "func" || d.Kind == "method" {
-			n := d.End - d.Start + 1
-			metrics = fmt.Sprintf("   [%d line%s, complexity %d, nesting %d]", n, textutil.Plural(n), d.Complexity, d.Nesting)
-		}
-		fmt.Fprintf(&sb, "  %4d-%-4d %s%s\n", d.Start, d.End, d.Signature, metrics)
-	}
+	writeOutline(&sb, decls)
 
 	start, end := 1, len(lines)
 	switch {
@@ -174,6 +172,24 @@ func File(ws *workspace.Workspace, q Query) (string, error) {
 		sb.WriteByte('\n')
 	}
 	return sb.String(), nil
+}
+
+// writeOutline writes the outline of decls: each declaration's line range
+// and signature, with metrics for functions.
+func writeOutline(sb *strings.Builder, decls []Decl) {
+	sb.WriteString("outline:\n")
+	for _, d := range decls {
+		metrics := ""
+		if d.Kind == "func" || d.Kind == "method" {
+			n := d.End - d.Start + 1
+			facts := []string{fmt.Sprintf("%d line%s", n, textutil.Plural(n)), fmt.Sprintf("complexity %d", d.Complexity), fmt.Sprintf("nesting %d", d.Nesting)}
+			if d.Effects != "" {
+				facts = append(facts, d.Effects)
+			}
+			metrics = "   [" + strings.Join(facts, ", ") + "]"
+		}
+		fmt.Fprintf(sb, "  %4d-%-4d %s%s\n", d.Start, d.End, d.Signature, metrics)
+	}
 }
 
 func find(decls []Decl, name string) *Decl {
@@ -257,6 +273,38 @@ func Outline(fset *token.FileSet, f *ast.File) []Decl {
 		}
 	}
 	return out
+}
+
+// addEffects fills in Effects for the functions among decls, the outline
+// of file, from the summaries of what calling each can do (see
+// analysis.Effects).
+func addEffects(ws *workspace.Workspace, pkg *packages.Package, file *ast.File, decls []Decl) {
+	effects := analysis.NewEffects()
+	for _, p := range ws.Pkgs {
+		effects.AddPackage(p.Syntax, p.TypesInfo)
+	}
+	i := 0
+	for _, d := range file.Decls {
+		fd, ok := d.(*ast.FuncDecl)
+		if !ok {
+			continue
+		}
+		for i < len(decls) && decls[i].Kind != "func" && decls[i].Kind != "method" {
+			i++
+		}
+		if i == len(decls) {
+			return
+		}
+		if fn, ok := pkg.TypesInfo.Defs[fd.Name].(*types.Func); ok && fd.Body != nil {
+			if s := effects.Func(fn); s != nil {
+				decls[i].Effects = "no side effects"
+				if s.Effect != "" {
+					decls[i].Effects = "side effects: " + s.Effect
+				}
+			}
+		}
+		i++
+	}
 }
 
 // Metrics returns the cyclomatic complexity of a function body (1 + one per

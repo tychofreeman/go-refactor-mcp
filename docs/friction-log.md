@@ -665,3 +665,38 @@ there.
 - The running MCP server predates the `doc` argument and `Type.Method`
   placement from #65, so those were not available; restarting it after
   a merge would have made them so.
+
+## 2026-10-18: story, side effects in `inspect`'s outline
+
+The first feature story after a run of tool work: each function's line
+in the outline now ends with `no side effects` or `side effects: <why>`.
+
+**The workflow held.** One refactoring made the change easy
+(`extract_function` pulled the outline loop out of `File`, complexity 18);
+then `add_field` (`Decl.Effects`), `add_declaration` (`addEffects`), two
+`replace_statements` and two `replace_expression`s made the change, test
+first.
+
+**Reading the feature's output on real code found a bug.** `Outline`,
+`Metrics` and `recvTypeName` were reported as "assigns to d": the symbolic
+variable of a type switch (`switch d := x.(type)`) has a nil `Defs`
+entry, and both `analysis.Effects` and `move_statement_*` took a nil
+entry for an assignment. Fixed with `analysis.Defines` (an entry at all);
+a variable `:=` redeclares is in `Uses`, which was checked first. Also
+missing: `ast.NewIdent` (allocation only).
+
+**By hand:**
+
+- **import grouping:** `add_declaration` put `golang.org/x/tools/go/packages`
+  in the module's own group; this repository keeps other modules in a group
+  of their own. Gap: the import adder knows standard library versus the
+  rest, not third-party versus this module.
+- **a long doc comment:** `extract_function`'s new `doc` was written on one
+  110-column line. Gap: wrap it like the rest of the comments (about 75
+  columns).
+- **a map entry** in the standard library table (the composite-literal
+  gap), and prose in tool descriptions and the README.
+
+**My mistake, again:** two edits sent in parallel to the same file, the
+second with line numbers from before the first. The refusal said what was
+cut; edits to one file should be sent one at a time.

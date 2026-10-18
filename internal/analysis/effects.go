@@ -420,7 +420,7 @@ func (b *body) visit(n ast.Node) bool {
 		}
 	case *ast.AssignStmt:
 		for _, l := range n.Lhs {
-			if id, ok := l.(*ast.Ident); ok && n.Tok == token.DEFINE && info.Defs[id] != nil {
+			if id, ok := l.(*ast.Ident); ok && n.Tok == token.DEFINE && Defines(info, id) {
 				continue
 			}
 			b.assigns(l)
