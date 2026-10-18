@@ -150,3 +150,49 @@ func TestMarkdownGroupsTools(t *testing.T) {
 		}
 	}
 }
+
+// claude -p --output-format stream-json writes request_id, and marks a
+// subagent's turns with the tool call that started it.
+func TestAnalyzeStreamJSON(t *testing.T) {
+	var tr transcript
+	usage := func(context int) map[string]any {
+		return map[string]any{"input_tokens": context, "output_tokens": 0}
+	}
+	tr.add(map[string]any{"type": "system", "subtype": "init"})
+	tr.add(map[string]any{"type": "assistant", "request_id": "r1", "parent_tool_use_id": nil, "message": map[string]any{
+		"usage": usage(1000), "content": []any{toolUse("a", "Read", 8)}}})
+	tr.add(map[string]any{"type": "assistant", "request_id": "s1", "parent_tool_use_id": "a", "message": map[string]any{
+		"usage": usage(50), "content": []any{toolUse("x", "Bash", 8)}}})
+	tr.result("a", 200)
+	tr.add(map[string]any{"type": "assistant", "request_id": "r2", "parent_tool_use_id": nil, "message": map[string]any{
+		"usage": usage(1100), "content": []any{map[string]any{"type": "text", "text": "ok"}}}})
+	tr.add(map[string]any{"type": "result", "subtype": "success", "total_cost_usd": 0.25, "num_turns": 2})
+
+	r, err := Analyze(strings.NewReader(tr.String()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Requests != 2 || len(r.Tools) != 1 || stats(t, r, "Read").ResultTokens != 100 {
+		t.Errorf("%+v", r)
+	}
+	if r.CostUSD != 0.25 || r.Turns != 2 {
+		t.Errorf("cost %v, turns %d: want 0.25, 2", r.CostUSD, r.Turns)
+	}
+}
+
+// Every result carries some framing, so a few short results say little
+// about characters per token; the inputs are then sized with a default.
+func TestAnalyzeTinyResultsUseDefaultRatio(t *testing.T) {
+	var tr transcript
+	tr.request("r1", 1000, 0, toolUse("a", "Bash", 708))
+	tr.result("a", 3)
+	tr.request("r2", 1120, 0, map[string]any{"type": "text", "text": "ok"})
+
+	r, err := Analyze(strings.NewReader(tr.String()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := stats(t, r, "Bash").InputTokens; got != 202 {
+		t.Errorf("Bash input tokens = %d, want 202 (708 chars / 3.5)", got)
+	}
+}

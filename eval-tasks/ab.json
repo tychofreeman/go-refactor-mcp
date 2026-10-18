@@ -1,0 +1,30 @@
+[
+  {
+    "name": "rename-wide",
+    "dir": "..",
+    "rev": "508d107",
+    "prompt": "Rename the function textutil.Plural (internal/textutil) to PluralSuffix, everywhere it is used. Behaviour must not change.",
+    "check": "go vet ./... && ! grep -rn --include=*.go 'textutil\\.Plural(' . && grep -q 'func PluralSuffix' internal/textutil/*.go && go test ./internal/textutil/ ./internal/edits/..."
+  },
+  {
+    "name": "add-parameter",
+    "dir": "..",
+    "rev": "508d107",
+    "prompt": "edit.Unified (internal/edit/diff.go) always shows 3 lines of context. Give it an int parameter for the number of context lines, use it instead of the 3, and pass 3 at every call so behaviour does not change.",
+    "check": "go vet ./... && grep -Eq 'func Unified\\([^)]*int\\)' internal/edit/diff.go && ! grep -q 'group(ops, 3)' internal/edit/diff.go && go test ./internal/edit/ ./internal/workspace/"
+  },
+  {
+    "name": "extract-function",
+    "dir": "..",
+    "rev": "508d107",
+    "prompt": "In internal/refactor/refactor.go, Run builds the refusal message for a step that broke the build in two ways, depending on whether the step is an Edit. Extract the code that builds that message into a function named rollbackReason. Behaviour must not change.",
+    "check": "go vet ./... && grep -q 'func rollbackReason' internal/refactor/refactor.go && go test ./internal/refactor/..."
+  },
+  {
+    "name": "small-edit",
+    "dir": "..",
+    "rev": "508d107",
+    "prompt": "In internal/locate/locate.go, change the refusal \"file is required\" to \"file is required: a path relative to the module root\".",
+    "check": "go vet ./... && grep -q 'file is required: a path relative to the module root' internal/locate/locate.go && go test ./internal/locate/"
+  }
+]

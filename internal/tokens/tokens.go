@@ -39,14 +39,20 @@ type Report struct {
 	BaseContext  int // context of the first request: system prompt, tools, CLAUDE.md
 	InputTokens  int // summed over requests, cached or not
 	OutputTokens int
+	CostUSD      float64     // from claude -p's result, when the input has one
+	Turns        int         // likewise
 	Tools        []ToolStats // most ContextTokens first
 }
 
 type line struct {
-	Type        string `json:"type"`
-	IsSidechain bool   `json:"isSidechain"`
-	RequestID   string `json:"requestId"`
-	Message     struct {
+	Type            string  `json:"type"`
+	IsSidechain     bool    `json:"isSidechain"`
+	RequestID       string  `json:"requestId"`
+	StreamRequestID string  `json:"request_id"`         // claude -p's spelling
+	ParentToolUseID *string `json:"parent_tool_use_id"` // set on a subagent's turns in claude -p
+	TotalCostUSD    float64 `json:"total_cost_usd"`     // on claude -p's result
+	NumTurns        int     `json:"num_turns"`          // likewise
+	Message         struct {
 		Usage *struct {
 			Input         int `json:"input_tokens"`
 			CacheCreation int `json:"cache_creation_input_tokens"`
@@ -88,19 +94,27 @@ func Analyze(r io.Reader) (*Report, error) {
 	seen := map[string]bool{}
 	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 0, 1<<20), 64<<20)
+	var cost float64 // from claude -p's result line
+	var turns int
 	for sc.Scan() {
 		var l line
-		if json.Unmarshal(sc.Bytes(), &l) != nil || l.IsSidechain {
+		if json.Unmarshal(sc.Bytes(), &l) != nil || l.IsSidechain || l.ParentToolUseID != nil {
 			continue
 		}
 		switch l.Type {
+		case "result":
+			cost, turns = l.TotalCostUSD, l.NumTurns
 		case "assistant":
 			u := l.Message.Usage
 			if u == nil {
 				continue
 			}
-			if !seen[l.RequestID] {
-				seen[l.RequestID] = true
+			id := l.RequestID
+			if id == "" {
+				id = l.StreamRequestID
+			}
+			if !seen[id] {
+				seen[id] = true
 				reqs = append(reqs, &request{context: u.Input + u.CacheCreation + u.CacheRead, output: u.Output})
 			}
 			cur := reqs[len(reqs)-1]
@@ -137,7 +151,9 @@ func Analyze(r io.Reader) (*Report, error) {
 	if err := sc.Err(); err != nil {
 		return nil, err
 	}
-	return report(reqs), nil
+	rep := report(reqs)
+	rep.CostUSD, rep.Turns = cost, turns
+	return rep, nil
 }
 
 func blocks(raw json.RawMessage) []block {
@@ -158,6 +174,11 @@ func textLen(raw json.RawMessage) int {
 	}
 	return n
 }
+
+// minCalibrationChars is how many characters of results a session needs
+// before its own characters-per-token ratio is trusted: each result also
+// carries a few tokens of framing, which swamp a short one.
+const minCalibrationChars = 100
 
 func report(reqs []*request) *Report {
 	r := &Report{Requests: len(reqs)}
@@ -183,7 +204,7 @@ func report(reqs []*request) *Report {
 		}
 	}
 	perChar := 1 / 3.5 // a common default, until the session gives its own
-	if chars > 0 {
+	if chars >= minCalibrationChars {
 		perChar = tokens / chars
 	}
 
@@ -242,6 +263,8 @@ func (r *Report) Merge(o *Report) {
 	r.BaseContext += o.BaseContext
 	r.InputTokens += o.InputTokens
 	r.OutputTokens += o.OutputTokens
+	r.CostUSD += o.CostUSD
+	r.Turns += o.Turns
 	byName := map[string]int{}
 	for i, s := range r.Tools {
 		byName[s.Name] = i
