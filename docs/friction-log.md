@@ -186,7 +186,17 @@ plain results.
 **`extract_function` at the end of a function.** Extracting the last
 statements before `return nil` gave `err := f(); if err != nil { return
 err }; return nil`, where `return f()` would do. Folded by hand. Gap:
-recognize the trailing `return nil` (see the `err2` entry above too).
+recognize the trailing `return nil` (see the `err2` entry above too). *Follow-up: done; the call site is now `return f(...)`, or
+`return 0, f(...)`, when the selection is followed by the matching
+success return.*
+
+**Building the new call site needed a slide, by hand.** To pull the
+call-site code out of `extract_function`'s 160-line `plan`, the
+`strings.Builder` it fills had to stay inside the extracted lines (copying
+one is refused), so `site.String()` was named with `extract_variable` and
+included. That needed `at := x.insertOffset(decl)`, which sat between them,
+moved above the call-site code first: a hand edit. Gap: `move_statement_up`
+(in `docs/edits.md`; a refactoring here, since the two are independent).
 
 **First real use: the case that motivated the tool.** On this repo,
 `introduce_parameter` with `d.decl` at the top of `movedecl`'s

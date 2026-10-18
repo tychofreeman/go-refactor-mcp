@@ -59,7 +59,7 @@ func (*ExtractFunction) Description() string {
 Use it to split a long function into named steps.
 Identify the statements by file, start_line and end_line (inclusive, as shown by inspect). The lines must cover whole statements of one block; comments and blank lines in the range are allowed and comments move with the code.
 Local variables the statements use become parameters; variables they change or declare that are used afterwards become results, assigned at the call site. The result notes the parameters and results chosen.
-Return statements are supported in two shapes: if every path through the statements returns, the call site becomes "return f(...)"; if the enclosing function returns an error and every return in the statements is an early exit with a non-nil error (like "if err != nil { return nil, err }"), the new function also returns an error and the call site checks it.
+Return statements are supported in two shapes: if every path through the statements returns, the call site becomes "return f(...)"; if the enclosing function returns an error and every return in the statements is an early exit with a non-nil error (like "if err != nil { return nil, err }"), the new function also returns an error and the call site checks it (or, when the lines are followed by "return nil" or "return <the same values>, nil", the call site is "return f(...)" in its place).
 Variables whose address is taken or that a function literal changes are passed as pointers, so both functions share them.
 If the statements use the receiver of the method they are in, the new function is a method of the same type; its name must then be unexported and not clash with a field or method.
 If the statements use the enclosing function's type parameters, the new function declares them too and the call passes them explicitly.
@@ -1758,9 +1758,44 @@ func (x *extraction) plan() (*refactor.Plan, error) {
 	}
 	fn.WriteString("\n}")
 
+	at := x.insertOffset(decl)
+
 	// The call.
+	final := x.finalReturn(f)
+	siteText := x.callSite(f, sig, indent, names, ts, errName, final)
+	end := x.end
+	if final != nil {
+		end = x.off(final.End())
+	}
+	edits := []edit.TextEdit{
+		{Start: x.start, End: end, NewText: siteText},
+		{Start: at, End: at, NewText: fn.String()},
+	}
+	edits = append(edits, x.importEdits()...)
+	edits = append(edits, hoistFile...)
+
+	notes := x.notes(f, names)
+	if final != nil {
+		notes = append(notes, fmt.Sprintf("the return after the selected lines returned what the new function's error says, so the call site is %q", strings.TrimSpace(siteText)))
+	}
+	first, last := x.line(x.tf.Pos(x.start)), x.line(x.tf.Pos(x.end))
+	n := len(x.stmts)
+	return &refactor.Plan{
+		Summary: fmt.Sprintf("extracted lines %d-%d (%d statement%s) into function %s", first, last, n, plural(n), x.name),
+		Edits:   []edit.FileEdit{{Path: x.path, Edits: edits}},
+		Notes:   notes,
+	}, nil
+}
+
+// callSite writes the statements that replace the selection. With final,
+// the return after the selection, the call site returns the exit values
+// and the new function's error in its place.
+func (x *extraction) callSite(f *flow, sig *types.Signature, indent string, names func(vs []*types.Var) []string, ts func(name string, t types.Type) string, errName string, final *ast.ReturnStmt) string {
 	call := x.callExpr(f)
 	var site strings.Builder
+	if final != nil {
+		return fmt.Sprintf("%sreturn %s", indent, strings.Join(append(append([]string(nil), x.exitValues...), call), ", "))
+	}
 	switch x.mode {
 	case terminal:
 		if sig.Results().Len() > 0 {
@@ -1801,22 +1836,7 @@ func (x *extraction) plan() (*refactor.Plan, error) {
 		}
 	}
 
-	at := x.insertOffset(decl)
-	edits := []edit.TextEdit{
-		{Start: x.start, End: x.end, NewText: site.String()},
-		{Start: at, End: at, NewText: fn.String()},
-	}
-	edits = append(edits, x.importEdits()...)
-	edits = append(edits, hoistFile...)
-
-	notes := x.notes(f, names)
-	first, last := x.line(x.tf.Pos(x.start)), x.line(x.tf.Pos(x.end))
-	n := len(x.stmts)
-	return &refactor.Plan{
-		Summary: fmt.Sprintf("extracted lines %d-%d (%d statement%s) into function %s", first, last, n, plural(n), x.name),
-		Edits:   []edit.FileEdit{{Path: x.path, Edits: edits}},
-		Notes:   notes,
-	}, nil
+	return site.String()
 }
 
 func (x *extraction) notes(f *flow, names func(vs []*types.Var) []string) []string {

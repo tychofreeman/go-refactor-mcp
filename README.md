@@ -552,6 +552,12 @@ so the call site passes them on. Two shapes are supported:
   Interface methods and function values never count. The call site uses `err`,
   or `err2` and so on if `err` is taken.
 
+  When the selection has no other results and is followed (in its block,
+  with no comment in between) by `return <the same values>, nil`, the call,
+  its check and that return fold into one: `return f(...)`, or
+  `return 0, f(...)` for exits that return `0, err`. Whatever the new
+  function's error, that returns what the old code did.
+
 Other returns are refused: an early return of a success value (`return v,
 nil`) looks the same to the caller as falling off the end. So are returns
 that use the enclosing function's named results, bare returns in a function

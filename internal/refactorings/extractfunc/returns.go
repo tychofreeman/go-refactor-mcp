@@ -32,10 +32,12 @@ import (
 	"go/ast"
 	"go/token"
 	"go/types"
+	"slices"
 	"strings"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
+	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 )
 
@@ -461,4 +463,40 @@ func (x *extraction) tokenText(es []ast.Expr) []string {
 
 func (x *extraction) quoteNode(n ast.Node) string {
 	return quoteText(string(x.src[x.off(n.Pos()):x.off(n.End())]))
+}
+
+// finalReturn returns the statement after the selection when the call
+// site can return in its place: the selection is an error exit with no
+// other results, and that statement is "return <exit values>, nil", with
+// no comment in between. Then "return <exit values>, f(...)" does what the
+// call, its check and that return did together.
+func (x *extraction) finalReturn(f *flow) *ast.ReturnStmt {
+	if x.mode != errorExit || len(f.results) > 0 {
+		return nil
+	}
+	last := x.stmts[len(x.stmts)-1]
+	i := slices.Index(x.list, last)
+	if i < 0 || i+1 >= len(x.list) {
+		return nil
+	}
+	r, ok := x.list[i+1].(*ast.ReturnStmt)
+	if !ok || len(r.Results) != len(x.exitValues)+1 {
+		return nil
+	}
+	if id, ok := r.Results[len(r.Results)-1].(*ast.Ident); !ok || x.info.Uses[id] != types.Universe.Lookup("nil") {
+		return nil
+	}
+	for j, v := range x.exitValues {
+		got, err1 := locate.Tokens(x.src[x.off(r.Results[j].Pos()):x.off(r.Results[j].End())])
+		want, err2 := locate.Tokens([]byte(v))
+		if err1 != nil || err2 != nil || !locate.EqualTokens(got, want) {
+			return nil
+		}
+	}
+	for _, cg := range x.file.Comments {
+		if cg.Pos() >= last.End() && cg.Pos() < r.End() {
+			return nil
+		}
+	}
+	return r
 }

@@ -10,11 +10,7 @@ var errSkip = errors.New("skip")
 func step1() error { return nil }
 
 func run() error {
-	err := first()
-	if err != nil {
-		return err
-	}
-	return nil
+	return first()
 }
 
 func first() error {
