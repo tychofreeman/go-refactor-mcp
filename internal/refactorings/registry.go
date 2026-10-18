@@ -4,6 +4,7 @@ package refactorings
 
 import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/adddecl"
+	"github.com/tychofreeman/go-refactor-mcp/internal/edits/addfield"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/createfile"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/insertstmts"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/replaceexpr"
@@ -47,6 +48,7 @@ func All() []refactor.Refactoring {
 		insertstmts.New(),
 		replaceexpr.New(),
 		adddecl.New(),
+		addfield.New(),
 	}
 }
 

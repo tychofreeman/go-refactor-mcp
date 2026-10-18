@@ -32,6 +32,8 @@ a candidate without evidence stays at the bottom.
   or next to a named one, with the imports they need.
 - **`replace_expression`:** one expression, or every one in the file that
   means the same, replaced by a new one, parenthesized as needed.
+- **`add_field`:** new fields in a struct type, opening up a one-line
+  struct, with the imports their types need.
 
 ## Candidates
 
@@ -95,8 +97,8 @@ form can come first, while the focus is on refactorings.
     first compiled.
   - 2026-10-17, adding `introduce_parameter`: the stub's `Plan` replaced by
     the real one, and the new checks added beside it.
-- `add_field` (struct) and `add_method` (a method on a type, or an
-  interface method).
+- `add_method` (an interface method; a method on a type is
+  `add_declaration`). `add_field` is done (see Done).
   - 2026-10-18, one interface check instead of two: `Workspace.TypesInfos`.
 
 ## Suggested, without evidence yet

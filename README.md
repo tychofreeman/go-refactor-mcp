@@ -41,8 +41,8 @@ model reads before choosing the next refactoring. That loop is the iteration.
   package or another one.
 - **Step 5 (in progress):** edits, steps that change behavior on purpose
   (see "Edits"). `create_file`, `replace_statements`, `insert_statements`,
-  `add_declaration` and `replace_expression` are done; the candidates are
-  in `docs/edits.md`.
+  `add_declaration`, `replace_expression` and `add_field` are done; the
+  candidates are in `docs/edits.md`.
 
 ## Roadmap
 
@@ -1314,6 +1314,16 @@ fields and methods referring to the same things and local variables of the
 same types, so `c.Body` in another method of the same type matches and
 `d.Body` of another type does not. A change in the expression's type is
 noted; the result must type-check.
+
+### add_field
+
+`add_field` adds fields to a struct type: one or more, as Go source with
+their comments and tags, at the end or just `after` or `before` a named
+field. A struct written on one line (`struct{ x, y int }`, or `struct{}`)
+is opened up into lines. Packages the fields' types name are imported.
+Adding a field changes the struct (its literals, its size, what reflection
+sees), so it is an edit; the type check refuses a duplicate name and an
+unkeyed literal that would no longer list every field.
 
 ## Testing
 

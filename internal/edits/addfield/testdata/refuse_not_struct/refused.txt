@@ -1,0 +1,1 @@
+id is not declared as a struct type
