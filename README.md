@@ -389,10 +389,26 @@ not finish. Each part names the first reason, so a refusal can say
   them before returning are summarized as part of the caller.
   `errors.New` and the `strconv` parsers have no side effects (but are not
   known calls: their errors are new values).
+- **Standard library** (`internal/analysis/stdlib.go`): a table, by full
+  name and including interface methods, of what common functions read,
+  write and how they panic. Reading the file system or the environment
+  (`os.ReadFile`, `os.Stat`, `filepath.Abs`) is a read, which only a side
+  effect can disturb; `strings.Join` and `slices.Contains` read their
+  slice; `sort.Strings` writes its argument; `strings.Builder` and
+  `bytes.Buffer` methods write their receiver; the `go/types` getters, the
+  `go/token` position methods and every `go/ast` node's `Pos` and `End`
+  read at most their receiver. `fmt.Sprint*` and `Errorf` have no side
+  effect unless an argument is an interface or has a `String`, `Error`,
+  `Format` or `GoString` method; `fmt.Fprint*` writing to a local
+  `strings.Builder` writes only that. Inside a function, a write to its
+  own local (`sb.WriteString` on a local builder, `sort.Strings` on a
+  fresh slice) is not a side effect.
 
 For now only `move_statement_up` and `move_statement_down` use these
 summaries; the other refactorings still treat every call not on the
-known list as a side effect.
+known list as a side effect. The function literals passed to
+`ast.Inspect` and the like run during their statement, so
+`move_statement_*` counts what they do as part of it.
 
 ## Rename: what it checks
 

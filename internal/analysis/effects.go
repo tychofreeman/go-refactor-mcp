@@ -70,12 +70,24 @@ func (e *Effects) Func(fn *types.Func) *Summary {
 // Call summarizes what call itself does, apart from evaluating its
 // function and arguments.
 func (e *Effects) Call(info *types.Info, call *ast.CallExpr) Summary {
+	return e.call(info, call, nil)
+}
+
+func (e *Effects) call(info *types.Info, call *ast.CallExpr, private func(target ast.Expr, inPlace bool) bool) Summary {
 	name := types.ExprString(call.Fun)
 	if tv, ok := info.Types[call.Fun]; ok && tv.IsType() {
 		return Summary{} // a conversion
 	}
 	if b, ok := info.Uses[IdentOf(call.Fun)].(*types.Builtin); ok {
 		return builtinCall(b.Name())
+	}
+	if fn, ok := info.Uses[IdentOf(call.Fun)].(*types.Func); ok {
+		if s, ok := stdCall(info, fn, call, private); ok {
+			return s
+		}
+		if s, ok := syncCallSummary(info, fn, call, private); ok {
+			return s
+		}
 	}
 	fn := staticCallee(info, call)
 	if fn == nil {
@@ -84,16 +96,6 @@ func (e *Effects) Call(info *types.Info, call *ast.CallExpr) Summary {
 	var s Summary
 	if call.Ellipsis.IsValid() {
 		s.Reads = "spreads " + types.ExprString(call.Args[len(call.Args)-1])
-	}
-	p, known := knownFuncs[fn.FullName()]
-	if !known {
-		p, known = effectFreeFuncs[fn.FullName()]
-	}
-	if known {
-		if p != NoPanic {
-			s.Unsafe = "calls " + name
-		}
-		return s
 	}
 	fs := e.Func(fn)
 	if fs == nil {
@@ -147,6 +149,59 @@ var syncCalls = map[string]syncCall{
 	"strings.Map": {}, "strings.IndexFunc": {}, "strings.LastIndexFunc": {},
 	"strings.ContainsFunc": {}, "strings.FieldsFunc": {}, "strings.TrimFunc": {},
 	"strings.TrimLeftFunc": {}, "strings.TrimRightFunc": {},
+}
+
+// SyncLits returns the function literals passed to call that run during
+// it, when it calls a function that calls them only before it returns
+// (ast.Inspect, sort.Slice, ...). Their bodies are part of what the call
+// does, which Call leaves to the caller to walk.
+func SyncLits(info *types.Info, call *ast.CallExpr) []*ast.FuncLit {
+	fn := staticCallee(info, call)
+	if fn == nil || fn.Pkg() == nil || fn.Signature().Recv() != nil {
+		return nil
+	}
+	if _, ok := syncCalls[fn.Pkg().Path()+"."+fn.Name()]; !ok {
+		return nil
+	}
+	var lits []*ast.FuncLit
+	for _, a := range call.Args {
+		if lit, ok := ast.Unparen(a).(*ast.FuncLit); ok {
+			lits = append(lits, lit)
+		}
+	}
+	return lits
+}
+
+// syncCallSummary summarizes a call of a function in syncCalls, apart
+// from the literal functions passed to it (see SyncLits): its reads and
+// writes of its first argument, and a function value passed to it, which
+// could do anything.
+func syncCallSummary(info *types.Info, fn *types.Func, call *ast.CallExpr, private func(target ast.Expr, inPlace bool) bool) (Summary, bool) {
+	if fn.Pkg() == nil || fn.Signature().Recv() != nil {
+		return Summary{}, false
+	}
+	sc, ok := syncCalls[fn.Pkg().Path()+"."+fn.Name()]
+	if !ok {
+		return Summary{}, false
+	}
+	var s Summary
+	for i, a := range call.Args {
+		_, isLit := ast.Unparen(a).(*ast.FuncLit)
+		_, isFunc := info.TypeOf(a).Underlying().(*types.Signature)
+		switch {
+		case isLit:
+		case isFunc:
+			s.Effect = "passes " + types.ExprString(a) + " to " + types.ExprString(call.Fun)
+		case i == 0 && (private == nil || !private(a, false)):
+			if sc.writes && s.Effect == "" {
+				s.Effect = "sorts " + types.ExprString(a)
+			}
+			if sc.reads {
+				s.Reads = "reads " + types.ExprString(a)
+			}
+		}
+	}
+	return s, true
 }
 
 // staticCallee returns the function call calls, when that is known
@@ -454,30 +509,10 @@ func (b *body) call(call *ast.CallExpr) Summary {
 			return s
 		}
 	}
-	fn := staticCallee(info, call)
-	if fn == nil || fn.Pkg() == nil {
-		return b.e.Call(info, call)
+	for _, lit := range SyncLits(info, call) {
+		b.sync[lit] = true
 	}
-	sc, ok := syncCalls[fn.Pkg().Path()+"."+fn.Name()]
-	if !ok || fn.Signature().Recv() != nil {
-		return b.e.Call(info, call)
-	}
-	var s Summary
-	for i, a := range call.Args {
-		if lit, ok := ast.Unparen(a).(*ast.FuncLit); ok {
-			b.sync[lit] = true
-		} else if _, isFunc := info.TypeOf(a).Underlying().(*types.Signature); isFunc {
-			s.Effect = "passes " + types.ExprString(a) + " to " + types.ExprString(call.Fun)
-		} else if i == 0 && !b.pointsPrivate(a) {
-			if sc.writes {
-				b.set(&s.Effect, "sorts "+types.ExprString(a))
-			}
-			if sc.reads {
-				b.set(&s.Reads, "reads "+types.ExprString(a))
-			}
-		}
-	}
-	return s
+	return b.e.call(info, call, b.writesPrivate)
 }
 
 // commaOK reports whether the type assertion ta in fn is the value of a
@@ -500,4 +535,17 @@ func commaOK(ta *ast.TypeAssertExpr, fn ast.Node) bool {
 func isInteger(t types.Type) bool {
 	b, ok := t.Underlying().(*types.Basic)
 	return ok && b.Info()&types.IsInteger != 0
+}
+
+// writesPrivate reports, for Effects.call, whether a call's write goes to
+// memory of this call: target in place (a local variable or part of one),
+// or what target points to (a fresh local, or the address of a local).
+func (b *body) writesPrivate(target ast.Expr, inPlace bool) bool {
+	if inPlace {
+		return b.private(target)
+	}
+	if u, ok := ast.Unparen(target).(*ast.UnaryExpr); ok && u.Op == token.AND {
+		return b.private(u.X)
+	}
+	return b.pointsPrivate(target)
 }

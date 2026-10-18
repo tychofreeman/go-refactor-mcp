@@ -629,3 +629,37 @@ functions that call such code; about 390 are writes through pointers or to
 package variables. The module's own functions were not the bottleneck;
 the standard library is. A breakdown of the refusals by callee before
 building would have shown it.
+
+## 2026-10-18: standard library knowledge for the effect summaries
+
+**Measured first this time.** Before writing any code, the remaining
+side-effect refusals were ranked by the innermost unknown callee:
+`append` (120), `ast.Inspect` (96), `fmt.Sprintf`/`Fprintf` (148), file
+system reads (105), `go/token` and `go/types` getters (~250), `n.Pos`
+(48), sorts (75), `strings.Builder` (35). That list became the table in
+`analysis/stdlib.go`, and `append`, which needs alias tracking, was left
+for its own change. On the same 5,569 statements: 526 applied before,
+560 after (521 on `main`).
+
+**The tests caught an unsound intermediate step.** Once `ast.Inspect` no
+longer counted as a side effect, a statement could slide past an
+`ast.Inspect` whose visitor wrote a variable the other statement read:
+`move_statement_*` skipped literal bodies. The refusal case written first
+(`refuse_visitor_writes_used`) applied, and failed. Fixed in the same
+change by walking the bodies of literals that run during the statement.
+
+**A bug the measurement showed.** `o.Pos()` on a `types.Object` was on the
+known list, but `Effects.Call` rejected interface methods before looking
+there.
+
+**By hand:**
+
+- **dependent edits:** declaring `walk` and using it in two places of one
+  100-line statement had to be one step (each step must type-check, so a
+  declaration alone is "declared and not used"). Gap: several edits
+  applied, and checked, as one step.
+- **elements of a map literal** (the standard library table's last
+  entries): the composite-literal gap again.
+- The running MCP server predates the `doc` argument and `Type.Method`
+  placement from #65, so those were not available; restarting it after
+  a merge would have made them so.
