@@ -31,7 +31,7 @@ model reads before choosing the next refactoring. That loop is the iteration.
 - **Step 4 (in progress):** refactorings that prepare a feature change.
   `add_parameter`, `remove_parameter`, `move_parameter` and
   `introduce_parameter` are done, for functions and methods, exported or
-  not. `move_declaration` moves a
+  not. `method_to_function` turns an unexported method into a function. `move_declaration` moves a
   declaration (with the helpers it uses, if asked) to another file, of its
   package or another one.
 - **Step 5 (later):** edits, steps that change behavior on purpose (see
@@ -906,6 +906,39 @@ Refused besides: a method called through an embedded field (`n.label()`
 for a method of `n`'s embedded `point`). The function checks of
 `add_parameter` apply too (only called, not an interface method,
 interfaces kept, the new name free).
+
+## Method to function: what it checks
+
+`method_to_function` turns a method into a function whose first
+parameter is the receiver, and changes every call: `x.m(a)` becomes
+`m(x, a)`, `m(&v, a)` where the call took the address of `v` for a pointer
+receiver, `m(*p, a)` where it dereferenced `p` for a value receiver, and
+`m(&o.inner, a)` for a method promoted from an embedded field. The
+function keeps the method's name unless `new_name` is given, and an
+unnamed receiver gets a name (the type's initial, or `recv`). It is the
+step before moving a method to another package, which `move_declaration`
+refuses, and before narrowing what a helper takes (`introduce_parameter`
+and `remove_parameter`).
+
+The receiver is evaluated first in both forms, so behavior is the same
+for every call; what can change is which types have the method:
+
+- only unexported methods: an exported one could satisfy an interface
+  outside this module that a library checks at run time (`fmt` looks for
+  `String`, `errors` for `Error`), and losing it would not be a compile
+  error;
+- no interface in the workspace has a method of that name and package
+  (an unexported method can only be in this module's interfaces), since a
+  type could implement it through the method, directly or by embedding;
+- every use is a call: a method value (`f := x.m`) or method expression
+  (`T.m`) is refused;
+- the receiver type has no type parameters (the function would have to
+  declare them);
+- the name is free: not declared in the package, not an import name in
+  one of its files, not predeclared, and not hidden by a local at any
+  call;
+- a call whose receiver contains another call of the method
+  (`n.after().after()`) is refused; assign the inner one first.
 
 ## Changing a method: interfaces
 

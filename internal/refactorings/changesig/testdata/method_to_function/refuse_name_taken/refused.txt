@@ -1,0 +1,1 @@
+the package already declares size (at a.go:7:6); pass new_name

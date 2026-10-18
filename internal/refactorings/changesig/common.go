@@ -164,7 +164,8 @@ func (t *target) collectCalls() error {
 					t.obj.Name(), t.ws.Position(id.Pos()))
 			}
 			pos := t.ws.Fset.Position(ce.Pos())
-			k := fmt.Sprintf("%s:%d", pos.Filename, pos.Offset)
+			// By range: in x.m().m() both calls start at the same offset.
+			k := fmt.Sprintf("%s:%d-%d", pos.Filename, pos.Offset, t.off(ce.End()))
 			if seen[k] {
 				continue // the same call, seen through another package variant
 			}
