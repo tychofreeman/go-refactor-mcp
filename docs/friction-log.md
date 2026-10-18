@@ -725,3 +725,26 @@ Among the MCP tools, `create_file` and `add_declaration` return about as
 many tokens as they were sent: the diff echoes the new code back. Gap: an
 edit's result could summarize code the model just wrote instead of
 repeating it.
+
+## 2026-10-18: the A/B harness (`refactor-ab`)
+
+Written through the MCP: `create_file` for the stub and test, then
+`add_declaration`, `replace_statements`, `replace_expression`, `add_field`.
+
+**A new local and its use cannot be separate steps.** Adding `cost` and
+`turns` to `tokens.Analyze` (declared before the loop, set in it, used
+after it) was refused in each order: Go rejects a local that is declared
+and not used, and a use of one not yet declared. Done as one
+`replace_statements` over the whole loop (50 lines restated). Gap: a batch
+of steps type-checked as a whole; or an edit that inserts in several
+places at once.
+
+**Added imports shift the line numbers below them.** Filling three stubs
+bottom-up is meant to keep earlier line numbers valid, but an edit that
+adds an import moves everything after the import block; one
+`replace_statements` was refused for it. Gap: name-based addressing for
+statements (1c), or a result that says how far lines moved.
+
+**A case clause cannot be added to a switch.** The `case "result":` went
+in with the same whole-loop replacement. Gap: an edit that adds a case
+clause.

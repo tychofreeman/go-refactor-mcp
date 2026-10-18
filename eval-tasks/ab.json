@@ -1,0 +1,58 @@
+[
+  {
+    "name": "rename-wide",
+    "dir": "..",
+    "rev": "508d107",
+    "prompt": "Rename the function textutil.Plural (internal/textutil) to PluralSuffix, everywhere it is used. Behaviour must not change.",
+    "check": "go vet ./... && ! grep -rn --include=*.go --exclude-dir=testdata 'textutil\\.Plural(' . && grep -q 'func PluralSuffix' internal/textutil/*.go && go test ./internal/textutil/ ./internal/edits/..."
+  },
+  {
+    "name": "add-parameter",
+    "dir": "..",
+    "rev": "508d107",
+    "prompt": "edit.Unified (internal/edit/diff.go) always shows 3 lines of context. Give it an int parameter for the number of context lines, use it instead of the 3, and pass 3 at every call so behaviour does not change.",
+    "check": "go vet ./... && grep -Eq 'func Unified\\([^)]*int\\)' internal/edit/diff.go && ! grep -q 'group(ops, 3)' internal/edit/diff.go && go test ./internal/edit/ ./internal/workspace/"
+  },
+  {
+    "name": "extract-function",
+    "dir": "..",
+    "rev": "508d107",
+    "prompt": "In internal/refactor/refactor.go, Run builds the refusal message for a step that broke the build in two ways, depending on whether the step is an Edit. Extract the code that builds that message into a function named rollbackReason. Behaviour must not change.",
+    "check": "go vet ./... && grep -q 'func rollbackReason' internal/refactor/refactor.go && go test ./internal/refactor/..."
+  },
+  {
+    "name": "small-edit",
+    "dir": "..",
+    "rev": "508d107",
+    "prompt": "In internal/locate/locate.go, change the refusal \"file is required\" to \"file is required: a path relative to the module root\".",
+    "check": "go vet ./... && grep -q 'file is required: a path relative to the module root' internal/locate/locate.go && go test ./internal/locate/"
+  },
+  {
+    "dir": "..",
+    "rev": "508d107",
+    "name": "rename-field",
+    "prompt": "Rename the Summary field of refactor.Plan (internal/refactor/refactor.go) to Headline, everywhere it is used. Other things named Summary, such as the Summary field of refactor.Result, keep their names. Behaviour must not change.",
+    "check": "go vet ./... && grep -Eq '^\\s+Headline\\s+string' internal/refactor/refactor.go && grep -Eq '^\\s+Summary\\s+string\\s+.json:\"summary' internal/refactor/refactor.go && go test ./internal/refactor/... ./internal/mcpserver/ ./internal/eval/"
+  },
+  {
+    "dir": "..",
+    "rev": "508d107",
+    "name": "add-parameter-nested",
+    "prompt": "Add a parameter suffix string to textutil.Plural (internal/textutil), after n, and return it instead of the hard-coded \"s\". Pass \"s\" at every call so behaviour does not change.",
+    "check": "go vet ./... && grep -Eq 'func Plural\\(n int, [A-Za-z]+ string\\) string' internal/textutil/textutil.go && ! grep -q 'return \"s\"' internal/textutil/textutil.go && go test ./internal/textutil/ ./internal/edits/... ./internal/refactorings/changesig/ ./internal/refactorings/extractfunc/"
+  },
+  {
+    "dir": "..",
+    "rev": "508d107",
+    "name": "move-to-package",
+    "prompt": "Move the helper function limit from internal/refactor/refactor.go into package textutil (internal/textutil) as the exported function Limit, and update its callers. Behaviour must not change.",
+    "check": "go vet ./... && grep -q '^func Limit' internal/textutil/*.go && ! grep -q '^func limit' internal/refactor/refactor.go && go test ./internal/refactor/... ./internal/textutil/"
+  },
+  {
+    "dir": "..",
+    "rev": "508d107",
+    "name": "story-option",
+    "prompt": "Refusals from refactor.Run (internal/refactor/refactor.go) list at most 10 type errors. Add a field MaxErrors int to refactor.Options so a caller can choose that limit, with 0 meaning the current 10, and use it in every place the 10 is used now. Callers that do not set it must behave as before.",
+    "check": "go vet ./... && grep -Eq '^\\s+MaxErrors\\s+int' internal/refactor/refactor.go && ! grep -q 'limit(errs, 10)' internal/refactor/refactor.go && go test ./internal/refactor/... ./internal/mcpserver/"
+  }
+]
