@@ -278,6 +278,14 @@ func unsafeValue(info *types.Info, e ast.Expr) (ast.Node, string) {
 			if (n.Op == token.QUO || n.Op == token.REM) && info.Types[n.Y].Value == nil {
 				bad, why = n, "could panic: it divides by a value that could be zero"
 			}
+		case *ast.CallExpr:
+			if known, panics := analysis.KnownCall(info, n); known {
+				if panics != analysis.NoPanic {
+					bad, why = n, "could panic: it calls "+types.ExprString(n.Fun)
+				}
+			} else if analysis.HasEffect(info, n) {
+				bad, why = n, "has side effects"
+			}
 		default:
 			if analysis.HasEffect(info, n) {
 				bad, why = n, "has side effects"

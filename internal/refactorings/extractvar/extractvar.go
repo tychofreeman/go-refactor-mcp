@@ -52,7 +52,7 @@ func (*ExtractVariable) Description() string {
 	return `Introduce a named variable for an expression: inserts "name := <expression>" just before the statement containing it and uses the name in its place. Constant expressions become a const.
 Use it to give a meaningful name to a complex sub-expression, to split up a long line, or (with all_occurrences) to replace a repeated expression.
 Identify the expression by file, the line where it starts, and its exact source text (whitespace may differ); add column only if that text occurs more than once on the line.
-all_occurrences also replaces identical occurrences later in the same block; it is only allowed for expressions without function calls whose variables are not modified afterwards.
+all_occurrences also replaces identical occurrences later in the same block; it is only allowed for expressions without function calls (other than known ones without side effects, like strings.ToLower) whose variables are not modified afterwards.
 Refuses if moving the expression before its statement could change behavior: when it is only evaluated conditionally or repeatedly (right side of && or ||, loop condition or post statement, else-if, case expression), when it would run before other calls in the same statement, when it is assigned to or its address is taken, or when it uses variables declared inside the statement.`
 }
 

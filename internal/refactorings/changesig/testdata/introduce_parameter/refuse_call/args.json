@@ -1,1 +1,1 @@
-{"file": "a.go", "line": 9, "expression": "strings.ToUpper(s)", "parameter": "up"}
+{"file": "a.go", "line": 9, "expression": "fmt.Sprint(s)", "parameter": "up"}

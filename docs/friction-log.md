@@ -411,3 +411,25 @@ statement (if obj == nil {) ... where ObjectKey has a short variable
 declaration (p := fset.Position(o.Pos()))". A body with one statement
 more no longer gives an empty "where a has  at -": the other side is "the
 end of a block".*
+
+## 2026-10-18: calls known to have no side effects
+
+**What it unblocks, tested.** `add_parameter` passing
+`strings.ToUpper(name)`, `introduce_parameter` of `strings.TrimSpace(s)`,
+`extract_variable` replacing every `strings.ToLower(s)`, and
+`inline_variable` repeating `strings.ToUpper(s)` were all refused before
+(any call counted as a side effect); now applied. `strings.Repeat` is
+refused as "could panic", not as a side effect.
+
+**The two cases that prompted it are still refused, for the right
+reason.** `t.obj.Name()` and `t.obj.Pkg().Path()` (in the
+`function_to_method` work and the dedupe story) are known getters now, but
+both sit inside a closure assigned to a variable, which can run any number
+of times, so `introduce_parameter` refuses them as "evaluated more than
+once per call". Gap: an expression that reads only state that cannot
+change (a parameter never assigned, then immutable getters) has the same
+value however often it is evaluated, so repetition need not matter.
+
+**An existing test changed meaning.** `introduce_parameter/refuse_call`
+used `strings.ToUpper` as its example of a call with side effects; it now
+uses `fmt.Sprint`.
