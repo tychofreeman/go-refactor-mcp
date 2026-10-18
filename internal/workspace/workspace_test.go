@@ -270,3 +270,50 @@ func TestErrorsReported(t *testing.T) {
 		t.Errorf("want root-relative type error, got %v", errs)
 	}
 }
+
+func TestSquash(t *testing.T) {
+	src := "package m\n\nfunc F() int { return 1 }\n"
+	dir := writeModule(t, map[string]string{"m.go": src})
+	w, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "m.go")
+	change := func(from, to string) {
+		t.Helper()
+		cur, _ := os.ReadFile(path)
+		i := strings.Index(string(cur), from)
+		if _, err := w.Apply(from+" to "+to, []edit.FileEdit{{Path: path, Edits: []edit.TextEdit{{Start: i, End: i + len(from), NewText: to}}}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	change("return 1", "return 2")
+	change("func F", "func G")
+	created := filepath.Join(dir, "sub", "n.go")
+	if _, err := w.Apply("create", []edit.FileEdit{{Path: created, Edits: []edit.TextEdit{{NewText: "package sub\n"}}}}); err != nil {
+		t.Fatal(err)
+	}
+
+	c, err := w.Squash(3, "batch")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Label != "batch" || !strings.Contains(c.Diff, "-func F() int { return 1 }\n+func G() int { return 2 }") || !strings.Contains(c.Diff, "+package sub") {
+		t.Errorf("squashed change %q, diff:\n%s", c.Label, c.Diff)
+	}
+	if _, err := w.Undo(); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(path); string(got) != src {
+		t.Errorf("one undo did not restore the file: %s", got)
+	}
+	if _, err := os.Stat(filepath.Dir(created)); !os.IsNotExist(err) {
+		t.Errorf("one undo did not remove the created file and directory: %v", err)
+	}
+	if w.CanUndo() {
+		t.Error("squashed changes left on the undo stack")
+	}
+	if _, err := w.Squash(1, "nothing"); err == nil {
+		t.Error("squashing more changes than the stack holds should fail")
+	}
+}

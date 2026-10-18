@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
+	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
 
@@ -81,6 +82,8 @@ type Result struct {
 	Notes       []string `json:"notes,omitempty"`
 	Files       []string `json:"files,omitempty"`
 	Diff        string   `json:"diff,omitempty"`
+	supplied    string   // the plan's Supplied, for a batch's combined diff
+	locations   bool     // the plan's Locations, likewise
 }
 
 // String renders the result as plain text, the format sent to models.
@@ -139,6 +142,7 @@ func Run(ws *workspace.Workspace, r Refactoring, args json.RawMessage, opts Opti
 		return nil, err
 	}
 	res.Summary, res.Notes = plan.Summary, plan.Notes
+	res.supplied, res.locations = plan.Supplied, plan.Locations
 
 	if opts.DryRun {
 		c, err := ws.Preview(r.Name(), plan.Edits)
@@ -180,6 +184,147 @@ func diffOf(ws *workspace.Workspace, c workspace.Change, opts Options, plan *Pla
 		return c.DiffContext(ws.Root, 0)
 	}
 	return c.Diff
+}
+
+// Step is one refactoring or edit of a batch, with its arguments.
+type Step struct {
+	Refactoring Refactoring
+	Args        json.RawMessage
+}
+
+// BatchResult is the outcome of RunBatch.
+type BatchResult struct {
+	Applied    bool
+	Steps      []*Result // the steps run, in order; when refused, the last one is the one refused
+	Total      int       // how many steps the batch had
+	FailedStep int       // 1-based, when refused
+	FailedTool string    // the refused step's tool
+	Refused    string
+	Diff       string // of the whole batch, when applied
+	Files      []string
+}
+
+// RunBatch runs steps in order, each through Run, as one change: if a
+// step is refused, the ones before it are undone and the batch is refused;
+// if all apply, they become one entry on the undo stack.
+//
+// A step that addresses a file by line (line, start_line, end_line or
+// column) is refused once an earlier step of the batch has changed that
+// file, since its line numbers may no longer be right.
+func RunBatch(ws *workspace.Workspace, steps []Step, opts Options) (*BatchResult, error) {
+	b := &BatchResult{Total: len(steps)}
+	changedBy := map[string]int{} // a file, relative to the root -> the first step that changed it
+	applied := 0
+	rollback := func() error {
+		for ; applied > 0; applied-- {
+			if _, err := ws.Undo(); err != nil {
+				return fmt.Errorf("rolling back the batch: %w", err)
+			}
+		}
+		return nil
+	}
+	var names []string
+	for i, s := range steps {
+		name := s.Refactoring.Name()
+		if file, byLine := lineAddressed(s.Args); byLine {
+			rel := ws.Rel(ws.Abs(file))
+			if by, ok := changedBy[rel]; ok {
+				b.FailedStep, b.FailedTool = i+1, name
+				b.Refused = fmt.Sprintf("it addresses %s by line, but step %d changed %s, so those line numbers may be wrong; address it by name, or put it before step %d", rel, by, rel, by)
+				return b, rollback()
+			}
+		}
+		res, err := Run(ws, s.Refactoring, s.Args, Options{Compact: opts.Compact})
+		if err != nil {
+			if rerr := rollback(); rerr != nil {
+				return nil, fmt.Errorf("step %d (%s): %v; %v", i+1, name, err, rerr)
+			}
+			return nil, fmt.Errorf("step %d (%s): %w", i+1, name, err)
+		}
+		b.Steps = append(b.Steps, res)
+		if !res.Applied {
+			b.FailedStep, b.FailedTool, b.Refused = i+1, name, res.Refused
+			return b, rollback()
+		}
+		applied++
+		names = append(names, name)
+		for _, f := range res.Files {
+			if _, ok := changedBy[f]; !ok {
+				changedBy[f] = i + 1
+			}
+		}
+	}
+	b.Applied = true
+	if applied == 0 {
+		return b, nil
+	}
+	c, err := ws.Squash(applied, "batch: "+strings.Join(names, ", "))
+	if err != nil {
+		return nil, err
+	}
+	b.Files = c.Files(ws.Root)
+	b.Diff = c.Diff
+	locations := true
+	var supplied []string
+	for _, r := range b.Steps {
+		locations = locations && r.locations
+		if r.supplied != "" {
+			supplied = append(supplied, r.supplied)
+		}
+	}
+	if opts.Compact {
+		b.Diff = c.DiffContext(ws.Root, 0)
+		if locations {
+			b.Diff = edit.Locations(b.Diff)
+		}
+	}
+	b.Diff = edit.ElideSupplied(b.Diff, strings.Join(supplied, "\n"))
+	return b, nil
+}
+
+// String renders the batch result as plain text, the format sent to models.
+func (b *BatchResult) String() string {
+	var sb strings.Builder
+	if !b.Applied {
+		fmt.Fprintf(&sb, "REFUSED batch at step %d of %d (%s): %s\n", b.FailedStep, b.Total, b.FailedTool, b.Refused)
+		switch n := b.FailedStep - 1; n {
+		case 0:
+			sb.WriteString("Nothing changed.\n")
+		case 1:
+			sb.WriteString("The earlier step 1 was rolled back; nothing changed.\n")
+		default:
+			fmt.Fprintf(&sb, "Steps 1-%d were rolled back; nothing changed.\n", n)
+		}
+		return sb.String()
+	}
+	fmt.Fprintf(&sb, "APPLIED batch: %d step%s\n", len(b.Steps), textutil.Plural(len(b.Steps)))
+	for i, r := range b.Steps {
+		fmt.Fprintf(&sb, "%d. %s: %s\n", i+1, r.Refactoring, r.Summary)
+		for _, n := range r.Notes {
+			fmt.Fprintf(&sb, "   note: %s\n", n)
+		}
+	}
+	if b.Diff != "" {
+		sb.WriteString("\n")
+		sb.WriteString(b.Diff)
+	}
+	return sb.String()
+}
+
+// lineAddressed returns the file a step's arguments address by line, if
+// they do.
+func lineAddressed(args json.RawMessage) (string, bool) {
+	var a struct {
+		File      string `json:"file"`
+		Line      int    `json:"line"`
+		StartLine int    `json:"start_line"`
+		EndLine   int    `json:"end_line"`
+		Column    int    `json:"column"`
+	}
+	if json.Unmarshal(args, &a) != nil || a.File == "" {
+		return "", false
+	}
+	return a.File, a.Line != 0 || a.StartLine != 0 || a.EndLine != 0 || a.Column != 0
 }
 
 func limit(s []string, n int) []string {

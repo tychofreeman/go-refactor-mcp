@@ -76,7 +76,7 @@ func TestRunAppliesAndReports(t *testing.T) {
 	model := &script{t: t, turns: []func([]Message) Message{
 		func(msgs []Message) Message {
 			sawSystem = msgs[0].Role == "system" && strings.Contains(msgs[0].Content, "Call exactly one tool per turn") &&
-				strings.Contains(msgs[0].Content, "Apply exactly ONE tool per call")
+				strings.Contains(msgs[0].Content, "Apply ONE tool per call")
 			return calls(call("inspect", `{"file":"m.go"}`))(msgs)
 		},
 		// The line as a string, as small models often send it; a second
