@@ -1,0 +1,1 @@
+{"file": "a.go", "line": 9, "where": "after", "content": "if n > 10 {\n\tn = 10\n}"}

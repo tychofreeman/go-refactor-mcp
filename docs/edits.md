@@ -26,6 +26,8 @@ a candidate without evidence stays at the bottom.
 - **`replace_statements`:** whole statements of one block replaced by new
   ones, re-indented, with the imports they need added and those only the
   old ones used removed.
+- **`insert_statements`:** new statements before or after a statement, or
+  into a block (an empty body too), with the imports they need.
 
 ## Candidates
 
@@ -49,9 +51,7 @@ form can come first, while the focus is on refactorings.
 
 **Statements**
 
-- `insert_statements`: new statements before or after whole statements of
-  a block, or into an empty body (`replace_statements` is done; this is
-  the case with nothing to replace).
+- `insert_statements` is done (see Done).
   - 2026-10-17, moving a declaration to another package: three statements
     computing a doc comment replaced by a call to the new `docOf`.
   - 2026-10-18, one interface check instead of two: the bodies of
