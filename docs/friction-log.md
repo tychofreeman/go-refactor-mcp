@@ -112,7 +112,8 @@ another in the same block, so removal had to join addition in one place
 (`Adder.Remove`, with `Edits` producing both). That turned a function of
 `movedecl` into a method of a type in another package. Gap: no tool turns
 a function into a method, and `move_declaration` does not yet move code
-that uses its neighbours.
+that uses its neighbours. *Follow-up: `function_to_method` (in the type's
+package, so here `move_declaration` to `imports` first).*
 
 **Three statements replaced by a call, by hand.** After adding `docOf`,
 `checkDecl` still computed the same doc comment in three places. Replacing
@@ -229,3 +230,24 @@ range.
 
 **Real code, dry run.** On this repo, `method_to_function` with
 `imports.Adder.nextLine` gives `nextLine(a, last.End())`, no by-hand work.
+
+## 2026-10-17: adding `function_to_method`
+
+**`introduce_parameter` refused a getter.** Making `checkNoInterface`
+take the method name, instead of reading `t.obj.Name()`, was a job for
+`introduce_parameter`, but any call counts as a side effect, even
+`types.Object.Name()`. Done by hand. Gap: a list of calls known to be
+pure (getters of `go/types` objects, `strings` functions, `len`-like
+helpers) for `analysis.HasEffect`.
+
+**A test variant has its own types.** Comparing an argument's type with
+the parameter's by `types.Identical` failed for calls in the test file
+(the test variant re-checks the package, with distinct `*types.Named`), so
+`size(&mover{...})` came out converted, `(*mover)(&mover{...})`. Compared
+by name, as `add_parameter` already does.
+
+**Real code.** `extractvar`'s `needsExplicitType(x *extraction, ...)`, the
+one function there that takes the extraction as a parameter, became the
+method `x.needsExplicitType(expr, tv)` in one call. A round trip
+(`method_to_function` then `function_to_method` on `Adder.nextLine`)
+gives back the file byte for byte.

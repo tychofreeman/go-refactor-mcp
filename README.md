@@ -31,7 +31,9 @@ model reads before choosing the next refactoring. That loop is the iteration.
 - **Step 4 (in progress):** refactorings that prepare a feature change.
   `add_parameter`, `remove_parameter`, `move_parameter` and
   `introduce_parameter` are done, for functions and methods, exported or
-  not. `method_to_function` turns an unexported method into a function. `move_declaration` moves a
+  not. `method_to_function` turns an unexported method into a function,
+  and `function_to_method` a function into a method of its first
+  parameter's type. `move_declaration` moves a
   declaration (with the helpers it uses, if asked) to another file, of its
   package or another one.
 - **Step 5 (later):** edits, steps that change behavior on purpose (see
@@ -939,6 +941,36 @@ for every call; what can change is which types have the method:
   call;
 - a call whose receiver contains another call of the method
   (`n.after().after()`) is refused; assign the inner one first.
+
+## Function to method: what it checks
+
+`function_to_method` is the reverse: the first parameter becomes the
+receiver, and `m(x, a)` becomes `x.m(a)`. Where the call passed `&v` (for a
+pointer receiver) or `*p` (for a value receiver) it is written `v.m(a)` or
+`p.m(a)`, since the call takes the address or dereferences itself; an
+argument of another type, like `nil`, is converted (`(*T)(nil).m(a)`), and
+a composite literal is parenthesized. The method keeps the function's name
+unless `new_name` is given.
+
+Adding a method can change what other code means without a compile
+error, so:
+
+- the method's name must be unexported: an exported one could make the
+  type satisfy an interface checked at run time (`fmt` looks for
+  `String`); every call must then be in the function's package;
+- no interface in the workspace has a method of that name and package
+  (the type would start implementing it, which a type assertion or switch
+  could notice);
+- neither the type nor any type that embeds it already has a field or
+  method of that name: the new method would clash, or, promoted, change
+  which one `x.name` means;
+- the receiver is the first parameter (move another one there first with
+  `move_parameter`, which checks the evaluation order), not variadic, and
+  of type `T` or `*T` for a non-generic defined type `T` declared in the
+  function's package, which is not a pointer or interface type;
+- the function is not generic, and every use is a call; a receiver
+  argument containing another call of the function (`f(f(x))`) is
+  refused.
 
 ## Changing a method: interfaces
 

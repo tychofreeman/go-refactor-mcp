@@ -617,7 +617,7 @@ func (x *extraction) declaration(expr ast.Expr, tv types.TypeAndValue, isConst b
 	// "v := e" gives v the type of e on its own. For untyped non-constant
 	// expressions (comparisons, shifts of untyped constants) that is the
 	// default type, which may differ from the type the context gave it.
-	if needsExplicitType(x, expr, tv) {
+	if x.needsExplicitType(expr, tv) {
 		t, err := x.typeString(tv.Type)
 		if err != nil {
 			return "", err
@@ -627,7 +627,7 @@ func (x *extraction) declaration(expr ast.Expr, tv types.TypeAndValue, isConst b
 	return x.name + " := " + rhs, nil
 }
 
-func needsExplicitType(x *extraction, expr ast.Expr, tv types.TypeAndValue) bool {
+func (x *extraction) needsExplicitType(expr ast.Expr, tv types.TypeAndValue) bool {
 	b, basic := tv.Type.Underlying().(*types.Basic)
 	if !basic || b.Info()&types.IsUntyped != 0 {
 		// Still untyped in context (e.g. an if condition): nothing imposed

@@ -1,0 +1,1 @@
+the call at q/q.go:5:35 is in another package, which cannot call the unexported method size
