@@ -55,7 +55,7 @@ func fakeClaude(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "stream.jsonl"), []byte(stream), 0o644)
-	script := "#!/bin/sh\ntest ! -f CLAUDE.md || exit 3\necho done >> notes.txt\ncat " + filepath.Join(dir, "stream.jsonl") + "\n"
+	script := "#!/bin/sh\ntest ! -f CLAUDE.md || exit 3\ntest ! -f hidden.txt || exit 4\necho done >> notes.txt\ncat " + filepath.Join(dir, "stream.jsonl") + "\n"
 	path := filepath.Join(dir, "claude")
 	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
@@ -165,5 +165,42 @@ func TestRunAllRelativeDirAtRev(t *testing.T) {
 	}
 	if len(results) != 1 || !results[0].Passed {
 		t.Errorf("want the run to start from the revision, got %+v", results)
+	}
+}
+
+// A task's tests are copied in after the run and before the check: the
+// run does not see them, and they are not part of its diff.
+func TestHiddenTests(t *testing.T) {
+	src := t.TempDir()
+	os.WriteFile(filepath.Join(src, "notes.txt"), []byte("start\n"), 0o644)
+	tests := t.TempDir()
+	os.WriteFile(filepath.Join(tests, "hidden.txt"), []byte("accept\n"), 0o644)
+	os.MkdirAll(filepath.Join(tests, "sub"), 0o755)
+	os.WriteFile(filepath.Join(tests, "sub", "h.txt"), []byte("accept\n"), 0o644)
+	cfg := Config{Claude: fakeClaude(t), Timeout: time.Minute, Runs: 1, Arms: []string{"manual"}, OutDir: t.TempDir()}
+	tasks := []Task{{Name: "hidden", Prompt: "p", Dir: src, Tests: tests, Check: "test -f hidden.txt && test -f sub/h.txt && grep -q done notes.txt"}}
+	results, err := RunAll(context.Background(), cfg, tasks)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 || !results[0].Passed || results[0].DiffLines != 1 || results[0].Error != "" {
+		t.Errorf("want the hidden tests seen only by the check, got %+v", results)
+	}
+}
+
+func TestHybridArm(t *testing.T) {
+	args := claudeArgs(Config{MCPServer: "/bin/refactor-mcp"}, "hybrid", "/work", "do it")
+	if !slices.Contains(args, "--mcp-config") {
+		t.Errorf("hybrid arm has no MCP server: %q", args)
+	}
+	i := slices.Index(args, "--allowedTools")
+	if i < 0 || !strings.Contains(args[i+1], "mcp__gorefactor") || !strings.Contains(args[i+1], "Edit") {
+		t.Errorf("hybrid arm should allow gorefactor and Edit: %q", args)
+	}
+	if i := slices.Index(args, "--disallowedTools"); i >= 0 && strings.Contains(args[i+1], "Edit") {
+		t.Errorf("hybrid arm disallows Edit: %q", args)
+	}
+	if _, err := RunAll(context.Background(), Config{Arms: []string{"hybrid"}, OutDir: t.TempDir()}, nil); err != nil {
+		t.Errorf("hybrid should be a known arm: %v", err)
 	}
 }

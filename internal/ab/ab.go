@@ -31,10 +31,15 @@ type Task struct {
 	Dir    string `json:"dir,omitempty"`   // the module to work on; default "."
 	Rev    string `json:"rev,omitempty"`   // a git revision of Dir to start from; default its files as they are
 	Check  string `json:"check,omitempty"` // shell command that must pass afterwards; default "go test ./..."
+	Tests  string `json:"tests,omitempty"` // files copied over the copy after the run, before the check: acceptance tests the run did not see
 }
 
 // Arms are the ways a task is run.
 var Arms = []string{"mcp", "manual"}
+
+// ExtraArms are run only when asked for: hybrid has the refactoring tools
+// and Claude's own editing tools too.
+var ExtraArms = []string{"hybrid"}
 
 // Config controls a set of runs.
 type Config struct {
@@ -72,12 +77,17 @@ func claudeArgs(cfg Config, arm, dir, prompt string) []string {
 	// Neither arm may hand the work to a subagent or the web.
 	disallowed := []string{"Agent", "Task", "WebFetch", "WebSearch"}
 	switch arm {
-	case "mcp":
+	case "mcp", "hybrid":
 		server, _ := json.Marshal(map[string]any{"mcpServers": map[string]any{
 			"gorefactor": map[string]any{"command": cfg.MCPServer, "args": []string{"-C", dir}},
 		}})
-		args = append(args, "--mcp-config", string(server), "--allowedTools", "mcp__gorefactor,Read,Bash,Grep,Glob")
-		disallowed = append(disallowed, "Edit", "Write", "MultiEdit", "NotebookEdit")
+		args = append(args, "--mcp-config", string(server))
+		if arm == "mcp" {
+			args = append(args, "--allowedTools", "mcp__gorefactor,Read,Bash,Grep,Glob")
+			disallowed = append(disallowed, "Edit", "Write", "MultiEdit", "NotebookEdit")
+		} else {
+			args = append(args, "--allowedTools", "mcp__gorefactor,Read,Edit,Write,MultiEdit,Bash,Grep,Glob")
+		}
 	case "manual":
 		args = append(args, "--allowedTools", "Read,Edit,Write,MultiEdit,Bash,Grep,Glob")
 	}
@@ -99,8 +109,8 @@ func RunAll(ctx context.Context, cfg Config, tasks []Task) ([]Result, error) {
 		arms = Arms
 	}
 	for _, arm := range arms {
-		if !slices.Contains(Arms, arm) {
-			return nil, fmt.Errorf("unknown arm %q (want one of %v)", arm, Arms)
+		if !slices.Contains(Arms, arm) && !slices.Contains(ExtraArms, arm) {
+			return nil, fmt.Errorf("unknown arm %q (want one of %v)", arm, slices.Concat(Arms, ExtraArms))
 		}
 	}
 	if cfg.Runs == 0 {
@@ -212,6 +222,15 @@ func runOne(ctx context.Context, cfg Config, t Task, arm string, i int) Result {
 		res.CostUSD, res.Turns, res.Input, res.Output = rep.CostUSD, rep.Turns, rep.InputTokens, rep.OutputTokens
 	}
 	res.DiffLines, _ = diffLines(dir)
+	if t.Tests != "" {
+		tests := t.Tests
+		if abs, err := filepath.Abs(tests); err == nil {
+			tests = abs
+		}
+		if _, err := run(ctx, dir, "cp", "-a", tests+"/.", dir); err != nil {
+			res.Error = "copying the tests in: " + err.Error()
+		}
+	}
 
 	check := t.Check
 	if check == "" {

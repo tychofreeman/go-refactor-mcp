@@ -93,6 +93,9 @@ func loadTasks(path, only string) ([]ab.Task, error) {
 		if !filepath.IsAbs(t.Dir) {
 			t.Dir = filepath.Join(filepath.Dir(path), t.Dir)
 		}
+		if t.Tests != "" && !filepath.IsAbs(t.Tests) {
+			t.Tests = filepath.Join(filepath.Dir(path), t.Tests)
+		}
 		keep = append(keep, t)
 	}
 	if len(keep) == 0 {

@@ -75,5 +75,37 @@
     "name": "multi-fields",
     "prompt": "In internal/refactor/refactor.go: rename the Notes field of refactor.Plan to Caveats everywhere it is used (the Notes field of refactor.Result keeps its name), and add a field Warnings []string to refactor.Result just after its Notes field, with the tag `json:\"warnings,omitempty\"`.",
     "check": "go vet ./... && grep -Eq '^\\s+Caveats\\s+\\[\\]string' internal/refactor/refactor.go && grep -Eq '^\\s+Notes\\s+\\[\\]string\\s+.json:\"notes' internal/refactor/refactor.go && grep -Eq '^\\s+Warnings\\s+\\[\\]string\\s+.json:\"warnings,omitempty\"' internal/refactor/refactor.go && go test ./internal/refactor/... ./internal/mcpserver/"
+  },
+  {
+    "name": "feat-symbol-addressing",
+    "dir": "..",
+    "rev": "d63c8e2",
+    "tests": "testdata/symbol-addressing",
+    "prompt": "The refactoring tools that target a declaration (rename, add_parameter, remove_parameter, move_parameter, move_declaration, function_to_method, method_to_function, remove_dead_code, merge_duplicate_function, extract_struct, add_field) identify it by file, line and name. Let them also accept file and name without line: name is then a package-level symbol of file's package, declared in any of its files: a function, type, variable or constant (\"Name\"), or a method or struct field (\"Type.Method\", \"Type.Field\"). They all find their target through locate.Ident (internal/locate), so it is enough that locate.Ident, given an IdentQuery whose Line and Column are both 0, resolves Name that way; a Name that is no such symbol must give a *refactor.Refusal. Addressing by line must keep working, and the tools' input schemas should no longer require line.",
+    "check": "go vet ./... && go test ./internal/locate/ ./internal/refactorings/rename/ ./internal/refactorings/changesig/ ./internal/mcpserver/"
+  },
+  {
+    "name": "feat-case-clause",
+    "dir": "..",
+    "rev": "326ef81",
+    "tests": "testdata/case-clause",
+    "prompt": "replace_statements (internal/edits/replacestmts) cannot replace the whole body of a case clause: given the lines of every statement after a `case x:` line, it refuses, saying the selection cuts the clause. Selecting all of a case clause's body statements, without its `case x:` line, should be allowed and replace just the body. Selecting the `case x:` line itself is still not allowed.",
+    "check": "go vet ./... && go test ./internal/edits/replacestmts/"
+  },
+  {
+    "name": "feat-no-echo",
+    "dir": "..",
+    "rev": "508d107",
+    "tests": "testdata/no-echo",
+    "prompt": "When create_file or add_declaration (MCP tools served by internal/mcpserver) apply, their result is a diff that repeats, line by line, the code the model just sent, which costs the model tokens to read again. Change those two tools' results so that code the model supplied is not repeated: say instead how many lines were added and which lines they are now (for example \"lines 1-6\"). Lines the tool adds itself, such as an import it added, must still be shown. Other tools' results do not change.",
+    "check": "go vet ./... && go test ./internal/mcpserver/ ./internal/edits/... ./internal/refactor/ ./internal/edit/"
+  },
+  {
+    "name": "feat-compact-diffs",
+    "dir": "..",
+    "rev": "8fb20d0",
+    "tests": "testdata/compact-diffs",
+    "prompt": "The MCP server's refactoring and edit results (internal/mcpserver) show a unified diff with three lines of context around each change. The context costs the model tokens and it rarely needs it. Make the MCP server's results show only the changed lines, with hunk headers that still say where they are. The refactor command-line tool (cmd/refactor) should keep showing three lines of context.",
+    "check": "go vet ./... && go test ./internal/mcpserver/ ./internal/refactor/ ./internal/edit/ ./internal/workspace/"
   }
 ]
