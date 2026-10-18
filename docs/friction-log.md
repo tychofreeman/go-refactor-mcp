@@ -502,3 +502,16 @@ would make one. *Fixed in the same PR, with the new tool:
 `add_declaration` wrote `gocode.ImportNote`, and four `replace_statements`
 switched the callers; the now unused `quoted` was deleted by hand (gap:
 `remove_dead_code`, since done).*
+
+## 2026-10-18: adding `replace_expression`
+
+**What "the same expression" means.** The first rule (each name the same
+object) would not have replaced `c.Body` in two methods: each method's
+receiver `c` is its own variable. It now asks that package-level names,
+imports, fields and methods be the same objects, and local variables have
+the same types: `c.Body` in another method of `*code` matches, `d.Body` of
+another type does not. Found by thinking it through against the test
+before running it.
+
+**Its first use was on itself**, through the CLI: `off + (pos(t.End()) -
+off)` became `pos(t.End())` in its own `Plan`.

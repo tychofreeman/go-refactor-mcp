@@ -40,8 +40,9 @@ model reads before choosing the next refactoring. That loop is the iteration.
   declaration (with the helpers it uses, if asked) to another file, of its
   package or another one.
 - **Step 5 (in progress):** edits, steps that change behavior on purpose
-  (see "Edits"). `create_file`, `replace_statements`, `insert_statements`
-  and `add_declaration` are done; the candidates are in `docs/edits.md`.
+  (see "Edits"). `create_file`, `replace_statements`, `insert_statements`,
+  `add_declaration` and `replace_expression` are done; the candidates are
+  in `docs/edits.md`.
 
 ## Roadmap
 
@@ -1301,6 +1302,18 @@ The `content` has no package clause and no imports: packages it names are
 imported as for `replace_statements`, and an `import` in it is refused. A
 name the package already declares is refused by the type check, whose
 message names both places.
+
+### replace_expression
+
+`replace_expression` replaces one expression (found by line and source
+text, as for `extract_variable`) with `new`, parenthesized where its
+context needs it (`b` becomes `(b + 1)` in `a * b`), with the imports it
+needs. With `all_occurrences` it replaces every expression in the file
+that means the same: the same tokens, with package-level names, imports,
+fields and methods referring to the same things and local variables of the
+same types, so `c.Body` in another method of the same type matches and
+`d.Body` of another type does not. A change in the expression's type is
+noted; the result must type-check.
 
 ## Testing
 
