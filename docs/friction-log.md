@@ -616,7 +616,9 @@ then the real value with `replace_expression`). By hand:
 - **a case clause's body:** replacing every statement of a `case` clause
   was refused ("cut the case clause"), since the last statement ends on
   the clause's last line; replacing the whole clause is refused too
-  (`case` is not a statement). A bug in `replace_statements`.
+  (`case` is not a statement). A bug in `replace_statements`. *Follow-up:
+  fixed; a clause's body can be selected to its end, and selecting the
+  `case` line itself is refused as a cut.*
 - **an elided composite literal:** `replace_expression` cannot take
   `{true, false, true}` (a map value with its type left out), which does
   not parse alone. Gap: parse the expression in its context.

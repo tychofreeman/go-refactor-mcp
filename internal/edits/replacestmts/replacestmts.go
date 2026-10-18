@@ -131,14 +131,29 @@ func selectStatements(tf *token.File, file *ast.File, src []byte, first, last in
 			return true
 		}
 		a, b := line(s.Pos()), line(s.End())
+		_, clause := s.(*ast.CaseClause)
+		if _, comm := s.(*ast.CommClause); comm {
+			clause = true
+		}
 		switch {
 		case b < first || a > last:
+			return false
+		case a >= first && b <= last && clause:
+			// A whole clause is not a statement of a block: its "case x:"
+			// header would be replaced too.
+			if cut == nil {
+				cut = s
+			}
 			return false
 		case a >= first && b <= last:
 			inside = append(inside, s)
 			return false
 		case a <= first && b >= last:
-			if _, block := s.(*ast.BlockStmt); !block && (a == first || b == last) && cut == nil {
+			// A clause ends with its last statement, so selecting its body
+			// to the end does not cut it, as long as the header is left out.
+			_, block := s.(*ast.BlockStmt)
+			container := block || (clause && a < first)
+			if !container && (a == first || b == last) && cut == nil {
 				if !(a == first && b == last) {
 					cut = s
 				}
