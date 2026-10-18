@@ -802,3 +802,30 @@ together, a `replace_expression` at line 227 was refused (the text was on
 226 by then) while the others applied. The refusal named the right line,
 so the retry was cheap; a batch addressed by name would not have had the
 problem.
+
+## 2026-10-18: the mcp arm's overhead on feature work
+
+The A/B feature runs (mcp arm: every edit through gorefactor) cost about
+twice the manual arm. The causes, by count: Bash edits the arm was
+denied (sed/python on JSON schemas in string literals, fixture
+directories made with mkdir and cp), arguments the tools do not take
+(add_field called with type/struct), and read-only Bash outside the
+allowed list. Fixed:
+
+- `replace_text`: exact old/new text in any file of the module (string
+  literals, comments, go.mod, JSON fixtures), type-checked like every
+  edit; addressing text, it stays valid in a batch.
+- A refusal for arguments a tool does not take lists the tool's
+  arguments with their descriptions.
+- `create_file` says it creates any kind of file, and that several (a
+  fixture directory) go in one batch. Its 29-file use here, one call and
+  one undo, is how the replace_text test fixtures were made.
+- The harness lets the mcp arm's Bash cd, cat, head, tail and wc
+  (redirects and tee are still denied).
+
+**A one-line function body cannot be replaced with replace_statements.**
+`func (*T) Description() string { return "" }` shares its line with the
+declaration, so the statement range is refused; `replace_expression` on
+the returned value works. Registering the new tool in the `All()` list
+(an element of a composite literal) and two description edits were done
+by hand: exactly what `replace_text` now covers.

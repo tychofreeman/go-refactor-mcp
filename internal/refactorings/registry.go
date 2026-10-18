@@ -9,6 +9,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/insertstmts"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/replaceexpr"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/replacestmts"
+	"github.com/tychofreeman/go-refactor-mcp/internal/edits/replacetext"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/changesig"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/deadcode"
@@ -52,6 +53,7 @@ func All() []refactor.Refactoring {
 		replaceexpr.New(),
 		adddecl.New(),
 		addfield.New(),
+		replacetext.New(),
 	}
 }
 

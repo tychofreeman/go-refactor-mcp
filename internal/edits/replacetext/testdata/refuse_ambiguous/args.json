@@ -1,0 +1,1 @@
+{"file": "m.go", "old": "limit(errs, 10)", "new": "limit(errs, max)"}

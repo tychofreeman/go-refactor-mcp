@@ -246,6 +246,23 @@ func TestBatchRefusals(t *testing.T) {
 	mustContain(t, "empty", out, "REFUSED batch: steps is empty")
 }
 
+// replace_text edits text no other tool reaches, such as a string
+// literal, and, addressing text rather than lines, works after an earlier
+// step of a batch changed the file.
+func TestReplaceText(t *testing.T) {
+	cs, dir := setup(t)
+	os.WriteFile(filepath.Join(dir, "calc", "doc.go"), []byte("package calc\n\n// Usage is shown to callers.\nconst Usage = `scale n by the rate`\n"), 0o644)
+	out, _ := call(t, cs, "batch", map[string]any{"steps": []any{
+		map[string]any{"tool": "rename", "args": map[string]any{"file": "calc/calc.go", "name": "Rate", "new_name": "Factor"}},
+		map[string]any{"tool": "replace_text", "args": map[string]any{"file": "calc/doc.go", "old": "by the rate", "new": "by the factor"}},
+		map[string]any{"tool": "replace_text", "args": map[string]any{"file": "calc/calc.go", "old": "// Factor is the multiplier.", "new": "// Factor multiplies n in Apply."}},
+	}})
+	mustContain(t, "batch", out, "APPLIED batch: 3 steps", "3. replace_text:")
+	doc, _ := os.ReadFile(filepath.Join(dir, "calc", "doc.go"))
+	calc, _ := os.ReadFile(filepath.Join(dir, "calc", "calc.go"))
+	mustContain(t, "files", string(doc)+string(calc), "`scale n by the factor`", "// Factor multiplies n in Apply.")
+}
+
 // TestRefactoringLoop walks the loop the model is meant to follow.
 func TestRefactoringLoop(t *testing.T) {
 	cs, dir := setup(t)

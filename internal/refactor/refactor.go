@@ -12,9 +12,11 @@
 package refactor
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
@@ -137,6 +139,9 @@ func Run(ws *workspace.Workspace, r Refactoring, args json.RawMessage, opts Opti
 	if err != nil {
 		if IsRefusal(err) {
 			res.Refused = err.Error()
+			if strings.HasPrefix(res.Refused, "invalid arguments") {
+				res.Refused += argsHelp(r.Name(), r.InputSchema())
+			}
 			return res, nil
 		}
 		return nil, err
@@ -346,4 +351,42 @@ func DecodeArgs(args json.RawMessage, v any) error {
 		return Refusef("invalid arguments: %v", err)
 	}
 	return nil
+}
+
+// argsHelp lists a tool's arguments, from its input schema and in its
+// order, for a refusal of arguments it does not take.
+func argsHelp(name string, schema json.RawMessage) string {
+	var s struct {
+		Properties json.RawMessage `json:"properties"`
+		Required   []string        `json:"required"`
+	}
+	if json.Unmarshal(schema, &s) != nil || len(s.Properties) == 0 {
+		return ""
+	}
+	// Decode the properties token by token to keep the schema's order.
+	dec := json.NewDecoder(bytes.NewReader(s.Properties))
+	if _, err := dec.Token(); err != nil {
+		return ""
+	}
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "\n%s takes:", name)
+	for dec.More() {
+		tok, err := dec.Token()
+		if err != nil {
+			return ""
+		}
+		key, _ := tok.(string)
+		var p struct {
+			Description string `json:"description"`
+		}
+		if err := dec.Decode(&p); err != nil {
+			return ""
+		}
+		required := ""
+		if slices.Contains(s.Required, key) {
+			required = " (required)"
+		}
+		fmt.Fprintf(&sb, "\n  %s%s: %s", key, required, p.Description)
+	}
+	return sb.String()
 }
