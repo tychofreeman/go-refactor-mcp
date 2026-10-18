@@ -59,6 +59,9 @@ form can come first, while the focus is on refactorings.
   are independent: neither writes what the other reads or writes, their
   side effects cannot be reordered observably, and no declaration moves
   past a use of it.
+  - 2026-10-17, `extract_function` returning `f(...)`: `at :=
+    x.insertOffset(decl)` slid above the call-site code so the code could
+    be extracted together with its `site.String()`.
 - `move_statement_in` / `move_statement_out`: move a statement into the
   block that follows it, or out of the block it ends or starts.
   *Refactoring when* the block is a plain `{ }` block and scoping allows it
@@ -83,7 +86,7 @@ form can come first, while the focus is on refactorings.
 
 ## Suggested, without evidence yet
 
-`delete_statement` (including declarations), `move_statement_up/down`,
+`delete_statement` (including declarations), `move_statement_down`,
 `move_statement_in/out`, `introduce_block` and `introduce_if` were
 suggested on 2026-10-17 and have no friction-log
 entries yet. More will be added here as they come up.
