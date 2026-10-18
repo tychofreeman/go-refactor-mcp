@@ -11,12 +11,18 @@ import (
 // The diff is what the model sees after each refactoring, so it is kept
 // close to `diff -u` / `git diff` output, which models read well.
 func Unified(name string, before, after []byte) string {
+	return UnifiedContext(name, before, after, 3)
+}
+
+// UnifiedContext is Unified with ctx lines of context; with none, the
+// diff is just the changed lines and where they are.
+func UnifiedContext(name string, before, after []byte, ctx int) string {
 	if string(before) == string(after) {
 		return ""
 	}
 	a, b := splitLines(string(before)), splitLines(string(after))
 	ops := myers(a, b)
-	hunks := group(ops, 3)
+	hunks := group(ops, ctx)
 
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "--- a/%s\n+++ b/%s\n", name, name)

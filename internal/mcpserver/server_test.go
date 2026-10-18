@@ -163,6 +163,19 @@ func TestRenameBySymbol(t *testing.T) {
 	mustContain(t, "app.go", string(app), "calc.Factor")
 }
 
+// Results show what changed and where, without context lines: the model
+// reads every result again on each later turn.
+func TestDiffsAreCompact(t *testing.T) {
+	cs, _ := setup(t)
+	out, _ := call(t, cs, "rename", map[string]any{"file": "calc/calc.go", "name": "Apply", "new_name": "Scale"})
+	mustContain(t, "rename", out, "APPLIED rename", "-func Apply(n int) int", "+func Scale(n int) int")
+	for _, l := range strings.Split(out, "\n") {
+		if strings.HasPrefix(l, " ") {
+			t.Errorf("context line in the result: %q\n%s", l, out)
+		}
+	}
+}
+
 // TestRefactoringLoop walks the loop the model is meant to follow.
 func TestRefactoringLoop(t *testing.T) {
 	cs, dir := setup(t)

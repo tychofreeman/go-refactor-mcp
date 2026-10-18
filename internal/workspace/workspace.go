@@ -157,6 +157,17 @@ func (c Change) Files(root string) []string {
 	return out
 }
 
+// DiffContext is the change's diff, paths relative to root, with n lines
+// of context instead of Diff's three.
+func (c Change) DiffContext(root string, n int) string {
+	var diffs []string
+	for p := range c.Before {
+		diffs = append(diffs, edit.UnifiedContext(rel(root, p), c.Before[p], c.After[p], n))
+	}
+	sort.Strings(diffs)
+	return strings.Join(diffs, "")
+}
+
 // Load loads and type-checks the module containing dir, including tests.
 //
 // The root is always the enclosing module (the nearest directory with a

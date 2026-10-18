@@ -105,7 +105,8 @@ func (r *Result) String() string {
 
 // Options controls Run.
 type Options struct {
-	DryRun bool // compute and show the diff without writing
+	DryRun  bool // compute and show the diff without writing
+	Compact bool // show the diff without context lines: what changed and where, at less cost to read
 }
 
 // Run executes one refactoring step.
@@ -143,7 +144,7 @@ func Run(ws *workspace.Workspace, r Refactoring, args json.RawMessage, opts Opti
 		if err != nil {
 			return nil, err
 		}
-		res.Diff, res.Files = edit.ElideSupplied(c.Diff, plan.Supplied), c.Files(ws.Root)
+		res.Diff, res.Files = edit.ElideSupplied(diffOf(ws, c, opts), plan.Supplied), c.Files(ws.Root)
 		return res, nil
 	}
 
@@ -165,8 +166,16 @@ func Run(ws *workspace.Workspace, r Refactoring, args json.RawMessage, opts Opti
 		return res, nil
 	}
 	res.Applied = true
-	res.Diff, res.Files = edit.ElideSupplied(c.Diff, plan.Supplied), c.Files(ws.Root)
+	res.Diff, res.Files = edit.ElideSupplied(diffOf(ws, c, opts), plan.Supplied), c.Files(ws.Root)
 	return res, nil
+}
+
+// diffOf is c's diff as the result shows it.
+func diffOf(ws *workspace.Workspace, c workspace.Change, opts Options) string {
+	if opts.Compact {
+		return c.DiffContext(ws.Root, 0)
+	}
+	return c.Diff
 }
 
 func limit(s []string, n int) []string {

@@ -759,3 +759,28 @@ statements (1c), or a result that says how far lines moved.
 **A case clause cannot be added to a switch.** The `case "result":` went
 in with the same whole-loop replacement. Gap: an edit that adds a case
 clause.
+
+## 2026-10-18: compact results
+
+Done through the MCP: `extract_function` pulled `Unified`'s body out as
+`UnifiedContext`, `move_parameter` (by name) put `name` first, and
+`introduce_parameter` turned the 3 lines of context into `ctx`, with
+`Unified` passing 3.
+
+**`extract_function` output needed tidying by hand.** The doc comment was
+one 120-character line, not wrapped like the file's comments, and the
+parameters came out as `before []byte, after []byte` (and in the order
+first used, so `name` last). Gap: wrap a given doc comment; group
+adjacent parameters of the same type.
+
+**`all_occurrences` replaced the new function's own body.** Replacing
+`c.Diff` with `diffOf(ws, c, opts)` everywhere in the file also replaced
+the `c.Diff` inside `diffOf`, which made it call itself forever. It
+type-checked, so it was applied; undone and redone one call at a time.
+Gap: `replace_expression` could refuse (or skip) an occurrence inside a
+function the new expression calls.
+
+**A flag cannot be added as a local.** `flag.Bool` in `main` is unused
+until the line that reads it, so it was declared as a package-level
+variable instead (allowed while unused). Same gap as the A/B harness:
+a declaration and its use in one step.
