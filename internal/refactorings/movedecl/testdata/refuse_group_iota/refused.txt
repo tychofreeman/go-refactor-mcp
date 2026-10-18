@@ -1,0 +1,1 @@
+mid has no value of its own: it repeats the expression of an earlier constant in the group, with its own iota

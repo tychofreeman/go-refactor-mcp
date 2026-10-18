@@ -21,6 +21,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -49,7 +50,8 @@ Identify the declaration by file, line and name, at the declaration or any use, 
 Imports the moved code needs are added to the destination (keeping an alias, or using the destination's name for the package); imports left unused are removed.
 also names other top-level declarations of the same file to move with it (not methods), e.g. the helpers it uses; they keep their names.
 To another package (to_file in another directory, which must hold a package): every reference is updated (q.Name outside that package, Name inside it), and new_name renames it on the way; an unexported declaration used outside the new package needs an exported new_name (defaultHost -> DefaultHost).
-Refuses between a test file and a non-test file, to or from a file with build constraints, a declaration grouped with others in parentheses, an init function or a variable whose initializer has side effects (initialization order follows the files), a //go:embed variable, and code that uses a dot import. To another package it also refuses methods and types with methods, code that uses other top-level declarations of its package (move those first, or with it in also), test files, and moves that would make an import cycle or need an internal package a user cannot import.`
+A declaration grouped with others in parentheses (var ( a = 1; b = 2 )) moves out as its own (var b = 2); naming every spec of the group moves the group. Taking a constant out of its group is refused when it, or a later one, uses iota or has no values (its value would change).
+Refuses between a test file and a non-test file, to or from a file with build constraints, an init function or a variable whose initializer has side effects (initialization order follows the files), a //go:embed variable, and code that uses a dot import. To another package it also refuses methods and types with methods, code that uses other top-level declarations of its package (move those first, or with it in also), test files, and moves that would make an import cycle or need an internal package a user cannot import.`
 }
 
 func (*MoveDeclaration) InputSchema() json.RawMessage {
@@ -99,7 +101,13 @@ type mover struct {
 
 // moved is one declaration a move carries.
 type moved struct {
-	decl    ast.Decl
+	decl ast.Decl
+	// spec is the spec declaring obj when decl groups several in
+	// parentheses; it moves out of the group as a declaration of its own,
+	// unless whole: every spec of the group moves, and so the group as it
+	// is.
+	spec    ast.Spec
+	whole   bool
 	obj     types.Object // the (first) name it declares
 	start   int          // the declaration's text, with its doc comment
 	end     int          // and a comment that ends its last line
@@ -199,7 +207,7 @@ func find(ws *workspace.Workspace, q locate.IdentQuery) (*mover, error) {
 					if err != nil {
 						return nil, err
 					}
-					md := &moved{decl: d, obj: obj}
+					md := &moved{decl: d, obj: obj, spec: groupSpec(ws.Fset, d, pos.Offset)}
 					return &mover{moved: md, decls: []*moved{md}, ws: ws, pkg: p, file: f, path: pos.Filename, src: src}, nil
 				}
 			}
@@ -222,23 +230,78 @@ func (m *mover) addAlso(also []string) error {
 			return refactor.Refusef("%s is declared in %s, not %s; moving declarations from several files at once is not supported yet", name, m.ws.Rel(pos.Filename), m.ws.Rel(m.path))
 		}
 		for _, d := range m.file.Decls {
-			if declares(m.ws.Fset, d, pos.Offset) && !m.moves(d) {
-				m.decls = append(m.decls, &moved{decl: d, obj: o})
+			if spec := groupSpec(m.ws.Fset, d, pos.Offset); declares(m.ws.Fset, d, pos.Offset) && !m.moves(d, spec) {
+				m.decls = append(m.decls, &moved{decl: d, obj: o, spec: spec})
 			}
 		}
 	}
-	sort.Slice(m.decls, func(i, j int) bool { return m.decls[i].decl.Pos() < m.decls[j].decl.Pos() })
+	sort.Slice(m.decls, func(i, j int) bool { return m.decls[i].node().Pos() < m.decls[j].node().Pos() })
+	m.markWhole()
 	return nil
 }
 
-// moves reports whether the declaration is already among those moved.
-func (m *mover) moves(decl ast.Decl) bool {
+// moves reports whether the declaration (or, in a group, the spec) is
+// already among those moved.
+func (m *mover) moves(decl ast.Decl, spec ast.Spec) bool {
 	for _, d := range m.decls {
-		if d.decl == decl {
+		if d.decl == decl && d.spec == spec {
 			return true
 		}
 	}
 	return false
+}
+
+// node is the syntax that moves: the spec, or the whole declaration.
+func (d *moved) node() ast.Node {
+	if d.spec != nil && !d.whole {
+		return d.spec
+	}
+	return d.decl
+}
+
+// groupSpec returns the spec of d declaring the name at offset when d
+// groups several specs, or nil.
+func groupSpec(fset *token.FileSet, d ast.Decl, offset int) ast.Spec {
+	g, ok := d.(*ast.GenDecl)
+	if !ok || len(g.Specs) < 2 {
+		return nil
+	}
+	for _, s := range g.Specs {
+		if declares(fset, &ast.GenDecl{Specs: []ast.Spec{s}}, offset) {
+			return s
+		}
+	}
+	return nil
+}
+
+// markWhole marks the specs of groups that move entirely.
+func (m *mover) markWhole() {
+	count := map[ast.Decl]int{}
+	for _, d := range m.decls {
+		if d.spec != nil {
+			count[d.decl]++
+		}
+	}
+	for _, d := range m.decls {
+		if d.spec != nil {
+			d.whole = count[d.decl] == len(d.decl.(*ast.GenDecl).Specs)
+		}
+	}
+}
+
+// units returns the moved text's pieces: each declaration once (a group
+// that moves whole is one piece), in source order.
+func (m *mover) units() []*moved {
+	var out []*moved
+	seen := map[ast.Decl]bool{}
+	for _, d := range m.decls {
+		if d.whole && seen[d.decl] {
+			continue
+		}
+		seen[d.decl] = true
+		out = append(out, d)
+	}
+	return out
 }
 
 // withAlso names, for a summary, the declarations moved along with the
@@ -290,11 +353,20 @@ func (m *mover) checkDecl(d *moved) error {
 			return refactor.Refusef("init functions run in the order of their files, so moving one could change behavior; this is not supported")
 		}
 	case *ast.GenDecl:
-		if len(decl.Specs) > 1 {
-			return refactor.Refusef("the declaration is part of a grouped declaration (at %s) with %d others; moving one out of a group is not supported yet",
-				m.ws.Position(decl.Pos()), len(decl.Specs)-1)
+		specs := decl.Specs
+		if d.spec != nil {
+			if !d.whole {
+				if err := m.checkLeavesGroup(decl, d.spec); err != nil {
+					return err
+				}
+			}
+			specs = []ast.Spec{d.spec}
 		}
-		if vs, ok := decl.Specs[0].(*ast.ValueSpec); ok {
+		for _, sp := range specs {
+			vs, ok := sp.(*ast.ValueSpec)
+			if !ok {
+				continue
+			}
 			if decl.Tok == token.VAR && hasEffect(m.pkg.TypesInfo, vs) {
 				return refactor.Refusef("the initializer of %s has side effects, and variables are initialized in the order of their files, so moving it could change the initialization order; this is not supported", vs.Names[0].Name)
 			}
@@ -303,15 +375,21 @@ func (m *mover) checkDecl(d *moved) error {
 			}
 		}
 	}
-	d.start = m.off(d.decl.Pos())
-	if doc := docOf(d.decl); doc != nil {
+	m.setRange(d)
+	return nil
+}
+
+// setRange finds the moved text: the declaration (or spec) with its doc
+// comment and a comment ending its last line.
+func (m *mover) setRange(d *moved) {
+	d.start = m.off(d.node().Pos())
+	if doc := docOf(d.node()); doc != nil {
 		d.start = m.off(doc.Pos())
 	}
-	d.end = m.off(d.decl.End())
+	d.end = m.off(d.node().End())
 	if rest := m.src[d.end:m.nextLine(d.end)]; strings.HasPrefix(strings.TrimSpace(string(rest)), "//") {
 		d.end += len(strings.TrimRight(string(rest), "\n"))
 	}
-	return nil
 }
 
 // checkDestination refuses a destination outside the source's package or
@@ -363,7 +441,7 @@ func (m *mover) collectImports() error {
 	sels := map[*ast.Ident]bool{}
 	var err error
 	for _, d := range m.decls {
-		ast.Inspect(d.decl, func(n ast.Node) bool {
+		ast.Inspect(d.node(), func(n ast.Node) bool {
 			if s, ok := n.(*ast.SelectorExpr); ok {
 				sels[s.Sel] = true
 			}
@@ -453,7 +531,7 @@ func (m *mover) fileFor(path string) (*fileEdits, error) {
 
 // deleteDecls deletes the moved declarations' lines from the source file.
 func (m *mover) deleteDecls() {
-	for _, d := range m.decls {
+	for _, d := range m.units() {
 		m.deleteDecl(d)
 	}
 }
@@ -523,7 +601,7 @@ func (m *mover) code(d *moved, qual func(*types.PkgName) string) (string, error)
 	info := m.pkg.TypesInfo
 	var edits []edit.TextEdit
 	rel := func(p token.Pos) int { return m.off(p) - d.start }
-	ast.Inspect(d.decl, func(n ast.Node) bool {
+	ast.Inspect(d.node(), func(n ast.Node) bool {
 		switch n := n.(type) {
 		case *ast.SelectorExpr:
 			x, ok := n.X.(*ast.Ident)
@@ -552,22 +630,88 @@ func (m *mover) code(d *moved, qual func(*types.PkgName) string) (string, error)
 		}
 		return true
 	})
-	if doc := docOf(d.decl); doc != nil && d.newName != d.obj.Name() {
+	if doc := docOf(d.node()); doc != nil && d.newName != d.obj.Name() && !d.whole {
 		// The doc comment names the declaration first, by convention.
 		if c := doc.List[0]; strings.HasPrefix(c.Text, "// "+d.obj.Name()+" ") {
 			at := rel(c.Pos()) + len("// ")
 			edits = append(edits, edit.TextEdit{Start: at, End: at + len(d.obj.Name()), NewText: d.newName})
 		}
 	}
+	if d.node() == d.spec {
+		// Out of its group: "x = 1" becomes "var x = 1", one level less
+		// indented (unless a raw string spans lines, which must not change).
+		kw := d.decl.(*ast.GenDecl).Tok.String()
+		at := rel(d.spec.Pos())
+		edits = append(edits, edit.TextEdit{Start: at, End: at, NewText: kw + " "})
+	}
 	out, err := edit.Apply(m.src[d.start:d.end], edits)
-	return string(out), err
+	if err != nil {
+		return "", err
+	}
+	if d.node() == d.spec && !multiLineRaw(d.spec) {
+		out = []byte(strings.ReplaceAll(string(out), "\n\t", "\n"))
+	}
+	return string(out), nil
+}
+
+// multiLineRaw reports whether n contains a raw string literal spanning
+// lines.
+func multiLineRaw(n ast.Node) bool {
+	found := false
+	ast.Inspect(n, func(n ast.Node) bool {
+		if b, ok := n.(*ast.BasicLit); ok && b.Kind == token.STRING && strings.HasPrefix(b.Value, "`") && strings.Contains(b.Value, "\n") {
+			found = true
+		}
+		return !found
+	})
+	return found
+}
+
+// checkLeavesGroup refuses taking spec out of the group decl when that
+// changes a constant: in a const group, iota is a spec's index, and a spec
+// without values repeats the previous expression.
+func (m *mover) checkLeavesGroup(decl *ast.GenDecl, spec ast.Spec) error {
+	if decl.Tok != token.CONST {
+		return nil
+	}
+	name := spec.(*ast.ValueSpec).Names[0].Name
+	positional := func(vs *ast.ValueSpec) bool {
+		if len(vs.Values) == 0 {
+			return true
+		}
+		uses := false
+		for _, v := range vs.Values {
+			ast.Inspect(v, func(n ast.Node) bool {
+				if id, ok := n.(*ast.Ident); ok && m.pkg.TypesInfo.Uses[id] == types.Universe.Lookup("iota") {
+					uses = true
+				}
+				return !uses
+			})
+		}
+		return uses
+	}
+	i := slices.Index(decl.Specs, spec)
+	vs := spec.(*ast.ValueSpec)
+	switch {
+	case len(vs.Values) == 0:
+		return refactor.Refusef("%s has no value of its own: it repeats the expression of an earlier constant in the group, with its own iota; move the whole group (name the others in also)", name)
+	case positional(vs):
+		return refactor.Refusef("%s uses iota, its position in the group; move the whole group (name the others in also)", name)
+	}
+	for _, later := range decl.Specs[i+1:] {
+		if lv := later.(*ast.ValueSpec); positional(lv) {
+			return refactor.Refusef("%s (at %s) uses iota or repeats an earlier expression, so its value depends on the position of %s; move the whole group (name the others in also)",
+				lv.Names[0].Name, m.ws.Position(lv.Pos()), name)
+		}
+	}
+	return nil
 }
 
 // allCode returns the moved declarations' text for their destination, in
 // source order (see code).
 func (m *mover) allCode(qual func(*types.PkgName) string) (string, error) {
 	var codes []string
-	for _, d := range m.decls {
+	for _, d := range m.units() {
 		c, err := m.code(d, qual)
 		if err != nil {
 			return "", err
@@ -577,12 +721,16 @@ func (m *mover) allCode(qual func(*types.PkgName) string) (string, error) {
 	return strings.Join(codes, "\n\n"), nil
 }
 
-func docOf(d ast.Decl) *ast.CommentGroup {
-	switch d := d.(type) {
+func docOf(n ast.Node) *ast.CommentGroup {
+	switch n := n.(type) {
 	case *ast.FuncDecl:
-		return d.Doc
+		return n.Doc
 	case *ast.GenDecl:
-		return d.Doc
+		return n.Doc
+	case *ast.ValueSpec:
+		return n.Doc
+	case *ast.TypeSpec:
+		return n.Doc
 	}
 	return nil
 }

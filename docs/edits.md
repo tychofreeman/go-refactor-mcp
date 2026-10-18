@@ -38,6 +38,9 @@ form can come first, while the focus is on refactorings.
 - `replace_expression`: replace one expression (found as
   `extract_variable` finds one) with new Go source, reporting a change of
   type.
+  - 2026-10-17, moving a declaration out of a group: six
+    `ast.Inspect(d.decl, ...)` became `ast.Inspect(d.node(), ...)`; an
+    all-occurrences option would have done them in one call.
 - `introduce_constant` / `introduce_variable`: declare a new package
   constant or variable, or a local `name := value` before a statement.
 

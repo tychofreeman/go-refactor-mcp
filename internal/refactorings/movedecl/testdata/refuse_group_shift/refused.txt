@@ -1,0 +1,1 @@
+second (at a.go:5:2) uses iota or repeats an earlier expression, so its value depends on the position of first
