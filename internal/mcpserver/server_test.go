@@ -174,8 +174,9 @@ func TestExternalEditBetweenCalls(t *testing.T) {
 		t.Fatalf("rename after external edit: %s", out)
 	}
 	got, _ := os.ReadFile(calcPath)
-	// Code references change; the doc comment mentioning Rate does not.
-	want := strings.NewReplacer("var Rate", "var Factor", "* Rate", "* Factor").Replace(edited)
+	// Code references change, and so does the doc comment that starts with
+	// the name.
+	want := strings.NewReplacer("var Rate", "var Factor", "* Rate", "* Factor", "// Rate is", "// Factor is").Replace(edited)
 	if string(got) != want {
 		t.Errorf("edit landed at stale offsets:\n%s", got)
 	}

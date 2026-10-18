@@ -482,7 +482,9 @@ branches. By hand: none of the new code.
 **`rename` keeps leaving doc comments behind.** Seven renames, seven
 stale doc comments, fixed by hand; and renaming a local `a` noted 34
 comments mentioning "a" across the file. Gap: rename a doc comment that
-starts with the name, and only note comments in the symbol's scope.
+starts with the name, and only note comments in the symbol's scope. *Follow-up: done; `rename` renames a doc
+comment that starts with the old name, and for a local notes only the
+comments in its scope.*
 
 ## 2026-10-18: adding `add_declaration`
 
