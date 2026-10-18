@@ -127,7 +127,7 @@ moved into a new `moved` type, embedded in `mover` so every `m.obj` kept
 compiling, with `decls []*moved` beside it. Gap: no tool extracts fields
 into a new type (an "extract struct" / introduce parameter object
 refactoring); embedding made it a two-line hand edit here, but in general
-it touches every use.
+it touches every use. *Follow-up: `extract_struct`.*
 
 **`add_parameter` refused a value the body reads anyway.** Giving
 `checkDecl`, `deleteDecl` and `code` a `d *moved` parameter, passing
@@ -300,7 +300,7 @@ gap logged before).
 `mover` so every `m.path` kept compiling, with `sources` beside it and a
 `from` on each moved declaration. The same embedding trick as the
 `moved` split before. Gap, again: extract fields into a new type (seen
-twice now).
+twice now). *Follow-up: `extract_struct`.*
 
 **A receiver type changed, by hand.** `lineStart` and `nextLine` read
 only `m.src`; their receiver became `*source` (calls on `m` still compile
@@ -332,3 +332,17 @@ with an empty `types.Package`; no code downstream changed.
 **Real code, on a copy.** Moving `imports.PathBase` and `IsStd` to a new
 `internal/importpath` updated five references and built. Gap, small: the
 CLI's `key=value` form cannot pass a list (`also`); the JSON form works.
+
+## 2026-10-18: adding `extract_struct`
+
+**The engine caught a bug before the tests did.** Inside a `type ( ... )`
+group the new spec was written with the `type` keyword; the result did not
+parse, so the change was rolled back with the errors, and the golden case
+failed with a clear message. Fixed.
+
+**Real code: the split this tool replaces.** On a copy of the repo at the
+commit before the `source` split, `extract_struct` with `mover`'s `file`,
+`path`, `src` and `imports` gave the first step of that change in one
+call (the struct, the embedding, and the one literal, in `find`), and
+`movedecl`'s tests passed. It embeds by value; the hand version embedded
+`*source`, which changes what copying a `mover` shares.

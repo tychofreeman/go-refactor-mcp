@@ -7,6 +7,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/changesig"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/extractfunc"
+	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/extractstruct"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/extractvar"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/inlinefunc"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/inlinevar"
@@ -32,6 +33,7 @@ func All() []refactor.Refactoring {
 		changesig.NewMethodToFunction(),
 		changesig.NewFunctionToMethod(),
 		movedecl.New(),
+		extractstruct.New(),
 		createfile.New(),
 	}
 }
