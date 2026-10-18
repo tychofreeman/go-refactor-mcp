@@ -60,14 +60,14 @@ func (*MoveDeclaration) InputSchema() json.RawMessage {
   "type": "object",
   "properties": {
     "file":    {"type": "string",  "description": "Path of a file containing the declaration or a use of it, relative to the workspace root."},
-    "line":    {"type": "integer", "description": "1-based line of that occurrence."},
-    "name":    {"type": "string",  "description": "The declared name (for a method, just the method name)."},
+    "line":    {"type": "integer", "description": "1-based line of that occurrence. Omit it to find name as a symbol of the package of file."},
+    "name":    {"type": "string",  "description": "The declared name: with line, just the method name for a method; without line, the package-level name or Type.Method."},
     "column":  {"type": "integer", "description": "Optional 1-based column, only needed to disambiguate."},
     "to_file": {"type": "string",  "description": "Destination file, relative to the workspace root; created if it does not exist. In another directory, the declaration moves to that package."},
     "new_name": {"type": "string", "description": "Optional, when moving to another package: the name in the new package (required for an unexported declaration used outside it, e.g. defaultHost -> DefaultHost)."},
     "also":     {"type": "array", "items": {"type": "string"}, "description": "Optional: other top-level declarations of the package (in any of its files) to move with it, by name (not methods), e.g. the helpers it uses. They keep their names."}
   },
-  "required": ["file", "line", "name", "to_file"],
+  "required": ["file", "name", "to_file"],
   "additionalProperties": false
 }`)
 }

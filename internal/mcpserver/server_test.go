@@ -89,6 +89,9 @@ func TestToolsAndInstructions(t *testing.T) {
 	if !strings.Contains(cs.InitializeResult().Instructions, "ONE tool per call") {
 		t.Error("server instructions not sent")
 	}
+	if !strings.Contains(cs.InitializeResult().Instructions, "without line") {
+		t.Error("server instructions do not describe addressing a declaration by name")
+	}
 	res, err := cs.ListTools(context.Background(), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -104,13 +107,60 @@ func TestToolsAndInstructions(t *testing.T) {
 	}
 	if tool := names["rename"]; tool != nil {
 		schema, _ := tool.InputSchema.(map[string]any)
-		if req, _ := schema["required"].([]any); len(req) != 4 {
+		if req, _ := schema["required"].([]any); len(req) != 3 {
 			t.Errorf("rename schema not passed through: %v", tool.InputSchema)
 		}
 	}
 	if tool := names["inspect"]; tool != nil && (tool.Annotations == nil || !tool.Annotations.ReadOnlyHint) {
 		t.Error("inspect should be annotated read-only")
 	}
+}
+
+// symbolTools target a declaration, so they accept name alone, as a
+// package-level symbol, in place of file + line + name.
+var symbolTools = []string{
+	"rename", "remove_dead_code", "merge_duplicate_function", "move_declaration",
+	"extract_struct", "add_parameter", "remove_parameter", "move_parameter",
+	"function_to_method", "method_to_function", "add_field",
+}
+
+func TestSymbolToolsDoNotRequireLine(t *testing.T) {
+	cs, _ := setup(t)
+	res, err := cs.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tools := map[string]*mcp.Tool{}
+	for _, tool := range res.Tools {
+		tools[tool.Name] = tool
+	}
+	for _, name := range symbolTools {
+		tool := tools[name]
+		if tool == nil {
+			t.Errorf("tool %q not listed", name)
+			continue
+		}
+		schema, _ := tool.InputSchema.(map[string]any)
+		req, _ := schema["required"].([]any)
+		for _, r := range req {
+			if r == "line" {
+				t.Errorf("%s: line is required", name)
+			}
+		}
+		props, _ := schema["properties"].(map[string]any)
+		nameProp, _ := props["name"].(map[string]any)
+		if desc, _ := nameProp["description"].(string); !strings.Contains(desc, "without line") {
+			t.Errorf("%s: name description does not mention the symbol form: %q", name, desc)
+		}
+	}
+}
+
+func TestRenameBySymbol(t *testing.T) {
+	cs, dir := setup(t)
+	out, _ := call(t, cs, "rename", map[string]any{"file": "calc/calc.go", "name": "Rate", "new_name": "Factor"})
+	mustContain(t, "rename", out, "APPLIED rename")
+	app, _ := os.ReadFile(filepath.Join(dir, "app/app.go"))
+	mustContain(t, "app.go", string(app), "calc.Factor")
 }
 
 // TestRefactoringLoop walks the loop the model is meant to follow.

@@ -47,12 +47,12 @@ func (*Rename) InputSchema() json.RawMessage {
   "type": "object",
   "properties": {
     "file":     {"type": "string",  "description": "Path of a file containing the symbol (declaration or any use), relative to the workspace root."},
-    "line":     {"type": "integer", "description": "1-based line number of that occurrence."},
-    "name":     {"type": "string",  "description": "Current name of the symbol."},
+    "line":     {"type": "integer", "description": "1-based line number of that occurrence. Omit it to find name as a symbol of the package of file."},
+    "name":     {"type": "string",  "description": "Current name of the symbol; without line, the package-level name, Type.Method or Type.Field."},
     "column":   {"type": "integer", "description": "Optional 1-based column, only needed to disambiguate."},
     "new_name": {"type": "string",  "description": "The new name. Must be a valid Go identifier."}
   },
-  "required": ["file", "line", "name", "new_name"],
+  "required": ["file", "name", "new_name"],
   "additionalProperties": false
 }`)
 }

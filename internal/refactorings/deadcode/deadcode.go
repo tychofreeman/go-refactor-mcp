@@ -36,11 +36,11 @@ func (*RemoveDeadCode) InputSchema() json.RawMessage {
   "type": "object",
   "properties": {
     "file":   {"type": "string",  "description": "Path of the file declaring it, relative to the workspace root."},
-    "line":   {"type": "integer", "description": "1-based line of its declaration."},
-    "name":   {"type": "string",  "description": "The declared name (for a method, just the method name)."},
+    "line":   {"type": "integer", "description": "1-based line of its declaration. Omit it to find name as a symbol of the package of file."},
+    "name":   {"type": "string",  "description": "The declared name: with line, just the method name for a method; without line, the package-level name or Type.Method."},
     "column": {"type": "integer", "description": "Optional 1-based column, only needed to disambiguate."}
   },
-  "required": ["file", "line", "name"],
+  "required": ["file", "name"],
   "additionalProperties": false
 }`)
 }

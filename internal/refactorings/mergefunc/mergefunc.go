@@ -49,13 +49,13 @@ func (*MergeDuplicate) InputSchema() json.RawMessage {
   "type": "object",
   "properties": {
     "file":      {"type": "string",  "description": "Path of a file containing the function to delete, at its declaration or a use, relative to the workspace root."},
-    "line":      {"type": "integer", "description": "1-based line of that occurrence."},
-    "name":      {"type": "string",  "description": "The name of the function to delete."},
+    "line":      {"type": "integer", "description": "1-based line of that occurrence. Omit it to find name as a symbol of the package of file."},
+    "name":      {"type": "string",  "description": "The name of the function to delete; without line, the package-level name or Type.Method."},
     "column":    {"type": "integer", "description": "Optional 1-based column, only needed to disambiguate."},
     "keep_file": {"type": "string",  "description": "A file of the package declaring the function to keep."},
     "keep_name": {"type": "string",  "description": "The name of the function to keep."}
   },
-  "required": ["file", "line", "name", "keep_file", "keep_name"],
+  "required": ["file", "name", "keep_file", "keep_name"],
   "additionalProperties": false
 }`)
 }

@@ -37,15 +37,15 @@ func (*AddParameter) InputSchema() json.RawMessage {
   "type": "object",
   "properties": {
     "file":      {"type": "string",  "description": "Path of a file containing the function's declaration or a call, relative to the workspace root."},
-    "line":      {"type": "integer", "description": "1-based line of that occurrence."},
-    "name":      {"type": "string",  "description": "The function's name (for a method, just the method name)."},
+    "line":      {"type": "integer", "description": "1-based line of that occurrence. Omit it to find name as a symbol of the package of file."},
+    "name":      {"type": "string",  "description": "The function's name: with line, just the method name for a method; without line, the package-level name or Type.Method."},
     "column":    {"type": "integer", "description": "Optional 1-based column, only needed to disambiguate."},
     "parameter": {"type": "string",  "description": "Name of the new parameter."},
     "type":      {"type": "string",  "description": "Type of the new parameter, as Go source valid in the declaring file, e.g. string or *bytes.Buffer."},
     "value":     {"type": "string",  "description": "Go expression every call passes for the new parameter, e.g. \"\" or nil or cfg.OutDir."},
     "before":    {"type": "string",  "description": "Optional: an existing parameter; the new one goes just before it."}
   },
-  "required": ["file", "line", "name", "parameter", "type", "value"],
+  "required": ["file", "name", "parameter", "type", "value"],
   "additionalProperties": false
 }`)
 }
