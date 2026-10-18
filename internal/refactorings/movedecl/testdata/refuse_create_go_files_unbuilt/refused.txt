@@ -1,0 +1,1 @@
+q has Go files, but none in a package this build loads

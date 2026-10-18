@@ -317,3 +317,18 @@ ordered by source (the named declaration's file first), then position.
 its methods are in `introparam.go`, now gets the next real refusal when
 moved to `internal/analysis`: its unexported `expr` field is used by code
 left behind. Within the package it moves (its methods stay).
+
+## 2026-10-17: story, moving into a new package
+
+**The workspace could not create a directory.** As with new files before,
+the first step was in `workspace`: `Preview` records the directories a
+new file needs (`Change.Dirs`), `Apply` creates them, and undo removes
+them. A test first, at that level.
+
+**A stand-in package.** The rest of the move needed only the destination's
+path, name and an empty scope, so a new package is a `packages.Package`
+with an empty `types.Package`; no code downstream changed.
+
+**Real code, on a copy.** Moving `imports.PathBase` and `IsStd` to a new
+`internal/importpath` updated five references and built. Gap, small: the
+CLI's `key=value` form cannot pass a list (`also`); the JSON form works.

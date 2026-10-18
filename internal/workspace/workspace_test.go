@@ -69,15 +69,7 @@ func TestApplyCreatesFileAndUndoRemovesIt(t *testing.T) {
 	m := filepath.Join(dir, "m.go")
 	src, _ := os.ReadFile(m)
 	i := strings.Index(string(src), "\nfunc G")
-	g := filepath.Join(dir, "sub", "g.go")
-	_, err = w.Apply("move G", []edit.FileEdit{
-		{Path: m, Edits: []edit.TextEdit{{Start: i, End: len(src)}}},
-		{Path: g, Edits: []edit.TextEdit{{NewText: "package m\nfunc G() int { return 1 }\n"}}},
-	})
-	if err == nil {
-		t.Fatal("creating a file in a missing directory should fail")
-	}
-	g = filepath.Join(dir, "g.go")
+	g := filepath.Join(dir, "g.go")
 	c, err := w.Apply("move G", []edit.FileEdit{
 		{Path: m, Edits: []edit.TextEdit{{Start: i, End: len(src)}}},
 		{Path: g, Edits: []edit.TextEdit{{NewText: "package m\nfunc G() int { return 1 }\n"}}},
@@ -105,6 +97,39 @@ func TestApplyCreatesFileAndUndoRemovesIt(t *testing.T) {
 	}
 	if errs := w.Errors(); len(errs) != 0 {
 		t.Fatalf("errors after undo: %v", errs)
+	}
+}
+
+func TestApplyCreatesDirectoriesAndUndoRemovesThem(t *testing.T) {
+	dir := writeModule(t, map[string]string{"m.go": "package m\n\nfunc F() int { return 1 }\n"})
+	w, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g := filepath.Join(dir, "sub", "deeper", "g.go")
+	if _, err := w.Apply("new package", []edit.FileEdit{
+		{Path: g, Edits: []edit.TextEdit{{NewText: "package deeper\n\nfunc G() int { return 1 }\n"}}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(g); err != nil {
+		t.Fatalf("new file in new directories not written: %v", err)
+	}
+	if errs := w.Errors(); len(errs) != 0 {
+		t.Fatalf("errors after creating the package: %v", errs)
+	}
+	found := false
+	for _, p := range w.Pkgs {
+		found = found || p.Name == "deeper"
+	}
+	if !found {
+		t.Error("the new package was not loaded")
+	}
+	if _, err := w.Undo(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "sub")); !os.IsNotExist(err) {
+		t.Errorf("undo did not remove the directories it created: %v", err)
 	}
 }
 
