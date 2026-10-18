@@ -9,6 +9,8 @@
 //	  refused.txt   a substring expected in the refusal message
 //	  notes.txt     optional, when applied: substrings expected in the
 //	                result's notes, one per line
+//	  no_notes.txt  optional, when applied: substrings the notes must not
+//	                contain, one per line
 //
 // Run `go test ./... -update` to (re)write out/ directories from the
 // current behavior; review the diff before committing.
@@ -112,6 +114,14 @@ func runCase(t *testing.T, r refactor.Refactoring, caseDir string) {
 		for _, line := range strings.Split(strings.TrimSpace(string(want)), "\n") {
 			if !strings.Contains(got, line) {
 				t.Errorf("no note contains %q; notes:\n%s", line, got)
+			}
+		}
+	}
+	if absent, err := os.ReadFile(filepath.Join(caseDir, "no_notes.txt")); err == nil {
+		got := strings.Join(res.Notes, "\n")
+		for _, line := range strings.Split(strings.TrimSpace(string(absent)), "\n") {
+			if strings.Contains(got, line) {
+				t.Errorf("a note contains %q, which it should not; notes:\n%s", line, got)
 			}
 		}
 	}

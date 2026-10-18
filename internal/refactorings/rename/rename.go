@@ -38,7 +38,8 @@ func (*Rename) Name() string { return "rename" }
 func (*Rename) Description() string {
 	return `Rename a variable, constant, function, type, type parameter, struct field or method, updating every reference in the workspace.
 Use it to give a symbol a clearer name. Identify the symbol by file, line and its current name (add column only if the name occurs more than once on that line with different meanings).
-Refuses if the new name would clash with or shadow another symbol, if an exported name used by another package would become unexported, if the method implements an interface, or if the symbol is declared outside the workspace.`
+Refuses if the new name would clash with or shadow another symbol, if an exported name used by another package would become unexported, if the method implements an interface, or if the symbol is declared outside the workspace.
+A doc comment that starts with the old name (the Go convention) is renamed too; other comments that mention it are listed in a note (for a local, only those in its scope).`
 }
 
 func (*Rename) InputSchema() json.RawMessage {
@@ -647,6 +648,84 @@ func (r *renamer) checkEmbeddedType() error {
 	return nil
 }
 
+// docEdits renames the old name where it starts the doc comment of a
+// renamed declaration (a function, method, type, variable, constant or
+// field), as Go's convention has it. It returns the edits and the
+// comments it changed.
+func (r *renamer) docEdits() ([]edit.FileEdit, map[token.Pos]bool) {
+	lead := regexp.MustCompile(`^//\s*` + regexp.QuoteMeta(r.old) + `\b`)
+	var fes []edit.FileEdit
+	done := map[token.Pos]bool{}
+	seen := map[string]bool{}
+	for _, t := range r.targets {
+		pos := r.ws.Fset.Position(t.Pos())
+		if !t.Pos().IsValid() || seen[pos.String()] || !r.ws.Contains(pos.Filename) {
+			continue
+		}
+		seen[pos.String()] = true
+		_, f := r.ws.FileSyntax(pos.Filename)
+		if f == nil {
+			continue
+		}
+		doc := docFor(f, t.Pos())
+		if doc == nil || len(doc.List) == 0 || done[doc.List[0].Pos()] {
+			continue
+		}
+		c := doc.List[0]
+		loc := lead.FindStringIndex(c.Text)
+		if loc == nil {
+			continue
+		}
+		at := r.ws.Fset.Position(c.Pos()).Offset + loc[1] - len(r.old)
+		done[c.Pos()] = true
+		fes = append(fes, edit.FileEdit{Path: pos.Filename, Edits: []edit.TextEdit{{Start: at, End: at + len(r.old), NewText: r.new}}})
+	}
+	return fes, done
+}
+
+// docFor returns the doc comment of the declaration whose name is at pos:
+// its spec's, or its declaration's when that declares only it.
+func docFor(f *ast.File, pos token.Pos) *ast.CommentGroup {
+	var doc *ast.CommentGroup
+	ast.Inspect(f, func(n ast.Node) bool {
+		if doc != nil || n == nil || n.Pos() > pos || n.End() <= pos {
+			return doc == nil && n != nil && n.Pos() <= pos && pos < n.End()
+		}
+		switch n := n.(type) {
+		case *ast.FuncDecl:
+			if n.Name.Pos() == pos {
+				doc = n.Doc
+			}
+		case *ast.GenDecl:
+			for _, sp := range n.Specs {
+				var names []*ast.Ident
+				var spDoc *ast.CommentGroup
+				switch sp := sp.(type) {
+				case *ast.TypeSpec:
+					names, spDoc = []*ast.Ident{sp.Name}, sp.Doc
+				case *ast.ValueSpec:
+					names, spDoc = sp.Names, sp.Doc
+				}
+				for _, id := range names {
+					if id.Pos() != pos {
+						continue
+					}
+					doc = spDoc
+					if doc == nil && len(n.Specs) == 1 && len(names) == 1 {
+						doc = n.Doc
+					}
+				}
+			}
+		case *ast.Field:
+			if len(n.Names) == 1 && n.Names[0].Pos() == pos {
+				doc = n.Doc
+			}
+		}
+		return doc == nil
+	})
+	return doc
+}
+
 var wordRE = func(w string) *regexp.Regexp { return regexp.MustCompile(`\b` + regexp.QuoteMeta(w) + `\b`) }
 
 func (r *renamer) plan() (*refactor.Plan, error) {
@@ -678,11 +757,13 @@ func (r *renamer) plan() (*refactor.Plan, error) {
 			}
 		}
 	}
+	docFes, renamedDocs := r.docEdits()
 	fes = edit.Merge(fes)
 	n := 0
 	for _, fe := range fes {
 		n += len(fe.Edits)
 	}
+	fes = edit.Merge(append(fes, docFes...))
 
 	plan := &refactor.Plan{
 		Summary: fmt.Sprintf("renamed %s %q to %q (%d occurrence%s in %d file%s)",
@@ -692,7 +773,10 @@ func (r *renamer) plan() (*refactor.Plan, error) {
 	if token.IsExported(r.old) && token.IsExported(r.new) && (isPackageLevel(r.first) || r.first.Parent() == nil) {
 		plan.Notes = append(plan.Notes, fmt.Sprintf("%q is exported: code outside this workspace that uses it was not updated", r.old))
 	}
-	if mentions := r.commentMentions(files); len(mentions) > 0 {
+	if len(docFes) > 0 {
+		plan.Notes = append(plan.Notes, fmt.Sprintf("renamed %q in the doc comment that starts with it", r.old))
+	}
+	if mentions := r.commentMentions(files, renamedDocs); len(mentions) > 0 {
 		plan.Notes = append(plan.Notes, fmt.Sprintf("comments still mention %q at %s; update them if they refer to this symbol",
 			r.old, strings.Join(mentions, ", ")))
 	}
@@ -702,10 +786,16 @@ func (r *renamer) plan() (*refactor.Plan, error) {
 // commentMentions lists (up to 5) comment positions in the edited files
 // that mention the old name as a word. Comments are not code, so they are
 // left alone, but the model may want to fix them.
-func (r *renamer) commentMentions(files map[string]bool) []string {
+func (r *renamer) commentMentions(files map[string]bool, skip map[token.Pos]bool) []string {
 	re := wordRE(r.old)
 	var out []string
 	seen := map[string]bool{}
+	// A local's comments are those in its scope; elsewhere the name is
+	// someone else's.
+	from, to := token.NoPos, token.NoPos
+	if sc := r.first.Parent(); sc != nil && sc != types.Universe && r.first.Pkg() != nil && sc != r.first.Pkg().Scope() {
+		from, to = sc.Pos(), sc.End()
+	}
 	for path := range files {
 		_, f := r.ws.FileSyntax(path)
 		if f == nil {
@@ -713,6 +803,9 @@ func (r *renamer) commentMentions(files map[string]bool) []string {
 		}
 		for _, cg := range f.Comments {
 			for _, c := range cg.List {
+				if skip[c.Pos()] || from.IsValid() && (c.Pos() < from || c.End() > to) {
+					continue
+				}
 				if loc := re.FindStringIndex(c.Text); loc != nil {
 					s := r.ws.Position(c.Pos() + token.Pos(loc[0]))
 					if !seen[s] {

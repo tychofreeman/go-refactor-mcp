@@ -373,8 +373,14 @@ Refused (with an explanation):
 - symbols declared outside the workspace (stdlib, dependencies)
 
 Not supported yet: imports, labels, embedded fields (and types that are
-embedded), interface methods. Comments mentioning the old name are not
-changed; the result includes a note listing them so the model can decide.
+embedded), interface methods.
+
+Comments: the doc comment of a renamed declaration (function, method,
+type, variable, constant or field) is renamed too when it starts with the
+old name, as Go's convention has it (`// helper doubles n.` becomes
+`// twice doubles n.`). Other comments mentioning the old name are not
+changed; the result notes where they are, so the model can decide, and for
+a local variable only the comments in its scope count.
 
 ## Extract variable: what it checks
 
