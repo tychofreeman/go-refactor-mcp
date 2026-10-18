@@ -170,3 +170,12 @@ func TestUnifiedContext(t *testing.T) {
 		t.Errorf("3 lines of context differ from Unified:\n%s\n%s", got, want)
 	}
 }
+
+func TestLocations(t *testing.T) {
+	diff := "--- a/a.go\n+++ b/a.go\n@@ -12 +12 @@\n-x\n+y\n@@ -40,2 +40,2 @@\n-x\n-x\n+y\n+y\n" +
+		"--- a/b/c.go\n+++ b/b/c.go\n@@ -3,0 +4 @@\n+new\n@@ -9 +9,0 @@\n-gone\n"
+	want := "changed lines:\n  a.go: 12, 40-41\n  b/c.go: 4, after 9\n"
+	if got := Locations(diff); got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+}
