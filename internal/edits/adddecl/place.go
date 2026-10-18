@@ -8,8 +8,17 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 )
 
-// declNamed returns the file's top-level declaration declaring name.
+// declNamed returns the file's top-level declaration declaring name, or
+// for "T.M" the method M of type T.
 func declNamed(file *ast.File, name string) ast.Decl {
+	if typ, method, ok := strings.Cut(name, "."); ok {
+		for _, d := range file.Decls {
+			if fd, ok := d.(*ast.FuncDecl); ok && fd.Recv != nil && fd.Name.Name == method && recvTypeName(fd) == typ {
+				return fd
+			}
+		}
+		return nil
+	}
 	for _, d := range file.Decls {
 		switch d := d.(type) {
 		case *ast.FuncDecl:
@@ -36,6 +45,35 @@ func declNamed(file *ast.File, name string) ast.Decl {
 	return nil
 }
 
+// recvTypeName returns the name of the type a method's receiver is (T for
+// t T, *T and *T[P]).
+func recvTypeName(fd *ast.FuncDecl) string {
+	e := fd.Recv.List[0].Type
+	for {
+		switch x := ast.Unparen(e).(type) {
+		case *ast.StarExpr:
+			e = x.X
+		case *ast.IndexExpr:
+			e = x.X
+		case *ast.IndexListExpr:
+			e = x.X
+		case *ast.Ident:
+			return x.Name
+		default:
+			return ""
+		}
+	}
+}
+
+// kindOf names what declNamed looks for: a method for "T.M", otherwise a
+// top-level declaration.
+func kindOf(name string) string {
+	if strings.Contains(name, ".") {
+		return "method"
+	}
+	return "top-level declaration"
+}
+
 // offset finds where the new declarations go and the text around them:
 // at the end of the file, or just after or before the declaration named.
 func offset(tf *token.File, file *ast.File, src []byte, rel, after, before string) (at int, pre, post string, err error) {
@@ -45,13 +83,13 @@ func offset(tf *token.File, file *ast.File, src []byte, rel, after, before strin
 	case after != "":
 		d := declNamed(file, after)
 		if d == nil {
-			return 0, "", "", refactor.Refusef("%s has no top-level declaration %s", rel, after)
+			return 0, "", "", refactor.Refusef("%s has no %s %s", rel, kindOf(after), after)
 		}
 		return nextLine(src, tf.Offset(d.End())), "\n", "", nil
 	case before != "":
 		d := declNamed(file, before)
 		if d == nil {
-			return 0, "", "", refactor.Refusef("%s has no top-level declaration %s", rel, before)
+			return 0, "", "", refactor.Refusef("%s has no %s %s", rel, kindOf(before), before)
 		}
 		start := d.Pos()
 		if doc := docOf(d); doc != nil {

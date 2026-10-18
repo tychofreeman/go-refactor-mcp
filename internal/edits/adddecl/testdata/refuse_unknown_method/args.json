@@ -1,0 +1,1 @@
+{"file": "m.go", "content": "func two() int { return 2 }", "after": "mover.missing"}

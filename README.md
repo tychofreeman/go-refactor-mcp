@@ -488,7 +488,9 @@ it so the model can decide whether to remove it.
 `extract_function` moves a run of complete statements into a new function,
 declared after the enclosing top-level declaration, and calls it in their
 place. Identify the statements by `file`, `start_line` and `end_line`
-(inclusive, as `inspect` numbers them). The original text moves, so comments
+(inclusive, as `inspect` numbers them); `doc`, if given, becomes the new
+function's doc comment (`//` is added to each line that lacks it). The
+original text moves, so comments
 come along; it is re-indented, except inside multi-line raw strings and
 comments. The result notes the parameters and results chosen, and warns
 when there are many (more than five parameters or three results): a
@@ -1307,10 +1309,12 @@ fails.
 to the module root. A Go file must parse, and its package clause must match
 the other Go files in its directory (a test file may use the `_test`
 package; any name is fine in a directory without Go files); it is gofmt-ed.
-Other files are written as given. Refused: a file that exists (change it
-with the other tools), a directory that does not exist, a path outside the
-module, or a file whose code does not type-check (a test that calls
-something not declared yet). Undo deletes the file.
+Other files are written as given. Missing directories are created, so a
+new package's first file needs no other step. Refused: a file that exists
+(change it with the other tools), a path through a file (`sub/b.go` when
+`sub` is a file), a path outside the module, or a file whose code does not
+type-check (a test that calls something not declared yet). Undo deletes
+the file and the directories it created.
 
 ### replace_statements
 
@@ -1350,7 +1354,9 @@ before or after the statement, a non-empty block written on one line (use
 
 `add_declaration` adds top-level declarations (functions, methods, types,
 variables, constants, with their doc comments) to an existing file: at its
-end, or just `after` or `before` the top-level declaration of that name.
+end, or just `after` or `before` the top-level declaration of that name
+(`Type.Method` for a method, which `after` alone cannot name when the
+method shares a type's name).
 The `content` has no package clause and no imports: packages it names are
 imported as for `replace_statements`, and an `import` in it is refused. A
 name the package already declares is refused by the type check, whose

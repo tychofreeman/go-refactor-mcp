@@ -22,6 +22,7 @@ import (
 	"flag"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -140,6 +141,22 @@ func runCase(t *testing.T, r refactor.Refactoring, caseDir string) {
 	}
 	compareTrees(t, inDir, tmp)
 	matchesFreshLoad(t, ws, "after undoing")
+}
+
+// GoTestCommand returns a command that runs the tests of the package
+// containing file (relative to root), for a stress test to check that a
+// change kept behavior. The STRESS_ variables are left out of its
+// environment: otherwise that package's own stress test would run too, on
+// the same copy, and could start more.
+func GoTestCommand(root, file string) *exec.Cmd {
+	cmd := exec.Command("go", "test", "-count=1", "./"+filepath.Dir(file))
+	cmd.Dir = root
+	for _, kv := range os.Environ() {
+		if !strings.HasPrefix(kv, "STRESS_") {
+			cmd.Env = append(cmd.Env, kv)
+		}
+	}
+	return cmd
 }
 
 // matchesFreshLoad fails the test if the (incrementally updated) workspace
