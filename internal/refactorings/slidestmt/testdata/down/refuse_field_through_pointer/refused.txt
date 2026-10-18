@@ -1,0 +1,1 @@
+line 7 has side effects

@@ -1,0 +1,1 @@
+line 7 declares x, which line 6 refers to

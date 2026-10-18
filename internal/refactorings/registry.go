@@ -21,6 +21,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/mergefunc"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/movedecl"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/rename"
+	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/slidestmt"
 )
 
 // All returns every available refactoring and edit.
@@ -43,6 +44,8 @@ func All() []refactor.Refactoring {
 		extractstruct.New(),
 		mergefunc.New(),
 		deadcode.New(),
+		slidestmt.NewUp(),
+		slidestmt.NewDown(),
 		createfile.New(),
 		replacestmts.New(),
 		insertstmts.New(),
