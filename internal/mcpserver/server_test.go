@@ -95,6 +95,9 @@ func TestToolsAndInstructions(t *testing.T) {
 	if !strings.Contains(cs.InitializeResult().Instructions, "no need to search for them first") {
 		t.Error("server instructions do not say the refactorings find every reference themselves")
 	}
+	if !strings.Contains(cs.InitializeResult().Instructions, "send them together with batch") {
+		t.Error("server instructions do not suggest batching a planned sequence")
+	}
 	res, err := cs.ListTools(context.Background(), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -188,6 +191,59 @@ func TestRenameListsLocations(t *testing.T) {
 	if strings.Contains(out, "func Scale") {
 		t.Errorf("rename showed the changed lines:\n%s", out)
 	}
+}
+
+// A batch runs several steps in one call, addressed by name so that a
+// later step can use what an earlier one made, and undoes as one.
+func TestBatch(t *testing.T) {
+	cs, dir := setup(t)
+	calc := filepath.Join(dir, "calc", "calc.go")
+	before, _ := os.ReadFile(calc)
+	out, _ := call(t, cs, "batch", map[string]any{"steps": []any{
+		map[string]any{"tool": "rename", "args": map[string]any{"file": "calc/calc.go", "name": "Apply", "new_name": "Scale"}},
+		map[string]any{"tool": "add_parameter", "args": map[string]any{"file": "calc/calc.go", "name": "Scale", "parameter": "k", "type": "int", "value": "0"}},
+	}})
+	mustContain(t, "batch", out, "APPLIED batch: 2 steps", "1. rename:", "2. add_parameter:", "+func Scale(n, k int) int")
+	app, _ := os.ReadFile(filepath.Join(dir, "app", "app.go"))
+	mustContain(t, "app.go", string(app), "calc.Scale(calc.Rate, 0)")
+
+	out, _ = call(t, cs, "undo", map[string]any{})
+	mustContain(t, "undo", out, "UNDONE batch: rename, add_parameter")
+	if got, _ := os.ReadFile(calc); string(got) != string(before) {
+		t.Errorf("one undo did not undo the batch:\n%s", got)
+	}
+
+	out, _ = call(t, cs, "batch", map[string]any{"report": "summary", "steps": []any{
+		map[string]any{"tool": "rename", "args": map[string]any{"file": "calc/calc.go", "name": "Apply", "new_name": "Scale"}},
+	}})
+	mustContain(t, "summary", out, "APPLIED batch: 1 step\n1. rename:")
+	if strings.Contains(out, "changed lines") {
+		t.Errorf("report summary showed the change:\n%s", out)
+	}
+}
+
+func TestBatchRefusals(t *testing.T) {
+	cs, dir := setup(t)
+	calc := filepath.Join(dir, "calc", "calc.go")
+	before, _ := os.ReadFile(calc)
+
+	out, _ := call(t, cs, "batch", map[string]any{"steps": []any{
+		map[string]any{"tool": "rename", "args": map[string]any{"file": "calc/calc.go", "name": "Apply", "new_name": "Scale"}},
+		map[string]any{"tool": "inspect", "args": map[string]any{}},
+	}})
+	mustContain(t, "unknown tool", out, `REFUSED batch: step 2: "inspect" is not a refactoring or edit`)
+
+	out, _ = call(t, cs, "batch", map[string]any{"steps": []any{
+		map[string]any{"tool": "rename", "args": map[string]any{"file": "calc/calc.go", "name": "Apply", "new_name": "Scale"}},
+		map[string]any{"tool": "rename", "args": map[string]any{"file": "calc/calc.go", "name": "Apply", "new_name": "Other"}},
+	}})
+	mustContain(t, "refused step", out, "REFUSED batch at step 2 of 2 (rename)", "rolled back")
+	if got, _ := os.ReadFile(calc); string(got) != string(before) {
+		t.Errorf("a refused batch changed the code:\n%s", got)
+	}
+
+	out, _ = call(t, cs, "batch", map[string]any{"steps": []any{}})
+	mustContain(t, "empty", out, "REFUSED batch: steps is empty")
 }
 
 // TestRefactoringLoop walks the loop the model is meant to follow.

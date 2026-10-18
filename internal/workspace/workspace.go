@@ -406,6 +406,43 @@ func (w *Workspace) Apply(label string, fes []edit.FileEdit) (Change, error) {
 // CanUndo reports whether there is a change to undo.
 func (w *Workspace) CanUndo() bool { return len(w.undo) > 0 }
 
+// Squash replaces the last n changes on the undo stack with one, labelled
+// label, that undoes them all, and returns it; its Diff goes from before
+// the first to after the last.
+func (w *Workspace) Squash(n int, label string) (Change, error) {
+	if n < 1 || n > len(w.undo) {
+		return Change{}, fmt.Errorf("cannot squash %d changes: the undo stack holds %d", n, len(w.undo))
+	}
+	c := Change{Label: label, Before: map[string][]byte{}, After: map[string][]byte{}, Created: map[string]bool{}, Deleted: map[string]bool{}}
+	for _, part := range w.undo[len(w.undo)-n:] {
+		for p, before := range part.Before {
+			if _, seen := c.Before[p]; !seen {
+				c.Before[p], c.Created[p] = before, part.Created[p]
+			}
+		}
+		for p, after := range part.After {
+			c.After[p], c.Deleted[p] = after, part.Deleted[p]
+		}
+		for _, d := range part.Dirs {
+			if !slices.Contains(c.Dirs, d) {
+				c.Dirs = append(c.Dirs, d)
+			}
+		}
+	}
+	// A file a later step put back as it was is not part of the change.
+	for p := range c.Before {
+		if bytes.Equal(c.Before[p], c.After[p]) && c.Created[p] == c.Deleted[p] {
+			delete(c.Before, p)
+			delete(c.After, p)
+			delete(c.Created, p)
+			delete(c.Deleted, p)
+		}
+	}
+	c.Diff = c.DiffContext(w.Root, 3)
+	w.undo = append(w.undo[:len(w.undo)-n], c)
+	return c, nil
+}
+
 // Undo reverts the most recent change and reloads. It refuses if a file
 // was modified on disk since the change was applied.
 func (w *Workspace) Undo() (Change, error) {

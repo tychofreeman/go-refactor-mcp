@@ -183,3 +183,101 @@ func TestLocationsResult(t *testing.T) {
 		t.Errorf("not compact: want the full diff, got:\n%s", res.Diff)
 	}
 }
+
+// setX changes X's initializer; its arguments only matter to RunBatch.
+type setX struct{}
+
+func (setX) Name() string                 { return "set_x" }
+func (setX) Description() string          { return "" }
+func (setX) InputSchema() json.RawMessage { return json.RawMessage(`{}`) }
+func (setX) Plan(ws *workspace.Workspace, _ json.RawMessage) (*refactor.Plan, error) {
+	path := ws.Abs("m.go")
+	src, _ := os.ReadFile(path)
+	i := strings.Index(string(src), "var X = F()") + len("var X = F()")
+	return &refactor.Plan{
+		Summary: "set X",
+		Edits:   []edit.FileEdit{{Path: path, Edits: []edit.TextEdit{{Start: i, End: i, NewText: " + 1"}}}},
+	}, nil
+}
+
+func TestBatchIsOneChange(t *testing.T) {
+	ws, path := setup(t, src)
+	b, err := refactor.RunBatch(ws, []refactor.Step{{Refactoring: bump{}}, {Refactoring: setX{}}}, refactor.Options{Compact: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !b.Applied || len(b.Steps) != 2 {
+		t.Fatalf("want both steps applied, got %+v", b)
+	}
+	want := "--- a/m.go\n+++ b/m.go\n@@ -3 +3 @@\n-func F() int { return 1 }\n+func F() int { return 2 }\n@@ -5 +5 @@\n-var X = F()\n+var X = F() + 1\n"
+	if b.Diff != want {
+		t.Errorf("diff:\n%s\nwant:\n%s", b.Diff, want)
+	}
+	for _, s := range []string{"APPLIED batch: 2 steps", "1. bump: bumped", "2. set_x: set X", want} {
+		if !strings.Contains(b.String(), s) {
+			t.Errorf("missing %q in:\n%s", s, b)
+		}
+	}
+	if _, err := ws.Undo(); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(path); string(got) != src || ws.CanUndo() {
+		t.Errorf("one undo should undo the batch; file:\n%s", got)
+	}
+}
+
+func TestBatchRollsBackOnRefusal(t *testing.T) {
+	ws, path := setup(t, src)
+	b, err := refactor.RunBatch(ws, []refactor.Step{{Refactoring: bump{}}, {Refactoring: buggy{}}}, refactor.Options{Compact: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.Applied || b.FailedStep != 2 || b.Refused == "" {
+		t.Fatalf("want a refusal at step 2, got %+v", b)
+	}
+	for _, s := range []string{"REFUSED batch at step 2 of 2 (buggy):", "step 1 was rolled back; nothing changed"} {
+		if !strings.Contains(b.String(), s) {
+			t.Errorf("missing %q in:\n%s", s, b)
+		}
+	}
+	if got, _ := os.ReadFile(path); string(got) != src || ws.CanUndo() {
+		t.Errorf("not rolled back; file:\n%s", got)
+	}
+}
+
+func TestBatchRefusesStaleLines(t *testing.T) {
+	byLine := json.RawMessage(`{"file": "m.go", "line": 5}`)
+
+	ws, path := setup(t, src)
+	b, err := refactor.RunBatch(ws, []refactor.Step{{Refactoring: bump{}}, {Refactoring: setX{}, Args: byLine}}, refactor.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.Applied || b.FailedStep != 2 || !strings.Contains(b.Refused, "step 1 changed m.go") {
+		t.Errorf("want step 2 refused for stale lines, got %+v", b)
+	}
+	if got, _ := os.ReadFile(path); string(got) != src {
+		t.Errorf("not rolled back; file:\n%s", got)
+	}
+
+	// Before any step changed the file, its line numbers are right.
+	ws, _ = setup(t, src)
+	b, err = refactor.RunBatch(ws, []refactor.Step{{Refactoring: setX{}, Args: byLine}, {Refactoring: bump{}}}, refactor.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !b.Applied {
+		t.Errorf("want the batch applied, got %+v", b)
+	}
+}
+
+func TestBatchOfRenamesListsLocations(t *testing.T) {
+	ws, _ := setup(t, src)
+	b, err := refactor.RunBatch(ws, []refactor.Step{{Refactoring: sameEverywhere{}}}, refactor.Options{Compact: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "changed lines:\n  m.go: 3\n"; b.Diff != want {
+		t.Errorf("got:\n%s\nwant:\n%s", b.Diff, want)
+	}
+}

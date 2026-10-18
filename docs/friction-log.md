@@ -784,3 +784,21 @@ function the new expression calls.
 until the line that reads it, so it was declared as a package-level
 variable instead (allowed while unused). Same gap as the A/B harness:
 a declaration and its use in one step.
+
+## 2026-10-18: the batch tool
+
+Built through the MCP (stub, test, body for `workspace.Squash`,
+`refactor.RunBatch` and the `batch` tool); the server instructions, a
+string literal, were edited by hand as before.
+
+**Inserted code is echoed back.** `insert_statements` returned the whole
+32-line tool registration it was given; only `create_file` and
+`add_declaration` leave out code the model supplied. Gap: the other edits
+(`insert_statements`, `replace_statements`, `add_field`) set
+`Plan.Supplied` too.
+
+**A parallel edit used a line number the other edits then moved.** Sent
+together, a `replace_expression` at line 227 was refused (the text was on
+226 by then) while the others applied. The refusal named the right line,
+so the retry was cheap; a batch addressed by name would not have had the
+problem.

@@ -45,8 +45,8 @@ Every step, refactoring or edit, starts from code that type-checks and must leav
 How to work with them:
 1. Call inspect (no arguments) for an overview, then inspect a file or function to read it with line numbers. The outline shows each function's complexity, nesting, and whether calling it has side effects (calls of a function without them are easier to move or reorder).
 2. To change a feature, first refactor so the change is easy, then make the change with an edit: "make the change easy, then make the easy change".
-3. Apply exactly ONE tool per call. Each call returns APPLIED with a diff, or REFUSED with the reason; a refusal changes nothing, so read it and choose differently.
-4. After each applied step, re-inspect the affected code before choosing the next step. Line numbers change after edits; never reuse old ones. Tools that target a declaration (rename, add_parameter, move_declaration, ...) also accept file and name without line: name is then a package-level symbol of file's package (Name, Type.Method or Type.Field), which stays valid after edits.
+3. Apply ONE tool per call, or, when you can plan several steps from what you have read, send them together with batch: one call, rolled back as a whole if any step is refused. Each call returns APPLIED with what changed, or REFUSED with the reason; a refusal changes nothing, so read it and choose differently.
+4. Line numbers change after edits; never reuse old ones: re-inspect the affected code before a step that needs them. Tools that target a declaration (rename, add_parameter, move_declaration, ...) also accept file and name without line: name is then a package-level symbol of file's package (Name, Type.Method or Type.Field), which stays valid after edits, so a planned sequence can address everything by name.
 5. Use check (with run_tests) at the end, and undo if a step made the code worse. Every step can be undone.
 
 Prefer these tools over editing files by hand for everything they cover.`
@@ -133,6 +133,38 @@ func (s *Server) MCP() *mcp.Server {
 	}, func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		return s.check(ctx, req.Params.Arguments), nil
 	})
+	srv.AddTool(&mcp.Tool{
+		Name: "batch",
+		Description: `Run several refactorings and edits in order, in one call: plan the sequence from one inspect and send it here instead of calling the tools one at a time.
+Each step is {tool, args}: a refactoring or edit (rename, add_parameter, extract_function, replace_statements, ...) and the arguments that tool takes. Each step runs on the code the earlier steps left and, like any step, must leave code that type-checks.
+Address declarations by name (file and name, no line): a name stays valid after earlier steps, and a step can name what an earlier one made (extract_function name=f, then add_parameter name=f). A line number in a file stays valid until a step changes that file; a step that gives one after that is refused.
+If a step is refused, the steps before it are rolled back, so nothing changes, and the result says which step and why. If all apply, the result lists each step's summary and then the change as a whole; one undo reverts the whole batch.
+report: "diff" (default) shows the change; "summary" shows only the steps' summaries.`,
+		InputSchema: json.RawMessage(`{
+  "type": "object",
+  "properties": {
+    "steps": {
+      "type": "array",
+      "description": "The steps, in order.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "tool": {"type": "string", "description": "A refactoring or edit, e.g. rename."},
+          "args": {"type": "object", "description": "The arguments that tool takes."}
+        },
+        "required": ["tool", "args"],
+        "additionalProperties": false
+      }
+    },
+    "report": {"type": "string", "enum": ["diff", "summary"], "description": "What the result shows after the steps' summaries: the change (default) or nothing more."}
+  },
+  "required": ["steps"],
+  "additionalProperties": false
+}`),
+		Annotations: &mcp.ToolAnnotations{DestructiveHint: &notDestructive},
+	}, func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		return s.batch(req.Params.Arguments), nil
+	})
 	return srv
 }
 
@@ -207,6 +239,53 @@ func (s *Server) undo() *mcp.CallToolResult {
 		return textResult("Cannot undo: " + err.Error())
 	}
 	return textResult(fmt.Sprintf("UNDONE %s\n\n%s", strings.TrimPrefix(c.Label, "undo "), c.Diff))
+}
+
+// batch runs the steps of one batch call; see the tool's description.
+func (s *Server) batch(args json.RawMessage) *mcp.CallToolResult {
+	var a struct {
+		Steps []struct {
+			Tool string          `json:"tool"`
+			Args json.RawMessage `json:"args"`
+		} `json:"steps"`
+		Report string `json:"report"`
+	}
+	if err := refactor.DecodeArgs(args, &a); err != nil {
+		return textResult("REFUSED batch: " + err.Error())
+	}
+	if a.Report != "" && a.Report != "diff" && a.Report != "summary" {
+		return textResult(fmt.Sprintf("REFUSED batch: report is %q; give diff or summary", a.Report))
+	}
+	if len(a.Steps) == 0 {
+		return textResult("REFUSED batch: steps is empty; give the refactorings and edits to run, in order")
+	}
+	byName := map[string]refactor.Refactoring{}
+	for _, r := range refactorings.All() {
+		byName[r.Name()] = r
+	}
+	steps := make([]refactor.Step, len(a.Steps))
+	for i, st := range a.Steps {
+		r := byName[st.Tool]
+		if r == nil {
+			return textResult(fmt.Sprintf("REFUSED batch: step %d: %q is not a refactoring or edit; a batch runs tools such as rename, add_parameter or replace_statements, not inspect, undo, check or batch. Nothing changed.", i+1, st.Tool))
+		}
+		steps[i] = refactor.Step{Refactoring: r, Args: st.Args}
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ws, err := s.workspace()
+	if err != nil {
+		return toolError(err)
+	}
+	b, err := refactor.RunBatch(ws, steps, refactor.Options{Compact: !s.FullDiffs})
+	if err != nil {
+		return toolError(err)
+	}
+	if a.Report == "summary" {
+		b.Diff = ""
+	}
+	return textResult(b.String())
 }
 
 // testTimeout bounds `go test` so a hanging test cannot stall the session.
