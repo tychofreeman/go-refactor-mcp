@@ -165,7 +165,8 @@ Moving code into `locate/expr.go` added `internal/refactor` and
 their own. Regrouped by hand. Also: `equalTokens`, which had no doc
 comment, became the exported `EqualTokens` without one. Gaps: new imports
 should go in the group they belong to; a move that exports a name could
-note that it has no doc comment.
+note that it has no doc comment. *Follow-up: imports done (`imports.Adder`
+keeps standard library imports and the others in separate runs).*
 
 **What the tools did.** `create_file` wrote the stub and the test file,
 `move_declaration` shared six declarations between the two refactorings.

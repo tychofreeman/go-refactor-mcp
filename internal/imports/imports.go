@@ -8,6 +8,7 @@ import (
 	"go/ast"
 	"go/token"
 	"go/types"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -166,7 +167,6 @@ func (a *Adder) Remove(spec *ast.ImportSpec) { a.removed[spec] = true }
 // Edits adds the imports that Name needed and deletes the removed ones.
 func (a *Adder) Edits() []edit.TextEdit {
 	var edits []edit.TextEdit
-	off := func(p token.Pos) int { return a.tf.Offset(p) }
 	var group, single *ast.GenDecl // where added imports go
 	for _, d := range a.file.Decls {
 		g, ok := d.(*ast.GenDecl)
@@ -195,36 +195,188 @@ func (a *Adder) Edits() []edit.TextEdit {
 	if len(a.added) == 0 {
 		return edits
 	}
-	var specs []string
-	for _, p := range a.paths() {
-		specs = append(specs, a.spec(p))
-	}
-	switch {
-	case group != nil:
-		at := off(group.Rparen)
-		start := off(a.tf.LineStart(a.tf.Line(group.Rparen)))
-		text := ""
-		for _, sp := range specs {
-			text += "\t" + sp + "\n"
+	return append(edits, a.addEdits(group, single)...)
+}
+
+// addEdits inserts the added imports: into group, the file's first
+// parenthesized import declaration, or else into single, made into a
+// parenthesized one, or else into a new declaration. As goimports does,
+// standard library imports are kept apart from the others: each goes,
+// sorted, into a run of imports of its kind (runs are separated by blank
+// lines), or into a new run, before the others for the standard library
+// and after them otherwise.
+func (a *Adder) addEdits(group, single *ast.GenDecl) []edit.TextEdit {
+	off := func(p token.Pos) int { return a.tf.Offset(p) }
+	if group == nil {
+		var std, other []string
+		add := func(path, text string) {
+			if IsStd(path) {
+				std = append(std, text)
+			} else {
+				other = append(other, text)
+			}
 		}
-		if strings.TrimSpace(string(a.src[start:at])) != "" {
-			text = "\n" + text // `"fmt")` on one line
+		if single != nil {
+			sp := single.Specs[0].(*ast.ImportSpec)
+			add(importPath(sp), string(a.src[off(sp.Pos()):off(sp.End())]))
 		}
-		return append(edits, edit.TextEdit{Start: at, End: at, NewText: text})
-	case single != nil:
-		text := "import (\n\t" + string(a.src[off(single.Specs[0].Pos()):off(single.Specs[0].End())]) + "\n"
-		for _, sp := range specs {
-			text += "\t" + sp + "\n"
+		for _, p := range a.paths() {
+			add(p, a.spec(p))
 		}
-		return append(edits, edit.TextEdit{Start: off(single.Pos()), End: off(single.End()), NewText: text + ")"})
-	default:
+		sort.Slice(std, func(i, j int) bool { return specPath(std[i]) < specPath(std[j]) })
+		sort.Slice(other, func(i, j int) bool { return specPath(other[i]) < specPath(other[j]) })
+		var text string
+		switch {
+		case len(std)+len(other) == 1:
+			text = "import " + strings.Join(append(std, other...), "")
+		default:
+			var runs []string
+			for _, run := range [][]string{std, other} {
+				if len(run) > 0 {
+					runs = append(runs, "\t"+strings.Join(run, "\n\t")+"\n")
+				}
+			}
+			text = "import (\n" + strings.Join(runs, "\n") + ")"
+		}
+		if single != nil {
+			return []edit.TextEdit{{Start: off(single.Pos()), End: off(single.End()), NewText: text}}
+		}
 		at := off(a.file.Name.End())
-		text := "\n\nimport " + specs[0]
-		if len(specs) > 1 {
-			text = "\n\nimport (\n\t" + strings.Join(specs, "\n\t") + "\n)"
-		}
-		return append(edits, edit.TextEdit{Start: at, End: at, NewText: text})
+		return []edit.TextEdit{{Start: at, End: at, NewText: "\n\n" + text}}
 	}
+
+	runs := a.runs(group)
+	var edits []edit.TextEdit
+	for _, std := range []bool{true, false} {
+		var paths []string
+		for _, p := range a.paths() {
+			if IsStd(p) == std {
+				paths = append(paths, p)
+			}
+		}
+		if len(paths) == 0 {
+			continue
+		}
+		run := -1
+		for i, r := range runs {
+			kind := slices.ContainsFunc(r, func(sp *ast.ImportSpec) bool { return IsStd(importPath(sp)) == std })
+			if std && kind && !slices.ContainsFunc(r, func(sp *ast.ImportSpec) bool { return !IsStd(importPath(sp)) }) && run < 0 {
+				run = i // the first run of only standard library imports
+			} else if !std && kind {
+				run = i // the last run with others
+			}
+		}
+		if run < 0 {
+			var text string
+			for _, p := range paths {
+				text += "\t" + a.spec(p) + "\n"
+			}
+			switch {
+			case len(runs) == 0:
+				edits = append(edits, a.beforeRparen(group, text))
+			case std:
+				at := off(a.tf.LineStart(a.tf.Line(runs[0][0].Pos())))
+				edits = append(edits, edit.TextEdit{Start: at, End: at, NewText: text + "\n"})
+			default:
+				edits = append(edits, a.beforeRparen(group, "\n"+text))
+			}
+			continue
+		}
+		r := runs[run]
+		for _, p := range paths {
+			i := slices.IndexFunc(r, func(sp *ast.ImportSpec) bool { return importPath(sp) > p })
+			if i < 0 {
+				last := r[len(r)-1]
+				if a.tf.Line(last.End()) == a.tf.Line(group.Rparen) {
+					edits = append(edits, a.beforeRparen(group, "\t"+a.spec(p)+"\n"))
+					continue
+				}
+				at := a.nextLine(last.End())
+				edits = append(edits, edit.TextEdit{Start: at, End: at, NewText: "\t" + a.spec(p) + "\n"})
+				continue
+			}
+			at := off(a.tf.LineStart(a.tf.Line(r[i].Pos())))
+			edits = append(edits, edit.TextEdit{Start: at, End: at, NewText: "\t" + a.spec(p) + "\n"})
+		}
+	}
+	return edits
+}
+
+// runs returns the imports of group that stay, in runs separated by blank
+// lines (or by removed imports' lines).
+func (a *Adder) runs(group *ast.GenDecl) [][]*ast.ImportSpec {
+	var runs [][]*ast.ImportSpec
+	prevLine := -1
+	for _, s := range group.Specs {
+		sp := s.(*ast.ImportSpec)
+		if a.removed[sp] {
+			continue
+		}
+		line := a.tf.Line(sp.Pos())
+		if sp.Doc != nil {
+			line = a.tf.Line(sp.Doc.Pos())
+		}
+		if len(runs) == 0 || line > prevLine+1 && a.blankBetween(prevLine, line) {
+			runs = append(runs, nil)
+		}
+		runs[len(runs)-1] = append(runs[len(runs)-1], sp)
+		prevLine = a.tf.Line(sp.End())
+	}
+	return runs
+}
+
+// blankBetween reports whether a blank line lies strictly between the
+// lines from and to.
+func (a *Adder) blankBetween(from, to int) bool {
+	for l := from + 1; l < to; l++ {
+		start := a.tf.Offset(a.tf.LineStart(l))
+		end := len(a.src)
+		if l+1 <= a.tf.LineCount() {
+			end = a.tf.Offset(a.tf.LineStart(l + 1))
+		}
+		if strings.TrimSpace(string(a.src[start:end])) == "" {
+			return true
+		}
+	}
+	return false
+}
+
+// beforeRparen inserts text, whole lines, before the closing parenthesis
+// of group.
+func (a *Adder) beforeRparen(group *ast.GenDecl, text string) edit.TextEdit {
+	at := a.tf.Offset(group.Rparen)
+	start := a.tf.Offset(a.tf.LineStart(a.tf.Line(group.Rparen)))
+	if strings.TrimSpace(string(a.src[start:at])) != "" {
+		text = "\n" + text // `"fmt")` on one line
+	} else {
+		at = start
+	}
+	return edit.TextEdit{Start: at, End: at, NewText: text}
+}
+
+// nextLine returns the offset of the line after the one holding p.
+func (a *Adder) nextLine(p token.Pos) int {
+	o := a.tf.Offset(p)
+	if i := strings.IndexByte(string(a.src[o:]), '\n'); i >= 0 {
+		return o + i + 1
+	}
+	return len(a.src)
+}
+
+// IsStd reports whether path is (by the goimports rule) in the standard
+// library: its first element has no dot.
+func IsStd(path string) bool {
+	first, _, _ := strings.Cut(path, "/")
+	return !strings.Contains(first, ".")
+}
+
+func importPath(sp *ast.ImportSpec) string { return strings.Trim(sp.Path.Value, "`\"") }
+
+// specPath returns the path of an import spec written as "name path" or
+// "path".
+func specPath(spec string) string {
+	f := strings.Fields(spec)
+	return strings.Trim(f[len(f)-1], "`\"")
 }
 
 // deleteLines deletes the whole lines from the one holding from to the one
