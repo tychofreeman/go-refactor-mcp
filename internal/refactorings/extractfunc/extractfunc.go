@@ -64,7 +64,7 @@ Return statements are supported in two shapes: if every path through the stateme
 Variables whose address is taken or that a function literal changes are passed as pointers, so both functions share them.
 If the statements use the receiver of the method they are in, the new function is a method of the same type; its name must then be unexported and not clash with a field or method.
 If the statements use the enclosing function's type parameters, the new function declares them too and the call passes them explicitly.
-Refuses other returns (for example an early return of a success value), defer, recover() or fallthrough, or a break, continue or goto that leaves the selected lines; if a variable they declare has its address taken or is used by a function literal and is used after them.
+Refuses other returns (for example an early return of a success value), defer, recover() or fallthrough, or a break, continue or goto that leaves the selected lines; if a variable they declare has its address taken or is used by a function literal that can run later (not one only called during its statement, like an ast.Inspect visitor), and is used after them.
 Local constants and types the statements need move to package level, so both functions share them; this is refused if one is part of a grouped declaration, uses local variables or type parameters, or its name is taken at package level.`
 }
 
@@ -790,8 +790,11 @@ func (x *extraction) analyzeDataFlow() error {
 		case x.fa.Addressed[v]:
 			return refactor.Refusef("%s (declared at line %d) has its address taken, or a pointer method is called on it, and is used after the selected lines; returning it would return a copy, so anything holding its address would no longer see the same variable (some types, like strings.Builder, also refuse to be copied). Include its later uses in the selection",
 				v.Name(), x.line(v.Pos()))
-		case x.fa.Captured[v]:
-			return refactor.Refusef("%s (declared at line %d) is used by a function literal and after the selected lines; returning it would return a copy that the function literal no longer shares. Include its later uses in the selection",
+		case x.fa.CapturedAsync[v]:
+			// A literal that only runs during its statement (an ast.Inspect
+			// visitor, say) has finished by the time the new function
+			// returns v, so a copy loses nothing.
+			return refactor.Refusef("%s (declared at line %d) is used by a function literal that can run later, and after the selected lines; returning it would return a copy that the function literal no longer shares. Include its later uses in the selection",
 				v.Name(), x.line(v.Pos()))
 		}
 		f.results = append(f.results, v)

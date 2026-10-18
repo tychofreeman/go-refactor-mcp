@@ -182,7 +182,7 @@ function literal no longer shares". But `ast.Inspect` calls the literal
 only before it returns (`analysis.SyncLit` already knows this), so the
 copy is the final value. Extracted the whole loop instead. Gap: treat
 variables of synchronous closures that finish inside the selection as
-plain results.
+plain results. *Follow-up: done.*
 
 **`extract_function` at the end of a function.** Extracting the last
 statements before `return nil` gave `err := f(); if err != nil { return
