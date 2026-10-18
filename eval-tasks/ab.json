@@ -54,5 +54,26 @@
     "name": "story-option",
     "prompt": "Refusals from refactor.Run (internal/refactor/refactor.go) list at most 10 type errors. Add a field MaxErrors int to refactor.Options so a caller can choose that limit, with 0 meaning the current 10, and use it in every place the 10 is used now. Callers that do not set it must behave as before.",
     "check": "go vet ./... && grep -Eq '^\\s+MaxErrors\\s+int' internal/refactor/refactor.go && ! grep -q 'limit(errs, 10)' internal/refactor/refactor.go && go test ./internal/refactor/... ./internal/mcpserver/"
+  },
+  {
+    "dir": "..",
+    "rev": "508d107",
+    "name": "multi-plural",
+    "prompt": "Three changes to textutil.Plural (internal/textutil): rename it to PluralSuffix everywhere; give it a parameter suffix string after n, returned instead of the hard-coded \"s\", with \"s\" passed at every call; and move it into a new file internal/textutil/plural.go. Behaviour must not change.",
+    "check": "go vet ./... && grep -Eq '^func PluralSuffix\\(n int, [A-Za-z]+ string\\) string' internal/textutil/plural.go && ! grep -q 'return \"s\"' internal/textutil/plural.go && ! grep -q '^func Plural' internal/textutil/textutil.go && ! grep -rn --include=*.go --exclude-dir=testdata 'textutil\\.Plural(' . && go test ./internal/textutil/ ./internal/edits/... ./internal/refactorings/changesig/"
+  },
+  {
+    "dir": "..",
+    "rev": "508d107",
+    "name": "multi-move-rename",
+    "prompt": "Two changes: move the helper function limit from internal/refactor/refactor.go into package textutil (internal/textutil) as the exported function Limit, updating its callers; and rename the function refactor.Refusef to Refuse everywhere it is used. Behaviour must not change.",
+    "check": "go vet ./... && grep -q '^func Limit' internal/textutil/*.go && ! grep -q '^func limit' internal/refactor/refactor.go && grep -q '^func Refuse(' internal/refactor/refactor.go && ! grep -rn --include=*.go --exclude-dir=testdata 'Refusef(' . && go test ./internal/refactor/... ./internal/locate/ ./internal/textutil/"
+  },
+  {
+    "dir": "..",
+    "rev": "508d107",
+    "name": "multi-fields",
+    "prompt": "In internal/refactor/refactor.go: rename the Notes field of refactor.Plan to Caveats everywhere it is used (the Notes field of refactor.Result keeps its name), and add a field Warnings []string to refactor.Result just after its Notes field, with the tag `json:\"warnings,omitempty\"`.",
+    "check": "go vet ./... && grep -Eq '^\\s+Caveats\\s+\\[\\]string' internal/refactor/refactor.go && grep -Eq '^\\s+Notes\\s+\\[\\]string\\s+.json:\"notes' internal/refactor/refactor.go && grep -Eq '^\\s+Warnings\\s+\\[\\]string\\s+.json:\"warnings,omitempty\"' internal/refactor/refactor.go && go test ./internal/refactor/... ./internal/mcpserver/"
   }
 ]
