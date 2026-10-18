@@ -7,6 +7,7 @@ import (
 	"go/types"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"golang.org/x/tools/go/packages"
@@ -20,7 +21,13 @@ import (
 // an import of it), uses inside it lose their qualifier, and so does the
 // moved code's own references to it.
 func (m *mover) planOtherPackage(to string) (*refactor.Plan, error) {
+	if err := m.addMethods(); err != nil {
+		return nil, err
+	}
 	if err := m.checkOtherPackage(to); err != nil {
+		return nil, err
+	}
+	if err := m.checkMembers(); err != nil {
 		return nil, err
 	}
 	if err := m.collectImports(); err != nil {
@@ -132,8 +139,8 @@ func (m *mover) checkOtherPackage(to string) error {
 func (m *mover) checkCanLeave(md *moved) error {
 	switch d := md.decl.(type) {
 	case *ast.FuncDecl:
-		if d.Recv != nil {
-			return refactor.Refusef("%s is a method, and a method must stay in the package of its type", d.Name.Name)
+		if d.Recv != nil && !m.is(recvTypeName(md.obj)) {
+			return refactor.Refusef("%s is a method, and a method must stay in the package of its type; move the type, which takes its methods along", d.Name.Name)
 		}
 	case *ast.GenDecl:
 		spec := d.Specs[0]
@@ -141,10 +148,6 @@ func (m *mover) checkCanLeave(md *moved) error {
 			spec = md.spec
 		}
 		switch s := spec.(type) {
-		case *ast.TypeSpec:
-			if n, ok := md.obj.Type().(*types.Named); ok && n.NumMethods() > 0 {
-				return refactor.Refusef("%s has methods, which must stay in its package; moving a type with methods is not supported yet", s.Name.Name)
-			}
 		case *ast.ValueSpec:
 			if len(s.Names) > 1 {
 				return refactor.Refusef("the declaration declares %d names; moving it to another package is not supported yet", len(s.Names))
@@ -226,8 +229,8 @@ func (m *mover) updateReferences() (map[string]bool, int, error) {
 			})
 			for id, o := range p.TypesInfo.Uses {
 				d := m.movedOf(o)
-				if d == nil || id.Pos() < f.FileStart || id.Pos() >= f.FileEnd {
-					continue
+				if d == nil || recvTypeName(o) != nil || id.Pos() < f.FileStart || id.Pos() >= f.FileEnd {
+					continue // a method is used through a value, whose type it follows
 				}
 				if path == m.path && m.inMoved(m.off(id.Pos())) {
 					continue // inside the moved code
@@ -316,4 +319,186 @@ func plural(n int) string {
 		return ""
 	}
 	return "s"
+}
+
+// recvTypeName returns the type name of a method's receiver, or nil for
+// anything but a method.
+func recvTypeName(o types.Object) types.Object {
+	fn, ok := o.(*types.Func)
+	if !ok || fn.Signature().Recv() == nil {
+		return nil
+	}
+	t := fn.Signature().Recv().Type()
+	if p, ok := t.(*types.Pointer); ok {
+		t = p.Elem()
+	}
+	if n, ok := t.(*types.Named); ok {
+		return n.Obj()
+	}
+	return nil
+}
+
+// addMethods adds the methods of each moved type: a method must stay in
+// its type's package, so they move along. They must be in the same file.
+func (m *mover) addMethods() error {
+	for _, d := range append([]*moved(nil), m.decls...) {
+		tn, ok := d.obj.(*types.TypeName)
+		if !ok {
+			continue
+		}
+		n, ok := tn.Type().(*types.Named)
+		if !ok {
+			continue
+		}
+		for i := 0; i < n.NumMethods(); i++ {
+			fn := n.Method(i)
+			pos := m.ws.Fset.Position(fn.Pos())
+			if pos.Filename != m.path {
+				return refactor.Refusef("the method %s of %s is in %s; move it to %s first (move_declaration within the package)",
+					fn.Name(), tn.Name(), m.ws.Rel(pos.Filename), m.ws.Rel(m.path))
+			}
+			for _, fd := range m.file.Decls {
+				if declares(m.ws.Fset, fd, pos.Offset) && !m.moves(fd, nil) {
+					md := &moved{decl: fd, obj: fn, newName: fn.Name()}
+					if err := m.checkDecl(md); err != nil {
+						return err
+					}
+					m.decls = append(m.decls, md)
+				}
+			}
+		}
+	}
+	sort.Slice(m.decls, func(i, j int) bool { return m.decls[i].node().Pos() < m.decls[j].node().Pos() })
+	return nil
+}
+
+// checkMembers refuses a move after which code staying outside the
+// destination package would use an unexported field or method of a moved
+// type (by a selector, a key or an unkeyed composite literal), or after
+// which a type would stop implementing an interface: an unexported method
+// belongs to its package, so an interface naming it no longer matches.
+func (m *mover) checkMembers() error {
+	type member struct{ what, of string }
+	unexported := map[string]member{} // by keyOf
+	var named []*types.Named
+	for _, d := range m.decls {
+		tn, ok := d.obj.(*types.TypeName)
+		if !ok {
+			continue
+		}
+		n, ok := tn.Type().(*types.Named)
+		if !ok {
+			continue
+		}
+		named = append(named, n)
+		if st, ok := n.Underlying().(*types.Struct); ok {
+			for i := 0; i < st.NumFields(); i++ {
+				if f := st.Field(i); !f.Exported() {
+					unexported[keyOf(m.ws.Fset, f)] = member{"field", tn.Name()}
+				}
+			}
+		}
+		for i := 0; i < n.NumMethods(); i++ {
+			if fn := n.Method(i); !fn.Exported() {
+				unexported[keyOf(m.ws.Fset, fn)] = member{"method", tn.Name()}
+				if err := m.checkNoInterface(fn); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	if len(unexported) == 0 {
+		return nil
+	}
+	inMoved := func(p token.Pos) bool {
+		return m.ws.Fset.Position(p).Filename == m.path && m.inMoved(m.off(p))
+	}
+	refuse := func(name string, mb member, at token.Pos) error {
+		return refactor.Refusef("%s, a %s of %s, is unexported, and %s uses it outside package %s; export it first (rename), or move that code too",
+			name, mb.what, mb.of, m.ws.Position(at), m.dest.Name)
+	}
+	for _, p := range m.ws.Pkgs {
+		if p.TypesInfo == nil || p.PkgPath == m.dest.PkgPath {
+			continue
+		}
+		for id, o := range p.TypesInfo.Uses {
+			if mb, ok := unexported[keyOf(m.ws.Fset, o)]; ok && !inMoved(id.Pos()) {
+				return refuse(o.Name(), mb, id.Pos())
+			}
+		}
+		for _, f := range p.Syntax {
+			var err error
+			ast.Inspect(f, func(n ast.Node) bool {
+				lit, ok := n.(*ast.CompositeLit)
+				if !ok || err != nil || len(lit.Elts) == 0 {
+					return err == nil
+				}
+				if _, keyed := lit.Elts[0].(*ast.KeyValueExpr); keyed || inMoved(lit.Pos()) || !m.isMovedType(p.TypesInfo.TypeOf(lit), named) {
+					return true
+				}
+				st, ok := p.TypesInfo.TypeOf(lit).Underlying().(*types.Struct)
+				for i := 0; ok && i < st.NumFields() && i < len(lit.Elts); i++ {
+					if f := st.Field(i); !f.Exported() {
+						err = refuse(f.Name(), member{"field", p.TypesInfo.TypeOf(lit).(*types.Named).Obj().Name()}, lit.Elts[i].Pos())
+						return false
+					}
+				}
+				return true
+			})
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// isMovedType reports whether t is one of the moved named types, seen
+// through any package variant.
+func (m *mover) isMovedType(t types.Type, moved []*types.Named) bool {
+	n, ok := t.(*types.Named)
+	if !ok {
+		return false
+	}
+	for _, mt := range moved {
+		if keyOf(m.ws.Fset, n.Obj()) == keyOf(m.ws.Fset, mt.Obj()) {
+			return true
+		}
+	}
+	return false
+}
+
+// checkNoInterface refuses if an interface in the workspace has the
+// unexported method fn's name in fn's package: after the move fn belongs
+// to the destination, so its type no longer implements that interface, and
+// a type assertion would quietly fail.
+func (m *mover) checkNoInterface(fn *types.Func) error {
+	has := func(it *types.Interface) bool {
+		for i := 0; i < it.NumMethods(); i++ {
+			if im := it.Method(i); im.Name() == fn.Name() && im.Pkg() != nil && im.Pkg().Path() == fn.Pkg().Path() {
+				return true
+			}
+		}
+		return false
+	}
+	for _, p := range m.ws.Pkgs {
+		if p.TypesInfo == nil {
+			continue
+		}
+		for id, o := range p.TypesInfo.Defs {
+			if tn, ok := o.(*types.TypeName); ok {
+				if it, ok := tn.Type().Underlying().(*types.Interface); ok && has(it) {
+					return refactor.Refusef("the interface %s (at %s) has the unexported method %s, which belongs to package %s; once moved, the type's %s would not implement it, and a type assertion would quietly fail",
+						tn.Name(), m.ws.Position(id.Pos()), fn.Name(), m.pkg.Name, fn.Name())
+				}
+			}
+		}
+		for e, tv := range p.TypesInfo.Types {
+			if it, ok := tv.Type.(*types.Interface); ok && tv.IsType() && has(it) {
+				return refactor.Refusef("the interface at %s has the unexported method %s, which belongs to package %s; once moved, the type's %s would not implement it",
+					m.ws.Position(e.Pos()), fn.Name(), m.pkg.Name, fn.Name())
+			}
+		}
+	}
+	return nil
 }

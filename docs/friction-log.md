@@ -271,3 +271,24 @@ gap; widening to an interface the arguments satisfy keeps behavior).
 `b = strings.ToUpper("x")` out of a `var` group; the existing rule refused
 it, rightly: a call in an initializer could run in another order once in
 another file.
+
+## 2026-10-17: story, a type with its methods to another package
+
+**A crash found by thinking, then a test.** The unkeyed-literal check
+read the literal's type name from the syntax, `lit.Type.(*ast.Ident)`,
+which is nil for the inner literals of `[]T{{4}}`. A test reproduced the
+panic before the fix (the type's name now comes from the type).
+
+**Real code, dry runs.** Moving `movedecl`'s `fileEdits` (with its method
+`dropUnused`) to `internal/edit` is refused because `otherpkg.go` uses its
+unexported `edits` field; moving `changesig`'s `call` is refused because
+its methods `recv` and `recvSelection` are in `introparam.go`, with the
+next step named (move them into `common.go` first). Both are the refusal a
+reviewer would give.
+
+**By hand.** The new checks reuse the shape of `changesig`'s
+`checkNoInterface` (an interface with a given method of a package), now in
+two packages. Gap: once more, a shared helper wants to move to `analysis`,
+and the two versions differ only in their messages: an extract with a
+parameter for the differing part would merge them (the near-duplicate
+gap logged before).

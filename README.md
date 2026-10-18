@@ -62,8 +62,9 @@ hand or a tool got in the way.
    references (and renaming it on the way when it changes package).
    *`move_declaration` done, within a package and to another one (see
    "Move declaration: what it checks"), with several declarations of a file
-   at once (`also`) and out of a grouped declaration; next: a type with its
-   methods, declarations from several files, and creating the package.*
+   at once (`also`), out of a grouped declaration, and a type with its
+   methods; next: declarations from several files, and creating the
+   package.*
 3. **Evidence from real use.** Keep the friction log during normal work.
    Later, a comparison: the same small stories done with and without the
    tools, comparing the size of the hand-written edits, test failures and
@@ -1076,8 +1077,8 @@ exported (`defaultHost` in a command becomes `agent.DefaultHost`).
 
 Refused, besides the checks above:
 
-- **what moves:** a method (it must stay with its type), a type with
-  methods, a declaration of several names (`var a, b = 1, 2`), and code
+- **what moves:** a method on its own (it must stay with its type), a
+  declaration of several names (`var a, b = 1, 2`), and code
   that uses other top-level declarations of its package: the new package
   would have to import the old one, which imports it (move those first,
   or with it in `also`);
@@ -1088,6 +1089,19 @@ Refused, besides the checks above:
   the destination (or the moved code's imports) already depends on it,
   which is an import cycle; a package that cannot import the destination
   (`internal`); a use through a dot import.
+
+A type takes its methods along, since a method must be in its type's
+package; they must be in the type's file (move them there first, within
+the package). A method call (`c.Inc()`) does not change, but what code left
+behind can reach does:
+
+- an unexported field or method of the type used outside the destination
+  package (by a selector, a key, or an unkeyed composite literal such as
+  `T{3}`) is refused: export it first, or move that code too;
+- an unexported method belongs to its package, so after the move the type
+  no longer implements an interface naming it; if any interface in the
+  workspace has such a method, the move is refused, since a type
+  assertion would quietly fail.
 
 ## Edits
 
