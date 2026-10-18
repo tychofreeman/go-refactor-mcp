@@ -11,6 +11,7 @@ import (
 
 	"golang.org/x/tools/go/packages"
 
+	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 )
@@ -520,32 +521,14 @@ func (m *mover) isMovedType(t types.Type, moved []*types.Named) bool {
 // to the destination, so its type no longer implements that interface, and
 // a type assertion would quietly fail.
 func (m *mover) checkNoInterface(fn *types.Func) error {
-	has := func(it *types.Interface) bool {
-		for i := 0; i < it.NumMethods(); i++ {
-			if im := it.Method(i); im.Name() == fn.Name() && im.Pkg() != nil && im.Pkg().Path() == fn.Pkg().Path() {
-				return true
-			}
-		}
-		return false
+	iface, at, found := analysis.InterfaceWithMethod(m.ws.TypesInfos(), fn.Pkg().Path(), fn.Name())
+	switch {
+	case !found:
+		return nil
+	case iface != nil:
+		return refactor.Refusef("the interface %s (at %s) has the unexported method %s, which belongs to package %s; once moved, the type's %s would not implement it, and a type assertion would quietly fail",
+			iface.Name(), m.ws.Position(at), fn.Name(), m.pkg.Name, fn.Name())
 	}
-	for _, p := range m.ws.Pkgs {
-		if p.TypesInfo == nil {
-			continue
-		}
-		for id, o := range p.TypesInfo.Defs {
-			if tn, ok := o.(*types.TypeName); ok {
-				if it, ok := tn.Type().Underlying().(*types.Interface); ok && has(it) {
-					return refactor.Refusef("the interface %s (at %s) has the unexported method %s, which belongs to package %s; once moved, the type's %s would not implement it, and a type assertion would quietly fail",
-						tn.Name(), m.ws.Position(id.Pos()), fn.Name(), m.pkg.Name, fn.Name())
-				}
-			}
-		}
-		for e, tv := range p.TypesInfo.Types {
-			if it, ok := tv.Type.(*types.Interface); ok && tv.IsType() && has(it) {
-				return refactor.Refusef("the interface at %s has the unexported method %s, which belongs to package %s; once moved, the type's %s would not implement it",
-					m.ws.Position(e.Pos()), fn.Name(), m.pkg.Name, fn.Name())
-			}
-		}
-	}
-	return nil
+	return refactor.Refusef("the interface at %s has the unexported method %s, which belongs to package %s; once moved, the type's %s would not implement it",
+		m.ws.Position(at), fn.Name(), m.pkg.Name, fn.Name())
 }

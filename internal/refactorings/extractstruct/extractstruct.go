@@ -112,7 +112,7 @@ func (*ExtractStruct) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refac
 	if err := x.checkNames(); err != nil {
 		return nil, err
 	}
-	if err := x.checkNoInterface(); err != nil {
+	if err := x.checkNotPassedAsInterface(); err != nil {
 		return nil, err
 	}
 	n, err := x.rewriteLiterals()
@@ -284,10 +284,10 @@ func sameObj(fset *token.FileSet, a, b types.Object) bool {
 	return pa == pb && a.Name() == b.Name()
 }
 
-// checkNoInterface refuses a value of the type (or a pointer to it) passed
-// to an interface parameter or converted to an interface: what reflection
-// sees there would change.
-func (x *extraction) checkNoInterface() error {
+// checkNotPassedAsInterface refuses a value of the type (or a pointer to
+// it) passed to an interface parameter or converted to an interface: what
+// reflection sees there would change.
+func (x *extraction) checkNotPassedAsInterface() error {
 	for _, p := range x.ws.Pkgs {
 		if p.TypesInfo == nil {
 			continue
