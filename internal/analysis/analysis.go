@@ -310,6 +310,16 @@ func (f *Func) Stable(e ast.Expr, sharing bool) (ast.Node, bool) {
 				return ok(e.Args...)
 			}
 		}
+		if known, panics := KnownCall(info, e); known && panics == NoPanic {
+			if sharing && IsReference(info.TypeOf(e)) {
+				return e, false // a new slice each time, say
+			}
+			args := e.Args
+			if sel, isSel := ast.Unparen(e.Fun).(*ast.SelectorExpr); isSel && info.Selections[sel] != nil {
+				args = append([]ast.Expr{sel.X}, args...) // a method's receiver
+			}
+			return ok(args...)
+		}
 		return e, false
 	case *ast.CompositeLit:
 		t := info.TypeOf(e)
@@ -347,6 +357,9 @@ func HasEffect(info *types.Info, n ast.Node) bool {
 			case "len", "cap", "min", "max", "real", "imag", "complex", "new", "make":
 				return false
 			}
+		}
+		if known, panics := KnownCall(info, n); known && panics == NoPanic {
+			return false
 		}
 		return true
 	case *ast.UnaryExpr:

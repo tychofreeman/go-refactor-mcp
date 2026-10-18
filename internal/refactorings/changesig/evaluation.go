@@ -72,6 +72,15 @@ func riskOf(info *types.Info, n ast.Node) (r risk, ok bool) {
 			}
 			break
 		}
+		if known, panics := analysis.KnownCall(info, n); known {
+			switch panics {
+			case analysis.NilPanic:
+				r.why, r.nilDeref = "could panic: it calls "+types.ExprString(n.Fun)+" on what could be nil", true
+			case analysis.OtherPanic:
+				r.why, r.panics = "could panic: it calls "+types.ExprString(n.Fun), true
+			}
+			break
+		}
 		if analysis.HasEffect(info, n) {
 			r.why, r.effect = "has side effects", true
 		}

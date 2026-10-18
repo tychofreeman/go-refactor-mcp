@@ -327,6 +327,32 @@ updated; exported renames add a note saying so.
   `p` and `p [p.test]`. Symbols are identified by declaration position, and
   edits are deduplicated, so references in `_test.go` files are updated too.
 
+
+### Calls known to have no side effects
+
+A call can do anything, so most checks treat one as a side effect. A
+vetted list (`analysis.KnownCall`) names functions that have none and whose
+result depends only on their arguments (strings, numbers, runes) and on
+receiver state that never changes: most of `strings` on strings,
+`unicode`, `unicode/utf8`, `math`, the lexical `path` and `path/filepath`
+functions, `strconv`'s formatting, the `go/token` predicates, and getters of
+`go/types` objects such as `Object.Name` and `Package.Path`. Each says how
+it can panic: never (`strings.ToUpper`), only through a nil receiver (the
+`go/types` getters), or otherwise (`strings.Repeat` with a negative count).
+
+A known call that cannot panic has no effect and gives the same value
+wherever it is evaluated, so `add_parameter` can pass `strings.ToUpper(name)`,
+`extract_variable` can replace every `strings.ToLower(s)`, and
+`inline_variable` can repeat one. One that can panic counts as a panic, of
+the kind it is (so `introduce_parameter` accepts a getter at entry, like a
+read through a pointer).
+
+Left out on purpose: functions that return a new error (`strconv.Atoi`:
+two calls give errors that are not `==`), that call their arguments'
+methods (`fmt`), that read memory other code can change (`bytes`,
+`strings.Join`, anything taking a slice; also any call spreading a slice,
+`f(xs...)`), and methods of `go/ast` nodes, whose fields can be assigned.
+
 ## Rename: what it checks
 
 Supported: local and package-level variables, constants, functions, types,
@@ -391,7 +417,9 @@ change behavior:
 - a `goto` jumps forward over the new declaration.
 
 `all_occurrences` additionally requires an expression with no calls (other
-than conversions and `len`/`cap`/`min`/`max`), no pointer, slice or map
+than conversions, `len`/`cap`/`min`/`max`, and the known functions without
+side effects that cannot panic, such as `strings.ToLower`; see "Calls
+known to have no side effects"), no pointer, slice or map
 element reads, no globals, no new slices or maps, and no local variable that
 escapes (address taken, captured by a closure) or is modified after the
 declaration. Without `all_occurrences`, the result notes other occurrences
@@ -766,8 +794,10 @@ The body does not use the new parameter yet; using it is the edit that
 follows. So that the step changes nothing, the value must be safe to
 evaluate where nothing evaluated before:
 
-- **no side effects:** no calls other than conversions and `len`, `cap`,
-  `min`, `max`, `new`, `make` and the like, and no channel receives;
+- **no side effects:** no calls other than conversions, `len`, `cap`,
+  `min`, `max`, `new`, `make` and the like, and the known functions without
+  side effects (`strings.ToUpper(name)`; one that can panic, like
+  `strings.Repeat`, counts as a panic), and no channel receives;
 - **no panics:** no pointer dereference (explicit, or a field read through a
   pointer), no indexing other than of a map, no slicing or type assertion,
   and no division by a non-constant.

@@ -1,0 +1,1 @@
+{"file": "a.go", "line": 5, "name": "greet", "parameter": "loud", "type": "string", "value": "strings.Repeat(name, 2)"}

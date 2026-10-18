@@ -1,0 +1,1 @@
+{"file": "m.go", "line": 6, "expression": "strings.ToLower(s)", "name": "lower", "all_occurrences": true}

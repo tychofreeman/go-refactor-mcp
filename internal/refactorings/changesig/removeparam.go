@@ -28,7 +28,7 @@ func (*RemoveParameter) Description() string {
 	return `Remove a parameter the body does not use from a function or method, and drop its argument from every call in the workspace.
 Use it to finish removing a feature: first change the body so it no longer uses the parameter, then remove it.
 Identify the function by file, line and name, at its declaration or any call, and give the parameter's name. Removing a variadic parameter drops all of its arguments.
-Each dropped argument must have no side effects and must not be able to panic (no calls, pointer dereferences, indexing or non-constant division), so that not evaluating it changes nothing.
+Each dropped argument must have no side effects and must not be able to panic (no calls other than to known functions without side effects such as strings.ToUpper, no pointer dereferences, indexing or non-constant division), so that not evaluating it changes nothing.
 Refuses if the body uses the parameter, if the function is used other than by calling it, if it is an interface method, if a method would stop or start implementing an interface the program can see (which could silently change a type assertion), if a dropped argument would leave a local variable or an import unused, or if the parameter's type is all that lets calls infer a type parameter.`
 }
 

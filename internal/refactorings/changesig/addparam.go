@@ -28,7 +28,7 @@ func (*AddParameter) Description() string {
 	return `Add a parameter to a function or method, and pass the given value for it at every call in the workspace.
 Use it to prepare a feature change: add the parameter first, then change the body to use it.
 Identify the function by file, line and name, at its declaration or any call. Give the new parameter's name and type, the value every call passes (written as Go source, e.g. "", nil, 0, or a name in scope at each call such as cfg.OutDir), and optionally before: the existing parameter to insert it ahead of (default: at the end, or just before a variadic parameter).
-The body does not use the new parameter yet, so behavior is unchanged; the value must therefore have no side effects and must not be able to panic (no calls, pointer dereferences, indexing or non-constant division).
+The body does not use the new parameter yet, so behavior is unchanged; the value must therefore have no side effects and must not be able to panic (no calls other than to known functions without side effects such as strings.ToUpper, no pointer dereferences, indexing or non-constant division).
 Refuses if the function is used other than by calling it (as a function value or method expression), if it is an interface method, if a method would stop or start implementing an interface the program can see (which could silently change a type assertion), if the new name clashes with a parameter, result or top-level local or would hide a name the body uses, or if the value does not type-check at some call.`
 }
 
@@ -227,7 +227,7 @@ func (t *target) checkValue(c call, value string, typ types.Type) error {
 		return refactor.Refusef("the value %s does not work at the call at %s: %s", value, where, msg)
 	}
 	if bad, why := unsafeValue(info, e); bad != nil {
-		return refactor.Refusef("the value %s %s (%s), and the body would not use it, so passing it would change behavior; use a value without calls, dereferences, indexing or division",
+		return refactor.Refusef("the value %s %s (%s), and the body would not use it, so passing it would change behavior; use a value without calls (other than known ones, like strings.ToUpper), dereferences, indexing or division",
 			value, why, types.ExprString(bad.(ast.Expr)))
 	}
 	if vt := info.Types[e].Type; !containsTypeParam(typ) && !assignable(vt, typ) {
