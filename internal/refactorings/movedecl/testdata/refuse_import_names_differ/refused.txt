@@ -1,0 +1,1 @@
+a.go imports "strings" as str, and b.go as strings

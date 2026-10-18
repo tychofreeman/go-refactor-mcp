@@ -7,7 +7,6 @@ import (
 	"go/types"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"golang.org/x/tools/go/packages"
@@ -60,19 +59,23 @@ func (m *mover) planOtherPackage(to string) (*refactor.Plan, error) {
 	}
 	m.deleteDecls()
 	if _, err := os.Stat(to); os.IsNotExist(err) {
-		m.files[to] = &fileEdits{edits: []edit.TextEdit{{NewText: m.newFile(func(pn *types.PkgName) string {
+		text, err := m.newFile(func(pn *types.PkgName) string {
 			if pn.Imported().Path() == m.dest.PkgPath {
 				return ""
 			}
 			return pn.Name()
-		})}}}
+		})
+		if err != nil {
+			return nil, err
+		}
+		m.files[to] = &fileEdits{edits: []edit.TextEdit{{NewText: text}}}
 	} else if err := m.appendTo(to, m.dest.PkgPath); err != nil {
 		return nil, err
 	}
 
 	plan := &refactor.Plan{
 		Summary: fmt.Sprintf("moved %s from %s to %s as %s.%s%s (%d reference%s updated)",
-			m.obj.Name(), m.ws.Rel(m.path), m.ws.Rel(to), m.dest.Name, m.newName, m.withAlso(), refs, plural(refs)),
+			m.obj.Name(), m.fromFiles(), m.ws.Rel(to), m.dest.Name, m.newName, m.withAlso(), refs, plural(refs)),
 		Edits: m.fileEdits(),
 	}
 	for _, d := range m.decls {
@@ -86,18 +89,15 @@ func (m *mover) planOtherPackage(to string) (*refactor.Plan, error) {
 // checkOtherPackage checks the destination package and file, and that the
 // declaration can leave its package.
 func (m *mover) checkOtherPackage(to string) error {
-	rel := m.ws.Rel(m.path)
-	switch {
-	case !strings.HasSuffix(to, ".go"):
+	if !strings.HasSuffix(to, ".go") {
 		return refactor.Refusef("to_file must be a .go file")
-	case strings.HasSuffix(m.path, "_test.go") || strings.HasSuffix(to, "_test.go"):
-		return refactor.Refusef("moving to or from a test file in another package is not supported yet")
-	case constrained(m.path, m.file):
-		return refactor.Refusef("%s has build constraints, so it is not built everywhere; moving out of it is not supported", rel)
 	}
-	for _, imp := range m.file.Imports {
-		if imp.Path.Value == `"C"` {
-			return refactor.Refusef("%s uses cgo; moving declarations out of cgo files is not supported", rel)
+	for _, s := range m.sources {
+		if strings.HasSuffix(s.path, "_test.go") || strings.HasSuffix(to, "_test.go") {
+			return refactor.Refusef("moving to or from a test file in another package is not supported yet")
+		}
+		if err := s.checkBuiltEverywhere(m.ws.Rel(s.path)); err != nil {
+			return err
 		}
 	}
 	dir := filepath.Dir(to)
@@ -232,7 +232,7 @@ func (m *mover) updateReferences() (map[string]bool, int, error) {
 				if d == nil || recvTypeName(o) != nil || id.Pos() < f.FileStart || id.Pos() >= f.FileEnd {
 					continue // a method is used through a value, whose type it follows
 				}
-				if path == m.path && m.inMoved(m.off(id.Pos())) {
+				if m.inMoved(path, m.off(id.Pos())) {
 					continue // inside the moved code
 				}
 				fe, err := m.fileFor(path)
@@ -274,10 +274,11 @@ func (m *mover) updateReferences() (map[string]bool, int, error) {
 	return users, refs, nil
 }
 
-// inMoved reports whether a source file offset is in the moved code.
-func (m *mover) inMoved(off int) bool {
+// inMoved reports whether an offset of the file at path is in the moved
+// code.
+func (m *mover) inMoved(path string, off int) bool {
 	for _, d := range m.decls {
-		if d.start <= off && off < d.end {
+		if d.from.path == path && d.start <= off && off < d.end {
 			return true
 		}
 	}
@@ -298,7 +299,7 @@ func (m *mover) checkNoCycle(users map[string]bool) error {
 		}
 	}
 	walk(m.dest, m.dest.PkgPath)
-	for _, imp := range m.imports {
+	for _, imp := range m.allImports() {
 		path := pkgNameOf(m.pkg.TypesInfo, imp).Imported().Path()
 		if d := m.pkg.Imports[path]; d != nil && path != m.dest.PkgPath {
 			deps[path] = m.obj.Name()
@@ -353,13 +354,13 @@ func (m *mover) addMethods() error {
 		for i := 0; i < n.NumMethods(); i++ {
 			fn := n.Method(i)
 			pos := m.ws.Fset.Position(fn.Pos())
-			if pos.Filename != m.path {
-				return refactor.Refusef("the method %s of %s is in %s; move it to %s first (move_declaration within the package)",
-					fn.Name(), tn.Name(), m.ws.Rel(pos.Filename), m.ws.Rel(m.path))
+			from, err := m.sourceFor(pos.Filename)
+			if err != nil {
+				return err
 			}
-			for _, fd := range m.file.Decls {
+			for _, fd := range from.file.Decls {
 				if declares(m.ws.Fset, fd, pos.Offset) && !m.moves(fd, nil) {
-					md := &moved{decl: fd, obj: fn, newName: fn.Name()}
+					md := &moved{from: from, decl: fd, obj: fn, newName: fn.Name()}
 					if err := m.checkDecl(md); err != nil {
 						return err
 					}
@@ -368,7 +369,7 @@ func (m *mover) addMethods() error {
 			}
 		}
 	}
-	sort.Slice(m.decls, func(i, j int) bool { return m.decls[i].node().Pos() < m.decls[j].node().Pos() })
+	m.sortDecls()
 	return nil
 }
 
@@ -411,7 +412,7 @@ func (m *mover) checkMembers() error {
 		return nil
 	}
 	inMoved := func(p token.Pos) bool {
-		return m.ws.Fset.Position(p).Filename == m.path && m.inMoved(m.off(p))
+		return m.inMoved(m.ws.Fset.Position(p).Filename, m.off(p))
 	}
 	refuse := func(name string, mb member, at token.Pos) error {
 		return refactor.Refusef("%s, a %s of %s, is unexported, and %s uses it outside package %s; export it first (rename), or move that code too",

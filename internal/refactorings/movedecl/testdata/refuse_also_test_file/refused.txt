@@ -1,0 +1,1 @@
+only one of a_test.go and c.go is a test file

@@ -1,1 +1,0 @@
-second is declared in b.go, not a.go

@@ -1,0 +1,1 @@
+{"file": "a.go", "line": 3, "name": "first", "to_file": "b.go", "also": ["second"]}
