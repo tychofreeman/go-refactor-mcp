@@ -47,9 +47,10 @@ type Edit interface {
 
 // Plan is the outcome of a successful precondition check.
 type Plan struct {
-	Summary string          // one line, e.g. `renamed "x" to "count" (4 references)`
-	Edits   []edit.FileEdit // byte-range edits against current file contents
-	Notes   []string        // caveats the model should know about
+	Summary  string          // one line, e.g. `renamed "x" to "count" (4 references)`
+	Edits    []edit.FileEdit // byte-range edits against current file contents
+	Notes    []string        // caveats the model should know about
+	Supplied string          // code the model wrote; the result names where it went instead of repeating it
 }
 
 // Refusal is a precondition failure. Its message is written for the model:
@@ -142,7 +143,7 @@ func Run(ws *workspace.Workspace, r Refactoring, args json.RawMessage, opts Opti
 		if err != nil {
 			return nil, err
 		}
-		res.Diff, res.Files = c.Diff, c.Files(ws.Root)
+		res.Diff, res.Files = edit.ElideSupplied(c.Diff, plan.Supplied), c.Files(ws.Root)
 		return res, nil
 	}
 
@@ -164,7 +165,7 @@ func Run(ws *workspace.Workspace, r Refactoring, args json.RawMessage, opts Opti
 		return res, nil
 	}
 	res.Applied = true
-	res.Diff, res.Files = c.Diff, c.Files(ws.Root)
+	res.Diff, res.Files = edit.ElideSupplied(c.Diff, plan.Supplied), c.Files(ws.Root)
 	return res, nil
 }
 

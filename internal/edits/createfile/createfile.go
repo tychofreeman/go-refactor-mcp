@@ -90,8 +90,9 @@ func (*CreateFile) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor
 		lines++
 	}
 	return &refactor.Plan{
-		Summary: fmt.Sprintf("created %s (%d line%s)", rel, lines, textutil.Plural(lines)),
-		Edits:   []edit.FileEdit{{Path: path, Edits: []edit.TextEdit{{NewText: a.Content}}}},
+		Summary:  fmt.Sprintf("created %s (%d line%s)", rel, lines, textutil.Plural(lines)),
+		Edits:    []edit.FileEdit{{Path: path, Edits: []edit.TextEdit{{NewText: a.Content}}}},
+		Supplied: a.Content,
 	}, nil
 }
 

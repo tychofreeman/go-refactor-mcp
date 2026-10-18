@@ -108,3 +108,53 @@ func TestMyersRoundTrip(t *testing.T) {
 		}
 	}
 }
+
+func TestElideSupplied(t *testing.T) {
+	for _, tc := range []struct{ name, diff, supplied, want string }{
+		{
+			name:     "a new file",
+			diff:     "--- a/m.go\n+++ b/m.go\n@@ -0,0 +1,3 @@\n+package m\n+\n+var X = 1\n",
+			supplied: "package m\n\nvar X = 1\n",
+			want:     "--- a/m.go\n+++ b/m.go\n@@ -0,0 +1,3 @@\n[3 lines added as written: lines 1-3]\n",
+		},
+		{
+			name: "added code beside an import the model did not write",
+			diff: "--- a/m.go\n+++ b/m.go\n@@ -1,5 +1,12 @@\n package m\n \n+import \"strings\"\n+\n func A() {}\n \n" +
+				"+// B upper-cases s.\n+func B(s string) string {\n+\treturn strings.ToUpper(s)\n+}\n+\n var X = 1\n",
+			supplied: "// B upper-cases s.\nfunc B(s string) string {\n\treturn strings.ToUpper(s)\n}",
+			want: "--- a/m.go\n+++ b/m.go\n@@ -1,5 +1,12 @@\n package m\n \n+import \"strings\"\n+\n func A() {}\n \n" +
+				"[5 lines added as written: lines 7-11]\n var X = 1\n",
+		},
+		{
+			name:     "gofmt changed the spacing",
+			diff:     "--- a/m.go\n+++ b/m.go\n@@ -2,0 +3,2 @@\n+type T struct {\n+\tx    int\n",
+			supplied: "type T struct {\n x int",
+			want:     "--- a/m.go\n+++ b/m.go\n@@ -2,0 +3,2 @@\n[2 lines added as written: lines 3-4]\n",
+		},
+		{
+			name:     "removed and changed lines are kept",
+			diff:     "--- a/m.go\n+++ b/m.go\n@@ -3,2 +3,2 @@\n-a()\n-b()\n+c()\n+d()\n",
+			supplied: "x()\ny()\n",
+			want:     "--- a/m.go\n+++ b/m.go\n@@ -3,2 +3,2 @@\n-a()\n-b()\n+c()\n+d()\n",
+		},
+		{
+			name:     "one line is not worth eliding",
+			diff:     "--- a/m.go\n+++ b/m.go\n@@ -3 +3,2 @@\n a()\n+b()\n",
+			supplied: "b()",
+			want:     "--- a/m.go\n+++ b/m.go\n@@ -3 +3,2 @@\n a()\n+b()\n",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := ElideSupplied(tc.diff, tc.supplied); got != tc.want {
+				t.Errorf("got:\n%s\nwant:\n%s", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestElideSuppliedNothingSupplied(t *testing.T) {
+	diff := "--- a/m.go\n+++ b/m.go\n@@ -1 +1,3 @@\n a()\n+\n+\n"
+	if got := ElideSupplied(diff, ""); got != diff {
+		t.Errorf("got:\n%s", got)
+	}
+}

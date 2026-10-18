@@ -714,6 +714,17 @@ every tool).
 branch in `locate.Ident` that calls it were a hand edit; `add_declaration`
 and `insert_statements` would have covered them, and should have been used.
 
+## 2026-10-18: not echoing code the model wrote
+
+**All through the MCP.** Stub, tests, helpers and implementation went in
+with `add_declaration`, `insert_statements`, `replace_statements`,
+`replace_expression` and `add_field` (addressed by name, without a line).
+
+**Adding a key to a composite literal.** Giving two `refactor.Plan`
+literals a `Supplied` field meant restating each whole statement with
+`replace_statements`. Cheap for a four-line literal. Gap: an edit that
+adds an element or key to a composite literal (like `add_field` for a
+type).
 ## 2026-10-18: a token baseline (`refactor-tokens`)
 
 **New files written with Write.** `internal/tokens` and its test were
