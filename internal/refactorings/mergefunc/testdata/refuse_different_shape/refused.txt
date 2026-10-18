@@ -1,0 +1,1 @@
+the bodies differ: a short variable declaration (k := n) at a.go:11:2 where a has an if statement (if n == 0 {) at a.go:4:2

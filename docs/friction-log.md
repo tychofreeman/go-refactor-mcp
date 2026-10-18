@@ -405,4 +405,9 @@ comment could note it, logged before).
 `ObjectKey` starts with an assignment. Those are near-duplicates, not
 duplicates: merging them would change a message or a result. Small gap:
 the refusal names node types (`*ast.IfStmt`) where words would read
-better ("an if statement").
+better ("an if statement"). *Follow-up: done; `analysis.Describe` names
+syntax in words, and the refusal adds the start of the code: "an if
+statement (if obj == nil {) ... where ObjectKey has a short variable
+declaration (p := fset.Position(o.Pos()))". A body with one statement
+more no longer gives an empty "where a has  at -": the other side is "the
+end of a block".*

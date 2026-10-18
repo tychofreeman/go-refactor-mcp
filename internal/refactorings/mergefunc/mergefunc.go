@@ -75,6 +75,7 @@ type fn struct {
 	pkg  *packages.Package // a variant declaring it
 	decl *ast.FuncDecl
 	path string
+	src  []byte // the file's contents
 }
 
 // Plan checks preconditions and computes the edits.
@@ -139,7 +140,11 @@ func funcOf(ws *workspace.Workspace, o types.Object, name string) (*fn, error) {
 					if fd.Body == nil {
 						return nil, refactor.Refusef("%s has no body in Go source", name)
 					}
-					return &fn{obj: f, pkg: p, decl: fd, path: path}, nil
+					src, err := os.ReadFile(path)
+					if err != nil {
+						return nil, err
+					}
+					return &fn{obj: f, pkg: p, decl: fd, path: path, src: src}, nil
 				}
 			}
 		}
@@ -185,15 +190,19 @@ func canon(ws *workspace.Workspace, f *fn) []tok {
 	info := f.pkg.TypesInfo
 	locals := map[types.Object]int{}
 	var out []tok
+	var stack []ast.Node
 	visit := func(n ast.Node) bool {
 		if n == nil {
-			out = append(out, tok{key: ")"})
+			done := stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+			out = append(out, tok{key: ")", pos: done.End() - 1, show: "the end of " + analysis.Describe(done)})
 			return true
 		}
 		if _, ok := n.(*ast.CommentGroup); ok {
 			return false
 		}
-		t := tok{key: fmt.Sprintf("%T", n), pos: n.Pos(), show: fmt.Sprintf("%T", n)}
+		stack = append(stack, n)
+		t := tok{key: fmt.Sprintf("%T", n), pos: n.Pos(), show: analysis.Describe(n) + " (" + f.excerpt(ws, n) + ")"}
 		switch n := n.(type) {
 		case *ast.BasicLit:
 			t.key += " " + n.Value
@@ -247,6 +256,21 @@ func canon(ws *workspace.Workspace, f *fn) []tok {
 	ast.Inspect(f.decl.Type, visit)
 	ast.Inspect(f.decl.Body, visit)
 	return out
+}
+
+// excerpt returns the start of n's source, for a message: its first line,
+// shortened if long.
+func (f *fn) excerpt(ws *workspace.Workspace, n ast.Node) string {
+	start, end := ws.Fset.Position(n.Pos()).Offset, ws.Fset.Position(n.End()).Offset
+	s := string(f.src[start:end])
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		s = s[:i]
+	}
+	s = strings.TrimSpace(s)
+	if len(s) > 30 {
+		s = s[:27] + "..."
+	}
+	return s
 }
 
 // compareBodies refuses functions whose canonical forms differ, naming
