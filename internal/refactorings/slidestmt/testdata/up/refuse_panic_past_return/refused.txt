@@ -1,0 +1,1 @@
+the statement on line 4 returns, so line 7 would run in a case it did not

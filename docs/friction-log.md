@@ -546,3 +546,55 @@ is awkward to restate).
 "fileEdits"` put the new methods after the *type* `fileEdits`, not the
 method `mover.fileEdits` beside which they belonged. Gap: accept
 `Type.Method` in `after`/`before`, as `inspect` does.
+
+## 2026-10-18: adding `move_statement_up` / `move_statement_down`
+
+**With the tools, mostly.** `create_file` wrote the stub, the test, the
+analysis (`facts.go`) and the stress test; `add_declaration` and
+`replace_statements` wrote `Plan` and its helpers; `extract_function`,
+`rename`, `replace_expression` and `add_field` cleaned up after. By hand:
+
+- **a new directory:** `create_file` refuses a file in a directory that
+  does not exist ("creating directories is not supported yet"), though
+  the workspace can create them (`move_declaration` does). Gap:
+  `create_file` creating missing directories.
+- **an element in a list:** registering the tools meant adding two
+  elements to the composite literal in `registry.go`. `replace_expression`
+  takes one expression, so the whole `return` was restated with
+  `replace_statements`. Gap: insert an element into a composite literal
+  or argument list.
+- **a second result:** `leaves` had to return whether other statements
+  may cross its jump. No tool adds a result to a function; changed by
+  hand (and the one call site restored with `sed` so the tools would
+  accept the code again). Gap: `add_result`, the counterpart of
+  `add_parameter`.
+- **a doc comment:** `extract_function` writes none, and no tool adds
+  one to a declaration. Gap: a `doc` argument for `extract_function`, or
+  an edit that sets a declaration's doc comment.
+
+**Line numbers again.** Two `replace_statements` were refused because I
+reused line numbers from before an insertion; the refusals ("cut the
+return statement", "cut the block") said exactly what was wrong.
+
+**What the stress test showed.** The first run (3000 statements of this
+module): no rollbacks, but 56% of refusals were "the statement returns",
+nearly all `if err != nil { return ... }` guards. Moving a statement that
+only declares variables, with no side effects or panics, past such a
+guard is safe, so that is now allowed; assignments are still refused (a
+bare `return` reads named results). The next largest group is calls not
+known to be free of side effects: recognizing the module's own functions
+that have none would help most. After the change, with each package's
+tests run after every move: 286 of 3000 applied, no rollbacks, no test
+failures; "returns" is still the largest refusal (1490), now because the
+statement to move calls something or assigns.
+
+**A stress harness that recursed.** With `STRESS_TESTS=1`, the stress
+test runs each changed package's tests with `go test`, which inherited
+`STRESS_DIR` and `STRESS_TESTS`: a package with its own stress test then
+ran it on the same copy, which ran more tests, and so on. Dozens of
+processes kept editing the copy (inlining variables, extracting
+functions) under the running workspace, which then panicked on a stale
+syntax tree. `slidestmt`'s stress test now leaves `STRESS_*` out of the
+child's environment; the other stress tests (`extractvar`, `inlinevar`,
+`extractfunc`, `inlinefunc`, `invertif`) have the same flaw when run with
+`STRESS_TESTS=1`.

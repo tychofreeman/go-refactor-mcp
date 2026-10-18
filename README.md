@@ -36,7 +36,8 @@ model reads before choosing the next refactoring. That loop is the iteration.
   parameter's type. `extract_struct` moves fields into a new, embedded
   struct type, `merge_duplicate_function` replaces a function with an
   identical one, and `remove_dead_code` deletes a declaration nothing
-  uses. `move_declaration` moves a
+  uses. `move_statement_up` and `move_statement_down` swap a statement
+  with its neighbor when the two are independent. `move_declaration` moves a
   declaration (with the helpers it uses, if asked) to another file, of its
   package or another one.
 - **Step 5 (in progress):** edits, steps that change behavior on purpose
@@ -81,8 +82,11 @@ hand or a tool got in the way.
    functions, inlining every call at once, and callees from other packages
    (see "Inline function: what it checks").
 5. **Statement refactorings**, the behavior-preserving forms of edits in
-   `docs/edits.md`: slide a statement up or down past an independent one,
-   introduce a plain block, and move a statement into or out of one; and
+   `docs/edits.md`: *sliding a statement up or down past an independent
+   one is done (see "Move statement up and down: what they check"); next
+   for it: calls of the module's own functions that have no side effects
+   (most refusals are calls).* Then: introduce a plain block, and move a
+   statement into or out of one; and
    statements with no effect for `remove_dead_code` (unused declarations
    are done). Deleting a statement for its
    effect is the edit `delete_statement`.
@@ -129,6 +133,7 @@ internal/
     invertif/                 invert_if, remove_else + testdata + opt-in stress test
     changesig/                add/remove/move_parameter + testdata/<tool>/
     movedecl/                 move_declaration + testdata
+    slidestmt/                move_statement_up/down + testdata/{up,down}/ + opt-in stress test
   edits/
     createfile/               create_file + testdata
 ```
@@ -1094,6 +1099,50 @@ reach any other way:
   only that name.
 
 Uses inside the declaration itself (a recursive call) do not count.
+
+## Move statement up and down: what they check
+
+`move_statement_up` swaps a statement with the one before it in its block
+(or case clause), `move_statement_down` with the one after it ("slide
+statements"). Identify it by `file` and the `line` it starts on; the
+outermost statement starting there moves, so a whole `if` or loop moves as
+one. Each statement takes along the comments directly above it (no blank
+line between) and a comment ending its last line; blank lines and other
+comments between the two stay where they are. A statement that shares a
+line with other code is refused.
+
+The two must be independent, which it checks conservatively:
+
+- **names:** neither may use something the other declares (`b := a + 1`
+  after `a := 1`; also `y, ok := ...` after `x, ok := ...`, which assigns
+  the same `ok`), and the statement moving up may not declare a name the
+  other refers to (it would capture that reference);
+- **local variables** that only the function's own code can reach (their
+  address is not taken and no closure uses them): one may not assign a
+  variable the other uses. Fields count separately, so `p.x = 1` and
+  `p.y = 2` swap, but `q := p` and `p.x = 1` do not;
+- **side effects:** a call not known to have none (see "Calls known to
+  have no side effects"), a channel operation, `go`, `defer`, `select`, or
+  an assignment to a package variable, through a pointer, or to a
+  variable a closure or pointer can reach. A statement with side effects
+  may not move past one that has side effects too, reads what other code
+  can change (package variables, memory through pointers, slice and map
+  elements, variables a closure can change), or could panic or not
+  finish;
+- **panics:** two statements that could both panic or not finish
+  (indexing, dereferencing, slicing, a type assertion without `ok`,
+  integer division by a variable, a known call that can panic, a `for`
+  loop) are not swapped, since which one fails first would change;
+- **leaving:** a statement that returns, `break`s or `continue`s may
+  only swap with one that does nothing but declare new variables, with no
+  side effects and nothing that could panic or not finish: such a
+  statement running, or not, when the other leaves cannot be seen. An
+  assignment could be (a bare `return` reads named results; a `break`
+  leaves the loop's variables in use). `goto`, `fallthrough`, labeled
+  statements and two leaving statements are refused.
+
+Defining a function literal runs nothing, so what its body does does not
+count, until something calls it.
 
 ## Changing a method: interfaces
 

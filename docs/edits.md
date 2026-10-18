@@ -70,13 +70,14 @@ form can come first, while the focus is on refactorings.
   - 2026-10-18, `versionSuffix` and `quoted` were deleted by hand; both
     were unused, so `remove_dead_code` now covers them.
 - `move_statement_up` / `move_statement_down`: swap a statement with the
-  one before or after it ("slide statements"). *Refactoring when* the two
-  are independent: neither writes what the other reads or writes, their
-  side effects cannot be reordered observably, and no declaration moves
-  past a use of it.
+  one before or after it ("slide statements"). The refactoring form is
+  done (the two must be independent; see the README); the edit form,
+  moving a statement past one it is not independent of, is left.
   - 2026-10-17, `extract_function` returning `f(...)`: `at :=
     x.insertOffset(decl)` slid above the call-site code so the code could
-    be extracted together with its `site.String()`.
+    be extracted together with its `site.String()`. (The refactoring would
+    refuse this one: `insertOffset` is a method call, so it counts as a
+    side effect.)
 - `move_statement_in` / `move_statement_out`: move a statement into the
   block that follows it, or out of the block it ends or starts.
   *Refactoring when* the block is a plain `{ }` block and scoping allows it
@@ -105,7 +106,7 @@ form can come first, while the focus is on refactorings.
 
 ## Suggested, without evidence yet
 
-`move_statement_down`, `move_statement_in/out`, `introduce_block` and
+`move_statement_in/out`, `introduce_block` and
 `introduce_if` were suggested on 2026-10-17 and have no friction-log
 entries yet. More will be added here as they come up.
 

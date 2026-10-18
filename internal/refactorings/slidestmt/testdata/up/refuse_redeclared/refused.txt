@@ -1,0 +1,1 @@
+line 5 uses ok, which line 4 declares
