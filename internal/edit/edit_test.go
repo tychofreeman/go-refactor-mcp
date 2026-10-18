@@ -158,3 +158,15 @@ func TestElideSuppliedNothingSupplied(t *testing.T) {
 		t.Errorf("got:\n%s", got)
 	}
 }
+
+func TestUnifiedContext(t *testing.T) {
+	before := "a\nb\nc\nd\ne\nf\ng\nh\ni\nj\n"
+	after := "a\nb\nc\nd\nE\nf\ng\nh\ni\nJ\n"
+	want := "--- a/m.go\n+++ b/m.go\n@@ -5 +5 @@\n-e\n+E\n@@ -10 +10 @@\n-j\n+J\n"
+	if got := UnifiedContext("m.go", []byte(before), []byte(after), 0); got != want {
+		t.Errorf("no context:\ngot:\n%s\nwant:\n%s", got, want)
+	}
+	if got, want := UnifiedContext("m.go", []byte(before), []byte(after), 3), Unified("m.go", []byte(before), []byte(after)); got != want {
+		t.Errorf("3 lines of context differ from Unified:\n%s\n%s", got, want)
+	}
+}

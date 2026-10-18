@@ -53,8 +53,11 @@ Prefer these tools over editing files by hand for everything they cover.`
 
 // Server is the refactoring MCP server for one module.
 type Server struct {
-	dir      string
-	patterns []string
+	// FullDiffs shows results with three lines of context around each
+	// change, as diff -u does; by default they have none.
+	FullDiffs bool
+	dir       string
+	patterns  []string
 
 	mu sync.Mutex
 	ws *workspace.Workspace // loaded lazily, refreshed before each call
@@ -157,7 +160,7 @@ func (s *Server) refactor(r refactor.Refactoring, args json.RawMessage) *mcp.Cal
 	if err != nil {
 		return toolError(err)
 	}
-	res, err := refactor.Run(ws, r, args, refactor.Options{})
+	res, err := refactor.Run(ws, r, args, refactor.Options{Compact: !s.FullDiffs})
 	if err != nil {
 		return toolError(err)
 	}

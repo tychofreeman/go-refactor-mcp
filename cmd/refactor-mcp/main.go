@@ -24,6 +24,8 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/mcpserver"
 )
 
+var fullDiffs = flag.Bool("full-diffs", false, "show results with three lines of context around each change (default: none)")
+
 func main() {
 	dir := flag.String("C", "", "module directory (default: $CLAUDE_PROJECT_DIR, else the current directory)")
 	pattern := flag.String("p", "./...", "package pattern to load, relative to the module root")
@@ -48,7 +50,9 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	srv := mcpserver.New(*dir, *pattern).MCP()
+	s := mcpserver.New(*dir, *pattern)
+	s.FullDiffs = *fullDiffs
+	srv := s.MCP()
 	err := srv.Run(ctx, &mcp.StdioTransport{})
 	// The client closing stdin (EOF) is the normal way a session ends.
 	if err != nil && ctx.Err() == nil && !errors.Is(err, io.EOF) && !errors.Is(err, mcp.ErrConnectionClosed) {

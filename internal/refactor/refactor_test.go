@@ -122,3 +122,33 @@ func TestEditRefusesBrokenInput(t *testing.T) {
 		t.Fatalf("want a refusal on code that does not type-check, got %+v", res)
 	}
 }
+
+// bump changes F's result from 1 to 2.
+type bump struct{}
+
+func (bump) Name() string                 { return "bump" }
+func (bump) Description() string          { return "" }
+func (bump) InputSchema() json.RawMessage { return json.RawMessage(`{}`) }
+func (bump) Plan(ws *workspace.Workspace, _ json.RawMessage) (*refactor.Plan, error) {
+	path := ws.Abs("m.go")
+	src, _ := os.ReadFile(path)
+	i := strings.Index(string(src), "return 1") + len("return ")
+	return &refactor.Plan{
+		Summary: "bumped",
+		Edits:   []edit.FileEdit{{Path: path, Edits: []edit.TextEdit{{Start: i, End: i + 1, NewText: "2"}}}},
+	}, nil
+}
+
+func TestCompactDiff(t *testing.T) {
+	for _, dryRun := range []bool{false, true} {
+		ws, _ := setup(t, src)
+		res, err := refactor.Run(ws, bump{}, nil, refactor.Options{Compact: true, DryRun: dryRun})
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := "--- a/m.go\n+++ b/m.go\n@@ -3 +3 @@\n-func F() int { return 1 }\n+func F() int { return 2 }\n"
+		if res.Diff != want {
+			t.Errorf("dry run %v: got diff:\n%s\nwant:\n%s", dryRun, res.Diff, want)
+		}
+	}
+}
