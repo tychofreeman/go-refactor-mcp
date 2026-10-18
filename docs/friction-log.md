@@ -515,3 +515,18 @@ before running it.
 
 **Its first use was on itself**, through the CLI: `off + (pos(t.End()) -
 off)` became `pos(t.End())` in its own `Plan`.
+
+## 2026-10-18: adding `add_field`
+
+**Built with the edits, and cleaned with them.** `create_file` and
+`replace_statements` as before. Then a wart in my own helpers (checking a
+single field by wrapping it in a throwaway `StructType`) was fixed with
+the tools: `add_declaration` added `fieldDeclares`, two
+`replace_expression` calls used it, and a `replace_statements` made
+`fieldNamed` use it too. No hand edits in the new package after the
+first draft.
+
+**A false note found by that use.** `replace_expression` said "the
+expression's type changes from untyped bool to bool" for
+`f(...) != nil` → `g(...)`: a comparison's untyped bool becomes `bool`
+wherever it is used, so that is no change. Fixed in `replace_expression`.
