@@ -1,0 +1,1 @@
+n, a field of T, is unexported, and p/use.go:3:31 uses it outside package q

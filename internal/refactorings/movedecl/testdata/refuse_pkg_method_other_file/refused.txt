@@ -1,0 +1,1 @@
+the method M of T is in p/p2.go; move it to p/p.go first (move_declaration within the package)

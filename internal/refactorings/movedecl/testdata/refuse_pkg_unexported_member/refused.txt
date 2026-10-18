@@ -1,0 +1,1 @@
+bump, a method of T, is unexported, and p/use.go:4:4 uses it outside package q
