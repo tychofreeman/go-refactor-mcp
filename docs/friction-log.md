@@ -157,7 +157,9 @@ Each was rewritten as a function taking those fields, by hand; then
 `move_declaration` moved them to `locate` and `analysis`, five moves with
 no by-hand work. Gap: a refactoring that turns a method into a function
 (the receiver, or just the fields it uses, become parameters), the
-reverse of the function-into-method gap logged earlier.
+reverse of the function-into-method gap logged earlier. *Follow-up:
+`method_to_function` (the receiver becomes the first parameter; narrow it
+with `introduce_parameter` and `remove_parameter`).*
 
 **`move_declaration` put module imports in the standard library group.**
 Moving code into `locate/expr.go` added `internal/refactor` and
@@ -214,3 +216,16 @@ between writes `d.decl`.
 
 **Found by the real use:** a type switch guard (`decl := d.decl.(type)`)
 was counted as a write and a possible panic. Fixed, test first.
+
+## 2026-10-17: adding `method_to_function`
+
+**Found by a test: chained calls of a method were half updated.**
+`collectCalls`, shared by the signature refactorings, keyed each call by
+its start offset to skip the same call seen through another package
+variant. In `n.after().after()` both calls start at the same offset, so
+the outer one was skipped: `add_parameter` on such a method gave code that
+did not compile (the engine rolled it back). Calls are now keyed by their
+range.
+
+**Real code, dry run.** On this repo, `method_to_function` with
+`imports.Adder.nextLine` gives `nextLine(a, last.End())`, no by-hand work.
