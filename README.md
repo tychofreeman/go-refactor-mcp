@@ -34,7 +34,8 @@ model reads before choosing the next refactoring. That loop is the iteration.
   not. `method_to_function` turns an unexported method into a function,
   and `function_to_method` a function into a method of its first
   parameter's type. `extract_struct` moves fields into a new, embedded
-  struct type. `move_declaration` moves a
+  struct type, and `merge_duplicate_function` replaces a function with an
+  identical one. `move_declaration` moves a
   declaration (with the helpers it uses, if asked) to another file, of its
   package or another one.
 - **Step 5 (later):** edits, steps that change behavior on purpose (see
@@ -1006,6 +1007,32 @@ Embedding keeps uses, but changes the struct's shape, so:
 Not supported yet: a generic struct, an embedded field among those to
 move, part of a field group (`x, y int`), and a multi-line literal with
 comments between its elements (rewriting it would lose them).
+
+## Merge duplicate function: what it checks
+
+`merge_duplicate_function` replaces every use of a function (calls and
+function values) with an identical function, qualified and imported where
+needed, and deletes it, with the imports only it used. To remove copies of
+a helper, move one copy where the others can reach it (`move_declaration`,
+which can create the package), then merge each of the others into it.
+
+Identical means a call of one does exactly what a call of the other does:
+
+- the same signature (parameter names aside);
+- bodies that match node for node, ignoring comments and layout:
+  parameters and locals may be named differently, consistently (so
+  `x - y` does not match `y - x` with the parameters swapped), and a call
+  of itself matches the other's call of itself;
+- every other name means the same object in both: a function, variable,
+  type, field or method, or an import of the same package
+  (`strings.ToUpper` matches `strings.ToUpper`; one package's `helper`
+  does not match another's).
+
+The refusal names the first difference. Also refused: methods and generic
+functions; an exported function to delete (code in other modules could
+call it); a function to keep that a user cannot see (unexported, in
+another package) or could only import by making an import cycle; and a use
+where the new name, or its package's name, means something else there.
 
 ## Changing a method: interfaces
 

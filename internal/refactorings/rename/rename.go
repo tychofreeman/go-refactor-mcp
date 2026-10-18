@@ -23,6 +23,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
 
@@ -685,7 +686,7 @@ func (r *renamer) plan() (*refactor.Plan, error) {
 
 	plan := &refactor.Plan{
 		Summary: fmt.Sprintf("renamed %s %q to %q (%d occurrence%s in %d file%s)",
-			kind(r.first), r.old, r.new, n, plural(n), len(fes), plural(len(fes))),
+			kind(r.first), r.old, r.new, n, textutil.Plural(n), len(fes), textutil.Plural(len(fes))),
 		Edits: fes,
 	}
 	if token.IsExported(r.old) && token.IsExported(r.new) && (isPackageLevel(r.first) || r.first.Parent() == nil) {
@@ -772,11 +773,4 @@ func declaredAt(ws *workspace.Workspace, o types.Object) string {
 
 func typeString(t types.Type) string {
 	return types.TypeString(t, func(p *types.Package) string { return p.Name() })
-}
-
-func plural(n int) string {
-	if n == 1 {
-		return ""
-	}
-	return "s"
 }

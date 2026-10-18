@@ -36,6 +36,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
 
@@ -160,7 +161,7 @@ func (x *inliner) plan() (*refactor.Plan, error) {
 	}
 	return &refactor.Plan{
 		Summary: fmt.Sprintf("inlined %s %q as %s (%d use%s replaced, declaration removed)",
-			kind, x.obj.Name(), x.quote(x.init), len(x.uses), plural(len(x.uses))),
+			kind, x.obj.Name(), x.quote(x.init), len(x.uses), textutil.Plural(len(x.uses))),
 		Edits: []edit.FileEdit{{Path: x.tf.Name(), Edits: edits}},
 		Notes: notes,
 	}, nil
@@ -178,7 +179,7 @@ func (x *inliner) findDeclaration() error {
 		}
 	case *types.Const:
 	default:
-		return refactor.Refusef("%q is a %s; only local variables and constants can be inlined", name, kindOf(x.obj))
+		return refactor.Refusef("%q is a %s; only local variables and constants can be inlined", name, analysis.KindOf(x.obj))
 	}
 	if x.obj.Pkg() == nil || x.obj.Parent() == x.obj.Pkg().Scope() {
 		return refactor.Refusef("%q is declared at package level; only variables and constants declared inside a function can be inlined", name)
@@ -541,7 +542,7 @@ func (x *inliner) checkScopes() error {
 			if _, got := inner.LookupParent(id.Name, u.Pos()); got != want {
 				where := "is not visible there"
 				if got != nil {
-					where = fmt.Sprintf("refers to the %s declared at %s instead", kindOf(got), declaredAt(x.ws, got))
+					where = fmt.Sprintf("refers to the %s declared at %s instead", analysis.KindOf(got), declaredAt(x.ws, got))
 				}
 				return refactor.Refusef("at the use of %q at %s, %q (used by its initializer %s) %s",
 					x.obj.Name(), x.ws.Position(u.Pos()), id.Name, x.quote(x.init), where)
@@ -907,41 +908,9 @@ func under(t types.Type) types.Type {
 	return t.Underlying()
 }
 
-func kindOf(o types.Object) string {
-	switch o := o.(type) {
-	case *types.Var:
-		if o.Pkg() != nil && o.Parent() == o.Pkg().Scope() {
-			return "package-level variable"
-		}
-		return "variable"
-	case *types.Const:
-		return "constant"
-	case *types.TypeName:
-		return "type"
-	case *types.Func:
-		return "function"
-	case *types.PkgName:
-		return "import"
-	case *types.Builtin:
-		return "builtin"
-	case *types.Nil:
-		return "predeclared nil"
-	case *types.Label:
-		return "label"
-	}
-	return "symbol"
-}
-
 func declaredAt(ws *workspace.Workspace, o types.Object) string {
 	if o.Pkg() == nil || !o.Pos().IsValid() {
 		return "universe scope (predeclared)"
 	}
 	return ws.Position(o.Pos())
-}
-
-func plural(n int) string {
-	if n == 1 {
-		return ""
-	}
-	return "s"
 }

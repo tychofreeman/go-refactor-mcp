@@ -382,3 +382,27 @@ be replaced by one shared copy, but no tool replaces a function by an
 identical one elsewhere and redirects its uses. Gap: a "use the identical
 function" refactoring (the body tokens match and resolve to the same
 objects, so every call can call the other one, and the copy goes).
+
+## 2026-10-18: adding `merge_duplicate_function`, and using it
+
+**Ten copies of `plural` became one, by the tools.** `move_declaration`
+moved `changesig`'s copy to `textutil` as `Plural`, and
+`merge_duplicate_function` merged each of the other nine into it (one of
+them the copy this tool's own package had), one call each: their uses
+switched to `textutil.Plural`, the import was added in the module group,
+and the copies went. By hand: only `Plural`'s doc comment.
+
+**Two more helpers, the same way.** `keyOf` (`movedecl`, and the copy
+here) became `analysis.ObjectKey`, and `kindOf` (`inlinefunc`,
+`inlinevar`) became `analysis.KindOf`, each with one move and one merge.
+`move_declaration` renamed `keyOf`'s doc comment with it; `kindOf` had
+none, and was given one by hand (a move that exports a name without a doc
+comment could note it, logged before).
+
+**The copies that differ were refused, with the difference.**
+`extractvar`'s `kindOf` says "predeclared" where `KindOf` says
+"predeclared nil"; `changesig`'s `keyOf` starts with an `if` where
+`ObjectKey` starts with an assignment. Those are near-duplicates, not
+duplicates: merging them would change a message or a result. Small gap:
+the refusal names node types (`*ast.IfStmt`) where words would read
+better ("an if statement").

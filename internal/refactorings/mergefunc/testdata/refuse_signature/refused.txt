@@ -1,0 +1,1 @@
+b has type func(n int64) int64, and a has type func(n int) int

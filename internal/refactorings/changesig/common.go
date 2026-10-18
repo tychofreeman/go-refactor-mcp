@@ -23,6 +23,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
 
@@ -203,7 +204,7 @@ func (t *target) newPlan(what string, fes []edit.FileEdit) *refactor.Plan {
 	}
 	plan := &refactor.Plan{
 		Summary: fmt.Sprintf("%s (%d call%s updated, %d file%s)",
-			what, len(t.calls), plural(len(t.calls)), len(files), plural(len(files))),
+			what, len(t.calls), textutil.Plural(len(t.calls)), len(files), textutil.Plural(len(files))),
 		Edits: edit.Merge(fes),
 	}
 	if t.obj.Exported() {
@@ -235,13 +236,6 @@ func keyOf(fset *token.FileSet, obj types.Object) string {
 func (t *target) off(p token.Pos) int { return t.ws.Fset.Position(p).Offset }
 
 func (t *target) text(n ast.Node) string { return string(t.src[t.off(n.Pos()):t.off(n.End())]) }
-
-func plural(n int) string {
-	if n == 1 {
-		return ""
-	}
-	return "s"
-}
 
 // unsafeValue returns the first part of e whose evaluation could have a
 // side effect or panic, and what it could do.

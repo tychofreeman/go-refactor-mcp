@@ -36,6 +36,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
 
@@ -237,7 +238,7 @@ func (x *extraction) plan(expr ast.Expr, all bool) (*refactor.Plan, error) {
 	}
 	return &refactor.Plan{
 		Summary: fmt.Sprintf("extracted %s into %s %q (%d occurrence%s replaced)",
-			x.quote(expr), kind, x.name, len(sites), plural(len(sites))),
+			x.quote(expr), kind, x.name, len(sites), textutil.Plural(len(sites))),
 		Edits: []edit.FileEdit{{Path: path0, Edits: edits}},
 		Notes: notes,
 	}, nil
@@ -718,7 +719,7 @@ func (x *extraction) occurrences(expr ast.Expr, tv types.TypeAndValue, container
 	})
 	if outside > 0 {
 		notes = append(notes, fmt.Sprintf("%d identical occurrence%s elsewhere in the function %s not replaced, because %s outside the block where %q is visible",
-			outside, plural(outside), isAre(outside), itThey(outside), x.name))
+			outside, textutil.Plural(outside), isAre(outside), itThey(outside), x.name))
 	}
 	return sites, notes, nil
 }
@@ -849,13 +850,6 @@ func declaredAt(ws *workspace.Workspace, o types.Object) string {
 		return "universe scope (predeclared)"
 	}
 	return ws.Position(o.Pos())
-}
-
-func plural(n int) string {
-	if n == 1 {
-		return ""
-	}
-	return "s"
 }
 
 func isAre(n int) string {

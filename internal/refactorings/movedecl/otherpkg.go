@@ -14,6 +14,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 )
 
 // planOtherPackage moves the declaration to the package in to's directory.
@@ -76,7 +77,7 @@ func (m *mover) planOtherPackage(to string) (*refactor.Plan, error) {
 
 	plan := &refactor.Plan{
 		Summary: fmt.Sprintf("moved %s from %s to %s as %s.%s%s (%d reference%s updated)",
-			m.obj.Name(), m.fromFiles(), m.ws.Rel(to), m.dest.Name, m.newName, m.withAlso(), refs, plural(refs)),
+			m.obj.Name(), m.fromFiles(), m.ws.Rel(to), m.dest.Name, m.newName, m.withAlso(), refs, textutil.Plural(refs)),
 		Edits: m.fileEdits(),
 	}
 	if m.created {
@@ -362,13 +363,6 @@ func (m *mover) checkNoCycle(users map[string]bool) error {
 	return nil
 }
 
-func plural(n int) string {
-	if n == 1 {
-		return ""
-	}
-	return "s"
-}
-
 // recvTypeName returns the type name of a method's receiver, or nil for
 // anything but a method.
 func recvTypeName(o types.Object) types.Object {
@@ -442,13 +436,13 @@ func (m *mover) checkMembers() error {
 		if st, ok := n.Underlying().(*types.Struct); ok {
 			for i := 0; i < st.NumFields(); i++ {
 				if f := st.Field(i); !f.Exported() {
-					unexported[keyOf(m.ws.Fset, f)] = member{"field", tn.Name()}
+					unexported[analysis.ObjectKey(m.ws.Fset, f)] = member{"field", tn.Name()}
 				}
 			}
 		}
 		for i := 0; i < n.NumMethods(); i++ {
 			if fn := n.Method(i); !fn.Exported() {
-				unexported[keyOf(m.ws.Fset, fn)] = member{"method", tn.Name()}
+				unexported[analysis.ObjectKey(m.ws.Fset, fn)] = member{"method", tn.Name()}
 				if err := m.checkNoInterface(fn); err != nil {
 					return err
 				}
@@ -470,7 +464,7 @@ func (m *mover) checkMembers() error {
 			continue
 		}
 		for id, o := range p.TypesInfo.Uses {
-			if mb, ok := unexported[keyOf(m.ws.Fset, o)]; ok && !inMoved(id.Pos()) {
+			if mb, ok := unexported[analysis.ObjectKey(m.ws.Fset, o)]; ok && !inMoved(id.Pos()) {
 				return refuse(o.Name(), mb, id.Pos())
 			}
 		}
@@ -509,7 +503,7 @@ func (m *mover) isMovedType(t types.Type, moved []*types.Named) bool {
 		return false
 	}
 	for _, mt := range moved {
-		if keyOf(m.ws.Fset, n.Obj()) == keyOf(m.ws.Fset, mt.Obj()) {
+		if analysis.ObjectKey(m.ws.Fset, n.Obj()) == analysis.ObjectKey(m.ws.Fset, mt.Obj()) {
 			return true
 		}
 	}

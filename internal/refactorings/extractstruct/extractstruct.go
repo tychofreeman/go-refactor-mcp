@@ -24,6 +24,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
 
@@ -126,7 +127,7 @@ func (*ExtractStruct) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refac
 	fes = append(fes, edit.FileEdit{Path: x.path, Edits: x.declEdits()})
 	return &refactor.Plan{
 		Summary: fmt.Sprintf("moved fields %s of %s into %s, embedded (%d literal%s updated)",
-			strings.Join(a.Fields, ", "), x.tn.Name(), x.newType, n, plural(n)),
+			strings.Join(a.Fields, ", "), x.tn.Name(), x.newType, n, textutil.Plural(n)),
 		Edits: edit.Merge(fes),
 	}, nil
 }
@@ -616,11 +617,4 @@ func joinAnd(names []string) string {
 		return strings.Join(names, "")
 	}
 	return strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1]
-}
-
-func plural(n int) string {
-	if n == 1 {
-		return ""
-	}
-	return "s"
 }

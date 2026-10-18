@@ -79,3 +79,11 @@ func Reindent(text, from, to string) string {
 	}
 	return sb.String()
 }
+
+// Plural returns "s" unless n is 1, for a message: "%d file%s".
+func Plural(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
+}

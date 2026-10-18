@@ -26,6 +26,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/imports"
 	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
 
@@ -192,7 +193,7 @@ func (x *inliner) plan() (*refactor.Plan, error) {
 	}
 	if len(bound) > 0 {
 		notes = append(notes, fmt.Sprintf("kept parameter%s %s as variable%s declared at the top of the inlined code, because using the argument directly could change what the body sees; rename if the name does not fit the caller",
-			plural(len(bound)), strings.Join(bound, ", "), plural(len(bound))))
+			textutil.Plural(len(bound)), strings.Join(bound, ", "), textutil.Plural(len(bound))))
 	}
 	if deleted && x.decl.Doc != nil {
 		doc := strings.TrimSpace(x.decl.Doc.Text())
@@ -732,10 +733,10 @@ func (x *inliner) checkFreeNames() error {
 		if _, got := scope.LookupParent(id.Name, pos); got != obj {
 			where := "is not visible there"
 			if got != nil {
-				where = fmt.Sprintf("refers to the %s declared at %s instead", kindOf(got), x.ws.Position(got.Pos()))
+				where = fmt.Sprintf("refers to the %s declared at %s instead", analysis.KindOf(got), x.ws.Position(got.Pos()))
 			}
 			return refactor.Refusef("%q uses %s (the %s declared at %s), but at the call %s; rename one of them first",
-				x.fn.Name(), id.Name, kindOf(obj), declaredAt(x.ws, obj), where)
+				x.fn.Name(), id.Name, analysis.KindOf(obj), declaredAt(x.ws, obj), where)
 		}
 	}
 	return nil
@@ -751,7 +752,7 @@ func (x *inliner) qualifier(p *types.Package) (string, error) {
 	scope := x.pkg.Types.Scope().Innermost(x.call.Pos())
 	if _, got := scope.LookupParent(n, x.call.Pos()); got != nil {
 		if pn, ok := got.(*types.PkgName); !ok || pn.Imported() != p {
-			return "", fmt.Errorf("which the calling file names %s, but at the call %s refers to the %s declared at %s", n, n, kindOf(got), x.ws.Position(got.Pos()))
+			return "", fmt.Errorf("which the calling file names %s, but at the call %s refers to the %s declared at %s", n, n, analysis.KindOf(got), x.ws.Position(got.Pos()))
 		}
 	}
 	x.usedQ[n] = true
@@ -810,7 +811,7 @@ func (x *inliner) checkDeclaredNames() error {
 		if v, ok := o.(*types.Var); ok && x.merged[v] != nil {
 			continue // becomes the caller's own variable
 		}
-		names = append(names, decl{n, fmt.Sprintf("%s %s (declared at %s)", kindOf(o), n, x.ws.Position(o.Pos()))})
+		names = append(names, decl{n, fmt.Sprintf("%s %s (declared at %s)", analysis.KindOf(o), n, x.ws.Position(o.Pos()))})
 	}
 	if len(names) > 0 && x.callerHasGoto() {
 		return refactor.Refusef("the calling function uses goto, and the inlined code declares %s; a goto must not jump over declarations, so this is not supported", names[0].what)
@@ -827,7 +828,7 @@ func (x *inliner) checkDeclaredNames() error {
 		}
 		if u := x.usedLater(o); u != nil {
 			return refactor.Refusef("the inlined code declares %s in the calling block, which would hide the %s %s used later at %s; rename one of them first",
-				d.what, kindOf(o), d.name, x.ws.Position(u.Pos()))
+				d.what, analysis.KindOf(o), d.name, x.ws.Position(u.Pos()))
 		}
 	}
 	return nil
@@ -940,43 +941,11 @@ func walkNamed(t types.Type, seen map[types.Type]bool, f func(*types.TypeName)) 
 	}
 }
 
-func kindOf(o types.Object) string {
-	switch o := o.(type) {
-	case *types.Var:
-		if o.Pkg() != nil && o.Parent() == o.Pkg().Scope() {
-			return "package-level variable"
-		}
-		return "variable"
-	case *types.Const:
-		return "constant"
-	case *types.TypeName:
-		return "type"
-	case *types.Func:
-		return "function"
-	case *types.PkgName:
-		return "import"
-	case *types.Builtin:
-		return "builtin"
-	case *types.Nil:
-		return "predeclared nil"
-	case *types.Label:
-		return "label"
-	}
-	return "symbol"
-}
-
 func declaredAt(ws *workspace.Workspace, o types.Object) string {
 	if o.Pkg() == nil || !o.Pos().IsValid() {
 		return "universe scope (predeclared)"
 	}
 	return ws.Position(o.Pos())
-}
-
-func plural(n int) string {
-	if n == 1 {
-		return ""
-	}
-	return "s"
 }
 
 func quoteAll(ss []string) []string {
