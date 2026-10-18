@@ -200,3 +200,160 @@ func TestEffectsFunc(t *testing.T) {
 		}
 	}
 }
+
+const stdSrc = `package p
+
+import (
+	"errors"
+	"fmt"
+	"go/ast"
+	"go/token"
+	"go/types"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"testing"
+)
+
+type named struct{ n int }
+
+func (named) String() string { return "named" }
+
+func f(path string, xs []string, n ast.Node, tf *token.File, fset *token.FileSet, pn *types.PkgName, t types.Type, sb *strings.Builder, err error, v named, o types.Object, fi fs.FileInfo, tt *testing.T) {
+	_, _ = os.ReadFile(path)
+	_ = strings.Join(xs, ",")
+	sort.Strings(xs)
+	_ = n.Pos()
+	_ = tf.Offset(n.Pos())
+	_ = fset.Position(n.Pos())
+	_ = pn.Name()
+	_ = t.Underlying()
+	sb.WriteString("x")
+	_ = fmt.Sprintf("%d %s", 1, path)
+	_ = fmt.Sprintf("%v", xs)
+	_ = fmt.Sprintf("%v", err)
+	_ = fmt.Sprintf("%v", v)
+	_ = errors.New("x")
+	_, _ = filepath.Rel(path, path)
+	_ = ast.Unparen(nil)
+	_ = token.NewFileSet()
+	fmt.Println()
+	_ = o.Pos()
+	_ = fi.IsDir()
+	tt.Helper()
+	_ = filepath.Join(xs...)
+}
+
+func builder(names []string) string {
+	var sb strings.Builder
+	for _, n := range names {
+		sb.WriteString(n)
+		fmt.Fprintf(&sb, "%d", len(n))
+	}
+	return sb.String()
+}
+
+func sorted(n int) []string {
+	out := make([]string, n)
+	sort.Strings(out)
+	return out
+}
+
+func sortsParam(xs []string) { sort.Strings(xs) }
+`
+
+// checkStd type-checks stdSrc and returns its package, file and info.
+func checkStd(t *testing.T) (*types.Package, *ast.File, *types.Info) {
+	t.Helper()
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "p.go", stdSrc, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	info := &types.Info{
+		Defs: map[*ast.Ident]types.Object{}, Uses: map[*ast.Ident]types.Object{},
+		Types: map[ast.Expr]types.TypeAndValue{}, Selections: map[*ast.SelectorExpr]*types.Selection{},
+	}
+	conf := types.Config{Importer: importer.Default()}
+	pkg, err := conf.Check("example.com/p", fset, []*ast.File{f}, info)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return pkg, f, info
+}
+
+func TestEffectsCallStandardLibrary(t *testing.T) {
+	_, f, info := checkStd(t)
+	e := NewEffects()
+	e.AddPackage([]*ast.File{f}, info)
+	// Which of effect, reads and unsafe each call itself has.
+	want := map[string][3]bool{
+		"os.ReadFile(path)":             {false, true, false},
+		`strings.Join(xs, ",")`:         {false, true, false},
+		"sort.Strings(xs)":              {true, true, false},
+		"n.Pos()":                       {false, true, true},
+		"tf.Offset(n.Pos())":            {false, true, true},
+		"fset.Position(n.Pos())":        {false, true, true},
+		"pn.Name()":                     {false, false, true},
+		"t.Underlying()":                {false, false, true},
+		`sb.WriteString("x")`:           {true, false, true},
+		`fmt.Sprintf("%d %s", 1, path)`: {false, false, false},
+		`fmt.Sprintf("%v", xs)`:         {false, true, false},
+		`fmt.Sprintf("%v", err)`:        {true, false, false},
+		`fmt.Sprintf("%v", v)`:          {true, false, false},
+		`errors.New("x")`:               {false, false, false},
+		"filepath.Rel(path, path)":      {false, false, false},
+		"ast.Unparen(nil)":              {false, true, false},
+		"token.NewFileSet()":            {false, false, false},
+		"fmt.Println()":                 {true, false, false},
+		"o.Pos()":                       {false, false, true},
+		"fi.IsDir()":                    {false, false, true},
+		"tt.Helper()":                   {false, false, true},
+		"filepath.Join(xs...)":          {false, true, false},
+	}
+	seen := map[string]bool{}
+	ast.Inspect(f, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		text := types.ExprString(call)
+		w, ok := want[text]
+		if !ok {
+			return true
+		}
+		seen[text] = true
+		s := e.Call(info, call)
+		if got := [3]bool{s.Effect != "", s.Reads != "", s.Unsafe != ""}; got != w {
+			t.Errorf("%s: effect, reads, unsafe = %v, want %v (summary %+v)", text, got, w, s)
+		}
+		return true
+	})
+	for text := range want {
+		if !seen[text] {
+			t.Errorf("no call %s in the source", text)
+		}
+	}
+}
+
+func TestEffectsFuncStandardLibraryWrites(t *testing.T) {
+	pkg, f, info := checkStd(t)
+	e := NewEffects()
+	e.AddPackage([]*ast.File{f}, info)
+	want := map[string][3]bool{
+		"builder":    {false, true, false},
+		"sorted":     {false, false, false},
+		"sortsParam": {true, true, false},
+	}
+	for name, w := range want {
+		s := e.Func(pkg.Scope().Lookup(name).(*types.Func))
+		if s == nil {
+			t.Fatalf("%s: no summary", name)
+		}
+		if got := [3]bool{s.Effect != "", s.Reads != "", s.Unsafe != ""}; got != w {
+			t.Errorf("%s: effect, reads, unsafe = %v, want %v (summary %+v)", name, got, w, *s)
+		}
+	}
+}

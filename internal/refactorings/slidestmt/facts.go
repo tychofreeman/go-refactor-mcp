@@ -49,6 +49,14 @@ func overlaps(a, b string) bool {
 	return a == b || strings.HasPrefix(a, b+".") || strings.HasPrefix(b, a+".")
 }
 
+// escapes reports whether code outside the statement that uses v can
+// reach v: its address is taken, or a closure that can run later uses it.
+// A closure that runs only during its statement (passed to ast.Inspect,
+// say) is part of that statement.
+func escapes(f *analysis.Func, v *types.Var) bool {
+	return f.Addressed[v] || f.CapturedAsync[v]
+}
+
 // factsOf computes the facts for s, a statement of f's body.
 func factsOf(f *analysis.Func, tf *token.File, s ast.Stmt, effects *analysis.Effects) *facts {
 	info := f.Info
@@ -73,12 +81,12 @@ func factsOf(f *analysis.Func, tf *token.File, s ast.Stmt, effects *analysis.Eff
 		if o.Pos() < s.Pos() || o.Pos() >= s.End() {
 			ft.outer[o.Name()] = true
 		}
-		if v, ok := o.(*types.Var); ok && f.IsLocal(v) && !f.Escapes(v) {
+		if v, ok := o.(*types.Var); ok && f.IsLocal(v) && !escapes(f, v) {
 			ft.accesses[v] = append(ft.accesses[v], pathAbove(info, id, parents))
 		}
 	}
 	for v, nodes := range f.Modified {
-		if f.Escapes(v) {
+		if escapes(f, v) {
 			continue
 		}
 		for _, n := range nodes {
@@ -245,7 +253,8 @@ func encloses(stack []ast.Node, tok token.Token) bool {
 
 // addEffects records s's first side effect, read of shared state, and
 // operation that could panic or not finish. Defining a function literal
-// runs nothing, so their bodies are skipped.
+// runs nothing, so their bodies are skipped, except for those passed to a
+// function that runs them before it returns (ast.Inspect, sort.Slice).
 func (ft *facts) addEffects(f *analysis.Func, s ast.Stmt, effects *analysis.Effects) {
 	info := f.Info
 	commaOK := commaOKAssertions(s)
@@ -258,14 +267,15 @@ func (ft *facts) addEffects(f *analysis.Func, s ast.Stmt, effects *analysis.Effe
 		if id, ok := e.(*ast.Ident); ok && id.Name == "_" {
 			return
 		}
-		if v := f.RootVar(e); v == nil || f.Escapes(v) {
+		if v := f.RootVar(e); v == nil || escapes(f, v) {
 			set(&ft.effect, "assigns to "+types.ExprString(e))
 		}
 	}
+	walk := map[*ast.FuncLit]bool{} // literals that run during s
 	ast.Inspect(s, func(n ast.Node) bool {
 		switch n := n.(type) {
 		case *ast.FuncLit:
-			return false
+			return walk[n]
 		case *ast.GoStmt:
 			set(&ft.effect, "starts a goroutine")
 		case *ast.DeferStmt:
@@ -306,6 +316,9 @@ func (ft *facts) addEffects(f *analysis.Func, s ast.Stmt, effects *analysis.Effe
 			set(&ft.effect, c.Effect)
 			set(&ft.shared, c.Reads)
 			set(&ft.unsafe, c.Unsafe)
+			for _, lit := range analysis.SyncLits(info, n) {
+				walk[lit] = true // it runs now: what it does is part of s
+			}
 		case *ast.UnaryExpr:
 			if n.Op == token.ARROW {
 				set(&ft.effect, "receives from a channel")
@@ -355,7 +368,7 @@ func (ft *facts) addEffects(f *analysis.Func, s ast.Stmt, effects *analysis.Effe
 			if v, ok := info.Uses[n].(*types.Var); ok && !v.IsField() {
 				if !f.IsLocal(v) {
 					set(&ft.shared, "reads the package variable "+v.Name())
-				} else if f.Escapes(v) {
+				} else if escapes(f, v) {
 					set(&ft.shared, "reads "+v.Name()+", which a closure or pointer can change")
 				}
 			}
