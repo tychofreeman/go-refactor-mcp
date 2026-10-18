@@ -107,5 +107,33 @@
     "tests": "testdata/compact-diffs",
     "prompt": "The MCP server's refactoring and edit results (internal/mcpserver) show a unified diff with three lines of context around each change. The context costs the model tokens and it rarely needs it. Make the MCP server's results show only the changed lines, with hunk headers that still say where they are. The refactor command-line tool (cmd/refactor) should keep showing three lines of context.",
     "check": "go vet ./... && go test ./internal/mcpserver/ ./internal/refactor/ ./internal/edit/ ./internal/workspace/"
+  },
+  {
+    "dir": "testdata/shop",
+    "check": "go vet ./... && go test ./...",
+    "name": "design-duplication",
+    "tests": "testdata/design-duplication",
+    "prompt": "The exports in package export (CSV, JSON and Markdown) leave out pending orders. They must also leave out cancelled orders, and list the orders by customer name, then by ID, instead of by ID alone."
+  },
+  {
+    "dir": "testdata/shop",
+    "check": "go vet ./... && go test ./...",
+    "name": "design-tangled",
+    "tests": "testdata/design-tangled",
+    "prompt": "Add a customer kind \"partner\" (Order.CustomerKind == \"partner\") to pricing.Total: partners pay wholesale's unit price (20% off) but get none of the quantity discounts, and they pay tax as retail customers do (20%, or 18% when the subtotal is over 100000 cents). Other customers' prices do not change."
+  },
+  {
+    "dir": "testdata/shop",
+    "check": "go vet ./... && go test ./...",
+    "name": "design-currency",
+    "tests": "testdata/design-currency",
+    "prompt": "The exports in package export write amounts as dollars and cents. Make them use the shop's currency: add a type export.Currency with fields Code string, Symbol string and Decimals int, and give CSV, JSON and Markdown a second parameter cur Currency. Totals are in the currency's minor units (cents for USD); write them with cur.Decimals decimal places, and with no decimal point when it is 0. CSV and JSON write the number alone; Markdown puts cur.Symbol before it, as it does with $ today. With Currency{Code: \"USD\", Symbol: \"$\", Decimals: 2} the output is what it is now."
+  },
+  {
+    "dir": "testdata/shop",
+    "check": "go vet ./... && go test ./...",
+    "name": "design-address",
+    "tests": "testdata/design-address",
+    "prompt": "Orders can now ship abroad, so addresses need a country. Give order.Order a field Address of a new type order.Address, with string fields Street, City, Postcode and Country, in place of its Street, City and Postcode fields. shipping.ValidAddress takes an order.Address; it must also report a missing country, and the 5-digit postcode rule applies only when Country is \"US\". The shipping label ends with the country on a line of its own, except for \"US\". Everything else, such as the exports, keeps working as before."
   }
 ]
