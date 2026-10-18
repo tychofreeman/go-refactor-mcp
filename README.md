@@ -110,9 +110,11 @@ cmd/refactor/                 CLI: one refactoring step per invocation
 cmd/refactor-mcp/             MCP server (stdio) for Claude Code and other MCP clients
 cmd/refactor-agent/           a local model (Ollama) refactoring a module with the same tools
 cmd/refactor-eval/            runs the agent on a module's most complex functions and measures the results
+cmd/refactor-tokens/          where Claude Code sessions spent their tokens, by tool (MCP vs by hand)
 internal/
   agent/                      the model loop: in-process MCP client, Ollama client, transcript
   eval/                       evaluation: pick targets, run the agent on copies, summarize
+  tokens/                     per-tool token cost from Claude Code transcripts
   metrics/                    per-function complexity, nesting and length, and summaries
   analysis/                   shared facts: side effects, stable expressions, escaping/modified locals
   edit/                       TextEdit/FileEdit, Apply, unified diff (Myers)
