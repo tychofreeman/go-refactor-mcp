@@ -83,9 +83,10 @@ hand or a tool got in the way.
    (see "Inline function: what it checks").
 5. **Statement refactorings**, the behavior-preserving forms of edits in
    `docs/edits.md`: *sliding a statement up or down past an independent
-   one is done (see "Move statement up and down: what they check"); next
-   for it: calls of the module's own functions that have no side effects
-   (most refusals are calls).* Then: introduce a plain block, and move a
+   one is done (see "Move statement up and down: what they check"), and
+   it knows which of the module's own functions have no side effects (see
+   "Calls of the module's own functions"); next: the other refactorings
+   using those summaries too.* Then: introduce a plain block, and move a
    statement into or out of one; and
    statements with no effect for `remove_dead_code` (unused declarations
    are done). Deleting a statement for its
@@ -360,6 +361,38 @@ two calls give errors that are not `==`), that call their arguments'
 methods (`fmt`), that read memory other code can change (`bytes`,
 `strings.Join`, anything taking a slice; also any call spreading a slice,
 `f(xs...)`), and methods of `go/ast` nodes, whose fields can be assigned.
+
+### Calls of the module's own functions
+
+`analysis.Effects` summarizes a call of a function declared in the
+workspace from its body, in three parts: whether it has a side effect,
+whether it reads what other code can change, and whether it could panic or
+not finish. Each part names the first reason, so a refusal can say
+"calls `bump`, which assigns to `count`".
+
+- **Side effects:** assigning to a package variable, through a pointer or
+  parameter (`xs[0] = 1`, `c.n++` with a pointer receiver), a channel
+  operation, `go`, and calls with side effects. Assigning to its own
+  locals, value parameters and value receivers is not one; nor is writing
+  through a local that only holds memory the function made itself
+  (`make`, `new`, a composite literal or its address, an `append` to it),
+  so building and returning a slice or map has no side effect.
+- **Reads:** package variables, memory through pointers, and elements of
+  slices and maps it did not make.
+- **Panics:** indexing, slicing, dereferencing, type assertions without
+  `ok`, integer division by a variable, `panic`, and `for` loops (which
+  might not finish).
+- **Calls** count what the callee does, recursively. A call of a function
+  value, an interface method, a recursive call, or a standard library
+  function not on the lists counts as a side effect. Function literals
+  passed to `ast.Inspect`, `sort.Slice` and similar functions that call
+  them before returning are summarized as part of the caller.
+  `errors.New` and the `strconv` parsers have no side effects (but are not
+  known calls: their errors are new values).
+
+For now only `move_statement_up` and `move_statement_down` use these
+summaries; the other refactorings still treat every call not on the
+known list as a side effect.
 
 ## Rename: what it checks
 
@@ -1124,7 +1157,8 @@ The two must be independent, which it checks conservatively:
   variable the other uses. Fields count separately, so `p.x = 1` and
   `p.y = 2` swap, but `q := p` and `p.x = 1` do not;
 - **side effects:** a call not known to have none (see "Calls known to
-  have no side effects"), a channel operation, `go`, `defer`, `select`, or
+  have no side effects" and "Calls of the module's own functions"), a
+  channel operation, `go`, `defer`, `select`, or
   an assignment to a package variable, through a pointer, or to a
   variable a closure or pointer can reach. A statement with side effects
   may not move past one that has side effects too, reads what other code

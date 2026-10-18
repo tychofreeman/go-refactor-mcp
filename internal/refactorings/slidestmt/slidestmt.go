@@ -39,7 +39,7 @@ func (m *MoveStatement) Description() string {
 	return `Swap a statement with the one before it (move_statement_up) or after it (move_statement_down) in the same block ("slide statements"), each with the comments directly above it.
 Use it to bring statements that belong together next to each other, e.g. before extract_function.
 Identify the statement by file and the line it starts on (the outermost statement starting there, so a whole if or loop moves as one).
-Behavior does not change, so it refuses when the order matters: one uses something the other declares, or declares a name the other refers to; one assigns a local variable the other uses; one has side effects (a call not known to be free of them, a channel operation, go or defer, an assignment to a package variable, through a pointer or to a variable a closure captures) and the other could see them, panic or not finish; or both could panic or not finish (indexing, dereferencing, dividing, type assertions, loops). It also refuses a statement that returns or jumps out (return, goto, fallthrough, break or continue to a loop around it), a labeled statement, and a line with more than the statement on it.`
+Behavior does not change, so it refuses when the order matters: one uses something the other declares, or declares a name the other refers to; one assigns a local variable the other uses; one has side effects (a call not known to be free of them: the module's own functions are judged by their bodies; a channel operation, go or defer, an assignment to a package variable, through a pointer or to a variable a closure captures) and the other could see them, panic or not finish; or both could panic or not finish (indexing, dereferencing, dividing, type assertions, loops). It also refuses a statement that returns or jumps out (return, goto, fallthrough, break or continue to a loop around it), a labeled statement, and a line with more than the statement on it.`
 }
 
 func (*MoveStatement) InputSchema() json.RawMessage {
@@ -97,7 +97,11 @@ func (m *MoveStatement) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 		return nil, err
 	}
 	f := analysis.AnalyzeFunc(pkg.TypesInfo, analysis.OutermostFunc(analysis.PathTo(file, first)))
-	if err := checkIndependent(factsOf(f, tf, first), factsOf(f, tf, second)); err != nil {
+	effects := analysis.NewEffects()
+	for _, p := range ws.Pkgs {
+		effects.AddPackage(p.Syntax, p.TypesInfo)
+	}
+	if err := checkIndependent(factsOf(f, tf, first, effects), factsOf(f, tf, second, effects)); err != nil {
 		return nil, err
 	}
 	swapped := string(src[bStart:bEnd]) + string(src[aEnd:bStart]) + string(src[aStart:aEnd])
