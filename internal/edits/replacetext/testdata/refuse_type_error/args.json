@@ -1,0 +1,1 @@
+{"file": "m.go", "old": "return 1", "new": "return \"one\""}

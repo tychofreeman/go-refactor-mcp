@@ -46,6 +46,7 @@ var ExtraArms = []string{"hybrid"}
 var lookingBash = []string{
 	"Bash(go build:*)", "Bash(go test:*)", "Bash(go vet:*)", "Bash(gofmt -l:*)",
 	"Bash(git diff:*)", "Bash(git status:*)", "Bash(ls:*)", "Bash(grep:*)",
+	"Bash(cd:*)", "Bash(cat:*)", "Bash(head:*)", "Bash(tail:*)", "Bash(wc:*)",
 }
 
 // Config controls a set of runs.

@@ -281,3 +281,41 @@ func TestBatchOfRenamesListsLocations(t *testing.T) {
 		t.Errorf("got:\n%s\nwant:\n%s", b.Diff, want)
 	}
 }
+
+// strict decodes its arguments as a real tool does.
+type strict struct{}
+
+func (strict) Name() string        { return "strict" }
+func (strict) Description() string { return "" }
+func (strict) InputSchema() json.RawMessage {
+	return json.RawMessage(`{"type": "object", "properties": {
+  "file": {"type": "string", "description": "The file."},
+  "line": {"type": "integer", "description": "The line."}
+}, "required": ["file"]}`)
+}
+func (strict) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
+	var a struct {
+		File string `json:"file"`
+		Line int    `json:"line"`
+	}
+	if err := refactor.DecodeArgs(raw, &a); err != nil {
+		return nil, err
+	}
+	return nil, refactor.Refusef("never applies")
+}
+
+// A model that guessed an argument's name is told what the tool takes.
+func TestBadArgumentsListTheArguments(t *testing.T) {
+	ws, _ := setup(t, src)
+	res, err := refactor.Run(ws, strict{}, json.RawMessage(`{"file": "m.go", "type": "int"}`), refactor.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "invalid arguments: json: unknown field \"type\"\nstrict takes:\n  file (required): The file.\n  line: The line."
+	if res.Refused != want {
+		t.Errorf("got:\n%s\nwant:\n%s", res.Refused, want)
+	}
+	if res, _ := refactor.Run(ws, strict{}, json.RawMessage(`{"file": "m.go"}`), refactor.Options{}); strings.Contains(res.Refused, "takes:") {
+		t.Errorf("other refusals should not list the arguments: %s", res.Refused)
+	}
+}

@@ -249,7 +249,7 @@ func TestMCPArmBashCannotEdit(t *testing.T) {
 		return allowedTools(args)
 	}
 	mcp := allowed("mcp")
-	if slices.Contains(mcp, "Bash") || !slices.Contains(mcp, "Bash(go test:*)") || !slices.Contains(mcp, "mcp__gorefactor") {
+	if slices.Contains(mcp, "Bash") || (!slices.Contains(mcp, "Bash(go test:*)") || !slices.Contains(mcp, "Bash(cat:*)") || !slices.Contains(mcp, "Bash(cd:*)")) || !slices.Contains(mcp, "mcp__gorefactor") {
 		t.Errorf("mcp arm tools: %q", mcp)
 	}
 	for _, arm := range []string{"hybrid", "manual"} {
