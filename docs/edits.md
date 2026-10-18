@@ -28,6 +28,8 @@ a candidate without evidence stays at the bottom.
   old ones used removed.
 - **`insert_statements`:** new statements before or after a statement, or
   into a block (an empty body too), with the imports they need.
+- **`add_declaration`:** new top-level declarations in a file, at its end
+  or next to a named one, with the imports they need.
 
 ## Candidates
 
@@ -86,8 +88,9 @@ form can come first, while the focus is on refactorings.
 
 **Declarations**
 
-- `add_declaration`, `replace_declaration`: a whole top-level function,
-  type, variable or constant (deleting one is `delete_statement`).
+- `replace_declaration`: a whole top-level function, type, variable or
+  constant (`add_declaration` is done; deleting one is
+  `delete_statement`).
   - 2026-10-17, adding `remove_parameter`: a stub declared so a test written
     first compiled.
   - 2026-10-17, adding `introduce_parameter`: the stub's `Plan` replaced by

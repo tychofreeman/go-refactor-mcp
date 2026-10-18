@@ -483,3 +483,19 @@ branches. By hand: none of the new code.
 stale doc comments, fixed by hand; and renaming a local `a` noted 34
 comments mentioning "a" across the file. Gap: rename a doc comment that
 starts with the name, and only note comments in the symbol's scope.
+
+## 2026-10-18: adding `add_declaration`
+
+**With the edits again.** `create_file` wrote `gocode.ParseDeclarations`,
+the stub, the test and the placement helpers; `replace_statements` wrote
+`Plan`, adding its seven imports. By hand: generalizing `gocode.Code` (a
+new field, gap `add_field`; and `c.Body` to `c.node` inside two
+`ast.Inspect` calls, gap `replace_expression`).
+
+**A small inconsistency left.** `insert_statements` and `add_declaration`
+note added imports as `["fmt" "os"]`, `replace_statements` as `"fmt",
+"os"`: three copies of note formatting that a shared helper in `gocode`
+would make one. *Fixed in the same PR, with the new tool:
+`add_declaration` wrote `gocode.ImportNote`, and four `replace_statements`
+switched the callers; the now unused `quoted` was deleted by hand (gap:
+`remove_dead_code`).*

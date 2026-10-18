@@ -1,0 +1,1 @@
+{"file": "a.go", "content": "// String writes p as (x, y).\nfunc (p point) String() string {\n\treturn \"(\" + strconv.Itoa(p.x) + \", \" + strconv.Itoa(p.y) + \")\"\n}"}

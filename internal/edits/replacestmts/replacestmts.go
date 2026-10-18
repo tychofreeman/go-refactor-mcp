@@ -111,10 +111,10 @@ func (*ReplaceStatements) Plan(ws *workspace.Workspace, raw json.RawMessage) (*r
 		Edits:   []edit.FileEdit{{Path: path, Edits: append([]edit.TextEdit{{Start: start, End: end, NewText: text}}, adder.Edits()...)}},
 	}
 	if len(added) > 0 {
-		plan.Notes = append(plan.Notes, "added import "+strings.Join(quoted(added), ", "))
+		plan.Notes = append(plan.Notes, gocode.ImportNote("added", added))
 	}
 	if len(removed) > 0 {
-		plan.Notes = append(plan.Notes, "removed import "+strings.Join(quoted(removed), ", ")+", which only the replaced statements used")
+		plan.Notes = append(plan.Notes, gocode.ImportNote("removed", removed)+", which only the replaced statements used")
 	}
 	return plan, nil
 }
@@ -222,12 +222,4 @@ func onlyComments(text []byte, line int) error {
 			return refactor.Refusef("the lines hold code outside whole statements (%s); select whole statements", strings.TrimSpace(tok.String()+" "+lit))
 		}
 	}
-}
-
-func quoted(paths []string) []string {
-	var out []string
-	for _, p := range paths {
-		out = append(out, fmt.Sprintf("%q", p))
-	}
-	return out
 }

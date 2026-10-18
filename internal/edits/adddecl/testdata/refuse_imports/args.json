@@ -1,0 +1,1 @@
+{"file": "a.go", "content": "import \"fmt\"\n\nfunc show() { fmt.Println() }"}
