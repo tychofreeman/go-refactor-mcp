@@ -61,10 +61,9 @@ hand or a tool got in the way.
 2. **Moving a declaration** to another file or package, updating its
    references (and renaming it on the way when it changes package).
    *`move_declaration` done, within a package and to another one (see
-   "Move declaration: what it checks"), with several declarations of a file
-   at once (`also`), out of a grouped declaration, and a type with its
-   methods; next: declarations from several files, and creating the
-   package.*
+   "Move declaration: what it checks"), with several declarations at once,
+   from any files of the package (`also`), out of a grouped declaration,
+   and a type with its methods; next: creating the package.*
 3. **Evidence from real use.** Keep the friction log during normal work.
    Later, a comparison: the same small stories done with and without the
    tools, comparing the size of the hand-written edits, test failures and
@@ -1053,16 +1052,19 @@ since its value would shift; move the whole group instead.
 
 ### Several declarations at once
 
-`also` names other top-level declarations of the same file (functions,
-types, variables and constants, not methods) to move with it, e.g. the
-helpers it calls. They go to the destination together, in their source
-order, each held to the same checks; they keep their names. To another
+`also` names other top-level declarations of the package (functions,
+types, variables and constants, not methods), in any of its files, to
+move with it, e.g. the helpers it calls. They go to the destination
+together, the named declaration's file first, each file's in its order;
+each is held to the same checks, and so is each file they come from
+(test file or not, build constraints, cgo); they keep their names. To another
 package this lets code that uses its neighbours move: references among the
 moved declarations stay unqualified. A declaration in `also` that stays
 unexported but is still used outside the new package is refused; rename it
-first. Refused: a name the package does not declare at top level, and one
-declared in another file (moving from several files at once is not
-supported yet).
+first. Refused: a name the package does not declare at top level, one
+already in the destination file, and, for a new destination file, a
+package that two source files import under different names (the new file
+could only use one; rename one first).
 
 ### To another package
 
@@ -1091,8 +1093,7 @@ Refused, besides the checks above:
   (`internal`); a use through a dot import.
 
 A type takes its methods along, since a method must be in its type's
-package; they must be in the type's file (move them there first, within
-the package). A method call (`c.Inc()`) does not change, but what code left
+package, from whichever files of the package they are in. A method call (`c.Inc()`) does not change, but what code left
 behind can reach does:
 
 - an unexported field or method of the type used outside the destination

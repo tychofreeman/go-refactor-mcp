@@ -48,10 +48,10 @@ func (*MoveDeclaration) Description() string {
 Use it to put code where it belongs before a change, e.g. a helper that two files or two packages now share.
 Identify the declaration by file, line and name, at the declaration or any use, and give to_file: the destination, relative to the workspace root.
 Imports the moved code needs are added to the destination (keeping an alias, or using the destination's name for the package); imports left unused are removed.
-also names other top-level declarations of the same file to move with it (not methods), e.g. the helpers it uses; they keep their names.
+also names other top-level declarations of the package, in any of its files, to move with it (not methods), e.g. the helpers it uses; they keep their names.
 To another package (to_file in another directory, which must hold a package): every reference is updated (q.Name outside that package, Name inside it), and new_name renames it on the way; an unexported declaration used outside the new package needs an exported new_name (defaultHost -> DefaultHost).
 A declaration grouped with others in parentheses (var ( a = 1; b = 2 )) moves out as its own (var b = 2); naming every spec of the group moves the group. Taking a constant out of its group is refused when it, or a later one, uses iota or has no values (its value would change).
-Refuses between a test file and a non-test file, to or from a file with build constraints, an init function or a variable whose initializer has side effects (initialization order follows the files), a //go:embed variable, and code that uses a dot import. To another package a type takes its methods along (they must be in its file); it refuses a method on its own, an unexported field or method of a moved type used by code left behind, an interface naming an unexported method of it (the type would quietly stop implementing it), code that uses other top-level declarations of its package (move those first, or with it in also), test files, and moves that would make an import cycle or need an internal package a user cannot import.`
+Refuses between a test file and a non-test file, to or from a file with build constraints, an init function or a variable whose initializer has side effects (initialization order follows the files), a //go:embed variable, and code that uses a dot import. To another package a type takes its methods along, from any file; it refuses a method on its own, an unexported field or method of a moved type used by code left behind, an interface naming an unexported method of it (the type would quietly stop implementing it), code that uses other top-level declarations of its package (move those first, or with it in also), test files, and moves that would make an import cycle or need an internal package a user cannot import.`
 }
 
 func (*MoveDeclaration) InputSchema() json.RawMessage {
@@ -64,7 +64,7 @@ func (*MoveDeclaration) InputSchema() json.RawMessage {
     "column":  {"type": "integer", "description": "Optional 1-based column, only needed to disambiguate."},
     "to_file": {"type": "string",  "description": "Destination file, relative to the workspace root; created if it does not exist. In another directory, the declaration moves to that package."},
     "new_name": {"type": "string", "description": "Optional, when moving to another package: the name in the new package (required for an unexported declaration used outside it, e.g. defaultHost -> DefaultHost)."},
-    "also":     {"type": "array", "items": {"type": "string"}, "description": "Optional: other top-level declarations of the same file to move with it, by name (not methods), e.g. the helpers it uses. They keep their names."}
+    "also":     {"type": "array", "items": {"type": "string"}, "description": "Optional: other top-level declarations of the package (in any of its files) to move with it, by name (not methods), e.g. the helpers it uses. They keep their names."}
   },
   "required": ["file", "line", "name", "to_file"],
   "additionalProperties": false
@@ -86,21 +86,30 @@ type moveArgs struct {
 // order.
 type mover struct {
 	*moved
-	decls   []*moved
-	ws      *workspace.Workspace
-	pkg     *packages.Package // a variant containing the source file
-	file    *ast.File
-	path    string
-	src     []byte
-	imports []*ast.ImportSpec
+	decls []*moved
+	ws    *workspace.Workspace
+	pkg   *packages.Package // a variant containing the source file
+	// The embedded source is the file of the declaration the arguments
+	// name; sources holds it and the others declarations move from.
+	*source
+	sources []*source
 
 	// Moving to another package:
 	dest  *packages.Package
 	files map[string]*fileEdits
 }
 
+// source is a file that declarations move from.
+type source struct {
+	path    string
+	file    *ast.File
+	src     []byte
+	imports []*ast.ImportSpec // those the moved code uses
+}
+
 // moved is one declaration a move carries.
 type moved struct {
+	from *source
 	decl ast.Decl
 	// spec is the spec declaring obj when decl groups several in
 	// parentheses; it moves out of the group as a declaration of its own,
@@ -172,12 +181,16 @@ func (*MoveDeclaration) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 	m.deleteDecls()
 	same := func(pn *types.PkgName) string { return pn.Name() }
 	if dst == nil {
-		m.files[to] = &fileEdits{edits: []edit.TextEdit{{NewText: m.newFile(same)}}}
+		text, err := m.newFile(same)
+		if err != nil {
+			return nil, err
+		}
+		m.files[to] = &fileEdits{edits: []edit.TextEdit{{NewText: text}}}
 	} else if err := m.appendTo(to, ""); err != nil {
 		return nil, err
 	}
 	return &refactor.Plan{
-		Summary: fmt.Sprintf("moved %s%s from %s to %s", a.Name, m.withAlso(), ws.Rel(m.path), ws.Rel(to)),
+		Summary: fmt.Sprintf("moved %s%s from %s to %s", a.Name, m.withAlso(), m.fromFiles(), ws.Rel(to)),
 		Edits:   m.fileEdits(),
 	}, nil
 }
@@ -207,8 +220,9 @@ func find(ws *workspace.Workspace, q locate.IdentQuery) (*mover, error) {
 					if err != nil {
 						return nil, err
 					}
-					md := &moved{decl: d, obj: obj, spec: groupSpec(ws.Fset, d, pos.Offset)}
-					return &mover{moved: md, decls: []*moved{md}, ws: ws, pkg: p, file: f, path: pos.Filename, src: src}, nil
+					s := &source{path: pos.Filename, file: f, src: src}
+					md := &moved{from: s, decl: d, obj: obj, spec: groupSpec(ws.Fset, d, pos.Offset)}
+					return &mover{moved: md, decls: []*moved{md}, ws: ws, pkg: p, source: s, sources: []*source{s}}, nil
 				}
 			}
 			return nil, refactor.Refusef("%s (declared at %s) is not a top-level declaration", id.Name, ws.Position(obj.Pos()))
@@ -221,23 +235,96 @@ func find(ws *workspace.Workspace, q locate.IdentQuery) (*mover, error) {
 // declarations of the source file, keeping m.decls in source order.
 func (m *mover) addAlso(also []string) error {
 	for _, name := range also {
-		o := m.pkg.Types.Scope().Lookup(name)
+		o := m.lookup(name)
 		if o == nil {
 			return refactor.Refusef("package %s declares no top-level %s (also names functions, types, variables and constants, not methods)", m.pkg.Name, name)
 		}
 		pos := m.ws.Fset.Position(o.Pos())
-		if pos.Filename != m.path {
-			return refactor.Refusef("%s is declared in %s, not %s; moving declarations from several files at once is not supported yet", name, m.ws.Rel(pos.Filename), m.ws.Rel(m.path))
+		from, err := m.sourceFor(pos.Filename)
+		if err != nil {
+			return err
 		}
-		for _, d := range m.file.Decls {
+		for _, d := range from.file.Decls {
 			if spec := groupSpec(m.ws.Fset, d, pos.Offset); declares(m.ws.Fset, d, pos.Offset) && !m.moves(d, spec) {
-				m.decls = append(m.decls, &moved{decl: d, obj: o, spec: spec})
+				m.decls = append(m.decls, &moved{from: from, decl: d, obj: o, spec: spec})
 			}
 		}
 	}
-	sort.Slice(m.decls, func(i, j int) bool { return m.decls[i].node().Pos() < m.decls[j].node().Pos() })
+	m.sortDecls()
 	m.markWhole()
 	return nil
+}
+
+// lookup finds a top-level name of the package, in any of its variants
+// (a test file's declarations are only in the test variant).
+func (m *mover) lookup(name string) types.Object {
+	if o := m.pkg.Types.Scope().Lookup(name); o != nil {
+		return o
+	}
+	for _, p := range m.ws.Pkgs {
+		if p.Types != nil && p.PkgPath == m.pkg.PkgPath {
+			if o := p.Types.Scope().Lookup(name); o != nil {
+				return o
+			}
+		}
+	}
+	return nil
+}
+
+// sourceFor returns the source for path, a file of the package, taking
+// its syntax from the variant the move uses when it has the file.
+func (m *mover) sourceFor(path string) (*source, error) {
+	for _, s := range m.sources {
+		if s.path == path {
+			return s, nil
+		}
+	}
+	var file *ast.File
+	for _, p := range append([]*packages.Package{m.pkg}, m.ws.Pkgs...) {
+		if p.PkgPath != m.pkg.PkgPath || file != nil {
+			continue
+		}
+		for _, f := range p.Syntax {
+			if m.ws.Fset.File(f.Pos()).Name() == path {
+				file = f
+			}
+		}
+	}
+	if file == nil {
+		return nil, refactor.Refusef("%s is not a file of package %s", m.ws.Rel(path), m.pkg.Name)
+	}
+	src, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	s := &source{path: path, file: file, src: src}
+	m.sources = append(m.sources, s)
+	return s, nil
+}
+
+// sortDecls puts the moved declarations in order: by source (the named
+// declaration's file first), then as each file has them.
+func (m *mover) sortDecls() {
+	rank := map[*source]int{}
+	for i, s := range m.sources {
+		rank[s] = i
+	}
+	sort.SliceStable(m.decls, func(i, j int) bool {
+		a, b := m.decls[i], m.decls[j]
+		if a.from != b.from {
+			return rank[a.from] < rank[b.from]
+		}
+		return a.node().Pos() < b.node().Pos()
+	})
+}
+
+// fromFiles names the source files, for a summary.
+func (m *mover) fromFiles() string {
+	var names []string
+	for _, s := range m.sources {
+		names = append(names, m.ws.Rel(s.path))
+	}
+	return strings.Join(names, ", ")
 }
 
 // moves reports whether the declaration (or, in a group, the spec) is
@@ -387,7 +474,7 @@ func (m *mover) setRange(d *moved) {
 		d.start = m.off(doc.Pos())
 	}
 	d.end = m.off(d.node().End())
-	if rest := m.src[d.end:m.nextLine(d.end)]; strings.HasPrefix(strings.TrimSpace(string(rest)), "//") {
+	if rest := d.from.src[d.end:d.from.nextLine(d.end)]; strings.HasPrefix(strings.TrimSpace(string(rest)), "//") {
 		d.end += len(strings.TrimRight(string(rest), "\n"))
 	}
 }
@@ -395,24 +482,28 @@ func (m *mover) setRange(d *moved) {
 // checkDestination refuses a destination outside the source's package or
 // built differently, and returns its syntax if it exists.
 func (m *mover) checkDestination(to string) (*ast.File, error) {
-	rel := m.ws.Rel(m.path)
+	if to == m.path {
+		return nil, refactor.Refusef("the declaration is already in %s", m.ws.Rel(to))
+	}
+	for _, d := range m.decls {
+		if d.from.path == to {
+			return nil, refactor.Refusef("%s is already in %s", d.obj.Name(), m.ws.Rel(to))
+		}
+	}
 	switch {
-	case to == m.path:
-		return nil, refactor.Refusef("the declaration is already in %s", rel)
 	case !strings.HasSuffix(to, ".go"):
 		return nil, refactor.Refusef("to_file must be a .go file")
 	case filepath.Dir(to) != filepath.Dir(m.path):
 		return nil, refactor.Refusef("%s is in another directory, so another package; moving to another package is not supported yet", m.ws.Rel(to))
-	case strings.HasSuffix(to, "_test.go") != strings.HasSuffix(m.path, "_test.go"):
-		return nil, refactor.Refusef("only one of %s and %s is a test file, so they are built differently; moving between them is not supported", rel, m.ws.Rel(to))
 	}
-	for _, imp := range m.file.Imports {
-		if imp.Path.Value == `"C"` {
-			return nil, refactor.Refusef("%s uses cgo; moving declarations out of cgo files is not supported", rel)
+	for _, s := range m.sources {
+		rel := m.ws.Rel(s.path)
+		if strings.HasSuffix(to, "_test.go") != strings.HasSuffix(s.path, "_test.go") {
+			return nil, refactor.Refusef("only one of %s and %s is a test file, so they are built differently; moving between them is not supported", rel, m.ws.Rel(to))
 		}
-	}
-	if constrained(m.path, m.file) {
-		return nil, refactor.Refusef("%s has build constraints, so it is not built everywhere; moving out of it is not supported", rel)
+		if err := s.checkBuiltEverywhere(rel); err != nil {
+			return nil, err
+		}
 	}
 	if _, err := os.Stat(to); os.IsNotExist(err) {
 		if !buildsEverywhere(to) {
@@ -461,12 +552,37 @@ func (m *mover) collectImports() error {
 			return true
 		})
 	}
-	for _, imp := range m.file.Imports {
-		if pn := pkgNameOf(m.pkg.TypesInfo, imp); pn != nil && used[pn] {
-			m.imports = append(m.imports, imp)
+	for _, s := range m.sources {
+		for _, imp := range s.file.Imports {
+			if pn := pkgNameOf(m.pkg.TypesInfo, imp); pn != nil && used[pn] {
+				s.imports = append(s.imports, imp)
+			}
 		}
 	}
 	return err
+}
+
+// checkBuiltEverywhere refuses a source file that is not built for every
+// platform: build constraints, or cgo.
+func (s *source) checkBuiltEverywhere(rel string) error {
+	for _, imp := range s.file.Imports {
+		if imp.Path.Value == `"C"` {
+			return refactor.Refusef("%s uses cgo; moving declarations out of cgo files is not supported", rel)
+		}
+	}
+	if constrained(s.path, s.file) {
+		return refactor.Refusef("%s has build constraints, so it is not built everywhere; moving out of it is not supported", rel)
+	}
+	return nil
+}
+
+// allImports returns the imports the moved code uses, from every source.
+func (m *mover) allImports() []*ast.ImportSpec {
+	var out []*ast.ImportSpec
+	for _, s := range m.sources {
+		out = append(out, s.imports...)
+	}
+	return out
 }
 
 // pkgNameOf returns the name an import declares (nil for a blank or dot
@@ -538,8 +654,8 @@ func (m *mover) deleteDecls() {
 
 // deleteDecl deletes the declaration's lines from the source file.
 func (m *mover) deleteDecl(d *moved) {
-	fe, _ := m.fileFor(m.path) // the source file is loaded
-	fe.edits = append(fe.edits, edit.TextEdit{Start: m.lineStart(d.start), End: m.nextLine(d.end)})
+	fe, _ := m.fileFor(d.from.path) // the source file is loaded
+	fe.edits = append(fe.edits, edit.TextEdit{Start: d.from.lineStart(d.start), End: d.from.nextLine(d.end)})
 	fe.cuts = append(fe.cuts, [2]int{d.start, d.end})
 }
 
@@ -644,7 +760,7 @@ func (m *mover) code(d *moved, qual func(*types.PkgName) string) (string, error)
 		at := rel(d.spec.Pos())
 		edits = append(edits, edit.TextEdit{Start: at, End: at, NewText: kw + " "})
 	}
-	out, err := edit.Apply(m.src[d.start:d.end], edits)
+	out, err := edit.Apply(d.from.src[d.start:d.end], edits)
 	if err != nil {
 		return "", err
 	}
@@ -738,7 +854,7 @@ func docOf(n ast.Node) *ast.CommentGroup {
 // newFile is the destination's contents when it does not exist: the
 // package clause, the imports the code needs as the source writes them,
 // and the code.
-func (m *mover) newFile(qual func(*types.PkgName) string) string {
+func (m *mover) newFile(qual func(*types.PkgName) string) (string, error) {
 	var b strings.Builder
 	name := m.file.Name.Name
 	if m.dest != nil {
@@ -746,9 +862,23 @@ func (m *mover) newFile(qual func(*types.PkgName) string) string {
 	}
 	fmt.Fprintf(&b, "package %s\n\n", name)
 	var specs []string
-	for _, imp := range m.imports {
-		if qual(pkgNameOf(m.pkg.TypesInfo, imp)) != "" {
-			specs = append(specs, string(m.src[m.off(imp.Pos()):m.off(imp.End())]))
+	byPath := map[string]*source{} // which source first imports a path
+	for _, s := range m.sources {
+		for _, imp := range s.imports {
+			pn := pkgNameOf(m.pkg.TypesInfo, imp)
+			if qual(pn) == "" {
+				continue
+			}
+			path := pn.Imported().Path()
+			if first := byPath[path]; first != nil {
+				if other := m.importName(first, path); other != pn.Name() {
+					return "", refactor.Refusef("%s imports %q as %s, and %s as %s; the new file would need both names, so rename one first",
+						m.ws.Rel(first.path), path, other, m.ws.Rel(s.path), pn.Name())
+				}
+				continue
+			}
+			byPath[path] = s
+			specs = append(specs, string(s.src[m.off(imp.Pos()):m.off(imp.End())]))
 		}
 	}
 	switch len(specs) {
@@ -761,7 +891,17 @@ func (m *mover) newFile(qual func(*types.PkgName) string) string {
 	code, _ := m.allCode(qual) // its edits come from its own syntax, so they apply
 	b.WriteString(code)
 	b.WriteString("\n")
-	return b.String()
+	return b.String(), nil
+}
+
+// importName returns the name the source s imports path as.
+func (m *mover) importName(s *source, path string) string {
+	for _, imp := range s.imports {
+		if pn := pkgNameOf(m.pkg.TypesInfo, imp); pn != nil && pn.Imported().Path() == path {
+			return pn.Name()
+		}
+	}
+	return ""
 }
 
 // appendTo adds the code at the end of an existing file, with the imports
@@ -774,7 +914,7 @@ func (m *mover) appendTo(to, destPath string) error {
 		return err
 	}
 	names := map[*types.PkgName]string{}
-	for _, imp := range m.imports {
+	for _, imp := range m.allImports() {
 		pn := pkgNameOf(m.pkg.TypesInfo, imp)
 		if pn.Imported().Path() == destPath {
 			names[pn] = ""
@@ -800,16 +940,16 @@ func (m *mover) appendTo(to, destPath string) error {
 
 func (m *mover) off(p token.Pos) int { return m.ws.Fset.Position(p).Offset }
 
-func (m *mover) lineStart(off int) int {
-	return strings.LastIndexByte(string(m.src[:off]), '\n') + 1
+func (s *source) lineStart(off int) int {
+	return strings.LastIndexByte(string(s.src[:off]), '\n') + 1
 }
 
 // nextLine returns the offset just past the newline that ends off's line.
-func (m *mover) nextLine(off int) int {
-	if i := strings.IndexByte(string(m.src[off:]), '\n'); i >= 0 {
+func (s *source) nextLine(off int) int {
+	if i := strings.IndexByte(string(s.src[off:]), '\n'); i >= 0 {
 		return off + i + 1
 	}
-	return len(m.src)
+	return len(s.src)
 }
 
 // hasEffect reports whether evaluating the spec's values could have a

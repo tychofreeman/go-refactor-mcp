@@ -292,3 +292,28 @@ two packages. Gap: once more, a shared helper wants to move to `analysis`,
 and the two versions differ only in their messages: an extract with a
 parameter for the differing part would merge them (the near-duplicate
 gap logged before).
+
+## 2026-10-17: story, moving declarations from several files
+
+**A struct split, by hand.** `mover` held one source file (`path`,
+`file`, `src`, `imports`); they became a `source` type, embedded in
+`mover` so every `m.path` kept compiling, with `sources` beside it and a
+`from` on each moved declaration. The same embedding trick as the
+`moved` split before. Gap, again: extract fields into a new type (seen
+twice now).
+
+**A receiver type changed, by hand.** `lineStart` and `nextLine` read
+only `m.src`; their receiver became `*source` (calls on `m` still compile
+through the embedding). No tool changes a receiver's type; the closest,
+`method_to_function` then `function_to_method`, needs a parameter of the
+new type in between. Gap: change a receiver to a field's type it reads
+only through ("move method to a field's type").
+
+**Ordering across files.** Sorting moved declarations by `token.Pos`
+followed the order the files were loaded, not the request; they are now
+ordered by source (the named declaration's file first), then position.
+
+**Real code, dry run.** `changesig`'s `call`, refused last round because
+its methods are in `introparam.go`, now gets the next real refusal when
+moved to `internal/analysis`: its unexported `expr` field is used by code
+left behind. Within the package it moves (its methods stay).
