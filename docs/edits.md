@@ -50,6 +50,9 @@ form can come first, while the focus is on refactorings.
   block, the general case inside a body.
   - 2026-10-17, moving a declaration to another package: three statements
     computing a doc comment replaced by a call to the new `docOf`.
+  - 2026-10-18, one interface check instead of two: the bodies of
+    `changesig` and `movedecl`'s `checkNoInterface` replaced by a call of
+    `analysis.InterfaceWithMethod` and their messages.
 - `delete_statement`: delete whole statements, or a whole declaration (a
   function, type, variable or constant), as long as the result
   type-checks. Deleting a call for its side effect is often the point, so
@@ -85,7 +88,9 @@ form can come first, while the focus is on refactorings.
     first compiled.
   - 2026-10-17, adding `introduce_parameter`: the stub's `Plan` replaced by
     the real one, and the new checks added beside it.
-- `add_field` (struct) and `add_method` (interface).
+- `add_field` (struct) and `add_method` (a method on a type, or an
+  interface method).
+  - 2026-10-18, one interface check instead of two: `Workspace.TypesInfos`.
 
 ## Suggested, without evidence yet
 

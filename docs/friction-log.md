@@ -346,3 +346,39 @@ commit before the `source` split, `extract_struct` with `mover`'s `file`,
 call (the struct, the embedding, and the one literal, in `find`), and
 `movedecl`'s tests passed. It embeds by value; the hand version embedded
 `*source`, which changes what copying a `mover` shares.
+
+## 2026-10-18: story, one interface check instead of two
+
+`changesig.checkNoInterface` and `movedecl.checkNoInterface` searched the
+same thing (an interface in the workspace with a given method of a given
+package) and differed in their receivers and messages. Now both call
+`analysis.InterfaceWithMethod`, which returns what it found; each keeps
+its own message.
+
+**What the tools did.** `create_file` wrote the shared function's stub
+and its unit test (test first). `rename` gave `extractstruct`'s different
+check (values passed as an interface) its own name,
+`checkNotPassedAsInterface`.
+
+**By hand, and why no tool fit.** The plan was `method_to_function`, then
+`introduce_parameter` for what the receiver supplied, then
+`move_declaration` to `analysis`. It would have stalled twice: the body
+reads `t.obj.Pkg().Path()`, a call (and calls count as side effects, the
+pure-call gap logged before), and its messages use `t.ws.Position`, which
+`analysis` must not depend on. The real change was a change of shape, from
+returning a refusal to returning a finding, which is an edit, not a
+refactoring. So by hand: the shared body (copied from one of the two),
+the two callers' new bodies, and `Workspace.TypesInfos`. Gaps:
+`replace_statements` / replacing a function body (in `docs/edits.md`),
+`add_method`, and the pure-call list.
+
+**Small ones.** `rename` noted that the doc comment still began with the
+old name, and left it; a doc comment that starts with the symbol's name
+(the Go convention) could be renamed with it, and re-wrapped.
+
+**More duplicates, counted.** `plural` is declared in 10 packages,
+`kindOf`/`kind` in 6, `keyOf` in 3, each with the same body. Each could
+be replaced by one shared copy, but no tool replaces a function by an
+identical one elsewhere and redirects its uses. Gap: a "use the identical
+function" refactoring (the body tokens match and resolve to the same
+objects, so every call can call the other one, and the copy goes).

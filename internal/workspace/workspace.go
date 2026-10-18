@@ -14,6 +14,7 @@ import (
 	"go/ast"
 	"go/format"
 	"go/token"
+	"go/types"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -289,6 +290,18 @@ func (w *Workspace) Position(pos token.Pos) string {
 		return "-"
 	}
 	return fmt.Sprintf("%s:%d:%d", w.Rel(p.Filename), p.Line, p.Column)
+}
+
+// TypesInfos returns the type information of every loaded package
+// variant that has it.
+func (w *Workspace) TypesInfos() []*types.Info {
+	var out []*types.Info
+	for _, p := range w.Pkgs {
+		if p.TypesInfo != nil {
+			out = append(out, p.TypesInfo)
+		}
+	}
+	return out
 }
 
 // FileSyntax returns the parsed file at the absolute path and the first

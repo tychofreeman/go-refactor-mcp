@@ -156,32 +156,14 @@ func (t *target) checkFuncName(name string) error {
 // through a method of that name (directly or through embedding), and would
 // stop or start to.
 func (t *target) checkNoInterface(name string) error {
-	has := func(it *types.Interface) bool {
-		for i := 0; i < it.NumMethods(); i++ {
-			if m := it.Method(i); m.Name() == name && m.Pkg() != nil && m.Pkg().Path() == t.obj.Pkg().Path() {
-				return true
-			}
-		}
-		return false
+	iface, at, found := analysis.InterfaceWithMethod(t.ws.TypesInfos(), t.obj.Pkg().Path(), name)
+	switch {
+	case !found:
+		return nil
+	case iface != nil:
+		return refactor.Refusef("the interface %s (at %s) has a method %s, which a type could implement through it; that is not supported", iface.Name(), t.ws.Position(at), name)
 	}
-	for _, p := range t.ws.Pkgs {
-		if p.TypesInfo == nil {
-			continue
-		}
-		for id, o := range p.TypesInfo.Defs {
-			if tn, ok := o.(*types.TypeName); ok {
-				if it, ok := tn.Type().Underlying().(*types.Interface); ok && has(it) {
-					return refactor.Refusef("the interface %s (at %s) has a method %s, which a type could implement through it; that is not supported", tn.Name(), t.ws.Position(id.Pos()), name)
-				}
-			}
-		}
-		for e, tv := range p.TypesInfo.Types {
-			if it, ok := tv.Type.(*types.Interface); ok && tv.IsType() && has(it) {
-				return refactor.Refusef("the interface at %s has a method %s, which a type could implement through it; that is not supported", t.ws.Position(e.Pos()), name)
-			}
-		}
-	}
-	return nil
+	return refactor.Refusef("the interface at %s has a method %s, which a type could implement through it; that is not supported", t.ws.Position(at), name)
 }
 
 // recvParam returns the receiver written as a parameter, naming it if the
