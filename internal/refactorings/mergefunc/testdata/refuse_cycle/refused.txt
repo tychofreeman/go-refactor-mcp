@@ -1,0 +1,1 @@
+package example.com/m would import example.com/m/q, which already depends on it

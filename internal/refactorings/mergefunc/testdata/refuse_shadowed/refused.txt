@@ -1,0 +1,1 @@
+at a.go:9:9, one is the variable declared at a.go:8:2

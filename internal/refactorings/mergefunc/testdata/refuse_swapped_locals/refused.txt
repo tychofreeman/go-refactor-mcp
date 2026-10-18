@@ -1,0 +1,1 @@
+the bodies differ: x at a.go:5:31 is the variable declared at a.go:5:11, where a has the variable declared at a.go:3:8

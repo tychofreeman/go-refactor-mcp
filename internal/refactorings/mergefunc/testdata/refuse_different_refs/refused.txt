@@ -1,0 +1,1 @@
+the bodies differ: helper at a.go:5:31 is the function declared at a.go:3:6, where Twice has the function declared at q/q.go:3:6
