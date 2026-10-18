@@ -85,7 +85,7 @@ func (*MethodToFunction) Plan(ws *workspace.Workspace, raw json.RawMessage) (*re
 	if err := t.checkFuncName(name); err != nil {
 		return nil, err
 	}
-	if err := t.checkNoInterface(); err != nil {
+	if err := t.checkNoInterface(t.obj.Name()); err != nil {
 		return nil, err
 	}
 	recvParam, err := t.recvParam(named)
@@ -152,12 +152,13 @@ func (t *target) checkFuncName(name string) error {
 }
 
 // checkNoInterface refuses if any interface in the workspace has a method
-// with the target's name and package: some type might implement it through
-// the target (directly or through embedding), and would stop.
-func (t *target) checkNoInterface() error {
+// called name in the target's package: some type might implement it
+// through a method of that name (directly or through embedding), and would
+// stop or start to.
+func (t *target) checkNoInterface(name string) error {
 	has := func(it *types.Interface) bool {
 		for i := 0; i < it.NumMethods(); i++ {
-			if m := it.Method(i); m.Name() == t.obj.Name() && m.Pkg() != nil && m.Pkg().Path() == t.obj.Pkg().Path() {
+			if m := it.Method(i); m.Name() == name && m.Pkg() != nil && m.Pkg().Path() == t.obj.Pkg().Path() {
 				return true
 			}
 		}
@@ -170,13 +171,13 @@ func (t *target) checkNoInterface() error {
 		for id, o := range p.TypesInfo.Defs {
 			if tn, ok := o.(*types.TypeName); ok {
 				if it, ok := tn.Type().Underlying().(*types.Interface); ok && has(it) {
-					return refactor.Refusef("the interface %s (at %s) has a method %s, which a type could implement through it; that is not supported", tn.Name(), t.ws.Position(id.Pos()), t.obj.Name())
+					return refactor.Refusef("the interface %s (at %s) has a method %s, which a type could implement through it; that is not supported", tn.Name(), t.ws.Position(id.Pos()), name)
 				}
 			}
 		}
 		for e, tv := range p.TypesInfo.Types {
 			if it, ok := tv.Type.(*types.Interface); ok && tv.IsType() && has(it) {
-				return refactor.Refusef("the interface at %s has a method %s, which a type could implement through it; that is not supported", t.ws.Position(e.Pos()), t.obj.Name())
+				return refactor.Refusef("the interface at %s has a method %s, which a type could implement through it; that is not supported", t.ws.Position(e.Pos()), name)
 			}
 		}
 	}

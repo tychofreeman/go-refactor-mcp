@@ -30,6 +30,7 @@ func All() []refactor.Refactoring {
 		changesig.NewMoveParameter(),
 		changesig.NewIntroduceParameter(),
 		changesig.NewMethodToFunction(),
+		changesig.NewFunctionToMethod(),
 		movedecl.New(),
 		createfile.New(),
 	}

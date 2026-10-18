@@ -1,0 +1,1 @@
+the type of n, int, is not a type declared in package m
