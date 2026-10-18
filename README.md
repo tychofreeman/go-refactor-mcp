@@ -34,8 +34,9 @@ model reads before choosing the next refactoring. That loop is the iteration.
   not. `method_to_function` turns an unexported method into a function,
   and `function_to_method` a function into a method of its first
   parameter's type. `extract_struct` moves fields into a new, embedded
-  struct type, and `merge_duplicate_function` replaces a function with an
-  identical one. `move_declaration` moves a
+  struct type, `merge_duplicate_function` replaces a function with an
+  identical one, and `remove_dead_code` deletes a declaration nothing
+  uses. `move_declaration` moves a
   declaration (with the helpers it uses, if asked) to another file, of its
   package or another one.
 - **Step 5 (in progress):** edits, steps that change behavior on purpose
@@ -81,8 +82,8 @@ hand or a tool got in the way.
 5. **Statement refactorings**, the behavior-preserving forms of edits in
    `docs/edits.md`: slide a statement up or down past an independent one,
    introduce a plain block, and move a statement into or out of one; and
-   `remove_dead_code`, which deletes only what cannot matter (an unused
-   declaration, a statement with no effect). Deleting a statement for its
+   statements with no effect for `remove_dead_code` (unused declarations
+   are done). Deleting a statement for its
    effect is the edit `delete_statement`.
 6. **`rename` gaps:** imports, labels, embedded fields and interface methods
    (see "Rename: what it checks").
@@ -1070,6 +1071,28 @@ functions; an exported function to delete (code in other modules could
 call it); a function to keep that a user cannot see (unexported, in
 another package) or could only import by making an import cycle; and a use
 where the new name, or its package's name, means something else there.
+
+## Remove dead code: what it checks
+
+`remove_dead_code` deletes a top-level declaration (function, method,
+type, variable or constant) that nothing uses, with its doc comment and the
+imports only it used; in a parenthesized group, only its spec goes. Being
+unused is not enough to be dead, so it must also be something nothing can
+reach any other way:
+
+- unexported (other modules could use an exported name), except in a
+  `main` package, which nothing imports;
+- not `init`, `main`, or a `Test`, `Benchmark`, `Fuzz` or `Example`
+  function in a test file, which run without being called;
+- a method that no interface in the workspace names (a type could
+  implement one through it);
+- a variable whose initializer has no side effects;
+- not a blank name (`var _ I = (*T)(nil)` checks something at compile
+  time), and without a `//go:` or `//export` directive;
+- a type without methods (remove them first), and a spec that declares
+  only that name.
+
+Uses inside the declaration itself (a recursive call) do not count.
 
 ## Changing a method: interfaces
 

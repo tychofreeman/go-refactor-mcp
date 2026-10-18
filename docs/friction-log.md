@@ -461,7 +461,8 @@ one `move_declaration` (from two files, into a new package). The move was
 refused at first: `versionSuffix = regexp.MustCompile(...)` is a package
 variable initialized by a call. So `create_file` wrote an `isVersion`
 function and `replace_statements` switched to it; the unused variable was
-deleted by hand (gap: `delete_statement`). Small gaps: a constant pattern
+deleted by hand (gap: `delete_statement`). *Follow-up:
+`remove_dead_code` covers it.* Small gaps: a constant pattern
 for `regexp.MustCompile` could count as having no effect; and the move
 left `version.go` with only its package clause (a move that empties a file
 could delete it).
@@ -500,4 +501,4 @@ note added imports as `["fmt" "os"]`, `replace_statements` as `"fmt",
 would make one. *Fixed in the same PR, with the new tool:
 `add_declaration` wrote `gocode.ImportNote`, and four `replace_statements`
 switched the callers; the now unused `quoted` was deleted by hand (gap:
-`remove_dead_code`).*
+`remove_dead_code`, since done).*
