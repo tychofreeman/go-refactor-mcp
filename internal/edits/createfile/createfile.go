@@ -13,6 +13,7 @@ import (
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
 
@@ -81,7 +82,7 @@ func (*CreateFile) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor
 		lines++
 	}
 	return &refactor.Plan{
-		Summary: fmt.Sprintf("created %s (%d line%s)", rel, lines, plural(lines)),
+		Summary: fmt.Sprintf("created %s (%d line%s)", rel, lines, textutil.Plural(lines)),
 		Edits:   []edit.FileEdit{{Path: path, Edits: []edit.TextEdit{{NewText: a.Content}}}},
 	}, nil
 }
@@ -129,11 +130,4 @@ func dirPackage(dir string) (string, error) {
 		}
 	}
 	return test, nil
-}
-
-func plural(n int) string {
-	if n == 1 {
-		return ""
-	}
-	return "s"
 }

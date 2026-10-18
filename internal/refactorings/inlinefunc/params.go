@@ -639,7 +639,7 @@ func (x *inliner) capture(p *param) string {
 				if q := x.paramOf(o); q != nil && q.subst {
 					continue // replaced too
 				}
-				return fmt.Sprintf("the %s %s declared at %s", kindOf(o), id.Name, x.ws.Position(o.Pos()))
+				return fmt.Sprintf("the %s %s declared at %s", analysis.KindOf(o), id.Name, x.ws.Position(o.Pos()))
 			}
 			for v, to := range x.merged {
 				if to.Name == id.Name && v.Pos() < u.Pos() {

@@ -613,18 +613,11 @@ func (m *mover) movedOf(o types.Object) *moved {
 		return nil
 	}
 	for _, d := range m.decls {
-		if keyOf(m.ws.Fset, o) == keyOf(m.ws.Fset, d.obj) {
+		if analysis.ObjectKey(m.ws.Fset, o) == analysis.ObjectKey(m.ws.Fset, d.obj) {
 			return d
 		}
 	}
 	return nil
-}
-
-// keyOf identifies an object by its declaration position, which a
-// package's variants share.
-func keyOf(fset *token.FileSet, o types.Object) string {
-	p := fset.Position(o.Pos())
-	return fmt.Sprintf("%s:%d:%s", p.Filename, p.Offset, o.Name())
 }
 
 // fileFor returns the edits to the file at path, which must be in a

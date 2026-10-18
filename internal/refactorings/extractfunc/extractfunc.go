@@ -1785,7 +1785,7 @@ func (x *extraction) plan() (*refactor.Plan, error) {
 	first, last := x.line(x.tf.Pos(x.start)), x.line(x.tf.Pos(x.end))
 	n := len(x.stmts)
 	return &refactor.Plan{
-		Summary: fmt.Sprintf("extracted lines %d-%d (%d statement%s) into function %s", first, last, n, plural(n), x.name),
+		Summary: fmt.Sprintf("extracted lines %d-%d (%d statement%s) into function %s", first, last, n, textutil.Plural(n), x.name),
 		Edits:   []edit.FileEdit{{Path: x.path, Edits: edits}},
 		Notes:   notes,
 	}, nil
@@ -1876,7 +1876,7 @@ func (x *extraction) notes(f *flow, names func(vs []*types.Var) []string) []stri
 	}
 	if np, nr := len(shown), len(f.results); np > 5 || nr > 3 {
 		notes = append(notes, fmt.Sprintf("%s takes %d parameter%s and returns %d result%s; so many usually means the selection cuts through code that shares many variables, and a different range of lines (or grouping the values in a struct) may give a simpler function",
-			x.name, np, plural(np), nr, plural(nr)))
+			x.name, np, textutil.Plural(np), nr, textutil.Plural(nr)))
 	}
 	var ptrs []string
 	for _, v := range f.params {
@@ -2150,11 +2150,4 @@ func kindOf(o types.Object) string {
 		return "variable"
 	}
 	return "name"
-}
-
-func plural(n int) string {
-	if n == 1 {
-		return ""
-	}
-	return "s"
 }

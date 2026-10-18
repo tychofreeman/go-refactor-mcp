@@ -19,10 +19,12 @@ import (
 
 	"golang.org/x/tools/go/packages"
 
+	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/imports"
 	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
 
@@ -98,7 +100,7 @@ func (*MergeDuplicate) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refa
 		return nil, err
 	}
 	switch {
-	case keyOf(ws.Fset, dup.obj) == keyOf(ws.Fset, keep.obj):
+	case analysis.ObjectKey(ws.Fset, dup.obj) == analysis.ObjectKey(ws.Fset, keep.obj):
 		return nil, refactor.Refusef("%s and %s are the same function", a.Name, a.KeepName)
 	case dup.obj.Exported():
 		return nil, refactor.Refusef("%s is exported, so code in other modules could call it, and deleting it would break them", dup.obj.Name())
@@ -133,7 +135,7 @@ func funcOf(ws *workspace.Workspace, o types.Object, name string) (*fn, error) {
 	for _, p := range ws.Pkgs {
 		for _, file := range p.Syntax {
 			for _, d := range file.Decls {
-				if fd, ok := d.(*ast.FuncDecl); ok && fd.Recv == nil && p.TypesInfo.Defs[fd.Name] != nil && keyOf(ws.Fset, p.TypesInfo.Defs[fd.Name]) == keyOf(ws.Fset, f) {
+				if fd, ok := d.(*ast.FuncDecl); ok && fd.Recv == nil && p.TypesInfo.Defs[fd.Name] != nil && analysis.ObjectKey(ws.Fset, p.TypesInfo.Defs[fd.Name]) == analysis.ObjectKey(ws.Fset, f) {
 					if fd.Body == nil {
 						return nil, refactor.Refusef("%s has no body in Go source", name)
 					}
@@ -143,11 +145,6 @@ func funcOf(ws *workspace.Workspace, o types.Object, name string) (*fn, error) {
 		}
 	}
 	return nil, refactor.Refusef("the declaration of %s is not in a loaded package", name)
-}
-
-func keyOf(fset *token.FileSet, o types.Object) string {
-	p := fset.Position(o.Pos())
-	return fmt.Sprintf("%s:%d:%s", p.Filename, p.Offset, o.Name())
 }
 
 // sameSignature refuses functions whose types differ (comparing by package
@@ -225,7 +222,7 @@ func canon(ws *workspace.Workspace, f *fn) []tok {
 			switch {
 			case o == nil:
 				t.key += " ?" + n.Name
-			case keyOf(ws.Fset, o) == keyOf(ws.Fset, f.obj):
+			case analysis.ObjectKey(ws.Fset, o) == analysis.ObjectKey(ws.Fset, f.obj):
 				t.key += " self"
 			case o.Pos().IsValid() && f.decl.Pos() <= o.Pos() && o.Pos() < f.decl.End():
 				i, ok := locals[o]
@@ -240,7 +237,7 @@ func canon(ws *workspace.Workspace, f *fn) []tok {
 				if pn, ok := o.(*types.PkgName); ok {
 					t.key += " package " + pn.Imported().Path()
 				} else {
-					t.key += " " + keyOf(ws.Fset, o)
+					t.key += " " + analysis.ObjectKey(ws.Fset, o)
 				}
 			}
 		}
@@ -324,7 +321,7 @@ func replaceUses(ws *workspace.Workspace, dup, keep *fn) (*refactor.Plan, error)
 			continue
 		}
 		for id, o := range p.TypesInfo.Uses {
-			if o == nil || keyOf(ws.Fset, o) != keyOf(ws.Fset, dup.obj) {
+			if o == nil || analysis.ObjectKey(ws.Fset, o) != analysis.ObjectKey(ws.Fset, dup.obj) {
 				continue
 			}
 			pos := ws.Fset.Position(id.Pos())
@@ -347,7 +344,7 @@ func replaceUses(ws *workspace.Workspace, dup, keep *fn) (*refactor.Plan, error)
 			}
 			text := keep.obj.Name()
 			if p.PkgPath == keep.pkg.PkgPath {
-				if o := lookup(text); o == nil || keyOf(ws.Fset, o) != keyOf(ws.Fset, keep.obj) {
+				if o := lookup(text); o == nil || analysis.ObjectKey(ws.Fset, o) != analysis.ObjectKey(ws.Fset, keep.obj) {
 					return nil, shadowed(ws, where, text, o)
 				}
 			} else {
@@ -435,7 +432,7 @@ func replaceUses(ws *workspace.Workspace, dup, keep *fn) (*refactor.Plan, error)
 	}
 	return &refactor.Plan{
 		Summary: fmt.Sprintf("replaced %s with %s.%s (%d reference%s updated) and deleted %s",
-			dup.obj.Name(), keep.pkg.Name, keep.obj.Name(), refs, plural(refs), dup.obj.Name()),
+			dup.obj.Name(), keep.pkg.Name, keep.obj.Name(), refs, textutil.Plural(refs), dup.obj.Name()),
 		Edits: edit.Merge(fes),
 	}, nil
 }
@@ -477,11 +474,4 @@ func pkgNameOf(info *types.Info, imp *ast.ImportSpec) *types.PkgName {
 		return nil
 	}
 	return pn
-}
-
-func plural(n int) string {
-	if n == 1 {
-		return ""
-	}
-	return "s"
 }

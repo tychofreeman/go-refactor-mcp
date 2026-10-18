@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
 
@@ -137,7 +138,7 @@ func File(ws *workspace.Workspace, q Query) (string, error) {
 		metrics := ""
 		if d.Kind == "func" || d.Kind == "method" {
 			n := d.End - d.Start + 1
-			metrics = fmt.Sprintf("   [%d line%s, complexity %d, nesting %d]", n, plural(n), d.Complexity, d.Nesting)
+			metrics = fmt.Sprintf("   [%d line%s, complexity %d, nesting %d]", n, textutil.Plural(n), d.Complexity, d.Nesting)
 		}
 		fmt.Fprintf(&sb, "  %4d-%-4d %s%s\n", d.Start, d.End, d.Signature, metrics)
 	}
@@ -356,11 +357,4 @@ func typeKind(fset *token.FileSet, e ast.Expr) string {
 		s = s[:57] + "..."
 	}
 	return s
-}
-
-func plural(n int) string {
-	if n == 1 {
-		return ""
-	}
-	return "s"
 }
