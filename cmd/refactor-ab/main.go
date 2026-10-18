@@ -24,6 +24,8 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/tokens"
 )
 
+var claudeMDDir = flag.String("claude-md", "", "directory of CLAUDE.md files by arm (<arm>.md): each copy starts with its arm's, in place of the module's own")
+
 func main() {
 	tasksFile := flag.String("tasks", "eval-tasks/ab.json", "JSON array of tasks; a task's dir is relative to this file")
 	only := flag.String("only", "", "comma-separated task names to run (default all)")
@@ -60,8 +62,12 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
+	mds, err := loadClaudeMD(*claudeMDDir)
+	if err != nil {
+		log.Fatal(err)
+	}
 	cfg := ab.Config{Claude: *claude, MCPServer: *mcpServer, Model: *model, BudgetUSD: *budget,
-		Timeout: *timeout, Runs: *runs, Arms: strings.Split(*arms, ","), OutDir: *out}
+		Timeout: *timeout, Runs: *runs, Arms: strings.Split(*arms, ","), OutDir: *out, ClaudeMD: mds}
 	results, err := ab.RunAll(ctx, cfg, tasks)
 	if err != nil {
 		log.Printf("stopped early: %v", err)
@@ -93,12 +99,35 @@ func loadTasks(path, only string) ([]ab.Task, error) {
 		if !filepath.IsAbs(t.Dir) {
 			t.Dir = filepath.Join(filepath.Dir(path), t.Dir)
 		}
+		if t.Tests != "" && !filepath.IsAbs(t.Tests) {
+			t.Tests = filepath.Join(filepath.Dir(path), t.Tests)
+		}
 		keep = append(keep, t)
 	}
 	if len(keep) == 0 {
 		return nil, fmt.Errorf("no tasks to run in %s", path)
 	}
 	return keep, nil
+}
+
+// loadClaudeMD reads dir/<arm>.md for each arm that has one; with no dir,
+// no arm gets a CLAUDE.md.
+func loadClaudeMD(dir string) (map[string]string, error) {
+	if dir == "" {
+		return nil, nil
+	}
+	mds := map[string]string{}
+	for _, arm := range append(ab.Arms, ab.ExtraArms...) {
+		data, err := os.ReadFile(filepath.Join(dir, arm+".md"))
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		mds[arm] = string(data)
+	}
+	return mds, nil
 }
 
 // byArm shows where each arm's tokens went, by tool, over all its runs.
