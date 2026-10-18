@@ -1,0 +1,1 @@
+the unkeyed literal at a.go:9:31 lists the fields in order, and x and z are not next to each other

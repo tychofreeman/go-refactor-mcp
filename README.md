@@ -33,7 +33,8 @@ model reads before choosing the next refactoring. That loop is the iteration.
   `introduce_parameter` are done, for functions and methods, exported or
   not. `method_to_function` turns an unexported method into a function,
   and `function_to_method` a function into a method of its first
-  parameter's type. `move_declaration` moves a
+  parameter's type. `extract_struct` moves fields into a new, embedded
+  struct type. `move_declaration` moves a
   declaration (with the helpers it uses, if asked) to another file, of its
   package or another one.
 - **Step 5 (later):** edits, steps that change behavior on purpose (see
@@ -971,6 +972,40 @@ error, so:
 - the function is not generic, and every use is a call; a receiver
   argument containing another call of the function (`f(f(x))`) is
   refused.
+
+## Extract struct: what it checks
+
+`extract_struct` moves some fields of a struct type into a new struct
+type, declared just before it, and embeds the new type (by value) where
+the first of them was. Every use keeps compiling with the same meaning:
+`m.path` now selects the field through the embedded struct. Fields move
+with their doc comments, tags and trailing comments. Composite literals of
+the type are rewritten: keyed ones group the moved keys
+(`mover{ws: w, source: source{path: p}}`), unkeyed ones the moved values
+(`point3{xy{1, 2}, 3}`), and a literal inside another is rewritten first.
+It is the first step of splitting a struct; `function_to_method` and
+`move_declaration` then give the new type its methods and its place.
+
+Embedding keeps uses, but changes the struct's shape, so:
+
+- only unexported struct types: code outside the module could write an
+  exported type's literals, or see its fields by reflection;
+- no value of the type (or pointer to it) may be passed to an interface
+  parameter or converted to an interface (`fmt.Printf("%+v", m)`,
+  `json.Marshal(m)`, `any(m)`): reflection would see the new embedded
+  field. A value assigned to an interface variable is not checked;
+- the moved fields are one level deeper, so another embedded field that
+  has a field or method of the same name would make the selector
+  ambiguous: refused;
+- an unkeyed literal can only be rewritten when the moved fields are next
+  to each other (otherwise its values would be evaluated in another
+  order); give it keys first;
+- `new_type` must be free: not declared in the package, nor a field or
+  method of the struct (the embedded field takes its name).
+
+Not supported yet: a generic struct, an embedded field among those to
+move, part of a field group (`x, y int`), and a multi-line literal with
+comments between its elements (rewriting it would lose them).
 
 ## Changing a method: interfaces
 

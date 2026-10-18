@@ -1,0 +1,1 @@
+the package already declares other (at a.go:8:6)
