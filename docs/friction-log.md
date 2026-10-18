@@ -40,6 +40,8 @@ model's next step was to undo it, then apply it again. Gap: no signal in the
 result that the new function's signature is very wide. A note in the
 `APPLIED` result ("the new function takes 13 parameters and returns 10
 results") would cost little and help any model judge its own step.
+*Follow-up: done; more than five parameters or three results gets a
+note.*
 
 **Follow-up:** `add_parameter` now covers the first entry: the `copyModule`
 change is one call, `parameter=skip type=string value=cfg.OutDir`, and the

@@ -59,7 +59,7 @@ func (*ExtractFunction) Description() string {
 	return `Move a run of complete statements into a new function, declared after the enclosing function, and call it in their place.
 Use it to split a long function into named steps.
 Identify the statements by file, start_line and end_line (inclusive, as shown by inspect). The lines must cover whole statements of one block; comments and blank lines in the range are allowed and comments move with the code.
-Local variables the statements use become parameters; variables they change or declare that are used afterwards become results, assigned at the call site. The result notes the parameters and results chosen.
+Local variables the statements use become parameters; variables they change or declare that are used afterwards become results, assigned at the call site. The result notes the parameters and results chosen, and warns when there are many (more than five parameters or three results), which usually means a different range of lines would give a simpler function.
 Return statements are supported in two shapes: if every path through the statements returns, the call site becomes "return f(...)"; if the enclosing function returns an error and every return in the statements is an early exit with a non-nil error (like "if err != nil { return nil, err }"), the new function also returns an error and the call site checks it ("if err := f(...); err != nil" when there are no other results; or, when the lines are followed by "return nil" or "return <the same values>, nil", the call site is "return f(...)" in its place).
 Variables whose address is taken or that a function literal changes are passed as pointers, so both functions share them.
 If the statements use the receiver of the method they are in, the new function is a method of the same type; its name must then be unexported and not clash with a field or method.
@@ -1873,6 +1873,10 @@ func (x *extraction) notes(f *flow, names func(vs []*types.Var) []string) []stri
 			return strings.Join(names(vs), ", ")
 		}
 		notes = append(notes, fmt.Sprintf("parameters: %s; results: %s", describe(shown), describe(f.results)))
+	}
+	if np, nr := len(shown), len(f.results); np > 5 || nr > 3 {
+		notes = append(notes, fmt.Sprintf("%s takes %d parameter%s and returns %d result%s; so many usually means the selection cuts through code that shares many variables, and a different range of lines (or grouping the values in a struct) may give a simpler function",
+			x.name, np, plural(np), nr, plural(nr)))
 	}
 	var ptrs []string
 	for _, v := range f.params {
