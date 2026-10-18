@@ -1,8 +1,9 @@
 package p
 
 import (
-	"example.com/m/q"
 	"testing"
+
+	"example.com/m/q"
 )
 
 func TestShout(t *testing.T) {

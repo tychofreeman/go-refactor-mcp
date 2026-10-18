@@ -954,7 +954,10 @@ changes is per file:
   existing one keeps its own name for a package it already imports, and
   the moved code's qualifiers change to match (`str.ToUpper` becomes
   `strings.ToUpper`). Imports that only the moved code used are removed
-  from the source;
+  from the source. Added imports go where goimports puts them: standard
+  library imports and the others in separate runs (separated by a blank
+  line), each sorted into a run of its kind or a new one. The same holds
+  for every refactoring that adds imports (`extract_function` too);
 - **which builds see the code:** both files must be built everywhere (no
   `//go:build` line, no GOOS or GOARCH in the name, no cgo), and both must
   be test files or neither, in the same package clause (not `p` and

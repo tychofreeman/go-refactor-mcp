@@ -1,8 +1,9 @@
 package main
 
 import (
-	"example.com/m/internal/agent"
 	"fmt"
+
+	"example.com/m/internal/agent"
 )
 
 func main() { fmt.Println(agent.DefaultHost) }
