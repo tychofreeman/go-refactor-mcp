@@ -1,0 +1,1 @@
+{"file": "sub/inner/b.go", "content": "package inner\n\nfunc B() int { return 2 }\n"}

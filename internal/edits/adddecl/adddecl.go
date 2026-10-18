@@ -27,7 +27,7 @@ func (*AddDeclaration) Name() string { return "add_declaration" }
 func (*AddDeclaration) Description() string {
 	return `Add new top-level declarations (functions, methods, types, variables, constants) to a file. This is an edit, not a refactoring: it may change behavior.
 Use it to add a function, a type or a method to an existing file; use create_file for a new file, and the refactorings to move or change declarations that exist.
-Give file and content, the declarations as Go source with their doc comments, but without a package clause or imports: packages the code names are imported, as replace_statements does (imports chooses when a name is ambiguous). They go at the end of the file, or just after or before the top-level declaration named in after or before.
+Give file and content, the declarations as Go source with their doc comments, but without a package clause or imports: packages the code names are imported, as replace_statements does (imports chooses when a name is ambiguous). They go at the end of the file, or just after or before the top-level declaration named in after or before (a method as Type.Method).
 Like every step, the result must type-check (so a name the package already declares is refused with the compiler's error), or nothing changes.`
 }
 
@@ -37,8 +37,8 @@ func (*AddDeclaration) InputSchema() json.RawMessage {
   "properties": {
     "file":    {"type": "string", "description": "Path of the file, relative to the workspace root."},
     "content": {"type": "string", "description": "The declarations, as Go source, without package clause or imports."},
-    "after":   {"type": "string", "description": "Optional: a top-level declaration of the file (a function, type, variable or constant name) to put the new ones just after."},
-    "before":  {"type": "string", "description": "Optional: a top-level declaration of the file to put the new ones just before."},
+    "after":   {"type": "string", "description": "Optional: a top-level declaration of the file (a function, type, variable or constant name, or Type.Method for a method) to put the new ones just after."},
+    "before":  {"type": "string", "description": "Optional: a top-level declaration of the file (or Type.Method) to put the new ones just before."},
     "imports": {"type": "array", "items": {"type": "string"}, "description": "Optional: import paths to use for package names the content uses, when the name alone is ambiguous."}
   },
   "required": ["file", "content"],

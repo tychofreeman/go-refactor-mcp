@@ -15,13 +15,12 @@ import (
 	"go/ast"
 	"math/rand"
 	"os"
-	"os/exec"
-	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/refactor/refactortest"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
 
@@ -82,8 +81,7 @@ func TestStress(t *testing.T) {
 				}
 				applied[kind]++
 				if os.Getenv("STRESS_TESTS") != "" {
-					cmd := exec.Command("go", "test", "-count=1", "./"+filepath.Dir(c.file))
-					cmd.Dir = ws.Root
+					cmd := refactortest.GoTestCommand(ws.Root, c.file)
 					if out, err := cmd.CombinedOutput(); err != nil {
 						bugs = append(bugs, fmt.Sprintf("TESTS FAIL %s %s:%d:%d:\n%s\n%s", r.Name(), c.file, c.line, c.col, res.Diff, tailLines(string(out), 15)))
 					}

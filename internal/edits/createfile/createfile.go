@@ -28,7 +28,7 @@ func (*CreateFile) Name() string { return "create_file" }
 func (*CreateFile) Description() string {
 	return `Create a new file with the given content. This is an edit, not a refactoring: it may change behavior.
 Use it to add code that does not exist yet, such as a new type, a test, or a new package's first file; use the refactorings to change existing code.
-A Go file must parse, and its package clause must match the other Go files in its directory (a test file may use the _test package); it is gofmt-ed. The directory must exist, and the file must not.
+A Go file must parse, and its package clause must match the other Go files in its directory (a test file may use the _test package); it is gofmt-ed. Missing directories are created (undo removes them); the file must not exist.
 Like every step, the result must type-check: if the new file refers to something that does not exist yet, it is refused with the errors. To write a failing test first, first declare what it calls (a stub), so the test compiles and fails. Undo removes the file.`
 }
 
@@ -68,9 +68,17 @@ func (*CreateFile) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor
 	if _, err := os.Stat(path); err == nil {
 		return nil, refactor.Refusef("%s already exists; change it with the other tools", rel)
 	}
-	dir := filepath.Dir(path)
-	if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
-		return nil, refactor.Refusef("the directory %s does not exist; creating directories is not supported yet", ws.Rel(dir))
+	// Missing directories are created (and removed again by undo), but a
+	// file in the way is not replaced.
+	for dir := filepath.Dir(path); dir != filepath.Dir(dir); dir = filepath.Dir(dir) {
+		fi, err := os.Stat(dir)
+		if err != nil {
+			continue // missing, or under a file: look further up
+		}
+		if !fi.IsDir() {
+			return nil, refactor.Refusef("%s is a file, not a directory", ws.Rel(dir))
+		}
+		break
 	}
 	if strings.HasSuffix(path, ".go") {
 		if err := checkGo(ws, path, a.Content); err != nil {
@@ -110,6 +118,9 @@ func checkGo(ws *workspace.Workspace, path, content string) error {
 // there are none), ignoring external test packages.
 func dirPackage(dir string) (string, error) {
 	entries, err := os.ReadDir(dir)
+	if os.IsNotExist(err) {
+		return "", nil // a directory the file creates
+	}
 	if err != nil {
 		return "", err
 	}

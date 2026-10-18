@@ -26,14 +26,13 @@ import (
 	"go/types"
 	"math/rand"
 	"os"
-	"os/exec"
-	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/refactor/refactortest"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/extractfunc"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
@@ -75,8 +74,7 @@ func runTests(ws *workspace.Workspace, file string) string {
 	if os.Getenv("STRESS_TESTS") == "" {
 		return ""
 	}
-	cmd := exec.Command("go", "test", "-count=1", "./"+filepath.Dir(file))
-	cmd.Dir = ws.Root
+	cmd := refactortest.GoTestCommand(ws.Root, file)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return tailLines(string(out), 15)
 	}

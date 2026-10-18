@@ -57,7 +57,7 @@ func (*ExtractFunction) Name() string { return "extract_function" }
 
 func (*ExtractFunction) Description() string {
 	return `Move a run of complete statements into a new function, declared after the enclosing function, and call it in their place.
-Use it to split a long function into named steps.
+Use it to split a long function into named steps. doc, if given, becomes the new function's doc comment.
 Identify the statements by file, start_line and end_line (inclusive, as shown by inspect). The lines must cover whole statements of one block; comments and blank lines in the range are allowed and comments move with the code.
 Local variables the statements use become parameters; variables they change or declare that are used afterwards become results, assigned at the call site. The result notes the parameters and results chosen, and warns when there are many (more than five parameters or three results), which usually means a different range of lines would give a simpler function.
 Return statements are supported in two shapes: if every path through the statements returns, the call site becomes "return f(...)"; if the enclosing function returns an error and every return in the statements is an early exit with a non-nil error (like "if err != nil { return nil, err }"), the new function also returns an error and the call site checks it ("if err := f(...); err != nil" when there are no other results; or, when the lines are followed by "return nil" or "return <the same values>, nil", the call site is "return f(...)" in its place).
@@ -75,7 +75,8 @@ func (*ExtractFunction) InputSchema() json.RawMessage {
     "file":       {"type": "string",  "description": "Path of the file, relative to the module root."},
     "start_line": {"type": "integer", "description": "1-based first line of the statements to extract."},
     "end_line":   {"type": "integer", "description": "1-based last line of the statements to extract (inclusive)."},
-    "name":       {"type": "string",  "description": "Name for the new function."}
+    "name":       {"type": "string",  "description": "Name for the new function."},
+    "doc":        {"type": "string",  "description": "Optional doc comment for the new function, without or with the leading //; start it with the function's name."}
   },
   "required": ["file", "start_line", "end_line", "name"],
   "additionalProperties": false
@@ -87,6 +88,7 @@ type args struct {
 	StartLine int    `json:"start_line"`
 	EndLine   int    `json:"end_line"`
 	Name      string `json:"name"`
+	Doc       string `json:"doc,omitempty"`
 }
 
 // extraction holds the state of one planning run.
@@ -100,6 +102,7 @@ type extraction struct {
 	path string // absolute
 	rel  string // as given
 	name string
+	doc  string // the new function's doc comment, as given
 
 	stmts []ast.Stmt // the selected statements, in order
 	list  []ast.Stmt // the statement list they belong to
@@ -169,7 +172,7 @@ func (*ExtractFunction) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 	}
 	x := &extraction{
 		ws: ws, pkg: pkg, info: pkg.TypesInfo, file: file, src: src,
-		path: path, rel: a.File, name: a.Name,
+		path: path, rel: a.File, name: a.Name, doc: a.Doc,
 		tf: ws.Fset.File(file.Pos()),
 	}
 	if a.EndLine > x.tf.LineCount() {
@@ -207,6 +210,30 @@ func checkName(name string) error {
 		return refactor.Refusef("init is reserved for package initialization functions, which cannot be called; choose another name")
 	}
 	return nil
+}
+
+// docComment returns doc as a comment for the line above a declaration:
+// each line starts with "// " unless it is a comment already. An empty
+// doc gives no comment.
+func docComment(doc string) string {
+	doc = strings.TrimSpace(doc)
+	if doc == "" {
+		return ""
+	}
+	var sb strings.Builder
+	for _, line := range strings.Split(doc, "\n") {
+		line = strings.TrimRight(line, " \t")
+		switch {
+		case strings.HasPrefix(strings.TrimSpace(line), "//"):
+			sb.WriteString(strings.TrimSpace(line))
+		case line == "":
+			sb.WriteString("//")
+		default:
+			sb.WriteString("// " + line)
+		}
+		sb.WriteString("\n")
+	}
+	return sb.String()
 }
 
 // ---------------------------------------------------------------------------
@@ -1747,7 +1774,7 @@ func (x *extraction) plan() (*refactor.Plan, error) {
 	}
 	unit := x.indentUnit(decl)
 	var fn strings.Builder
-	fmt.Fprintf(&fn, "\n\n%s {\n", sigText)
+	fmt.Fprintf(&fn, "\n\n%s%s {\n", docComment(x.doc), sigText)
 	for _, v := range f.locals {
 		fmt.Fprintf(&fn, "%svar %s %s\n", unit, v.Name(), ts(v.Name(), v.Type()))
 	}

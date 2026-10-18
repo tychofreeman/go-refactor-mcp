@@ -1,0 +1,1 @@
+{"file": "m.go", "content": "func (m *mover) count() int { return m.e.n }", "after": "mover.edits"}

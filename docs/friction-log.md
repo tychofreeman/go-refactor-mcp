@@ -545,7 +545,7 @@ is awkward to restate).
 **`after` cannot name a method.** `add_declaration` with `after:
 "fileEdits"` put the new methods after the *type* `fileEdits`, not the
 method `mover.fileEdits` beside which they belonged. Gap: accept
-`Type.Method` in `after`/`before`, as `inspect` does.
+`Type.Method` in `after`/`before`, as `inspect` does. *Follow-up: done.*
 
 ## 2026-10-18: adding `move_statement_up` / `move_statement_down`
 
@@ -557,7 +557,7 @@ analysis (`facts.go`) and the stress test; `add_declaration` and
 - **a new directory:** `create_file` refuses a file in a directory that
   does not exist ("creating directories is not supported yet"), though
   the workspace can create them (`move_declaration` does). Gap:
-  `create_file` creating missing directories.
+  `create_file` creating missing directories. *Follow-up: done.*
 - **an element in a list:** registering the tools meant adding two
   elements to the composite literal in `registry.go`. `replace_expression`
   takes one expression, so the whole `return` was restated with
@@ -570,7 +570,8 @@ analysis (`facts.go`) and the stress test; `add_declaration` and
   `add_parameter`.
 - **a doc comment:** `extract_function` writes none, and no tool adds
   one to a declaration. Gap: a `doc` argument for `extract_function`, or
-  an edit that sets a declaration's doc comment.
+  an edit that sets a declaration's doc comment. *Follow-up:
+  `extract_function` takes `doc`.*
 
 **Line numbers again.** Two `replace_statements` were refused because I
 reused line numbers from before an insertion; the refusals ("cut the
@@ -597,4 +598,5 @@ functions) under the running workspace, which then panicked on a stale
 syntax tree. `slidestmt`'s stress test now leaves `STRESS_*` out of the
 child's environment; the other stress tests (`extractvar`, `inlinevar`,
 `extractfunc`, `inlinefunc`, `invertif`) have the same flaw when run with
-`STRESS_TESTS=1`.
+`STRESS_TESTS=1`. *Follow-up: all six now use one helper,
+`refactortest.GoTestCommand`, that leaves them out.*
