@@ -1,0 +1,1 @@
+{"file": "a.go", "line": 5, "where": "before", "content": "fmt.Println(\"counting\", len(xs))"}

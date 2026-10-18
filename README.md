@@ -39,8 +39,8 @@ model reads before choosing the next refactoring. That loop is the iteration.
   declaration (with the helpers it uses, if asked) to another file, of its
   package or another one.
 - **Step 5 (in progress):** edits, steps that change behavior on purpose
-  (see "Edits"). `create_file` and `replace_statements` are done; the
-  candidates are in `docs/edits.md`.
+  (see "Edits"). `create_file`, `replace_statements` and
+  `insert_statements` are done; the candidates are in `docs/edits.md`.
 
 ## Roadmap
 
@@ -1249,6 +1249,19 @@ use. An import only the replaced statements used, and the new ones do not,
 is removed. Refused: lines that cut a statement or cover statements of
 different blocks, content that does not parse, and, like every step, a
 result that does not type-check.
+
+### insert_statements
+
+`insert_statements` inserts new statements at `line`: `before` the
+statement that starts there, `after` the statement that ends there (the
+outermost one, so on a closing brace it means after the whole `if` or
+loop), or `into` the block whose `{` is on that line (or the `case` clause
+whose colon is), at its start. An empty function body written on one line
+(`func f() {}`) is opened up. The content is re-indented to the block, and
+its imports are added as for `replace_statements`. Refused: a line where no
+statement starts or ends (or no block opens), a line with other code
+before or after the statement, a non-empty block written on one line (use
+`replace_statements`), and a result that does not type-check.
 
 ## Testing
 

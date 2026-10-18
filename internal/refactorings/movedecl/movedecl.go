@@ -855,7 +855,8 @@ func (m *mover) newFile(qual func(*types.PkgName) string) (string, error) {
 		name = m.dest.Name
 	}
 	fmt.Fprintf(&b, "package %s\n\n", name)
-	var specs []string
+	type spec struct{ path, text string }
+	var specs []spec
 	byPath := map[string]*source{} // which source first imports a path
 	for _, s := range m.sources {
 		for _, imp := range s.imports {
@@ -872,15 +873,31 @@ func (m *mover) newFile(qual func(*types.PkgName) string) (string, error) {
 				continue
 			}
 			byPath[path] = s
-			specs = append(specs, string(s.src[m.off(imp.Pos()):m.off(imp.End())]))
+			specs = append(specs, spec{path, string(s.src[m.off(imp.Pos()):m.off(imp.End())])})
 		}
+	}
+	// As goimports writes them: the standard library first, then the others,
+	// each sorted.
+	sort.SliceStable(specs, func(i, j int) bool {
+		x, y := specs[i], specs[j]
+		if imports.IsStd(x.path) != imports.IsStd(y.path) {
+			return imports.IsStd(x.path)
+		}
+		return x.path < y.path
+	})
+	var lines []string
+	for i, sp := range specs {
+		if i > 0 && imports.IsStd(specs[i-1].path) != imports.IsStd(sp.path) {
+			lines = append(lines, "")
+		}
+		lines = append(lines, sp.text)
 	}
 	switch len(specs) {
 	case 0:
 	case 1:
-		fmt.Fprintf(&b, "import %s\n\n", specs[0])
+		fmt.Fprintf(&b, "import %s\n\n", specs[0].text)
 	default:
-		fmt.Fprintf(&b, "import (\n\t%s\n)\n\n", strings.Join(specs, "\n\t"))
+		fmt.Fprintf(&b, "import (\n\t%s\n)\n\n", strings.Join(lines, "\n\t"))
 	}
 	code, _ := m.allCode(qual) // its edits come from its own syntax, so they apply
 	b.WriteString(code)

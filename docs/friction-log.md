@@ -452,3 +452,34 @@ file of the package imports under the name, the workspace's packages, and
 the standard library, and refuses with the candidates when the name is
 ambiguous (`rand`), so the result never depends on what happens to be
 downloaded.
+
+## 2026-10-18: adding `insert_statements`, mostly with the edits
+
+**Prep with the tools.** `replace_statements`' parsing, re-indenting and
+import code moved to a new `internal/edits/gocode` with seven `rename`s and
+one `move_declaration` (from two files, into a new package). The move was
+refused at first: `versionSuffix = regexp.MustCompile(...)` is a package
+variable initialized by a call. So `create_file` wrote an `isVersion`
+function and `replace_statements` switched to it; the unused variable was
+deleted by hand (gap: `delete_statement`). Small gaps: a constant pattern
+for `regexp.MustCompile` could count as having no effect; and the move
+left `version.go` with only its package clause (a move that empties a file
+could delete it).
+
+**A bug the move showed.** `move_declaration` wrote a *new* file's imports
+in one unsorted group; the earlier grouping fix had been in `imports.Adder`
+only. Fixed, test first, with one `replace_statements` call: the first
+attempt, three separate replacements, was refused because the first one
+alone did not type-check, which is the rule working (dependent changes
+are one step).
+
+**The edit itself, with the edits.** `create_file` wrote the stub, the
+test and the helpers file; `replace_statements` turned the stub's
+`return` into `Plan`, adding six imports (four of them workspace
+packages) by itself; another `replace_statements` merged two redundant
+branches. By hand: none of the new code.
+
+**`rename` keeps leaving doc comments behind.** Seven renames, seven
+stale doc comments, fixed by hand; and renaming a local `a` noted 34
+comments mentioning "a" across the file. Gap: rename a doc comment that
+starts with the name, and only note comments in the symbol's scope.
