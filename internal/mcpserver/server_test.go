@@ -92,6 +92,9 @@ func TestToolsAndInstructions(t *testing.T) {
 	if !strings.Contains(cs.InitializeResult().Instructions, "without line") {
 		t.Error("server instructions do not describe addressing a declaration by name")
 	}
+	if !strings.Contains(cs.InitializeResult().Instructions, "no need to search for them first") {
+		t.Error("server instructions do not say the refactorings find every reference themselves")
+	}
 	res, err := cs.ListTools(context.Background(), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -167,12 +170,23 @@ func TestRenameBySymbol(t *testing.T) {
 // reads every result again on each later turn.
 func TestDiffsAreCompact(t *testing.T) {
 	cs, _ := setup(t)
-	out, _ := call(t, cs, "rename", map[string]any{"file": "calc/calc.go", "name": "Apply", "new_name": "Scale"})
-	mustContain(t, "rename", out, "APPLIED rename", "-func Apply(n int) int", "+func Scale(n int) int")
+	out, _ := call(t, cs, "add_parameter", map[string]any{"file": "calc/calc.go", "name": "Apply", "parameter": "k", "type": "int", "value": "0"})
+	mustContain(t, "add_parameter", out, "APPLIED add_parameter", "-func Apply(n int) int", "+func Apply(n, k int) int")
 	for _, l := range strings.Split(out, "\n") {
 		if strings.HasPrefix(l, " ") {
 			t.Errorf("context line in the result: %q\n%s", l, out)
 		}
+	}
+}
+
+// A rename changes the same name everywhere, so its result lists where
+// instead of showing each line twice.
+func TestRenameListsLocations(t *testing.T) {
+	cs, _ := setup(t)
+	out, _ := call(t, cs, "rename", map[string]any{"file": "calc/calc.go", "name": "Apply", "new_name": "Scale"})
+	mustContain(t, "rename", out, "APPLIED rename", "changed lines:\n  app/app.go: 5\n  calc/calc.go: 6\n")
+	if strings.Contains(out, "func Scale") {
+		t.Errorf("rename showed the changed lines:\n%s", out)
 	}
 }
 
@@ -191,7 +205,7 @@ func TestRefactoringLoop(t *testing.T) {
 	if isErr {
 		t.Fatalf("rename errored: %s", out)
 	}
-	mustContain(t, "rename", out, "APPLIED rename", "3 occurrences in 2 files", "+var Factor = 3", "+func Run() int { return calc.Apply(calc.Factor) }")
+	mustContain(t, "rename", out, "APPLIED rename", "3 occurrences in 2 files", "app/app.go: 5", "calc/calc.go: 3-4, 6")
 
 	// A refusal is a normal result the model reads, not a tool error, and
 	// changes nothing.

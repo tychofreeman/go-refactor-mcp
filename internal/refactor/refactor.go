@@ -47,10 +47,11 @@ type Edit interface {
 
 // Plan is the outcome of a successful precondition check.
 type Plan struct {
-	Summary  string          // one line, e.g. `renamed "x" to "count" (4 references)`
-	Edits    []edit.FileEdit // byte-range edits against current file contents
-	Notes    []string        // caveats the model should know about
-	Supplied string          // code the model wrote; the result names where it went instead of repeating it
+	Summary   string          // one line, e.g. `renamed "x" to "count" (4 references)`
+	Edits     []edit.FileEdit // byte-range edits against current file contents
+	Notes     []string        // caveats the model should know about
+	Supplied  string          // code the model wrote; the result names where it went instead of repeating it
+	Locations bool            // the change is the same at every site (a rename): a compact result lists where, not the diff
 }
 
 // Refusal is a precondition failure. Its message is written for the model:
@@ -144,7 +145,7 @@ func Run(ws *workspace.Workspace, r Refactoring, args json.RawMessage, opts Opti
 		if err != nil {
 			return nil, err
 		}
-		res.Diff, res.Files = edit.ElideSupplied(diffOf(ws, c, opts), plan.Supplied), c.Files(ws.Root)
+		res.Diff, res.Files = edit.ElideSupplied(diffOf(ws, c, opts, plan), plan.Supplied), c.Files(ws.Root)
 		return res, nil
 	}
 
@@ -166,12 +167,15 @@ func Run(ws *workspace.Workspace, r Refactoring, args json.RawMessage, opts Opti
 		return res, nil
 	}
 	res.Applied = true
-	res.Diff, res.Files = edit.ElideSupplied(diffOf(ws, c, opts), plan.Supplied), c.Files(ws.Root)
+	res.Diff, res.Files = edit.ElideSupplied(diffOf(ws, c, opts, plan), plan.Supplied), c.Files(ws.Root)
 	return res, nil
 }
 
 // diffOf is c's diff as the result shows it.
-func diffOf(ws *workspace.Workspace, c workspace.Change, opts Options) string {
+func diffOf(ws *workspace.Workspace, c workspace.Change, opts Options, plan *Plan) string {
+	if opts.Compact && plan.Locations {
+		return edit.Locations(c.DiffContext(ws.Root, 0))
+	}
 	if opts.Compact {
 		return c.DiffContext(ws.Root, 0)
 	}

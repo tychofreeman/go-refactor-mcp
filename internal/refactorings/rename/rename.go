@@ -768,7 +768,8 @@ func (r *renamer) plan() (*refactor.Plan, error) {
 	plan := &refactor.Plan{
 		Summary: fmt.Sprintf("renamed %s %q to %q (%d occurrence%s in %d file%s)",
 			kind(r.first), r.old, r.new, n, textutil.Plural(n), len(fes), textutil.Plural(len(fes))),
-		Edits: fes,
+		Edits:     fes,
+		Locations: true,
 	}
 	if token.IsExported(r.old) && token.IsExported(r.new) && (isPackageLevel(r.first) || r.first.Parent() == nil) {
 		plan.Notes = append(plan.Notes, fmt.Sprintf("%q is exported: code outside this workspace that uses it was not updated", r.old))

@@ -152,3 +152,34 @@ func TestCompactDiff(t *testing.T) {
 		}
 	}
 }
+
+// sameEverywhere is bump, reported as a change that is the same at every site.
+type sameEverywhere struct{ bump }
+
+func (s sameEverywhere) Plan(ws *workspace.Workspace, args json.RawMessage) (*refactor.Plan, error) {
+	p, err := s.bump.Plan(ws, args)
+	if p != nil {
+		p.Locations = true
+	}
+	return p, err
+}
+
+func TestLocationsResult(t *testing.T) {
+	ws, _ := setup(t, src)
+	res, err := refactor.Run(ws, sameEverywhere{}, nil, refactor.Options{Compact: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "changed lines:\n  m.go: 3\n"; res.Diff != want {
+		t.Errorf("compact: got:\n%s\nwant:\n%s", res.Diff, want)
+	}
+
+	ws, _ = setup(t, src)
+	res, err = refactor.Run(ws, sameEverywhere{}, nil, refactor.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(res.Diff, "+func F() int { return 2 }") {
+		t.Errorf("not compact: want the full diff, got:\n%s", res.Diff)
+	}
+}

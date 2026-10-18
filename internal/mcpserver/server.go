@@ -38,7 +38,7 @@ const Version = "0.2.0"
 const Instructions = `Refactoring and editing tools for the Go module in this project.
 
 Two kinds of tool:
-- Refactorings (rename, extract_function, add_parameter, move_declaration, ...) preserve behavior. They find every reference with the type checker, refuse changes that would alter behavior, and run only on code that type-checks; each applied step is verified to compile.
+- Refactorings (rename, extract_function, add_parameter, move_declaration, ...) preserve behavior. They find every reference with the type checker (every use, call and comment that names it), so there is no need to search for them first; they refuse changes that would alter behavior, and run only on code that type-checks; each applied step is verified to compile.
 - Edits (create_file, ...) change behavior on purpose: the step that adds or changes a feature.
 Every step, refactoring or edit, starts from code that type-checks and must leave code that type-checks; a step that would not is refused with the errors, and nothing changes. To write a failing test first, first add a stub for what it calls.
 

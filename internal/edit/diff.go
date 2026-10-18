@@ -2,6 +2,7 @@ package edit
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -43,6 +44,40 @@ func UnifiedContext(name string, before, after []byte, ctx int) string {
 			}
 		}
 	}
+	return sb.String()
+}
+
+// Locations lists where a unified diff changed each file, by line in the
+// new file ("changed lines:\n  a.go: 12, 40-41\n"): enough to report a
+// change that is the same everywhere, such as a rename.
+func Locations(diff string) string {
+	var sb strings.Builder
+	sb.WriteString("changed lines:\n")
+	file, lines := "", []string(nil)
+	flush := func() {
+		if file != "" {
+			fmt.Fprintf(&sb, "  %s: %s\n", file, strings.Join(lines, ", "))
+		}
+		file, lines = "", nil
+	}
+	for _, l := range strings.Split(diff, "\n") {
+		switch {
+		case strings.HasPrefix(l, "+++ b/"):
+			flush()
+			file = strings.TrimPrefix(l, "+++ b/")
+		case strings.HasPrefix(l, "@@ "):
+			start, n := newRange(l)
+			switch n {
+			case 0:
+				lines = append(lines, fmt.Sprintf("after %d", start))
+			case 1:
+				lines = append(lines, strconv.Itoa(start))
+			default:
+				lines = append(lines, fmt.Sprintf("%d-%d", start, start+n-1))
+			}
+		}
+	}
+	flush()
 	return sb.String()
 }
 
@@ -97,15 +132,22 @@ func ElideSupplied(diff, supplied string) string {
 // newStart is the first line in the new file of the hunk whose header is
 // h ("@@ -a,b +c,d @@").
 func newStart(h string) int {
+	start, _ := newRange(h)
+	return start
+}
+
+// newRange is the new-file range of the hunk whose header is h
+// ("@@ -a,b +c,d @@"): its first line and how many lines it has.
+func newRange(h string) (start, n int) {
 	_, after, _ := strings.Cut(h, " +")
-	n := 0
-	for _, c := range after {
-		if c < '0' || c > '9' {
-			break
-		}
-		n = n*10 + int(c-'0')
+	rng, _, _ := strings.Cut(after, " ")
+	s, count, found := strings.Cut(rng, ",")
+	start, _ = strconv.Atoi(s)
+	n = 1
+	if found {
+		n, _ = strconv.Atoi(count)
 	}
-	return n
+	return start, n
 }
 
 // squash drops the whitespace from a line, so a line gofmt re-spaced still
