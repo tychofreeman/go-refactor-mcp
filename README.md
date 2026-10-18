@@ -569,8 +569,13 @@ shape.
 Refused (with an explanation):
 
 - a variable the statements declare has its address taken or is used by a
-  function literal, and is used after them: returning it would return a
-  copy (some types, like `strings.Builder`, also refuse to be copied);
+  function literal that can run later (one stored, deferred, or passed to
+  a function not known to call it only before returning), and is used
+  after them: returning it would return a copy (some types, like
+  `strings.Builder`, also refuse to be copied). A literal that only runs
+  during its statement, like an `ast.Inspect` visitor or a `sort.Slice`
+  comparison, has finished when the new function returns, so its
+  variables are returned like any other;
 - a `:=` in the statements redeclares a variable passed as a pointer;
 - the function has a type parameter named `_`, or one whose name a local
   type hides at the call site, and the statements use its type parameters;
