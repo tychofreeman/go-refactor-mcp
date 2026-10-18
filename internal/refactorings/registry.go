@@ -9,6 +9,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/replacestmts"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/changesig"
+	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/deadcode"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/extractfunc"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/extractstruct"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/extractvar"
@@ -39,6 +40,7 @@ func All() []refactor.Refactoring {
 		movedecl.New(),
 		extractstruct.New(),
 		mergefunc.New(),
+		deadcode.New(),
 		createfile.New(),
 		replacestmts.New(),
 		insertstmts.New(),
