@@ -46,7 +46,7 @@ How to work with them:
 1. Call inspect (no arguments) for an overview, then inspect a file or function to read it with line numbers. The outline shows each function's complexity, nesting, and whether calling it has side effects (calls of a function without them are easier to move or reorder).
 2. To change a feature, first refactor so the change is easy, then make the change with an edit: "make the change easy, then make the easy change".
 3. Apply exactly ONE tool per call. Each call returns APPLIED with a diff, or REFUSED with the reason; a refusal changes nothing, so read it and choose differently.
-4. After each applied step, re-inspect the affected code before choosing the next step. Line numbers change after edits; never reuse old ones.
+4. After each applied step, re-inspect the affected code before choosing the next step. Line numbers change after edits; never reuse old ones. Tools that target a declaration (rename, add_parameter, move_declaration, ...) also accept file and name without line: name is then a package-level symbol of file's package (Name, Type.Method or Type.Field), which stays valid after edits.
 5. Use check (with run_tests) at the end, and undo if a step made the code worse. Every step can be undone.
 
 Prefer these tools over editing files by hand for everything they cover.`

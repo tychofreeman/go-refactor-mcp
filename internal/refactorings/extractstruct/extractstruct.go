@@ -49,13 +49,13 @@ func (*ExtractStruct) InputSchema() json.RawMessage {
   "type": "object",
   "properties": {
     "file":     {"type": "string",  "description": "Path of a file containing the struct type's declaration or a use, relative to the workspace root."},
-    "line":     {"type": "integer", "description": "1-based line of that occurrence."},
-    "name":     {"type": "string",  "description": "The struct type's name."},
+    "line":     {"type": "integer", "description": "1-based line of that occurrence. Omit it to find name as a symbol of the package of file."},
+    "name":     {"type": "string",  "description": "The struct type's name; without line, it is found among the package-level names."},
     "column":   {"type": "integer", "description": "Optional 1-based column, only needed to disambiguate."},
     "fields":   {"type": "array", "items": {"type": "string"}, "description": "The fields to move into the new type."},
     "new_type": {"type": "string",  "description": "Name of the new struct type, which is also the embedded field's name."}
   },
-  "required": ["file", "line", "name", "fields", "new_type"],
+  "required": ["file", "name", "fields", "new_type"],
   "additionalProperties": false
 }`)
 }

@@ -35,13 +35,13 @@ func (*FunctionToMethod) InputSchema() json.RawMessage {
   "type": "object",
   "properties": {
     "file":     {"type": "string",  "description": "Path of a file containing the function's declaration or a call, relative to the workspace root."},
-    "line":     {"type": "integer", "description": "1-based line of that occurrence."},
-    "name":     {"type": "string",  "description": "The function's name."},
+    "line":     {"type": "integer", "description": "1-based line of that occurrence. Omit it to find name as a symbol of the package of file."},
+    "name":     {"type": "string",  "description": "The function's name; without line, it is found among the package-level names."},
     "column":   {"type": "integer", "description": "Optional 1-based column, only needed to disambiguate."},
     "receiver": {"type": "string",  "description": "Optional: the parameter that becomes the receiver; it must be the first (the default)."},
     "new_name": {"type": "string",  "description": "Optional name for the method (default: the function's name)."}
   },
-  "required": ["file", "line", "name"],
+  "required": ["file", "name"],
   "additionalProperties": false
 }`)
 }

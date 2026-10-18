@@ -10,6 +10,7 @@ import (
 	"go/ast"
 	"go/token"
 	"go/types"
+	"strings"
 
 	"golang.org/x/tools/go/packages"
 
@@ -20,7 +21,7 @@ import (
 // IdentQuery addresses one identifier.
 type IdentQuery struct {
 	File   string // relative to the workspace root, or absolute
-	Line   int    // 1-based
+	Line   int    // 1-based; 0 means Name is a package-level symbol
 	Column int    // 1-based byte column; 0 means "find Name on Line"
 	Name   string // expected identifier name; required when Column is 0
 }
@@ -35,6 +36,9 @@ func Ident(ws *workspace.Workspace, q IdentQuery) (*packages.Package, *ast.Ident
 	pkg, file := ws.FileSyntax(path)
 	if file == nil {
 		return nil, nil, refactor.Refusef("file %s is not part of the loaded packages %v", ws.Rel(path), ws.Patterns)
+	}
+	if q.Line == 0 && q.Column == 0 {
+		return symbol(pkg, q.Name)
 	}
 	tf := ws.Fset.File(file.Pos())
 	if q.Line < 1 || q.Line > tf.LineCount() {
@@ -74,6 +78,39 @@ func Ident(ws *workspace.Workspace, q IdentQuery) (*packages.Package, *ast.Ident
 		}
 	}
 	return pkg, matches[0], nil
+}
+
+// symbol finds the declaring identifier of a package-level name in pkg,
+// or of a field or method written Type.Name.
+func symbol(pkg *packages.Package, name string) (*packages.Package, *ast.Ident, error) {
+	if name == "" {
+		return nil, nil, refactor.Refusef("give name: a package-level symbol (Name, or Type.Method or Type.Field), or with line, the identifier on that line")
+	}
+	parts := strings.Split(name, ".")
+	if len(parts) > 2 {
+		return nil, nil, refactor.Refusef("%q is not a symbol: write Name, or Type.Name for a field or method", name)
+	}
+	obj := pkg.Types.Scope().Lookup(parts[0])
+	if obj == nil {
+		return nil, nil, refactor.Refusef("no package-level %q in package %s; for a local, give the line where it is declared or used", parts[0], pkg.Types.Name())
+	}
+	if len(parts) == 2 {
+		tn, ok := obj.(*types.TypeName)
+		if !ok {
+			return nil, nil, refactor.Refusef("%s is not a type, so %q names no field or method", parts[0], name)
+		}
+		member, index, _ := types.LookupFieldOrMethod(tn.Type(), true, pkg.Types, parts[1])
+		if member == nil || len(index) != 1 {
+			return nil, nil, refactor.Refusef("%s has no field or method %q declared on it", parts[0], parts[1])
+		}
+		obj = member
+	}
+	for id, def := range pkg.TypesInfo.Defs {
+		if def == obj {
+			return pkg, id, nil
+		}
+	}
+	return nil, nil, refactor.Refusef("the declaration of %q is not in the loaded source", name)
 }
 
 func objectOf(info *types.Info, id *ast.Ident) types.Object {

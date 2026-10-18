@@ -36,15 +36,15 @@ func (*AddField) InputSchema() json.RawMessage {
   "type": "object",
   "properties": {
     "file":    {"type": "string",  "description": "Path of a file containing the struct type's declaration or a use, relative to the workspace root."},
-    "line":    {"type": "integer", "description": "1-based line of that occurrence."},
-    "name":    {"type": "string",  "description": "The struct type's name."},
+    "line":    {"type": "integer", "description": "1-based line of that occurrence. Omit it to find name as a symbol of the package of file."},
+    "name":    {"type": "string",  "description": "The struct type's name; without line, it is found among the package-level names."},
     "column":  {"type": "integer", "description": "Optional 1-based column, only needed to disambiguate."},
     "field":   {"type": "string",  "description": "The fields to add, as Go source, e.g. \"timeout time.Duration // per try\"."},
     "after":   {"type": "string",  "description": "Optional: a field to put them just after."},
     "before":  {"type": "string",  "description": "Optional: a field to put them just before."},
     "imports": {"type": "array", "items": {"type": "string"}, "description": "Optional: import paths to use for package names the fields use, when the name alone is ambiguous."}
   },
-  "required": ["file", "line", "name", "field"],
+  "required": ["file", "name", "field"],
   "additionalProperties": false
 }`)
 }

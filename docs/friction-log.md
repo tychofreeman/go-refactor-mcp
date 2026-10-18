@@ -700,3 +700,16 @@ missing: `ast.NewIdent` (allocation only).
 **My mistake, again:** two edits sent in parallel to the same file, the
 second with line numbers from before the first. The refusal said what was
 cut; edits to one file should be sent one at a time.
+
+## 2026-10-18: addressing declarations by name
+
+**Twelve JSON schemas edited by hand.** Making `line` optional and
+documenting the symbol form changed text inside the raw string literal each
+`InputSchema` returns. `replace_expression` would have to restate the whole
+literal, which costs more than the edit. Gap: an edit of text within a
+string literal (or schemas built from shared pieces, so one edit covers
+every tool).
+
+**The lookup itself was written by hand.** The `symbol` function and the
+branch in `locate.Ident` that calls it were a hand edit; `add_declaration`
+and `insert_statements` would have covered them, and should have been used.

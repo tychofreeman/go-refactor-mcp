@@ -37,12 +37,12 @@ func (*RemoveParameter) InputSchema() json.RawMessage {
   "type": "object",
   "properties": {
     "file":      {"type": "string",  "description": "Path of a file containing the function's declaration or a call, relative to the workspace root."},
-    "line":      {"type": "integer", "description": "1-based line of that occurrence."},
-    "name":      {"type": "string",  "description": "The function's name (for a method, just the method name)."},
+    "line":      {"type": "integer", "description": "1-based line of that occurrence. Omit it to find name as a symbol of the package of file."},
+    "name":      {"type": "string",  "description": "The function's name: with line, just the method name for a method; without line, the package-level name or Type.Method."},
     "column":    {"type": "integer", "description": "Optional 1-based column, only needed to disambiguate."},
     "parameter": {"type": "string",  "description": "Name of the parameter to remove."}
   },
-  "required": ["file", "line", "name", "parameter"],
+  "required": ["file", "name", "parameter"],
   "additionalProperties": false
 }`)
 }
