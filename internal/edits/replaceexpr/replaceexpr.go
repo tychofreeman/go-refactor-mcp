@@ -123,7 +123,7 @@ func (*ReplaceExpression) Plan(ws *workspace.Workspace, raw json.RawMessage) (*r
 	}
 	info := &types.Info{Types: map[ast.Expr]types.TypeAndValue{}}
 	if err := types.CheckExpr(ws.Fset, pkg.Types, expr.Pos(), newExpr, info); err == nil {
-		if from, to := pkg.TypesInfo.TypeOf(expr), info.TypeOf(newExpr); from != nil && to != nil && !types.Identical(from, to) {
+		if from, to := pkg.TypesInfo.TypeOf(expr), info.TypeOf(newExpr); from != nil && to != nil && !types.Identical(types.Default(from), types.Default(to)) { // an untyped bool is a bool where it is used
 			plan.Notes = append(plan.Notes, fmt.Sprintf("the expression's type changes from %s to %s", from, to))
 		}
 	}
