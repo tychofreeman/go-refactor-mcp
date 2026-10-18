@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"go/ast"
 	"go/build"
+	"go/parser"
 	"go/token"
 	"go/types"
 	"io"
@@ -47,7 +48,7 @@ func (*MoveDeclaration) Description() string {
 	return `Move a top-level declaration (function, method, type, variable or constant, with its doc comment) to another file, of the same package or of another one, creating the file if needed.
 Use it to put code where it belongs before a change, e.g. a helper that two files or two packages now share.
 Identify the declaration by file, line and name, at the declaration or any use, and give to_file: the destination, relative to the workspace root.
-Imports the moved code needs are added to the destination (keeping an alias, or using the destination's name for the package); imports left unused are removed.
+Imports the moved code needs are added to the destination (keeping an alias, or using the destination's name for the package); imports left unused are removed. A source file left with only its package clause is deleted.
 also names other top-level declarations of the package, in any of its files, to move with it (not methods), e.g. the helpers it uses; they keep their names.
 To another package (to_file in another directory; a directory without a package gets a new one, named after it, creating missing directories): every reference is updated (q.Name outside that package, Name inside it), and new_name renames it on the way; an unexported declaration used outside the new package needs an exported new_name (defaultHost -> DefaultHost).
 A declaration grouped with others in parentheses (var ( a = 1; b = 2 )) moves out as its own (var b = 2); naming every spec of the group moves the group. Taking a constant out of its group is refused when it, or a later one, uses iota or has no values (its value would change).
@@ -98,6 +99,9 @@ type mover struct {
 	dest    *packages.Package
 	created bool
 	files   map[string]*fileEdits
+	// emptied holds the source files the move leaves with only a package
+	// clause, which it deletes.
+	emptied []string
 }
 
 // source is a file that declarations move from.
@@ -137,6 +141,30 @@ type fileEdits struct {
 	edits []edit.TextEdit
 	cuts  [][2]int
 	needs map[string]bool
+}
+
+// empties reports whether the edits leave the source file at path with
+// nothing but its package clause: no declarations, imports or comments.
+func (m *mover) empties(path string, edits []edit.TextEdit) bool {
+	i := slices.IndexFunc(m.sources, func(s *source) bool { return s.path == path })
+	if i < 0 {
+		return false
+	}
+	after, err := edit.Apply(m.sources[i].src, edits)
+	if err != nil {
+		return false
+	}
+	f, err := parser.ParseFile(token.NewFileSet(), path, after, parser.ParseComments)
+	return err == nil && len(f.Decls) == 0 && len(f.Comments) == 0
+}
+
+// emptiedNotes notes the files the move deletes.
+func (m *mover) emptiedNotes() []string {
+	var notes []string
+	for _, path := range m.emptied {
+		notes = append(notes, fmt.Sprintf("deleted %s, which the move left empty", m.ws.Rel(path)))
+	}
+	return notes
 }
 
 // Plan checks preconditions and computes the edits.
@@ -190,9 +218,11 @@ func (*MoveDeclaration) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 	} else if err := m.appendTo(to, ""); err != nil {
 		return nil, err
 	}
+	edits := m.fileEdits()
 	return &refactor.Plan{
 		Summary: fmt.Sprintf("moved %s%s from %s to %s", a.Name, m.withAlso(), m.fromFiles(), ws.Rel(to)),
-		Edits:   m.fileEdits(),
+		Edits:   edits,
+		Notes:   m.emptiedNotes(),
 	}, nil
 }
 
@@ -662,9 +692,15 @@ func (m *mover) fileEdits() []edit.FileEdit {
 			fe.dropUnused(m.ws)
 			fe.edits = append(fe.edits, fe.adder.Edits()...)
 		}
+		if m.empties(path, fe.edits) {
+			m.emptied = append(m.emptied, path)
+			fes = append(fes, edit.FileEdit{Path: path, Delete: true})
+			continue
+		}
 		fes = append(fes, edit.FileEdit{Path: path, Edits: fe.edits})
 	}
 	sort.Slice(fes, func(i, j int) bool { return fes[i].Path < fes[j].Path })
+	sort.Strings(m.emptied)
 	return edit.Merge(fes)
 }
 

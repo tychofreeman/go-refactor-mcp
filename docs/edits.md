@@ -2,10 +2,10 @@
 
 Refactorings keep behavior; edits change it on purpose, as the step that
 adds or changes a feature does. The aim, later, is to do nearly all coding
-through these typed steps instead of editing files by hand. For now the
-focus stays on refactorings; this file collects the edits we may want, and
-the evidence for each, so the order is decided by real use when we get to
-them.
+through these typed steps instead of editing files by hand. This file
+collects the edits we may want, and the evidence for each, so the order is
+decided by real use: refactorings and edits alike are picked by what the
+friction log shows was missing.
 
 Every edit follows the rule refactorings do: the code type-checks before
 and after each step, or the step is refused and nothing changes. New code
@@ -61,13 +61,14 @@ form can come first, while the focus is on refactorings.
   - 2026-10-18, one interface check instead of two: the bodies of
     `changesig` and `movedecl`'s `checkNoInterface` replaced by a call of
     `analysis.InterfaceWithMethod` and their messages.
-- `delete_statement`: delete whole statements, or a whole declaration (a
-  function, type, variable or constant), as long as the result
-  type-checks. Deleting a call for its side effect is often the point, so
-  this is an edit, even though some deletions keep behavior. The
-  refactoring that deletes only what cannot matter is a different tool,
-  `remove_dead_code` (on the roadmap): nothing uses what it declares, and
-  it has no effect.
+- `delete_statement`: delete whole statements, or a declaration that is
+  still used, as long as the result type-checks. Deleting a call for its
+  side effect is often the point, so this is an edit, even though some
+  deletions keep behavior. A declaration nothing uses is deleted by the
+  refactoring `remove_dead_code` (done); its gap, deleting statements
+  with no effect, is on the roadmap.
+  - 2026-10-18, `versionSuffix` and `quoted` were deleted by hand; both
+    were unused, so `remove_dead_code` now covers them.
 - `move_statement_up` / `move_statement_down`: swap a statement with the
   one before or after it ("slide statements"). *Refactoring when* the two
   are independent: neither writes what the other reads or writes, their
@@ -91,8 +92,9 @@ form can come first, while the focus is on refactorings.
 **Declarations**
 
 - `replace_declaration`: a whole top-level function, type, variable or
-  constant (`add_declaration` is done; deleting one is
-  `delete_statement`).
+  constant (`add_declaration` is done; deleting an unused one is
+  `remove_dead_code`). Since `replace_statements`, a stub's body is
+  replaced without it; the entries below predate that.
   - 2026-10-17, adding `remove_parameter`: a stub declared so a test written
     first compiled.
   - 2026-10-17, adding `introduce_parameter`: the stub's `Plan` replaced by
@@ -103,14 +105,13 @@ form can come first, while the focus is on refactorings.
 
 ## Suggested, without evidence yet
 
-`delete_statement` (including declarations), `move_statement_down`,
-`move_statement_in/out`, `introduce_block` and `introduce_if` were
-suggested on 2026-10-17 and have no friction-log
+`move_statement_down`, `move_statement_in/out`, `introduce_block` and
+`introduce_if` were suggested on 2026-10-17 and have no friction-log
 entries yet. More will be added here as they come up.
 
 ## Not yet logged
 
-So far every refactoring in this repository was itself written by editing
-files directly: new functions, new files, changed statements. Those edits
-were not logged one by one; from now on, hand edits made during feature
-work are logged with the candidate that would have covered them.
+Until the first edits (2026-10-18), every refactoring in this repository
+was itself written by editing files directly: new functions, new files,
+changed statements. Those edits were not logged one by one; since then,
+hand edits are logged with the candidate that would have covered them.

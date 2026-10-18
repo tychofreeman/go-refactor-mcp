@@ -83,6 +83,7 @@ func (m *mover) planOtherPackage(to string) (*refactor.Plan, error) {
 	if m.created {
 		plan.Notes = append(plan.Notes, fmt.Sprintf("created package %s (%s)", m.dest.Name, m.dest.PkgPath))
 	}
+	plan.Notes = append(plan.Notes, m.emptiedNotes()...)
 	for _, d := range m.decls {
 		if d.obj.Exported() {
 			plan.Notes = append(plan.Notes, fmt.Sprintf("%s was exported: references in other modules are not updated", d.obj.Name()))
