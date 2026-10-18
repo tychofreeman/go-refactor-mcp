@@ -1,0 +1,1 @@
+{"file": "a.go", "start_line": 4, "end_line": 4, "content": "return util.Twice(n)"}

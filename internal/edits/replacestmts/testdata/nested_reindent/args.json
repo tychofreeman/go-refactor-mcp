@@ -1,0 +1,1 @@
+{"file": "a.go", "start_line": 9, "end_line": 10, "content": "    n += x\n    fmt.Println(\"added\", x)"}

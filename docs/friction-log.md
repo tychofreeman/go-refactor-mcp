@@ -433,3 +433,22 @@ value however often it is evaluated, so repetition need not matter.
 **An existing test changed meaning.** `introduce_parameter/refuse_call`
 used `strings.ToUpper` as its example of a call with side effects; it now
 uses `fmt.Sprint`.
+
+## 2026-10-18: adding `replace_statements`, the first edit after `create_file`
+
+**Built by hand, of course.** Its own stub could not be replaced by
+itself; the implementation was written directly.
+
+**Replaying a hand edit with the tools.** On a copy of the repo at the
+commit before the dedupe story, `create_file` wrote
+`analysis.InterfaceWithMethod`, and one `replace_statements` call turned
+`changesig`'s `checkNoInterface` body (26 lines) into the call and its two
+messages: the story's main hand edit, in two tool calls, with
+`changesig`'s tests passing.
+
+**Imports: our resolver, not goimports.** goimports could pick any
+package in the module cache; this one looks, in order, at what another
+file of the package imports under the name, the workspace's packages, and
+the standard library, and refuses with the candidates when the name is
+ambiguous (`rand`), so the result never depends on what happens to be
+downloaded.

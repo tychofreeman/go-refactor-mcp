@@ -4,6 +4,7 @@ package refactorings
 
 import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/createfile"
+	"github.com/tychofreeman/go-refactor-mcp/internal/edits/replacestmts"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/changesig"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/extractfunc"
@@ -37,6 +38,7 @@ func All() []refactor.Refactoring {
 		extractstruct.New(),
 		mergefunc.New(),
 		createfile.New(),
+		replacestmts.New(),
 	}
 }
 

@@ -1,0 +1,1 @@
+rand could be crypto/rand, math/rand or math/rand/v2; name the one to import in imports

@@ -38,8 +38,9 @@ model reads before choosing the next refactoring. That loop is the iteration.
   identical one. `move_declaration` moves a
   declaration (with the helpers it uses, if asked) to another file, of its
   package or another one.
-- **Step 5 (later):** edits, steps that change behavior on purpose (see
-  "Edits"). `create_file` is done; the candidates are in `docs/edits.md`.
+- **Step 5 (in progress):** edits, steps that change behavior on purpose
+  (see "Edits"). `create_file` and `replace_statements` are done; the
+  candidates are in `docs/edits.md`.
 
 ## Roadmap
 
@@ -1227,6 +1228,27 @@ Other files are written as given. Refused: a file that exists (change it
 with the other tools), a directory that does not exist, a path outside the
 module, or a file whose code does not type-check (a test that calls
 something not declared yet). Undo deletes the file.
+
+### replace_statements
+
+`replace_statements` replaces whole statements of one block, lines
+`start_line` to `end_line` (as `inspect` numbers them), with `content`: new
+Go statements, without the enclosing braces. It is how a stub's body
+becomes the implementation (select the stub's `return` line), and how
+statements change what they do. The lines must cover whole statements of
+one block, with nothing else on them but comments and blank lines (which
+are replaced too); `content` must parse as statements, and is re-indented
+to the block (unless a raw string in it spans lines).
+
+Imports follow the code. A package the new statements name that is not in
+scope there is imported: the package another file of the package imports
+under that name, else a workspace package of that name, else a standard
+library one; when several fit (`rand`: `crypto/rand`, `math/rand`,
+`math/rand/v2`) the refusal lists them, and `imports` names the one to
+use. An import only the replaced statements used, and the new ones do not,
+is removed. Refused: lines that cut a statement or cover statements of
+different blocks, content that does not parse, and, like every step, a
+result that does not type-check.
 
 ## Testing
 
