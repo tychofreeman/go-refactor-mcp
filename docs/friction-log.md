@@ -1036,3 +1036,24 @@ have fit better: it addresses lines, not text, and re-indents its
 content. Gap: when the exact match fails, replace_text could try a match
 that ignores leading whitespace (if only one place matches), or show the
 closest match in its refusal.
+
+## 2026-10-19: finishing touches
+
+Fixed three frictions from today: extract_function wraps its doc
+comment at the file's width (gocode.DocComment, for the other tools
+later); imports for code an edit adds also come from what other
+packages of the module import by that name (astutil); and a variable
+only a literal of the selection changes, which nothing outside it sees
+again, is passed as a copy rather than a pointer. All through
+gorefactor. I sent a batch without check "end" for the third time
+today; the hint is clear, but the step that needs it is usually the
+first, which refers to a function a later step declares. A batch whose
+first steps fail only on names its later steps declare could retry
+itself with check "end" and say so.
+
+## 2026-10-19: move_declaration with_dependencies
+
+All through gorefactor. Dry runs on real code found two more needs of a
+move, both refused clearly: exporting fields the source package still
+reads (changesig.call), and regexp.MustCompile of a constant counting as
+a side effect (refactor.stepRef).

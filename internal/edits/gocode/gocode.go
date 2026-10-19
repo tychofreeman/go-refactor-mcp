@@ -140,7 +140,8 @@ func AddImports(ws *workspace.Workspace, pkg *packages.Package, file *ast.File, 
 
 // resolve finds the package the content means by name: one of chosen,
 // else what another file of the package imports as name, else a workspace
-// package of that name, else a standard library one; it must be unique.
+// package of that name, else a standard library one, else what another
+// package of the module imports as name (a dependency); it must be unique.
 func resolve(ws *workspace.Workspace, pkg *packages.Package, name string, chosen []string) (string, error) {
 	for _, p := range chosen {
 		if importName(p) == name {
@@ -149,23 +150,7 @@ func resolve(ws *workspace.Workspace, pkg *packages.Package, name string, chosen
 	}
 	try := []func() []string{
 		func() []string { // another file of the package
-			set := map[string]bool{}
-			for _, p := range ws.Pkgs {
-				if p.PkgPath != pkg.PkgPath || p.TypesInfo == nil {
-					continue
-				}
-				for _, o := range p.TypesInfo.Defs {
-					if pn, ok := o.(*types.PkgName); ok && pn.Name() == name {
-						set[pn.Imported().Path()] = true
-					}
-				}
-				for _, o := range p.TypesInfo.Implicits {
-					if pn, ok := o.(*types.PkgName); ok && pn.Name() == name {
-						set[pn.Imported().Path()] = true
-					}
-				}
-			}
-			return keys(set)
+			return importedAs(ws, name, func(p *packages.Package) bool { return p.PkgPath == pkg.PkgPath })
 		},
 		func() []string { // a workspace package
 			set := map[string]bool{}
@@ -177,6 +162,9 @@ func resolve(ws *workspace.Workspace, pkg *packages.Package, name string, chosen
 			return keys(set)
 		},
 		func() []string { return stdPackages()[name] },
+		func() []string { // a dependency another package of the module imports
+			return importedAs(ws, name, func(*packages.Package) bool { return true })
+		},
 	}
 	for _, f := range try {
 		switch paths := f(); len(paths) {
@@ -188,6 +176,28 @@ func resolve(ws *workspace.Workspace, pkg *packages.Package, name string, chosen
 		}
 	}
 	return "", refactor.Refusef("the content uses %s, which is not in scope there and no package of that name was found; declare it, or name the package to import in imports", name)
+}
+
+// importedAs returns the paths that the files of the workspace's packages
+// for which in is true import as name.
+func importedAs(ws *workspace.Workspace, name string, in func(*packages.Package) bool) []string {
+	set := map[string]bool{}
+	for _, p := range ws.Pkgs {
+		if p.TypesInfo == nil || !in(p) {
+			continue
+		}
+		for _, o := range p.TypesInfo.Defs {
+			if pn, ok := o.(*types.PkgName); ok && pn.Name() == name {
+				set[pn.Imported().Path()] = true
+			}
+		}
+		for _, o := range p.TypesInfo.Implicits {
+			if pn, ok := o.(*types.PkgName); ok && pn.Name() == name {
+				set[pn.Imported().Path()] = true
+			}
+		}
+	}
+	return keys(set)
 }
 
 // importName is the name a package at path is usually imported as.

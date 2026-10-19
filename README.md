@@ -142,6 +142,11 @@ hand or a tool got in the way.
      those steps itself, as one batch. Five stories (Oct 17: adding
      `introduce_parameter`, a type with its methods, moving from several
      files; Oct 18: one interface check, adding `insert_statements`).
+     *First part done: `move_declaration` with `with_dependencies` moves
+     what the moved code uses of its package, exporting what the package
+     still uses. Left: exporting fields and methods other code of the
+     package still uses, and the steps that change code rather than move
+     it (methods into functions, a variable initialized by a call).*
    - **Merge near-duplicate functions.** `merge_duplicate_function`
      refuses copies that differ, and names the difference; this tool makes
      each difference a parameter instead. Also `extract_function` over
@@ -714,6 +719,9 @@ fmt.Println(total)                     for _, x := range xs { total += x }
   other uses become `*v`, or `(*v)` where Go does not dereference
   (`(*v)[i]`, `(*v)(args)`, methods of interfaces). For example,
   `json.Unmarshal(data, &cfg)` moves as `json.Unmarshal(data, cfg)`.
+  A variable only a function literal of the statements changes is passed
+  as a copy when nothing outside them can see it again: no literal
+  outside them uses it, no code after them, and no loop around them.
 - If the statements use the receiver of the method they are in, the new
   function is a method of the same type, called as `c.bump()`; generic
   receivers (`(s *Stack[T])`) keep their type parameters. A value receiver
@@ -1424,6 +1432,16 @@ first. Refused: a name the package does not declare at top level, one
 already in the destination file, and, for a new destination file, a
 package that two source files import under different names (the new file
 could only use one; rename one first).
+
+To another package, `with_dependencies` finds them instead: every
+top-level declaration of the package that the moved code uses moves too,
+and what those use, with the methods of moved types, until the moved code
+uses nothing else of the package. One the package still uses afterwards
+is exported on the way (`helper` becomes `Helper`, refused if the
+destination declares that name). The result lists each on a `chose:` line,
+with the moved code that needed it. A dependency that cannot move (an
+`init`, a variable whose initializer has side effects) refuses the move,
+naming what needed it.
 
 ### To another package
 
