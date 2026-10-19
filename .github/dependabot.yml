@@ -1,0 +1,18 @@
+# Weekly updates of the Go modules, in one PR, and monthly updates of
+# the GitHub Actions the workflows use. CI tests each PR. The go
+# directive in go.mod and the CI matrix's Go versions are changed by
+# hand. Only the root module is covered, so the golden-case modules
+# under testdata are left alone.
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      go-deps:
+        patterns: ["*"]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

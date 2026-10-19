@@ -73,3 +73,18 @@ jobs:
             echo "::error title=Tests failed on Go ${{ matrix.go }}::${encoded}"
             exit 1
           fi
+
+  vulncheck:
+    name: Vulnerabilities
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+
+      - name: govulncheck
+        # Fails only when the code calls a function with a known
+        # vulnerability, in a dependency or the standard library.
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
