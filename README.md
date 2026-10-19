@@ -95,6 +95,30 @@ hand or a tool got in the way.
    (see "Rename: what it checks").
 7. **Packaging:** tagged releases, so `go install ...@latest` gets a stable
    version, and possibly a Claude Code plugin for a one-step install.
+8. **Test run time.** CI's test step grew from about 13 s to 75 s per Go
+   version between Oct 16 and Oct 19, in step with the golden cases (132 to
+   824): about 9 s per 100 cases under `-race`. Each case loads a module
+   with `packages.Load`, so the cost is per case, not per assertion. In
+   order:
+   - **Measure** per package and per test (`go test -json`), which the CI
+     logs don't show now, so the rest is decided on numbers.
+   - **The fresh-load comparison** in `refactortest.Run` loads each applied
+     case twice more, after applying and after undoing: 1,725 loads for
+     today's cases instead of 811 (`-short` skips it). Options: run it in
+     one CI job only, or only after undoing.
+   - **`-race` in both CI jobs.** Run it in one only.
+   - **Tests that start `go test`:** `mcpserver.TestRefactoringLoop`
+     (`check` with `run_tests`) and `agent.TestRunUndoesWhenTestsBreak`.
+   - **Repeated tests.** Each costs a load or two, so these come last:
+     `mcpserver` tests that repeat `refactor`'s checks of batches, compact
+     diffs and broken input (keep only the wiring); the six
+     `refuse_type_error` cases of the edits, which all test
+     `refactor.Run`'s check; and undo after an external edit, tested in
+     both `workspace` and `mcpserver`.
+   - **Not for speed:** the stress tests copy `envInt`, `tailLines` and
+     their candidate loop six times (`inlinefunc` has them factored out
+     already), `inlinevar`'s `copyDir` is `refactortest.copyTree`, and
+     `extractvar.TestTokens` tests `locate`.
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
