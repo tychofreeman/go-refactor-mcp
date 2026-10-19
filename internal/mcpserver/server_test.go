@@ -340,6 +340,36 @@ func TestBatchCheckAtEnd(t *testing.T) {
 	mustContain(t, "more.go", string(got), "\ttotal := a + b\n\treturn total\n")
 }
 
+// A step can address the lines an earlier step made: an id, then
+// $id.end, $prev.end+1, and so on.
+func TestBatchStepReferences(t *testing.T) {
+	cs, dir := setup(t)
+	more := filepath.Join(dir, "calc", "more.go")
+	os.WriteFile(more, []byte("package calc\n\nfunc Sum(a, b int) int {\n\treturn a + b\n}\n"), 0o644)
+	out, _ := call(t, cs, "batch", map[string]any{"check": "end", "steps": []any{
+		map[string]any{"id": "total", "tool": "insert_statements", "args": map[string]any{"file": "calc/more.go", "line": 4, "where": "before", "content": "total := a + b"}},
+		map[string]any{"tool": "insert_statements", "args": map[string]any{"file": "calc/more.go", "line": "$total.end", "where": "after", "content": "total *= 2"}},
+		map[string]any{"tool": "replace_statements", "args": map[string]any{"file": "calc/more.go", "start_line": "$prev.end+1", "end_line": "$prev.end+1", "content": "return total"}},
+	}})
+	mustContain(t, "batch", out, "APPLIED batch: 3 steps")
+	got, _ := os.ReadFile(more)
+	mustContain(t, "more.go", string(got), "\ttotal := a + b\n\ttotal *= 2\n\treturn total\n}")
+}
+
+// The import a step adds is not part of the lines it made.
+func TestBatchStepReferenceSkipsImports(t *testing.T) {
+	cs, dir := setup(t)
+	more := filepath.Join(dir, "calc", "more.go")
+	os.WriteFile(more, []byte("package calc\n\nfunc Sum(a, b int) int {\n\treturn a + b\n}\n"), 0o644)
+	out, _ := call(t, cs, "batch", map[string]any{"check": "end", "steps": []any{
+		map[string]any{"tool": "insert_statements", "args": map[string]any{"file": "calc/more.go", "line": 4, "where": "before", "content": "s := strings.Repeat(\"x\", a)"}},
+		map[string]any{"tool": "insert_statements", "args": map[string]any{"file": "calc/more.go", "line": "$prev.end", "where": "after", "content": "_ = s"}},
+	}})
+	mustContain(t, "batch", out, "APPLIED batch: 2 steps")
+	got, _ := os.ReadFile(more)
+	mustContain(t, "more.go", string(got), "import \"strings\"", "\ts := strings.Repeat(\"x\", a)\n\t_ = s\n\treturn a + b\n")
+}
+
 // A test first: write it, then declare stubs for what it calls, in one
 // batch.
 func TestBatchTestThenStubs(t *testing.T) {

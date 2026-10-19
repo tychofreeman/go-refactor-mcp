@@ -1016,3 +1016,12 @@ without check "end" (the hint caught it), and add_declaration did not
 find astutil by name although the module already imports it elsewhere;
 it only looks in the standard library and the workspace's packages, so
 a dependency of the module needs imports.
+
+## 2026-10-19: references to what earlier steps of a batch made
+
+All through gorefactor. An end-to-end test caught that a step adding
+its first import changes two places of the file (the import and the
+code), so a reference to it was refused; edits that write an import
+declaration now count as none. replace_text does not add imports, as it
+works on text, so a strings.HasPrefix it wrote needed a second step for
+the import. extract_function's doc comment was again not wrapped.

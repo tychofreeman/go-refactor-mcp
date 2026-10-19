@@ -94,17 +94,18 @@ func IsRefusal(err error) bool {
 
 // Result is returned to the caller (CLI or model) after each step.
 type Result struct {
-	Refactoring string   `json:"refactoring"`
-	Applied     bool     `json:"applied"`
-	DryRun      bool     `json:"dry_run,omitempty"`
-	Summary     string   `json:"summary,omitempty"`
-	Refused     string   `json:"refused,omitempty"`
-	Notes       []string `json:"notes,omitempty"`
-	Choices     []string `json:"choices,omitempty"`
-	Files       []string `json:"files,omitempty"`
-	Diff        string   `json:"diff,omitempty"`
-	supplied    string   // the plan's Supplied, for a batch's combined diff
-	locations   bool     // the plan's Locations, likewise
+	Refactoring string          `json:"refactoring"`
+	Applied     bool            `json:"applied"`
+	DryRun      bool            `json:"dry_run,omitempty"`
+	Summary     string          `json:"summary,omitempty"`
+	Refused     string          `json:"refused,omitempty"`
+	Notes       []string        `json:"notes,omitempty"`
+	Choices     []string        `json:"choices,omitempty"`
+	Files       []string        `json:"files,omitempty"`
+	Diff        string          `json:"diff,omitempty"`
+	supplied    string          // the plan's Supplied, for a batch's combined diff
+	locations   bool            // the plan's Locations, likewise
+	edits       []edit.FileEdit // the plan's Edits, for a batch to tell where the step changed each file
 }
 
 // String renders the result as plain text, the format sent to models.
@@ -177,7 +178,7 @@ func Run(ws *workspace.Workspace, r Refactoring, args json.RawMessage, opts Opti
 		return nil, err
 	}
 	res.Summary, res.Notes = plan.Summary, plan.Notes
-	res.supplied, res.locations = plan.Supplied, plan.Locations
+	res.supplied, res.locations, res.edits = plan.Supplied, plan.Locations, plan.Edits
 	res.Choices = plan.Choices
 
 	if opts.DryRun {
@@ -273,6 +274,7 @@ func diffOf(ws *workspace.Workspace, c workspace.Change, opts Options, plan *Pla
 
 // Step is one refactoring or edit of a batch, with its arguments.
 type Step struct {
+	ID          string // optional: a name later steps can refer to it by
 	Refactoring Refactoring
 	Args        json.RawMessage
 }
@@ -297,10 +299,16 @@ type BatchResult struct {
 // files as they were when the batch began, as the model last inspected
 // them: each is moved to where that line is after the earlier steps. A
 // step that addresses a line an earlier step rewrote or removed, or a
-// line of a file created in the batch, is refused.
+// line of a file created in the batch, is refused. A line may instead be
+// a reference to the lines an earlier step made (see batchref.go).
 func RunBatch(ws *workspace.Workspace, steps []Step, opts Options) (*BatchResult, error) {
 	b := &BatchResult{Total: len(steps)}
-	lines := map[string]*lineMap{} // by file, relative to the root: its lines through the batch
+	if err := checkIDs(steps); err != nil {
+		b.Refused = err.Error()
+		return b, nil
+	}
+	lines := map[string]*lineMap{}                    // by file, relative to the root: its lines through the batch
+	made := make([]map[string]*stepLines, len(steps)) // by step, then file: the lines it made
 	applied := 0
 	rollback := func() error {
 		for ; applied > 0; applied-- {
@@ -316,14 +324,15 @@ func RunBatch(ws *workspace.Workspace, steps []Step, opts Options) (*BatchResult
 		args := s.Args
 		if file, byLine := lineAddressed(s.Args); byLine {
 			rel := ws.Rel(ws.Abs(file))
-			if m := lines[rel]; m != nil {
-				translated, err := translateLines(s.Args, rel, m)
-				if err != nil {
-					b.FailedStep, b.FailedTool, b.Refused = i+1, name, err.Error()
-					return b, rollback()
-				}
-				args = translated
+			resolvedArgs, resolved, err := resolveRefs(s.Args, rel, i, steps, made)
+			if m := lines[rel]; err == nil && m != nil {
+				resolvedArgs, err = translateLines(resolvedArgs, rel, m, resolved)
 			}
+			if err != nil {
+				b.FailedStep, b.FailedTool, b.Refused = i+1, name, err.Error()
+				return b, rollback()
+			}
+			args = resolvedArgs
 		}
 		res, err := Run(ws, s.Refactoring, args, Options{Compact: opts.Compact, Unchecked: opts.Unchecked})
 		if err != nil {
@@ -342,15 +351,7 @@ func RunBatch(ws *workspace.Workspace, steps []Step, opts Options) (*BatchResult
 		}
 		applied++
 		names = append(names, name)
-		if c, ok := ws.LastChange(); ok {
-			for p, before := range c.Before {
-				rel := ws.Rel(p)
-				if lines[rel] == nil {
-					lines[rel] = newLineMap(before)
-				}
-				lines[rel].follow(i+1, before, c.After[p])
-			}
-		}
+		followStep(ws, made, i, lines, res)
 	}
 	if opts.Unchecked {
 		if errs := ws.Errors(); len(errs) > 0 {
@@ -385,6 +386,34 @@ func RunBatch(ws *workspace.Workspace, steps []Step, opts Options) (*BatchResult
 	}
 	b.Diff = edit.ElideSupplied(b.Diff, strings.Join(supplied, "\n"))
 	return b, nil
+}
+
+// followStep records where step i (0-based), which made res, changed each
+// file: it moves the batch's starting lines and the earlier steps' lines
+// past it, and keeps the lines it made.
+func followStep(ws *workspace.Workspace, made []map[string]*stepLines, i int, lines map[string]*lineMap, res *Result) {
+	if c, ok := ws.LastChange(); ok {
+		made[i] = map[string]*stepLines{}
+		for p, before := range c.Before {
+			rel := ws.Rel(p)
+			if lines[rel] == nil {
+				lines[rel] = newLineMap(before)
+			}
+			lines[rel].follow(i+1, before, c.After[p])
+			for _, m := range made[:i] {
+				if s := m[rel]; s != nil {
+					s.follow(i+1, before, c.After[p])
+				}
+			}
+			var edits []edit.TextEdit
+			for _, fe := range res.edits {
+				if fe.Path == p {
+					edits = append(edits, fe.Edits...)
+				}
+			}
+			made[i][rel] = madeLines(before, c.After[p], edits, c.Created[p])
+		}
+	}
 }
 
 // lineMap follows a file's lines through the steps of a batch. For each
@@ -423,24 +452,25 @@ func (m *lineMap) follow(step int, before, after []byte) {
 
 // translateLines rewrites a step's line arguments (line, start_line,
 // end_line), given as of the start of the batch, to where those lines are
-// now. A line an earlier step rewrote or removed cannot be addressed.
-func translateLines(args json.RawMessage, rel string, m *lineMap) (json.RawMessage, error) {
+// now, except the keys in now, which already are. A line an earlier step
+// rewrote or removed cannot be addressed.
+func translateLines(args json.RawMessage, rel string, m *lineMap, now map[string]bool) (json.RawMessage, error) {
 	var a map[string]json.RawMessage
 	if err := json.Unmarshal(args, &a); err != nil {
 		return args, nil
 	}
 	for _, key := range []string{"line", "start_line", "end_line"} {
 		var n int
-		if raw, ok := a[key]; !ok || json.Unmarshal(raw, &n) != nil || n <= 0 {
+		if raw, ok := a[key]; !ok || now[key] || json.Unmarshal(raw, &n) != nil || n <= 0 {
 			continue
 		}
 		switch {
 		case m.created:
-			return nil, fmt.Errorf("%s was created in this batch, so it has no line %d from before it; address what is in it by name", rel, n)
+			return nil, fmt.Errorf("%s was created in this batch, so it has no line %d from before it; address what is in it by name, or by reference to the step that created it ($2.start, $prev.end+3, ...)", rel, n)
 		case n >= len(m.now):
 			return nil, fmt.Errorf("%s had %d lines when the batch began, so there is no line %d", rel, len(m.now)-1, n)
 		case m.now[n] == 0:
-			return nil, fmt.Errorf("line %d of %s (as it was when the batch began) was rewritten by step %d, so it is not there to address; address what step %d made by name, or send this step in a later call with line numbers from a new inspect", n, rel, m.changed[n], m.changed[n])
+			return nil, fmt.Errorf("line %d of %s (as it was when the batch began) was rewritten by step %d, so it is not there to address; address what step %d made by name, or by reference ($%d.start, $%d.end+1, ...), or send this step in a later call with line numbers from a new inspect", n, rel, m.changed[n], m.changed[n], m.changed[n], m.changed[n])
 		}
 		a[key], _ = json.Marshal(m.now[n])
 	}
@@ -487,16 +517,17 @@ func (b *BatchResult) String() string {
 // they do.
 func lineAddressed(args json.RawMessage) (string, bool) {
 	var a struct {
-		File      string `json:"file"`
-		Line      int    `json:"line"`
-		StartLine int    `json:"start_line"`
-		EndLine   int    `json:"end_line"`
-		Column    int    `json:"column"`
+		File      string          `json:"file"`
+		Line      json.RawMessage `json:"line"` // a number, or a reference to an earlier step's lines
+		StartLine json.RawMessage `json:"start_line"`
+		EndLine   json.RawMessage `json:"end_line"`
+		Column    int             `json:"column"`
 	}
 	if json.Unmarshal(args, &a) != nil || a.File == "" {
 		return "", false
 	}
-	return a.File, a.Line != 0 || a.StartLine != 0 || a.EndLine != 0 || a.Column != 0
+	given := func(raw json.RawMessage) bool { return len(raw) > 0 && string(raw) != "0" && string(raw) != "null" }
+	return a.File, given(a.Line) || given(a.StartLine) || given(a.EndLine) || a.Column != 0
 }
 
 func limit(s []string, n int) []string {

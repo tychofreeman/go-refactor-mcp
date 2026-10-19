@@ -361,9 +361,13 @@ func (markLine) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Pl
 	var a struct {
 		File string `json:"file"`
 		Line int    `json:"line"`
+		Text string `json:"text"`
 	}
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
+	}
+	if a.Text == "" {
+		a.Text = "mark"
 	}
 	path := ws.Abs(a.File)
 	src, _ := os.ReadFile(path)
@@ -373,8 +377,139 @@ func (markLine) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Pl
 	}
 	return &refactor.Plan{
 		Summary: fmt.Sprintf("marked line %d", a.Line),
-		Edits:   []edit.FileEdit{{Path: path, Edits: []edit.TextEdit{{Start: off, End: off, NewText: "// mark\n"}}}},
+		Edits:   []edit.FileEdit{{Path: path, Edits: []edit.TextEdit{{Start: off, End: off, NewText: "// " + a.Text + "\n"}}}},
 	}, nil
+}
+
+// twoPlaces changes F's body and X's initializer: two places in m.go.
+type twoPlaces struct{}
+
+func (twoPlaces) Name() string                 { return "two_places" }
+func (twoPlaces) Description() string          { return "" }
+func (twoPlaces) InputSchema() json.RawMessage { return json.RawMessage(`{}`) }
+func (twoPlaces) Plan(ws *workspace.Workspace, _ json.RawMessage) (*refactor.Plan, error) {
+	path := ws.Abs("m.go")
+	src, _ := os.ReadFile(path)
+	i := strings.Index(string(src), "return 1") + len("return ")
+	j := strings.Index(string(src), "= F()") + len("= F()")
+	return &refactor.Plan{
+		Summary: "changed two places",
+		Edits: []edit.FileEdit{{Path: path, Edits: []edit.TextEdit{
+			{Start: i, End: i + 1, NewText: "2"},
+			{Start: j, End: j, NewText: " + 1"},
+		}}},
+	}, nil
+}
+
+// rewriteLine replaces line of m.go with "// rewritten"; file must be
+// m.go.
+type rewriteLine struct{}
+
+func (rewriteLine) Name() string                 { return "rewrite_line" }
+func (rewriteLine) Description() string          { return "" }
+func (rewriteLine) InputSchema() json.RawMessage { return json.RawMessage(`{}`) }
+func (rewriteLine) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
+	var a struct {
+		File string `json:"file"`
+		Line int    `json:"line"`
+	}
+	if err := refactor.DecodeArgs(raw, &a); err != nil {
+		return nil, err
+	}
+	path := ws.Abs("m.go")
+	src, _ := os.ReadFile(path)
+	start := 0
+	for i := 1; i < a.Line; i++ {
+		start += strings.Index(string(src[start:]), "\n") + 1
+	}
+	end := start + strings.Index(string(src[start:]), "\n")
+	return &refactor.Plan{
+		Summary: fmt.Sprintf("rewrote line %d", a.Line),
+		Edits:   []edit.FileEdit{{Path: path, Edits: []edit.TextEdit{{Start: start, End: end, NewText: "// rewritten"}}}},
+	}, nil
+}
+
+// mark is a markLine step at line (a number or a reference), with id.
+func mark(id string, line any, text string) refactor.Step {
+	args, _ := json.Marshal(map[string]any{"file": "m.go", "line": line, "text": text})
+	return refactor.Step{ID: id, Refactoring: markLine{}, Args: args}
+}
+
+// A step can address the lines an earlier one made: by id, by position or
+// as $prev, at its start or end, with an offset. The range follows later
+// steps: $a.end+1 is still right after "// a" once "// b" went in above it.
+func TestBatchStepReferences(t *testing.T) {
+	for _, c := range []struct {
+		name  string
+		steps []refactor.Step
+		want  string
+	}{
+		{"by id", []refactor.Step{mark("a", 5, "a"), mark("", 3, "b"), mark("", "$a.end+1", "after a")},
+			"package m\n\n// b\nfunc F() int { return 1 }\n\n// a\n// after a\nvar X = F()\n"},
+		{"by position and prev", []refactor.Step{mark("", 3, "one"), mark("", "$1.start", "zero"), mark("", "$prev.end+1", "half")},
+			"package m\n\n// zero\n// half\n// one\nfunc F() int { return 1 }\n\nvar X = F()\n"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			ws, path := setup(t, src)
+			b, err := refactor.RunBatch(ws, c.steps, refactor.Options{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !b.Applied {
+				t.Fatalf("refused: %s", b.Refused)
+			}
+			if got, _ := os.ReadFile(path); string(got) != c.want {
+				t.Errorf("got:\n%s\nwant:\n%s", got, c.want)
+			}
+		})
+	}
+}
+
+// A reference that names no step before this one, or a step without one
+// range in the file, is refused, and the batch rolled back.
+func TestBatchStepReferenceRefusals(t *testing.T) {
+	for _, c := range []struct {
+		name  string
+		steps []refactor.Step
+		want  string
+	}{
+		{"unknown id", []refactor.Step{mark("a", 3, "a"), mark("", "$b.end", "x")}, `no step before this one has id "b"`},
+		{"later step", []refactor.Step{mark("", "$2.end", "x"), mark("", 3, "a")}, "step 2 has not run yet"},
+		{"prev of the first", []refactor.Step{mark("", "$prev.end", "x")}, "no step before this one"},
+		{"syntax", []refactor.Step{mark("", 3, "a"), mark("", "$prev.middle", "x")}, "$prev.end"},
+		{"several places", []refactor.Step{{Refactoring: twoPlaces{}}, mark("", "$prev.end", "x")}, "step 1 changed m.go in 2 places"},
+		{"rewritten since", []refactor.Step{mark("a", 3, "a"), {Refactoring: rewriteLine{}, Args: json.RawMessage(`{"file": "m.go", "line": "$a.start"}`)}, mark("", "$a.end", "x")}, "what step 1 made was rewritten by step 2"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			ws, path := setup(t, src)
+			b, err := refactor.RunBatch(ws, c.steps, refactor.Options{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if b.Applied || !strings.Contains(b.Refused, c.want) {
+				t.Errorf("want a refusal containing %q, got %+v", c.want, b)
+			}
+			if got, _ := os.ReadFile(path); string(got) != src {
+				t.Errorf("not rolled back; file:\n%s", got)
+			}
+		})
+	}
+
+	// Ids must be unique, and neither prev nor a number.
+	for _, ids := range [][]string{{"a", "a"}, {"prev"}, {"2"}} {
+		ws, _ := setup(t, src)
+		var steps []refactor.Step
+		for i, id := range ids {
+			steps = append(steps, mark(id, 3+i, "x"))
+		}
+		b, err := refactor.RunBatch(ws, steps, refactor.Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if b.Applied || !strings.Contains(b.Refused, "id") {
+			t.Errorf("ids %q: want a refusal, got %+v", ids, b)
+		}
+	}
 }
 
 // declareN is an edit that declares n in F, unused: alone, it does not

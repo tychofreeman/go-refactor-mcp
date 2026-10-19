@@ -58,7 +58,7 @@ How to work with them:
 1. Call inspect (no arguments) for an overview, then inspect a file or function to read it with line numbers. The outline shows each function's complexity, nesting, and whether calling it has side effects (calls of a function without them are easier to move or reorder).
 2. To change a feature, first refactor so the change is easy, then make the change with an edit: "make the change easy, then make the easy change".
 3. Apply ONE tool per call, or, when you can plan several steps from what you have read, send them together with batch: one call, rolled back as a whole if any step is refused. Each call returns APPLIED with what changed, or REFUSED with the reason; a refusal changes nothing, so read it and choose differently.
-4. Line numbers change after edits. Before a single step that needs them, re-inspect the code an earlier step changed. In a batch, give line numbers as they were when the batch began (from the inspect you planned it with): the batch moves them past the earlier steps. Tools that target a declaration (rename, add_parameter, move_declaration, ...) also accept file and name without line: name is then a package-level symbol of file's package (Name, Type.Method or Type.Field), which stays valid after edits.
+4. Line numbers change after edits. Before a single step that needs them, re-inspect the code an earlier step changed. In a batch, give line numbers as they were when the batch began (from the inspect you planned it with): the batch moves them past the earlier steps. To address what an earlier step of the batch made, give a reference instead of a number: "$prev.end", "$2.start", "$helper.end+1" (see batch). Tools that target a declaration (rename, add_parameter, move_declaration, ...) also accept file and name without line: name is then a package-level symbol of file's package (Name, Type.Method or Type.Field), which stays valid after edits.
 5. Use check (with run_tests) at the end, and undo if a step made the code worse. Every step can be undone.
 
 Prefer these tools over editing files by hand for everything they cover.`
@@ -149,7 +149,7 @@ func (s *Server) MCP() *mcp.Server {
 		Name: "batch",
 		Description: `Run several refactorings and edits in order, in one call: plan the sequence from one inspect and send it here instead of calling the tools one at a time.
 Each step is {tool, args}: a refactoring or edit (rename, add_parameter, extract_function, replace_statements, ...) and the arguments that tool takes. Each step runs on the code the earlier steps left and, like any step, must leave code that type-checks.
-Give every line number as it is in the code you inspected before the batch: the batch moves it to where that line is after the earlier steps. So one inspect is enough to plan a whole sequence, e.g. extract_function the duplicated lines in each of three files, then merge_duplicate_function the new functions, then add_parameter to the one left. A line an earlier step rewrote cannot be addressed by number; address what that step made by name (file and name, no line), which also works for declarations generally.
+Give every line number as it is in the code you inspected before the batch: the batch moves it to where that line is after the earlier steps. So one inspect is enough to plan a whole sequence, e.g. extract_function the duplicated lines in each of three files, then merge_duplicate_function the new functions, then add_parameter to the one left. A line an earlier step rewrote cannot be addressed by number; address what that step made by name (file and name, no line), which also works for declarations generally, or by reference: in place of a number, line, start_line or end_line may be "$prev.start" or "$prev.end" (the first or last line the step before added or changed in the step's file, as it is now), "$2.end" (step 2's), or "$helper.end" (the step with "id": "helper"), with an offset such as "$prev.end+1". E.g. insert_statements with line "$prev.end" and where "after" adds code right after what the step before inserted. A step that changed several places of the file, such as a rename, has no one range to refer to.
 Independent steps can also be sent as separate tool calls in one turn; a batch is for steps that build on each other.
 If a step is refused, the steps before it are rolled back, so nothing changes, and the result says which step and why. If all apply, the result lists each step's summary and then the change as a whole; one undo reverts the whole batch.
 report: "diff" (default) shows the change; "summary" shows only the steps' summaries.
@@ -163,6 +163,7 @@ check: "each" (default) type-checks after every step; "end" only after the last,
       "items": {
         "type": "object",
         "properties": {
+          "id":   {"type": "string", "description": "Optional: a name for the step, so later steps can address the lines it made as $id.start or $id.end."},
           "tool": {"type": "string", "description": "A refactoring or edit, e.g. rename."},
           "args": {"type": "object", "description": "The arguments that tool takes."}
         },
@@ -283,6 +284,7 @@ func (s *Server) undo() *mcp.CallToolResult {
 func (s *Server) batch(args json.RawMessage) *mcp.CallToolResult {
 	var a struct {
 		Steps []struct {
+			ID   string          `json:"id"`
 			Tool string          `json:"tool"`
 			Args json.RawMessage `json:"args"`
 		} `json:"steps"`
@@ -311,7 +313,7 @@ func (s *Server) batch(args json.RawMessage) *mcp.CallToolResult {
 		if r == nil {
 			return textResult(fmt.Sprintf("REFUSED batch: step %d: %q is not a refactoring or edit; a batch runs tools such as rename, add_parameter or replace_statements, not inspect, undo, check or batch. Nothing changed.", i+1, st.Tool))
 		}
-		steps[i] = refactor.Step{Refactoring: r, Args: st.Args}
+		steps[i] = refactor.Step{ID: st.ID, Refactoring: r, Args: st.Args}
 	}
 
 	s.mu.Lock()

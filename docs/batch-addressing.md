@@ -17,7 +17,8 @@ but not statements.
 
 This file collects ways to address what earlier steps of a batch changed,
 from the most specific to the most general. Roadmap item 10 in the README
-takes option 3.
+takes option 3, with ranges that follow later steps as option 5's marks
+do; `internal/refactor/batchref.go` implements it.
 
 ## What a step's result is
 
