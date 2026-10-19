@@ -106,8 +106,8 @@ hand or a tool got in the way.
      annotation (`.github/test-times.sh`).*
    - **The fresh-load comparison** in `refactortest.Run` loads each applied
      case twice more, after applying and after undoing: 1,725 loads for
-     today's cases instead of 811 (`-short` skips it). Options: run it in
-     one CI job only, or only after undoing.
+     today's cases instead of 811 (`-short` skips it). *Done: it runs in
+     the `stable` CI job only; the `1.26.x` job runs with `-short`.*
    - **`-race` in both CI jobs.** Run it in one only.
    - **Tests that start `go test`:** `mcpserver.TestRefactoringLoop`
      (`check` with `run_tests`) and `agent.TestRunUndoesWhenTestsBreak`.
