@@ -1,0 +1,2 @@
+func (s *Stack[T]) PushAll(p []T), in stack.go
+func (s *Stack[T]) At(n int) T, in stack.go

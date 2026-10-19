@@ -34,7 +34,7 @@ func (*CreateFromUsage) Name() string { return "create_from_usage" }
 
 func (*CreateFromUsage) Description() string {
 	return `Declare the functions code calls before they exist, as stubs ("create from usage"). This is an edit, not a refactoring, and the one step that may start from code that does not type-check: it must leave fewer errors and no new one.
-Use it after writing a test or code that calls functions not written yet: give the file with the calls. Every function it calls that is not declared gets a stub, or only those in names; a call pkg.F declares F in that package of the module, and a call x.M, where x is (or points to) a type of the module without a field or method M, declares the method M on that type, with a receiver like its other methods'. If that type is an interface, M is added to it, with a stub on each type of the module that implemented it, so that they still do. A type of the module used as an interface it lacks methods of (assigned, passed or returned as one, e.g. var _ io.Writer = (*T)(nil)) gets stubs of those methods, with the interface's signatures.
+Use it after writing a test or code that calls functions not written yet: give the file with the calls. Every function it calls that is not declared gets a stub, or only those in names; a call pkg.F declares F in that package of the module, and a call x.M, where x is (or points to) a type of the module without a field or method M, declares the method M on that type, with a receiver like its other methods'. On a generic type, the method is written with its type parameters: called on a Stack[string], a string argument becomes a T parameter. If that type is an interface, M is added to it, with a stub on each type of the module that implemented it, so that they still do. A type of the module used as an interface it lacks methods of (assigned, passed or returned as one, e.g. var _ io.Writer = (*T)(nil)) gets stubs of those methods, with the interface's signatures.
 Each parameter has its argument's type and is named after it (a variable or field) or its type. The results come from how the value is used: a call as a statement has none, a returned call has the function's results, err is an error and ok a bool, and a variable has the type it is compared with, passed as, assigned to or returned as. When the use does not tell, give them in results. The body is panic("not implemented").
 A stub goes in to_file; else a method goes in the file of its type, and a function in the calling file, if it is of that package and not a test; else in the file the test is named after (m.go for m_test.go), or the package's first file. The result's "chose:" lines give each signature and file: check them.`
 }
@@ -103,7 +103,9 @@ func (*CreateFromUsage) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 		names = append(names, s.fullName())
 	}
 	for _, d := range decls {
-		choices = append(choices, d.choice)
+		if d.choice != "" {
+			choices = append(choices, d.choice)
+		}
 	}
 	edits, err := writeStubs(ws, decls)
 	if err != nil {
@@ -162,7 +164,8 @@ func writeStubs(ws *workspace.Workspace, decls []decl) ([]edit.FileEdit, error) 
 
 // decl is a declaration to write: text at offset at of file, or at its
 // end if at is -1 (an offset is only for a method added to an interface),
-// and the choice it is, for the result.
+// and the choice it is, for the result ("" for a line break that only
+// spreads a one-line interface over lines).
 type decl struct {
 	file   string
 	at     int
@@ -197,7 +200,7 @@ func (st *stubber) declare(s stub) ([]decl, error) {
 	if err != nil {
 		return nil, err
 	}
-	sig, err := st.signature(s, qualifier(s.target.PkgPath), used)
+	sig, err := st.signature(s, writer(s.target.PkgPath, s.recv), used)
 	if err != nil {
 		return nil, err
 	}
@@ -209,16 +212,16 @@ func (st *stubber) declare(s stub) ([]decl, error) {
 
 // signature is that of s's function, from its call: "Name(params)
 // results".
-func (st *stubber) signature(s stub, qual types.Qualifier, used map[string]bool) (string, error) {
+func (st *stubber) signature(s stub, write func(types.Type) string, used map[string]bool) (string, error) {
 	line := st.ws.Fset.Position(s.call.Pos()).Line
-	params, err := parameters(st.pkg.TypesInfo, s.call, qual, used)
+	params, err := parameters(st.pkg.TypesInfo, s.call, write, used)
 	if err != nil {
 		return "", refactor.Refusef("for %s, called on line %d of %s: %v", s.name, line, st.args.File, err)
 	}
 	res, ok := st.args.Results[s.name]
 	if ok {
 		res = resultText(res)
-	} else if res, ok = results(st.pkg.TypesInfo, st.file, s.call, qual); !ok {
+	} else if res, ok = results(st.pkg.TypesInfo, st.file, s.call, write); !ok {
 		return "", refactor.Refusef("cannot tell the results of %s from its use on line %d of %s; give them in results, e.g. {%q: \"(int, error)\"}", s.name, line, st.args.File, s.name)
 	}
 	return s.name + "(" + strings.Join(params, ", ") + ")" + res, nil
@@ -232,7 +235,7 @@ func (st *stubber) implement(s stub) ([]decl, error) {
 	if err != nil {
 		return nil, err
 	}
-	sig := strings.TrimPrefix(types.TypeString(s.method.Type(), qualifier(s.target.PkgPath)), "func")
+	sig := sigString(s.method.Type().(*types.Signature), writer(s.target.PkgPath, s.recv))
 	recv := receiver(st.pkg.TypesInfo, s.recv, s.x)
 	return []decl{funcDecl(st.ws, dest, "("+recv+") "+s.name+sig)}, nil
 }
@@ -249,24 +252,29 @@ func (st *stubber) extend(s stub) ([]decl, error) {
 		return nil, refactor.Refusef("cannot find the declaration of interface %s", obj.Name())
 	}
 	tf := st.ws.Fset.File(f.Pos())
-	if tf.Line(it.Methods.Opening) == tf.Line(it.Methods.Closing) {
-		return nil, refactor.Refusef("interface %s is written on one line; write it on several to add %s to it", obj.Name(), s.name)
-	}
 	src, err := os.ReadFile(pos.Filename)
 	if err != nil {
 		return nil, err
 	}
-	at := tf.Offset(tf.LineStart(tf.Line(it.Methods.Closing)))
-	sig, err := st.signature(s, qualifier(obj.Pkg().Path()), map[string]bool{})
+	sig, err := st.signature(s, writer(obj.Pkg().Path(), s.recv), map[string]bool{})
 	if err != nil {
 		return nil, err
 	}
-	decls := []decl{{file: pos.Filename, at: at, text: gocode.IndentOf(src, at) + "\t" + sig + "\n",
-		choice: fmt.Sprintf("%s, in interface %s in %s", sig, obj.Name(), st.ws.Rel(pos.Filename))}}
+	choice := fmt.Sprintf("%s, in interface %s in %s", sig, obj.Name(), st.ws.Rel(pos.Filename))
+	var decls []decl
+	if tf.Line(it.Methods.Opening) == tf.Line(it.Methods.Closing) {
+		// Spread it over lines, which gofmt then indents.
+		last := it.Methods.List[len(it.Methods.List)-1]
+		decls = append(decls, decl{file: pos.Filename, at: tf.Offset(it.Methods.Opening) + 1, text: "\n"},
+			decl{file: pos.Filename, at: tf.Offset(last.End()), text: "\n" + sig + "\n", choice: choice})
+	} else {
+		at := tf.Offset(tf.LineStart(tf.Line(it.Methods.Closing)))
+		decls = append(decls, decl{file: pos.Filename, at: at, text: gocode.IndentOf(src, at) + "\t" + sig + "\n", choice: choice})
+	}
 	for _, t := range implementers(st.ws, s.recv) {
 		home := st.ws.Fset.Position(t.Obj().Pos()).Filename
 		recv := receiver(st.pkg.TypesInfo, t, nil)
-		tsig, err := st.signature(s, qualifier(t.Obj().Pkg().Path()), map[string]bool{strings.Fields(recv)[0]: true})
+		tsig, err := st.signature(s, writer(t.Obj().Pkg().Path(), nil), map[string]bool{strings.Fields(recv)[0]: true})
 		if err != nil {
 			return nil, err
 		}
@@ -359,6 +367,103 @@ func qualifier(path string) types.Qualifier {
 	}
 }
 
+// writer writes types for code in the package at path. For a method of
+// an instance of a generic type, recv, it writes the instance's type
+// arguments as the type's parameters: string as T for Stack[string].
+func writer(path string, recv *types.Named) func(types.Type) string {
+	qual := qualifier(path)
+	var args []types.Type
+	var names []string
+	if recv != nil && recv.TypeArgs().Len() > 0 {
+		names = typeParamNames(recv)
+		for i := range recv.TypeArgs().Len() {
+			args = append(args, recv.TypeArgs().At(i))
+		}
+	}
+	var write func(types.Type) string
+	write = func(t types.Type) string {
+		for i, a := range args {
+			if types.Identical(t, a) {
+				return names[i]
+			}
+		}
+		switch t := t.(type) {
+		case *types.Pointer:
+			return "*" + write(t.Elem())
+		case *types.Slice:
+			return "[]" + write(t.Elem())
+		case *types.Array:
+			return fmt.Sprintf("[%d]%s", t.Len(), write(t.Elem()))
+		case *types.Map:
+			return "map[" + write(t.Key()) + "]" + write(t.Elem())
+		case *types.Named:
+			if t.TypeArgs().Len() > 0 {
+				var targs []string
+				for i := range t.TypeArgs().Len() {
+					targs = append(targs, write(t.TypeArgs().At(i)))
+				}
+				return qualified(t.Obj(), qual) + "[" + strings.Join(targs, ", ") + "]"
+			}
+		}
+		return types.TypeString(t, qual)
+	}
+	return write
+}
+
+// qualified is obj's name, qualified by qual.
+func qualified(obj types.Object, qual types.Qualifier) string {
+	if p := qual(obj.Pkg()); p != "" {
+		return p + "." + obj.Name()
+	}
+	return obj.Name()
+}
+
+// typeParamNames are the names named's methods give its type parameters,
+// or else those of its declaration.
+func typeParamNames(named *types.Named) []string {
+	origin := named.Origin()
+	tps := origin.TypeParams()
+	for i := range origin.NumMethods() {
+		if r := origin.Method(i).Type().(*types.Signature).RecvTypeParams(); r.Len() > 0 {
+			tps = r
+			break
+		}
+	}
+	var names []string
+	for i := range tps.Len() {
+		names = append(names, tps.At(i).Obj().Name())
+	}
+	return names
+}
+
+// sigString writes sig's parameters and results, as they follow a
+// function's name.
+func sigString(sig *types.Signature, write func(types.Type) string) string {
+	tuple := func(vs *types.Tuple, variadic bool) string {
+		var ps []string
+		for i := range vs.Len() {
+			v := vs.At(i)
+			t := write(v.Type())
+			if variadic && i == vs.Len()-1 {
+				t = "..." + write(v.Type().(*types.Slice).Elem())
+			}
+			if v.Name() != "" {
+				t = v.Name() + " " + t
+			}
+			ps = append(ps, t)
+		}
+		return strings.Join(ps, ", ")
+	}
+	s := "(" + tuple(sig.Params(), sig.Variadic()) + ")"
+	switch r := sig.Results(); {
+	case r.Len() == 1 && r.At(0).Name() == "":
+		s += " " + tuple(r, false)
+	case r.Len() > 0:
+		s += " (" + tuple(r, false) + ")"
+	}
+	return s
+}
+
 // fullName is "Name", or "Type.Name" for a method.
 func (s stub) fullName() string {
 	if s.recv != nil {
@@ -405,7 +510,7 @@ func undeclared(ws *workspace.Workspace, pkg *packages.Package, file *ast.File) 
 				target, id = pkg.Imports[pn.Imported().Path()], f.Sel
 			} else if named := receiverType(ws, info, f); named != nil {
 				if home, _ := ws.FileSyntax(ws.Fset.Position(named.Obj().Pos()).Filename); home != nil {
-					add(types.TypeString(named, nil)+"."+f.Sel.Name, stub{name: f.Sel.Name, target: home, call: call, recv: named, x: f.X})
+					add(types.TypeString(named.Origin(), nil)+"."+f.Sel.Name, stub{name: f.Sel.Name, target: home, call: call, recv: named, x: f.X})
 				}
 				return true
 			}
@@ -456,7 +561,7 @@ func unimplemented(ws *workspace.Workspace, pkg *packages.Package, file *ast.Fil
 			if obj, _, _ := types.LookupFieldOrMethod(t, true, named.Obj().Pkg(), m.Name()); obj != nil || home == nil {
 				continue
 			}
-			if k := types.TypeString(named, nil) + "." + m.Name(); !seen[k] {
+			if k := types.TypeString(named.Origin(), nil) + "." + m.Name(); !seen[k] {
 				seen[k] = true
 				out = append(out, stub{name: m.Name(), target: home, recv: named, x: e, method: m})
 			}
@@ -473,7 +578,7 @@ func moduleType(ws *workspace.Workspace, t types.Type) *types.Named {
 		t = p.Elem()
 	}
 	named, ok := t.(*types.Named)
-	if !ok || named.Obj().Pkg() == nil || named.TypeParams().Len() > 0 || !ws.Contains(ws.Fset.Position(named.Obj().Pos()).Filename) {
+	if !ok || named.Obj().Pkg() == nil || !ws.Contains(ws.Fset.Position(named.Obj().Pos()).Filename) {
 		return nil
 	}
 	return named
@@ -526,10 +631,14 @@ func receiver(info *types.Info, named *types.Named, x ast.Expr) string {
 	if name == "" {
 		name = strings.ToLower(named.Obj().Name()[:1])
 	}
-	if ptr {
-		return name + " *" + named.Obj().Name()
+	t := named.Obj().Name()
+	if tps := typeParamNames(named); len(tps) > 0 {
+		t += "[" + strings.Join(tps, ", ") + "]"
 	}
-	return name + " " + named.Obj().Name()
+	if ptr {
+		return name + " *" + t
+	}
+	return name + " " + t
 }
 
 // destination is the file a stub for target goes in: to_file if given;
@@ -567,7 +676,7 @@ func destination(ws *workspace.Workspace, target *packages.Package, caller, toFi
 
 // parameters declares a parameter for each argument of call: of its type,
 // and named after it or its type.
-func parameters(info *types.Info, call *ast.CallExpr, qual types.Qualifier, used map[string]bool) ([]string, error) {
+func parameters(info *types.Info, call *ast.CallExpr, write func(types.Type) string, used map[string]bool) ([]string, error) {
 	var out []string
 	for i, arg := range call.Args {
 		t := typeOf(info, arg)
@@ -579,9 +688,9 @@ func parameters(info *types.Info, call *ast.CallExpr, qual types.Qualifier, used
 			name = strings.TrimRight(name, "0123456789") + strconv.Itoa(n)
 		}
 		used[name] = true
-		ts := types.TypeString(t, qual)
+		ts := write(t)
 		if s, ok := t.Underlying().(*types.Slice); ok && i == len(call.Args)-1 && call.Ellipsis.IsValid() {
-			ts = "..." + types.TypeString(s.Elem(), qual)
+			ts = "..." + write(s.Elem())
 		}
 		out = append(out, name+" "+ts)
 	}
@@ -649,7 +758,7 @@ func typeOf(info *types.Info, e ast.Expr) types.Type {
 // results infers the results of the function call calls from how its
 // value is used, as the text after the parameter list: "", " T" or
 // " (T, U)". ok is false if the use does not tell.
-func results(info *types.Info, file *ast.File, call *ast.CallExpr, qual types.Qualifier) (text string, ok bool) {
+func results(info *types.Info, file *ast.File, call *ast.CallExpr, write func(types.Type) string) (text string, ok bool) {
 	path, _ := astutil.PathEnclosingInterval(file, call.Pos(), call.End())
 	var ts []types.Type
 	switch p := path[1].(type) {
@@ -688,7 +797,7 @@ func results(info *types.Info, file *ast.File, call *ast.CallExpr, qual types.Qu
 	}
 	var names []string
 	for _, t := range ts {
-		names = append(names, types.TypeString(t, qual))
+		names = append(names, write(t))
 	}
 	return resultText(strings.Join(names, ", ")), true
 }

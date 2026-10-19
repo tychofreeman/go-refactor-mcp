@@ -962,3 +962,11 @@ All through gorefactor. Notes:
   (`types.WriteSignature` takes a *bytes.Buffer); with `check: "end"`
   the whole 8-step batch had to be resent. A way to resend with one
   step changed would save that.
+
+## 2026-10-19: create_from_usage for generic types and one-line interfaces
+
+All through gorefactor. Changing a parameter's type (qual
+types.Qualifier to write func(types.Type) string, in three functions
+and their calls) has no refactoring: it took 13 replace_text steps in
+one batch checked at its end. A change_parameter_type refactoring, or
+add_parameter followed by remove_parameter in one batch, would fit.

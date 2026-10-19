@@ -1,0 +1,2 @@
+Name() string, in interface Shape in shapes.go
+func (q Square) Name() string, in shapes.go
