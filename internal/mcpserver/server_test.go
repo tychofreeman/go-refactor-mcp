@@ -4,10 +4,12 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings"
 )
 
 const calcSrc = `package calc
@@ -495,5 +497,24 @@ func TestSignatureChangesListLocations(t *testing.T) {
 	mustContain(t, "add_parameter", out, "APPLIED add_parameter", "changed lines:", "app/app.go: 5")
 	if strings.Contains(out, "+func Apply") {
 		t.Errorf("add_parameter showed the diff:\n%s", out)
+	}
+}
+
+// The instructions list the tools by what the model wants to do; every
+// tool must be in that list.
+func TestInstructionsNameEveryTool(t *testing.T) {
+	_, groups, ok := strings.Cut(Instructions, "Which tool, by what you want to do:")
+	if !ok {
+		t.Fatal("the instructions have no list of tools by intention")
+	}
+	groups, _, _ = strings.Cut(groups, "\n\n")
+	names := []string{"inspect", "batch", "check", "undo"}
+	for _, r := range refactorings.All() {
+		names = append(names, r.Name())
+	}
+	for _, n := range names {
+		if !regexp.MustCompile(`\b` + n + `\b`).MatchString(groups) {
+			t.Errorf("%s is not in the instructions' list of tools", n)
+		}
 	}
 }
