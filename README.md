@@ -793,7 +793,9 @@ Refused (with an explanation):
   `strings.Builder`, also refuse to be copied). A literal that only runs
   during its statement, like an `ast.Inspect` visitor or a `sort.Slice`
   comparison, has finished when the new function returns, so its
-  variables are returned like any other;
+  variables are returned like any other; so has one the statements
+  assign to a variable they declare and only call directly, outside
+  another literal (a recursive `visit` function, say);
 - a `:=` in the statements redeclares a variable passed as a pointer;
 - the function has a type parameter named `_`, or one whose name a local
   type hides at the call site, and the statements use its type parameters;

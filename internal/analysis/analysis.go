@@ -32,6 +32,9 @@ type Func struct {
 	// SyncLit) runs only while the statement creating it runs, so it
 	// cannot touch the variable while other code runs.
 	CapturedAsync map[*types.Var]bool
+	// AsyncLits lists, for each local in CapturedAsync, the closures not
+	// known to be synchronous that reference it.
+	AsyncLits map[*types.Var][]*ast.FuncLit
 	// Modified lists where each local is written: assignment (also of a
 	// field or array element of it), ++/--, or a range loop with =.
 	Modified map[*types.Var][]ast.Node
@@ -86,6 +89,7 @@ func AnalyzeFunc(info *types.Info, fn ast.Node) *Func {
 		Addressed:     map[*types.Var]bool{},
 		Captured:      map[*types.Var]bool{},
 		CapturedAsync: map[*types.Var]bool{},
+		AsyncLits:     map[*types.Var][]*ast.FuncLit{},
 		Modified:      map[*types.Var][]ast.Node{},
 	}
 	address := func(e ast.Expr) {
@@ -165,6 +169,9 @@ func AnalyzeFunc(info *types.Info, fn ast.Node) *Func {
 					f.Captured[v] = true
 					if !sync[lit] {
 						f.CapturedAsync[v] = true
+						if l := f.AsyncLits[v]; len(l) == 0 || l[len(l)-1] != lit {
+							f.AsyncLits[v] = append(l, lit)
+						}
 					}
 				}
 			}

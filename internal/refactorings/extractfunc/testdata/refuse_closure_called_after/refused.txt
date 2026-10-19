@@ -1,0 +1,1 @@
+out (declared at line 4) is used by a function literal that can run later

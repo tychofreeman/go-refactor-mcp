@@ -45,6 +45,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
+	"golang.org/x/tools/go/ast/astutil"
 )
 
 // ExtractFunction is the "extract_function" refactoring.
@@ -64,7 +65,7 @@ Return statements are supported in two shapes: if every path through the stateme
 Variables whose address is taken or that a function literal changes are passed as pointers, so both functions share them.
 If the statements use the receiver of the method they are in, the new function is a method of the same type; its name must then be unexported and not clash with a field or method.
 If the statements use the enclosing function's type parameters, the new function declares them too and the call passes them explicitly.
-Refuses other returns (for example an early return of a success value), defer, recover() or fallthrough, or a break, continue or goto that leaves the selected lines; if a variable they declare has its address taken or is used by a function literal that can run later (not one only called during its statement, like an ast.Inspect visitor), and is used after them.
+Refuses other returns (for example an early return of a success value), defer, recover() or fallthrough, or a break, continue or goto that leaves the selected lines; if a variable they declare has its address taken or is used by a function literal that can run later (not one only called during its statement, like an ast.Inspect visitor, or only called by the selected lines through a variable they declare, like a recursive visit function), and is used after them.
 Local constants and types the statements need move to package level, so both functions share them; this is refused if one is part of a grouped declaration, uses local variables or type parameters, or its name is taken at package level.`
 }
 
@@ -817,10 +818,11 @@ func (x *extraction) analyzeDataFlow() error {
 		case x.fa.Addressed[v]:
 			return refactor.Refusef("%s (declared at line %d) has its address taken, or a pointer method is called on it, and is used after the selected lines; returning it would return a copy, so anything holding its address would no longer see the same variable (some types, like strings.Builder, also refuse to be copied). Include its later uses in the selection",
 				v.Name(), x.line(v.Pos()))
-		case x.fa.CapturedAsync[v]:
+		case x.capturedLater(v):
 			// A literal that only runs during its statement (an ast.Inspect
-			// visitor, say) has finished by the time the new function
-			// returns v, so a copy loses nothing.
+			// visitor, say), or only when the selected lines call it, has
+			// finished by the time the new function returns v, so a copy
+			// loses nothing.
 			return refactor.Refusef("%s (declared at line %d) is used by a function literal that can run later, and after the selected lines; returning it would return a copy that the function literal no longer shares. Include its later uses in the selection",
 				v.Name(), x.line(v.Pos()))
 		}
@@ -2092,6 +2094,89 @@ func (x *extraction) inSelectionPos(p token.Pos) bool {
 }
 
 func (x *extraction) inSelection(n ast.Node) bool { return x.inSelectionPos(n.Pos()) }
+
+// capturedLater reports whether a function literal that can run after the
+// selected lines uses v.
+func (x *extraction) capturedLater(v *types.Var) bool {
+	for _, lit := range x.fa.AsyncLits[v] {
+		if !x.calledOnlyInSelection(lit) {
+			return true
+		}
+	}
+	return false
+}
+
+// calledOnlyInSelection reports whether lit runs only while the selected
+// lines do: they assign it to a variable they declare (a recursive visit
+// function, say), and only call that variable, directly and not in another
+// function literal of theirs.
+func (x *extraction) calledOnlyInSelection(lit *ast.FuncLit) bool {
+	if !x.inSelection(lit) {
+		return false
+	}
+	fn := x.holder(lit)
+	if fn == nil || !x.inSelectionPos(fn.Pos()) || x.fa.Addressed[fn] {
+		return false
+	}
+	for id, obj := range x.info.Uses {
+		if obj != fn {
+			continue
+		}
+		if !x.inSelection(id) {
+			return false
+		}
+		path, _ := astutil.PathEnclosingInterval(x.file, id.Pos(), id.End())
+		if as, ok := path[1].(*ast.AssignStmt); ok && slices.Contains(as.Lhs, ast.Expr(id)) {
+			continue // a write, which runs nothing
+		}
+		if call, ok := path[1].(*ast.CallExpr); !ok || call.Fun != id {
+			return false
+		}
+		switch path[2].(type) {
+		case *ast.GoStmt, *ast.DeferStmt:
+			return false
+		}
+		for _, n := range path[2:] {
+			if l, ok := n.(*ast.FuncLit); ok && x.inSelection(l) && l != lit {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// holder returns the local variable that an assignment or declaration in
+// the selected lines sets to lit, or nil.
+func (x *extraction) holder(lit *ast.FuncLit) *types.Var {
+	var out *types.Var
+	set := func(lhs []*ast.Ident, rhs []ast.Expr) {
+		if len(lhs) != len(rhs) {
+			return
+		}
+		for i, r := range rhs {
+			if lhs[i] != nil && ast.Unparen(r) == lit {
+				out, _ = x.info.ObjectOf(lhs[i]).(*types.Var)
+			}
+		}
+	}
+	for _, s := range x.stmts {
+		ast.Inspect(s, func(n ast.Node) bool {
+			switch n := n.(type) {
+			case *ast.AssignStmt:
+				var lhs []*ast.Ident
+				for _, l := range n.Lhs {
+					id, _ := l.(*ast.Ident)
+					lhs = append(lhs, id)
+				}
+				set(lhs, n.Rhs)
+			case *ast.ValueSpec:
+				set(n.Names, n.Values)
+			}
+			return out == nil
+		})
+	}
+	return out
+}
 
 // enclosingName names the function containing the selection, for messages.
 func (x *extraction) enclosingName() string {
