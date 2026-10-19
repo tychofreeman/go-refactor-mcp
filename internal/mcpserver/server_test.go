@@ -244,6 +244,12 @@ func TestBatchRefusals(t *testing.T) {
 
 	out, _ = call(t, cs, "batch", map[string]any{"steps": []any{}})
 	mustContain(t, "empty", out, "REFUSED batch: steps is empty")
+
+	// A tool's argument put beside the steps is explained, not just refused.
+	out, _ = call(t, cs, "batch", map[string]any{"file": "calc/calc.go", "steps": []any{
+		map[string]any{"tool": "rename", "args": map[string]any{"name": "Apply", "new_name": "Scale"}},
+	}})
+	mustContain(t, "argument beside the steps", out, `unknown field "file"`, "steps (required)", "each step's args")
 }
 
 // replace_text edits text no other tool reaches, such as a string
@@ -261,6 +267,19 @@ func TestReplaceText(t *testing.T) {
 	doc, _ := os.ReadFile(filepath.Join(dir, "calc", "doc.go"))
 	calc, _ := os.ReadFile(filepath.Join(dir, "calc", "calc.go"))
 	mustContain(t, "files", string(doc)+string(calc), "`scale n by the factor`", "// Factor multiplies n in Apply.")
+}
+
+// A batch takes line numbers as they were when it began: after a step
+// adds code above Apply, a later step still finds it at its old line.
+func TestBatchLinesFromBeforeTheBatch(t *testing.T) {
+	cs, dir := setup(t)
+	out, _ := call(t, cs, "batch", map[string]any{"steps": []any{
+		map[string]any{"tool": "add_declaration", "args": map[string]any{"file": "calc/calc.go", "before": "Rate", "content": "// Base is where counting starts.\nconst Base = 0"}},
+		map[string]any{"tool": "rename", "args": map[string]any{"file": "calc/calc.go", "line": 6, "name": "Apply", "new_name": "Scale"}},
+	}})
+	mustContain(t, "batch", out, "APPLIED batch: 2 steps")
+	app, _ := os.ReadFile(filepath.Join(dir, "app", "app.go"))
+	mustContain(t, "app.go", string(app), "calc.Scale(")
 }
 
 // TestRefactoringLoop walks the loop the model is meant to follow.

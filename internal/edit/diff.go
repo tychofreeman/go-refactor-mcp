@@ -47,6 +47,19 @@ func UnifiedContext(name string, before, after []byte, ctx int) string {
 	return sb.String()
 }
 
+// LineMap maps each line of before (1-based) to the line it is in after,
+// or to 0 if the change rewrote or removed it.
+func LineMap(before, after []byte) []int {
+	a, b := splitLines(string(before)), splitLines(string(after))
+	m := make([]int, len(a)+1)
+	for _, o := range myers(a, b) {
+		if o.kind == ' ' {
+			m[o.a+1] = o.b + 1
+		}
+	}
+	return m
+}
+
 // Locations lists where a unified diff changed each file, by line in the
 // new file ("changed lines:\n  a.go: 12, 40-41\n"): enough to report a
 // change that is the same everywhere, such as a rename.

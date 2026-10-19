@@ -213,12 +213,14 @@ type BatchResult struct {
 // step is refused, the ones before it are undone and the batch is refused;
 // if all apply, they become one entry on the undo stack.
 //
-// A step that addresses a file by line (line, start_line, end_line or
-// column) is refused once an earlier step of the batch has changed that
-// file, since its line numbers may no longer be right.
+// Line numbers in the steps (line, start_line, end_line) are those of the
+// files as they were when the batch began, as the model last inspected
+// them: each is moved to where that line is after the earlier steps. A
+// step that addresses a line an earlier step rewrote or removed, or a
+// line of a file created in the batch, is refused.
 func RunBatch(ws *workspace.Workspace, steps []Step, opts Options) (*BatchResult, error) {
 	b := &BatchResult{Total: len(steps)}
-	changedBy := map[string]int{} // a file, relative to the root -> the first step that changed it
+	lines := map[string]*lineMap{} // by file, relative to the root: its lines through the batch
 	applied := 0
 	rollback := func() error {
 		for ; applied > 0; applied-- {
@@ -231,15 +233,19 @@ func RunBatch(ws *workspace.Workspace, steps []Step, opts Options) (*BatchResult
 	var names []string
 	for i, s := range steps {
 		name := s.Refactoring.Name()
+		args := s.Args
 		if file, byLine := lineAddressed(s.Args); byLine {
 			rel := ws.Rel(ws.Abs(file))
-			if by, ok := changedBy[rel]; ok {
-				b.FailedStep, b.FailedTool = i+1, name
-				b.Refused = fmt.Sprintf("it addresses %s by line, but step %d changed %s, so those line numbers may be wrong; address it by name, or put it before step %d", rel, by, rel, by)
-				return b, rollback()
+			if m := lines[rel]; m != nil {
+				translated, err := translateLines(s.Args, rel, m)
+				if err != nil {
+					b.FailedStep, b.FailedTool, b.Refused = i+1, name, err.Error()
+					return b, rollback()
+				}
+				args = translated
 			}
 		}
-		res, err := Run(ws, s.Refactoring, s.Args, Options{Compact: opts.Compact})
+		res, err := Run(ws, s.Refactoring, args, Options{Compact: opts.Compact})
 		if err != nil {
 			if rerr := rollback(); rerr != nil {
 				return nil, fmt.Errorf("step %d (%s): %v; %v", i+1, name, err, rerr)
@@ -253,9 +259,13 @@ func RunBatch(ws *workspace.Workspace, steps []Step, opts Options) (*BatchResult
 		}
 		applied++
 		names = append(names, name)
-		for _, f := range res.Files {
-			if _, ok := changedBy[f]; !ok {
-				changedBy[f] = i + 1
+		if c, ok := ws.LastChange(); ok {
+			for p, before := range c.Before {
+				rel := ws.Rel(p)
+				if lines[rel] == nil {
+					lines[rel] = newLineMap(before)
+				}
+				lines[rel].follow(i+1, before, c.After[p])
 			}
 		}
 	}
@@ -285,6 +295,66 @@ func RunBatch(ws *workspace.Workspace, steps []Step, opts Options) (*BatchResult
 	}
 	b.Diff = edit.ElideSupplied(b.Diff, strings.Join(supplied, "\n"))
 	return b, nil
+}
+
+// lineMap follows a file's lines through the steps of a batch. For each
+// line (1-based) of the file as it was when the batch began, now is the
+// line it is on now, or 0 once a step rewrote or removed it; changed is
+// that step.
+type lineMap struct {
+	now     []int
+	changed []int
+	created bool // the file did not exist when the batch began
+}
+
+func newLineMap(before []byte) *lineMap {
+	now := edit.LineMap(before, before)
+	return &lineMap{now: now, changed: make([]int, len(now)), created: before == nil}
+}
+
+// follow moves m's lines through step, which changed the file from before
+// to after.
+func (m *lineMap) follow(step int, before, after []byte) {
+	moved := edit.LineMap(before, after)
+	for i, cur := range m.now {
+		if cur == 0 {
+			continue
+		}
+		if cur >= len(moved) || moved[cur] == 0 {
+			m.now[i] = 0
+			if m.changed[i] == 0 {
+				m.changed[i] = step
+			}
+			continue
+		}
+		m.now[i] = moved[cur]
+	}
+}
+
+// translateLines rewrites a step's line arguments (line, start_line,
+// end_line), given as of the start of the batch, to where those lines are
+// now. A line an earlier step rewrote or removed cannot be addressed.
+func translateLines(args json.RawMessage, rel string, m *lineMap) (json.RawMessage, error) {
+	var a map[string]json.RawMessage
+	if err := json.Unmarshal(args, &a); err != nil {
+		return args, nil
+	}
+	for _, key := range []string{"line", "start_line", "end_line"} {
+		var n int
+		if raw, ok := a[key]; !ok || json.Unmarshal(raw, &n) != nil || n <= 0 {
+			continue
+		}
+		switch {
+		case m.created:
+			return nil, fmt.Errorf("%s was created in this batch, so it has no line %d from before it; address what is in it by name", rel, n)
+		case n >= len(m.now):
+			return nil, fmt.Errorf("%s had %d lines when the batch began, so there is no line %d", rel, len(m.now)-1, n)
+		case m.now[n] == 0:
+			return nil, fmt.Errorf("line %d of %s (as it was when the batch began) was rewritten by step %d, so it is not there to address; address what step %d made by name, or send this step in a later call with line numbers from a new inspect", n, rel, m.changed[n], m.changed[n])
+		}
+		a[key], _ = json.Marshal(m.now[n])
+	}
+	return json.Marshal(a)
 }
 
 // String renders the batch result as plain text, the format sent to models.

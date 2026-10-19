@@ -317,3 +317,27 @@ func TestSquash(t *testing.T) {
 		t.Error("squashing more changes than the stack holds should fail")
 	}
 }
+
+// The test main package go generates for a package's tests is not the
+// module's code: renaming or removing a test must not make it an error.
+func TestRenamingATestIsNotAnError(t *testing.T) {
+	test := "package m\n\nimport \"testing\"\n\nfunc TestOld(t *testing.T) {}\n"
+	dir := writeModule(t, map[string]string{"m.go": "package m\n", "m_test.go": test})
+	w, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range w.Pkgs {
+		if strings.HasSuffix(p.ID, ".test") {
+			t.Errorf("generated test main package %s loaded", p.ID)
+		}
+	}
+	path := filepath.Join(dir, "m_test.go")
+	i := strings.Index(test, "TestOld")
+	if _, err := w.Apply("rename test", []edit.FileEdit{{Path: path, Edits: []edit.TextEdit{{Start: i, End: i + len("TestOld"), NewText: "TestNew"}}}}); err != nil {
+		t.Fatal(err)
+	}
+	if errs := w.Errors(); len(errs) != 0 {
+		t.Errorf("renaming a test gave errors: %v", errs)
+	}
+}

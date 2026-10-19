@@ -829,3 +829,31 @@ declaration, so the statement range is refused; `replace_expression` on
 the returned value works. Registering the new tool in the `All()` list
 (an element of a composite literal) and two description edits were done
 by hand: exactly what `replace_text` now covers.
+
+## 2026-10-18: line numbers in a batch
+
+**Built with the batch tool's own limitation in the way.** Adding a test
+helper and then replacing a test body by its line numbers could not go in
+one batch: the helper changed the file, so the line-addressed step after
+it was refused as stale (the rule this change replaces). Done as two
+calls; an added import then shifted the lines once more.
+
+**A test function could not be renamed.** `rename` of
+`TestBatchRefusesStaleLines` was refused: "a reference ... is in
+~/.cache/go-build/..., outside the workspace". The workspace loaded the
+main package go generates to run the tests (`p.test`), whose source in
+the build cache refers to every test by name; after a rename by hand it
+went stale and made every tool refuse with a type error in that file.
+Fixed: the workspace leaves those generated packages out. The running
+server still had the bug, so the rename was done by hand at the end.
+
+**The running server blocked its own fix.** After the test rename by
+hand, the session's server (built before the fix) refused every tool
+with the stale test-main error, so the batch-argument help below was
+written with Edit. Reconnecting to a server built from this branch
+removes the problem.
+
+**Batch arguments put beside the steps.** In the A/B runs a batch was
+refused three times with `unknown field "file"`: a step's argument sent
+at the top level. The refusal now says what batch takes and that a
+tool's arguments go in each step's args.

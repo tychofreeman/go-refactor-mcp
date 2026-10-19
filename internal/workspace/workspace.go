@@ -215,9 +215,23 @@ func (w *Workspace) Reload() error {
 	if len(pkgs) == 0 {
 		return fmt.Errorf("no Go packages found in %s matching %v", w.Root, w.Patterns)
 	}
-	w.Fset, w.Pkgs, w.stamps = fset, pkgs, stamps
+	w.Fset, w.Pkgs, w.stamps = fset, withoutTestMains(pkgs), stamps
 	w.FullLoads++
 	return nil
+}
+
+// withoutTestMains leaves out the main packages go generates to run a
+// package's tests ("p.test"): their source is in the build cache, not the
+// module, and goes stale when a test is renamed or removed.
+func withoutTestMains(pkgs []*packages.Package) []*packages.Package {
+	var out []*packages.Package
+	for _, p := range pkgs {
+		if p.Name == "main" && strings.HasSuffix(p.ID, ".test") {
+			continue
+		}
+		out = append(out, p)
+	}
+	return out
 }
 
 // Errors returns the deduplicated list/parse/type errors of all loaded
@@ -405,6 +419,15 @@ func (w *Workspace) Apply(label string, fes []edit.FileEdit) (Change, error) {
 
 // CanUndo reports whether there is a change to undo.
 func (w *Workspace) CanUndo() bool { return len(w.undo) > 0 }
+
+// LastChange returns the change on top of the undo stack: the one applied
+// last.
+func (w *Workspace) LastChange() (Change, bool) {
+	if len(w.undo) == 0 {
+		return Change{}, false
+	}
+	return w.undo[len(w.undo)-1], true
+}
 
 // Squash replaces the last n changes on the undo stack with one, labelled
 // label, that undoes them all, and returns it; its Diff goes from before
