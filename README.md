@@ -262,6 +262,27 @@ hand or a tool got in the way.
     IDE "Generate" set). Measure progress by the code in edit arguments
     per story: `refactor-tokens`' input tokens for `create_file`,
     `replace_*`, `insert_statements` and `add_declaration`.
+14. **Large modules: measure memory and time.** The workspace keeps the
+    syntax and type information of every package of the module (test
+    variants too) for the whole session; dependencies, the standard
+    library included, come as types only, from export data. So memory
+    grows with the module's own lines, likely tens to hundreds of times
+    their size, and time with how much imports what: an edit to a
+    package most of the module imports re-type-checks most of it, and
+    some tools (`rename`'s references, interface checks, the effect
+    summaries) look at every package. Nothing has measured this on a
+    large module yet; `BenchmarkApplyUndo` and `BenchmarkLoad` use a
+    generated module of 20 small packages. In order:
+    - **Measure** peak memory (`/usr/bin/time -v`) and time of a full
+      load, `check`, an edit with its undo in a package most of the
+      module imports, and a `rename` of a widely used name, on real
+      modules of growing size: this one, golang.org/x/tools, and
+      kubernetes. Record the numbers here, and per line of Go.
+    - **Decide on the numbers.** If memory or time is a problem at the
+      sizes people work in, the usual remedies: load only the packages a
+      step needs and those that import them, or keep the syntax only of
+      packages being edited and cache the types of the rest, as gopls
+      does since its 2023 redesign.
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
