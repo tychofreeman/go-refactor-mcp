@@ -252,7 +252,7 @@ func (s *Server) batch(args json.RawMessage) *mcp.CallToolResult {
 		Report string `json:"report"`
 	}
 	if err := refactor.DecodeArgs(args, &a); err != nil {
-		return textResult("REFUSED batch: " + err.Error())
+		return textResult("REFUSED batch: " + err.Error() + "\nbatch takes:\n  steps (required): the steps, in order, each {\"tool\": ..., \"args\": {...}}; a tool's own arguments (file, name, line, ...) go in each step's args\n  report: diff (the default) or summary")
 	}
 	if a.Report != "" && a.Report != "diff" && a.Report != "summary" {
 		return textResult(fmt.Sprintf("REFUSED batch: report is %q; give diff or summary", a.Report))

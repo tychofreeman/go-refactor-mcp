@@ -846,3 +846,14 @@ the build cache refers to every test by name; after a rename by hand it
 went stale and made every tool refuse with a type error in that file.
 Fixed: the workspace leaves those generated packages out. The running
 server still had the bug, so the rename was done by hand at the end.
+
+**The running server blocked its own fix.** After the test rename by
+hand, the session's server (built before the fix) refused every tool
+with the stale test-main error, so the batch-argument help below was
+written with Edit. Reconnecting to a server built from this branch
+removes the problem.
+
+**Batch arguments put beside the steps.** In the A/B runs a batch was
+refused three times with `unknown field "file"`: a step's argument sent
+at the top level. The refusal now says what batch takes and that a
+tool's arguments go in each step's args.

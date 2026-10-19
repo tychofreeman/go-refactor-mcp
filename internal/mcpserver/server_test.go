@@ -244,6 +244,12 @@ func TestBatchRefusals(t *testing.T) {
 
 	out, _ = call(t, cs, "batch", map[string]any{"steps": []any{}})
 	mustContain(t, "empty", out, "REFUSED batch: steps is empty")
+
+	// A tool's argument put beside the steps is explained, not just refused.
+	out, _ = call(t, cs, "batch", map[string]any{"file": "calc/calc.go", "steps": []any{
+		map[string]any{"tool": "rename", "args": map[string]any{"name": "Apply", "new_name": "Scale"}},
+	}})
+	mustContain(t, "argument beside the steps", out, `unknown field "file"`, "steps (required)", "each step's args")
 }
 
 // replace_text edits text no other tool reaches, such as a string
