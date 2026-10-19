@@ -15,7 +15,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/gocode"
 	"github.com/tychofreeman/go-refactor-mcp/internal/imports"
-	"github.com/tychofreeman/go-refactor-mcp/internal/inspect"
+	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
@@ -134,7 +134,7 @@ func (*ReplaceStatements) Plan(ws *workspace.Workspace, raw json.RawMessage) (*r
 // ("Name" or "Type.Method") with a.Content: also a body on the same line
 // as the function's signature, which a range of lines cannot select.
 func replaceBody(ws *workspace.Workspace, pkg *packages.Package, file *ast.File, src []byte, a args) (*refactor.Plan, error) {
-	fd := findFunc(file, a.Function)
+	fd := locate.Func(file, a.Function)
 	if fd == nil || fd.Body == nil {
 		return nil, refactor.Refusef("no function %s in %s; give Name, or Type.Method for a method", a.Function, a.File)
 	}
@@ -169,25 +169,6 @@ func replaceBody(ws *workspace.Workspace, pkg *packages.Package, file *ast.File,
 		plan.Notes = append(plan.Notes, gocode.ImportNote("removed", removed)+", which only the replaced body used")
 	}
 	return plan, nil
-}
-
-// findFunc returns the function of file named name, or for "Type.Method"
-// the method, named as inspect's outline names them.
-func findFunc(file *ast.File, name string) *ast.FuncDecl {
-	for _, d := range file.Decls {
-		fd, ok := d.(*ast.FuncDecl)
-		if !ok {
-			continue
-		}
-		n := fd.Name.Name
-		if fd.Recv != nil && len(fd.Recv.List) > 0 {
-			n = inspect.ReceiverTypeName(fd.Recv.List[0].Type) + "." + n
-		}
-		if n == name {
-			return fd
-		}
-	}
-	return nil
 }
 
 // selectStatements returns the statements lines first-last cover: whole

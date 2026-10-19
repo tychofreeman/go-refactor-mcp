@@ -401,6 +401,9 @@ func TestBatchCheckedAtEnd(t *testing.T) {
 	if b.Applied || b.FailedStep != 1 {
 		t.Errorf("checked at each step, want step 1 refused, got %+v", b)
 	}
+	if !strings.Contains(b.Refused, `if a later step of the batch completes this one, send it with check "end"`) {
+		t.Errorf("the refusal should point to check \"end\": %s", b.Refused)
+	}
 
 	ws, path = setup(t, src)
 	b, err = refactor.RunBatch(ws, steps, refactor.Options{Unchecked: true})

@@ -962,3 +962,13 @@ All through gorefactor. Notes:
   (`types.WriteSignature` takes a *bytes.Buffer); with `check: "end"`
   the whole 8-step batch had to be resent. A way to resend with one
   step changed would save that.
+
+## 2026-10-19: locals by function and name
+
+Follow-up to "the inline could not share a batch with the introduce":
+inline_variable and rename take `function` in place of `line`, so a
+local, parameter or result is found by name in its function, which
+stays valid after earlier steps of a batch. Twice while building it I
+sent a batch whose steps only type-check together without
+`check: "end"`; a step refused for type errors in a batch now says to
+send it that way.
