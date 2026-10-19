@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -46,7 +47,7 @@ How to work with them:
 1. Call inspect (no arguments) for an overview, then inspect a file or function to read it with line numbers. The outline shows each function's complexity, nesting, and whether calling it has side effects (calls of a function without them are easier to move or reorder).
 2. To change a feature, first refactor so the change is easy, then make the change with an edit: "make the change easy, then make the easy change".
 3. Apply ONE tool per call, or, when you can plan several steps from what you have read, send them together with batch: one call, rolled back as a whole if any step is refused. Each call returns APPLIED with what changed, or REFUSED with the reason; a refusal changes nothing, so read it and choose differently.
-4. Line numbers change after edits; never reuse old ones: re-inspect the affected code before a step that needs them. Tools that target a declaration (rename, add_parameter, move_declaration, ...) also accept file and name without line: name is then a package-level symbol of file's package (Name, Type.Method or Type.Field), which stays valid after edits, so a planned sequence can address everything by name.
+4. Line numbers change after edits. Before a single step that needs them, re-inspect the code an earlier step changed. In a batch, give line numbers as they were when the batch began (from the inspect you planned it with): the batch moves them past the earlier steps. Tools that target a declaration (rename, add_parameter, move_declaration, ...) also accept file and name without line: name is then a package-level symbol of file's package (Name, Type.Method or Type.Field), which stays valid after edits.
 5. Use check (with run_tests) at the end, and undo if a step made the code worse. Every step can be undone.
 
 Prefer these tools over editing files by hand for everything they cover.`
@@ -79,7 +80,7 @@ func (s *Server) MCP() *mcp.Server {
 		r := r
 		srv.AddTool(&mcp.Tool{
 			Name:        r.Name(),
-			Description: r.Description() + "\nApplies the change to disk and returns a diff; it can be reverted with undo.",
+			Description: r.Description() + symbolNote(r.InputSchema()) + "\nApplies the change to disk and returns what changed (the changed lines without context; for a rename, where they are); it can be reverted with undo.",
 			InputSchema: r.InputSchema(),
 			Annotations: &mcp.ToolAnnotations{DestructiveHint: &notDestructive},
 		}, func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -167,6 +168,25 @@ report: "diff" (default) shows the change; "summary" shows only the steps' summa
 		return s.batch(req.Params.Arguments), nil
 	})
 	return srv
+}
+
+// symbolNote tells, for a tool whose line is optional, how it finds a
+// declaration by name alone; the tools' own descriptions were written for
+// file, line and name.
+func symbolNote(schema json.RawMessage) string {
+	var s struct {
+		Properties map[string]json.RawMessage `json:"properties"`
+		Required   []string                   `json:"required"`
+	}
+	if json.Unmarshal(schema, &s) != nil {
+		return ""
+	}
+	_, line := s.Properties["line"]
+	_, name := s.Properties["name"]
+	if !line || !name || slices.Contains(s.Required, "line") {
+		return ""
+	}
+	return "\nWithout line, name alone identifies it as a package-level symbol of file's package (Name, or Type.Method or Type.Field); unlike a line number, a name stays valid after edits."
 }
 
 // workspace returns the session's workspace, loading it on first use and

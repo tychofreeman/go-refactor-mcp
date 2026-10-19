@@ -36,8 +36,11 @@ func (m *MoveStatement) Name() string {
 }
 
 func (m *MoveStatement) Description() string {
-	return `Swap a statement with the one before it (move_statement_up) or after it (move_statement_down) in the same block ("slide statements"), each with the comments directly above it.
-Use it to bring statements that belong together next to each other, e.g. before extract_function.
+	which := "before"
+	if m.down {
+		which = "after"
+	}
+	return "Swap a statement with the one " + which + " it in the same block (\"slide statements\"), each with the comments directly above it.\n" + `Use it to bring statements that belong together next to each other, e.g. before extract_function.
 Identify the statement by file and the line it starts on (the outermost statement starting there, so a whole if or loop moves as one).
 Behavior does not change, so it refuses when the order matters: one uses something the other declares, or declares a name the other refers to; one assigns a local variable the other uses; one has side effects (a call not known to be free of them: the module's own functions are judged by their bodies; a channel operation, go or defer, an assignment to a package variable, through a pointer or to a variable a closure captures) and the other could see them, panic or not finish; or both could panic or not finish (indexing, dereferencing, dividing, type assertions, loops). It also refuses a statement that returns or jumps out (return, goto, fallthrough, break or continue to a loop around it), a labeled statement, and a line with more than the statement on it.`
 }
