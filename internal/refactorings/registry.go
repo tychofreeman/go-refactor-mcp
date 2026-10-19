@@ -5,6 +5,7 @@ package refactorings
 import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/addcase"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/adddecl"
+	"github.com/tychofreeman/go-refactor-mcp/internal/edits/addelement"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/addfield"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/createfile"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/insertstmts"
@@ -56,6 +57,7 @@ func All() []refactor.Refactoring {
 		addfield.New(),
 		replacetext.New(),
 		addcase.New(),
+		addelement.New(),
 	}
 }
 
