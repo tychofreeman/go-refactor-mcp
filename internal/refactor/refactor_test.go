@@ -105,6 +105,9 @@ func TestEditThatBreaksTheBuildIsRefused(t *testing.T) {
 	if strings.Contains(res.Refused, "bug") {
 		t.Errorf("an edit's type error comes from its input, not a bug in the tool: %s", res.Refused)
 	}
+	if !strings.Contains(res.Refused, `batch with check "end", then create_from_usage`) {
+		t.Errorf("an undefined name should point to create_from_usage: %s", res.Refused)
+	}
 	if got, _ := os.ReadFile(path); string(got) != src {
 		t.Errorf("file not restored:\n%s", got)
 	}
@@ -435,5 +438,62 @@ func TestBatchCheckedAtEnd(t *testing.T) {
 	}
 	if b.Applied || b.FailedStep != 2 || !strings.Contains(b.Refused, "an earlier edit of this batch") {
 		t.Errorf("want the refactoring refused, got %+v", b)
+	}
+}
+
+// declare is a fix: it appends decl to m.go, choosing it.
+type declare struct{ decl string }
+
+func (declare) Name() string                 { return "declare" }
+func (declare) Description() string          { return "" }
+func (declare) InputSchema() json.RawMessage { return json.RawMessage(`{}`) }
+func (declare) ChangesBehavior()             {}
+func (declare) Fixes()                       {}
+func (d declare) Plan(ws *workspace.Workspace, _ json.RawMessage) (*refactor.Plan, error) {
+	path := ws.Abs("m.go")
+	src, _ := os.ReadFile(path)
+	return &refactor.Plan{
+		Summary: "declared",
+		Edits:   []edit.FileEdit{{Path: path, Edits: []edit.TextEdit{{Start: len(src), End: len(src), NewText: d.decl}}}},
+		Choices: []string{strings.TrimSpace(d.decl)},
+	}, nil
+}
+
+// A fix starts from code that does not type-check, and must leave fewer
+// errors and no new one.
+func TestFix(t *testing.T) {
+	const broken = "package m\n\nvar X int = F()\n\nvar Y = G()\n"
+
+	ws, _ := setup(t, broken)
+	res, err := refactor.Run(ws, declare{"\nfunc F() int { return 1 }\n"}, nil, refactor.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Applied {
+		t.Fatalf("want it applied with G still undefined, got %+v", res)
+	}
+	if out := res.String(); !strings.Contains(out, "chose: func F() int { return 1 }\n") {
+		t.Errorf("the result does not show the choice:\n%s", out)
+	}
+
+	ws, path := setup(t, broken)
+	res, err = refactor.Run(ws, declare{"\nfunc F() string { return \"\" }\n"}, nil, refactor.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Applied || !strings.Contains(res.Refused, "cannot use F()") {
+		t.Errorf("want a new error refused, got %+v", res)
+	}
+	if got, _ := os.ReadFile(path); string(got) != broken {
+		t.Errorf("not rolled back:\n%s", got)
+	}
+
+	ws, _ = setup(t, broken)
+	res, err = refactor.Run(ws, declare{"\nfunc H() int { return 1 }\n"}, nil, refactor.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Applied || !strings.Contains(res.Refused, "fixes none of the errors") {
+		t.Errorf("want a fix that fixes nothing refused, got %+v", res)
 	}
 }

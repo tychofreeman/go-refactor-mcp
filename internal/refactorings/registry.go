@@ -8,6 +8,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/addelement"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/addfield"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/createfile"
+	"github.com/tychofreeman/go-refactor-mcp/internal/edits/createfromusage"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/insertstmts"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/replaceexpr"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/replacestmts"
@@ -58,6 +59,7 @@ func All() []refactor.Refactoring {
 		replacetext.New(),
 		addcase.New(),
 		addelement.New(),
+		createfromusage.New(),
 	}
 }
 

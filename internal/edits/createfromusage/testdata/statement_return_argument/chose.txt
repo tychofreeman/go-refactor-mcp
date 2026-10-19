@@ -1,0 +1,3 @@
+func Apply(cfg Config, xs []int, name string, n int), in m.go
+func Title(cfg Config) string, in m.go
+func check(xs []int) (bool, error), in m.go

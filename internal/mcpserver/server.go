@@ -38,10 +38,21 @@ const Version = "0.2.0"
 // as Claude Code show them to the model. They set the pace of the loop.
 const Instructions = `Refactoring and editing tools for the Go module in this project.
 
-Two kinds of tool:
-- Refactorings (rename, extract_function, add_parameter, move_declaration, ...) preserve behavior. They find every reference with the type checker (every use, call and comment that names it), so there is no need to search for them first; they refuse changes that would alter behavior, and run only on code that type-checks; each applied step is verified to compile.
-- Edits (create_file, ...) change behavior on purpose: the step that adds or changes a feature.
-Every step, refactoring or edit, starts from code that type-checks and must leave code that type-checks; a step that would not is refused with the errors, and nothing changes. To write a failing test first, first add a stub for what it calls.
+Two kinds of tool, by what they guarantee:
+- Refactorings preserve behavior. They find every reference with the type checker (every use, call and comment that names it), so there is no need to search for them first; they refuse changes that would alter behavior.
+- Edits change behavior on purpose: the step that adds or changes a feature.
+Every step, refactoring or edit, starts from code that type-checks and must leave code that type-checks; a step that would not is refused with the errors, and nothing changes. To write a failing test first, send a batch with check "end": the step that writes the test, then create_from_usage to declare stubs for what it calls.
+Some tools choose for you (create_from_usage chooses a stub's signature and file); their result lists each choice on a "chose:" line. Check them: give the choice explicitly, or undo, to change it.
+
+Which tool, by what you want to do:
+- Read the code: inspect.
+- Rename or move: rename, move_declaration.
+- Split or join code (refactorings): extract_function, inline_function, extract_variable, inline_variable, extract_struct, merge_duplicate_function, function_to_method, method_to_function.
+- Change a signature and every call (refactorings): add_parameter, remove_parameter, move_parameter, introduce_parameter.
+- Simplify control flow (refactorings): invert_if, remove_else, move_statement_up, move_statement_down, remove_dead_code.
+- Add code (edits): create_file, add_declaration, add_field, add_case, add_element, insert_statements; create_from_usage declares the functions code calls before they exist.
+- Change code (edits): replace_statements, replace_expression; replace_text for string literals, comments and files that are not Go.
+- Several steps in one call: batch. Then: check, and undo to revert a step.
 
 How to work with them:
 1. Call inspect (no arguments) for an overview, then inspect a file or function to read it with line numbers. The outline shows each function's complexity, nesting, and whether calling it has side effects (calls of a function without them are easier to move or reorder).

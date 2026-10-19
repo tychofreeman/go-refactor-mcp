@@ -4,10 +4,12 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings"
 )
 
 const calcSrc = `package calc
@@ -337,6 +339,21 @@ func TestBatchCheckAtEnd(t *testing.T) {
 	mustContain(t, "more.go", string(got), "\ttotal := a + b\n\treturn total\n")
 }
 
+// A test first: write it, then declare stubs for what it calls, in one
+// batch.
+func TestBatchTestThenStubs(t *testing.T) {
+	cs, dir := setup(t)
+	test := "package calc\n\nimport \"testing\"\n\nfunc TestHalf(t *testing.T) {\n\tif got := Half(4); got != 2 {\n\t\tt.Errorf(\"Half(4) = %d\", got)\n\t}\n}\n"
+	steps := []any{
+		map[string]any{"tool": "create_file", "args": map[string]any{"file": "calc/half_test.go", "content": test}},
+		map[string]any{"tool": "create_from_usage", "args": map[string]any{"file": "calc/half_test.go"}},
+	}
+	out, _ := call(t, cs, "batch", map[string]any{"check": "end", "steps": steps})
+	mustContain(t, "batch", out, "APPLIED batch: 2 steps", "chose: func Half(n int) int, in calc/")
+	got, _ := os.ReadFile(filepath.Join(dir, "calc", "half_test.go"))
+	mustContain(t, "half_test.go", string(got), "Half(4)")
+}
+
 // TestRefactoringLoop walks the loop the model is meant to follow.
 func TestRefactoringLoop(t *testing.T) {
 	cs, dir := setup(t)
@@ -495,5 +512,24 @@ func TestSignatureChangesListLocations(t *testing.T) {
 	mustContain(t, "add_parameter", out, "APPLIED add_parameter", "changed lines:", "app/app.go: 5")
 	if strings.Contains(out, "+func Apply") {
 		t.Errorf("add_parameter showed the diff:\n%s", out)
+	}
+}
+
+// The instructions list the tools by what the model wants to do; every
+// tool must be in that list.
+func TestInstructionsNameEveryTool(t *testing.T) {
+	_, groups, ok := strings.Cut(Instructions, "Which tool, by what you want to do:")
+	if !ok {
+		t.Fatal("the instructions have no list of tools by intention")
+	}
+	groups, _, _ = strings.Cut(groups, "\n\n")
+	names := []string{"inspect", "batch", "check", "undo"}
+	for _, r := range refactorings.All() {
+		names = append(names, r.Name())
+	}
+	for _, n := range names {
+		if !regexp.MustCompile(`\b` + n + `\b`).MatchString(groups) {
+			t.Errorf("%s is not in the instructions' list of tools", n)
+		}
 	}
 }
