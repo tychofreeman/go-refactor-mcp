@@ -182,6 +182,20 @@ hand or a tool got in the way.
      group adjacent parameters of one type, put third-party imports apart
      from the module's, note an exported name without a doc comment. One
      shared pass after every tool.
+10. **Addressing what earlier steps of a batch made.** A step's lines are
+    as of the start of the batch, so a line an earlier step rewrote, or
+    any line of a file it created, cannot be addressed, and "after what
+    the previous step inserted" has no address at all (friction log,
+    Oct 18: line numbers in a batch; Oct 19: locals by function and
+    name). Next: a step may take an `id`, and a later step's `line`,
+    `start_line` or `end_line` may be a reference to an earlier step's
+    range of new lines in that file: `$helper.end`, `$2.start` (by
+    position), `$prev.end` (the step before), with offsets such as
+    `$prev.end+1`. `RunBatch` resolves them when the step runs, before
+    the tool sees its arguments, so no tool's schema changes. A step that
+    changed several places in the file is refused as a reference. The
+    other options (one special address, a cursor, marks that follow later
+    edits, search from a reference) are in `docs/batch-addressing.md`.
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
