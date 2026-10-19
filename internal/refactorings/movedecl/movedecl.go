@@ -65,7 +65,8 @@ func (*MoveDeclaration) InputSchema() json.RawMessage {
     "column":  {"type": "integer", "description": "Optional 1-based column, only needed to disambiguate."},
     "to_file": {"type": "string",  "description": "Destination file, relative to the workspace root; created if it does not exist. In another directory, the declaration moves to that package."},
     "new_name": {"type": "string", "description": "Optional, when moving to another package: the name in the new package (required for an unexported declaration used outside it, e.g. defaultHost -> DefaultHost)."},
-    "also":     {"type": "array", "items": {"type": "string"}, "description": "Optional: other top-level declarations of the package (in any of its files) to move with it, by name (not methods), e.g. the helpers it uses. They keep their names."}
+    "also":     {"type": "array", "items": {"type": "string"}, "description": "Optional: other top-level declarations of the package (in any of its files) to move with it, by name (not methods), e.g. the helpers it uses. They keep their names."},
+    "with_dependencies": {"type": "boolean", "description": "Optional, when moving to another package: also move every top-level declaration of the package that the moved code uses, and what those use, in place of naming them in also. One the package still uses after the move is exported (helper becomes Helper). The result lists each on a chose: line."}
   },
   "required": ["file", "name", "to_file"],
   "additionalProperties": false
@@ -80,6 +81,8 @@ type moveArgs struct {
 	ToFile  string   `json:"to_file"`
 	NewName string   `json:"new_name,omitempty"`
 	Also    []string `json:"also,omitempty"`
+
+	WithDependencies bool `json:"with_dependencies,omitempty"`
 }
 
 // mover holds what one move needs. The embedded declaration is the one
@@ -102,6 +105,12 @@ type mover struct {
 	// emptied holds the source files the move leaves with only a package
 	// clause, which it deletes.
 	emptied []string
+
+	// withDeps moves the declarations the moved code uses along;
+	// needed records, for each one added that way, the moved code that
+	// needed it, for the result's choices.
+	withDeps bool
+	needed   map[*moved]string
 }
 
 // source is a file that declarations move from.
@@ -194,6 +203,7 @@ func (*MoveDeclaration) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 		if a.NewName != "" {
 			m.newName = a.NewName
 		}
+		m.withDeps = a.WithDependencies
 		return m.planOtherPackage(to)
 	}
 	if a.NewName != "" && a.NewName != m.obj.Name() {
