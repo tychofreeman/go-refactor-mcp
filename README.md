@@ -127,6 +127,61 @@ hand or a tool got in the way.
      their candidate loop six times (`inlinefunc` has them factored out
      already), `inlinevar`'s `copyDir` is `refactortest.copyTree`, and
      `extractvar.TestTokens` tests `locate`.
+9. **Intent tools.** Grouped by what the person wanted, the friction log's
+   hand edits fall into a few intentions, each of which took several tools
+   or a step no tool covers. An intent tool takes the intention and works
+   out the steps, often from a plan another tool already prints in its
+   refusal. By evidence (dates are friction-log entries):
+   - **Move whatever a move needs.** `move_declaration`'s refusals name
+     the step to take first: move the methods it needs, turn methods into
+     functions, replace a variable initialized by a call. This tool takes
+     those steps itself, as one batch. Five stories (Oct 17: adding
+     `introduce_parameter`, a type with its methods, moving from several
+     files; Oct 18: one interface check, adding `insert_statements`).
+   - **Merge near-duplicate functions.** `merge_duplicate_function`
+     refuses copies that differ, and names the difference; this tool makes
+     each difference a parameter instead. Also `extract_function` over
+     several ranges that differ only in expressions. Five stories (Oct 17:
+     adding `move_parameter`, a type with its methods; Oct 18: one
+     interface check, adding `merge_duplicate_function`, adding
+     `add_declaration`).
+   - **Narrow a parameter or receiver to the fields it uses.** Today this
+     is `method_to_function`, `introduce_parameter` for each field, then
+     `remove_parameter` and `function_to_method`, and it stalls at the
+     first getter in a closure. Narrowing the receiver to one field is
+     "move a method to a field's type". Four stories (Oct 17: adding
+     `refactor-eval`, adding `introduce_parameter`, moving from several
+     files; Oct 18: one interface check).
+   - **One to many.** A field that held one item becomes a slice, and each
+     use a loop over it (`introduce_loop` in `docs/edits.md`).
+     `extract_struct` does the first step. Three stories, each the largest
+     hand edit of its story (Oct 17: several declarations at once, moving
+     from several files; Oct 18: chained tasks). Generating code from a
+     description, such as the sum of a field over a list, belongs here
+     and with `create_from_usage`; the log has two such loops written by
+     hand (Oct 17: adding `refactor-eval`, adding `move_parameter`).
+   - **Results, and a value through several calls.** `add_result`,
+     `remove_result` and `change_result_type`, the counterparts of the
+     parameter tools (`change_parameter_type` is done), with a pointer
+     that is only written becoming a result; and a parameter added along
+     every call path from one function to another. Five stories (Oct 17:
+     adding `refactor-eval`, several declarations at once; Oct 18: one
+     interface check, `move_statement_up`, summaries of the module's own
+     functions).
+   - **Every occurrence of a pattern.** One edit taking `gofmt -r`-style
+     patterns, such as `ast.Inspect($d.decl, $f)` to
+     `ast.Inspect($d.node(), $f)`, across the module and checked as one
+     step, in place of an all-occurrences option in each tool. It skips an
+     occurrence inside a function the replacement calls, which
+     `all_occurrences` once rewrote into endless recursion. Four stories
+     (Oct 17: out of a grouped declaration; Oct 18: addressing
+     declarations by name, compact results; Oct 19: generic types), and
+     the "every occurrence at once" left in items 1 and 4.
+   - **Finish code as the file does.** Not an intention, but the most
+     small hand edits, about eight: wrap doc comments at the file's width,
+     group adjacent parameters of one type, put third-party imports apart
+     from the module's, note an exported name without a doc comment. One
+     shared pass after every tool.
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
