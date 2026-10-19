@@ -59,8 +59,14 @@ jobs:
 
       - name: Test
         run: |
-          set -o pipefail
-          if ! go test -race ./... 2>&1 | tee test.log; then
+          # -json records how long each package and test took; test.log
+          # keeps the usual output, for the log and the failure annotation.
+          status=0
+          go test -race -json ./... > test.json 2> test.err || status=$?
+          { cat test.err; jq -Rj 'fromjson? | select(.Action == "output" or .Action == "build-output") | .Output' test.json; } > test.log
+          cat test.log
+          sh .github/test-times.sh test.json "Go ${{ matrix.go }}"
+          if [ "$status" -ne 0 ]; then
             # Report the failures as an annotation on the PR.
             failures=$(grep -E -A 25 -e '^--- FAIL' -e '^panic:' -e '^FAIL' test.log | head -150)
             encoded=$(printf '%s' "$failures" | sed -e 's/%/%25/g' -e 's/\r/%0D/g' | awk 'BEGIN { ORS = "%0A" } 1')
