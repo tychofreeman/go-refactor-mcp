@@ -1005,3 +1005,14 @@ errs as a pointer because a closure appends to it, though the caller
 never reads errs again; four replace_text steps made it a value. A
 doc comment given to extract_function was not wrapped (see "Finish
 code as the file does" in roadmap item 9).
+
+## 2026-10-19: extract_function and a local recursive closure
+
+Fixed the refusal above: a literal the selected lines assign to a
+variable they declare, and only call directly (not by go or defer, not
+from another of their literals), no longer counts as one that can run
+later. All through gorefactor. Two frictions: the first batch was sent
+without check "end" (the hint caught it), and add_declaration did not
+find astutil by name although the module already imports it elsewhere;
+it only looks in the standard library and the workspace's packages, so
+a dependency of the module needs imports.
