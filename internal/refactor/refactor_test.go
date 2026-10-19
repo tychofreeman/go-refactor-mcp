@@ -2,6 +2,7 @@ package refactor_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -245,29 +246,39 @@ func TestBatchRollsBackOnRefusal(t *testing.T) {
 	}
 }
 
-func TestBatchRefusesStaleLines(t *testing.T) {
-	byLine := json.RawMessage(`{"file": "m.go", "line": 5}`)
-
+func TestBatchTranslatesLines(t *testing.T) {
+	// Line numbers in a batch are those of the files as they were when it
+	// began: the second mark goes before var X, which the first moved down.
 	ws, path := setup(t, src)
-	b, err := refactor.RunBatch(ws, []refactor.Step{{Refactoring: bump{}}, {Refactoring: setX{}, Args: byLine}}, refactor.Options{})
+	b, err := refactor.RunBatch(ws, []refactor.Step{
+		{Refactoring: markLine{}, Args: json.RawMessage(`{"file": "m.go", "line": 3}`)},
+		{Refactoring: markLine{}, Args: json.RawMessage(`{"file": "m.go", "line": 5}`)},
+	}, refactor.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if b.Applied || b.FailedStep != 2 || !strings.Contains(b.Refused, "step 1 changed m.go") {
-		t.Errorf("want step 2 refused for stale lines, got %+v", b)
+	if !b.Applied || b.Steps[1].Summary != "marked line 6" {
+		t.Fatalf("want both steps applied, the second at line 6 now, got %+v", b)
+	}
+	want := "package m\n\n// mark\nfunc F() int { return 1 }\n\n// mark\nvar X = F()\n"
+	if got, _ := os.ReadFile(path); string(got) != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+
+	// A line an earlier step rewrote cannot be addressed.
+	ws, path = setup(t, src)
+	b, err = refactor.RunBatch(ws, []refactor.Step{
+		{Refactoring: bump{}},
+		{Refactoring: markLine{}, Args: json.RawMessage(`{"file": "m.go", "line": 3}`)},
+	}, refactor.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.Applied || b.FailedStep != 2 || !strings.Contains(b.Refused, "line 3 of m.go") || !strings.Contains(b.Refused, "step 1") {
+		t.Errorf("want step 2 refused, naming the line and the step that changed it, got %+v", b)
 	}
 	if got, _ := os.ReadFile(path); string(got) != src {
 		t.Errorf("not rolled back; file:\n%s", got)
-	}
-
-	// Before any step changed the file, its line numbers are right.
-	ws, _ = setup(t, src)
-	b, err = refactor.RunBatch(ws, []refactor.Step{{Refactoring: setX{}, Args: byLine}, {Refactoring: bump{}}}, refactor.Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !b.Applied {
-		t.Errorf("want the batch applied, got %+v", b)
 	}
 }
 
@@ -318,4 +329,30 @@ func TestBadArgumentsListTheArguments(t *testing.T) {
 	if res, _ := refactor.Run(ws, strict{}, json.RawMessage(`{"file": "m.go"}`), refactor.Options{}); strings.Contains(res.Refused, "takes:") {
 		t.Errorf("other refusals should not list the arguments: %s", res.Refused)
 	}
+}
+
+// markLine puts a "// mark" line before the line its arguments name.
+type markLine struct{}
+
+func (markLine) Name() string                 { return "mark_line" }
+func (markLine) Description() string          { return "" }
+func (markLine) InputSchema() json.RawMessage { return json.RawMessage(`{}`) }
+func (markLine) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
+	var a struct {
+		File string `json:"file"`
+		Line int    `json:"line"`
+	}
+	if err := refactor.DecodeArgs(raw, &a); err != nil {
+		return nil, err
+	}
+	path := ws.Abs(a.File)
+	src, _ := os.ReadFile(path)
+	off := 0
+	for i := 1; i < a.Line; i++ {
+		off += strings.Index(string(src[off:]), "\n") + 1
+	}
+	return &refactor.Plan{
+		Summary: fmt.Sprintf("marked line %d", a.Line),
+		Edits:   []edit.FileEdit{{Path: path, Edits: []edit.TextEdit{{Start: off, End: off, NewText: "// mark\n"}}}},
+	}, nil
 }

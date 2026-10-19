@@ -1,6 +1,7 @@
 package edit
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
@@ -177,5 +178,18 @@ func TestLocations(t *testing.T) {
 	want := "changed lines:\n  a.go: 12, 40-41\n  b/c.go: 4, after 9\n"
 	if got := Locations(diff); got != want {
 		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestLineMap(t *testing.T) {
+	before := "a\nb\nc\nd\ne\n"
+	after := "new\na\nB\nc\ne\n" // a line added before a, b changed, d removed
+	got := LineMap([]byte(before), []byte(after))
+	want := []int{0, 2, 0, 4, 0, 5}
+	if !slices.Equal(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if got := LineMap(nil, []byte("x\n")); len(got) != 1 {
+		t.Errorf("a new file has no old lines to map: %v", got)
 	}
 }

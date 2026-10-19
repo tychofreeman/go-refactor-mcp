@@ -137,7 +137,8 @@ func (s *Server) MCP() *mcp.Server {
 		Name: "batch",
 		Description: `Run several refactorings and edits in order, in one call: plan the sequence from one inspect and send it here instead of calling the tools one at a time.
 Each step is {tool, args}: a refactoring or edit (rename, add_parameter, extract_function, replace_statements, ...) and the arguments that tool takes. Each step runs on the code the earlier steps left and, like any step, must leave code that type-checks.
-Address declarations by name (file and name, no line): a name stays valid after earlier steps, and a step can name what an earlier one made (extract_function name=f, then add_parameter name=f). A line number in a file stays valid until a step changes that file; a step that gives one after that is refused.
+Give every line number as it is in the code you inspected before the batch: the batch moves it to where that line is after the earlier steps. So one inspect is enough to plan a whole sequence, e.g. extract_function the duplicated lines in each of three files, then merge_duplicate_function the new functions, then add_parameter to the one left. A line an earlier step rewrote cannot be addressed by number; address what that step made by name (file and name, no line), which also works for declarations generally.
+Independent steps can also be sent as separate tool calls in one turn; a batch is for steps that build on each other.
 If a step is refused, the steps before it are rolled back, so nothing changes, and the result says which step and why. If all apply, the result lists each step's summary and then the change as a whole; one undo reverts the whole batch.
 report: "diff" (default) shows the change; "summary" shows only the steps' summaries.`,
 		InputSchema: json.RawMessage(`{
