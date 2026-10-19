@@ -927,3 +927,12 @@ existed, so the field went in first.
 Registering `add_case` and `add_element` was done by hand: the
 running server predated `check: "end"`, so the import and its use
 could not be separate steps.
+
+## 2026-10-19: quality measures in the A/B harness, all through the MCP
+
+Done entirely with gorefactor, no hand edits: extract_function plus
+move_declaration (ReadModule from eval to metrics), tests and stubs
+created together, then bodies filled by name, in batches with
+`check: "end"`. `check: "end"` removed the usual stub-first dance: a
+test file and the stubs it calls went in one call. One refusal:
+create_file has no `imports` argument (the imports went in content).
