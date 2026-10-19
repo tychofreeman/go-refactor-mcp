@@ -1039,3 +1039,10 @@ today; the hint is clear, but the step that needs it is usually the
 first, which refers to a function a later step declares. A batch whose
 first steps fail only on names its later steps declare could retry
 itself with check "end" and say so.
+
+## 2026-10-19: move_declaration with_dependencies
+
+All through gorefactor. Dry runs on real code found two more needs of a
+move, both refused clearly: exporting fields the source package still
+reads (changesig.call), and regexp.MustCompile of a constant counting as
+a side effect (refactor.stepRef).
