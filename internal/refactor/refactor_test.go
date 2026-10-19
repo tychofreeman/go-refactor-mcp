@@ -62,6 +62,23 @@ func TestRollbackOnBrokenBuild(t *testing.T) {
 	}
 }
 
+// compileChecked is buggy as a refactoring whose last precondition is
+// that the code compiles after it.
+type compileChecked struct{ buggy }
+
+func (compileChecked) ChecksByCompiling() {}
+
+func TestCompileCheckedRefusal(t *testing.T) {
+	ws, _ := setup(t, src)
+	res, err := refactor.Run(ws, compileChecked{}, nil, refactor.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Applied || !strings.Contains(res.Refused, "would not compile, so it was not applied") || strings.Contains(res.Refused, "bug") {
+		t.Errorf("want a plain refusal with the errors, got %+v", res)
+	}
+}
+
 func TestRefusesBrokenInput(t *testing.T) {
 	ws, _ := setup(t, "package m\n\nvar X int = \"s\"\n")
 	res, err := refactor.Run(ws, buggy{}, nil, refactor.Options{})

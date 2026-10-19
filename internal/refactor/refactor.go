@@ -67,6 +67,14 @@ type Fix interface {
 	Fixes()
 }
 
+// CompileChecked is a refactoring whose last precondition is that the
+// code compiles after it (for example, that a body still type-checks
+// with a parameter's new type): a compile error is a refusal, not a bug.
+type CompileChecked interface {
+	Refactoring
+	ChecksByCompiling()
+}
+
 // Refusal is a precondition failure. Its message is written for the model:
 // it should say what is wrong and, where possible, what to do instead.
 type Refusal struct{ Reason string }
@@ -185,7 +193,7 @@ func Run(ws *workspace.Workspace, r Refactoring, args json.RawMessage, opts Opti
 	if err != nil {
 		return nil, err
 	}
-	if reason := afterRefusal(r.Name(), isEdit, isFix, opts.Unchecked, before, ws.Errors()); reason != "" {
+	if reason := afterRefusal(r, isEdit, isFix, opts.Unchecked, before, ws.Errors()); reason != "" {
 		if _, uerr := ws.Undo(); uerr != nil {
 			return nil, fmt.Errorf("the step broke the build and undo failed: %v (%s)", uerr, reason)
 		}
@@ -197,9 +205,10 @@ func Run(ws *workspace.Workspace, r Refactoring, args json.RawMessage, opts Opti
 	return res, nil
 }
 
-// afterRefusal says why the step named name, which left the errors after
+// afterRefusal says why the step r, which left the errors after
 // from before, is refused, or "" if it is not.
-func afterRefusal(name string, isEdit, isFix, unchecked bool, before, after []string) string {
+func afterRefusal(r Refactoring, isEdit, isFix, unchecked bool, before, after []string) string {
+	_, compiles := r.(CompileChecked)
 	switch {
 	case len(after) == 0 || unchecked && isEdit:
 		return ""
@@ -213,8 +222,11 @@ func afterRefusal(name string, isEdit, isFix, unchecked bool, before, after []st
 		return fmt.Sprintf("the result does not type-check, so it was not applied; change the code you gave so that it compiles. Errors were:\n  %s%s",
 			strings.Join(limit(after, 10), "\n  "), hint)
 	}
+	if compiles {
+		return fmt.Sprintf("the change would not compile, so it was not applied. Errors were:\n  %s", strings.Join(limit(after, 10), "\n  "))
+	}
 	return fmt.Sprintf("the change would not compile, so it was rolled back. This is a bug in the %q precondition checks; errors were:\n  %s",
-		name, strings.Join(limit(after, 10), "\n  "))
+		r.Name(), strings.Join(limit(after, 10), "\n  "))
 }
 
 // fixRefusal says why a fix that left the errors after, from before, is

@@ -1,6 +1,7 @@
 // Package changesig implements refactorings that change a function's
 // signature and update every call to match: add_parameter,
-// remove_parameter and move_parameter, so far.
+// remove_parameter, move_parameter, introduce_parameter,
+// change_parameter_type, function_to_method and method_to_function.
 //
 // They share two requirements. Every reference to the function must be a
 // call: a function value (`f := fn`, passing fn as an argument) has the
