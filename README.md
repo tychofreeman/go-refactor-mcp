@@ -102,11 +102,17 @@ hand or a tool got in the way.
    order:
    - **Measure** per package and per test (`go test -json`), which the CI
      logs don't show now, so the rest is decided on numbers.
-   - **The fresh-load comparison** in `refactortest.Run` loads each applied
-     case twice more, after applying and after undoing: 1,725 loads for
-     today's cases instead of 811 (`-short` skips it). Options: run it in
-     one CI job only, or only after undoing.
-   - **`-race` in both CI jobs.** Run it in one only.
+   - **Next: make the fresh-load comparison cheaper.** `refactortest.Run`
+     compares the workspace with a fresh load after applying and after
+     undoing each applied case: 1,725 loads for today's cases instead of
+     811. It is over half the test time: on Oct 19, CI's package times
+     summed to 267 s with it and 122 s with `-short`, which skips it. It
+     must keep checking both points, since skipping either could hide an
+     incremental-update bug. The aim is the same check for less work, for
+     example by not type-checking the standard library again for each
+     fresh load. The CI test-times report measures the result.
+   - **`-race` costs little,** about 5% of package time, within run-to-run
+     noise, so it stays in both CI jobs.
    - **Tests that start `go test`:** `mcpserver.TestRefactoringLoop`
      (`check` with `run_tests`) and `agent.TestRunUndoesWhenTestsBreak`.
    - **Repeated tests.** Each costs a load or two, so these come last:
