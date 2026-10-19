@@ -225,6 +225,22 @@ hand or a tool got in the way.
     conditions or step outputs; those, and the other ways to define a
     transformation (pattern templates, inlinable functions, snippets,
     scripts, Go code), are in `docs/user-transformations.md`.
+12. **Smaller results: test a summary in place of the diff.** A result
+    stays in the context, so every later request sends it again. Steps
+    whose result follows from their arguments (`move_parameter`,
+    `replace_text`, edits whose content the model supplied) could return
+    a summary and where the result landed; steps that choose
+    (`extract_function`, `create_from_usage`) keep the diff. In order:
+    - **Measure the possible win:** `refactor-tokens` on recent sessions,
+      for the share of tokens that are results of applied steps. A few
+      percent ends the item here, with the number in the friction log.
+    - **Build:** a `Plan` field marking a result as predictable, and a
+      server flag `-results summary` beside `-full-diffs`.
+    - **Test:** an A/B arm "mcp-summary" against "mcp" on the same tasks,
+      comparing total tokens, `inspect` calls and file reads after
+      applied steps, undos, refusals and failed checks, and the final
+      diff. The proposal and what would count as a result are in
+      `docs/result-size.md`.
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
