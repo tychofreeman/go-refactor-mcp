@@ -100,8 +100,10 @@ hand or a tool got in the way.
    824): about 9 s per 100 cases under `-race`. Each case loads a module
    with `packages.Load`, so the cost is per case, not per assertion. In
    order:
-   - **Measure** per package and per test (`go test -json`), which the CI
-     logs don't show now, so the rest is decided on numbers.
+   - **Measure** per package and per test (`go test -json`), so the rest
+     is decided on numbers. *Done: each CI job reports its slowest
+     packages, tests and golden cases in the job summary and as a notice
+     annotation (`.github/test-times.sh`).*
    - **Next: make the fresh-load comparison cheaper.** `refactortest.Run`
      compares the workspace with a fresh load after applying and after
      undoing each applied case: 1,725 loads for today's cases instead of
