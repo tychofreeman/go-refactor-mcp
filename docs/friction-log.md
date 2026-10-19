@@ -1026,6 +1026,17 @@ declaration now count as none. replace_text does not add imports, as it
 works on text, so a strings.HasPrefix it wrote needed a second step for
 the import. extract_function's doc comment was again not wrapped.
 
+## 2026-10-19: replace_text missed on indentation
+
+A batch was refused because a replace_text step's `old` had one tab of
+indentation where the file had two (the lines were inside a for loop in
+gocode.DocComment); the batch rolled back the steps before it. I had not
+read the file first. replace_statements with start_line/end_line would
+have fit better: it addresses lines, not text, and re-indents its
+content. Gap: when the exact match fails, replace_text could try a match
+that ignores leading whitespace (if only one place matches), or show the
+closest match in its refusal.
+
 ## 2026-10-19: finishing touches
 
 Fixed three frictions from today: extract_function wraps its doc
