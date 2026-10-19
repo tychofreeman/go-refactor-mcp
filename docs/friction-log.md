@@ -927,3 +927,17 @@ existed, so the field went in first.
 Registering `add_case` and `add_element` was done by hand: the
 running server predated `check: "end"`, so the import and its use
 could not be separate steps.
+
+## 2026-10-19: create_from_usage, the first intention tool
+
+All through gorefactor. Notes:
+- A test that calls the code it tests could not be added on its own
+  (`unknown field Choices`): the field and the test went in one batch
+  with `check: "end"`.
+- Registering the new tool was one `add_element` call, which added
+  the import too; add_case and add_element had to be registered by
+  hand.
+- `batch` input with literal tab characters inside JSON strings was
+  rejected by the client as invalid JSON; escaping them as `\t` worked.
+- `extract_function` named a parameter `p` after the case variable it
+  came from; a rename followed.

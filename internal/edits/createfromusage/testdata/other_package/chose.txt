@@ -1,0 +1,1 @@
+func Double(n int) int, in b/b.go

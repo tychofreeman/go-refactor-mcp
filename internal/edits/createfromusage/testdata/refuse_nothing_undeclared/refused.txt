@@ -1,0 +1,1 @@
+m.go calls no function that is not declared

@@ -339,6 +339,21 @@ func TestBatchCheckAtEnd(t *testing.T) {
 	mustContain(t, "more.go", string(got), "\ttotal := a + b\n\treturn total\n")
 }
 
+// A test first: write it, then declare stubs for what it calls, in one
+// batch.
+func TestBatchTestThenStubs(t *testing.T) {
+	cs, dir := setup(t)
+	test := "package calc\n\nimport \"testing\"\n\nfunc TestHalf(t *testing.T) {\n\tif got := Half(4); got != 2 {\n\t\tt.Errorf(\"Half(4) = %d\", got)\n\t}\n}\n"
+	steps := []any{
+		map[string]any{"tool": "create_file", "args": map[string]any{"file": "calc/half_test.go", "content": test}},
+		map[string]any{"tool": "create_from_usage", "args": map[string]any{"file": "calc/half_test.go"}},
+	}
+	out, _ := call(t, cs, "batch", map[string]any{"check": "end", "steps": steps})
+	mustContain(t, "batch", out, "APPLIED batch: 2 steps", "chose: func Half(n int) int, in calc/")
+	got, _ := os.ReadFile(filepath.Join(dir, "calc", "half_test.go"))
+	mustContain(t, "half_test.go", string(got), "Half(4)")
+}
+
 // TestRefactoringLoop walks the loop the model is meant to follow.
 func TestRefactoringLoop(t *testing.T) {
 	cs, dir := setup(t)

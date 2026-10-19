@@ -9,6 +9,8 @@
 //	  refused.txt   a substring expected in the refusal message
 //	  notes.txt     optional, when applied: substrings expected in the
 //	                result's notes, one per line
+//	  chose.txt     optional, when applied: substrings expected in the
+//	                result's choices, one per line
 //	  no_notes.txt  optional, when applied: substrings the notes must not
 //	                contain, one per line
 //
@@ -84,8 +86,8 @@ func runCase(t *testing.T, r refactor.Refactoring, caseDir string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if errs := ws.Errors(); len(errs) > 0 {
-		t.Fatalf("input does not type-check: %v", errs)
+	if _, fix := r.(refactor.Fix); !fix && len(ws.Errors()) > 0 {
+		t.Fatalf("input does not type-check: %v", ws.Errors())
 	}
 
 	res, err := refactor.Run(ws, r, args, refactor.Options{})
@@ -115,6 +117,14 @@ func runCase(t *testing.T, r refactor.Refactoring, caseDir string) {
 		for _, line := range strings.Split(strings.TrimSpace(string(want)), "\n") {
 			if !strings.Contains(got, line) {
 				t.Errorf("no note contains %q; notes:\n%s", line, got)
+			}
+		}
+	}
+	if want, err := os.ReadFile(filepath.Join(caseDir, "chose.txt")); err == nil {
+		got := strings.Join(res.Choices, "\n")
+		for _, line := range strings.Split(strings.TrimSpace(string(want)), "\n") {
+			if !strings.Contains(got, line) {
+				t.Errorf("no choice contains %q; choices:\n%s", line, got)
 			}
 		}
 	}

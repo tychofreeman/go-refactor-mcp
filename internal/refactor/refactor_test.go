@@ -105,6 +105,9 @@ func TestEditThatBreaksTheBuildIsRefused(t *testing.T) {
 	if strings.Contains(res.Refused, "bug") {
 		t.Errorf("an edit's type error comes from its input, not a bug in the tool: %s", res.Refused)
 	}
+	if !strings.Contains(res.Refused, `batch with check "end", then create_from_usage`) {
+		t.Errorf("an undefined name should point to create_from_usage: %s", res.Refused)
+	}
 	if got, _ := os.ReadFile(path); string(got) != src {
 		t.Errorf("file not restored:\n%s", got)
 	}

@@ -206,8 +206,12 @@ func afterRefusal(name string, isEdit, isFix, unchecked bool, before, after []st
 	case isFix:
 		return fixRefusal(before, after)
 	case isEdit:
-		return fmt.Sprintf("the result does not type-check, so it was not applied; change the code you gave so that it compiles. Errors were:\n  %s",
-			strings.Join(limit(after, 10), "\n  "))
+		hint := ""
+		if slices.ContainsFunc(after, func(e string) bool { return strings.Contains(e, "undefined: ") }) {
+			hint = "\nIf it calls functions that do not exist yet, send it in a batch with check \"end\", then create_from_usage to declare them."
+		}
+		return fmt.Sprintf("the result does not type-check, so it was not applied; change the code you gave so that it compiles. Errors were:\n  %s%s",
+			strings.Join(limit(after, 10), "\n  "), hint)
 	}
 	return fmt.Sprintf("the change would not compile, so it was rolled back. This is a bug in the %q precondition checks; errors were:\n  %s",
 		name, strings.Join(limit(after, 10), "\n  "))
