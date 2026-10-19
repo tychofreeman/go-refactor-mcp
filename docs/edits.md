@@ -104,11 +104,76 @@ form can come first, while the focus is on refactorings.
   `add_declaration`). `add_field` is done (see Done).
   - 2026-10-18, one interface check instead of two: `Workspace.TypesInfos`.
 
+**Generators**
+
+The edits above take the new code as `content`, so the model still writes
+it. A generator takes a description instead (names, a field, an
+operation, an expression) and writes the code itself, using the types
+the type checker knows. The model then writes only names, conditions and
+values; the tool writes loops, checks, tests and signatures.
+
+- `create_loop`: a function, or statements, that loop over a slice or map
+  and compute something from its elements, described by `over`, `op` and
+  `field`: `create_loop function=totalCost over=items op=sum field=Cost`
+  declares `func totalCost(items []Item) float64` with the range and the
+  accumulator. Operations: sum, count, min and max, filter, map (collect
+  a field), any and all (with a condition), and index by key (a map from
+  a field to the element). The element, field and result types come from
+  the type checker. Roadmap item 13.
+  - 2026-10-17, adding `refactor-eval`, and adding `move_parameter`: a
+    loop summing a field over a list, written by hand each time.
+  - 2026-10-17, moving several declarations at once; moving from several
+    files; 2026-10-18, chained tasks: one item became many, and each use
+    a loop over them, the largest hand edit of each story (roadmap item
+    9, "one to many"; `introduce_loop` above wraps existing statements,
+    this writes new ones).
+- `replace_parameter`: replace a parameter with a new one computed from
+  it, given the new parameter, its type and the expression that computes
+  it from the old one at each call (`write` of type
+  `func(types.Type) string` from `qual` as
+  `func(t types.Type) string { return types.TypeString(t, qual) }`). The
+  tool rewrites the signature, the body's uses (which must all be ones
+  the new parameter can serve, such as `types.TypeString(x, qual)`
+  becoming `write(x)`) and every call. `change_parameter_type` (done)
+  covers a conversion of the same value; this covers a different value.
+  Roadmap item 13.
+  - 2026-10-19, create_from_usage for generic types: a
+    `types.Qualifier` parameter became a `func(types.Type) string` in
+    three functions and their calls, in 13 `replace_text` steps.
+  - 2026-10-19, change_parameter_type: the new tool did not cover that
+    case, since it is not a type change.
+- `create_test`: a table-driven test of a named function from its cases
+  as data (arguments, wanted results, a wanted error), written with the
+  table, the `t.Run` loop, the comparisons and the error checks. In this
+  repository, `add_golden_case` would do the same for a refactoring's
+  `testdata/<case>/` (`in/`, `args.json`, `out/` or `refused.txt`).
+  - 2026-10-19, a cheaper fresh-load comparison; change_parameter_type:
+    the tests were written whole with `create_file`, the largest code
+    the model still sent that day.
+
+Repeated sequences of steps rather than new code (scaffolding a new
+refactoring: its package, `Plan`, golden-test harness and registry
+entry) are recipes, roadmap item 11.
+
 ## Suggested, without evidence yet
 
 `move_statement_in/out`, `introduce_block` and
 `introduce_if` were suggested on 2026-10-17 and have no friction-log
 entries yet. More will be added here as they come up.
+
+Suggested on 2026-10-19, generators with no friction-log entry yet:
+
+- `call_checked`: a call with its error check,
+  `call function=parse args=[src] results=[file, err]` writing
+  `file, err := parse(src)` and `if err != nil { return <zero values>,
+  err }` with the enclosing function's zero values. The commonest Go
+  boilerplate; it is also the error-exit shape `inline_function` lacks
+  (roadmap item 4).
+- The IDE "Generate" set: a constructor from a struct's fields, a method
+  that forwards to a field (delegation), a `String` method, and an
+  exhaustive `switch` over a type's constants or an interface's
+  implementations (`create_from_usage` already writes the methods a type
+  lacks for an interface).
 
 ## Not yet logged
 

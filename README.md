@@ -241,6 +241,27 @@ hand or a tool got in the way.
       applied steps, undos, refusals and failed checks, and the final
       diff. The proposal and what would count as a result are in
       `docs/result-size.md`.
+13. **Generators: less code written by the model.** The edits take new
+    code as `content`, so the model still writes every loop, test and
+    changed call. Generators take a description and write the code from
+    the types, so a batch carries names and expressions rather than
+    statements. First the two with the most evidence (see "Generators"
+    in `docs/edits.md`):
+    - **`create_loop`:** a function or statements computing a sum,
+      count, min or max, filter, map, any/all or index over a slice or
+      map, from `over`, `op` and `field`. A summing loop was written by
+      hand twice (Oct 17), and "one to many" in item 9 was the largest
+      hand edit of three stories.
+    - **`replace_parameter`:** a parameter replaced by one computed from
+      it, rewriting the signature, the body's uses and every call. It
+      took 13 `replace_text` steps on Oct 19, a case
+      `change_parameter_type` does not cover.
+
+    Then `create_test` (table-driven tests from cases as data), and the
+    suggestions without evidence yet (a call with its error check, the
+    IDE "Generate" set). Measure progress by the code in edit arguments
+    per story: `refactor-tokens`' input tokens for `create_file`,
+    `replace_*`, `insert_statements` and `add_declaration`.
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
