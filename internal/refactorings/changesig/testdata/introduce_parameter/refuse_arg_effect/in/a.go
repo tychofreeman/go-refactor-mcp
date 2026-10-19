@@ -6,6 +6,8 @@ func f(p point) int {
 	return p.x
 }
 
-func next() point { return point{1, 2} }
+var made int
+
+func next() point { made++; return point{1, 2} }
 
 func Use() int { return f(next()) }

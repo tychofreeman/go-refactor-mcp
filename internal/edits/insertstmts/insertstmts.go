@@ -103,8 +103,9 @@ func (*InsertStatements) Plan(ws *workspace.Workspace, raw json.RawMessage) (*re
 	}
 	n := len(code.Body.List)
 	plan := &refactor.Plan{
-		Summary: fmt.Sprintf("inserted %d statement%s %s %d of %s", n, textutil.Plural(n), p.what, a.Line, a.File),
-		Edits:   []edit.FileEdit{{Path: path, Edits: append([]edit.TextEdit{{Start: p.at, End: p.end, NewText: p.text(a.Content, code.Raw)}}, adder.Edits()...)}},
+		Summary:  fmt.Sprintf("inserted %d statement%s %s %d of %s", n, textutil.Plural(n), p.what, a.Line, a.File),
+		Edits:    []edit.FileEdit{{Path: path, Edits: append([]edit.TextEdit{{Start: p.at, End: p.end, NewText: p.text(a.Content, code.Raw)}}, adder.Edits()...)}},
+		Supplied: a.Content,
 	}
 	if len(added) > 0 {
 		plan.Notes = append(plan.Notes, gocode.ImportNote("added", added))

@@ -161,7 +161,7 @@ func (t *target) checkNoCallIn(arg ast.Expr) error {
 }
 
 func unsafeArg(info *types.Info, e ast.Expr) bool {
-	bad, _ := unsafeValue(info, e)
+	bad, _ := unsafeValue(info, e, nil)
 	return bad != nil
 }
 

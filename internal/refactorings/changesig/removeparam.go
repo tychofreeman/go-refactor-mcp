@@ -29,7 +29,7 @@ func (*RemoveParameter) Description() string {
 Use it to finish removing a feature: first change the body so it no longer uses the parameter, then remove it.
 Identify the function by file, line and name, at its declaration or any call, and give the parameter's name. Removing a variadic parameter drops all of its arguments.
 Each dropped argument must have no side effects and must not be able to panic (no calls other than to known functions without side effects such as strings.ToUpper, no pointer dereferences, indexing or non-constant division), so that not evaluating it changes nothing.
-Refuses if the body uses the parameter, if the function is used other than by calling it, if it is an interface method, if a method would stop or start implementing an interface the program can see (which could silently change a type assertion), if a dropped argument would leave a local variable or an import unused, or if the parameter's type is all that lets calls infer a type parameter.`
+Refuses if the body uses the parameter (unless it never reads the value it is called with: the first statement that mentions it assigns it a value of its type, as in "n, err := f()" or "err = f()", which then declares it), if the function is used other than by calling it, if it is an interface method, if a method would stop or start implementing an interface the program can see (which could silently change a type assertion), if a dropped argument would leave a local variable or an import unused, or if the parameter's type is all that lets calls infer a type parameter.`
 }
 
 func (*RemoveParameter) InputSchema() json.RawMessage {
@@ -97,7 +97,7 @@ func (*RemoveParameter) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 			dropped = args[at:]
 		}
 		for _, arg := range dropped {
-			if bad, why := unsafeValue(c.pkg.TypesInfo, arg); bad != nil {
+			if bad, why := unsafeValue(c.pkg.TypesInfo, arg, t.effects()); bad != nil {
 				return nil, refactor.Refusef("the argument %s at %s %s (%s), so not passing it would change behavior; move it out of the call first (for example `_ = %s`)",
 					types.ExprString(arg), t.ws.Position(arg.Pos()), why, types.ExprString(bad.(ast.Expr)), types.ExprString(arg))
 			}
@@ -112,6 +112,7 @@ func (*RemoveParameter) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 	for _, c := range cuts {
 		fes = append(fes, c.fileEdit())
 	}
+	fes = append(fes, t.fixes...)
 	return t.newPlan(fmt.Sprintf("removed parameter %q from %s", a.Parameter, t.obj.Name()), fes), nil
 }
 
@@ -143,6 +144,10 @@ func (t *target) checkUnused(p param) error {
 	v := info.Defs[p.field.Names[p.index]]
 	for id, o := range info.Uses {
 		if v != nil && o == v {
+			if fix, ok := t.deadOnEntry(v); ok {
+				t.fixes = append(t.fixes, fix...)
+				break
+			}
 			return refactor.Refusef("the body of %s uses %s (at %s); remove that use first", t.obj.Name(), p.name, t.ws.Position(id.Pos()))
 		}
 	}
@@ -150,6 +155,65 @@ func (t *target) checkUnused(p param) error {
 		return refactor.Refusef("the type of %s mentions a type parameter of %s, which calls may infer from its argument; this is not supported yet", p.name, t.obj.Name())
 	}
 	return nil
+}
+
+// deadOnEntry reports whether the body never reads the value v, a
+// parameter, is called with: the first top-level statement that mentions v
+// assigns it a value of its own type without reading it. Then v can go,
+// and fix turns that statement's "=" into ":=" so that it declares v.
+func (t *target) deadOnEntry(v types.Object) (fix []edit.FileEdit, ok bool) {
+	info := t.pkg.TypesInfo
+	mentions := func(n ast.Node) bool {
+		found := false
+		ast.Inspect(n, func(m ast.Node) bool {
+			if id, isIdent := m.(*ast.Ident); isIdent && info.Uses[id] == v {
+				found = true
+			}
+			return !found
+		})
+		return found
+	}
+	for _, st := range t.decl.Body.List {
+		if !mentions(st) {
+			continue
+		}
+		as, isAssign := st.(*ast.AssignStmt)
+		if !isAssign || (as.Tok != token.DEFINE && as.Tok != token.ASSIGN) {
+			return nil, false
+		}
+		for _, r := range as.Rhs {
+			if mentions(r) {
+				return nil, false
+			}
+		}
+		at := -1
+		for i, l := range as.Lhs {
+			if id, isIdent := l.(*ast.Ident); isIdent && info.Uses[id] == v {
+				at = i
+			}
+		}
+		if at < 0 {
+			return nil, false // v.f = ... or the like, which reads v
+		}
+		var typ types.Type
+		if len(as.Rhs) == len(as.Lhs) {
+			typ = info.TypeOf(as.Rhs[at])
+		} else if tuple, isTuple := info.TypeOf(as.Rhs[0]).(*types.Tuple); isTuple && at < tuple.Len() {
+			typ = tuple.At(at).Type()
+		}
+		if typ == nil || !types.Identical(typ, v.Type()) {
+			return nil, false // a v declared there would have another type
+		}
+		if as.Tok == token.DEFINE {
+			return nil, true
+		}
+		if len(as.Lhs) != 1 {
+			return nil, false // ":=" would declare the others anew too
+		}
+		path := t.ws.Fset.Position(as.TokPos).Filename
+		return []edit.FileEdit{{Path: path, Edits: []edit.TextEdit{{Start: t.off(as.TokPos), End: t.off(as.TokPos) + 1, NewText: ":="}}}}, true
+	}
+	return nil, false
 }
 
 // paramCut deletes the parameter's name, or its whole field when it is the

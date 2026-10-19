@@ -38,6 +38,22 @@ type target struct {
 	// params flattens the parameter list: one entry per name.
 	params []param
 	calls  []call
+	effs   *analysis.Effects // what calls do, built on first use by effects
+	fixes  []edit.FileEdit   // further edits the change needs, beyond the signature and the calls
+}
+
+// effects summarizes what calls do: the module's own functions from their
+// bodies, and known ones of the standard library (fmt.Sprintf of values
+// without methods, for one), so that a call without side effects is not
+// refused as one.
+func (t *target) effects() *analysis.Effects {
+	if t.effs == nil {
+		t.effs = analysis.NewEffects()
+		for _, p := range t.ws.Pkgs {
+			t.effs.AddPackage(p.Syntax, p.TypesInfo)
+		}
+	}
+	return t.effs
 }
 
 type param struct {
@@ -206,6 +222,9 @@ func (t *target) newPlan(what string, fes []edit.FileEdit) *refactor.Plan {
 		Summary: fmt.Sprintf("%s (%d call%s updated, %d file%s)",
 			what, len(t.calls), textutil.Plural(len(t.calls)), len(files), textutil.Plural(len(files))),
 		Edits: edit.Merge(fes),
+		// Every call changes the same way: the summary says how, the
+		// result lists where.
+		Locations: true,
 	}
 	if t.obj.Exported() {
 		plan.Notes = append(plan.Notes, fmt.Sprintf("%s is exported: calls in other modules are not updated", t.obj.Name()))
@@ -239,7 +258,7 @@ func (t *target) text(n ast.Node) string { return string(t.src[t.off(n.Pos()):t.
 
 // unsafeValue returns the first part of e whose evaluation could have a
 // side effect or panic, and what it could do.
-func unsafeValue(info *types.Info, e ast.Expr) (ast.Node, string) {
+func unsafeValue(info *types.Info, e ast.Expr, eff *analysis.Effects) (ast.Node, string) {
 	if tv := info.Types[e]; tv.Value != nil {
 		return nil, "" // a constant
 	}
@@ -282,6 +301,13 @@ func unsafeValue(info *types.Info, e ast.Expr) (ast.Node, string) {
 			if known, panics := analysis.KnownCall(info, n); known {
 				if panics != analysis.NoPanic {
 					bad, why = n, "could panic: it calls "+types.ExprString(n.Fun)
+				}
+			} else if eff != nil {
+				switch s := eff.Call(info, n); {
+				case s.Effect != "":
+					bad, why = n, "has side effects"
+				case s.Unsafe != "":
+					bad, why = n, "could panic: it "+s.Unsafe
 				}
 			} else if analysis.HasEffect(info, n) {
 				bad, why = n, "has side effects"
