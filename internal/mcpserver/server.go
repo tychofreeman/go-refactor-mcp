@@ -141,7 +141,8 @@ Each step is {tool, args}: a refactoring or edit (rename, add_parameter, extract
 Give every line number as it is in the code you inspected before the batch: the batch moves it to where that line is after the earlier steps. So one inspect is enough to plan a whole sequence, e.g. extract_function the duplicated lines in each of three files, then merge_duplicate_function the new functions, then add_parameter to the one left. A line an earlier step rewrote cannot be addressed by number; address what that step made by name (file and name, no line), which also works for declarations generally.
 Independent steps can also be sent as separate tool calls in one turn; a batch is for steps that build on each other.
 If a step is refused, the steps before it are rolled back, so nothing changes, and the result says which step and why. If all apply, the result lists each step's summary and then the change as a whole; one undo reverts the whole batch.
-report: "diff" (default) shows the change; "summary" shows only the steps' summaries.`,
+report: "diff" (default) shows the change; "summary" shows only the steps' summaries.
+check: "each" (default) type-checks after every step; "end" only after the last, so edits may pass through code that does not compile yet, such as a variable declared in one step and first used in the next. A refactoring in such a batch still needs code that type-checks where it runs. If the code does not type-check at the end, the whole batch is rolled back.`,
 		InputSchema: json.RawMessage(`{
   "type": "object",
   "properties": {
@@ -158,7 +159,8 @@ report: "diff" (default) shows the change; "summary" shows only the steps' summa
         "additionalProperties": false
       }
     },
-    "report": {"type": "string", "enum": ["diff", "summary"], "description": "What the result shows after the steps' summaries: the change (default) or nothing more."}
+    "report": {"type": "string", "enum": ["diff", "summary"], "description": "What the result shows after the steps' summaries: the change (default) or nothing more."},
+    "check":  {"type": "string", "enum": ["each", "end"], "description": "When the code must type-check: after each step (default), or only after the last, so that edits can pass through code that does not compile yet (a declaration, then its first use). Refactorings still need code that type-checks."}
   },
   "required": ["steps"],
   "additionalProperties": false
@@ -270,9 +272,13 @@ func (s *Server) batch(args json.RawMessage) *mcp.CallToolResult {
 			Args json.RawMessage `json:"args"`
 		} `json:"steps"`
 		Report string `json:"report"`
+		Check  string `json:"check"`
 	}
 	if err := refactor.DecodeArgs(args, &a); err != nil {
 		return textResult("REFUSED batch: " + err.Error() + "\nbatch takes:\n  steps (required): the steps, in order, each {\"tool\": ..., \"args\": {...}}; a tool's own arguments (file, name, line, ...) go in each step's args\n  report: diff (the default) or summary")
+	}
+	if a.Check != "" && a.Check != "each" && a.Check != "end" {
+		return textResult(fmt.Sprintf("REFUSED batch: check is %q; give each or end", a.Check))
 	}
 	if a.Report != "" && a.Report != "diff" && a.Report != "summary" {
 		return textResult(fmt.Sprintf("REFUSED batch: report is %q; give diff or summary", a.Report))
@@ -299,7 +305,7 @@ func (s *Server) batch(args json.RawMessage) *mcp.CallToolResult {
 	if err != nil {
 		return toolError(err)
 	}
-	b, err := refactor.RunBatch(ws, steps, refactor.Options{Compact: !s.FullDiffs})
+	b, err := refactor.RunBatch(ws, steps, refactor.Options{Compact: !s.FullDiffs, Unchecked: a.Check == "end"})
 	if err != nil {
 		return toolError(err)
 	}

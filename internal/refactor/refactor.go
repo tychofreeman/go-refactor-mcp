@@ -111,8 +111,9 @@ func (r *Result) String() string {
 
 // Options controls Run.
 type Options struct {
-	DryRun  bool // compute and show the diff without writing
-	Compact bool // show the diff without context lines: what changed and where, at less cost to read
+	DryRun    bool // compute and show the diff without writing
+	Compact   bool // show the diff without context lines: what changed and where, at less cost to read
+	Unchecked bool // an edit may start from and leave code that does not type-check: a batch checked at its end
 }
 
 // Run executes one refactoring step.
@@ -129,9 +130,14 @@ type Options struct {
 func Run(ws *workspace.Workspace, r Refactoring, args json.RawMessage, opts Options) (*Result, error) {
 	res := &Result{Refactoring: r.Name(), DryRun: opts.DryRun}
 
-	if errs := ws.Errors(); len(errs) > 0 {
+	_, isEdit := r.(Edit)
+	if errs := ws.Errors(); len(errs) > 0 && !(opts.Unchecked && isEdit) {
 		res.Refused = fmt.Sprintf("the code does not type-check, so refactorings cannot be verified. Fix these first:\n  %s",
 			strings.Join(limit(errs, 10), "\n  "))
+		if opts.Unchecked {
+			res.Refused = fmt.Sprintf("the code does not type-check here, after an earlier edit of this batch, and a refactoring runs only on code that type-checks; put it before that edit, or after the step that completes it. Errors were:\n  %s",
+				strings.Join(limit(errs, 10), "\n  "))
+		}
 		return res, nil
 	}
 
@@ -162,13 +168,13 @@ func Run(ws *workspace.Workspace, r Refactoring, args json.RawMessage, opts Opti
 	if err != nil {
 		return nil, err
 	}
-	if errs := ws.Errors(); len(errs) > 0 {
+	if errs := ws.Errors(); len(errs) > 0 && !(opts.Unchecked && isEdit) {
 		if _, uerr := ws.Undo(); uerr != nil {
 			return nil, fmt.Errorf("refactoring broke the build and undo failed: %v (errors: %v)", uerr, errs)
 		}
 		res.Refused = fmt.Sprintf("the change would not compile, so it was rolled back. This is a bug in the %q precondition checks; errors were:\n  %s",
 			r.Name(), strings.Join(limit(errs, 10), "\n  "))
-		if _, isEdit := r.(Edit); isEdit {
+		if isEdit {
 			res.Refused = fmt.Sprintf("the result does not type-check, so it was not applied; change the code you gave so that it compiles. Errors were:\n  %s",
 				strings.Join(limit(errs, 10), "\n  "))
 		}
@@ -245,7 +251,7 @@ func RunBatch(ws *workspace.Workspace, steps []Step, opts Options) (*BatchResult
 				args = translated
 			}
 		}
-		res, err := Run(ws, s.Refactoring, args, Options{Compact: opts.Compact})
+		res, err := Run(ws, s.Refactoring, args, Options{Compact: opts.Compact, Unchecked: opts.Unchecked})
 		if err != nil {
 			if rerr := rollback(); rerr != nil {
 				return nil, fmt.Errorf("step %d (%s): %v; %v", i+1, name, err, rerr)
@@ -267,6 +273,13 @@ func RunBatch(ws *workspace.Workspace, steps []Step, opts Options) (*BatchResult
 				}
 				lines[rel].follow(i+1, before, c.After[p])
 			}
+		}
+	}
+	if opts.Unchecked {
+		if errs := ws.Errors(); len(errs) > 0 {
+			b.Refused = fmt.Sprintf("after all %d step%s the code does not type-check, so the batch was rolled back. Errors were:\n  %s",
+				len(steps), textutil.Plural(len(steps)), strings.Join(limit(errs, 10), "\n  "))
+			return b, rollback()
 		}
 	}
 	b.Applied = true
@@ -360,6 +373,10 @@ func translateLines(args json.RawMessage, rel string, m *lineMap) (json.RawMessa
 // String renders the batch result as plain text, the format sent to models.
 func (b *BatchResult) String() string {
 	var sb strings.Builder
+	if !b.Applied && b.FailedStep == 0 {
+		fmt.Fprintf(&sb, "REFUSED batch: %s\nNothing changed.\n", b.Refused)
+		return sb.String()
+	}
 	if !b.Applied {
 		fmt.Fprintf(&sb, "REFUSED batch at step %d of %d (%s): %s\n", b.FailedStep, b.Total, b.FailedTool, b.Refused)
 		switch n := b.FailedStep - 1; n {
