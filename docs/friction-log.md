@@ -979,3 +979,14 @@ stays valid after earlier steps of a batch. Twice while building it I
 sent a batch whose steps only type-check together without
 `check: "end"`; a step refused for type errors in a batch now says to
 send it that way.
+
+## 2026-10-19: change_parameter_type
+
+All through gorefactor; the new tool was written with create_file in
+one batch with its test, its registration (add_element) and its place
+in the instructions. The batch hint for check "end" fired on its first
+real use: a rename of err2 to err in two replace_text steps that only
+compile together. The tool does not cover the case that prompted it
+(a Qualifier parameter becoming a func(types.Type) string): that is
+not a type change but a replacement of one parameter by another,
+computed from it at each call.

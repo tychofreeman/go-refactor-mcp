@@ -60,6 +60,7 @@ func All() []refactor.Refactoring {
 		addcase.New(),
 		addelement.New(),
 		createfromusage.New(),
+		changesig.NewChangeParameterType(),
 	}
 }
 
