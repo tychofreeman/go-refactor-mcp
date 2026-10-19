@@ -100,6 +100,9 @@ func TestToolsAndInstructions(t *testing.T) {
 	if !strings.Contains(cs.InitializeResult().Instructions, "send them together with batch") {
 		t.Error("server instructions do not suggest batching a planned sequence")
 	}
+	if !strings.Contains(cs.InitializeResult().Instructions, "load the schema of every tool its steps use") {
+		t.Error("server instructions do not say to load the schemas of a batch's tools")
+	}
 	res, err := cs.ListTools(context.Background(), nil)
 	if err != nil {
 		t.Fatal(err)

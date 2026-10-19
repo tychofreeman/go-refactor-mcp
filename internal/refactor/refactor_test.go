@@ -351,6 +351,35 @@ func TestBadArgumentsListTheArguments(t *testing.T) {
 	}
 }
 
+// A batch checks every step's argument names before it runs any step, so
+// a model that guessed several names learns all of them in one refusal.
+func TestBatchChecksArgumentsFirst(t *testing.T) {
+	ws, path := setup(t, src)
+	b, err := refactor.RunBatch(ws, []refactor.Step{
+		{Refactoring: bump{}, Args: json.RawMessage(`{"anything": 1}`)},
+		{Refactoring: strict{}, Args: json.RawMessage(`{"file": "m.go", "type": "int", "kind": 2}`)},
+		{Refactoring: strict{}, Args: json.RawMessage(`{"line": "$prev.end"}`)},
+		{Refactoring: strict{}, Args: json.RawMessage(`{"file": "m.go", "line": 3}`)},
+	}, refactor.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `REFUSED batch: the arguments of 2 steps are not what their tools take:
+  step 2 (strict): no argument "kind" or "type"
+  step 3 (strict): missing file
+strict takes:
+  file (required): The file.
+  line: The line.
+Nothing changed.
+`
+	if b.Applied || b.String() != want {
+		t.Errorf("got:\n%s\nwant:\n%s", b, want)
+	}
+	if got, _ := os.ReadFile(path); string(got) != src || ws.CanUndo() {
+		t.Errorf("no step should have run; file:\n%s", got)
+	}
+}
+
 // markLine puts a "// mark" line before the line its arguments name.
 type markLine struct{}
 
