@@ -16,6 +16,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -55,6 +56,15 @@ type Plan struct {
 	Notes     []string        // caveats the model should know about
 	Supplied  string          // code the model wrote; the result names where it went instead of repeating it
 	Locations bool            // the change is the same at every site (a rename): a compact result lists where, not the diff
+	Choices   []string        // what the tool decided for the model (a signature, a file), for it to check
+}
+
+// Fix is an edit that may start from code that does not type-check, such
+// as a call of a function not declared yet. It must leave fewer errors,
+// and no new one.
+type Fix interface {
+	Edit
+	Fixes()
 }
 
 // Refusal is a precondition failure. Its message is written for the model:
@@ -82,6 +92,7 @@ type Result struct {
 	Summary     string   `json:"summary,omitempty"`
 	Refused     string   `json:"refused,omitempty"`
 	Notes       []string `json:"notes,omitempty"`
+	Choices     []string `json:"choices,omitempty"`
 	Files       []string `json:"files,omitempty"`
 	Diff        string   `json:"diff,omitempty"`
 	supplied    string   // the plan's Supplied, for a batch's combined diff
@@ -98,6 +109,9 @@ func (r *Result) String() string {
 		fmt.Fprintf(&sb, "PREVIEW %s: %s (not applied)\n", r.Refactoring, r.Summary)
 	default:
 		fmt.Fprintf(&sb, "APPLIED %s: %s\n", r.Refactoring, r.Summary)
+	}
+	for _, c := range r.Choices {
+		fmt.Fprintf(&sb, "chose: %s\n", c)
 	}
 	for _, n := range r.Notes {
 		fmt.Fprintf(&sb, "note: %s\n", n)
@@ -130,13 +144,15 @@ type Options struct {
 func Run(ws *workspace.Workspace, r Refactoring, args json.RawMessage, opts Options) (*Result, error) {
 	res := &Result{Refactoring: r.Name(), DryRun: opts.DryRun}
 
+	before := ws.Errors()
 	_, isEdit := r.(Edit)
-	if errs := ws.Errors(); len(errs) > 0 && !(opts.Unchecked && isEdit) {
+	_, isFix := r.(Fix)
+	if len(before) > 0 && !isFix && !(opts.Unchecked && isEdit) {
 		res.Refused = fmt.Sprintf("the code does not type-check, so refactorings cannot be verified. Fix these first:\n  %s",
-			strings.Join(limit(errs, 10), "\n  "))
+			strings.Join(limit(before, 10), "\n  "))
 		if opts.Unchecked {
 			res.Refused = fmt.Sprintf("the code does not type-check here, after an earlier edit of this batch, and a refactoring runs only on code that type-checks; put it before that edit, or after the step that completes it. Errors were:\n  %s",
-				strings.Join(limit(errs, 10), "\n  "))
+				strings.Join(limit(before, 10), "\n  "))
 		}
 		return res, nil
 	}
@@ -154,6 +170,7 @@ func Run(ws *workspace.Workspace, r Refactoring, args json.RawMessage, opts Opti
 	}
 	res.Summary, res.Notes = plan.Summary, plan.Notes
 	res.supplied, res.locations = plan.Supplied, plan.Locations
+	res.Choices = plan.Choices
 
 	if opts.DryRun {
 		c, err := ws.Preview(r.Name(), plan.Edits)
@@ -168,23 +185,64 @@ func Run(ws *workspace.Workspace, r Refactoring, args json.RawMessage, opts Opti
 	if err != nil {
 		return nil, err
 	}
-	if errs := ws.Errors(); len(errs) > 0 && !(opts.Unchecked && isEdit) {
+	if reason := afterRefusal(r.Name(), isEdit, isFix, opts.Unchecked, before, ws.Errors()); reason != "" {
 		if _, uerr := ws.Undo(); uerr != nil {
-			return nil, fmt.Errorf("refactoring broke the build and undo failed: %v (errors: %v)", uerr, errs)
+			return nil, fmt.Errorf("the step broke the build and undo failed: %v (%s)", uerr, reason)
 		}
-		res.Refused = fmt.Sprintf("the change would not compile, so it was rolled back. This is a bug in the %q precondition checks; errors were:\n  %s",
-			r.Name(), strings.Join(limit(errs, 10), "\n  "))
-		if isEdit {
-			res.Refused = fmt.Sprintf("the result does not type-check, so it was not applied; change the code you gave so that it compiles. Errors were:\n  %s",
-				strings.Join(limit(errs, 10), "\n  "))
-		}
-		res.Summary = ""
+		res.Refused, res.Summary = reason, ""
 		return res, nil
 	}
 	res.Applied = true
 	res.Diff, res.Files = edit.ElideSupplied(diffOf(ws, c, opts, plan), plan.Supplied), c.Files(ws.Root)
 	return res, nil
 }
+
+// afterRefusal says why the step named name, which left the errors after
+// from before, is refused, or "" if it is not.
+func afterRefusal(name string, isEdit, isFix, unchecked bool, before, after []string) string {
+	switch {
+	case len(after) == 0 || unchecked && isEdit:
+		return ""
+	case isFix:
+		return fixRefusal(before, after)
+	case isEdit:
+		return fmt.Sprintf("the result does not type-check, so it was not applied; change the code you gave so that it compiles. Errors were:\n  %s",
+			strings.Join(limit(after, 10), "\n  "))
+	}
+	return fmt.Sprintf("the change would not compile, so it was rolled back. This is a bug in the %q precondition checks; errors were:\n  %s",
+		name, strings.Join(limit(after, 10), "\n  "))
+}
+
+// fixRefusal says why a fix that left the errors after, from before, is
+// refused, or "" if it is not: it must fix some and add none.
+func fixRefusal(before, after []string) string {
+	had := map[string]int{}
+	for _, e := range before {
+		had[withoutPosition(e)]++
+	}
+	var added []string
+	for _, e := range after {
+		k := withoutPosition(e)
+		if had[k] == 0 {
+			added = append(added, e)
+			continue
+		}
+		had[k]--
+	}
+	switch {
+	case len(added) > 0:
+		return fmt.Sprintf("the change adds errors the code did not have, so it was not applied. New errors:\n  %s", strings.Join(limit(added, 10), "\n  "))
+	case len(after) >= len(before):
+		return fmt.Sprintf("the change fixes none of the errors, so it was not applied. Errors are:\n  %s", strings.Join(limit(after, 10), "\n  "))
+	}
+	return ""
+}
+
+// position is the file:line:col: prefix of an error, which an edit above
+// it moves.
+var position = regexp.MustCompile(`^\S*:\d+:\d+: `)
+
+func withoutPosition(e string) string { return position.ReplaceAllString(e, "") }
 
 // diffOf is c's diff as the result shows it.
 func diffOf(ws *workspace.Workspace, c workspace.Change, opts Options, plan *Plan) string {
@@ -392,6 +450,9 @@ func (b *BatchResult) String() string {
 	fmt.Fprintf(&sb, "APPLIED batch: %d step%s\n", len(b.Steps), textutil.Plural(len(b.Steps)))
 	for i, r := range b.Steps {
 		fmt.Fprintf(&sb, "%d. %s: %s\n", i+1, r.Refactoring, r.Summary)
+		for _, c := range r.Choices {
+			fmt.Fprintf(&sb, "   chose: %s\n", c)
+		}
 		for _, n := range r.Notes {
 			fmt.Fprintf(&sb, "   note: %s\n", n)
 		}
