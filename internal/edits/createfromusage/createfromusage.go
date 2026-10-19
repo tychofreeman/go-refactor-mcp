@@ -33,9 +33,9 @@ func (*CreateFromUsage) Name() string { return "create_from_usage" }
 
 func (*CreateFromUsage) Description() string {
 	return `Declare the functions code calls before they exist, as stubs ("create from usage"). This is an edit, not a refactoring, and the one step that may start from code that does not type-check: it must leave fewer errors and no new one.
-Use it after writing a test or code that calls functions not written yet: give the file with the calls. Every function it calls that is not declared gets a stub, or only those in names; a call pkg.F declares F in that package of the module.
+Use it after writing a test or code that calls functions not written yet: give the file with the calls. Every function it calls that is not declared gets a stub, or only those in names; a call pkg.F declares F in that package of the module, and a call x.M, where x is (or points to) a type of the module without a field or method M, declares the method M on that type, with a receiver like its other methods'.
 Each parameter has its argument's type and is named after it (a variable or field) or its type. The results come from how the value is used: a call as a statement has none, a returned call has the function's results, err is an error and ok a bool, and a variable has the type it is compared with, passed as, assigned to or returned as. When the use does not tell, give them in results. The body is panic("not implemented").
-A stub goes in to_file; else in the calling file, if it is of that package and not a test; else in the file the test is named after (m.go for m_test.go), or the package's first file. The result's "chose:" lines give each signature and file: check them.`
+A stub goes in to_file; else a method goes in the file of its type, and a function in the calling file, if it is of that package and not a test; else in the file the test is named after (m.go for m_test.go), or the package's first file. The result's "chose:" lines give each signature and file: check them.`
 }
 
 func (*CreateFromUsage) InputSchema() json.RawMessage {
@@ -92,18 +92,24 @@ func (*CreateFromUsage) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 	byFile := map[string]string{} // the stubs' declarations, by the file they go in
 	var order, names, choices []string
 	for _, s := range stubs {
-		dest, err := destination(ws, s.target, path, a.ToFile)
+		home, recv, used := "", "", map[string]bool{}
+		if s.recv != nil {
+			home = ws.Fset.Position(s.recv.Obj().Pos()).Filename
+			recv = receiver(pkg.TypesInfo, s.recv, s.call.Fun.(*ast.SelectorExpr).X)
+			used[strings.Fields(recv)[0]] = true
+		}
+		dest, err := destination(ws, s.target, path, a.ToFile, home)
 		if err != nil {
 			return nil, err
 		}
 		qual := func(p *types.Package) string {
-			if p == s.target.Types {
+			if p.Path() == s.target.PkgPath {
 				return ""
 			}
 			return p.Name()
 		}
 		line := tf.Line(s.call.Pos())
-		params, err := parameters(pkg.TypesInfo, s.call, qual)
+		params, err := parameters(pkg.TypesInfo, s.call, qual, used)
 		if err != nil {
 			return nil, refactor.Refusef("for %s, called on line %d of %s: %v", s.name, line, a.File, err)
 		}
@@ -114,8 +120,13 @@ func (*CreateFromUsage) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 			return nil, refactor.Refusef("cannot tell the results of %s from its use on line %d of %s; give them in results, e.g. {%q: \"(int, error)\"}", s.name, line, a.File, s.name)
 		}
 		sig := s.name + "(" + strings.Join(params, ", ") + ")" + res
+		name := s.name
+		if recv != "" {
+			sig = "(" + recv + ") " + sig
+			name = s.recv.Obj().Name() + "." + s.name
+		}
 		choices = append(choices, fmt.Sprintf("func %s, in %s", sig, ws.Rel(dest)))
-		names = append(names, s.name)
+		names = append(names, name)
 		if _, ok := byFile[dest]; !ok {
 			order = append(order, dest)
 		}
@@ -162,6 +173,7 @@ type stub struct {
 	name   string
 	target *packages.Package
 	call   *ast.CallExpr
+	recv   *types.Named // for a method, the type it is a method of
 }
 
 // undeclared returns the functions of the module file calls that are not
@@ -170,6 +182,12 @@ func undeclared(ws *workspace.Workspace, pkg *packages.Package, file *ast.File) 
 	info := pkg.TypesInfo
 	seen := map[string]bool{}
 	var out []stub
+	add := func(key string, s stub) {
+		if !seen[key] {
+			seen[key] = true
+			out = append(out, s)
+		}
+	}
 	ast.Inspect(file, func(n ast.Node) bool {
 		call, ok := n.(*ast.CallExpr)
 		if !ok {
@@ -180,29 +198,85 @@ func undeclared(ws *workspace.Workspace, pkg *packages.Package, file *ast.File) 
 		case *ast.Ident:
 			id = f
 		case *ast.SelectorExpr:
-			if x, ok := f.X.(*ast.Ident); ok {
-				if pn, ok := info.Uses[x].(*types.PkgName); ok {
-					target, id = pkg.Imports[pn.Imported().Path()], f.Sel
+			x, _ := f.X.(*ast.Ident)
+			if pn, ok := info.Uses[x].(*types.PkgName); ok {
+				target, id = pkg.Imports[pn.Imported().Path()], f.Sel
+			} else if named := receiverType(ws, info, f); named != nil {
+				if home, _ := ws.FileSyntax(ws.Fset.Position(named.Obj().Pos()).Filename); home != nil {
+					add(types.TypeString(named, nil)+"."+f.Sel.Name, stub{name: f.Sel.Name, target: home, call: call, recv: named})
 				}
+				return true
 			}
 		}
 		if id == nil || target == nil || len(target.GoFiles) == 0 || !ws.Contains(target.GoFiles[0]) ||
 			info.Uses[id] != nil || target.Types.Scope().Lookup(id.Name) != nil {
 			return true
 		}
-		if k := target.PkgPath + "." + id.Name; !seen[k] {
-			seen[k] = true
-			out = append(out, stub{name: id.Name, target: target, call: call})
-		}
+		add(target.PkgPath+"."+id.Name, stub{name: id.Name, target: target, call: call})
 		return true
 	})
 	return out
 }
 
+// receiverType is the named type of the module that sel's operand has,
+// or points to, when sel names neither a field nor a method of it: the
+// type to declare the method sel.Sel on. It is nil otherwise, and for
+// interfaces and generic types.
+func receiverType(ws *workspace.Workspace, info *types.Info, sel *ast.SelectorExpr) *types.Named {
+	if info.Selections[sel] != nil {
+		return nil
+	}
+	t := info.TypeOf(sel.X)
+	if p, ok := t.(*types.Pointer); ok {
+		t = p.Elem()
+	}
+	named, ok := t.(*types.Named)
+	if !ok || named.Obj().Pkg() == nil || types.IsInterface(named) || named.TypeParams().Len() > 0 ||
+		!ws.Contains(ws.Fset.Position(named.Obj().Pos()).Filename) {
+		return nil
+	}
+	if obj, _, _ := types.LookupFieldOrMethod(named, true, named.Obj().Pkg(), sel.Sel.Name); obj != nil {
+		return nil
+	}
+	return named
+}
+
+// receiver chooses the receiver of a new method of named, called on x,
+// as "r T" or "r *T": as its methods have it (a pointer if any has one),
+// or for a type without methods, a pointer if x is one, or is a variable
+// or field of a struct type.
+func receiver(info *types.Info, named *types.Named, x ast.Expr) string {
+	name, ptr := "", false
+	for i := range named.NumMethods() {
+		r := named.Method(i).Type().(*types.Signature).Recv()
+		if _, ok := r.Type().(*types.Pointer); ok {
+			ptr = true
+		}
+		if name == "" && r.Name() != "_" {
+			name = r.Name()
+		}
+	}
+	if named.NumMethods() == 0 {
+		_, ptr = info.TypeOf(x).(*types.Pointer)
+		switch x.(type) {
+		case *ast.Ident, *ast.SelectorExpr:
+			_, isStruct := named.Underlying().(*types.Struct)
+			ptr = ptr || isStruct
+		}
+	}
+	if name == "" {
+		name = strings.ToLower(named.Obj().Name()[:1])
+	}
+	if ptr {
+		return name + " *" + named.Obj().Name()
+	}
+	return name + " " + named.Obj().Name()
+}
+
 // destination is the file a stub for target goes in: to_file if given;
-// else the calling file, if it is of target and not a test; else the file
+// else home (for a method, the file of its type) if given; else the calling file, if it is of target and not a test; else the file
 // of target the caller is named after (m.go for m_test.go), or its first.
-func destination(ws *workspace.Workspace, target *packages.Package, caller, toFile string) (string, error) {
+func destination(ws *workspace.Workspace, target *packages.Package, caller, toFile, home string) (string, error) {
 	var files []string
 	for _, f := range target.GoFiles {
 		if !strings.HasSuffix(f, "_test.go") {
@@ -215,6 +289,9 @@ func destination(ws *workspace.Workspace, target *packages.Package, caller, toFi
 			return "", refactor.Refusef("to_file %s is not a file of package %s", toFile, target.PkgPath)
 		}
 		return p, nil
+	}
+	if home != "" {
+		return home, nil
 	}
 	if len(files) == 0 {
 		return "", refactor.Refusef("package %s has only test files; create a file for the stubs with create_file, then give it as to_file", target.PkgPath)
@@ -231,8 +308,7 @@ func destination(ws *workspace.Workspace, target *packages.Package, caller, toFi
 
 // parameters declares a parameter for each argument of call: of its type,
 // and named after it or its type.
-func parameters(info *types.Info, call *ast.CallExpr, qual types.Qualifier) ([]string, error) {
-	used := map[string]bool{}
+func parameters(info *types.Info, call *ast.CallExpr, qual types.Qualifier, used map[string]bool) ([]string, error) {
 	var out []string
 	for i, arg := range call.Args {
 		t := typeOf(info, arg)
