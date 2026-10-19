@@ -41,7 +41,7 @@ const Instructions = `Refactoring and editing tools for the Go module in this pr
 Two kinds of tool, by what they guarantee:
 - Refactorings preserve behavior. They find every reference with the type checker (every use, call and comment that names it), so there is no need to search for them first; they refuse changes that would alter behavior.
 - Edits change behavior on purpose: the step that adds or changes a feature.
-Every step, refactoring or edit, starts from code that type-checks and must leave code that type-checks; a step that would not is refused with the errors, and nothing changes. To write a failing test first, send a batch with check "end": the step that writes the test, then create_from_usage to declare stubs for what it calls.
+Every step, refactoring or edit, starts from code that type-checks and must leave code that type-checks; a step that would not is refused with the errors, and nothing changes. Except: an edit that calls functions or methods nothing declares yet gets stubs for them (create_from_usage), so to write a failing test first, just write the test.
 Some tools choose for you (create_from_usage chooses a stub's signature and file); their result lists each choice on a "chose:" line. Check them: give the choice explicitly, or undo, to change it.
 
 Which tool, by what you want to do:
@@ -153,7 +153,7 @@ Give every line number as it is in the code you inspected before the batch: the 
 Independent steps can also be sent as separate tool calls in one turn; a batch is for steps that build on each other.
 If a step is refused, the steps before it are rolled back, so nothing changes, and the result says which step and why. If all apply, the result lists each step's summary and then the change as a whole; one undo reverts the whole batch.
 report: "diff" (default) shows the change; "summary" shows only the steps' summaries.
-check: "each" (default) type-checks after every step; "end" only after the last, so edits may pass through code that does not compile yet, such as a variable declared in one step and first used in the next. A refactoring in such a batch still needs code that type-checks where it runs. If the code does not type-check at the end, the whole batch is rolled back.`,
+check: "each" (default) type-checks after every step; "end" only after the last, so edits may pass through code that does not compile yet, such as a variable declared in one step and first used in the next. A refactoring in such a batch still needs code that type-checks where it runs. If the code does not type-check at the end, the whole batch is rolled back. A batch checked at each step, whose edit does not type-check, runs again with "end" by itself; and functions and methods the steps call but nothing declares get stubs (create_from_usage), unless a name is close to a declared one.`,
 		InputSchema: json.RawMessage(`{
   "type": "object",
   "properties": {
@@ -207,6 +207,17 @@ func symbolNote(r refactor.Refactoring) string {
 	return "\nWithout line, name alone identifies it as a package-level symbol of file's package (Name, or Type.Method or Type.Field); unlike a line number, a name stays valid after edits."
 }
 
+// declarer is create_from_usage, which a batch runs to declare what its
+// steps call but nothing declares.
+func declarer() refactor.Refactoring {
+	for _, r := range refactorings.All() {
+		if r.Name() == "create_from_usage" {
+			return r
+		}
+	}
+	return nil
+}
+
 // workspace returns the session's workspace, loading it on first use and
 // refreshing it if files changed on disk. Callers hold s.mu.
 func (s *Server) workspace() (*workspace.Workspace, error) {
@@ -234,6 +245,20 @@ func (s *Server) refactor(r refactor.Refactoring, args json.RawMessage) *mcp.Cal
 	res, err := refactor.Run(ws, r, args, refactor.Options{Compact: !s.FullDiffs})
 	if err != nil {
 		return toolError(err)
+	}
+	if _, edit := r.(refactor.Edit); edit && strings.HasPrefix(res.Refused, "the result does not type-check") {
+		// Run it as a batch, which declares what it calls.
+		b, err := refactor.RunBatch(ws, []refactor.Step{{Refactoring: r, Args: args}}, refactor.Options{Compact: !s.FullDiffs, Unchecked: true, Declare: declarer()})
+		if err != nil {
+			return toolError(err)
+		}
+		if b.Applied {
+			return textResult(b.String())
+		}
+		if b.FailedStep == 0 && len(b.Steps) > 1 {
+			res.Refused = fmt.Sprintf("the result does not type-check, so it was not applied; change the code you gave so that it compiles. With stubs for the functions it calls, the errors left were:\n  %s", strings.Join(b.Errors, "\n  "))
+		}
+		res.Notes = append(res.Notes, b.Notes...)
 	}
 	text := res.String()
 	if res.Applied {
@@ -322,7 +347,7 @@ func (s *Server) batch(args json.RawMessage) *mcp.CallToolResult {
 	if err != nil {
 		return toolError(err)
 	}
-	b, err := refactor.RunBatch(ws, steps, refactor.Options{Compact: !s.FullDiffs, Unchecked: a.Check == "end"})
+	b, err := refactor.RunBatch(ws, steps, refactor.Options{Compact: !s.FullDiffs, Unchecked: a.Check == "end", Declare: declarer()})
 	if err != nil {
 		return toolError(err)
 	}

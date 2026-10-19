@@ -134,9 +134,10 @@ func (r *Result) String() string {
 
 // Options controls Run.
 type Options struct {
-	DryRun    bool // compute and show the diff without writing
-	Compact   bool // show the diff without context lines: what changed and where, at less cost to read
-	Unchecked bool // an edit may start from and leave code that does not type-check: a batch checked at its end
+	DryRun    bool        // compute and show the diff without writing
+	Compact   bool        // show the diff without context lines: what changed and where, at less cost to read
+	Unchecked bool        // an edit may start from and leave code that does not type-check: a batch checked at its end
+	Declare   Refactoring // with Unchecked, in a batch: declares what the steps call but nothing declares (create_from_usage)
 }
 
 // Run executes one refactoring step.
@@ -166,6 +167,7 @@ func Run(ws *workspace.Workspace, r Refactoring, args json.RawMessage, opts Opti
 		return res, nil
 	}
 
+	args, took := aliasArgs(r.InputSchema(), args)
 	plan, err := r.Plan(ws, args)
 	if err != nil {
 		if IsRefusal(err) {
@@ -180,6 +182,9 @@ func Run(ws *workspace.Workspace, r Refactoring, args json.RawMessage, opts Opti
 	res.Summary, res.Notes = plan.Summary, plan.Notes
 	res.supplied, res.locations, res.edits = plan.Supplied, plan.Locations, plan.Edits
 	res.Choices = plan.Choices
+	if took != "" {
+		res.Notes = append(res.Notes, took)
+	}
 
 	if opts.DryRun {
 		c, err := ws.Preview(r.Name(), plan.Edits)
@@ -216,12 +221,8 @@ func afterRefusal(r Refactoring, isEdit, isFix, unchecked bool, before, after []
 	case isFix:
 		return fixRefusal(before, after)
 	case isEdit:
-		hint := ""
-		if slices.ContainsFunc(after, func(e string) bool { return strings.Contains(e, "undefined: ") }) {
-			hint = "\nIf it calls functions that do not exist yet, send it in a batch with check \"end\", then create_from_usage to declare them."
-		}
-		return fmt.Sprintf("the result does not type-check, so it was not applied; change the code you gave so that it compiles. Errors were:\n  %s%s",
-			strings.Join(limit(after, 10), "\n  "), hint)
+		return fmt.Sprintf("the result does not type-check, so it was not applied; change the code you gave so that it compiles. Errors were:\n  %s",
+			strings.Join(limit(after, 10), "\n  "))
 	}
 	if compiles {
 		return fmt.Sprintf("the change would not compile, so it was not applied. Errors were:\n  %s", strings.Join(limit(after, 10), "\n  "))
@@ -289,6 +290,8 @@ type BatchResult struct {
 	Refused    string
 	Diff       string // of the whole batch, when applied
 	Files      []string
+	Notes      []string // about the batch as a whole, when applied
+	Errors     []string // when refused at its end: the errors left
 }
 
 // RunBatch runs steps in order, each through Run, as one change: if a
@@ -301,7 +304,46 @@ type BatchResult struct {
 // step that addresses a line an earlier step rewrote or removed, or a
 // line of a file created in the batch, is refused. A line may instead be
 // a reference to the lines an earlier step made (see batchref.go).
+//
+// A batch checked at each step, whose edit does not type-check, runs again
+// checked at its end: a later step may complete that one, or, with
+// opts.Declare, the batch declares what the steps call. If that is refused
+// too, the first refusal stands, with the second's.
 func RunBatch(ws *workspace.Workspace, steps []Step, opts Options) (*BatchResult, error) {
+	b, err := runBatch(ws, steps, opts)
+	if err != nil || b.Applied || opts.Unchecked || !retriable(b, opts) {
+		return b, err
+	}
+	retry, err := runBatch(ws, steps, Options{Compact: opts.Compact, Unchecked: true, Declare: opts.Declare})
+	if err != nil {
+		return nil, err
+	}
+	switch {
+	case !retry.Applied && retry.FailedStep == 0:
+		// Every step ran: the errors left at the end are the ones to fix.
+		if b.FailedStep < b.Total {
+			retry.Refused = fmt.Sprintf("step %d did not type-check on its own, so the batch ran again with check \"end\"; ", b.FailedStep) + retry.Refused
+		}
+		return retry, nil
+	case !retry.Applied:
+		b.Refused += fmt.Sprintf("\nRun again with check \"end\", the batch was refused at step %d (%s): %s", retry.FailedStep, retry.FailedTool, retry.Refused)
+		return b, nil
+	}
+	if b.FailedStep < b.Total {
+		retry.Notes = append(retry.Notes, fmt.Sprintf("step %d did not type-check on its own, so the batch ran again with check \"end\"", b.FailedStep))
+	}
+	return retry, nil
+}
+
+// retriable reports whether b, refused when checked at each step, may
+// apply checked at its end: an edit that does not type-check, before the
+// last step or with something to declare what it calls.
+func retriable(b *BatchResult, opts Options) bool {
+	return b.FailedStep > 0 && strings.HasPrefix(b.Refused, "the result does not type-check") && (b.FailedStep < b.Total || opts.Declare != nil)
+}
+
+// runBatch runs steps once, type-checked as opts says.
+func runBatch(ws *workspace.Workspace, steps []Step, opts Options) (*BatchResult, error) {
 	b := &BatchResult{Total: len(steps)}
 	if err := checkIDs(steps); err != nil {
 		b.Refused = err.Error()
@@ -348,9 +390,6 @@ func RunBatch(ws *workspace.Workspace, steps []Step, opts Options) (*BatchResult
 		b.Steps = append(b.Steps, res)
 		if !res.Applied {
 			b.FailedStep, b.FailedTool, b.Refused = i+1, name, res.Refused
-			if !opts.Unchecked && i < len(steps)-1 && strings.HasPrefix(res.Refused, "the result does not type-check") {
-				b.Refused += "\nOr, if a later step of the batch completes this one, send it with check \"end\": the batch is then type-checked once, after its last step."
-			}
 			return b, rollback()
 		}
 		applied++
@@ -358,9 +397,31 @@ func RunBatch(ws *workspace.Workspace, steps []Step, opts Options) (*BatchResult
 		followStep(ws, made, i, lines, res)
 	}
 	if opts.Unchecked {
-		if errs := ws.Errors(); len(errs) > 0 {
+		errs := ws.Errors()
+		var skipped []string
+		if len(errs) > 0 && opts.Declare != nil {
+			declared, notDeclared, err := declareMissing(ws, errs, opts)
+			for _, res := range declared {
+				b.Steps = append(b.Steps, res)
+				applied++
+				names = append(names, res.Refactoring)
+			}
+			if err != nil {
+				if rerr := rollback(); rerr != nil {
+					return nil, fmt.Errorf("declaring what the steps call: %v; %v", err, rerr)
+				}
+				return nil, fmt.Errorf("declaring what the steps call: %w", err)
+			}
+			skipped = notDeclared
+			errs = ws.Errors()
+		}
+		if len(errs) > 0 {
 			b.Refused = fmt.Sprintf("after all %d step%s the code does not type-check, so the batch was rolled back. Errors were:\n  %s",
 				len(steps), textutil.Plural(len(steps)), strings.Join(limit(errs, 10), "\n  "))
+			for _, s := range skipped {
+				b.Refused += "\n" + s
+			}
+			b.Errors, b.Notes = errs, skipped
 			return b, rollback()
 		}
 	}
@@ -501,6 +562,9 @@ func (b *BatchResult) String() string {
 		return sb.String()
 	}
 	fmt.Fprintf(&sb, "APPLIED batch: %d step%s\n", len(b.Steps), textutil.Plural(len(b.Steps)))
+	for _, n := range b.Notes {
+		fmt.Fprintf(&sb, "note: %s\n", n)
+	}
 	for i, r := range b.Steps {
 		fmt.Fprintf(&sb, "%d. %s: %s\n", i+1, r.Refactoring, r.Summary)
 		for _, c := range r.Choices {

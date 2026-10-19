@@ -325,7 +325,8 @@ func TestBatchLinesFromBeforeTheBatch(t *testing.T) {
 	mustContain(t, "app.go", string(app), "calc.Scale(")
 }
 
-// With check "end", a declaration and its first use can be two steps.
+// With check "end", a declaration and its first use can be two steps;
+// without, the batch runs again with check "end" (see refactor.RunBatch).
 func TestBatchCheckAtEnd(t *testing.T) {
 	cs, dir := setup(t)
 	more := filepath.Join(dir, "calc", "more.go")
@@ -334,10 +335,7 @@ func TestBatchCheckAtEnd(t *testing.T) {
 		map[string]any{"tool": "insert_statements", "args": map[string]any{"file": "calc/more.go", "line": 4, "where": "before", "content": "total := a + b"}},
 		map[string]any{"tool": "replace_statements", "args": map[string]any{"file": "calc/more.go", "start_line": 4, "end_line": 4, "content": "return total"}},
 	}
-	out, _ := call(t, cs, "batch", map[string]any{"steps": steps})
-	mustContain(t, "checked at each step", out, "REFUSED batch at step 1 of 2", "declared and not used")
-
-	out, _ = call(t, cs, "batch", map[string]any{"check": "end", "steps": steps})
+	out, _ := call(t, cs, "batch", map[string]any{"check": "end", "steps": steps})
 	mustContain(t, "checked at the end", out, "APPLIED batch: 2 steps")
 	got, _ := os.ReadFile(more)
 	mustContain(t, "more.go", string(got), "\ttotal := a + b\n\treturn total\n")
@@ -386,6 +384,30 @@ func TestBatchTestThenStubs(t *testing.T) {
 	mustContain(t, "batch", out, "APPLIED batch: 2 steps", "chose: func Half(n int) int, in calc/")
 	got, _ := os.ReadFile(filepath.Join(dir, "calc", "half_test.go"))
 	mustContain(t, "half_test.go", string(got), "Half(4)")
+}
+
+// A batch, or a single edit, that calls functions nothing declares gets
+// stubs for them, without check "end" or a create_from_usage step.
+func TestStubsForWhatEditsCall(t *testing.T) {
+	cs, dir := setup(t)
+	test := "package calc\n\nimport \"testing\"\n\nfunc TestHalf(t *testing.T) {\n\tif got := Half(4); got != 2 {\n\t\tt.Errorf(\"Half(4) = %d\", got)\n\t}\n}\n"
+	out, _ := call(t, cs, "batch", map[string]any{"steps": []any{
+		map[string]any{"tool": "create_file", "args": map[string]any{"file": "calc/half_test.go", "content": test}},
+	}})
+	mustContain(t, "batch", out, "APPLIED batch: 2 steps", "2. create_from_usage: ", "chose: func Half(n int) int, in calc/", "since the steps call Half and nothing declares it")
+
+	out, _ = call(t, cs, "replace_statements", map[string]any{"file": "calc/calc.go", "function": "Apply", "content": "return Double(n) * Rate"})
+	mustContain(t, "replace_statements", out, "APPLIED batch: 2 steps", "chose: func Double(n int) int")
+	got, _ := os.ReadFile(filepath.Join(dir, "calc", "calc.go"))
+	mustContain(t, "calc.go", string(got), "return Double(n) * Rate", "func Double(n int) int")
+
+	// A name that is not called, such as a variable, gets no stub, and the
+	// others still do; the batch is refused for it.
+	out, _ = call(t, cs, "replace_statements", map[string]any{"file": "calc/calc.go", "function": "Apply", "content": "_ = factor\nreturn Triple(n) * Rate"})
+	mustContain(t, "replace_statements", out, "REFUSED replace_statements", "With stubs for the functions it calls, the errors left were:\n  calc/calc.go:7:6: undefined: factor")
+	if strings.Contains(out, "undefined: Triple") {
+		t.Errorf("Triple should have had a stub:\n%s", out)
+	}
 }
 
 // TestRefactoringLoop walks the loop the model is meant to follow.
@@ -474,15 +496,15 @@ func TestBrokenCodeIsReported(t *testing.T) {
 func TestCreateFileThenUndo(t *testing.T) {
 	cs, dir := setup(t)
 	path := filepath.Join(dir, "calc/half_test.go")
-	broken := "package calc\n\nimport \"testing\"\n\nfunc TestHalf(t *testing.T) {\n\tif Half(4) != 2 {\n\t\tt.Fatal()\n\t}\n}\n"
+	broken := "package calc\n\nimport \"testing\"\n\nfunc TestHalf(t *testing.T) {\n\tif half != 2 {\n\t\tt.Fatal()\n\t}\n}\n"
 	out, _ := call(t, cs, "create_file", map[string]any{"file": "calc/half_test.go", "content": broken})
-	if !strings.Contains(out, "REFUSED create_file") || !strings.Contains(out, "undefined: Half") {
+	if !strings.Contains(out, "REFUSED create_file") || !strings.Contains(out, "undefined: half") {
 		t.Fatalf("want a file that does not type-check refused with its error, got:\n%s", out)
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatalf("refused file was left on disk: %v", err)
 	}
-	ok := strings.ReplaceAll(broken, "Half(4) != 2", "Apply(2) != 2*Rate")
+	ok := strings.ReplaceAll(broken, "half != 2", "Apply(2) != 2*Rate")
 	if out, _ := call(t, cs, "create_file", map[string]any{"file": "calc/half_test.go", "content": ok}); !strings.Contains(out, "APPLIED create_file") {
 		t.Fatalf("want the file created, got:\n%s", out)
 	}

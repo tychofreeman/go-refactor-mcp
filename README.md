@@ -283,6 +283,26 @@ hand or a tool got in the way.
       step needs and those that import them, or keep the syntax only of
       packages being edited and cache the types of the rest, as gopls
       does since its 2023 redesign.
+15. **Teach a fresh model through the tools, not the prompt.** On Oct 19
+    a fresh model with the MCP cost more than one without it: it guessed
+    argument names, cut statements with its line ranges, and sent steps
+    that called functions not written yet without `create_from_usage`.
+    In order:
+    - **Refusals that say what to send:** a batch checks every step's
+      argument names first, and a range that cuts a statement gets the
+      whole-statement range to send. *Done (#113).*
+    - **Defaults that do it for the model:** a batch whose edit does not
+      type-check runs again with check "end"; functions and methods the
+      steps call but nothing declares get stubs (`create_from_usage`), in
+      a batch or a single edit, except a name close to a declared one;
+      an unknown argument name that can only mean one missing argument
+      is taken as it (`old_text` as `old`). *Done.*
+    - **Follow lines through a step's own edits,** not a line diff, so a
+      step after `extract_function` can address the lines below it.
+    - **Coaching in results,** when a model does something a tool could
+      have done (three single steps that could have been one batch).
+    - **One worked example** of a whole batch in the instructions.
+    - **Measure** each with the A/B harness's feature and chain tasks.
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the

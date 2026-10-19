@@ -122,9 +122,6 @@ func TestEditThatBreaksTheBuildIsRefused(t *testing.T) {
 	if strings.Contains(res.Refused, "bug") {
 		t.Errorf("an edit's type error comes from its input, not a bug in the tool: %s", res.Refused)
 	}
-	if !strings.Contains(res.Refused, `batch with check "end", then create_from_usage`) {
-		t.Errorf("an undefined name should point to create_from_usage: %s", res.Refused)
-	}
 	if got, _ := os.ReadFile(path); string(got) != src {
 		t.Errorf("file not restored:\n%s", got)
 	}
@@ -579,11 +576,8 @@ func TestBatchCheckedAtEnd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if b.Applied || b.FailedStep != 1 {
-		t.Errorf("checked at each step, want step 1 refused, got %+v", b)
-	}
-	if !strings.Contains(b.Refused, `if a later step of the batch completes this one, send it with check "end"`) {
-		t.Errorf("the refusal should point to check \"end\": %s", b.Refused)
+	if !b.Applied {
+		t.Errorf("checked at each step, want it applied on a retry, got %+v", b)
 	}
 
 	ws, path = setup(t, src)
@@ -679,5 +673,127 @@ func TestFix(t *testing.T) {
 	}
 	if res.Applied || !strings.Contains(res.Refused, "fixes none of the errors") {
 		t.Errorf("want a fix that fixes nothing refused, got %+v", res)
+	}
+}
+
+// A batch whose step does not type-check until a later step completes it
+// runs again, checked at its end, and says so.
+func TestBatchRetriesCheckedAtEnd(t *testing.T) {
+	ws, path := setup(t, src)
+	b, err := refactor.RunBatch(ws, []refactor.Step{{Refactoring: declareN{}}, {Refactoring: useN{}}}, refactor.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !b.Applied || !strings.Contains(b.String(), "note: step 1 did not type-check on its own, so the batch ran again with check \"end\"\n") {
+		t.Fatalf("want it applied on the retry, got:\n%s", b)
+	}
+	if got, _ := os.ReadFile(path); !strings.Contains(string(got), "n := 2; return n") {
+		t.Errorf("file:\n%s", got)
+	}
+	if _, err := ws.Undo(); err != nil || ws.CanUndo() {
+		t.Errorf("want one undo for the batch: %v", err)
+	}
+
+	// When the retry is refused too, the first refusal stands and says so.
+	ws, path = setup(t, src)
+	b, err = refactor.RunBatch(ws, []refactor.Step{{Refactoring: declareN{}}, {Refactoring: bump{}}}, refactor.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.Applied || b.FailedStep != 1 || !strings.Contains(b.Refused, "Run again with check \"end\", the batch was refused at step 2 (bump): the code does not type-check here") {
+		t.Errorf("want step 1's refusal and the retry's, got:\n%s", b)
+	}
+	if got, _ := os.ReadFile(path); string(got) != src || ws.CanUndo() {
+		t.Errorf("not rolled back; file:\n%s", got)
+	}
+}
+
+// callG is an edit that adds a call of name, which nothing declares, to X.
+type callG struct{ name string }
+
+func (callG) Name() string                 { return "call_g" }
+func (callG) Description() string          { return "" }
+func (callG) InputSchema() json.RawMessage { return json.RawMessage(`{}`) }
+func (callG) ChangesBehavior()             {}
+func (c callG) Plan(ws *workspace.Workspace, _ json.RawMessage) (*refactor.Plan, error) {
+	path := ws.Abs("m.go")
+	src, _ := os.ReadFile(path)
+	i := strings.LastIndex(string(src), "F()") + len("F()")
+	return &refactor.Plan{Summary: "called " + c.name, Edits: []edit.FileEdit{{Path: path, Edits: []edit.TextEdit{{Start: i, End: i, NewText: " + " + c.name + "()"}}}}}, nil
+}
+
+// A batch whose code calls functions nothing declares declares them with
+// opts.Declare, as create_from_usage does, and says so.
+func TestBatchDeclaresMissing(t *testing.T) {
+	opts := refactor.Options{Declare: declare{"\nfunc G() int { return 0 }\n"}}
+	ws, path := setup(t, src)
+	b, err := refactor.RunBatch(ws, []refactor.Step{{Refactoring: callG{"G"}}}, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "2. declare: declared\n   chose: func G() int { return 0 }\n   note: added by the batch, since the steps call G and nothing declares it; check that it is meant to be new, not a misspelled name\n"
+	if !b.Applied || !strings.Contains(b.String(), want) {
+		t.Fatalf("want G declared, got:\n%s", b)
+	}
+	if got, _ := os.ReadFile(path); !strings.Contains(string(got), "var X = F() + G()") || !strings.Contains(string(got), "func G() int") {
+		t.Errorf("file:\n%s", got)
+	}
+	if _, err := ws.Undo(); err != nil || ws.CanUndo() {
+		t.Errorf("want one undo for the batch: %v", err)
+	}
+
+	// A name close to a declared one may be a misspelling: it is not declared.
+	ws, path = setup(t, src)
+	b, err = refactor.RunBatch(ws, []refactor.Step{{Refactoring: callG{"x"}}}, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.Applied || !strings.Contains(b.String(), "undefined: x") || !strings.Contains(b.String(), "x was not declared for you, since it is close to X") {
+		t.Errorf("want x refused as a likely misspelling, got:\n%s", b)
+	}
+	if got, _ := os.ReadFile(path); string(got) != src || ws.CanUndo() {
+		t.Errorf("not rolled back; file:\n%s", got)
+	}
+}
+
+// echo is a tool that shows the arguments it was given, as JSON.
+type echo struct{}
+
+func (echo) Name() string        { return "echo" }
+func (echo) Description() string { return "" }
+func (echo) InputSchema() json.RawMessage {
+	return json.RawMessage(`{"type": "object", "properties": {
+  "file": {"type": "string"}, "name": {"type": "string"}, "parameter": {"type": "string"},
+  "old": {"type": "string"}, "new": {"type": "string"}, "content": {"type": "string"}
+}, "required": ["file"]}`)
+}
+func (echo) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
+	var a map[string]string
+	json.Unmarshal(raw, &a)
+	b, _ := json.Marshal(a)
+	return &refactor.Plan{Summary: string(b)}, nil
+}
+
+// A guessed argument name that can only mean one argument the tool takes,
+// and that is not given, is taken as that one, and the result says so.
+func TestArgumentAliases(t *testing.T) {
+	ws, _ := setup(t, src)
+	for _, c := range []struct{ args, summary, note string }{
+		{`{"file": "m.go", "old_text": "a", "new_text": "b"}`, `{"file":"m.go","new":"b","old":"a"}`, `took "new_text" as new and "old_text" as old`},
+		{`{"file": "m.go", "name": "F", "parameter_name": "p"}`, `{"file":"m.go","name":"F","parameter":"p"}`, `took "parameter_name" as parameter`},
+		{`{"file": "m.go", "new": "a", "new_code": "b"}`, `{"content":"b","file":"m.go","new":"a"}`, `took "new_code" as content`},
+		// parameter_name could be parameter or name.
+		{`{"file": "m.go", "parameter_name": "p"}`, `{"file":"m.go","parameter_name":"p"}`, ""},
+	} {
+		res, err := refactor.Run(ws, echo{}, json.RawMessage(c.args), refactor.Options{DryRun: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if res.Summary != c.summary {
+			t.Errorf("%s: got %s, want %s", c.args, res.Summary, c.summary)
+		}
+		if note := strings.Join(res.Notes, "\n"); !strings.Contains(note, c.note) || c.note == "" && note != "" {
+			t.Errorf("%s: notes %q, want %q", c.args, note, c.note)
+		}
 	}
 }

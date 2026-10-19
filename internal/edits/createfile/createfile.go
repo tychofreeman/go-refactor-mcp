@@ -30,7 +30,7 @@ func (*CreateFile) Description() string {
 Use it to add code that does not exist yet, such as a new type, a test, or a new package's first file; use the refactorings to change existing code.
 Any kind of file can be created (go.mod, JSON, test fixtures, ...). A Go file must parse, and its package clause must match the other Go files in its directory (a test file may use the _test package); it is gofmt-ed. Missing directories are created (undo removes them); the file must not exist.
 To create several files, such as a test fixture directory, send the create_file steps together in one batch.
-Like every step, the result must type-check: if the new file refers to something that does not exist yet, it is refused with the errors. To write a failing test first, first declare what it calls (a stub), so the test compiles and fails. Undo removes the file.`
+Like every step, the result must type-check: if the new file refers to something that does not exist yet, it is refused with the errors; but functions and methods it calls that nothing declares get stubs (create_from_usage), so a failing test first compiles and fails. Undo removes the file.`
 }
 
 func (*CreateFile) InputSchema() json.RawMessage {
