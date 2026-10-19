@@ -1025,3 +1025,17 @@ code), so a reference to it was refused; edits that write an import
 declaration now count as none. replace_text does not add imports, as it
 works on text, so a strings.HasPrefix it wrote needed a second step for
 the import. extract_function's doc comment was again not wrapped.
+
+## 2026-10-19: finishing touches
+
+Fixed three frictions from today: extract_function wraps its doc
+comment at the file's width (gocode.DocComment, for the other tools
+later); imports for code an edit adds also come from what other
+packages of the module import by that name (astutil); and a variable
+only a literal of the selection changes, which nothing outside it sees
+again, is passed as a copy rather than a pointer. All through
+gorefactor. I sent a batch without check "end" for the third time
+today; the hint is clear, but the step that needs it is usually the
+first, which refers to a function a later step declares. A batch whose
+first steps fail only on names its later steps declare could retry
+itself with check "end" and say so.

@@ -1,0 +1,1 @@
+{"file": "b.go", "content": "// Title is Name, upper-cased.\nfunc Title() string { return strutil.Up(Name) }"}
