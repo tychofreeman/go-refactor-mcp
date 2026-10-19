@@ -1076,3 +1076,18 @@ through gorefactor, but two frictions on the way:
   text, instead.
 - I sent a batch without check "end" for the fourth time; the
   auto-retry proposed above would have saved the turn.
+
+## 2026-10-19: defaults that teach a fresh model
+
+All code through gorefactor. The tests were appended with a heredoc, a
+slip; add_declaration would have done it. Frictions:
+- rename refused RunBatch → runBatch, rightly (mcpserver uses it). I
+  extracted the body into runBatch instead, but extract_function put
+  steps before ws in the parameters (order of first use). A
+  move_parameter step fixed it; extract_function could keep the order
+  of the enclosing function's parameters.
+- The new auto-declare found a real limit: create_from_usage refuses a
+  whole file when one name in names is not a call (an undefined
+  variable), and when one call's results can't be told. The batch now
+  drops names that are not called and passes on any other refusal as a
+  note.
