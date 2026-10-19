@@ -880,3 +880,24 @@ call, which only type-check together) was done with Edit.
 
 **Extracted functions take parameters in an odd order** (`ctx` in the
 middle); `move_parameter` fixes it, by name, in the same batch.
+
+## 2026-10-18: follow-ups from the backlog
+
+- **Edits no longer echo the model's code:** `insert_statements`,
+  `replace_statements` and `add_field` mark their content as supplied,
+  like `create_file` and `add_declaration`.
+- **Signature changes list locations:** `add_parameter` and the other
+  `changesig` tools report where calls changed, as `rename` does.
+- **Calls without side effects are judged by what they do:**
+  `add_parameter`'s value, `remove_parameter`'s dropped arguments and
+  `introduce_parameter`'s expression now use the effect summaries
+  (`analysis.Effects`): the module's own functions by their bodies, and
+  `fmt.Sprintf` of values that cannot have methods. Two old fixtures
+  turned out to be false positives (`fmt.Sprint` of a string, a
+  `next()` that only returns a literal) and now test real side effects.
+- **A parameter whose value is never read can be removed:** when the
+  first statement that mentions it assigns it (`n, err := ...` or
+  `err = ...`), `remove_parameter` removes it, turning `=` into `:=`.
+
+Still open: adding a case clause, an element of a composite literal, a
+one-line function body; a declaration and its first use in one step.

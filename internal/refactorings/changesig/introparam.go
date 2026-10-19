@@ -224,12 +224,12 @@ func (t *target) checkCall(info *types.Info, expr ast.Expr, c call, csrc []byte)
 // checkArgEffects refuses a call whose arguments or receiver have side
 // effects.
 func (t *target) checkArgEffects(c call, csrc []byte) error {
-	if x := c.recv(); x != nil && firstRisk(c.pkg.TypesInfo, x, func(r risk) bool { return r.effect }) != nil {
+	if x := c.recv(); x != nil && firstRisk(c.pkg.TypesInfo, x, func(r risk) bool { return r.effect }, t.effects()) != nil {
 		return refactor.Refusef("the receiver %s at %s has side effects; assign it to a variable first",
 			csrc[t.off(x.Pos()):t.off(x.End())], t.ws.Position(x.Pos()))
 	}
 	for i, arg := range c.expr.Args {
-		if firstRisk(c.pkg.TypesInfo, arg, func(r risk) bool { return r.effect }) != nil {
+		if firstRisk(c.pkg.TypesInfo, arg, func(r risk) bool { return r.effect }, t.effects()) != nil {
 			p := t.params[min(i, len(t.params)-1)]
 			return refactor.Refusef("the argument %s for %s at %s has side effects; assign it to a variable first",
 				csrc[t.off(arg.Pos()):t.off(arg.End())], p.name, t.ws.Position(arg.Pos()))

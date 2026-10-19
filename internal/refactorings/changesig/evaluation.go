@@ -29,7 +29,7 @@ type risk struct {
 
 // riskOf classifies the node n itself, not its children; ok is false when
 // evaluating it is harmless.
-func riskOf(info *types.Info, n ast.Node) (r risk, ok bool) {
+func riskOf(info *types.Info, n ast.Node, eff *analysis.Effects) (r risk, ok bool) {
 	r.node = n
 	switch n := n.(type) {
 	case *ast.StarExpr:
@@ -81,6 +81,17 @@ func riskOf(info *types.Info, n ast.Node) (r risk, ok bool) {
 			}
 			break
 		}
+		if eff != nil {
+			switch s := eff.Call(info, n); {
+			case s.Effect != "":
+				r.why, r.effect = "has side effects", true
+			case s.Unsafe != "":
+				r.why, r.panics = "could panic: it "+s.Unsafe, true
+			case s.Reads != "":
+				r.why, r.shared = s.Reads, true
+			}
+			break
+		}
 		if analysis.HasEffect(info, n) {
 			r.why, r.effect = "has side effects", true
 		}
@@ -99,7 +110,7 @@ func riskOf(info *types.Info, n ast.Node) (r risk, ok bool) {
 // risks lists what evaluating e could do or depend on, in source order.
 // Function literals are not evaluated (defining one runs nothing), nor
 // are constant expressions.
-func risks(info *types.Info, e ast.Node) []risk {
+func risks(info *types.Info, e ast.Node, eff *analysis.Effects) []risk {
 	var out []risk
 	ast.Inspect(e, func(n ast.Node) bool {
 		if _, ok := n.(*ast.FuncLit); ok {
@@ -108,7 +119,7 @@ func risks(info *types.Info, e ast.Node) []risk {
 		if ex, ok := n.(ast.Expr); ok && info.Types[ex].Value != nil {
 			return false
 		}
-		if r, ok := riskOf(info, n); ok {
+		if r, ok := riskOf(info, n, eff); ok {
 			out = append(out, r)
 		}
 		return true
@@ -117,8 +128,8 @@ func risks(info *types.Info, e ast.Node) []risk {
 }
 
 // firstRisk returns the first risk of e that matches, or nil.
-func firstRisk(info *types.Info, e ast.Node, match func(risk) bool) *risk {
-	for _, r := range risks(info, e) {
+func firstRisk(info *types.Info, e ast.Node, match func(risk) bool, eff *analysis.Effects) *risk {
+	for _, r := range risks(info, e, eff) {
 		if match(r) {
 			return &r
 		}
@@ -137,7 +148,7 @@ func (t *target) checkEvaluation(info *types.Info, file *ast.File, expr ast.Expr
 	// canPanic is the first way expr could panic other than a nil
 	// dereference, or else the first nil dereference.
 	var shared, canPanic *risk
-	for _, r := range risks(info, expr) {
+	for _, r := range risks(info, expr, t.effects()) {
 		switch {
 		case r.effect:
 			return refactor.Refusef("%s has side effects (%s); evaluated at each call instead, they would happen where the body would not", q, t.brief(r.node))
@@ -178,7 +189,7 @@ func (t *target) checkEvaluation(info *types.Info, file *ast.File, expr ast.Expr
 		if n.End() > expr.Pos() {
 			return true // it encloses expr, and finishes after it
 		}
-		r, risky := riskOf(info, n)
+		r, risky := riskOf(info, n, t.effects())
 		write := t.writes(fa, n)
 		switch {
 		case (r.effect || write) && shared != nil:
