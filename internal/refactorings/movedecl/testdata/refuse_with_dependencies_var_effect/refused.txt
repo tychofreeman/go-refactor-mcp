@@ -1,0 +1,1 @@
+Greet uses greeting, which would have to move too, but the initializer of greeting has side effects

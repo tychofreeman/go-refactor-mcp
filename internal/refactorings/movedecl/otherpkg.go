@@ -22,7 +22,11 @@ import (
 // an import of it), uses inside it lose their qualifier, and so does the
 // moved code's own references to it.
 func (m *mover) planOtherPackage(to string) (*refactor.Plan, error) {
-	if err := m.addMethods(); err != nil {
+	add := m.addMethods
+	if m.withDeps {
+		add = m.addDependencies
+	}
+	if err := add(); err != nil {
 		return nil, err
 	}
 	if err := m.checkOtherPackage(to); err != nil {
@@ -36,6 +40,11 @@ func (m *mover) planOtherPackage(to string) (*refactor.Plan, error) {
 	}
 	if err := m.checkNoSourceRefs(); err != nil {
 		return nil, err
+	}
+	if m.withDeps {
+		if err := m.exportStillUsed(); err != nil {
+			return nil, err
+		}
 	}
 	m.files = map[string]*fileEdits{}
 	users, refs, err := m.updateReferences()
@@ -79,6 +88,15 @@ func (m *mover) planOtherPackage(to string) (*refactor.Plan, error) {
 		Summary: fmt.Sprintf("moved %s from %s to %s as %s.%s%s (%d reference%s updated)",
 			m.obj.Name(), m.fromFiles(), m.ws.Rel(to), m.dest.Name, m.newName, m.withAlso(), refs, textutil.Plural(refs)),
 		Edits: m.fileEdits(),
+	}
+	for _, d := range m.decls {
+		if by, ok := m.needed[d]; ok {
+			choice := fmt.Sprintf("also moved %s (used by %s)", d.obj.Name(), by)
+			if d.newName != d.obj.Name() {
+				choice += fmt.Sprintf(" as %s, since package %s still uses it", d.newName, m.pkg.Name)
+			}
+			plan.Choices = append(plan.Choices, choice)
+		}
 	}
 	if m.created {
 		plan.Notes = append(plan.Notes, fmt.Sprintf("created package %s (%s)", m.dest.Name, m.dest.PkgPath))
@@ -242,7 +260,7 @@ func (m *mover) checkNoSourceRefs() error {
 				return err == nil
 			}
 			if o := info.Uses[id]; o != nil && o.Parent() == scope && !m.is(o) {
-				err = refactor.Refusef("%s refers to %s, declared in package %s at %s; move that first (or with it), since package %s cannot import %s back",
+				err = refactor.Refusef("%s refers to %s, declared in package %s at %s; move that first (or with it, in also, or with with_dependencies), since package %s cannot import %s back",
 					d.obj.Name(), o.Name(), m.pkg.Name, m.ws.Position(o.Pos()), m.dest.Name, m.pkg.Name)
 			}
 			return true
@@ -413,6 +431,100 @@ func (m *mover) addMethods() error {
 	}
 	m.sortDecls()
 	return nil
+}
+
+// addDependencies adds the methods of moved types and the top-level
+// declarations of the source package that moved code uses, until the
+// moved code uses no others, recording in needed what needed each.
+func (m *mover) addDependencies() error {
+	m.needed = map[*moved]string{}
+	info, scope := m.pkg.TypesInfo, m.pkg.Types.Scope()
+	for {
+		if err := m.addMethods(); err != nil {
+			return err
+		}
+		var names []string
+		by := map[string]string{}
+		for _, d := range m.decls {
+			ast.Inspect(d.node(), func(n ast.Node) bool {
+				if id, ok := n.(*ast.Ident); ok {
+					if o := info.Uses[id]; o != nil && o.Parent() == scope && !m.is(o) && by[o.Name()] == "" {
+						by[o.Name()] = displayName(d.obj)
+						names = append(names, o.Name())
+					}
+				}
+				return true
+			})
+		}
+		if len(names) == 0 {
+			return nil
+		}
+		if err := m.addAlso(names); err != nil {
+			return err
+		}
+		for _, d := range m.decls {
+			if d.newName != "" {
+				continue
+			}
+			if err := m.checkDecl(d); err != nil {
+				return refactor.Refusef("%s uses %s, which would have to move too, but %v", by[d.obj.Name()], d.obj.Name(), err)
+			}
+			d.newName = d.obj.Name()
+			m.needed[d] = by[d.obj.Name()]
+		}
+	}
+}
+
+// displayName is a declared name as a person writes it: Type.Method for a
+// method.
+func displayName(o types.Object) string {
+	if tn := recvTypeName(o); tn != nil {
+		return tn.Name() + "." + o.Name()
+	}
+	return o.Name()
+}
+
+// exportStillUsed exports each unexported declaration the move added for
+// the moved code that code outside the destination still uses: Helper
+// for helper.
+func (m *mover) exportStillUsed() error {
+	for d := range m.needed {
+		if token.IsExported(d.newName) || !m.usedOutsideDest(d) {
+			continue
+		}
+		name := strings.ToUpper(d.newName[:1]) + d.newName[1:]
+		if o := m.dest.Types.Scope().Lookup(name); o != nil {
+			return refactor.Refusef("%s must become exported, since package %s still uses it, but package %s already declares %s (at %s); rename one first",
+				d.obj.Name(), m.pkg.Name, m.dest.Name, name, m.ws.Position(o.Pos()))
+		}
+		for _, other := range m.decls {
+			if other.newName == name {
+				return refactor.Refusef("%s must become exported, since package %s still uses it, but %s also moves; rename one first", d.obj.Name(), m.pkg.Name, name)
+			}
+		}
+		d.newName = name
+	}
+	return nil
+}
+
+// usedOutsideDest reports whether code outside the moved code and the
+// destination package uses d.
+func (m *mover) usedOutsideDest(d *moved) bool {
+	for _, p := range m.ws.Pkgs {
+		if p.TypesInfo == nil || p.PkgPath == m.dest.PkgPath {
+			continue
+		}
+		for id, o := range p.TypesInfo.Uses {
+			if m.movedOf(o) != d {
+				continue
+			}
+			pos := m.ws.Fset.Position(id.Pos())
+			if !m.inMoved(pos.Filename, pos.Offset) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // checkMembers refuses a move after which code staying outside the
