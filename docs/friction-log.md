@@ -949,3 +949,16 @@ created together, then bodies filled by name, in batches with
 `check: "end"`. `check: "end"` removed the usual stub-first dance: a
 test file and the stubs it calls went in one call. One refusal:
 create_file has no `imports` argument (the imports went in content).
+
+## 2026-10-19: create_from_usage for methods and interfaces
+
+All through gorefactor. Notes:
+- Threading a set of reserved names into `parameters` was
+  introduce_parameter (the `map[string]bool{}` literal), inline_variable,
+  then rename. The inline could not share a batch with the introduce:
+  it addresses a line the introduce rewrote. Addressing a local by
+  function and name would let it.
+- One batch was refused at its end on a single wrong API guess
+  (`types.WriteSignature` takes a *bytes.Buffer); with `check: "end"`
+  the whole 8-step batch had to be resent. A way to resend with one
+  step changed would save that.

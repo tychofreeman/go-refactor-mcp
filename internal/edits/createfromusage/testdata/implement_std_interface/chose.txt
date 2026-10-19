@@ -1,0 +1,1 @@
+func (c *Counter) Write(p []byte) (n int, err error), in m.go

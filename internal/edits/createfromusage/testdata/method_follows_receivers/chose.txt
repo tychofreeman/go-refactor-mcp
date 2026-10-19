@@ -1,0 +1,1 @@
+func (pl *Plan) Total() int, in m.go
