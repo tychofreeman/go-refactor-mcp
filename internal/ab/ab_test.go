@@ -258,3 +258,31 @@ func TestMCPArmBashCannotEdit(t *testing.T) {
 		}
 	}
 }
+
+// A task's later stages run in the copy the stage before left, each as a
+// session of its own, measured and checked on its own.
+func TestThenStages(t *testing.T) {
+	src := t.TempDir()
+	os.WriteFile(filepath.Join(src, "notes.txt"), []byte("start\n"), 0o644)
+	tests := t.TempDir()
+	os.WriteFile(filepath.Join(tests, "hidden.txt"), []byte("accept\n"), 0o644)
+	out := t.TempDir()
+	cfg := Config{Claude: fakeClaude(t), Timeout: time.Minute, Runs: 1, Arms: []string{"manual"}, OutDir: out}
+	task := Task{Name: "chain", Prompt: "first", Dir: src, Check: "test $(grep -c done notes.txt) = 1",
+		Then: []Stage{{Prompt: "second", Tests: tests, Check: "test $(grep -c done notes.txt) = 2 && test -f hidden.txt"}}}
+	results, err := RunAll(context.Background(), cfg, []Task{task})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 2 || results[0].Task != "chain" || results[1].Task != "chain#2" {
+		t.Fatalf("want a result per stage, got %+v", results)
+	}
+	for _, r := range results {
+		if !r.Passed || r.DiffLines != 1 || r.CostUSD != 0.25 || r.Error != "" {
+			t.Errorf("%s: %+v (check output %q)", r.Task, r, r.Check)
+		}
+		if _, err := os.Stat(filepath.Join(out, r.Task+"-manual-1.jsonl")); err != nil {
+			t.Errorf("%s: stream not kept: %v", r.Task, err)
+		}
+	}
+}

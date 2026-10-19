@@ -135,5 +135,61 @@
     "name": "design-address",
     "tests": "testdata/design-address",
     "prompt": "Orders can now ship abroad, so addresses need a country. Give order.Order a field Address of a new type order.Address, with string fields Street, City, Postcode and Country, in place of its Street, City and Postcode fields. shipping.ValidAddress takes an order.Address; it must also report a missing country, and the 5-digit postcode rule applies only when Country is \"US\". The shipping label ends with the country on a line of its own, except for \"US\". Everything else, such as the exports, keeps working as before."
+  },
+  {
+    "dir": "testdata/shop",
+    "check": "go vet ./... && go test ./...",
+    "name": "chain-duplication",
+    "tests": "testdata/design-duplication",
+    "prompt": "The exports in package export (CSV, JSON and Markdown) leave out pending orders. They must also leave out cancelled orders, and list the orders by customer name, then by ID, instead of by ID alone.",
+    "then": [
+      {
+        "prompt": "The exports in package export (CSV, JSON and Markdown) must also leave out orders that have no lines.",
+        "tests": "testdata/design-duplication-2",
+        "check": "go vet ./... && go test ./..."
+      }
+    ]
+  },
+  {
+    "dir": "testdata/shop",
+    "check": "go vet ./... && go test ./...",
+    "name": "chain-tangled",
+    "tests": "testdata/design-tangled",
+    "prompt": "Add a customer kind \"partner\" (Order.CustomerKind == \"partner\") to pricing.Total: partners pay wholesale's unit price (20% off) but get none of the quantity discounts, and they pay tax as retail customers do (20%, or 18% when the subtotal is over 100000 cents). Other customers' prices do not change.",
+    "then": [
+      {
+        "prompt": "Add a customer kind \"student\" to pricing.Total: students pay the retail price, with the retail quantity discounts, and then 15% off that price (price * 85 / 100, in whole cents); their tax is 10%. Other customers' prices do not change.",
+        "tests": "testdata/design-tangled-2",
+        "check": "go vet ./... && go test ./..."
+      }
+    ]
+  },
+  {
+    "dir": "testdata/shop",
+    "check": "go vet ./... && go test ./...",
+    "name": "chain-currency",
+    "tests": "testdata/design-currency",
+    "prompt": "The exports in package export write amounts as dollars and cents. Make them use the shop's currency: add a type export.Currency with fields Code string, Symbol string and Decimals int, and give CSV, JSON and Markdown a second parameter cur Currency. Totals are in the currency's minor units (cents for USD); write them with cur.Decimals decimal places, and with no decimal point when it is 0. CSV and JSON write the number alone; Markdown puts cur.Symbol before it, as it does with $ today. With Currency{Code: \"USD\", Symbol: \"$\", Decimals: 2} the output is what it is now.",
+    "then": [
+      {
+        "prompt": "Totals can now be negative (refunds, from lines with a negative UnitCents). The exports must write a negative amount with a leading minus: -3.60 in CSV and JSON, and in Markdown with the minus before the symbol, as in -€3.60.",
+        "tests": "testdata/design-currency-2",
+        "check": "go vet ./... && go test ./..."
+      }
+    ]
+  },
+  {
+    "dir": "testdata/shop",
+    "check": "go vet ./... && go test ./...",
+    "name": "chain-address",
+    "tests": "testdata/design-address",
+    "prompt": "Orders can now ship abroad, so addresses need a country. Give order.Order a field Address of a new type order.Address, with string fields Street, City, Postcode and Country, in place of its Street, City and Postcode fields. shipping.ValidAddress takes an order.Address; it must also report a missing country, and the 5-digit postcode rule applies only when Country is \"US\". The shipping label ends with the country on a line of its own, except for \"US\". Everything else, such as the exports, keeps working as before.",
+    "then": [
+      {
+        "prompt": "Addresses get an optional region (a state or county): give order.Address a string field Region. When it is set, the shipping label's postcode-and-city line becomes \"Postcode City, Region\". The CSV export gets a region column after city (header id,customer,city,region,total), and the JSON export a \"region\" field after \"city\".",
+        "tests": "testdata/design-address-2",
+        "check": "go vet ./... && go test ./..."
+      }
+    ]
   }
 ]
