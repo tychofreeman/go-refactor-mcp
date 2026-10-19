@@ -307,6 +307,10 @@ func RunBatch(ws *workspace.Workspace, steps []Step, opts Options) (*BatchResult
 		b.Refused = err.Error()
 		return b, nil
 	}
+	if err := checkArgs(steps); err != nil {
+		b.Refused = err.Error()
+		return b, nil
+	}
 	lines := map[string]*lineMap{}                    // by file, relative to the root: its lines through the batch
 	made := make([]map[string]*stepLines, len(steps)) // by step, then file: the lines it made
 	applied := 0

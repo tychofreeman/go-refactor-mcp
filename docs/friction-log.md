@@ -1057,3 +1057,22 @@ All through gorefactor. Dry runs on real code found two more needs of a
 move, both refused clearly: exporting fields the source package still
 reads (changesig.call), and regexp.MustCompile of a constant counting as
 a side effect (refactor.stepRef).
+
+## 2026-10-19: fixes from the fresh-model A/B
+
+A batch now checks every step's argument names against its tool's schema
+before running any step, and refuses with all the problems and each
+tool's arguments at once. A replace_statements range that cuts a
+statement now suggests the whole-statement range to send. The server
+instructions say to load every batch tool's schema in one request. All
+through gorefactor, but two frictions on the way:
+- A step after extract_function that addressed a line below the
+  extracted code was refused as "rewritten by step 1". The batch follows
+  lines with a line diff. extract_function moves the selected lines
+  below the function, and the diff pairs the old lines with that moved
+  block (41 lines), not with the rest of the function (33 lines), so the
+  rest counts as rewritten. Following lines through the step's own edits
+  instead of a diff would fix it. I used replace_text, which addresses
+  text, instead.
+- I sent a batch without check "end" for the fourth time; the
+  auto-retry proposed above would have saved the turn.

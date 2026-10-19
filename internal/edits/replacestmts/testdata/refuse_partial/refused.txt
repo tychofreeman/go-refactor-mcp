@@ -1,1 +1,1 @@
-lines 4-5 cut the if statement on lines 4-6
+lines 4-5 cut the if statement on lines 4-6; select whole statements, e.g. start_line 4, end_line 6

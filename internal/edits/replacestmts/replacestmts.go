@@ -175,6 +175,81 @@ func replaceBody(ws *workspace.Workspace, pkg *packages.Package, file *ast.File,
 // statements of one block, with nothing else on those lines but comments.
 func selectStatements(tf *token.File, file *ast.File, src []byte, first, last int) ([]ast.Stmt, error) {
 	line := func(p token.Pos) int { return tf.Line(p) }
+	cut, inside := findCut(file, line, first, last)
+	if cut != nil {
+		what := analysis.Describe(cut)
+		what = "the " + what[strings.IndexByte(what, ' ')+1:] // "an if statement" -> "the if statement"
+		return nil, refactor.Refusef("lines %d-%d cut %s on lines %d-%d; select whole statements%s", first, last, what, line(cut.Pos()), line(cut.End()), wholeRange(file, line, first, last))
+	}
+	if len(inside) == 0 {
+		return nil, refactor.Refusef("lines %d-%d hold no whole statement", first, last)
+	}
+	// They must all be statements of one list.
+	parent := listOf(file, inside[0])
+	for _, s := range inside[1:] {
+		if listOf(file, s) != parent {
+			return nil, refactor.Refusef("lines %d-%d cover statements of different blocks", first, last)
+		}
+	}
+	// Nothing else on the lines but comments.
+	start := tf.Offset(tf.LineStart(first))
+	end := len(src)
+	if last < tf.LineCount() {
+		end = tf.Offset(tf.LineStart(last + 1))
+	}
+	pos := start
+	for _, s := range inside {
+		if err := onlyComments(src[pos:tf.Offset(s.Pos())], first); err != nil {
+			return nil, err
+		}
+		pos = tf.Offset(s.End())
+	}
+	if err := onlyComments(src[pos:end], first); err != nil {
+		return nil, err
+	}
+	return inside, nil
+}
+
+// wholeRange suggests, for a refusal of lines first-last that cut a
+// statement, the lines of whole statements of one block that cover them:
+// the range grown to each statement it cuts, or, for a whole case clause,
+// the clause's statements. It is "" if there are none.
+func wholeRange(file *ast.File, line func(token.Pos) int, first, last int) string {
+	for {
+		cut, inside := findCut(file, line, first, last)
+		if cut == nil {
+			if len(inside) == 0 {
+				return ""
+			}
+			for _, s := range inside[1:] {
+				if listOf(file, s) != listOf(file, inside[0]) {
+					return ""
+				}
+			}
+			return fmt.Sprintf(", e.g. start_line %d, end_line %d", first, last)
+		}
+		a, b := line(cut.Pos()), line(cut.End())
+		if a >= first && b <= last {
+			// Only a whole clause is cut while within the lines.
+			var body []ast.Stmt
+			switch c := cut.(type) {
+			case *ast.CaseClause:
+				body = c.Body
+			case *ast.CommClause:
+				body = c.Body
+			}
+			if a != first || b != last || len(body) == 0 {
+				return ""
+			}
+			return fmt.Sprintf(", e.g. start_line %d, end_line %d (the clause's statements; its case header cannot be replaced)", line(body[0].Pos()), line(body[len(body)-1].End()))
+		}
+		first, last = min(first, a), max(last, b)
+	}
+}
+
+// findCut returns the first statement lines first-last cut, if any, and
+// the outermost statements within them.
+func findCut(file *ast.File, line func(p token.Pos) int, first int, last int) (ast.Stmt, []ast.Stmt) {
 	var cut ast.Stmt
 	var inside []ast.Stmt // the outermost statements within the lines
 	ast.Inspect(file, func(n ast.Node) bool {
@@ -218,38 +293,7 @@ func selectStatements(tf *token.File, file *ast.File, src []byte, first, last in
 			return true
 		}
 	})
-	if cut != nil {
-		what := analysis.Describe(cut)
-		what = "the " + what[strings.IndexByte(what, ' ')+1:] // "an if statement" -> "the if statement"
-		return nil, refactor.Refusef("lines %d-%d cut %s on lines %d-%d; select whole statements", first, last, what, line(cut.Pos()), line(cut.End()))
-	}
-	if len(inside) == 0 {
-		return nil, refactor.Refusef("lines %d-%d hold no whole statement", first, last)
-	}
-	// They must all be statements of one list.
-	parent := listOf(file, inside[0])
-	for _, s := range inside[1:] {
-		if listOf(file, s) != parent {
-			return nil, refactor.Refusef("lines %d-%d cover statements of different blocks", first, last)
-		}
-	}
-	// Nothing else on the lines but comments.
-	start := tf.Offset(tf.LineStart(first))
-	end := len(src)
-	if last < tf.LineCount() {
-		end = tf.Offset(tf.LineStart(last + 1))
-	}
-	pos := start
-	for _, s := range inside {
-		if err := onlyComments(src[pos:tf.Offset(s.Pos())], first); err != nil {
-			return nil, err
-		}
-		pos = tf.Offset(s.End())
-	}
-	if err := onlyComments(src[pos:end], first); err != nil {
-		return nil, err
-	}
-	return inside, nil
+	return cut, inside
 }
 
 // listOf returns the statement list holding s (by its owner).
