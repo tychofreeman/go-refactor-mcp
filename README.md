@@ -168,6 +168,15 @@ hand or a tool got in the way.
      adding `refactor-eval`, several declarations at once; Oct 18: one
      interface check, `move_statement_up`, summaries of the module's own
      functions).
+   - **Replace a parameter by one computed from it.** `replace_parameter`:
+     a new parameter whose argument at each call is computed from the old
+     one (`qual types.Qualifier` becoming `write func(types.Type) string`,
+     passed `func(t types.Type) string { return types.TypeString(t,
+     qual) }`), the body's uses rewritten in terms of it, and the old
+     parameter removed, as one step. It is not a type change, since no
+     conversion joins the two, so `change_parameter_type` refuses it. One
+     story (Oct 19: generic types, 13 `replace_text` steps; noted again
+     under change_parameter_type).
    - **Every occurrence of a pattern.** One edit taking `gofmt -r`-style
      patterns, such as `ast.Inspect($d.decl, $f)` to
      `ast.Inspect($d.node(), $f)`, across the module and checked as one
