@@ -225,7 +225,7 @@ func Outline(fset *token.FileSet, f *ast.File) []Decl {
 			dd := Decl{Kind: "func", Name: d.Name.Name, Start: line(start), End: line(d.End())}
 			if d.Recv != nil && len(d.Recv.List) > 0 {
 				dd.Kind = "method"
-				dd.Name = recvTypeName(d.Recv.List[0].Type) + "." + d.Name.Name
+				dd.Name = ReceiverTypeName(d.Recv.List[0].Type) + "." + d.Name.Name
 			}
 			dd.Signature = header(fset, d)
 			if d.Body != nil {
@@ -366,14 +366,14 @@ func header(fset *token.FileSet, d *ast.FuncDecl) string {
 	return strings.Join(strings.Fields(buf.String()), " ")
 }
 
-func recvTypeName(e ast.Expr) string {
+func ReceiverTypeName(e ast.Expr) string {
 	switch t := e.(type) {
 	case *ast.StarExpr:
-		return recvTypeName(t.X)
+		return ReceiverTypeName(t.X)
 	case *ast.IndexExpr:
-		return recvTypeName(t.X)
+		return ReceiverTypeName(t.X)
 	case *ast.IndexListExpr:
-		return recvTypeName(t.X)
+		return ReceiverTypeName(t.X)
 	case *ast.Ident:
 		return t.Name
 	}

@@ -1,0 +1,1 @@
+{"file": "m.go", "function": "T.Label", "content": "if t.n == 0 {\n\treturn \"zero\"\n}\nreturn strconv.Itoa(t.n)"}
