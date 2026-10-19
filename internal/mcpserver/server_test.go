@@ -161,6 +161,43 @@ func TestSymbolToolsDoNotRequireLine(t *testing.T) {
 	}
 }
 
+// The descriptions say what the tools do now: how a declaration can be
+// addressed, what a result shows, and which way each slide goes.
+func TestDescriptionsAreCurrent(t *testing.T) {
+	cs, _ := setup(t)
+	res, err := cs.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tools := map[string]string{}
+	for _, tool := range res.Tools {
+		tools[tool.Name] = tool.Description
+	}
+	for _, name := range symbolTools {
+		mustContain(t, name, tools[name], "Without line, name alone identifies")
+	}
+	if strings.Contains(tools["inline_variable"], "Without line") {
+		t.Error("inline_variable needs a line, but its description says otherwise")
+	}
+	for name, desc := range tools {
+		if strings.Contains(desc, "returns a diff") {
+			t.Errorf("%s still says it returns a diff", name)
+		}
+	}
+	mustContain(t, "rename", tools["rename"], "returns what changed")
+	if strings.Contains(tools["move_statement_up"], "move_statement_down") || !strings.Contains(tools["move_statement_up"], "the one before it") {
+		t.Errorf("move_statement_up describes both directions: %s", tools["move_statement_up"])
+	}
+	if !strings.Contains(tools["move_statement_down"], "the one after it") {
+		t.Errorf("move_statement_down: %s", tools["move_statement_down"])
+	}
+	instr := cs.InitializeResult().Instructions
+	mustContain(t, "instructions", instr, "as they were when the batch began")
+	if strings.Contains(instr, "never reuse old ones") {
+		t.Error("instructions still say never to reuse line numbers, which a batch now does")
+	}
+}
+
 func TestRenameBySymbol(t *testing.T) {
 	cs, dir := setup(t)
 	out, _ := call(t, cs, "rename", map[string]any{"file": "calc/calc.go", "name": "Rate", "new_name": "Factor"})
