@@ -211,6 +211,15 @@ hand or a tool got in the way.
     or whose lines a later step rewrote, is refused as a reference.* The
     other options (one special address, a cursor, search from a
     reference) are in `docs/batch-addressing.md`.
+11. **Recipes: saved batches with parameters.** Not urgent; later. A
+    file holds a batch's steps with placeholders (`${type}`,
+    `${field}`), and a `run_recipe` tool or `refactor recipe` fills them
+    in and runs them with `RunBatch`, so a recipe rolls back and undoes
+    as one step. Portable only for steps addressed by name, and for
+    lines the recipe's own steps made (item 10's references). No loops,
+    conditions or step outputs; those, and the other ways to define a
+    transformation (pattern templates, inlinable functions, snippets,
+    scripts, Go code), are in `docs/user-transformations.md`.
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
