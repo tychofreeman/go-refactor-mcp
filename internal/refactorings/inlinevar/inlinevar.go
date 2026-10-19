@@ -51,7 +51,7 @@ func (*InlineVariable) Name() string { return "inline_variable" }
 func (*InlineVariable) Description() string {
 	return `Replace every use of a local variable (or local constant) with the expression it is initialized with, and delete its declaration. The inverse of extract_variable.
 Use it to remove a variable whose name adds nothing, such as one that is set and then used once immediately, or to undo an unhelpful extraction.
-Identify the variable by file, line and name, at its declaration or at any use.
+Identify the variable by file, line and name, at its declaration or at any use; or by file, function ("Name" or "Type.Method") and name, which stays valid after edits, e.g. later in a batch.
 Works for "x := expr", "var x [T] = expr" and "const x [T] = expr", also in an if or switch header. If the variable's type differs from the expression's own type (an explicit type, an untyped constant, an interface), the expression is converted so the type is kept.
 Refuses if the variable is ever assigned or its address is taken; if inlining would evaluate the expression a different number of times or in a different order (an initializer with function calls, or that reads data other code can change, needs exactly one use, evaluated exactly once in the same block with no calls in between); if a variable the expression reads is modified before a use; or if a name in the expression would mean something else at a use.`
 }
@@ -63,18 +63,23 @@ func (*InlineVariable) InputSchema() json.RawMessage {
     "file":   {"type": "string",  "description": "Path of the file, relative to the module root."},
     "line":   {"type": "integer", "description": "1-based line of the variable's declaration or of any use."},
     "name":   {"type": "string",  "description": "The variable's name."},
+    "function": {"type": "string", "description": "Instead of line: the function (Name or Type.Method) of file that declares the variable."},
     "column": {"type": "integer", "description": "Optional 1-based column, only needed if the name occurs more than once on the line with different meanings."}
   },
-  "required": ["file", "line", "name"],
+  "required": ["file", "name"],
   "additionalProperties": false
 }`)
 }
 
+// LocalsOnly marks it as finding only locals: without line, by function.
+func (*InlineVariable) LocalsOnly() {}
+
 type args struct {
-	File   string `json:"file"`
-	Line   int    `json:"line"`
-	Column int    `json:"column,omitempty"`
-	Name   string `json:"name"`
+	File     string `json:"file"`
+	Line     int    `json:"line"`
+	Column   int    `json:"column,omitempty"`
+	Name     string `json:"name"`
+	Function string `json:"function,omitempty"`
 }
 
 type inliner struct {
@@ -101,7 +106,7 @@ func (*InlineVariable) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refa
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
-	pkg, id, err := locate.Ident(ws, locate.IdentQuery{File: a.File, Line: a.Line, Column: a.Column, Name: a.Name})
+	pkg, id, err := locate.Ident(ws, locate.IdentQuery{File: a.File, Line: a.Line, Column: a.Column, Name: a.Name, Function: a.Function})
 	if err != nil {
 		return nil, err
 	}

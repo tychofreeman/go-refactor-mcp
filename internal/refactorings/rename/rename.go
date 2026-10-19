@@ -37,7 +37,7 @@ func (*Rename) Name() string { return "rename" }
 
 func (*Rename) Description() string {
 	return `Rename a variable, constant, function, type, type parameter, struct field or method, updating every reference in the workspace.
-Use it to give a symbol a clearer name. Identify the symbol by file, line and its current name (add column only if the name occurs more than once on that line with different meanings).
+Use it to give a symbol a clearer name. Identify the symbol by file, line and its current name (add column only if the name occurs more than once on that line with different meanings). For a local, function ("Name" or "Type.Method") can take the place of line, and stays valid after edits.
 Refuses if the new name would clash with or shadow another symbol, if an exported name used by another package would become unexported, if the method implements an interface, or if the symbol is declared outside the workspace.
 A doc comment that starts with the old name (the Go convention) is renamed too; other comments that mention it are listed in a note (for a local, only those in its scope).`
 }
@@ -49,6 +49,7 @@ func (*Rename) InputSchema() json.RawMessage {
     "file":     {"type": "string",  "description": "Path of a file containing the symbol (declaration or any use), relative to the workspace root."},
     "line":     {"type": "integer", "description": "1-based line number of that occurrence. Omit it to find name as a symbol of the package of file."},
     "name":     {"type": "string",  "description": "Current name of the symbol; without line, the package-level name, Type.Method or Type.Field."},
+    "function": {"type": "string",  "description": "Instead of line, for a local: the function (Name or Type.Method) of file that declares it (a variable, constant, parameter or result)."},
     "column":   {"type": "integer", "description": "Optional 1-based column, only needed to disambiguate."},
     "new_name": {"type": "string",  "description": "The new name. Must be a valid Go identifier."}
   },
@@ -58,11 +59,12 @@ func (*Rename) InputSchema() json.RawMessage {
 }
 
 type args struct {
-	File    string `json:"file"`
-	Line    int    `json:"line"`
-	Column  int    `json:"column,omitempty"`
-	Name    string `json:"name"`
-	NewName string `json:"new_name"`
+	File     string `json:"file"`
+	Line     int    `json:"line"`
+	Column   int    `json:"column,omitempty"`
+	Name     string `json:"name"`
+	NewName  string `json:"new_name"`
+	Function string `json:"function,omitempty"`
 }
 
 // Plan checks preconditions and computes the edits.
@@ -74,7 +76,7 @@ func (*Rename) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Pla
 	if a.NewName == "" {
 		return nil, refactor.Refusef("new_name is required")
 	}
-	pkg, id, err := locate.Ident(ws, locate.IdentQuery{File: a.File, Line: a.Line, Column: a.Column, Name: a.Name})
+	pkg, id, err := locate.Ident(ws, locate.IdentQuery{File: a.File, Line: a.Line, Column: a.Column, Name: a.Name, Function: a.Function})
 	if err != nil {
 		return nil, err
 	}

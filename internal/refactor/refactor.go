@@ -323,6 +323,9 @@ func RunBatch(ws *workspace.Workspace, steps []Step, opts Options) (*BatchResult
 		b.Steps = append(b.Steps, res)
 		if !res.Applied {
 			b.FailedStep, b.FailedTool, b.Refused = i+1, name, res.Refused
+			if !opts.Unchecked && i < len(steps)-1 && strings.HasPrefix(res.Refused, "the result does not type-check") {
+				b.Refused += "\nOr, if a later step of the batch completes this one, send it with check \"end\": the batch is then type-checked once, after its last step."
+			}
 			return b, rollback()
 		}
 		applied++

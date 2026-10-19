@@ -179,8 +179,9 @@ func TestDescriptionsAreCurrent(t *testing.T) {
 		mustContain(t, name, tools[name], "Without line, name alone identifies")
 	}
 	if strings.Contains(tools["inline_variable"], "Without line") {
-		t.Error("inline_variable needs a line, but its description says otherwise")
+		t.Error("inline_variable finds only locals, but its description says it finds package-level symbols")
 	}
+	mustContain(t, "inline_variable", tools["inline_variable"], "function (\"Name\" or \"Type.Method\") and name")
 	for name, desc := range tools {
 		if strings.Contains(desc, "returns a diff") {
 			t.Errorf("%s still says it returns a diff", name)
