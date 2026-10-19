@@ -41,6 +41,7 @@ import (
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
+	"github.com/tychofreeman/go-refactor-mcp/internal/edits/gocode"
 	"github.com/tychofreeman/go-refactor-mcp/internal/imports"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
@@ -62,7 +63,7 @@ Use it to split a long function into named steps. doc, if given, becomes the new
 Identify the statements by file, start_line and end_line (inclusive, as shown by inspect). The lines must cover whole statements of one block; comments and blank lines in the range are allowed and comments move with the code.
 Local variables the statements use become parameters; variables they change or declare that are used afterwards become results, assigned at the call site. The result notes the parameters and results chosen, and warns when there are many (more than five parameters or three results), which usually means a different range of lines would give a simpler function.
 Return statements are supported in two shapes: if every path through the statements returns, the call site becomes "return f(...)"; if the enclosing function returns an error and every return in the statements is an early exit with a non-nil error (like "if err != nil { return nil, err }"), the new function also returns an error and the call site checks it ("if err := f(...); err != nil" when there are no other results; or, when the lines are followed by "return nil" or "return <the same values>, nil", the call site is "return f(...)" in its place).
-Variables whose address is taken or that a function literal changes are passed as pointers, so both functions share them.
+Variables whose address is taken or that a function literal changes are passed as pointers, so both functions share them (unless only the selected lines' own literals change them, and nothing after the lines uses them).
 If the statements use the receiver of the method they are in, the new function is a method of the same type; its name must then be unexported and not clash with a field or method.
 If the statements use the enclosing function's type parameters, the new function declares them too and the call passes them explicitly.
 Refuses other returns (for example an early return of a success value), defer, recover() or fallthrough, or a break, continue or goto that leaves the selected lines; if a variable they declare has its address taken or is used by a function literal that can run later (not one only called during its statement, like an ast.Inspect visitor, or only called by the selected lines through a variable they declare, like a recursive visit function), and is used after them.
@@ -211,30 +212,6 @@ func checkName(name string) error {
 		return refactor.Refusef("init is reserved for package initialization functions, which cannot be called; choose another name")
 	}
 	return nil
-}
-
-// docComment returns doc as a comment for the line above a declaration:
-// each line starts with "// " unless it is a comment already. An empty
-// doc gives no comment.
-func docComment(doc string) string {
-	doc = strings.TrimSpace(doc)
-	if doc == "" {
-		return ""
-	}
-	var sb strings.Builder
-	for _, line := range strings.Split(doc, "\n") {
-		line = strings.TrimRight(line, " \t")
-		switch {
-		case strings.HasPrefix(strings.TrimSpace(line), "//"):
-			sb.WriteString(strings.TrimSpace(line))
-		case line == "":
-			sb.WriteString("//")
-		default:
-			sb.WriteString("// " + line)
-		}
-		sb.WriteString("\n")
-	}
-	return sb.String()
 }
 
 // ---------------------------------------------------------------------------
@@ -720,7 +697,8 @@ func (x *extraction) analyzeDataFlow() error {
 	f := &flow{fresh: map[*types.Var]bool{}, pointers: map[*types.Var]bool{}}
 	for _, v := range order {
 		switch {
-		case x.fa.Addressed[v], (x.fa.CapturedAsync[v] || x.declaredOutsideLit(v)) && len(x.fa.Modified[v]) > 0:
+		case x.fa.Addressed[v], x.declaredOutsideLit(v) && len(x.fa.Modified[v]) > 0,
+			x.fa.CapturedAsync[v] && len(x.fa.Modified[v]) > 0 && x.sharedWithCaller(v):
 			// Other code can reach v while the statements run: pass a
 			// pointer, so that both work on the same variable. (A variable
 			// that function literals use but nothing ever assigns cannot
@@ -732,7 +710,9 @@ func (x *extraction) analyzeDataFlow() error {
 			// That does not hold for a literal containing the selection:
 			// v outlives each call of it, and code after the literal reads
 			// v even when the selection ends in a return, which would
-			// leave no result to assign back.)
+			// leave no result to assign back. Nor does a literal of the
+			// selection that can run later need v shared, when nothing
+			// outside the selection sees v again: see sharedWithCaller.)
 			if v == x.recv && analysis.IsPointer(v.Type()) {
 				return refactor.Refusef("the receiver %s is a pointer whose own address is taken, or a function literal uses it; a method cannot have a pointer-to-pointer receiver", v.Name())
 			}
@@ -1355,10 +1335,6 @@ func (x *extraction) usedOutside(v *types.Var) bool {
 	return false
 }
 
-// loopAround reports whether the selection is inside a loop (or a function
-// that jumps backwards with goto) that v is declared outside of, so that a
-// value the selection stores can be read by the selection itself in the
-// next iteration.
 // declaredOutsideLit reports whether the selection is inside a function
 // literal and v is declared outside the innermost one: the literal
 // captures v, which outlives each call of it.
@@ -1371,6 +1347,10 @@ func (x *extraction) declaredOutsideLit(v *types.Var) bool {
 	return false
 }
 
+// loopAround reports whether the selection is inside a loop (or a function
+// that jumps backwards with goto) that v is declared outside of, so that a
+// value the selection stores can be read by the selection itself in the
+// next iteration.
 func (x *extraction) loopAround(v *types.Var) bool {
 	for _, n := range analysis.PathTo(x.file, x.stmts[0]) {
 		switch n := n.(type) {
@@ -1390,6 +1370,19 @@ func (x *extraction) loopAround(v *types.Var) bool {
 		}
 	}
 	return false
+}
+
+// sharedWithCaller reports whether code outside the selection can see the
+// changes that a function literal able to run later makes to v: a literal
+// outside the selection uses v, code outside it uses v, or a loop runs the
+// selection again. If none can, the new function may change its own copy.
+func (x *extraction) sharedWithCaller(v *types.Var) bool {
+	for _, lit := range x.fa.AsyncLits[v] {
+		if !x.inSelection(lit) {
+			return true
+		}
+	}
+	return x.usedOutside(v) || x.loopAround(v)
 }
 
 // assignedFirst reports whether the selection's first reference to v is a
@@ -1776,7 +1769,7 @@ func (x *extraction) plan() (*refactor.Plan, error) {
 	}
 	unit := x.indentUnit(decl)
 	var fn strings.Builder
-	fmt.Fprintf(&fn, "\n\n%s%s {\n", docComment(x.doc), sigText)
+	fmt.Fprintf(&fn, "\n\n%s%s {\n", gocode.DocComment(x.doc, gocode.CommentWidth(x.src)), sigText)
 	for _, v := range f.locals {
 		fmt.Fprintf(&fn, "%svar %s %s\n", unit, v.Name(), ts(v.Name(), v.Type()))
 	}

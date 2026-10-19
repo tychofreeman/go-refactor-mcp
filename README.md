@@ -714,6 +714,9 @@ fmt.Println(total)                     for _, x := range xs { total += x }
   other uses become `*v`, or `(*v)` where Go does not dereference
   (`(*v)[i]`, `(*v)(args)`, methods of interfaces). For example,
   `json.Unmarshal(data, &cfg)` moves as `json.Unmarshal(data, cfg)`.
+  A variable only a function literal of the statements changes is passed
+  as a copy when nothing outside them can see it again: no literal
+  outside them uses it, no code after them, and no loop around them.
 - If the statements use the receiver of the method they are in, the new
   function is a method of the same type, called as `c.bump()`; generic
   receivers (`(s *Stack[T])`) keep their type parameters. A value receiver
