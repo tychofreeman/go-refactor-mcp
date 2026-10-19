@@ -319,6 +319,24 @@ func TestBatchLinesFromBeforeTheBatch(t *testing.T) {
 	mustContain(t, "app.go", string(app), "calc.Scale(")
 }
 
+// With check "end", a declaration and its first use can be two steps.
+func TestBatchCheckAtEnd(t *testing.T) {
+	cs, dir := setup(t)
+	more := filepath.Join(dir, "calc", "more.go")
+	os.WriteFile(more, []byte("package calc\n\nfunc Sum(a, b int) int {\n\treturn a + b\n}\n"), 0o644)
+	steps := []any{
+		map[string]any{"tool": "insert_statements", "args": map[string]any{"file": "calc/more.go", "line": 4, "where": "before", "content": "total := a + b"}},
+		map[string]any{"tool": "replace_statements", "args": map[string]any{"file": "calc/more.go", "start_line": 4, "end_line": 4, "content": "return total"}},
+	}
+	out, _ := call(t, cs, "batch", map[string]any{"steps": steps})
+	mustContain(t, "checked at each step", out, "REFUSED batch at step 1 of 2", "declared and not used")
+
+	out, _ = call(t, cs, "batch", map[string]any{"check": "end", "steps": steps})
+	mustContain(t, "checked at the end", out, "APPLIED batch: 2 steps")
+	got, _ := os.ReadFile(more)
+	mustContain(t, "more.go", string(got), "\ttotal := a + b\n\treturn total\n")
+}
+
 // TestRefactoringLoop walks the loop the model is meant to follow.
 func TestRefactoringLoop(t *testing.T) {
 	cs, dir := setup(t)

@@ -356,3 +356,84 @@ func (markLine) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Pl
 		Edits:   []edit.FileEdit{{Path: path, Edits: []edit.TextEdit{{Start: off, End: off, NewText: "// mark\n"}}}},
 	}, nil
 }
+
+// declareN is an edit that declares n in F, unused: alone, it does not
+// type-check.
+type declareN struct{}
+
+func (declareN) Name() string                 { return "declare_n" }
+func (declareN) Description() string          { return "" }
+func (declareN) InputSchema() json.RawMessage { return json.RawMessage(`{}`) }
+func (declareN) ChangesBehavior()             {}
+func (declareN) Plan(ws *workspace.Workspace, _ json.RawMessage) (*refactor.Plan, error) {
+	path := ws.Abs("m.go")
+	src, _ := os.ReadFile(path)
+	i := strings.Index(string(src), "{ return 1 }") + 1
+	return &refactor.Plan{Summary: "declared n", Edits: []edit.FileEdit{{Path: path, Edits: []edit.TextEdit{{Start: i, End: i, NewText: " n := 2;"}}}}}, nil
+}
+
+// useN is an edit that returns n from F.
+type useN struct{}
+
+func (useN) Name() string                 { return "use_n" }
+func (useN) Description() string          { return "" }
+func (useN) InputSchema() json.RawMessage { return json.RawMessage(`{}`) }
+func (useN) ChangesBehavior()             {}
+func (useN) Plan(ws *workspace.Workspace, _ json.RawMessage) (*refactor.Plan, error) {
+	path := ws.Abs("m.go")
+	src, _ := os.ReadFile(path)
+	i := strings.Index(string(src), "return 1") + len("return ")
+	return &refactor.Plan{Summary: "used n", Edits: []edit.FileEdit{{Path: path, Edits: []edit.TextEdit{{Start: i, End: i + 1, NewText: "n"}}}}}, nil
+}
+
+// A batch checked at its end lets a declaration and its use be two steps.
+func TestBatchCheckedAtEnd(t *testing.T) {
+	steps := []refactor.Step{{Refactoring: declareN{}}, {Refactoring: useN{}}}
+
+	ws, path := setup(t, src)
+	b, err := refactor.RunBatch(ws, steps, refactor.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.Applied || b.FailedStep != 1 {
+		t.Errorf("checked at each step, want step 1 refused, got %+v", b)
+	}
+
+	ws, path = setup(t, src)
+	b, err = refactor.RunBatch(ws, steps, refactor.Options{Unchecked: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !b.Applied {
+		t.Fatalf("checked at the end, want it applied, got %+v", b)
+	}
+	if got, _ := os.ReadFile(path); !strings.Contains(string(got), "func F() int { n := 2; return n }") {
+		t.Errorf("file:\n%s", got)
+	}
+	if _, err := ws.Undo(); err != nil || ws.CanUndo() {
+		t.Errorf("want one undo for the batch: %v", err)
+	}
+
+	// Code that does not type-check at the end is rolled back.
+	ws, path = setup(t, src)
+	b, err = refactor.RunBatch(ws, steps[:1], refactor.Options{Unchecked: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.Applied || !strings.Contains(b.String(), "declared and not used") || !strings.Contains(b.String(), "after all 1 step") {
+		t.Errorf("want the batch refused at its end, got:\n%s", b)
+	}
+	if got, _ := os.ReadFile(path); string(got) != src || ws.CanUndo() {
+		t.Errorf("not rolled back; file:\n%s", got)
+	}
+
+	// A refactoring still needs code that type-checks.
+	ws, _ = setup(t, src)
+	b, err = refactor.RunBatch(ws, []refactor.Step{{Refactoring: declareN{}}, {Refactoring: bump{}}}, refactor.Options{Unchecked: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.Applied || b.FailedStep != 2 || !strings.Contains(b.Refused, "an earlier edit of this batch") {
+		t.Errorf("want the refactoring refused, got %+v", b)
+	}
+}

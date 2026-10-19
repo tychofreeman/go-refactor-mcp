@@ -901,3 +901,12 @@ middle); `move_parameter` fixes it, by name, in the same batch.
 
 Still open: adding a case clause, an element of a composite literal, a
 one-line function body; a declaration and its first use in one step.
+
+## 2026-10-18: a batch checked at its end
+
+Follow-up to "a declaration and its use in one step" (hit four times):
+`batch` takes `check: "end"`, so edits may pass through code that does
+not compile yet and the whole batch is type-checked once, at its end.
+Its test could not be added in one step by the server it was being
+built for: the test used the new `Options.Unchecked` field before it
+existed, so the field went in first.
