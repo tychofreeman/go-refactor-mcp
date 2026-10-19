@@ -110,8 +110,9 @@ func (*AddField) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.P
 		return nil, err
 	}
 	plan := &refactor.Plan{
-		Summary: fmt.Sprintf("added to struct %s in %s", a.Name, ws.Rel(path)),
-		Edits:   []edit.FileEdit{{Path: path, Edits: append([]edit.TextEdit{e}, adder.Edits()...)}},
+		Summary:  fmt.Sprintf("added to struct %s in %s", a.Name, ws.Rel(path)),
+		Edits:    []edit.FileEdit{{Path: path, Edits: append([]edit.TextEdit{e}, adder.Edits()...)}},
+		Supplied: a.Field,
 	}
 	if len(added) > 0 {
 		plan.Notes = append(plan.Notes, gocode.ImportNote("added", added))

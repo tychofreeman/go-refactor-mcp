@@ -210,8 +210,8 @@ func TestRenameBySymbol(t *testing.T) {
 // reads every result again on each later turn.
 func TestDiffsAreCompact(t *testing.T) {
 	cs, _ := setup(t)
-	out, _ := call(t, cs, "add_parameter", map[string]any{"file": "calc/calc.go", "name": "Apply", "parameter": "k", "type": "int", "value": "0"})
-	mustContain(t, "add_parameter", out, "APPLIED add_parameter", "-func Apply(n int) int", "+func Apply(n, k int) int")
+	out, _ := call(t, cs, "replace_expression", map[string]any{"file": "calc/calc.go", "line": 6, "expression": "n * Rate", "new": "Rate * n"})
+	mustContain(t, "replace_expression", out, "APPLIED replace_expression", "-func Apply(n int) int { return n * Rate }", "+func Apply(n int) int { return Rate * n }")
 	for _, l := range strings.Split(out, "\n") {
 		if strings.HasPrefix(l, " ") {
 			t.Errorf("context line in the result: %q\n%s", l, out)
@@ -240,7 +240,7 @@ func TestBatch(t *testing.T) {
 		map[string]any{"tool": "rename", "args": map[string]any{"file": "calc/calc.go", "name": "Apply", "new_name": "Scale"}},
 		map[string]any{"tool": "add_parameter", "args": map[string]any{"file": "calc/calc.go", "name": "Scale", "parameter": "k", "type": "int", "value": "0"}},
 	}})
-	mustContain(t, "batch", out, "APPLIED batch: 2 steps", "1. rename:", "2. add_parameter:", "+func Scale(n, k int) int")
+	mustContain(t, "batch", out, "APPLIED batch: 2 steps", "1. rename:", "2. add_parameter:", "changed lines:\n  app/app.go: 5")
 	app, _ := os.ReadFile(filepath.Join(dir, "app", "app.go"))
 	mustContain(t, "app.go", string(app), "calc.Scale(calc.Rate, 0)")
 
@@ -441,5 +441,41 @@ func TestAddedCodeIsNotEchoed(t *testing.T) {
 	mustContain(t, "add_declaration", out, "APPLIED add_declaration", "lines added as written", `+import "strconv"`)
 	if strings.Contains(out, "strconv.Itoa(n)") {
 		t.Errorf("add_declaration echoed the content:\n%s", out)
+	}
+}
+
+// The other edits do not repeat the code the model sent either; what they
+// replaced is still shown.
+func TestEditsDoNotEchoTheirCode(t *testing.T) {
+	cs, dir := setup(t)
+	os.WriteFile(filepath.Join(dir, "calc", "more.go"), []byte("package calc\n\ntype Pair struct {\n\tA int\n}\n\nfunc Sum(p Pair) int {\n\ts := p.A\n\treturn s\n}\n"), 0o644)
+
+	out, _ := call(t, cs, "replace_statements", map[string]any{"file": "calc/more.go", "start_line": 8, "end_line": 9, "content": "total := p.A * 2\nreturn total"})
+	mustContain(t, "replace_statements", out, "APPLIED replace_statements", "-\ts := p.A", "lines added as written")
+	if strings.Contains(out, "total := p.A * 2") {
+		t.Errorf("replace_statements echoed its content:\n%s", out)
+	}
+
+	out, _ = call(t, cs, "insert_statements", map[string]any{"file": "calc/more.go", "line": 9, "where": "before", "content": "check := total\n_ = check"})
+	mustContain(t, "insert_statements", out, "APPLIED insert_statements", "lines added as written")
+	if strings.Contains(out, "check := total") {
+		t.Errorf("insert_statements echoed its content:\n%s", out)
+	}
+
+	out, _ = call(t, cs, "add_field", map[string]any{"file": "calc/more.go", "name": "Pair", "field": "B int\nC string"})
+	mustContain(t, "add_field", out, "APPLIED add_field")
+	if strings.Contains(out, "C string") {
+		t.Errorf("add_field echoed its fields:\n%s", out)
+	}
+}
+
+// A signature change edits every call the same way, so its result lists
+// where, as a rename's does.
+func TestSignatureChangesListLocations(t *testing.T) {
+	cs, _ := setup(t)
+	out, _ := call(t, cs, "add_parameter", map[string]any{"file": "calc/calc.go", "name": "Apply", "parameter": "k", "type": "int", "value": "0"})
+	mustContain(t, "add_parameter", out, "APPLIED add_parameter", "changed lines:", "app/app.go: 5")
+	if strings.Contains(out, "+func Apply") {
+		t.Errorf("add_parameter showed the diff:\n%s", out)
 	}
 }

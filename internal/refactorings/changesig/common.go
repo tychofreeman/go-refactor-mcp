@@ -206,6 +206,9 @@ func (t *target) newPlan(what string, fes []edit.FileEdit) *refactor.Plan {
 		Summary: fmt.Sprintf("%s (%d call%s updated, %d file%s)",
 			what, len(t.calls), textutil.Plural(len(t.calls)), len(files), textutil.Plural(len(files))),
 		Edits: edit.Merge(fes),
+		// Every call changes the same way: the summary says how, the
+		// result lists where.
+		Locations: true,
 	}
 	if t.obj.Exported() {
 		plan.Notes = append(plan.Notes, fmt.Sprintf("%s is exported: calls in other modules are not updated", t.obj.Name()))
