@@ -1,0 +1,1 @@
+func (s *mem) Put(key string, value string), in store.go

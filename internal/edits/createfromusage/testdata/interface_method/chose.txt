@@ -1,0 +1,3 @@
+Name() string, in interface Shape in shapes.go
+func (q Square) Name() string, in shapes.go
+func (c *Circle) Name() string, in shapes.go

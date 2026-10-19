@@ -3,6 +3,7 @@
 package createfromusage
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"go/ast"
@@ -33,7 +34,7 @@ func (*CreateFromUsage) Name() string { return "create_from_usage" }
 
 func (*CreateFromUsage) Description() string {
 	return `Declare the functions code calls before they exist, as stubs ("create from usage"). This is an edit, not a refactoring, and the one step that may start from code that does not type-check: it must leave fewer errors and no new one.
-Use it after writing a test or code that calls functions not written yet: give the file with the calls. Every function it calls that is not declared gets a stub, or only those in names; a call pkg.F declares F in that package of the module, and a call x.M, where x is (or points to) a type of the module without a field or method M, declares the method M on that type, with a receiver like its other methods'.
+Use it after writing a test or code that calls functions not written yet: give the file with the calls. Every function it calls that is not declared gets a stub, or only those in names; a call pkg.F declares F in that package of the module, and a call x.M, where x is (or points to) a type of the module without a field or method M, declares the method M on that type, with a receiver like its other methods'. If that type is an interface, M is added to it, with a stub on each type of the module that implemented it, so that they still do. A type of the module used as an interface it lacks methods of (assigned, passed or returned as one, e.g. var _ io.Writer = (*T)(nil)) gets stubs of those methods, with the interface's signatures.
 Each parameter has its argument's type and is named after it (a variable or field) or its type. The results come from how the value is used: a call as a statement has none, a returned call has the function's results, err is an error and ok a bool, and a variable has the type it is compared with, passed as, assigned to or returned as. When the use does not tell, give them in results. The body is panic("not implemented").
 A stub goes in to_file; else a method goes in the file of its type, and a function in the calling file, if it is of that package and not a test; else in the file the test is named after (m.go for m_test.go), or the package's first file. The result's "chose:" lines give each signature and file: check them.`
 }
@@ -56,14 +57,16 @@ func (*CreateFromUsage) ChangesBehavior() {}
 
 func (*CreateFromUsage) Fixes() {}
 
+type args struct {
+	File    string            `json:"file"`
+	Names   []string          `json:"names,omitempty"`
+	Results map[string]string `json:"results,omitempty"`
+	ToFile  string            `json:"to_file,omitempty"`
+}
+
 // Plan checks preconditions and computes the edits.
 func (*CreateFromUsage) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
-	var a struct {
-		File    string            `json:"file"`
-		Names   []string          `json:"names,omitempty"`
-		Results map[string]string `json:"results,omitempty"`
-		ToFile  string            `json:"to_file,omitempty"`
-	}
+	var a args
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
@@ -72,7 +75,7 @@ func (*CreateFromUsage) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 	if file == nil {
 		return nil, refactor.Refusef("file %s is not part of the loaded packages", a.File)
 	}
-	stubs := undeclared(ws, pkg, file)
+	stubs := append(undeclared(ws, pkg, file), unimplemented(ws, pkg, file)...)
 	if len(a.Names) > 0 {
 		var chosen []stub
 		for _, n := range a.Names {
@@ -85,55 +88,24 @@ func (*CreateFromUsage) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 		stubs = chosen
 	}
 	if len(stubs) == 0 {
-		return nil, refactor.Refusef("%s calls no function that is not declared", a.File)
+		return nil, refactor.Refusef("%s calls no function that is not declared, and uses no type as an interface it lacks methods of", a.File)
 	}
 
-	tf := ws.Fset.File(file.Pos())
-	byFile := map[string]string{} // the stubs' declarations, by the file they go in
-	var order, names, choices []string
+	st := &stubber{ws: ws, pkg: pkg, file: file, caller: path, args: a}
+	var decls []decl
+	var names, choices []string
 	for _, s := range stubs {
-		home, recv, used := "", "", map[string]bool{}
-		if s.recv != nil {
-			home = ws.Fset.Position(s.recv.Obj().Pos()).Filename
-			recv = receiver(pkg.TypesInfo, s.recv, s.call.Fun.(*ast.SelectorExpr).X)
-			used[strings.Fields(recv)[0]] = true
-		}
-		dest, err := destination(ws, s.target, path, a.ToFile, home)
+		ds, err := st.declare(s)
 		if err != nil {
 			return nil, err
 		}
-		qual := func(p *types.Package) string {
-			if p.Path() == s.target.PkgPath {
-				return ""
-			}
-			return p.Name()
-		}
-		line := tf.Line(s.call.Pos())
-		params, err := parameters(pkg.TypesInfo, s.call, qual, used)
-		if err != nil {
-			return nil, refactor.Refusef("for %s, called on line %d of %s: %v", s.name, line, a.File, err)
-		}
-		res, ok := a.Results[s.name]
-		if ok {
-			res = resultText(res)
-		} else if res, ok = results(pkg.TypesInfo, file, s.call, qual); !ok {
-			return nil, refactor.Refusef("cannot tell the results of %s from its use on line %d of %s; give them in results, e.g. {%q: \"(int, error)\"}", s.name, line, a.File, s.name)
-		}
-		sig := s.name + "(" + strings.Join(params, ", ") + ")" + res
-		name := s.name
-		if recv != "" {
-			sig = "(" + recv + ") " + sig
-			name = s.recv.Obj().Name() + "." + s.name
-		}
-		choices = append(choices, fmt.Sprintf("func %s, in %s", sig, ws.Rel(dest)))
-		names = append(names, name)
-		if _, ok := byFile[dest]; !ok {
-			order = append(order, dest)
-		}
-		byFile[dest] += "\nfunc " + sig + " {\n\tpanic(\"not implemented\")\n}\n"
+		decls = append(decls, ds...)
+		names = append(names, s.fullName())
 	}
-
-	edits, err := writeStubs(order, ws, byFile)
+	for _, d := range decls {
+		choices = append(choices, d.choice)
+	}
+	edits, err := writeStubs(ws, decls)
 	if err != nil {
 		return nil, err
 	}
@@ -144,9 +116,16 @@ func (*CreateFromUsage) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 	}, nil
 }
 
-// writeStubs appends the declarations of byFile to their files, in
-// order, importing what they use.
-func writeStubs(order []string, ws *workspace.Workspace, byFile map[string]string) ([]edit.FileEdit, error) {
+// writeStubs writes decls into their files, importing what they use.
+func writeStubs(ws *workspace.Workspace, decls []decl) ([]edit.FileEdit, error) {
+	var order []string
+	byFile := map[string][]decl{}
+	for _, d := range decls {
+		if byFile[d.file] == nil {
+			order = append(order, d.file)
+		}
+		byFile[d.file] = append(byFile[d.file], d)
+	}
 	var edits []edit.FileEdit
 	for _, dest := range order {
 		dpkg, dfile := ws.FileSyntax(dest)
@@ -154,7 +133,21 @@ func writeStubs(order []string, ws *workspace.Workspace, byFile map[string]strin
 		if err != nil {
 			return nil, err
 		}
-		code, _, err := gocode.ParseDeclarations(byFile[dest])
+		var tes []edit.TextEdit
+		end, all := "", "" // all is what the file gets, as declarations: to find the packages it names
+		for _, d := range byFile[dest] {
+			if d.at < 0 {
+				end += d.text
+				all += d.text
+				continue
+			}
+			tes = append(tes, edit.TextEdit{Start: d.at, End: d.at, NewText: d.text})
+			all += "\ntype _ interface {\n" + d.text + "}\n"
+		}
+		if end != "" {
+			tes = append(tes, edit.TextEdit{Start: len(src), End: len(src), NewText: end})
+		}
+		code, _, err := gocode.ParseDeclarations(all)
 		if err != nil {
 			return nil, err
 		}
@@ -162,9 +155,216 @@ func writeStubs(order []string, ws *workspace.Workspace, byFile map[string]strin
 		if _, err := gocode.AddImports(ws, dpkg, dfile, adder, dfile.Name.Pos(), code, nil); err != nil {
 			return nil, err
 		}
-		edits = append(edits, edit.FileEdit{Path: dest, Edits: append([]edit.TextEdit{{Start: len(src), End: len(src), NewText: byFile[dest]}}, adder.Edits()...)})
+		edits = append(edits, edit.FileEdit{Path: dest, Edits: append(tes, adder.Edits()...)})
 	}
 	return edits, nil
+}
+
+// decl is a declaration to write: text at offset at of file, or at its
+// end if at is -1 (an offset is only for a method added to an interface),
+// and the choice it is, for the result.
+type decl struct {
+	file   string
+	at     int
+	text   string
+	choice string
+}
+
+// stubber declares the stubs for the calls of one file.
+type stubber struct {
+	ws     *workspace.Workspace
+	pkg    *packages.Package // of the file with the calls
+	file   *ast.File
+	caller string // its path
+	args   args
+}
+
+// declare returns the declarations s needs.
+func (st *stubber) declare(s stub) ([]decl, error) {
+	switch {
+	case s.method != nil:
+		return st.implement(s)
+	case s.recv != nil && types.IsInterface(s.recv):
+		return st.extend(s)
+	}
+	home, recv, used := "", "", map[string]bool{}
+	if s.recv != nil {
+		home = st.ws.Fset.Position(s.recv.Obj().Pos()).Filename
+		recv = receiver(st.pkg.TypesInfo, s.recv, s.x)
+		used[strings.Fields(recv)[0]] = true
+	}
+	dest, err := destination(st.ws, s.target, st.caller, st.args.ToFile, home)
+	if err != nil {
+		return nil, err
+	}
+	sig, err := st.signature(s, qualifier(s.target.PkgPath), used)
+	if err != nil {
+		return nil, err
+	}
+	if recv != "" {
+		sig = "(" + recv + ") " + sig
+	}
+	return []decl{funcDecl(st.ws, dest, sig)}, nil
+}
+
+// signature is that of s's function, from its call: "Name(params)
+// results".
+func (st *stubber) signature(s stub, qual types.Qualifier, used map[string]bool) (string, error) {
+	line := st.ws.Fset.Position(s.call.Pos()).Line
+	params, err := parameters(st.pkg.TypesInfo, s.call, qual, used)
+	if err != nil {
+		return "", refactor.Refusef("for %s, called on line %d of %s: %v", s.name, line, st.args.File, err)
+	}
+	res, ok := st.args.Results[s.name]
+	if ok {
+		res = resultText(res)
+	} else if res, ok = results(st.pkg.TypesInfo, st.file, s.call, qual); !ok {
+		return "", refactor.Refusef("cannot tell the results of %s from its use on line %d of %s; give them in results, e.g. {%q: \"(int, error)\"}", s.name, line, st.args.File, s.name)
+	}
+	return s.name + "(" + strings.Join(params, ", ") + ")" + res, nil
+}
+
+// implement declares s.method, of an interface, on s.recv, with the
+// interface's signature.
+func (st *stubber) implement(s stub) ([]decl, error) {
+	home := st.ws.Fset.Position(s.recv.Obj().Pos()).Filename
+	dest, err := destination(st.ws, s.target, st.caller, st.args.ToFile, home)
+	if err != nil {
+		return nil, err
+	}
+	sig := strings.TrimPrefix(types.TypeString(s.method.Type(), qualifier(s.target.PkgPath)), "func")
+	recv := receiver(st.pkg.TypesInfo, s.recv, s.x)
+	return []decl{funcDecl(st.ws, dest, "("+recv+") "+s.name+sig)}, nil
+}
+
+// extend adds the method s calls to the interface s.recv, and a stub of it
+// to each type of the module that implemented the interface, so that it
+// still does.
+func (st *stubber) extend(s stub) ([]decl, error) {
+	obj := s.recv.Obj()
+	pos := st.ws.Fset.Position(obj.Pos())
+	_, f := st.ws.FileSyntax(pos.Filename)
+	it := interfaceType(st.ws, f, pos.Offset)
+	if it == nil {
+		return nil, refactor.Refusef("cannot find the declaration of interface %s", obj.Name())
+	}
+	tf := st.ws.Fset.File(f.Pos())
+	if tf.Line(it.Methods.Opening) == tf.Line(it.Methods.Closing) {
+		return nil, refactor.Refusef("interface %s is written on one line; write it on several to add %s to it", obj.Name(), s.name)
+	}
+	src, err := os.ReadFile(pos.Filename)
+	if err != nil {
+		return nil, err
+	}
+	at := tf.Offset(tf.LineStart(tf.Line(it.Methods.Closing)))
+	sig, err := st.signature(s, qualifier(obj.Pkg().Path()), map[string]bool{})
+	if err != nil {
+		return nil, err
+	}
+	decls := []decl{{file: pos.Filename, at: at, text: gocode.IndentOf(src, at) + "\t" + sig + "\n",
+		choice: fmt.Sprintf("%s, in interface %s in %s", sig, obj.Name(), st.ws.Rel(pos.Filename))}}
+	for _, t := range implementers(st.ws, s.recv) {
+		home := st.ws.Fset.Position(t.Obj().Pos()).Filename
+		recv := receiver(st.pkg.TypesInfo, t, nil)
+		tsig, err := st.signature(s, qualifier(t.Obj().Pkg().Path()), map[string]bool{strings.Fields(recv)[0]: true})
+		if err != nil {
+			return nil, err
+		}
+		decls = append(decls, funcDecl(st.ws, home, "("+recv+") "+tsig))
+	}
+	return decls, nil
+}
+
+// interfaceType is the interface type declared by the type spec whose
+// name is at offset in f.
+func interfaceType(ws *workspace.Workspace, f *ast.File, offset int) *ast.InterfaceType {
+	var it *ast.InterfaceType
+	ast.Inspect(f, func(n ast.Node) bool {
+		if ts, ok := n.(*ast.TypeSpec); ok && ws.Fset.Position(ts.Name.Pos()).Offset == offset {
+			it, _ = ts.Type.(*ast.InterfaceType)
+		}
+		return it == nil
+	})
+	return it
+}
+
+// implementers returns the named types of the module, other than
+// interfaces, that implement iface (directly or through a pointer), each
+// once, in the order they are declared. Types are compared by package
+// path, as the test variant of a package has types of its own.
+func implementers(ws *workspace.Workspace, iface *types.Named) []*types.Named {
+	want := methodKeys(iface)
+	seen := map[string]bool{}
+	var out []*types.Named
+	for _, info := range ws.TypesInfos() {
+		for _, obj := range info.Defs {
+			tn, ok := obj.(*types.TypeName)
+			if !ok || tn.IsAlias() || tn.Pkg() == nil || tn.Parent() != tn.Pkg().Scope() {
+				continue
+			}
+			named, ok := tn.Type().(*types.Named)
+			pos := ws.Fset.Position(tn.Pos())
+			if !ok || types.IsInterface(named) || seen[pos.String()] || !ws.Contains(pos.Filename) {
+				continue
+			}
+			seen[pos.String()] = true
+			have := methodKeys(types.NewPointer(named))
+			if !slices.ContainsFunc(want, func(k string) bool { return !slices.Contains(have, k) }) {
+				out = append(out, named)
+			}
+		}
+	}
+	slices.SortFunc(out, func(a, b *types.Named) int {
+		pa, pb := ws.Fset.Position(a.Obj().Pos()), ws.Fset.Position(b.Obj().Pos())
+		return cmp.Or(strings.Compare(pa.Filename, pb.Filename), pa.Offset-pb.Offset)
+	})
+	return out
+}
+
+// methodKeys are the methods of t's method set, each as its name and the
+// types of its signature, written with package paths.
+func methodKeys(t types.Type) []string {
+	byPath := func(p *types.Package) string { return p.Path() }
+	tuple := func(vs *types.Tuple) string {
+		var ts []string
+		for i := range vs.Len() {
+			ts = append(ts, types.TypeString(vs.At(i).Type(), byPath))
+		}
+		return strings.Join(ts, ",")
+	}
+	ms := types.NewMethodSet(t)
+	var keys []string
+	for i := range ms.Len() {
+		m := ms.At(i).Obj()
+		sig := m.Type().(*types.Signature)
+		keys = append(keys, fmt.Sprintf("%s(%s)%v(%s)", m.Name(), tuple(sig.Params()), sig.Variadic(), tuple(sig.Results())))
+	}
+	return keys
+}
+
+// funcDecl is a stub of the function with signature sig, at the end of
+// file.
+func funcDecl(ws *workspace.Workspace, file, sig string) decl {
+	return decl{file: file, at: -1, text: "\nfunc " + sig + " {\n\tpanic(\"not implemented\")\n}\n", choice: fmt.Sprintf("func %s, in %s", sig, ws.Rel(file))}
+}
+
+// qualifier writes the types of the package at path unqualified, and
+// those of others by package name.
+func qualifier(path string) types.Qualifier {
+	return func(p *types.Package) string {
+		if p.Path() == path {
+			return ""
+		}
+		return p.Name()
+	}
+}
+
+// fullName is "Name", or "Type.Name" for a method.
+func (s stub) fullName() string {
+	if s.recv != nil {
+		return s.recv.Obj().Name() + "." + s.name
+	}
+	return s.name
 }
 
 // stub is a function to declare: its name, the package it goes in, and
@@ -174,6 +374,8 @@ type stub struct {
 	target *packages.Package
 	call   *ast.CallExpr
 	recv   *types.Named // for a method, the type it is a method of
+	x      ast.Expr     // for a method, what it is called on
+	method *types.Func  // for a method to implement an interface, the interface's
 }
 
 // undeclared returns the functions of the module file calls that are not
@@ -203,7 +405,7 @@ func undeclared(ws *workspace.Workspace, pkg *packages.Package, file *ast.File) 
 				target, id = pkg.Imports[pn.Imported().Path()], f.Sel
 			} else if named := receiverType(ws, info, f); named != nil {
 				if home, _ := ws.FileSyntax(ws.Fset.Position(named.Obj().Pos()).Filename); home != nil {
-					add(types.TypeString(named, nil)+"."+f.Sel.Name, stub{name: f.Sel.Name, target: home, call: call, recv: named})
+					add(types.TypeString(named, nil)+"."+f.Sel.Name, stub{name: f.Sel.Name, target: home, call: call, recv: named, x: f.X})
 				}
 				return true
 			}
@@ -218,22 +420,79 @@ func undeclared(ws *workspace.Workspace, pkg *packages.Package, file *ast.File) 
 	return out
 }
 
-// receiverType is the named type of the module that sel's operand has,
-// or points to, when sel names neither a field nor a method of it: the
-// type to declare the method sel.Sel on. It is nil otherwise, and for
-// interfaces and generic types.
-func receiverType(ws *workspace.Workspace, info *types.Info, sel *ast.SelectorExpr) *types.Named {
-	if info.Selections[sel] != nil {
-		return nil
-	}
-	t := info.TypeOf(sel.X)
+// unimplemented returns the methods types of the module lack where file
+// uses one as an interface it does not implement (assigns, passes or
+// returns it): one stub for each missing method.
+func unimplemented(ws *workspace.Workspace, pkg *packages.Package, file *ast.File) []stub {
+	info := pkg.TypesInfo
+	seen := map[string]bool{}
+	var out []stub
+	var stack []ast.Node
+	ast.Inspect(file, func(n ast.Node) bool {
+		if n == nil {
+			stack = stack[:len(stack)-1]
+			return true
+		}
+		stack = append(stack, n)
+		e, ok := n.(ast.Expr)
+		if !ok {
+			return true
+		}
+		t := info.TypeOf(e)
+		named := moduleType(ws, t)
+		if named == nil || types.IsInterface(named) {
+			return true
+		}
+		path := slices.Clone(stack)
+		slices.Reverse(path)
+		want := expected(info, path)
+		if want == nil || !types.IsInterface(want) || types.AssignableTo(t, want) {
+			return true
+		}
+		home, _ := ws.FileSyntax(ws.Fset.Position(named.Obj().Pos()).Filename)
+		it := want.Underlying().(*types.Interface)
+		for i := range it.NumMethods() {
+			m := it.Method(i)
+			if obj, _, _ := types.LookupFieldOrMethod(t, true, named.Obj().Pkg(), m.Name()); obj != nil || home == nil {
+				continue
+			}
+			if k := types.TypeString(named, nil) + "." + m.Name(); !seen[k] {
+				seen[k] = true
+				out = append(out, stub{name: m.Name(), target: home, recv: named, x: e, method: m})
+			}
+		}
+		return true
+	})
+	return out
+}
+
+// moduleType is the named type of the module t is, or points to, if it
+// is not generic; nil otherwise.
+func moduleType(ws *workspace.Workspace, t types.Type) *types.Named {
 	if p, ok := t.(*types.Pointer); ok {
 		t = p.Elem()
 	}
 	named, ok := t.(*types.Named)
-	if !ok || named.Obj().Pkg() == nil || types.IsInterface(named) || named.TypeParams().Len() > 0 ||
-		!ws.Contains(ws.Fset.Position(named.Obj().Pos()).Filename) {
+	if !ok || named.Obj().Pkg() == nil || named.TypeParams().Len() > 0 || !ws.Contains(ws.Fset.Position(named.Obj().Pos()).Filename) {
 		return nil
+	}
+	return named
+}
+
+// receiverType is the named type of the module that sel's operand has,
+// or points to, when sel names neither a field nor a method of it: the
+// type to declare the method sel.Sel on. It is nil otherwise, and for
+// empty interfaces and generic types.
+func receiverType(ws *workspace.Workspace, info *types.Info, sel *ast.SelectorExpr) *types.Named {
+	if info.Selections[sel] != nil {
+		return nil
+	}
+	named := moduleType(ws, info.TypeOf(sel.X))
+	if named == nil {
+		return nil
+	}
+	if iface, ok := named.Underlying().(*types.Interface); ok && iface.NumMethods() == 0 {
+		return nil // every type implements it: there is no telling which to add the method to
 	}
 	if obj, _, _ := types.LookupFieldOrMethod(named, true, named.Obj().Pkg(), sel.Sel.Name); obj != nil {
 		return nil
