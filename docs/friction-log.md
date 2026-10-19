@@ -941,3 +941,11 @@ All through gorefactor. Notes:
   rejected by the client as invalid JSON; escaping them as `\t` worked.
 - `extract_function` named a parameter `p` after the case variable it
   came from; a rename followed.
+## 2026-10-19: quality measures in the A/B harness, all through the MCP
+
+Done entirely with gorefactor, no hand edits: extract_function plus
+move_declaration (ReadModule from eval to metrics), tests and stubs
+created together, then bodies filled by name, in batches with
+`check: "end"`. `check: "end"` removed the usual stub-first dance: a
+test file and the stubs it calls went in one call. One refusal:
+create_file has no `imports` argument (the imports went in content).

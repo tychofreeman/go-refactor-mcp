@@ -54,31 +54,10 @@ func Targets(funcs []metrics.Func, n int) []Target {
 }
 
 // ModuleFuncs measures the functions of the module at root, leaving out
-// tests, testdata, vendor and hidden directories; file paths are relative
-// to root.
+// tests, testdata, vendor and hidden directories (see
+// metrics.ReadModule); file paths are relative to root.
 func ModuleFuncs(root string) ([]metrics.Func, error) {
-	files := map[string][]byte{}
-	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			if n := d.Name(); p != root && (strings.HasPrefix(n, ".") || n == "vendor" || n == "testdata") {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if !strings.HasSuffix(p, ".go") {
-			return nil
-		}
-		b, err := os.ReadFile(p)
-		if err != nil {
-			return err
-		}
-		rel, err := filepath.Rel(root, p)
-		files[filepath.ToSlash(rel)] = b
-		return err
-	})
+	files, err := metrics.ReadModule(root)
 	if err != nil {
 		return nil, err
 	}

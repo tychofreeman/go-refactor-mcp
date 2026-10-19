@@ -21,6 +21,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tychofreeman/go-refactor-mcp/internal/metrics"
 	"github.com/tychofreeman/go-refactor-mcp/internal/tokens"
 )
 
@@ -89,7 +90,47 @@ type Result struct {
 	Error     string  `json:"error,omitempty"`
 	Check     string  `json:"check_output,omitempty"` // the end of it, when it failed
 
+	Quality Quality `json:"quality"`
+
 	Tokens *tokens.Report `json:"-"`
+}
+
+// Quality is how good the code a run left behind is, by the numbers
+// inspect shows the model: of the functions the run added or changed, and
+// of the whole module before and after (tests left out).
+type Quality struct {
+	Changed       int `json:"changed_funcs"`
+	MaxComplexity int `json:"changed_max_complexity"`
+	MaxNesting    int `json:"changed_max_nesting"`
+	MaxLines      int `json:"changed_max_lines"`
+	Complexity    int `json:"complexity_delta"`     // the module's total, after minus before
+	OverThreshold int `json:"over_threshold_delta"` // functions over the complexity threshold, plus those over the nesting one: after minus before
+	DupBefore     int `json:"dup_lines_before"`
+	DupAfter      int `json:"dup_lines_after"`
+}
+
+// measureQuality compares the module's Go files (path -> source) before
+// and after a run.
+func measureQuality(before, after map[string][]byte) Quality {
+	q := Quality{DupBefore: metrics.Duplicated(before), DupAfter: metrics.Duplicated(after)}
+	changed, _ := metrics.Changed(before, after)
+	for _, f := range changed {
+		q.Changed++
+		q.MaxComplexity = max(q.MaxComplexity, f.Complexity)
+		q.MaxNesting = max(q.MaxNesting, f.Nesting)
+		q.MaxLines = max(q.MaxLines, f.Lines)
+	}
+	fb, _ := metrics.Measure(before)
+	fa, _ := metrics.Measure(after)
+	sb, sa := metrics.Summarize(fb), metrics.Summarize(fa)
+	q.Complexity = sa.Complexity - sb.Complexity
+	q.OverThreshold = sa.OverComplexity + sa.OverNesting - sb.OverComplexity - sb.OverNesting
+	return q
+}
+
+// values are q's numbers in the order of the summary's columns.
+func (q Quality) values() []int {
+	return []int{q.Changed, q.MaxComplexity, q.MaxNesting, q.MaxLines, q.Complexity, q.OverThreshold, q.DupBefore, q.DupAfter}
 }
 
 // claudeArgs are the flags for one run in arm, working in dir.
@@ -171,14 +212,15 @@ func RunAll(ctx context.Context, cfg Config, tasks []Task) ([]Result, error) {
 	return results, nil
 }
 
+type taskArm struct{ task, arm string }
+
 // Summary renders results as Markdown: per task and arm, how many runs
 // passed and their mean cost.
 func Summary(results []Result) string {
-	type key struct{ task, arm string }
-	var order []key
-	groups := map[key][]Result{}
+	var order []taskArm
+	groups := map[taskArm][]Result{}
 	for _, r := range results {
-		k := key{r.Task, r.Arm}
+		k := taskArm{r.Task, r.Arm}
 		if groups[k] == nil {
 			order = append(order, k)
 		}
@@ -204,7 +246,30 @@ func Summary(results []Result) string {
 		fmt.Fprintf(&sb, "| %s | %s | %d/%d | $%.2f | %.0f | %.0f | %.1f | %.0f |\n",
 			k.task, k.arm, passed, len(rs), cost/n, in/n, out/n, turns/n, diff/n)
 	}
+	writeQuality(&sb, order, groups)
 	return sb.String()
+}
+
+// writeQuality writes the table of the quality of the code each task and
+// arm left behind.
+func writeQuality(sb *strings.Builder, order []taskArm, groups map[taskArm][]Result) {
+	sb.WriteString("\nQuality of the code left behind, means per run: the functions the run added or changed (how many; their highest complexity, nesting and length), " +
+		"the change in the module's total complexity and in functions over the thresholds, and its duplicated lines.\n\n" +
+		"| task | arm | changed funcs | max complexity | max nesting | longest | Δ complexity | Δ over threshold | dup lines before → after |\n|---|---|---|---|---|---|---|---|---|\n")
+	for _, k := range order {
+		rs := groups[k]
+		sums := make([]float64, len(Quality{}.values()))
+		for _, r := range rs {
+			for i, v := range r.Quality.values() {
+				sums[i] += float64(v)
+			}
+		}
+		means := []any{k.task, k.arm}
+		for _, s := range sums {
+			means = append(means, s/float64(len(rs)))
+		}
+		fmt.Fprintf(sb, "| %s | %s | %.1f | %.1f | %.1f | %.1f | %.1f | %.1f | %.0f → %.0f |\n", means...)
+	}
 }
 
 // runOne runs task t once in arm, stage after stage, in one copy, and
@@ -251,6 +316,7 @@ func runStage(ctx context.Context, cfg Config, arm string, res Result, dir strin
 		res.Error = err.Error()
 		return res
 	}
+	before, _ := metrics.ReadModule(dir)
 	cmd := exec.CommandContext(ctx, cfg.Claude, claudeArgs(cfg, arm, dir, s.Prompt)...)
 	cmd.Dir = dir
 	cmd.Stdout = f
@@ -266,6 +332,8 @@ func runStage(ctx context.Context, cfg Config, arm string, res Result, dir strin
 		res.CostUSD, res.Turns, res.Input, res.Output = rep.CostUSD, rep.Turns, rep.InputTokens, rep.OutputTokens
 	}
 	res.DiffLines, _ = diffLines(dir)
+	after, _ := metrics.ReadModule(dir)
+	res.Quality = measureQuality(before, after)
 	if s.Tests != "" {
 		tests := s.Tests
 		if abs, err := filepath.Abs(tests); err == nil {

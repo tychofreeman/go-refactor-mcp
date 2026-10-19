@@ -83,6 +83,8 @@ func TestRunAll(t *testing.T) {
 	src := t.TempDir()
 	os.WriteFile(filepath.Join(src, "notes.txt"), []byte("start\n"), 0o644)
 	os.WriteFile(filepath.Join(src, "CLAUDE.md"), []byte("use the MCP\n"), 0o644)
+	twice := "\ta := 1\n\tb := 2\n\tc := 3\n\td := 4\n\tprintln(a, b, c, d)\n}\n"
+	os.WriteFile(filepath.Join(src, "p.go"), []byte("package p\n\nfunc A() {\n"+twice+"\nfunc B() {\n"+twice), 0o644)
 	out := t.TempDir()
 	cfg := Config{Claude: fakeClaude(t), MCPServer: "refactor-mcp", Timeout: time.Minute, Runs: 1, OutDir: out}
 	tasks := []Task{
@@ -100,6 +102,9 @@ func TestRunAll(t *testing.T) {
 	for _, r := range results {
 		if r.Error != "" || r.CostUSD != 0.25 || r.Turns != 2 || r.Input != 1000 || r.Output != 20 || r.DiffLines != 1 {
 			t.Errorf("%s/%s: %+v", r.Task, r.Arm, r)
+		}
+		if q := r.Quality; q.DupBefore != 10 || q.DupAfter != 10 || q.Changed != 0 {
+			t.Errorf("%s/%s: quality %+v, want 10 duplicated lines before and after, nothing changed", r.Task, r.Arm, q)
 		}
 		if want := r.Task == "note"; r.Passed != want {
 			t.Errorf("%s/%s: passed = %v, want %v", r.Task, r.Arm, r.Passed, want)
@@ -139,14 +144,18 @@ func TestRunAllReportsAFailedRun(t *testing.T) {
 
 func TestSummary(t *testing.T) {
 	md := Summary([]Result{
-		{Task: "rename", Arm: "mcp", Passed: true, CostUSD: 0.20, Turns: 4, Input: 1000, Output: 100, DiffLines: 10},
-		{Task: "rename", Arm: "mcp", Passed: true, CostUSD: 0.40, Turns: 6, Input: 3000, Output: 300, DiffLines: 10},
+		{Task: "rename", Arm: "mcp", Passed: true, CostUSD: 0.20, Turns: 4, Input: 1000, Output: 100, DiffLines: 10,
+			Quality: Quality{Changed: 2, MaxComplexity: 4, MaxNesting: 1, MaxLines: 10, Complexity: -2, OverThreshold: -1, DupBefore: 14, DupAfter: 4}},
+		{Task: "rename", Arm: "mcp", Passed: true, CostUSD: 0.40, Turns: 6, Input: 3000, Output: 300, DiffLines: 10,
+			Quality: Quality{Changed: 1, MaxComplexity: 6, MaxNesting: 2, MaxLines: 20, Complexity: 1, OverThreshold: 0, DupBefore: 14, DupAfter: 8}},
 		{Task: "rename", Arm: "manual", Passed: false, CostUSD: 0.50, Turns: 9, Input: 5000, Output: 500, DiffLines: 12},
 	})
 	for _, want := range []string{
 		"| task | arm | passed | cost | input tokens | output tokens | turns | diff lines |",
 		"| rename | mcp | 2/2 | $0.30 | 2000 | 200 | 5.0 | 10 |",
 		"| rename | manual | 0/1 | $0.50 | 5000 | 500 | 9.0 | 12 |",
+		"| task | arm | changed funcs | max complexity | max nesting | longest | Δ complexity | Δ over threshold | dup lines before → after |",
+		"| rename | mcp | 1.5 | 5.0 | 1.5 | 15.0 | -0.5 | -0.5 | 14 → 6 |",
 	} {
 		if !strings.Contains(md, want) {
 			t.Errorf("missing %q in:\n%s", want, md)
@@ -154,6 +163,16 @@ func TestSummary(t *testing.T) {
 	}
 	if strings.Index(md, "| rename | mcp") > strings.Index(md, "| rename | manual") {
 		t.Errorf("arms not in the order run:\n%s", md)
+	}
+}
+
+func TestMeasureQuality(t *testing.T) {
+	f := "package p\n\nfunc F(x int) int {\n\tif x > 0 {\n\t\treturn 1\n\t}\n\treturn 0\n}\n"
+	g := "\nfunc G(x int) int {\n\tfor i := 0; i < x; i++ {\n\t\tif i > 2 {\n\t\t\treturn i\n\t\t}\n\t}\n\treturn 0\n}\n"
+	got := measureQuality(map[string][]byte{"p.go": []byte(f)}, map[string][]byte{"p.go": []byte(f + g)})
+	want := Quality{Changed: 1, MaxComplexity: 3, MaxNesting: 2, MaxLines: 8, Complexity: 3}
+	if got != want {
+		t.Errorf("measureQuality:\n got %+v\nwant %+v", got, want)
 	}
 }
 
