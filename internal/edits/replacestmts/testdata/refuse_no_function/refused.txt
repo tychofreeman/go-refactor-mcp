@@ -1,0 +1,1 @@
+no function Triple in m.go

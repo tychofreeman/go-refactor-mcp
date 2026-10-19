@@ -910,3 +910,20 @@ not compile yet and the whole batch is type-checked once, at its end.
 Its test could not be added in one step by the server it was being
 built for: the test used the new `Options.Unchecked` field before it
 existed, so the field went in first.
+
+## 2026-10-18: the rest of the tool backlog
+
+- **A one-line function body:** `replace_statements` takes `function`
+  (a name, or `Type.Method`) in place of start_line/end_line and
+  replaces the whole body.
+- **A case clause:** `add_case` adds clauses at the end of a switch or
+  type switch, or before/after one of its clauses (a comment above the
+  clause stays with it).
+- **An element of a composite literal:** `add_element` adds a field,
+  map entry or value at the end of a literal or before/after a key,
+  on its own line or inline, as the literal is written.
+- **A declaration and its first use:** covered by `check: "end"`.
+
+Registering `add_case` and `add_element` was done by hand: the
+running server predated `check: "end"`, so the import and its use
+could not be separate steps.

@@ -1,0 +1,1 @@
+{"file": "m.go", "line": 8, "where": "before", "content": "case 4, 5:\n\treturn \"some\""}
