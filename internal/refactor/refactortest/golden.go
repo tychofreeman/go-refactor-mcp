@@ -89,6 +89,7 @@ func runCase(t *testing.T, r refactor.Refactoring, caseDir string) {
 	if _, fix := r.(refactor.Fix); !fix && len(ws.Errors()) > 0 {
 		t.Fatalf("input does not type-check: %v", ws.Errors())
 	}
+	loads := newFreshLoads(t, ws)
 
 	res, err := refactor.Run(ws, r, args, refactor.Options{})
 	if err != nil {
@@ -143,14 +144,14 @@ func runCase(t *testing.T, r refactor.Refactoring, caseDir string) {
 		return
 	}
 	compareTrees(t, outDir, tmp)
-	matchesFreshLoad(t, ws, "after applying")
+	matchesFreshLoad(t, ws, loads, "after applying")
 
 	// Every applied step must be undoable back to the exact input.
 	if _, err := ws.Undo(); err != nil {
 		t.Fatalf("undo: %v", err)
 	}
 	compareTrees(t, inDir, tmp)
-	matchesFreshLoad(t, ws, "after undoing")
+	matchesFreshLoad(t, ws, loads, "after undoing")
 }
 
 // GoTestCommand returns a command that runs the tests of the package
@@ -169,18 +170,84 @@ func GoTestCommand(root, file string) *exec.Cmd {
 	return cmd
 }
 
+// freshLoads loads a case's files afresh, for matchesFreshLoad. A load runs
+// go list, which costs most of it; when the files have the fingerprint of
+// an earlier load (always, after undoing), that load's metadata gives the
+// same workspace by parsing and type-checking alone.
+type freshLoads struct {
+	meta map[string]*workspace.Metadata // by fingerprint
+}
+
+// newFreshLoads starts from ws, just loaded. It checks that a load from
+// ws's metadata matches ws, so the loads it saves are checked against go
+// list on every case's input.
+func newFreshLoads(t *testing.T, ws *workspace.Workspace) *freshLoads {
+	t.Helper()
+	l := &freshLoads{meta: map[string]*workspace.Metadata{}}
+	if testing.Short() {
+		return l
+	}
+	m := l.add(t, ws)
+	if m == nil {
+		return l
+	}
+	fresh, err := m.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if diffs := workspace.Compare(ws, fresh, 15); len(diffs) > 0 {
+		t.Errorf("a load from the metadata differs from the load:\n  %s", strings.Join(diffs, "\n  "))
+	}
+	return l
+}
+
+// add saves the metadata of ws, just loaded, under its files' fingerprint,
+// and returns it (nil if ws has none).
+func (l *freshLoads) add(t *testing.T, ws *workspace.Workspace) *workspace.Metadata {
+	t.Helper()
+	fp, err := workspace.Fingerprint(ws.Root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, ok := ws.Metadata()
+	if !ok {
+		return nil
+	}
+	l.meta[fp] = m
+	return m
+}
+
+// load loads the files at root afresh.
+func (l *freshLoads) load(t *testing.T, root string) *workspace.Workspace {
+	t.Helper()
+	fp, err := workspace.Fingerprint(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m, ok := l.meta[fp]; ok {
+		fresh, err := m.Load()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return fresh
+	}
+	fresh, err := workspace.Load(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	l.add(t, fresh)
+	return fresh
+}
+
 // matchesFreshLoad fails the test if the (incrementally updated) workspace
 // differs from a fresh load of the same files. It is skipped with -short,
-// since each comparison costs a full load.
-func matchesFreshLoad(t *testing.T, ws *workspace.Workspace, when string) {
+// since each comparison costs a load.
+func matchesFreshLoad(t *testing.T, ws *workspace.Workspace, loads *freshLoads, when string) {
 	t.Helper()
 	if testing.Short() {
 		return
 	}
-	fresh, err := workspace.Load(ws.Root)
-	if err != nil {
-		t.Fatal(err)
-	}
+	fresh := loads.load(t, ws.Root)
 	if diffs := workspace.Compare(ws, fresh, 15); len(diffs) > 0 {
 		t.Errorf("%s, the workspace differs from a fresh load (full loads %d, incremental updates %d):\n  %s",
 			when, ws.FullLoads, ws.IncrementalUpdates, strings.Join(diffs, "\n  "))

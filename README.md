@@ -104,15 +104,19 @@ hand or a tool got in the way.
      is decided on numbers. *Done: each CI job reports its slowest
      packages, tests and golden cases in the job summary and as a notice
      annotation (`.github/test-times.sh`).*
-   - **Next: make the fresh-load comparison cheaper.** `refactortest.Run`
+   - **Make the fresh-load comparison cheaper.** `refactortest.Run`
      compares the workspace with a fresh load after applying and after
-     undoing each applied case: 1,725 loads for today's cases instead of
-     811. It is over half the test time: on Oct 19, CI's package times
-     summed to 267 s with it and 122 s with `-short`, which skips it. It
-     must keep checking both points, since skipping either could hide an
-     incremental-update bug. The aim is the same check for less work, for
-     example by not type-checking the standard library again for each
-     fresh load. The CI test-times report measures the result.
+     undoing each applied case, and that was over half the test time (on
+     Oct 19, CI's package times summed to 267 s with it and 122 s with
+     `-short`, which skips it). *Done: about 40 ms of a 47 ms load is
+     `go list`, which only reports metadata (packages, their files and
+     imports). A fresh load now takes the metadata of an earlier load of
+     the case when `workspace.Fingerprint` (each Go file up to the end of
+     its imports, go.mod, go.sum) shows go list would report the same, as
+     it always does after undoing, and only parses and type-checks. Each
+     case checks such a load against its first, real one. Locally the sum
+     of package times went from 164 s to 109 s, against 90 s with
+     `-short`.*
    - **`-race` costs little,** about 5% of package time, within run-to-run
      noise, so it stays in both CI jobs.
    - **Tests that start `go test`:** `mcpserver.TestRefactoringLoop`
@@ -1543,8 +1547,9 @@ unkeyed literal that would no longer list every field.
 
 `go test ./...` runs the unit and golden tests. The golden cases run in
 parallel, and after each applied refactoring and each undo they compare the
-incrementally updated workspace with a fresh load. `go test -short ./...`
-skips that comparison for a faster local loop; CI always runs it.
+incrementally updated workspace with a fresh load (one that reuses the
+metadata of an earlier `go list` when the files' headers are unchanged;
+see roadmap item 8). `go test -short ./...` skips that comparison for a faster local loop; CI always runs it.
 `TestGoldenRoundTrip` checks that `inline_variable` undoes `extract_variable`:
 for every applying `extract_variable` golden case, extracting and then
 inlining the new variable must give back the original code (after gofmt).

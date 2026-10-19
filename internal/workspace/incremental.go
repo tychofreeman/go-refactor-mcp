@@ -154,6 +154,21 @@ func (w *Workspace) updateIncrementally(changed []string) error {
 	// Re-check in dependency order, so that each importer sees the new
 	// types of its dependencies (Imports points at the same Package values
 	// whose Types are replaced in place).
+	order := dependencyOrder(affected)
+
+	roots := map[*packages.Package]bool{}
+	for _, p := range w.Pkgs {
+		roots[p] = true
+	}
+	for _, p := range order {
+		w.recheck(p, !roots[p], newSyntax, parseErrs)
+	}
+	return nil
+}
+
+// dependencyOrder returns the packages of set, each after those of set it
+// imports, deterministically.
+func dependencyOrder(set map[*packages.Package]bool) []*packages.Package {
 	var order []*packages.Package
 	visited := map[*packages.Package]bool{}
 	var visit func(p *packages.Package)
@@ -168,29 +183,21 @@ func (w *Workspace) updateIncrementally(changed []string) error {
 		}
 		sort.Strings(paths) // deterministic order
 		for _, path := range paths {
-			if imp := p.Imports[path]; affected[imp] {
+			if imp := p.Imports[path]; set[imp] {
 				visit(imp)
 			}
 		}
 		order = append(order, p)
 	}
-	sorted := make([]*packages.Package, 0, len(affected))
-	for p := range affected {
+	sorted := make([]*packages.Package, 0, len(set))
+	for p := range set {
 		sorted = append(sorted, p)
 	}
 	sort.Slice(sorted, func(i, j int) bool { return sorted[i].ID < sorted[j].ID })
 	for _, p := range sorted {
 		visit(p)
 	}
-
-	roots := map[*packages.Package]bool{}
-	for _, p := range w.Pkgs {
-		roots[p] = true
-	}
-	for _, p := range order {
-		w.recheck(p, !roots[p], newSyntax, parseErrs)
-	}
-	return nil
+	return order
 }
 
 // sourcePackages returns the root packages (w.Pkgs) followed by every
@@ -253,10 +260,7 @@ func canRecheck(p *packages.Package) bool {
 }
 
 // recheck re-type-checks p with the new syntax for changed files, replacing
-// its Syntax, Types, TypesInfo and errors, configured as go/packages does.
-// Like go/packages, it skips function bodies in packages that are not roots
-// (dep is true): only their declarations matter to the packages importing
-// them.
+// its Syntax, Types, TypesInfo and errors (see typeCheck).
 func (w *Workspace) recheck(p *packages.Package, dep bool, newSyntax map[string]*ast.File, parseErrs map[string]error) {
 	files := make([]*ast.File, len(p.Syntax))
 	replaced := map[string]bool{}
@@ -282,6 +286,15 @@ func (w *Workspace) recheck(p *packages.Package, dep bool, newSyntax map[string]
 		}
 	}
 
+	w.typeCheck(p, dep, files, errs)
+}
+
+// typeCheck type-checks p from files, configured as go/packages does, and
+// sets its Syntax, Types, TypesInfo and errors: errs (parse errors)
+// followed by the type errors. Like go/packages, it skips function bodies
+// in packages that are not roots (dep is true): only their declarations
+// matter to the packages importing them.
+func (w *Workspace) typeCheck(p *packages.Package, dep bool, files []*ast.File, errs []packages.Error) {
 	tpkg := types.NewPackage(p.PkgPath, p.Name)
 	info := &types.Info{
 		Types:        map[ast.Expr]types.TypeAndValue{},
