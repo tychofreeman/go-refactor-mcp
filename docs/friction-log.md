@@ -857,3 +857,26 @@ removes the problem.
 refused three times with `unknown field "file"`: a step's argument sent
 at the top level. The refusal now says what batch takes and that a
 tool's arguments go in each step's args.
+
+## 2026-10-18: chained tasks in the A/B harness
+
+Restructured `runOne` through the MCP before adding stages: extract
+`runStage`, give it a `Stage`, make the stream path a parameter, then add
+the multi-stage version beside the old one, switch the caller, remove the
+old one as dead code and rename (one batch of four steps).
+
+**Over-cautious refusals.** `extract_function` rightly refused a range
+with `defer cancel()`. Three refusals were wrong for this code:
+`remove_parameter` refused an `err` parameter whose value the body never
+reads (every use is `x, err := ...`, which overwrites it);
+`add_parameter` refused the value `t.first()`, a method of the package
+that only builds a struct (the effect summaries `inspect` shows know
+that); `introduce_parameter` refused `fmt.Sprintf` of strings and ints as
+having side effects. Gaps: dead-on-entry parameters; module functions
+without side effects as values; `fmt.Sprintf` with arguments that cannot
+be Stringers. Worked around with a composite literal and one
+`replace_text` over contiguous text; the `err` removal (signature plus
+call, which only type-check together) was done with Edit.
+
+**Extracted functions take parameters in an odd order** (`ctx` in the
+middle); `move_parameter` fixes it, by name, in the same batch.

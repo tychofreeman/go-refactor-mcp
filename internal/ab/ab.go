@@ -26,13 +26,25 @@ import (
 
 // Task is one coding task.
 type Task struct {
-	Name   string `json:"name"`
-	Prompt string `json:"prompt"`
-	Dir    string `json:"dir,omitempty"`   // the module to work on; default "."
-	Rev    string `json:"rev,omitempty"`   // a git revision of Dir to start from; default its files as they are
-	Check  string `json:"check,omitempty"` // shell command that must pass afterwards; default "go test ./..."
-	Tests  string `json:"tests,omitempty"` // files copied over the copy after the run, before the check: acceptance tests the run did not see
+	Name   string  `json:"name"`
+	Prompt string  `json:"prompt"`
+	Dir    string  `json:"dir,omitempty"`   // the module to work on; default "."
+	Rev    string  `json:"rev,omitempty"`   // a git revision of Dir to start from; default its files as they are
+	Check  string  `json:"check,omitempty"` // shell command that must pass afterwards; default "go test ./..."
+	Tests  string  `json:"tests,omitempty"` // files copied over the copy after the run, before the check: acceptance tests the run did not see
+	Then   []Stage `json:"then,omitempty"`  // later changes, each a new session in the copy the stage before left
 }
+
+// Stage is one change asked of a run: a task's own, or one of the later
+// ones in Then, each made in the copy the stage before left.
+type Stage struct {
+	Prompt string `json:"prompt"`
+	Tests  string `json:"tests,omitempty"` // files copied over the copy after the stage, before its check
+	Check  string `json:"check,omitempty"` // shell command that must pass afterwards; default "go test ./..."
+}
+
+// first is t's own stage, the one before Then.
+func (t Task) first() Stage { return Stage{Prompt: t.Prompt, Tests: t.Tests, Check: t.Check} }
 
 // Arms are the ways a task is run.
 var Arms = []string{"mcp", "manual"}
@@ -147,10 +159,11 @@ func RunAll(ctx context.Context, cfg Config, tasks []Task) ([]Result, error) {
 				if err := ctx.Err(); err != nil {
 					return results, err
 				}
-				r := runOne(ctx, cfg, t, arm, i)
-				results = append(results, r)
-				if err := enc.Encode(r); err != nil {
-					return results, err
+				for _, r := range runOne(ctx, cfg, t, arm, i) {
+					results = append(results, r)
+					if err := enc.Encode(r); err != nil {
+						return results, err
+					}
 				}
 			}
 		}
@@ -194,30 +207,51 @@ func Summary(results []Result) string {
 	return sb.String()
 }
 
-// runOne runs task t once in arm and checks the result.
-func runOne(ctx context.Context, cfg Config, t Task, arm string, i int) Result {
-	res := Result{Task: t.Name, Arm: arm, Run: i}
+// runOne runs task t once in arm, stage after stage, in one copy, and
+// checks each stage.
+func runOne(ctx context.Context, cfg Config, t Task, arm string, i int) []Result {
+	first := Result{Task: t.Name, Arm: arm, Run: i}
 	start := time.Now()
 	dir, err := os.MkdirTemp("", "ab-"+t.Name+"-")
 	if err != nil {
-		res.Error = err.Error()
-		return res
+		first.Error = err.Error()
+		return []Result{first}
 	}
 	defer os.RemoveAll(dir)
 	if err := prepare(t, dir, cfg.ClaudeMD[arm]); err != nil {
-		res.Error = "preparing the copy: " + err.Error()
-		return res
+		first.Error = "preparing the copy: " + err.Error()
+		return []Result{first}
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, cfg.Timeout)
 	defer cancel()
-	streamPath := filepath.Join(cfg.OutDir, fmt.Sprintf("%s-%s-%d.jsonl", t.Name, arm, i))
+	stream := func(name string) string {
+		return filepath.Join(cfg.OutDir, fmt.Sprintf("%s-%s-%d.jsonl", name, arm, i))
+	}
+	results := []Result{runStage(ctx, cfg, arm, first, dir, start, t.first(), stream(t.Name))}
+	for k, s := range t.Then {
+		res := Result{Task: fmt.Sprintf("%s#%d", t.Name, k+2), Arm: arm, Run: i}
+		// This stage starts where the one before ended, its tests included,
+		// committed so that its diff is this stage's alone.
+		if _, err := run(ctx, dir, "sh", "-c", "git add -A && git -c user.name=ab -c user.email=ab@localhost commit -q --allow-empty -m stage"); err != nil {
+			res.Error = "committing the stage before: " + err.Error()
+			results = append(results, res)
+			continue
+		}
+		results = append(results, runStage(ctx, cfg, arm, res, dir, time.Now(), s, stream(res.Task)))
+	}
+	return results
+}
+
+// runStage runs one stage: claude in dir, which holds the copy, writing
+// its stream to streamPath, then the stage's check.
+func runStage(ctx context.Context, cfg Config, arm string, res Result, dir string, start time.Time, s Stage, streamPath string) Result {
 	f, err := os.Create(streamPath)
 	if err != nil {
 		res.Error = err.Error()
 		return res
 	}
-	cmd := exec.CommandContext(ctx, cfg.Claude, claudeArgs(cfg, arm, dir, t.Prompt)...)
+	cmd := exec.CommandContext(ctx, cfg.Claude, claudeArgs(cfg, arm, dir, s.Prompt)...)
 	cmd.Dir = dir
 	cmd.Stdout = f
 	var stderr bytes.Buffer
@@ -232,8 +266,8 @@ func runOne(ctx context.Context, cfg Config, t Task, arm string, i int) Result {
 		res.CostUSD, res.Turns, res.Input, res.Output = rep.CostUSD, rep.Turns, rep.InputTokens, rep.OutputTokens
 	}
 	res.DiffLines, _ = diffLines(dir)
-	if t.Tests != "" {
-		tests := t.Tests
+	if s.Tests != "" {
+		tests := s.Tests
 		if abs, err := filepath.Abs(tests); err == nil {
 			tests = abs
 		}
@@ -242,7 +276,7 @@ func runOne(ctx context.Context, cfg Config, t Task, arm string, i int) Result {
 		}
 	}
 
-	check := t.Check
+	check := s.Check
 	if check == "" {
 		check = "go test ./..."
 	}
