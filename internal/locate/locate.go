@@ -10,10 +10,12 @@ import (
 	"go/ast"
 	"go/token"
 	"go/types"
+	"strconv"
 	"strings"
 
 	"golang.org/x/tools/go/packages"
 
+	"github.com/tychofreeman/go-refactor-mcp/internal/inspect"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
@@ -24,6 +26,11 @@ type IdentQuery struct {
 	Line   int    // 1-based; 0 means Name is a package-level symbol
 	Column int    // 1-based byte column; 0 means "find Name on Line"
 	Name   string // expected identifier name; required when Column is 0
+
+	// Function, with Line 0, makes Name a local of that function of File
+	// ("Name" or "Type.Method"): a variable, constant, parameter or
+	// result declared in it.
+	Function string
 }
 
 // Ident finds the identifier described by q. Failures are *refactor.Refusal
@@ -36,6 +43,9 @@ func Ident(ws *workspace.Workspace, q IdentQuery) (*packages.Package, *ast.Ident
 	pkg, file := ws.FileSyntax(path)
 	if file == nil {
 		return nil, nil, refactor.Refusef("file %s is not part of the loaded packages %v", ws.Rel(path), ws.Patterns)
+	}
+	if q.Line == 0 && q.Column == 0 && q.Function != "" {
+		return local(ws, pkg, file, q)
 	}
 	if q.Line == 0 && q.Column == 0 {
 		return symbol(pkg, q.Name)
@@ -92,7 +102,7 @@ func symbol(pkg *packages.Package, name string) (*packages.Package, *ast.Ident, 
 	}
 	obj := pkg.Types.Scope().Lookup(parts[0])
 	if obj == nil {
-		return nil, nil, refactor.Refusef("no package-level %q in package %s; for a local, give the line where it is declared or used", parts[0], pkg.Types.Name())
+		return nil, nil, refactor.Refusef("no package-level %q in package %s; for a local, give function, or the line where it is declared or used", parts[0], pkg.Types.Name())
 	}
 	if len(parts) == 2 {
 		tn, ok := obj.(*types.TypeName)
@@ -111,6 +121,40 @@ func symbol(pkg *packages.Package, name string) (*packages.Package, *ast.Ident, 
 		}
 	}
 	return nil, nil, refactor.Refusef("the declaration of %q is not in the loaded source", name)
+}
+
+// local finds the declaration of q.Name, a local of the function
+// q.Function of file: a variable, constant, parameter or result.
+func local(ws *workspace.Workspace, pkg *packages.Package, file *ast.File, q IdentQuery) (*packages.Package, *ast.Ident, error) {
+	fd := Func(file, q.Function)
+	if fd == nil {
+		return nil, nil, refactor.Refusef("no function %s in %s", q.Function, ws.Rel(ws.Abs(q.File)))
+	}
+	var found []*ast.Ident
+	ast.Inspect(fd, func(n ast.Node) bool {
+		if id, ok := n.(*ast.Ident); ok && id.Name == q.Name {
+			switch obj := pkg.TypesInfo.Defs[id].(type) {
+			case *types.Var:
+				if !obj.IsField() {
+					found = append(found, id)
+				}
+			case *types.Const:
+				found = append(found, id)
+			}
+		}
+		return true
+	})
+	switch len(found) {
+	case 0:
+		return nil, nil, refactor.Refusef("%s declares no %s", q.Function, q.Name)
+	case 1:
+		return pkg, found[0], nil
+	}
+	var lines []string
+	for _, id := range found {
+		lines = append(lines, strconv.Itoa(ws.Fset.Position(id.Pos()).Line))
+	}
+	return nil, nil, refactor.Refusef("%s is declared %d times in %s (lines %s); give the line of the one you mean", q.Name, len(found), q.Function, strings.Join(lines, ", "))
 }
 
 func objectOf(info *types.Info, id *ast.Ident) types.Object {
@@ -165,4 +209,23 @@ func hint(tf *token.File, file *ast.File, line int, name string) string {
 		return ""
 	}
 	return fmt.Sprintf(" (%q is at column %d)", name, tf.Position(ids[0].Pos()).Column)
+}
+
+// Func returns the function of file named name, or for "Type.Method"
+// the method, named as inspect's outline names them.
+func Func(file *ast.File, name string) *ast.FuncDecl {
+	for _, d := range file.Decls {
+		fd, ok := d.(*ast.FuncDecl)
+		if !ok {
+			continue
+		}
+		n := fd.Name.Name
+		if fd.Recv != nil && len(fd.Recv.List) > 0 {
+			n = inspect.ReceiverTypeName(fd.Recv.List[0].Type) + "." + n
+		}
+		if n == name {
+			return fd
+		}
+	}
+	return nil
 }

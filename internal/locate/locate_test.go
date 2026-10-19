@@ -110,3 +110,55 @@ func TestIdentBySymbolRefusals(t *testing.T) {
 		})
 	}
 }
+
+func TestIdentByFunction(t *testing.T) {
+	ws := loadModule(t, map[string]string{
+		"go.mod": "module example.com/demo\n\ngo 1.22\n",
+		"a.go": `package demo
+
+func Total(xs []int) int {
+	sum := 0
+	for _, x := range xs {
+		sum += x
+	}
+	return sum
+}
+
+func Twice(n int) int {
+	if n > 0 {
+		v := n * 2
+		return v
+	}
+	v := 0
+	return v
+}
+`,
+	})
+	for _, c := range []struct {
+		function, name string
+		line           int    // of the declaration found
+		refused        string // or the refusal
+	}{
+		{"Total", "sum", 4, ""},
+		{"Total", "xs", 3, ""},
+		{"Total", "x", 5, ""},
+		{"Twice", "v", 0, "v is declared 2 times in Twice (lines 13, 16); give the line"},
+		{"Total", "missing", 0, "Total declares no missing"},
+		{"Nope", "x", 0, "no function Nope in a.go"},
+	} {
+		_, id, err := locate.Ident(ws, locate.IdentQuery{File: "a.go", Function: c.function, Name: c.name})
+		if c.refused != "" {
+			if err == nil || !strings.Contains(err.Error(), c.refused) {
+				t.Errorf("%s.%s: got %v, want a refusal containing %q", c.function, c.name, err, c.refused)
+			}
+			continue
+		}
+		if err != nil {
+			t.Errorf("%s.%s: %v", c.function, c.name, err)
+			continue
+		}
+		if got := ws.Fset.Position(id.Pos()).Line; id.Name != c.name || got != c.line {
+			t.Errorf("%s.%s: found %s on line %d, want line %d", c.function, c.name, id.Name, got, c.line)
+		}
+	}
+}

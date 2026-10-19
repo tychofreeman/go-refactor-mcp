@@ -970,3 +970,12 @@ types.Qualifier to write func(types.Type) string, in three functions
 and their calls) has no refactoring: it took 13 replace_text steps in
 one batch checked at its end. A change_parameter_type refactoring, or
 add_parameter followed by remove_parameter in one batch, would fit.
+## 2026-10-19: locals by function and name
+
+Follow-up to "the inline could not share a batch with the introduce":
+inline_variable and rename take `function` in place of `line`, so a
+local, parameter or result is found by name in its function, which
+stays valid after earlier steps of a batch. Twice while building it I
+sent a batch whose steps only type-check together without
+`check: "end"`; a step refused for type errors in a batch now says to
+send it that way.

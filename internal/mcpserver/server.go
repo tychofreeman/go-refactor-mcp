@@ -91,7 +91,7 @@ func (s *Server) MCP() *mcp.Server {
 		r := r
 		srv.AddTool(&mcp.Tool{
 			Name:        r.Name(),
-			Description: r.Description() + symbolNote(r.InputSchema()) + "\nApplies the change to disk and returns what changed (the changed lines without context; for a rename, where they are); it can be reverted with undo.",
+			Description: r.Description() + symbolNote(r) + "\nApplies the change to disk and returns what changed (the changed lines without context; for a rename, where they are); it can be reverted with undo.",
 			InputSchema: r.InputSchema(),
 			Annotations: &mcp.ToolAnnotations{DestructiveHint: &notDestructive},
 		}, func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -185,8 +185,12 @@ check: "each" (default) type-checks after every step; "end" only after the last,
 
 // symbolNote tells, for a tool whose line is optional, how it finds a
 // declaration by name alone; the tools' own descriptions were written for
-// file, line and name.
-func symbolNote(schema json.RawMessage) string {
+// file, line and name. A tool for locals only has none.
+func symbolNote(r refactor.Refactoring) string {
+	if _, ok := r.(interface{ LocalsOnly() }); ok {
+		return ""
+	}
+	schema := r.InputSchema()
 	var s struct {
 		Properties map[string]json.RawMessage `json:"properties"`
 		Required   []string                   `json:"required"`
