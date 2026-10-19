@@ -108,7 +108,8 @@ hand or a tool got in the way.
      case twice more, after applying and after undoing: 1,725 loads for
      today's cases instead of 811 (`-short` skips it). *Done: it runs in
      the `stable` CI job only; the `1.26.x` job runs with `-short`.*
-   - **`-race` in both CI jobs.** Run it in one only.
+   - **`-race` in both CI jobs.** Run it in one only. *Done: it runs in
+     the `1.26.x` job, the one that skips the fresh-load comparison.*
    - **Tests that start `go test`:** `mcpserver.TestRefactoringLoop`
      (`check` with `run_tests`) and `agent.TestRunUndoesWhenTestsBreak`.
    - **Repeated tests.** Each costs a load or two, so these come last:

@@ -24,12 +24,15 @@ jobs:
         # read the package data of the Go version users have installed.
         go: ["1.26.x", "stable"]
         include:
-          # -short skips the golden runner's comparison of the workspace
-          # with a fresh load after every applied case, which more than
-          # doubles the loads. It catches bugs in the incremental update,
-          # which do not depend on the Go version, so one job is enough.
+          # The slow checks run in one job each, since neither depends on
+          # the Go version:
+          # - -race, which slows every test down.
+          # - The golden runner's comparison of the workspace with a fresh
+          #   load after every applied case, which more than doubles the
+          #   loads and catches bugs in the incremental update. -short
+          #   skips it.
           - go: "1.26.x"
-            test_flags: -short
+            test_flags: -race -short
     env:
       # Use exactly the Go version from the matrix, not one go.mod asks for.
       GOTOOLCHAIN: local
@@ -69,7 +72,7 @@ jobs:
           # -json records how long each package and test took; test.log
           # keeps the usual output, for the log and the failure annotation.
           status=0
-          go test -race ${{ matrix.test_flags }} -json ./... > test.json 2> test.err || status=$?
+          go test ${{ matrix.test_flags }} -json ./... > test.json 2> test.err || status=$?
           { cat test.err; jq -Rj 'fromjson? | select(.Action == "output" or .Action == "build-output") | .Output' test.json; } > test.log
           cat test.log
           sh .github/test-times.sh test.json "Go ${{ matrix.go }}"
