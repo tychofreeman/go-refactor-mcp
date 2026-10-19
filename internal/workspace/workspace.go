@@ -105,7 +105,22 @@ type stamp struct {
 // type-checking it.
 func snapshot(root string) (map[string]stamp, error) {
 	out := map[string]stamp{}
-	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+	err := walkLoadFiles(root, func(p string, d fs.DirEntry) error {
+		fi, err := d.Info()
+		if err != nil {
+			return nil // vanished during the walk; the next refresh will see it
+		}
+		out[p] = stamp{fi.Size(), fi.ModTime().UnixNano()}
+		return nil
+	})
+	return out, err
+}
+
+// walkLoadFiles calls visit for each file under root that affects package
+// loading: Go source, go.mod, go.sum and go.work, outside the directories
+// go list ignores.
+func walkLoadFiles(root string, visit func(path string, d fs.DirEntry) error) error {
+	return filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -120,14 +135,8 @@ func snapshot(root string) (map[string]stamp, error) {
 		if !strings.HasSuffix(name, ".go") && name != "go.mod" && name != "go.sum" && name != "go.work" {
 			return nil
 		}
-		fi, err := d.Info()
-		if err != nil {
-			return nil // vanished during the walk; the next refresh will see it
-		}
-		out[p] = stamp{fi.Size(), fi.ModTime().UnixNano()}
-		return nil
+		return visit(p, d)
 	})
-	return out, err
 }
 
 // Change records one applied set of edits, enough to show it and undo it.

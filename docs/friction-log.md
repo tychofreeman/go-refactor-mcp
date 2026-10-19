@@ -990,3 +990,18 @@ compile together. The tool does not cover the case that prompted it
 (a Qualifier parameter becoming a func(types.Type) string): that is
 not a type change but a replacement of one parameter by another,
 computed from it at each call.
+
+## 2026-10-19: a cheaper fresh-load comparison
+
+All through gorefactor, by hand only in that the tests and new file
+were written whole with create_file. extract_function refused to
+extract the dependency ordering out of updateIncrementally: "order is
+used by a function literal that can run later, and after the selected
+lines". The literal (visit) is declared in the selected lines and not
+used after them, so it cannot run later; the refusal should only apply
+when the literal escapes the selection. Done instead with
+replace_statements and add_declaration. extract_function also passed
+errs as a pointer because a closure appends to it, though the caller
+never reads errs again; four replace_text steps made it a value. A
+doc comment given to extract_function was not wrapped (see "Finish
+code as the file does" in roadmap item 9).
