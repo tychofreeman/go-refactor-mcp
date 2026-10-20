@@ -73,7 +73,7 @@ func (x *extraction) decideReturns() error {
 	if sig == nil {
 		return fmt.Errorf("internal error: no signature for the function containing line %d", x.line(x.stmts[0].Pos()))
 	}
-	term := x.terminatingList(x.stmts, false)
+	term := analysis.TerminatingList(x.info, x.stmts, nil)
 	needed := sig.Results().Len() > 0 && x.checkTermination() != nil
 	switch {
 	case len(x.returns) == 0 && !needed:

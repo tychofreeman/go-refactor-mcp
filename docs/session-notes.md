@@ -200,7 +200,8 @@ results are in `docs/cost-history.md`.
   rename refuses changing whether go test runs a function, `testKind`;
   `make` of a slice or channel sized other than by a constant, len or
   cap can panic; extract_function's `sharedLoopVar` before Go 1.22, by
-  `info.FileVersions`). All 25 review items are done; left on item 17:
-  one check for terminating statements.
+  `info.FileVersions`). All 25 review items are done, and item 17 with
+  them: one check for terminating statements, `analysis.TerminatingList`
+  (#170).
   Change only
   this repo copy: the Claude Doc linked from #130 is not kept up to date.

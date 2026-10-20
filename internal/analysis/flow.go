@@ -29,46 +29,59 @@ func EndsFlow(info *types.Info, list []ast.Stmt) bool {
 // Terminating reports whether s is a terminating statement as defined by
 // the Go spec.
 func Terminating(info *types.Info, s ast.Stmt) bool {
-	return terminating(info, s, nil)
+	return terminating(info, s, nil, nil)
 }
 
-func terminatingList(info *types.Info, list []ast.Stmt) bool {
+// TerminatingList reports whether list ends in a terminating statement.
+// When call is not nil, it counts as replaced by a call of a new
+// function, which is not one: the last statement extract_function moves.
+func TerminatingList(info *types.Info, list []ast.Stmt, call ast.Stmt) bool {
 	for i := len(list) - 1; i >= 0; i-- {
-		if _, empty := list[i].(*ast.EmptyStmt); empty {
+		switch s := list[i]; {
+		case s == call:
+			return false
+		case isEmpty(s):
 			continue
+		default:
+			return terminating(info, s, nil, call)
 		}
-		return terminating(info, list[i], nil)
 	}
 	return false
 }
 
-// terminating is Terminating for s, labeled with label (or nil).
-func terminating(info *types.Info, s ast.Stmt, label types.Object) bool {
+func isEmpty(s ast.Stmt) bool {
+	_, ok := s.(*ast.EmptyStmt)
+	return ok
+}
+
+// terminating is Terminating for s, labeled with label (or nil), with
+// call counted as TerminatingList does.
+func terminating(info *types.Info, s ast.Stmt, label types.Object, call ast.Stmt) bool {
 	switch s := s.(type) {
 	case *ast.ReturnStmt:
 		return true
 	case *ast.BranchStmt:
 		return s.Tok == token.GOTO
 	case *ast.ExprStmt:
-		if call, ok := ast.Unparen(s.X).(*ast.CallExpr); ok {
-			if id, ok := ast.Unparen(call.Fun).(*ast.Ident); ok {
+		if c, ok := ast.Unparen(s.X).(*ast.CallExpr); ok {
+			if id, ok := ast.Unparen(c.Fun).(*ast.Ident); ok {
 				return info.Uses[id] == types.Universe.Lookup("panic")
 			}
 		}
 	case *ast.BlockStmt:
-		return terminatingList(info, s.List)
+		return TerminatingList(info, s.List, call)
 	case *ast.IfStmt:
-		return s.Else != nil && terminating(info, s.Body, nil) && terminating(info, s.Else, nil)
+		return s.Else != nil && terminating(info, s.Body, nil, call) && terminating(info, s.Else, nil, call)
 	case *ast.ForStmt:
 		return s.Cond == nil && !breaksOut(info, s, label)
 	case *ast.LabeledStmt:
-		return terminating(info, s.Stmt, info.Defs[s.Label])
+		return terminating(info, s.Stmt, info.Defs[s.Label], call)
 	case *ast.SwitchStmt:
-		return terminatingClauses(info, s, s.Body, label, false)
+		return terminatingClauses(info, s, s.Body, label, false, call)
 	case *ast.TypeSwitchStmt:
-		return terminatingClauses(info, s, s.Body, label, false)
+		return terminatingClauses(info, s, s.Body, label, false, call)
 	case *ast.SelectStmt:
-		return terminatingClauses(info, s, s.Body, label, true)
+		return terminatingClauses(info, s, s.Body, label, true, call)
 	}
 	return false
 }
@@ -76,7 +89,7 @@ func terminating(info *types.Info, s ast.Stmt, label types.Object) bool {
 // terminatingClauses applies the spec's rule for switch and select: no
 // break refers to the statement, a switch has a default case, and every
 // clause ends in a terminating statement (or, in a switch, fallthrough).
-func terminatingClauses(info *types.Info, stmt ast.Stmt, body *ast.BlockStmt, label types.Object, isSelect bool) bool {
+func terminatingClauses(info *types.Info, stmt ast.Stmt, body *ast.BlockStmt, label types.Object, isSelect bool, call ast.Stmt) bool {
 	if breaksOut(info, stmt, label) {
 		return false
 	}
@@ -94,7 +107,7 @@ func terminatingClauses(info *types.Info, stmt ast.Stmt, body *ast.BlockStmt, la
 				continue
 			}
 		}
-		if !terminatingList(info, list) {
+		if !TerminatingList(info, list, call) {
 			return false
 		}
 	}
