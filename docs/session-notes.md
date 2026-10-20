@@ -114,8 +114,8 @@ results are in `docs/cost-history.md`.
   rather than adding commits to one the user may already be merging.
 - Roadmap item 15: refusals for ranges that start at the `func` line are
   done (#124); they give the body's lines and, for `replace_statements`,
-  `function`. Still open: one worked example of a batch in the
-  instructions.
+  `function`. The worked example of a batch is in the instructions
+  (#174), and `TestInstructionsExampleRuns` runs it, so keep it valid.
 - Third-party A/B (roadmap item 16): `eval-tasks/third-party/` has 172
   candidate PRs from five large repos, and `ab.json` there the first ten
   tasks, built by `tasks.py` from `tasks.json` (prompts by hand) and
@@ -204,6 +204,8 @@ results are in `docs/cost-history.md`.
   them: one check for terminating statements, `analysis.TerminatingList`
   (#170). Then roadmap item 15's open bullets, one PR each, chained from
   #170: a smaller module overview (#171, one line per package),
-  replace_text adds imports (#173, `gocode.ImportNames`).
+  replace_text adds imports (#173, `gocode.ImportNames`), a worked batch
+  in the instructions (#174). Counting refused Bash reads apart is done
+  in #172 (refactor-tokens), not here.
   Change only
   this repo copy: the Claude Doc linked from #130 is not kept up to date.

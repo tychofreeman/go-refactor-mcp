@@ -1136,6 +1136,10 @@ helper with add_declaration, Plan's new body with replace_statements
 All through gorefactor: the test with insert_statements, the
 instructions and these notes with replace_text.
 
+## 2026-10-20: a worked batch in the instructions
+
+All through `refactor batch` and replace_text; nothing by hand.
+
 ## 2026-10-20: replace_text adds imports
 
 All through `refactor batch`, and for the last time with the import

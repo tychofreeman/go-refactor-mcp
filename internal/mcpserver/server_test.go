@@ -131,6 +131,28 @@ func TestToolsAndInstructions(t *testing.T) {
 	}
 }
 
+// The instructions' worked example of a batch runs as it is written, on
+// a module like the one it names.
+func TestInstructionsExampleRuns(t *testing.T) {
+	_, example, ok := strings.Cut(Instructions, "Example batch")
+	if !ok {
+		t.Fatal("the instructions have no example batch")
+	}
+	start := strings.Index(example, "{")
+	end := strings.Index(example, "\n\n")
+	var args map[string]any
+	if start < 0 || end < start || json.Unmarshal([]byte(example[start:end]), &args) != nil {
+		t.Fatalf("the example is not one JSON object:\n%s", example)
+	}
+	cs, dir := setup(t)
+	out, _ := call(t, cs, "batch", args)
+	mustContain(t, "example batch", out, "APPLIED batch")
+	got, _ := os.ReadFile(filepath.Join(dir, "calc", "calc.go"))
+	if strings.Contains(string(got), "not implemented") {
+		t.Errorf("the stub was not replaced:\n%s", got)
+	}
+}
+
 // symbolTools target a declaration, so they accept name alone, as a
 // package-level symbol, in place of file + line + name.
 var symbolTools = []string{

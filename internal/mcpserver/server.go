@@ -62,6 +62,13 @@ How to work with them:
 4. Line numbers change after edits. Before a single step that needs them, re-inspect the code an earlier step changed. In a batch, give line numbers as they were when the batch began (from the inspect you planned it with): the batch moves them past the earlier steps. To address what an earlier step of the batch made, give a reference instead of a number: "$prev.end", "$2.start", "$helper.end+1" (see batch). Tools that target a declaration (rename, add_parameter, move_declaration, ...) also accept file and name without line: name is then a package-level symbol of file's package (Name, Type.Method or Type.Field), which stays valid after edits.
 5. Use check (with run_tests) at the end, and undo if a step made the code worse. Every step can be undone.
 
+Example batch, for a feature added test first: the test calls Discount, which nothing declares, so it gets a stub; the next step replaces the stub with the real function; the last renames by name. One call, one turn:
+{"report": "summary", "steps": [
+  {"tool": "add_declaration", "args": {"file": "calc/calc_test.go", "content": "func TestDiscount(t *testing.T) {\n\tif Discount(200, 10) != 180 {\n\t\tt.Fatal(\"wrong\")\n\t}\n}"}},
+  {"tool": "add_declaration", "args": {"file": "calc/calc.go", "content": "// Discount is price less pct percent of it.\nfunc Discount(price, pct int) int { return price - price*pct/100 }"}},
+  {"tool": "rename", "args": {"file": "calc/calc.go", "name": "Apply", "new_name": "Scale"}}
+]}
+
 Prefer these tools over editing files by hand for everything they cover.`
 
 // Server is the refactoring MCP server for one module.
