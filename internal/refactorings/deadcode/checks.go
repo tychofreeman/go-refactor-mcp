@@ -100,6 +100,9 @@ func (t *target) check(ws *workspace.Workspace) error {
 			}
 			return refactor.Refusef("the interface at %s has a method %s, which a type could implement through this one", ws.Position(at), name)
 		}
+		if s := dependencyInterface(ws, fn); s != "" {
+			return refactor.Refusef("%s through %s, so code that only sees it as that interface (as fmt.Println calls String, and io.Copy WriteTo) can call it; deleting it would change what that code does", s, name)
+		}
 	}
 	if tn, ok := t.obj.(*types.TypeName); ok {
 		if n, ok := tn.Type().(*types.Named); ok && n.NumMethods() > 0 {
@@ -136,6 +139,80 @@ func (t *target) check(ws *workspace.Workspace) error {
 		}
 	}
 	return t.checkUnused(ws)
+}
+
+// dependencyInterface says which interface, declared by a dependency or
+// predeclared (error), the receiver type of fn implements through fn, as
+// "*src implements io.WriterTo", or "" if none: code in the dependency can
+// call fn without naming it (fmt.Println calls String, io.Copy calls
+// WriteTo), so it is not dead.
+func dependencyInterface(ws *workspace.Workspace, fn *types.Func) string {
+	recv := fn.Signature().Recv().Type()
+	if p, ok := recv.(*types.Pointer); ok {
+		recv = p.Elem()
+	}
+	named, ok := recv.(*types.Named)
+	if !ok {
+		return ""
+	}
+	noQualifier := func(*types.Package) string { return "" }
+	check := func(it *types.Interface, label string) string {
+		has := false
+		for i := 0; i < it.NumMethods(); i++ {
+			m := it.Method(i)
+			has = has || m.Name() == fn.Name() && (m.Exported() || m.Pkg() != nil && m.Pkg().Path() == fn.Pkg().Path())
+		}
+		if !has {
+			return ""
+		}
+		for _, T := range []types.Type{named, types.NewPointer(named)} {
+			if types.Implements(T, it) {
+				return types.TypeString(T, noQualifier) + " implements " + label
+			}
+		}
+		return ""
+	}
+	if s := check(types.Universe.Lookup("error").Type().Underlying().(*types.Interface), "error"); s != "" {
+		return s
+	}
+	done := map[string]bool{}
+	var walk func(p *packages.Package) string
+	walk = func(p *packages.Package) string {
+		paths := make([]string, 0, len(p.Imports))
+		for path := range p.Imports {
+			paths = append(paths, path)
+		}
+		slices.Sort(paths)
+		for _, path := range paths {
+			d := p.Imports[path]
+			if done[d.PkgPath] {
+				continue
+			}
+			done[d.PkgPath] = true
+			if d.Types != nil {
+				scope := d.Types.Scope()
+				for _, n := range scope.Names() {
+					if tn, ok := scope.Lookup(n).(*types.TypeName); ok && !tn.IsAlias() {
+						if it, ok := tn.Type().Underlying().(*types.Interface); ok {
+							if s := check(it, tn.Type().String()); s != "" {
+								return s
+							}
+						}
+					}
+				}
+			}
+			if s := walk(d); s != "" {
+				return s
+			}
+		}
+		return ""
+	}
+	for _, p := range ws.Pkgs {
+		if s := walk(p); s != "" {
+			return s
+		}
+	}
+	return ""
 }
 
 // checkUnused refuses a declaration used anywhere but inside itself.
