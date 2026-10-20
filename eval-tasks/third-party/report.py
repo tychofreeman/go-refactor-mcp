@@ -69,6 +69,11 @@ def main():
                 check = check_for(c, v)
                 if check:
                     c["hidden_check"] = check
+                bb, api = len(v.get("black_box", [])), len(v.get("needs_api", []))
+                # Recommended: the black-box packages are at least half of
+                # those whose tests check the PR, so the hidden check covers
+                # most of what the PR's own tests do.
+                c["recommended"] = v["outcome"] == "black_box" and bb >= api
                 rows.append(c)
             json.dump(c, out)
             out.write("\n")
@@ -77,8 +82,14 @@ def main():
     by_repo = {}
     for c in rows:
         by_repo.setdefault(c["repo"], []).append(c)
+    print("| Repository | Verified | Black-box | Recommended | Needs API | Not fail-to-pass | Broken |")
+    print("|---|---|---|---|---|---|---|")
     for repo, cs in by_repo.items():
-        cs.sort(key=lambda c: (order[c["verification"]["outcome"]], "SML".index(c["size"]), c["date"]))
+        n = lambda o: sum(c["verification"]["outcome"] == o for c in cs)
+        print(f"| {repo} | {len(cs)} | {n('black_box')} | {sum(c['recommended'] for c in cs)} | {n('needs_api')} | {n('not_f2p')} | {n('broken')} |")
+    print()
+    for repo, cs in by_repo.items():
+        cs.sort(key=lambda c: (not c["recommended"], order[c["verification"]["outcome"]], "SML".index(c["size"]), c["date"]))
         print(f"### {repo}\n")
         print("| PR | Issue | Title | Size (packages) | Refactored on the way | Outcome | Black-box test packages | Names a needs_api prompt must give |")
         print("|---|---|---|---|---|---|---|---|")
@@ -104,7 +115,8 @@ def main():
             title = c["title"].replace("|", "\\|")
             if len(title) > 70:
                 title = title[:67] + "..."
-            print(f"| {pr} | {issues} | {title} | {c['size']} ({len(c['packages'])}) | {refac} | {v['outcome']} | {pk} | {missing} |")
+            outcome = "**recommended**" if c["recommended"] else v["outcome"]
+            print(f"| {pr} | {issues} | {title} | {c['size']} ({len(c['packages'])}) | {refac} | {outcome} | {pk} | {missing} |")
         print()
 
 
