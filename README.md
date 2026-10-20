@@ -524,6 +524,26 @@ hand or a tool got in the way.
       duplicates the logic of `analysis/flow.go` (the review's code
       quality note). *Done (#170): `analysis.TerminatingList` takes the
       statement that becomes the call, and `extract_function` uses it.*
+18. **Take type reasoning off the model.** The model should say what it
+    wants and the tools work out what compiles. `docs/type-errors.md`
+    counts the 66 type-check refusals in all A/B runs so far by kind, and
+    ranks what the engine could take over, in order:
+    - **Stubs for fields** used before they exist (`x.F`, `T{F: v}`),
+      typed by their use, and `struct{}` for a type named only as a
+      field's or parameter's type.
+    - **Imports in every edit:** `replace_text` adds those new code needs,
+      and every edit removes those it leaves unused.
+    - **Signature and type changes that carry their consequences:**
+      `change_signature` (parameters and results, every call, and for a
+      method its interface and the interface's other implementers), and
+      `change_field_type` with uses adjusted where mechanical; an edit
+      that changes a signature by text is pointed to them.
+    - **Mechanical repairs with a note:** `:=` to `=`, exporting a helper
+      another package calls, "already declared at ..." with how to
+      replace it.
+    - **Refactorings toward a test written first:** run while the only
+      errors are in tests it fixes.
+    - **Measure** by counting these refusals per run, by kind.
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the

@@ -30,6 +30,12 @@ results are in `docs/cost-history.md`.
 
 ## Decisions and their reasons
 
+- **The model reasons about intent, the engine about types**
+  (2026-10-20). The user's concern with type-check refusals for the
+  model's own code: the project is to take type-safe code off the
+  model, so it reasons at a higher level. Roadmap item 18 and
+  `docs/type-errors.md` rank what to take over.
+
 - **Every step must type-check** (2026-10-17). The user rejected letting
   edits leave type errors. Test-first still works: stubs for what a new
   test calls are declared automatically, and an edit may start from
