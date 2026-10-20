@@ -50,7 +50,7 @@ Item 8 is the root of several others: one fix in `Stable` covers both of its con
 | 9 | `inline_function` changes evaluation order on the left of an assignment. *Fixed in #145.* | `inlinefunc/inlinefunc.go:390` | In `m[k()] = f()`, `f`'s body now runs before `k()`. |
 | 10 | `inline_function` assumes a parameter is dead after the call despite a backward `goto`. *Fixed in #146.* | `inlinefunc/merge.go:245` | The repro's result changed from 27 to 34. `extract_function` already checks for `goto`. |
 | 11 | `inline_function` misses `else if` conditions and `for` post statements as conditional positions. *Fixed in #147.* | `inlinefunc/params.go:493` | A `p.n` substituted into `else if p.n > 0` no longer panics for `p == nil` when the first branch is taken. |
-| 12 | Effect summaries skip the bodies of synchronous closures | `analysis/effects.go:143` | `introduce_parameter` moved a `FieldsFunc` call whose closure increments a counter: it now runs once per call instead of once per loop pass. |
+| 12 | Effect summaries skip the bodies of synchronous closures. *Fixed in #148, in changesig, the caller that skipped them.* | `analysis/effects.go:143` | `introduce_parameter` moved a `FieldsFunc` call whose closure increments a counter: it now runs once per call instead of once per loop pass. |
 | 13 | `extract_function`'s error-exit shape misses a later write to `err` in a loop, and its non-nil helper check ignores `defer`/`recover` | `extractfunc/returns.go:328`, `:250` | A helper that recovers from a panic returns a nil error, though every `return` passes a non-nil one. |
 | 14 | `remove_dead_code` deletes `String` or `WriteTo` in package main | `deadcode/checks.go:95` | They're unused in code, but `fmt` and `io` call them dynamically. |
 | 15 | `rename` of a struct field silently changes its JSON key | `rename/rename.go:261` | Renaming `Name` to `name` drops it from `json.Marshal` output. |
@@ -72,7 +72,7 @@ Mostly false refusals, misleading results and one crash; none changes behavior e
 | 24 | Argument aliases in a batch skip line translation | `refactor/refactor.go:373` | A step sent with `line_no` instead of `line` uses the untranslated number. |
 | 25 | Smaller behavior gaps | `rename`, `slidestmt`, `extractfunc` | `rename` can stop a `Test…` function from running or start running a helper; `move_statement` doesn't count `make(n)` with a variable size as able to panic; pre-1.22 loop variables captured by goroutines. |
 
-**Code quality.** Two whitelists of synchronous-callee functions have drifted apart (`analysis.go:45`, `effects.go:143`). `extract_function` duplicates the terminating-statement logic in `analysis/flow.go`. The README says only `move_statement` uses the effect summaries, but the signature-change tools do too.
+**Code quality.** Two whitelists of synchronous-callee functions have drifted apart (`analysis.go:45`, `effects.go:143`). `extract_function` duplicates the terminating-statement logic in `analysis/flow.go`. The README said only `move_statement` uses the effect summaries, but the signature-change tools do too (corrected in #148).
 
 ## What to fix first
 

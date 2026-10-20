@@ -143,5 +143,7 @@ results are in `docs/cost-history.md`.
   checks the operands on the left of an assignment), 10 (#146, no
   variable is dead after the call in a caller with goto), 11 (#147, an
   else if and a for post count as conditional uses; analysis.PathTo
-  runs from the node outward). Change only
+  runs from the node outward), 12 (#148, changesig walks the literals a
+  call runs, `syncWalk`; a false refusal remains when such a literal
+  names its parameters: "uses r, declared in the body"). Change only
   this repo copy: the Claude Doc linked from #130 is not kept up to date.

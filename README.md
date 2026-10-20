@@ -725,11 +725,13 @@ not finish. Each part names the first reason, so a refusal can say
   own local (`sb.WriteString` on a local builder, `sort.Strings` on a
   fresh slice) is not a side effect.
 
-For now only `move_statement_up` and `move_statement_down` use these
-summaries; the other refactorings still treat every call not on the
-known list as a side effect. The function literals passed to
-`ast.Inspect` and the like run during their statement, so
-`move_statement_*` counts what they do as part of it.
+`move_statement_up`, `move_statement_down` and the signature changes
+(`introduce_parameter`, the value `add_parameter` passes and the
+arguments `remove_parameter` drops) use these summaries; the other refactorings still treat every
+call not on the known list as a side effect. The function literals
+passed to `ast.Inspect`, `strings.FieldsFunc` and the like run during
+the call, so what they do counts as part of it: an expression whose
+literal increments a package variable has side effects.
 
 ## Rename: what it checks
 

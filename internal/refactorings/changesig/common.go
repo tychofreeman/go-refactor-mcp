@@ -265,12 +265,13 @@ func unsafeValue(info *types.Info, e ast.Expr, eff *analysis.Effects) (ast.Node,
 	}
 	var bad ast.Node
 	var why string
-	ast.Inspect(e, func(n ast.Node) bool {
+	ast.Inspect(e, syncWalk(info, func(n ast.Node) bool {
 		if bad != nil {
 			return false
 		}
-		if _, ok := n.(*ast.FuncLit); ok {
-			return false // defining a closure runs nothing
+		if l := assignsOutside(info, n, e); l != nil {
+			bad, why = n, "has side effects: it assigns "+types.ExprString(l)
+			return false
 		}
 		if ex, ok := n.(ast.Expr); ok && info.Types[ex].Value != nil {
 			return false
@@ -319,6 +320,50 @@ func unsafeValue(info *types.Info, e ast.Expr, eff *analysis.Effects) (ast.Node,
 			}
 		}
 		return bad == nil
-	})
+	}))
 	return bad, why
+}
+
+// syncWalk adapts an ast.Inspect visitor so that it walks into the
+// function literals a call runs before it returns (analysis.SyncLits,
+// such as the one strings.FieldsFunc calls), whose bodies are part of
+// what the call does, and skips every other literal, since defining one
+// runs nothing.
+func syncWalk(info *types.Info, visit func(ast.Node) bool) func(ast.Node) bool {
+	sync := map[*ast.FuncLit]bool{}
+	return func(n ast.Node) bool {
+		switch n := n.(type) {
+		case *ast.FuncLit:
+			if !sync[n] {
+				return false
+			}
+		case *ast.CallExpr:
+			for _, lit := range analysis.SyncLits(info, n) {
+				sync[lit] = true
+			}
+		}
+		return visit(n)
+	}
+}
+
+// assignsOutside returns the first thing the assignment or ++/-- n writes
+// that is not a variable declared inside e, or nil. Within an expression,
+// only a function literal that runs during it can assign.
+func assignsOutside(info *types.Info, n, e ast.Node) ast.Expr {
+	var lhs []ast.Expr
+	switch n := n.(type) {
+	case *ast.AssignStmt:
+		lhs = n.Lhs
+	case *ast.IncDecStmt:
+		lhs = []ast.Expr{n.X}
+	}
+	for _, l := range lhs {
+		if id, ok := ast.Unparen(l).(*ast.Ident); ok {
+			if o := info.ObjectOf(id); id.Name == "_" || o != nil && e.Pos() <= o.Pos() && o.Pos() < e.End() {
+				continue
+			}
+		}
+		return l
+	}
+	return nil
 }

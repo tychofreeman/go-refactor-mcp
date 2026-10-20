@@ -1,0 +1,1 @@
+{"file": "a.go", "line": 9, "expression": "strings.FieldsFunc(s, func(rune) bool { counter++; return false })", "parameter": "fields"}
