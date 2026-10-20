@@ -41,7 +41,7 @@ const Instructions = `Refactoring and editing tools for the Go module in this pr
 Two kinds of tool, by what they guarantee:
 - Refactorings preserve behavior. They find every reference with the type checker (every use, call and comment that names it), so there is no need to search for them first; they refuse changes that would alter behavior.
 - Edits change behavior on purpose: the step that adds or changes a feature.
-Every step, refactoring or edit, starts from code that type-checks and must leave code that type-checks; a step that would not is refused with the errors, and nothing changes. Except: an edit that calls functions or methods nothing declares yet gets stubs for them (create_from_usage), so to write a failing test first, just write the test.
+Every step, refactoring or edit, starts from code that type-checks and must leave code that type-checks; a step that would not is refused with the errors, and nothing changes. An edit may also start from code that does not type-check if it fixes some of the errors and adds none (add_field for a field a test written first uses). And an edit that calls functions or methods nothing declares yet gets stubs for them (create_from_usage), so to write a failing test first, just write the test.
 Some tools choose for you (create_from_usage chooses a stub's signature and file); their result lists each choice on a "chose:" line. Check them: give the choice explicitly, or undo, to change it.
 
 Which tool, by what you want to do:

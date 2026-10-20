@@ -1,0 +1,1 @@
+replaced the stub of area (panic("not implemented")) at a.go:7

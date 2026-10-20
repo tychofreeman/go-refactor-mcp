@@ -130,14 +130,19 @@ func TestEditThatBreaksTheBuildIsRefused(t *testing.T) {
 	}
 }
 
+// An edit on code that does not type-check must fix some of it; this one
+// breaks the package clause, and undoing it reloads the workspace.
 func TestEditRefusesBrokenInput(t *testing.T) {
-	ws, _ := setup(t, "package m\n\nvar X int = \"s\"\n")
+	ws, path := setup(t, "package m\n\nvar X int = \"s\"\n")
 	res, err := refactor.Run(ws, breakingEdit{}, nil, refactor.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Applied || !strings.Contains(res.Refused, "does not type-check") {
-		t.Fatalf("want a refusal on code that does not type-check, got %+v", res)
+	if res.Applied || !strings.Contains(res.Refused, "the change adds errors the code did not have") {
+		t.Fatalf("want a refusal for the errors it adds, got %+v", res)
+	}
+	if got, _ := os.ReadFile(path); string(got) != "package m\n\nvar X int = \"s\"\n" {
+		t.Errorf("not rolled back; file:\n%s", got)
 	}
 }
 
@@ -712,6 +717,46 @@ func TestFix(t *testing.T) {
 	}
 	if res.Applied || !strings.Contains(res.Refused, "fixes none of the errors") {
 		t.Errorf("want a fix that fixes nothing refused, got %+v", res)
+	}
+}
+
+// appendDecl is an edit, not a fix: it appends decl to m.go.
+type appendDecl struct{ decl string }
+
+func (appendDecl) Name() string                 { return "append_decl" }
+func (appendDecl) Description() string          { return "" }
+func (appendDecl) InputSchema() json.RawMessage { return json.RawMessage(`{}`) }
+func (appendDecl) ChangesBehavior()             {}
+func (d appendDecl) Plan(ws *workspace.Workspace, _ json.RawMessage) (*refactor.Plan, error) {
+	path := ws.Abs("m.go")
+	src, _ := os.ReadFile(path)
+	return &refactor.Plan{Summary: "appended", Edits: []edit.FileEdit{{Path: path, Edits: []edit.TextEdit{{Start: len(src), End: len(src), NewText: d.decl}}}}}, nil
+}
+
+// An edit may start from code that does not type-check, as a fix does, if
+// it leaves fewer errors and adds none: add_field for the field a test
+// written first already uses.
+func TestEditFixesBrokenCode(t *testing.T) {
+	const broken = "package m\n\nvar X int = F()\n\nvar Y = G()\n"
+	for _, c := range []struct{ decl, refused string }{
+		{"\nfunc F() int { return 1 }\n", ""},
+		{"\nvar Z = 1\n", "the change fixes none of the errors"},
+		{"\nfunc F() int { return H() }\n", "the change adds errors the code did not have"},
+	} {
+		ws, _ := setup(t, broken)
+		res, err := refactor.Run(ws, appendDecl{c.decl}, nil, refactor.Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if c.refused == "" && !res.Applied || c.refused != "" && !strings.Contains(res.Refused, c.refused) {
+			t.Errorf("%q: want refused %q, got %+v", c.decl, c.refused, res)
+		}
+	}
+
+	// A refactoring still needs code that type-checks.
+	ws, _ := setup(t, broken)
+	if res, _ := refactor.Run(ws, bump{}, nil, refactor.Options{}); !strings.Contains(res.Refused, "refactorings cannot be verified") {
+		t.Errorf("want the refactoring refused, got %+v", res)
 	}
 }
 

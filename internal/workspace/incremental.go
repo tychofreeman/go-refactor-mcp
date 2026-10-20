@@ -71,7 +71,11 @@ func (w *Workspace) updateIncrementally(changed []string) error {
 			owners[f] = append(owners[f], p)
 		}
 		for _, f := range p.Syntax {
-			oldSyntax[w.Fset.File(f.Pos()).Name()] = f
+			tf := w.Fset.File(f.Pos())
+			if tf == nil {
+				return errNeedReload // a file that did not parse as far as its package clause
+			}
+			oldSyntax[tf.Name()] = f
 		}
 	}
 
