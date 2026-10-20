@@ -1,0 +1,1 @@
+type src implements interface io.WriterTo through method WriteTo

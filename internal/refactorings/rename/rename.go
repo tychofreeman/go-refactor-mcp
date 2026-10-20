@@ -530,7 +530,8 @@ type namedIface struct {
 
 // interfacesWithMethod collects every interface type reachable from the
 // workspace's types (named interfaces, interface parameters of called
-// functions, anonymous interfaces) that has a method called name. Named
+// functions, anonymous interfaces), and every package-level interface of
+// its dependencies, that has a method called name. Named
 // interfaces are listed first and an interface reached both through its
 // name and directly is reported by its name, so messages are stable
 // regardless of map iteration order.
@@ -609,6 +610,32 @@ func (r *renamer) interfacesWithMethod(name string) []namedIface {
 				visit(o.Type())
 			}
 		}
+	}
+	// Then every package-level interface of every dependency, which the
+	// workspace's types need not mention: io.Copy finds io.WriterTo.
+	done := map[string]bool{}
+	var deps func(p *packages.Package)
+	deps = func(p *packages.Package) {
+		for _, d := range p.Imports {
+			if done[d.PkgPath] {
+				continue
+			}
+			done[d.PkgPath] = true
+			if d.Types != nil {
+				scope := d.Types.Scope()
+				for _, n := range scope.Names() {
+					if tn, ok := scope.Lookup(n).(*types.TypeName); ok && !tn.IsAlias() {
+						if it, ok := tn.Type().Underlying().(*types.Interface); ok {
+							record(it, tn.Type().String(), true)
+						}
+					}
+				}
+			}
+			deps(d)
+		}
+	}
+	for _, p := range r.ws.Pkgs {
+		deps(p)
 	}
 	sort.SliceStable(out, func(i, j int) bool {
 		if out[i].named != out[j].named {
