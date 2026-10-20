@@ -219,13 +219,74 @@ func Func(file *ast.File, name string) *ast.FuncDecl {
 		if !ok {
 			continue
 		}
-		n := fd.Name.Name
-		if fd.Recv != nil && len(fd.Recv.List) > 0 {
-			n = inspect.ReceiverTypeName(fd.Recv.List[0].Type) + "." + n
-		}
-		if n == name {
+		if FuncName(fd) == name {
 			return fd
 		}
+	}
+	return nil
+}
+
+// FuncName names fd as inspect's outline does: Name, or Type.Method for a
+// method.
+func FuncName(fd *ast.FuncDecl) string {
+	n := fd.Name.Name
+	if fd.Recv != nil && len(fd.Recv.List) > 0 {
+		n = inspect.ReceiverTypeName(fd.Recv.List[0].Type) + "." + n
+	}
+	return n
+}
+
+// Signature is a function whose signature a line range starts on: the
+// range selects the function, not the statements of its body.
+type Signature struct {
+	Name string // as FuncName gives it
+	// Text says so, for a refusal: "lines 5-12 include the signature of
+	// T.Run on line 6".
+	Text string
+	// First and Last are the lines of the body's statements, 0 if it has
+	// none or they share a line with a brace of the body.
+	First, Last int
+	Empty       bool // the body has no statements
+}
+
+// SignatureAt returns the function whose doc comment or signature holds
+// line first of the range first-last, when the range reaches its func
+// line, or nil if there is none.
+func SignatureAt(tf *token.File, file *ast.File, first, last int) *Signature {
+	line := func(p token.Pos) int { return tf.Line(p) }
+	for _, d := range file.Decls {
+		fd, ok := d.(*ast.FuncDecl)
+		if !ok || fd.Body == nil {
+			continue
+		}
+		from, to := line(fd.Pos()), line(fd.Body.Lbrace)
+		start := from
+		if fd.Doc != nil {
+			start = line(fd.Doc.Pos())
+		}
+		if first < start || first > to || last < from {
+			continue
+		}
+		s := &Signature{Name: FuncName(fd), Empty: len(fd.Body.List) == 0}
+		lines := fmt.Sprintf("lines %d-%d include", first, last)
+		if first == last {
+			lines = fmt.Sprintf("line %d includes", first)
+		}
+		sig := fmt.Sprintf(" on lines %d-%d", from, to)
+		if from == to {
+			sig = fmt.Sprintf(" on line %d", from)
+		}
+		if first == last && first == from {
+			sig = ""
+		}
+		s.Text = fmt.Sprintf("%s the signature of %s%s", lines, s.Name, sig)
+		if !s.Empty {
+			a, b := line(fd.Body.List[0].Pos()), line(fd.Body.List[len(fd.Body.List)-1].End())
+			if a > to && b < line(fd.Body.Rbrace) {
+				s.First, s.Last = a, b
+			}
+		}
+		return s
 	}
 	return nil
 }

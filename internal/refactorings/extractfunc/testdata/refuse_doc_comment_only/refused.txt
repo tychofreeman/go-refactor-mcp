@@ -1,0 +1,1 @@
+lines 5-5 of m.go contain no statements inside a function body

@@ -174,6 +174,9 @@ func replaceBody(ws *workspace.Workspace, pkg *packages.Package, file *ast.File,
 // selectStatements returns the statements lines first-last cover: whole
 // statements of one block, with nothing else on those lines but comments.
 func selectStatements(tf *token.File, file *ast.File, src []byte, first, last int) ([]ast.Stmt, error) {
+	if s := locate.SignatureAt(tf, file, first, last); s != nil {
+		return nil, signatureRefusal(s)
+	}
 	line := func(p token.Pos) int { return tf.Line(p) }
 	cut, inside := findCut(file, line, first, last)
 	if cut != nil {
@@ -208,6 +211,15 @@ func selectStatements(tf *token.File, file *ast.File, src []byte, first, last in
 		return nil, err
 	}
 	return inside, nil
+}
+
+// signatureRefusal refuses lines that start on the signature of s's
+// function, pointing to function, which replaces the whole body.
+func signatureRefusal(s *locate.Signature) error {
+	if s.First == 0 {
+		return refactor.Refusef("%s; give function %q to replace its body", s.Text, s.Name)
+	}
+	return refactor.Refusef("%s; give function %q to replace its whole body, or start_line %d, end_line %d for its statements", s.Text, s.Name, s.First, s.Last)
 }
 
 // wholeRange suggests, for a refusal of lines first-last that cut a

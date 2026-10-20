@@ -1125,6 +1125,17 @@ All through gorefactor. replace_text still does not add imports
 (strings.TrimSpace in a replaced block); I dropped the call rather than
 add the import in another step.
 
+## 2026-10-20: ranges that start at the `func` line
+
+All through gorefactor, with the CLI (`refactor`) built from the branch:
+the session worked in a cloud clone, and the MCP it had ran on another
+checkout. extract_function and inline_variable pulled `locate.FuncName` out
+of `locate.Func`, add_declaration added `locate.SignatureAt` and the two
+refusals, insert_statements the checks, and replace_text these notes. By
+hand: the golden cases. The CLI has no `batch`, so steps went one at a
+time; an insert sent before the function it calls was refused, and an
+import add_declaration added moved the next line number by one.
+
 ## 2026-10-20: inspect without bodies, and targets
 
 All through gorefactor except two size checks: a temporary test file

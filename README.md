@@ -320,7 +320,13 @@ hand or a tool got in the way.
       model selected a whole function, signature included, for
       `extract_function` (3) and `replace_statements` (2). The refusal
       could give the body's lines, and for `replace_statements` point to
-      `function`, which replaces the whole body.
+      `function`, which replaces the whole body. *Done: both refuse with
+      the function's name and the lines of its statements, and
+      `replace_statements` names `function`. Before, the refusal named a
+      `func` token and, for a range that cut the body, suggested the whole
+      function, which was refused in turn. Still a refusal, not a guess:
+      a model that selected a whole function may have written a new
+      signature in `content`.*
     - **Coaching in results,** when a model does something a tool could
       have done (three single steps that could have been one batch).
       Tried in #119 (a tip on the second single step in a row) and
@@ -797,7 +803,9 @@ The lines must cover whole statements of one block (a function body, a `{}`
 block, or one `case`); comments and blank lines in the range are allowed.
 Selecting all of an `if` extracts the `if`; selecting only its body extracts
 the body. A range that cuts a statement or crosses a block boundary is
-refused, and the refusal lists the statement lines nearby.
+refused, and the refusal lists the statement lines nearby. A range that
+starts on a function's signature (or its doc comment) and reaches the
+`func` line is refused with the lines of its body's statements.
 
 Local variables the statements use become parameters, in order of first
 use. Variables they change and that are used afterwards, and variables they
@@ -1637,7 +1645,9 @@ becomes the implementation (select the stub's `return` line), and how
 statements change what they do. The lines must cover whole statements of
 one block, with nothing else on them but comments and blank lines (which
 are replaced too); `content` must parse as statements, and is re-indented
-to the block (unless a raw string in it spans lines).
+to the block (unless a raw string in it spans lines). Lines that start on a
+function's signature are refused with `function`, which replaces the
+whole body, and the lines of its statements.
 
 Imports follow the code. A package the new statements name that is not in
 scope there is imported: the package another file of the package imports

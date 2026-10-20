@@ -43,6 +43,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/gocode"
 	"github.com/tychofreeman/go-refactor-mcp/internal/imports"
+	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
@@ -224,6 +225,9 @@ func checkName(name string) error {
 // extracts the if, not its body. Then it checks that the lines contain
 // nothing but those statements and comments.
 func (x *extraction) selectStatements(first, last int) error {
+	if s := locate.SignatureAt(x.tf, x.file, first, last); s != nil {
+		return signatureRefusal(s)
+	}
 	var lists []stmtList
 	ast.Inspect(x.file, func(n ast.Node) bool {
 		switch n := n.(type) {
@@ -308,6 +312,18 @@ func (x *extraction) selectStatements(first, last int) error {
 		x.end = len(x.src)
 	}
 	return nil
+}
+
+// signatureRefusal refuses lines that start on the signature of s's
+// function, with the lines of its statements to send instead.
+func signatureRefusal(s *locate.Signature) error {
+	switch {
+	case s.Empty:
+		return refactor.Refusef("%s; its body has no statements to extract", s.Text)
+	case s.First == 0:
+		return refactor.Refusef("%s; its statements are on a line with a brace of the body, which lines cannot select", s.Text)
+	}
+	return refactor.Refusef("%s; to extract its statements, use start_line %d, end_line %d", s.Text, s.First, s.Last)
 }
 
 type stmtList struct {
