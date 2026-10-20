@@ -21,7 +21,7 @@ commit. The outcome is one of:
 Each package is judged on its own and listed under the outcome it got.
 
 The repository is left checked out at its original commit. Go comes from
-PATH; lazygit's integration tests run through cmd/integration_test.
+PATH; lazygit's integration tests run through pkg/integration/clients.
 """
 
 import argparse
@@ -119,8 +119,19 @@ def go_test(repo, go_tests, timeout, compile_only=False):
 
 
 def lazygit_run(repo, names, timeout):
-    env = dict(os.environ, INPUT_DELAY="0")
-    return run(repo, "go", "run", "cmd/integration_test/main.go", "cli", *names, timeout=timeout, env=env)
+    """Runs lazygit integration tests through its go test runner, which
+    drives lazygit headless in a pseudo-terminal (its cli runner needs a
+    real terminal)."""
+    code, out, total = 0, "", 0.0
+    for name in names:
+        pattern = "/".join(["^TestIntegration$"] + ["^" + re.escape(p) + "$" for p in name.split("/")])
+        c, o, secs = run(repo, "go", "test", "-count=1", "-v", "-vet=off", "-run", pattern, "./pkg/integration/clients/", timeout=timeout)
+        if c == 0 and "--- PASS: TestIntegration/" not in o:
+            c, o = 1, o + "\nno test named " + name + " ran"
+        code = code or c
+        out += o
+        total += secs
+    return code, out, round(total, 1)
 
 
 def lazygit_compile(repo, timeout):

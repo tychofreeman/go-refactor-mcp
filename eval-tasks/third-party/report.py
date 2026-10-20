@@ -24,7 +24,9 @@ def check_for(c, v):
     for pkg in v.get("black_box", []):
         if pkg == "integration":
             files += [f for f in c["test_files"] if f.startswith(LAZYGIT_TESTS)]
-            cmds.append("go run cmd/integration_test/main.go cli " + " ".join(v["integration_tests"]))
+            for name in v["integration_tests"]:
+                parts = "/".join("^" + p + "$" for p in name.split("/"))
+                cmds.append(f"go test -count=1 -run '^TestIntegration$/{parts}' ./pkg/integration/clients/")
             continue
         files += [f for f in c["test_files"] if os.path.dirname(f) == pkg and f.endswith("_test.go")]
         names = v["go_tests"].get(pkg, [])
