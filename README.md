@@ -461,7 +461,9 @@ hand or a tool got in the way.
       using the variadic parameter unless the call passes a slice with
       `...`), 20 (#162, `create_file` formats only `.go` files), 21
       (#163, `replace_expression` removes an import only the replaced
-      expression used).*
+      expression used), 22 (#164, the A/B summary leaves runs cut off
+      before their result out of the means and lists them; `Bash(cat:*)`
+      does not let `cat > file` through, checked with `claude -p`).*
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the

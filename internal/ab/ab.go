@@ -77,18 +77,19 @@ type Config struct {
 
 // Result is one run of one task in one arm.
 type Result struct {
-	Task      string  `json:"task"`
-	Arm       string  `json:"arm"`
-	Run       int     `json:"run"`
-	Passed    bool    `json:"passed"`
-	CostUSD   float64 `json:"cost_usd"`
-	Turns     int     `json:"turns"`
-	Input     int     `json:"input_tokens"` // summed over requests, cached or not
-	Output    int     `json:"output_tokens"`
-	DiffLines int     `json:"diff_lines"` // lines added and removed
-	Seconds   float64 `json:"seconds"`
-	Error     string  `json:"error,omitempty"`
-	Check     string  `json:"check_output,omitempty"` // the end of it, when it failed
+	Task       string  `json:"task"`
+	Arm        string  `json:"arm"`
+	Run        int     `json:"run"`
+	Passed     bool    `json:"passed"`
+	CostUSD    float64 `json:"cost_usd"`
+	Turns      int     `json:"turns"`
+	Input      int     `json:"input_tokens"` // summed over requests, cached or not
+	Output     int     `json:"output_tokens"`
+	DiffLines  int     `json:"diff_lines"` // lines added and removed
+	Seconds    float64 `json:"seconds"`
+	Error      string  `json:"error,omitempty"`
+	Check      string  `json:"check_output,omitempty"` // the end of it, when it failed
+	Unfinished bool    `json:"unfinished,omitempty"`   // the session ended without claude -p's result (a timeout, say), so it has no cost and only part of its tokens
 
 	Quality Quality `json:"quality"`
 
@@ -215,7 +216,8 @@ func RunAll(ctx context.Context, cfg Config, tasks []Task) ([]Result, error) {
 type taskArm struct{ task, arm string }
 
 // Summary renders results as Markdown: per task and arm, how many runs
-// passed and their mean cost.
+// passed and their mean cost. The means of cost, tokens and turns leave
+// out unfinished runs, which have no cost and only part of their tokens.
 func Summary(results []Result) string {
 	var order []taskArm
 	groups := map[taskArm][]Result{}
@@ -228,23 +230,34 @@ func Summary(results []Result) string {
 	}
 	var sb strings.Builder
 	sb.WriteString("Means per run.\n\n| task | arm | passed | cost | input tokens | output tokens | turns | diff lines |\n|---|---|---|---|---|---|---|---|\n")
+	var unfinished []string
 	for _, k := range order {
 		rs := groups[k]
-		passed := 0
+		passed, finished := 0, 0
 		var cost, in, out, turns, diff float64
 		for _, r := range rs {
 			if r.Passed {
 				passed++
 			}
+			diff += float64(r.DiffLines)
+			if r.Unfinished {
+				continue
+			}
+			finished++
 			cost += r.CostUSD
 			in += float64(r.Input)
 			out += float64(r.Output)
 			turns += float64(r.Turns)
-			diff += float64(r.DiffLines)
 		}
-		n := float64(len(rs))
+		if finished < len(rs) {
+			unfinished = append(unfinished, fmt.Sprintf("%s %s: %d of %d", k.task, k.arm, len(rs)-finished, len(rs)))
+		}
+		n, f := float64(len(rs)), float64(max(finished, 1))
 		fmt.Fprintf(&sb, "| %s | %s | %d/%d | $%.2f | %.0f | %.0f | %.1f | %.0f |\n",
-			k.task, k.arm, passed, len(rs), cost/n, in/n, out/n, turns/n, diff/n)
+			k.task, k.arm, passed, len(rs), cost/f, in/f, out/f, turns/f, diff/n)
+	}
+	if len(unfinished) > 0 {
+		fmt.Fprintf(&sb, "\nUnfinished runs (cut off before claude -p's result, by a timeout say), left out of the means of cost, tokens and turns: %s.\n", strings.Join(unfinished, "; "))
 	}
 	writeQuality(&sb, order, groups)
 	return sb.String()
@@ -331,6 +344,7 @@ func runStage(ctx context.Context, cfg Config, arm string, res Result, dir strin
 		res.Tokens = rep
 		res.CostUSD, res.Turns, res.Input, res.Output = rep.CostUSD, rep.Turns, rep.InputTokens, rep.OutputTokens
 	}
+	res.Unfinished = res.Tokens == nil || !res.Tokens.Finished
 	res.DiffLines, _ = diffLines(dir)
 	after, _ := metrics.ReadModule(dir)
 	res.Quality = measureQuality(before, after)

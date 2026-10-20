@@ -41,6 +41,7 @@ type Report struct {
 	OutputTokens int
 	CostUSD      float64     // from claude -p's result, when the input has one
 	Turns        int         // likewise
+	Finished     bool        // whether the input ends with claude -p's result; a session cut off by a timeout does not
 	Tools        []ToolStats // most ContextTokens first
 }
 
@@ -96,6 +97,7 @@ func Analyze(r io.Reader) (*Report, error) {
 	sc.Buffer(make([]byte, 0, 1<<20), 64<<20)
 	var cost float64 // from claude -p's result line
 	var turns int
+	finished := false
 	for sc.Scan() {
 		var l line
 		if json.Unmarshal(sc.Bytes(), &l) != nil || l.IsSidechain || l.ParentToolUseID != nil {
@@ -103,7 +105,7 @@ func Analyze(r io.Reader) (*Report, error) {
 		}
 		switch l.Type {
 		case "result":
-			cost, turns = l.TotalCostUSD, l.NumTurns
+			cost, turns, finished = l.TotalCostUSD, l.NumTurns, true
 		case "assistant":
 			u := l.Message.Usage
 			if u == nil {
@@ -152,7 +154,7 @@ func Analyze(r io.Reader) (*Report, error) {
 		return nil, err
 	}
 	rep := report(reqs)
-	rep.CostUSD, rep.Turns = cost, turns
+	rep.CostUSD, rep.Turns, rep.Finished = cost, turns, finished
 	return rep, nil
 }
 

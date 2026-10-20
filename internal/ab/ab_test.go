@@ -100,7 +100,7 @@ func TestRunAll(t *testing.T) {
 		t.Fatalf("want 4 results (2 tasks, 2 arms), got %d: %+v", len(results), results)
 	}
 	for _, r := range results {
-		if r.Error != "" || r.CostUSD != 0.25 || r.Turns != 2 || r.Input != 1000 || r.Output != 20 || r.DiffLines != 1 {
+		if r.Error != "" || r.Unfinished || r.CostUSD != 0.25 || r.Turns != 2 || r.Input != 1000 || r.Output != 20 || r.DiffLines != 1 {
 			t.Errorf("%s/%s: %+v", r.Task, r.Arm, r)
 		}
 		if q := r.Quality; q.DupBefore != 10 || q.DupAfter != 10 || q.Changed != 0 {
@@ -137,7 +137,7 @@ func TestRunAllReportsAFailedRun(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(results) != 1 || results[0].Error == "" || results[0].Passed {
+	if len(results) != 1 || results[0].Error == "" || results[0].Passed || !results[0].Unfinished {
 		t.Errorf("want a failed run, got %+v", results)
 	}
 }
@@ -163,6 +163,23 @@ func TestSummary(t *testing.T) {
 	}
 	if strings.Index(md, "| rename | mcp") > strings.Index(md, "| rename | manual") {
 		t.Errorf("arms not in the order run:\n%s", md)
+	}
+}
+
+// A run cut off before claude -p's result has no cost and only part of
+// its tokens, so the means leave it out, and say so.
+func TestSummaryLeavesOutUnfinishedRuns(t *testing.T) {
+	md := Summary([]Result{
+		{Task: "rename", Arm: "manual", Passed: true, CostUSD: 0.50, Turns: 9, Input: 5000, Output: 500, DiffLines: 12},
+		{Task: "rename", Arm: "manual", Unfinished: true, Turns: 0, Input: 2000, Output: 100, DiffLines: 4},
+	})
+	for _, want := range []string{
+		"| rename | manual | 1/2 | $0.50 | 5000 | 500 | 9.0 | 8 |",
+		"rename manual: 1 of 2",
+	} {
+		if !strings.Contains(md, want) {
+			t.Errorf("missing %q in:\n%s", want, md)
+		}
 	}
 }
 
