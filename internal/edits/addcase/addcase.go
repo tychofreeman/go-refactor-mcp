@@ -137,6 +137,9 @@ func (*AddCase) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Pl
 	if err != nil {
 		return nil, refactor.Refusef("content must be case clauses (\"case x:\" or \"default:\", each with its statements): %v", err)
 	}
+	if len(code.Body.List) != 1 { // a "}" in the content closed the switch
+		return nil, refactor.Refusef("content must be case clauses only (\"case x:\" or \"default:\", each with its statements), but a \"}\" in it closes the switch and more code follows")
+	}
 	n := len(code.Body.List[0].(*ast.SwitchStmt).Body.List)
 	if n == 0 {
 		return nil, refactor.Refusef("content has no case clauses")

@@ -151,5 +151,6 @@ results are in `docs/cost-history.md`.
   method through which its type implements a dependency's interface or
   error), 15 (#151, rename refuses an exported field of a struct passed
   as an interface: `analysis.PassedAsInterface` and `Holds`, which
-  extract_struct could use too). Change only
+  extract_struct could use too), 16 (#152, statement content may not
+  close its block: `gocode.ParseStatements` and add_case). Change only
   this repo copy: the Claude Doc linked from #130 is not kept up to date.

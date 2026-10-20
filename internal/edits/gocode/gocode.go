@@ -34,11 +34,17 @@ type Code struct {
 // ParseStatements parses text as a list of statements.
 func ParseStatements(text string) (*Code, error) {
 	src := "package p\nfunc _() {\n" + text + "\n}\n"
-	f, err := parser.ParseFile(token.NewFileSet(), "", src, parser.ParseComments)
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "", src, parser.ParseComments)
 	if err != nil {
 		return nil, refactor.Refusef("content is not a list of Go statements: %v", err)
 	}
 	body := f.Decls[0].(*ast.FuncDecl).Body
+	// A "}" in text could close the block early, and what follows it
+	// become declarations of their own.
+	if end := fset.Position(body.Rbrace); len(f.Decls) != 1 || end.Offset != len(src)-2 {
+		return nil, refactor.Refusef("content must be statements of one block: its \"}\" on line %d closes the block, and more code follows", end.Line-2)
+	}
 	c := &Code{Body: body, node: body}
 	ast.Inspect(c.Body, func(n ast.Node) bool {
 		if b, ok := n.(*ast.BasicLit); ok && strings.HasPrefix(b.Value, "`") && strings.Contains(b.Value, "\n") {

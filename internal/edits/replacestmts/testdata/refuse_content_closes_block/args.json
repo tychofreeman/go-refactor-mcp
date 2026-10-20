@@ -1,0 +1,5 @@
+{
+  "file": "a.go",
+  "function": "helper",
+  "content": "fmt.Println(\"y\")\n}\n\n// Evil is not part of helper.\nfunc Evil() int {\n\treturn 42"
+}

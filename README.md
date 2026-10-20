@@ -1750,7 +1750,8 @@ Go statements, without the enclosing braces. It is how a stub's body
 becomes the implementation (select the stub's `return` line), and how
 statements change what they do. The lines must cover whole statements of
 one block, with nothing else on them but comments and blank lines (which
-are replaced too); `content` must parse as statements, and is re-indented
+are replaced too); `content` must parse as statements of that one block (a `}`
+in it that closes the block early is refused), and is re-indented
 to the block (unless a raw string in it spans lines). Lines that start on a
 function's signature are refused with `function`, which replaces the
 whole body, and the lines of its statements.
