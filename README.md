@@ -327,6 +327,13 @@ hand or a tool got in the way.
       removed: the model never batched after it, and most single steps
       in a row were parallel calls in one turn, which cost nothing
       extra. Serial steps a batch would save came about once per run.
+    - **Reading through `inspect`, not whole files.** In the feature runs,
+      whole Go files read with Read, `cat` or `inspect` were over half of
+      what the reading cost (counting each result once per later turn).
+      `inspect` of a file now shows it without function bodies, a third to
+      a half of the file; a function or range shows only that, without the
+      outline; and `targets` reads several in one call, as `cat a; cat b`
+      did. *Done;* to be measured.
     - **One worked example** of a whole batch in the instructions.
     - **Measure** each with the A/B harness's feature and chain tasks.
 
@@ -356,7 +363,7 @@ internal/
   edit/                       TextEdit/FileEdit, Apply, unified diff (Myers)
   textutil/                   token scanning and re-indenting for moved source text
   imports/                    a file's import names; adding the imports moved code needs
-  inspect/                    module overview, file outline + complexity + side effects, numbered source
+  inspect/                    module overview, files without bodies + complexity + side effects, numbered source
   mcpserver/                  MCP tools: one per refactoring, plus inspect, undo, check
   workspace/                  go/packages loading (incl. tests), apply, undo, errors
   locate/                     file+line+name (+column) → *ast.Ident
@@ -430,7 +437,7 @@ Tools:
 
 | Tool | What it does |
 |---|---|
-| `inspect` | No args: module overview. `file`: outline (line ranges, complexity, nesting, side effects) + numbered source. `function` or `start_line`/`end_line` to narrow. |
+| `inspect` | No args: module overview. `file`: the file without its function bodies, numbered; each body's lines, complexity, nesting, side effects. `function` or `start_line`/`end_line` to read part; `targets` for several in one call. |
 | `rename`, `extract_variable`, `inline_variable`, `extract_function`, `inline_function`, `invert_if`, `remove_else`, `add_parameter`, `remove_parameter`, `move_parameter`, `move_declaration` (and every future refactoring) | Applies one step; returns `APPLIED` + diff, or `REFUSED` + reason (nothing changed). |
 | `create_file` (and every future edit) | Applies one step that may change behavior; like a refactoring, it must leave code that type-checks. Returns `APPLIED` + diff, or `REFUSED` + reason (nothing changed). |
 | `undo` | Reverts the last applied step; repeatable. |

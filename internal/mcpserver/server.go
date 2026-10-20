@@ -3,7 +3,8 @@
 // Tools:
 //   - one tool per registered refactoring (rename, ...), which applies a
 //     single step and returns the diff or the reason it was refused;
-//   - inspect: module overview, file outline with complexity and side effects, numbered source;
+//   - inspect: module overview, a file without its function bodies, numbered
+//     source of functions or lines, several in one call;
 //   - undo: revert the last applied refactoring;
 //   - check: report type errors and optionally run go test.
 //
@@ -55,7 +56,7 @@ Which tool, by what you want to do:
 - Several steps in one call: batch. Then: check, and undo to revert a step.
 
 How to work with them:
-1. Call inspect (no arguments) for an overview, then inspect a file or function to read it with line numbers. The outline shows each function's complexity, nesting, and whether calling it has side effects (calls of a function without them are easier to move or reorder).
+1. Call inspect (no arguments) for an overview. Inspect a file to see its declarations without their bodies, with line numbers: a third to a half of reading the whole file. Then read what you will change: inspect with function, or start_line/end_line, or several at once with targets. Each function shows its complexity, nesting, and whether calling it has side effects (calls of a function without them are easier to move or reorder).
 2. To change a feature, first refactor so the change is easy, then make the change with an edit: "make the change easy, then make the easy change".
 3. Apply ONE tool per call, or, when you can plan several steps from what you have read, send them together with batch: one call, rolled back as a whole if any step is refused. A step's args are that tool's own arguments, so if your client loads tool schemas on demand, first load the schema of every tool its steps use, all in one request, rather than guessing their names. Each call returns APPLIED with what changed, or REFUSED with the reason; a refusal changes nothing, so read it and choose differently.
 4. Line numbers change after edits. Before a single step that needs them, re-inspect the code an earlier step changed. In a batch, give line numbers as they were when the batch began (from the inspect you planned it with): the batch moves them past the earlier steps. To address what an earlier step of the batch made, give a reference instead of a number: "$prev.end", "$2.start", "$helper.end+1" (see batch). Tools that target a declaration (rename, add_parameter, move_declaration, ...) also accept file and name without line: name is then a package-level symbol of file's package (Name, Type.Method or Type.Field), which stays valid after edits.
@@ -103,16 +104,18 @@ func (s *Server) MCP() *mcp.Server {
 		Name: "inspect",
 		Description: `Read Go code with line numbers. Use it before every refactoring to get exact line numbers, and again after each change.
 - No arguments: overview of the module's packages and files.
-- file: outline of the file (each declaration's line range; for functions also length, cyclomatic complexity, nesting depth, and whether calling it has side effects, with the first reason) followed by its source.
-- file + function ("Name" or "Type.Method"): the outline plus that function's source.
-- file + start_line/end_line: the outline plus those lines.`,
+- file: the file with its functions without their bodies, a third to a half of reading it whole: declarations, doc comments and types in full, and in place of each body the lines it takes, with the function's length, cyclomatic complexity, nesting depth, and whether calling it has side effects (with the first reason).
+- file + function ("Name" or "Type.Method"): that function's source.
+- file + start_line/end_line: those lines.
+- targets: several of these in one call, e.g. [{"file": "a.go", "function": "F"}, {"file": "b.go", "start_line": 10, "end_line": 30}].`,
 		InputSchema: json.RawMessage(`{
   "type": "object",
   "properties": {
     "file":       {"type": "string",  "description": "File path relative to the module root."},
     "function":   {"type": "string",  "description": "Function name, or Type.Method for a method."},
     "start_line": {"type": "integer", "description": "First line to show (1-based)."},
-    "end_line":   {"type": "integer", "description": "Last line to show (inclusive)."}
+    "end_line":   {"type": "integer", "description": "Last line to show (inclusive)."},
+    "targets":    {"type": "array", "description": "Several views in one call, in place of the arguments above: each a file, with function or start_line/end_line to read part of it.", "items": {"type": "object", "properties": {"file": {"type": "string"}, "function": {"type": "string"}, "start_line": {"type": "integer"}, "end_line": {"type": "integer"}}, "required": ["file"], "additionalProperties": false}}
   },
   "additionalProperties": false
 }`),

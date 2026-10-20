@@ -124,9 +124,75 @@ func TestFileFunction(t *testing.T) {
 	if strings.Contains(out, "35  func (c Circle)") {
 		t.Error("function view leaked past the function")
 	}
+	if strings.Contains(out, "const Pi2") {
+		t.Errorf("function view has the outline of the whole file:\n%s", out)
+	}
 	// A bare method name resolves when unambiguous.
 	if out, err := Run(ws, Query{File: "shapes.go", Function: "Area"}); err != nil || !strings.Contains(out, "35  func (c Circle) Area()") {
 		t.Errorf("method lookup failed: %v\n%s", err, out)
+	}
+}
+
+// A file is shown with its function bodies elided: the declarations, doc
+// comments and types in full, each function's metrics, and the lines to
+// ask for to read a body.
+func TestFileElidesBodies(t *testing.T) {
+	ws := load(t)
+	out, err := Run(ws, Query{File: "shapes.go"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"shapes.go  (package shapes, 35 lines)",
+		" 6  type Shape interface{ Area() float64 }",
+		"12  \tCircle struct{ R float64 }",
+		"18  // Classify buckets n.\n19  func Classify(n int) string {\n        … lines 20-32   [16 lines, complexity 6, nesting 3, no side effects]\n33  }\n",
+		"35  func (c Circle) Area() float64 { return math.Pi * c.R * c.R }\n        [1 line, complexity 1, nesting 0, no side effects]",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output lacks %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, `return "neg"`) {
+		t.Errorf("a body was shown:\n%s", out)
+	}
+}
+
+// A range shows those lines only, without the outline of the file.
+func TestFileRange(t *testing.T) {
+	out, err := Run(load(t), Query{File: "shapes.go", StartLine: 6, EndLine: 6})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "6  type Shape interface") || strings.Contains(out, "func Classify") {
+		t.Errorf("range view:\n%s", out)
+	}
+}
+
+// Several targets are read in one call; a target that is refused says so
+// in its place, and the others are still shown.
+func TestTargets(t *testing.T) {
+	ws := load(t)
+	out, err := Run(ws, Query{Targets: []Query{
+		{File: "shapes.go", Function: "Classify"},
+		{File: "shapes.go", StartLine: 6, EndLine: 6},
+		{File: "nope.go"},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"source (lines 18-33):", "6  type Shape interface", "file nope.go is not part of the module"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output lacks %q:\n%s", want, out)
+		}
+	}
+	for _, q := range []Query{
+		{File: "shapes.go", Targets: []Query{{File: "shapes.go"}}},
+		{Targets: []Query{{Targets: []Query{{File: "shapes.go"}}}}},
+	} {
+		if _, err := Run(ws, q); !refactor.IsRefusal(err) {
+			t.Errorf("%+v: want refusal, got %v", q, err)
+		}
 	}
 }
 
@@ -162,11 +228,11 @@ func LogTwice(s string) {
 		t.Fatal(err)
 	}
 	for _, want := range []string{
-		"func Log(s string)   [1 line, complexity 1, nesting 0, side effects: calls fmt.Println]",
-		"func Twice(n int) int   [1 line, complexity 1, nesting 0, no side effects]",
-		"func Count() int   [1 line, complexity 1, nesting 0, no side effects]",
-		"func Bump()   [1 line, complexity 1, nesting 0, side effects: assigns to counter]",
-		"func LogTwice(s string)   [4 lines, complexity 1, nesting 0, side effects: calls Log, which calls fmt.Println]",
+		"func Log(s string) { fmt.Println(s) }\n        [1 line, complexity 1, nesting 0, side effects: calls fmt.Println]",
+		"func Twice(n int) int { return 2 * n }\n        [1 line, complexity 1, nesting 0, no side effects]",
+		"func Count() int { return counter }\n        [1 line, complexity 1, nesting 0, no side effects]",
+		"func Bump() { counter++ }\n        [1 line, complexity 1, nesting 0, side effects: assigns to counter]",
+		"func LogTwice(s string) {\n        … lines 16-17   [4 lines, complexity 1, nesting 0, side effects: calls Log, which calls fmt.Println]\n18  }",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("outline lacks %q:\n%s", want, out)
