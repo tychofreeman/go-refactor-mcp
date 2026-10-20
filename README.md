@@ -444,6 +444,10 @@ hand or a tool got in the way.
       its edits get no stubs for the functions they call (the server
       passes `Declare`). Sessions in a cloud clone use the CLI, since the
       MCP runs on the user's own checkout, so they order steps by hand.
+      *Done (#160): `refactor batch '{"steps": [...]}'` takes the batch
+      tool's arguments, and a single edit is retried with stubs as the
+      server does (`refactorings.RunStep`, `ParseBatch`, `Declarer`, which
+      both now use).*
     - **The review's low items, 19-25:** a crash in `introduce_parameter`
       on a variadic parameter with no variadic arguments; `create_file`
       gofmt-ing any file that parses as Go; `replace_expression` not

@@ -1136,6 +1136,14 @@ helper with add_declaration, Plan's new body with replace_statements
 All through gorefactor: the test with insert_statements, the
 instructions and these notes with replace_text.
 
+## 2026-10-20: the CLI runs batches
+
+All through gorefactor's CLI: the test with create_file, `declarer` renamed
+and moved to the registry with rename and move_declaration, `RunStep`
+and `ParseBatch` added with add_declaration, the server's two bodies
+replaced with replace_statements, and the CLI's `run` with replace_text
+(one range, built as JSON with a script).
+
 ## 2026-10-20: one list of functions that run a closure
 
 All through gorefactor's CLI with replace_text: the test, the merged

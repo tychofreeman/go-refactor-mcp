@@ -207,17 +207,6 @@ func symbolNote(r refactor.Refactoring) string {
 	return "\nWithout line, name alone identifies it as a package-level symbol of file's package (Name, or Type.Method or Type.Field); unlike a line number, a name stays valid after edits."
 }
 
-// declarer is create_from_usage, which a batch runs to declare what its
-// steps call but nothing declares.
-func declarer() refactor.Refactoring {
-	for _, r := range refactorings.All() {
-		if r.Name() == "create_from_usage" {
-			return r
-		}
-	}
-	return nil
-}
-
 // workspace returns the session's workspace, loading it on first use and
 // refreshing it if files changed on disk. Callers hold s.mu.
 func (s *Server) workspace() (*workspace.Workspace, error) {
@@ -242,26 +231,11 @@ func (s *Server) refactor(r refactor.Refactoring, args json.RawMessage) *mcp.Cal
 	if err != nil {
 		return toolError(err)
 	}
-	res, err := refactor.Run(ws, r, args, refactor.Options{Compact: !s.FullDiffs})
+	text, refused, err := refactorings.RunStep(ws, r, args, refactor.Options{Compact: !s.FullDiffs})
 	if err != nil {
 		return toolError(err)
 	}
-	if _, edit := r.(refactor.Edit); edit && strings.HasPrefix(res.Refused, "the result does not type-check") {
-		// Run it as a batch, which declares what it calls.
-		b, err := refactor.RunBatch(ws, []refactor.Step{{Refactoring: r, Args: args}}, refactor.Options{Compact: !s.FullDiffs, Unchecked: true, Declare: declarer()})
-		if err != nil {
-			return toolError(err)
-		}
-		if b.Applied {
-			return textResult(b.String())
-		}
-		if b.FailedStep == 0 && len(b.Steps) > 1 {
-			res.Refused = fmt.Sprintf("the result does not type-check, so it was not applied; change the code you gave so that it compiles. With stubs for the functions it calls, the errors left were:\n  %s", strings.Join(b.Errors, "\n  "))
-		}
-		res.Notes = append(res.Notes, b.Notes...)
-	}
-	text := res.String()
-	if res.Applied {
+	if !refused {
 		text += "\nRe-inspect the changed code before the next step; line numbers may have shifted.\n"
 	}
 	return textResult(text)
@@ -326,51 +300,21 @@ func notLoading(err error) string {
 
 // batch runs the steps of one batch call; see the tool's description.
 func (s *Server) batch(args json.RawMessage) *mcp.CallToolResult {
-	var a struct {
-		Steps []struct {
-			ID   string          `json:"id"`
-			Tool string          `json:"tool"`
-			Args json.RawMessage `json:"args"`
-		} `json:"steps"`
-		Report string `json:"report"`
-		Check  string `json:"check"`
+	batch, refused := refactorings.ParseBatch(args)
+	if refused != "" {
+		return textResult(refused)
 	}
-	if err := refactor.DecodeArgs(args, &a); err != nil {
-		return textResult("REFUSED batch: " + err.Error() + "\nbatch takes:\n  steps (required): the steps, in order, each {\"tool\": ..., \"args\": {...}}; a tool's own arguments (file, name, line, ...) go in each step's args\n  report: diff (the default) or summary")
-	}
-	if a.Check != "" && a.Check != "each" && a.Check != "end" {
-		return textResult(fmt.Sprintf("REFUSED batch: check is %q; give each or end", a.Check))
-	}
-	if a.Report != "" && a.Report != "diff" && a.Report != "summary" {
-		return textResult(fmt.Sprintf("REFUSED batch: report is %q; give diff or summary", a.Report))
-	}
-	if len(a.Steps) == 0 {
-		return textResult("REFUSED batch: steps is empty; give the refactorings and edits to run, in order")
-	}
-	byName := map[string]refactor.Refactoring{}
-	for _, r := range refactorings.All() {
-		byName[r.Name()] = r
-	}
-	steps := make([]refactor.Step, len(a.Steps))
-	for i, st := range a.Steps {
-		r := byName[st.Tool]
-		if r == nil {
-			return textResult(fmt.Sprintf("REFUSED batch: step %d: %q is not a refactoring or edit; a batch runs tools such as rename, add_parameter or replace_statements, not inspect, undo, check or batch. Nothing changed.", i+1, st.Tool))
-		}
-		steps[i] = refactor.Step{ID: st.ID, Refactoring: r, Args: st.Args}
-	}
-
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	ws, err := s.workspace()
 	if err != nil {
 		return toolError(err)
 	}
-	b, err := refactor.RunBatch(ws, steps, refactor.Options{Compact: !s.FullDiffs, Unchecked: a.Check == "end", Declare: declarer()})
+	b, err := refactor.RunBatch(ws, batch.Steps, refactor.Options{Compact: !s.FullDiffs, Unchecked: batch.Unchecked, Declare: refactorings.Declarer()})
 	if err != nil {
 		return toolError(err)
 	}
-	if a.Report == "summary" {
+	if batch.Summary {
 		b.Diff = ""
 	}
 	return textResult(b.String())

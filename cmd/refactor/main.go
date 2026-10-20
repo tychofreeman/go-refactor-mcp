@@ -1,10 +1,12 @@
-// Command refactor runs one refactoring step from the command line. It
-// uses the same engine and arguments as the MCP server will, so it is the
-// easiest way to try and debug a refactoring by hand.
+// Command refactor runs a refactoring step, or a batch of them, from the
+// command line. It runs them as the MCP server does, with the same
+// arguments, and declares what an edit calls as the server does, so it is
+// the easiest way to try and debug a refactoring by hand.
 //
 //	refactor list
 //	refactor [-C dir] [-n] rename file=main.go line=7 name=t new_name=total
 //	refactor rename '{"file":"main.go","line":7,"name":"t","new_name":"total"}'
+//	refactor batch '{"steps":[{"tool":"rename","args":{...}}, ...]}'
 //
 // Exit status: 0 applied (or previewed), 2 refused, 1 error.
 package main
@@ -31,9 +33,9 @@ func run(argv []string) int {
 	dir := fs.String("C", ".", "workspace root (module directory)")
 	pattern := fs.String("p", "./...", "package pattern to load")
 	dryRun := fs.Bool("n", false, "dry run: print the diff without writing")
-	asJSON := fs.Bool("json", false, "print the result as JSON")
+	asJSON := fs.Bool("json", false, "print the result as JSON (without declaring what an edit calls)")
 	fs.Usage = func() {
-		fmt.Fprintf(fs.Output(), "usage: refactor [flags] list\n       refactor [flags] <refactoring> key=value... | '<json>'\n\nflags:\n")
+		fmt.Fprintf(fs.Output(), "usage: refactor [flags] list\n       refactor [flags] <refactoring> key=value... | '<json>'\n       refactor [flags] batch '<json>'\n\nflags:\n")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(argv); err != nil {
@@ -51,6 +53,9 @@ func run(argv []string) int {
 		}
 		return 0
 	}
+	if name == "batch" {
+		return runBatch(fs.Args()[1:], *dir, *pattern, *dryRun)
+	}
 	r, ok := refactorings.Lookup(name)
 	if !ok {
 		fmt.Fprintf(os.Stderr, "unknown refactoring %q (try: refactor list)\n", name)
@@ -67,19 +72,64 @@ func run(argv []string) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	res, err := refactor.Run(ws, r, args, refactor.Options{DryRun: *dryRun})
+	if *asJSON {
+		// The result of the step alone, without the retry that declares
+		// what an edit calls.
+		res, err := refactor.Run(ws, r, args, refactor.Options{DryRun: *dryRun})
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			return 1
+		}
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		enc.Encode(res)
+		if res.Refused != "" {
+			return 2
+		}
+		return 0
+	}
+	text, refused, err := refactorings.RunStep(ws, r, args, refactor.Options{DryRun: *dryRun})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		return 1
 	}
-	if *asJSON {
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetIndent("", "  ")
-		enc.Encode(res)
-	} else {
-		fmt.Print(res.String())
+	fmt.Print(text)
+	if refused {
+		return 2
 	}
-	if res.Refused != "" {
+	return 0
+}
+
+// runBatch runs the batch tool: argv is its arguments as one JSON object.
+func runBatch(argv []string, dir, pattern string, dryRun bool) int {
+	if dryRun {
+		fmt.Fprintln(os.Stderr, "-n does not apply to batch: a batch writes each step before the next")
+		return 1
+	}
+	if len(argv) != 1 {
+		fmt.Fprintln(os.Stderr, `batch takes one JSON object: '{"steps":[{"tool":...,"args":{...}}, ...]}'`)
+		return 1
+	}
+	batch, refused := refactorings.ParseBatch(json.RawMessage(argv[0]))
+	if refused != "" {
+		fmt.Println(refused)
+		return 2
+	}
+	ws, err := workspace.Load(dir, pattern)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	b, err := refactor.RunBatch(ws, batch.Steps, refactor.Options{Unchecked: batch.Unchecked, Declare: refactorings.Declarer()})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
+		return 1
+	}
+	if batch.Summary {
+		b.Diff = ""
+	}
+	fmt.Print(b.String())
+	if !b.Applied {
 		return 2
 	}
 	return 0
