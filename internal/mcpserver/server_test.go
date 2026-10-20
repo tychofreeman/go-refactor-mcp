@@ -387,6 +387,27 @@ func TestStepThatBreaksLoadingIsRefused(t *testing.T) {
 	mustContain(t, "undo", out, "Nothing to undo")
 }
 
+// undo only needs the files, so it works while the module does not load:
+// here go.mod was broken by hand after a rename.
+func TestUndoWhileTheModuleDoesNotLoad(t *testing.T) {
+	cs, dir := setup(t)
+	calc := filepath.Join(dir, "calc", "calc.go")
+	before, _ := os.ReadFile(calc)
+	out, _ := call(t, cs, "rename", map[string]any{"file": "calc/calc.go", "name": "Apply", "new_name": "Scale"})
+	mustContain(t, "rename", out, "APPLIED")
+	gomod := filepath.Join(dir, "go.mod")
+	if err := os.WriteFile(gomod, []byte("modul example.com/demo\n\ngo 1.22\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, _ = call(t, cs, "undo", map[string]any{})
+	mustContain(t, "undo", out, "UNDONE rename", "The module does not load")
+	if got, _ := os.ReadFile(calc); string(got) != string(before) {
+		t.Errorf("rename not undone:\n%s", got)
+	}
+	out, _ = call(t, cs, "undo", map[string]any{})
+	mustContain(t, "undo", out, "Nothing to undo")
+}
+
 // replace_text edits text no other tool reaches, such as a string
 // literal, and, addressing text rather than lines, works after an earlier
 // step of a batch changed the file.

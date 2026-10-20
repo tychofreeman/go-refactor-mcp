@@ -495,7 +495,9 @@ func (w *Workspace) Squash(n int, label string) (Change, error) {
 }
 
 // Undo reverts the most recent change and reloads. It refuses if a file
-// was modified on disk since the change was applied.
+// was modified on disk since the change was applied, and then returns no
+// change. If the files are restored but reloading them fails, it returns
+// the inverse change with the error.
 func (w *Workspace) Undo() (Change, error) {
 	if len(w.undo) == 0 {
 		return Change{}, fmt.Errorf("nothing to undo")

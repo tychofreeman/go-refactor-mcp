@@ -127,6 +127,8 @@ results are in `docs/cost-history.md`.
   Items 6-7 (#139): `workspace.Apply` reloads before pushing the change,
   and when the module no longer loads it puts the files back and returns
   `ErrBreaksLoading`, which `Run` refuses; a batch then rolls back its
-  earlier steps. Still open from 7: `undo` while the module does not
-  load, which the server's refresh before every call blocks. Change only
+  earlier steps. The `undo` tool (#140) goes ahead when the refresh
+  before it fails, since it needs only the files, and says the module
+  does not load. The review's fix order is done; next by severity are
+  items 1, 3-5. Change only
   this repo copy: the Claude Doc linked from #130 is not kept up to date.

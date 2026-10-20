@@ -1136,6 +1136,15 @@ helper with add_declaration, Plan's new body with replace_statements
 All through gorefactor: the test with insert_statements, the
 instructions and these notes with replace_text.
 
+## 2026-10-20: undo while the module does not load
+
+All through gorefactor's CLI: the test and `notLoading` with
+add_declaration, the handler with replace_statements (`function`), the
+tool description and docs with replace_text. An edit through the CLI
+gets no stubs for functions it calls (the server passes `Declare`; the
+CLI does not), so the handler that called `notLoading` was refused until
+`notLoading` was declared.
+
 ## 2026-10-20: a step that breaks go.mod, items 6-7 of the review
 
 All through gorefactor's CLI: `Apply`'s body with replace_statements
