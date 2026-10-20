@@ -1,0 +1,1 @@
+is not evaluated on every call (return "<nil>" (at a.go:7:3) returns before it)

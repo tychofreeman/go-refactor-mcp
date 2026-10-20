@@ -1,0 +1,1 @@
+is not evaluated on every call (return 0 (at a.go:5:3) returns before it)

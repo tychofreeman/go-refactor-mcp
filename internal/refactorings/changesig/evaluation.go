@@ -50,8 +50,8 @@ func riskOf(info *types.Info, n ast.Node, eff *analysis.Effects) (r risk, ok boo
 			r.why, r.shared = "reads a map", true
 		case *types.Slice, *types.Pointer: // a pointer to an array
 			r.why, r.shared, r.panics = "could panic: it indexes", true, true
-		default:
-			if info.Types[n.Index].Value == nil {
+		default: // an array, or a string, which is only checked when it is constant too
+			if info.Types[n.Index].Value == nil || analysis.IsString(tv.Type) && tv.Value == nil {
 				r.why, r.panics = "could panic: it indexes", true
 			}
 		}
@@ -140,8 +140,8 @@ func firstRisk(info *types.Info, e ast.Node, match func(risk) bool, eff *analysi
 // checkEvaluation checks that evaluating expr at the call gives what the
 // body got, and does what the body did. expr must have no side effects.
 // If it can panic or reads memory that other code can change, it must be
-// evaluated at entry: on every call, once, and after nothing that could
-// change that memory or make the outcome differ. A panic before it is
+// evaluated at entry: on every call (no return before it), once, and after
+// nothing that could change that memory or make the outcome differ. A panic before it is
 // allowed only when both could only be nil dereferences, which panic
 // alike.
 func (t *target) checkEvaluation(info *types.Info, file *ast.File, expr ast.Expr, q string) error {
@@ -191,7 +191,10 @@ func (t *target) checkEvaluation(info *types.Info, file *ast.File, expr ast.Expr
 		}
 		r, risky := riskOf(info, n, t.effects())
 		write := t.writes(fa, n)
+		_, isReturn := n.(*ast.ReturnStmt)
 		switch {
+		case isReturn && canPanic != nil:
+			err = refactor.Refusef("%s %s, and it is not evaluated on every call (%s (at %s) returns before it)", q, canPanic.why, t.brief(n), t.ws.Position(n.Pos()))
 		case (r.effect || write) && shared != nil:
 			err = refactor.Refusef("%s reads memory that %s (at %s) could change before it", q, t.brief(n), t.ws.Position(n.Pos()))
 		case r.effect && canPanic != nil:

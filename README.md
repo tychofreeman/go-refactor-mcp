@@ -1313,7 +1313,8 @@ value is the same at both points and evaluating it does the same:
   unexported in another package, is refused.
 
 An expression that could panic (a read through a pointer, indexing,
-slicing, a type assertion, division by a variable), or that reads memory
+including a constant index into a string, slicing, a type assertion,
+division by a variable), or that reads memory
 other code can change (through a pointer, a slice or map element, the
 length of a map, a package variable), is allowed only when it is
 evaluated *at entry*, which is what `m.decl` at the top of a method
@@ -1321,7 +1322,9 @@ usually is:
 
 - on every call: not inside an `if` or `else`, a `case`, the right
   operand of `&&` or `||`, nor (once per call) a loop, a function
-  literal, or a function with `goto`;
+  literal, or a function with `goto`; and, for one that could panic, after
+  no `return` (so `n.name` after `if n == nil { return "<nil>" }` stays
+  in the body, where the guard protects it);
 - after nothing that could change it or the outcome: no call or channel
   operation before it, no write to anything but a local variable whose
   address is never taken, and no possible panic, unless both could only

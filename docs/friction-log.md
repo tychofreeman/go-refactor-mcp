@@ -1136,6 +1136,12 @@ helper with add_declaration, Plan's new body with replace_statements
 All through gorefactor: the test with insert_statements, the
 instructions and these notes with replace_text.
 
+## 2026-10-20: introduce_parameter after a guard, item 2 of the review
+
+All through gorefactor's CLI: the two changes to `checkEvaluation` and
+`riskOf`, and these notes, with replace_text. By hand: the golden cases
+(`in/`, `args.json`, `refused.txt`; `out/` from `-update`).
+
 ## 2026-10-20: expressions that can panic, item 8 of the review
 
 All through gorefactor's CLI: `analysis.MayPanic`, its helpers and its
