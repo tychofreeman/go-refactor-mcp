@@ -287,6 +287,19 @@ func TestBatchTranslatesLines(t *testing.T) {
 		t.Errorf("got:\n%s\nwant:\n%s", got, want)
 	}
 
+	// A line given by another name (line_no) is translated too.
+	ws, _ = setup(t, src)
+	b, err = refactor.RunBatch(ws, []refactor.Step{
+		{Refactoring: markLine{}, Args: json.RawMessage(`{"file": "m.go", "line": 3}`)},
+		{Refactoring: markLine{}, Args: json.RawMessage(`{"file": "m.go", "line_no": 5}`)},
+	}, refactor.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !b.Applied || b.Steps[1].Summary != "marked line 6" || !strings.Contains(strings.Join(b.Steps[1].Notes, "\n"), `took "line_no" as line`) {
+		t.Errorf("want line_no taken as line and translated to 6, got %+v", b.Steps)
+	}
+
 	// A line an earlier step rewrote cannot be addressed.
 	ws, path = setup(t, src)
 	b, err = refactor.RunBatch(ws, []refactor.Step{
@@ -385,9 +398,11 @@ Nothing changed.
 // markLine puts a "// mark" line before the line its arguments name.
 type markLine struct{}
 
-func (markLine) Name() string                 { return "mark_line" }
-func (markLine) Description() string          { return "" }
-func (markLine) InputSchema() json.RawMessage { return json.RawMessage(`{}`) }
+func (markLine) Name() string        { return "mark_line" }
+func (markLine) Description() string { return "" }
+func (markLine) InputSchema() json.RawMessage {
+	return json.RawMessage(`{"type": "object", "properties": {"file": {}, "line": {}, "text": {}}}`)
+}
 func (markLine) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
 	var a struct {
 		File string `json:"file"`

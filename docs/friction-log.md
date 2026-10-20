@@ -1136,6 +1136,12 @@ helper with add_declaration, Plan's new body with replace_statements
 All through gorefactor: the test with insert_statements, the
 instructions and these notes with replace_text.
 
+## 2026-10-20: argument aliases in a batch
+
+All through `refactor batch`. The test's first try used `slices`, which
+the test file does not import, and replace_text does not add imports;
+`strings` instead.
+
 ## 2026-10-20: lines gofmt realigned keep their place
 
 All through `refactor batch`: the test with replace_text, the fix with
