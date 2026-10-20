@@ -106,6 +106,24 @@ results are in `docs/cost-history.md`.
   done (#124); they give the body's lines and, for `replace_statements`,
   `function`. Still open: one worked example of a batch in the
   instructions.
+- Third-party A/B (roadmap item 16): `eval-tasks/third-party/` has 172
+  candidate PRs from five large repos, and `ab.json` there the first ten
+  tasks, built by `tasks.py` from `tasks.json` (prompts by hand) and
+  validated: at the parent `go vet` passes and the hidden tests fail, at
+  the PR all pass. Not yet run. What making them taught:
+  - Read each hidden test before writing a prompt. "Black-box" only
+    means it compiles against the old code: one compared a function's
+    result with `reflect.DeepEqual` (pins a `[]string` return), one only
+    checked a default list. Prompts must give every exact string the
+    tests check (error messages, config names).
+  - Hidden test files are the PR's whole files, some internal; every
+    prompt says hidden tests use the existing names and signatures, or a
+    refactoring run would fail for refactoring.
+  - Fixtures under `testdata/` belong with the tests (fixed in
+    verify.py on Oct 20; four candidates re-verified).
+  - The GitHub API is closed to repos outside the session; read PRs and
+    issues with WebFetch. Gitea's tests refuse to run as root (use
+    `--as-user`), and verifying fills the disk (`--clean-cache`).
 - Sessions in a cloud clone have no MCP on that clone (the user's MCP
   runs on their own checkout); build `cmd/refactor` from the branch and
   use it for every step. It has no `batch`, so steps go one at a time.

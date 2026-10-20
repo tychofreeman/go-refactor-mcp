@@ -10,6 +10,8 @@ change.
   verification where it has one, and for one with black-box tests the
   hidden check: the test files and the `go test` command.
 - `candidates.py`, `verify.py`, `report.py`: how the list was made (below).
+- `tasks.json`, `tasks.py`, `ab.json`: A/B tasks made from candidates
+  (below).
 
 ## Summary
 
@@ -47,9 +49,13 @@ Go code in two or more packages and change tests. Each records:
 - **Issues** the commit says it closes, which are where prompts can come
   from.
 
-**Verification** (`verify.py`): the PR's test files are put on its parent
-commit, and the tests the PR added or changed are compiled and run there,
-then run again at the PR's commit. Each test package gets one of:
+**Verification** (`verify.py`): the PR's test files, and the fixtures it
+added or changed under `testdata/`, are put on its parent commit, and the
+tests the PR added or changed are compiled and run there, then run again
+at the PR's commit. (Until Oct 20 the fixtures were left out, so a test
+that reads a new one failed before the PR whatever the code did; the four
+verified candidates with such fixtures were verified again.) Each test
+package gets one of:
 
 - **black-box:** compiles against the old code, fails there, passes after
   the PR. These tests check behavior, so the prompt can describe the
@@ -67,33 +73,52 @@ PR's own tests do. Otherwise it is **needs API** if any package is,
 **not fail-to-pass**, or **broken** (its tests fail at the PR's commit, or it
 added no test functions).
 
-## Turning a candidate into a task
+## Tasks
 
-A task for `cmd/refactor-ab` (see `../ab.json`) needs a clone of the
-repository with history back to the candidate's parent:
+`ab.json` holds A/B tasks made from candidates; run them with
+`cmd/refactor-ab -tasks eval-tasks/third-party/ab.json`. It is built from
+`tasks.json`, which holds what is written by hand: each task's name, the
+candidate (repository and commit) and the prompt.
 
-```json
-{
-  "name": "tp-hugo-render-context",
-  "dir": "/path/to/clones/gohugoio_hugo",
-  "rev": "<parent>",
-  "prompt": "<the feature, from the issue>",
-  "tests": "eval-tasks/third-party/tests/tp-hugo-render-context",
-  "check": "<hidden_check.command>"
-}
+```sh
+cd eval-tasks/third-party
+python3 tasks.py clone        # blobless clones of the five repositories into clones/
+python3 tasks.py build        # ab.json, and each task's hidden tests in tests/NAME/
+python3 tasks.py validate     # each check fails at the parent and passes at the PR
 ```
 
-- `tests` is a directory holding the candidate's `hidden_check.files` at
-  their paths, from the PR's commit:
-  `git -C CLONE archive COMMIT -- FILES | tar -x -C DIR`. Only the black-box
-  packages' test files go there: a file that uses a name the PR added would
-  fail to compile against any design that named it differently.
-- `check` is `hidden_check.command`, which runs exactly the tests the PR
-  added or changed in those packages. Add `go vet` of the changed packages
-  if the run should also leave clean code.
-- The prompt comes from the issue (the `issues` field, or the PR), written
-  as a request, not as the diff. For a needs-API candidate it must also
-  name what the tests call.
+`clones/` and `tests/` are not committed: the tests belong to their
+projects, and `build` extracts them again. Each task:
+
+- **starts** at the PR's parent (`rev`), in a copy of the clone (`dir`);
+- **is told** the feature as a request, from the PR and its issues, with
+  every user-visible detail the hidden tests check (an error message, a
+  config name) and nothing of the PR's design; and, the same for every
+  task, that tests it cannot see use the existing functions, types and
+  fields by their current names, so it must keep those. The hidden test
+  files are the PR's whole files, and some are internal tests: a run that
+  renamed what they use would fail however well it delivered the feature,
+  which would count against refactoring;
+- **is checked** by `go vet ./...` (everything still builds, tests
+  included) and then the tests the PR added or changed in its black-box
+  packages, with the PR's test files and fixtures copied over the copy
+  (`tests`).
+
+`validate` makes the copies as the harness does: at the parent `go vet`
+must pass and the hidden tests fail, and at the PR's commit the whole
+check must pass.
+
+The first ten, two per repository, one that refactored on the way where
+there is one:
+
+TASK_TABLE
+
+Two candidates were set aside while writing these. OpenTofu #4680's test
+compiles against the old code only because it compares the result with
+`reflect.DeepEqual`; it checks that a function returns `[]string`, which
+no prompt should dictate. Gitea #39785's test only checks that a name is
+in a default list, which a one-line change passes without the feature.
+Each candidate's hidden test needs that reading before it becomes a task.
 
 ## Environment
 

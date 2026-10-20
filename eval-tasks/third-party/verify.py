@@ -160,7 +160,7 @@ def verify(repo, c, timeout):
         return dict(rec, outcome="broken", why="no added or changed test functions")
 
     checkout(repo, parent)
-    put_tests(repo, commit, tests)
+    put_tests(repo, commit, tests + c.get("test_data", []))
     steps = []
     # Each package's tests are judged on their own: one package's tests may
     # use a helper the PR added while another's check behavior only.

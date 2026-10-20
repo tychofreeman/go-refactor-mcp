@@ -1198,3 +1198,10 @@ scripts, a README and JSON data, and this session's gorefactor server ran
 on the linked computer, not on this checkout. The roadmap and these notes
 were edited with Edit for the same reason; replace_text would have done
 them in a session with the server on the checkout.
+
+## 2026-10-20: the first third-party A/B tasks
+
+By hand, and not a gorefactor gap: `tasks.py`, the fixes to the other
+scripts, `tasks.json` and the docs are Python, JSON and Markdown, and no
+Go changed. As in the PR before, the gorefactor server of this cloud
+session ran on the linked computer, not on this checkout.

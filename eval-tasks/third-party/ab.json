@@ -1,0 +1,82 @@
+[
+  {
+    "name": "tp-cli-extension-env",
+    "dir": "clones/cli_cli",
+    "rev": "ff28e72b59be",
+    "prompt": "An extension can be run as `gh <name>` or directly as `./gh-<name>`, and today it cannot tell which. When gh runs an extension, of any kind (script or binary), set `GH_EXTENSION=1` in the extension's environment. Keep the rest of the environment the extension gets now, and override a `GH_EXTENSION` that is already set to another value. Running the extension directly is unchanged. Also document the variable in `gh help environment`.\n\nTests you cannot see will check this. They use the existing functions, types and fields by their current names and signatures, so keep those as they are; refactor around them as you need.",
+    "tests": "tests/tp-cli-extension-env",
+    "check": "go vet ./... && go test -count=1 -run '^(TestHelperProcess|TestManager_Dispatch_binary|TestManager_Dispatch_ghExtensionEnv)$' ./pkg/cmd/extension"
+  },
+  {
+    "name": "tp-cli-comments-json",
+    "dir": "clones/cli_cli",
+    "rev": "606cda4a9b1a",
+    "prompt": "`gh issue view`, `gh pr view` and `gh discussion view` accept `--comments` together with `--json`, but the JSON output silently ignores `--comments`. Reject that combination in all three commands, the way they already reject other conflicting flags, with the error `specify only one of --comments or --json`. The `--comments` search qualifier of `gh search` must keep working with `--json`.\n\nTests you cannot see will check this. They use the existing functions, types and fields by their current names and signatures, so keep those as they are; refactor around them as you need.",
+    "tests": "tests/tp-cli-comments-json",
+    "check": "go vet ./... && go test -count=1 -run '^(TestNewCmdView)$' ./pkg/cmd/discussion/view && go test -count=1 -run '^(TestNewCmdView)$' ./pkg/cmd/issue/view && go test -count=1 -run '^(Test_NewCmdView)$' ./pkg/cmd/pr/view"
+  },
+  {
+    "name": "tp-hugo-render-context",
+    "dir": "clones/gohugoio_hugo",
+    "rev": "df4ac34856bb",
+    "prompt": "A page's `.Render VIEW` renders the page with the view template VIEW, always with the page as the template's data context. Let it take an optional context, as `partial` does: `PAGE.Render VIEW [CONTEXT]`. When CONTEXT is given, it replaces the page as the template's data context; without it, rendering is as before, and `.Render` without a view still fails. With more than two arguments, fail with an error containing `too many arguments, expected VIEW [CONTEXT]`. When the view argument is not a string, fail with an error containing `failed to convert view argument to string: ` followed by the error from `cast.ToStringE`.\n\nTests you cannot see will check this. They use the existing functions, types and fields by their current names and signatures, so keep those as they are; refactor around them as you need.",
+    "tests": "tests/tp-hugo-render-context",
+    "check": "go vet ./... && go test -count=1 -run '^(TestRenderWithContext|TestRenderWithContextErrors|TestRenderWithoutArgument)$' ./hugolib"
+  },
+  {
+    "name": "tp-hugo-frame-count",
+    "dir": "clones/gohugoio_hugo",
+    "rev": "df8badea25f9",
+    "prompt": "Add `FrameCount` to image resources, every resource for which `reflect.IsImageResourceWithMeta` is true, so templates can use `$img.FrameCount`. It is the number of frames in the image: more than 1 for an animated image (GIF, WebP, AVIF), otherwise 1. For a processed image it counts the frames of the image Hugo wrote: resizing an animated GIF keeps its frames, also when converting it to WebP, while a JPEG has 1, and so does a processed AVIF, since Hugo writes AVIF with one frame. For JPEG XL it may always be 1.\n\nTests you cannot see will check this. They use the existing functions, types and fields by their current names and signatures, so keep those as they are; refactor around them as you need.",
+    "tests": "tests/tp-hugo-frame-count",
+    "check": "go vet ./... && go test -count=1 -run '^(TestImageFrameCount)$' ./resources/images"
+  },
+  {
+    "name": "tp-lazygit-stack-order",
+    "dir": "clones/jesseduffield_lazygit",
+    "rev": "a1f11020545a",
+    "prompt": "With the branch sort order `date`, branches are sorted by committer date. Rebasing a stack of branches gives all their tip commits the same committer date, and git then falls back to alphabetical order, so the stack shows up scrambled. Within each group of branches that share a committer date, order them so that a branch comes before the branches it is based on (its ancestors), and otherwise keep their current order. Do this for local branches (`git.localBranchSortOrder`) and for remote branches (`git.remoteBranchSortOrder`). The checked-out branch stays first, and groups with different dates stay in date order.\n\nTests you cannot see will check this. They use the existing functions, types and fields by their current names and signatures, so keep those as they are; refactor around them as you need.",
+    "tests": "tests/tp-lazygit-stack-order",
+    "check": "go vet ./... && go test -count=1 -run '^TestIntegration$/^branch$/^sort_local_branches_in_stack_order$' ./pkg/integration/clients/ && go test -count=1 -run '^TestIntegration$/^branch$/^sort_remote_branches_in_stack_order$' ./pkg/integration/clients/"
+  },
+  {
+    "name": "tp-lazygit-cherry-pick-worktrees",
+    "dir": "clones/jesseduffield_lazygit",
+    "rev": "fc85e9353cb5",
+    "prompt": "Commits copied for cherry-picking (`C` in the commits view) are forgotten when you switch to another worktree, so you cannot paste them there (`V`). Keep the copied commits when switching to another worktree or repo, so that the information view still shows how many commits are copied and pasting them in the other worktree works. If the other repo does not have the copied commits, pasting may fail, and the error is shown.\n\nTests you cannot see will check this. They use the existing functions, types and fields by their current names and signatures, so keep those as they are; refactor around them as you need.",
+    "tests": "tests/tp-lazygit-cherry-pick-worktrees",
+    "check": "go vet ./... && go test -count=1 -run '^TestIntegration$/^cherry_pick$/^cherry_pick_across_worktrees$' ./pkg/integration/clients/"
+  },
+  {
+    "name": "tp-tofu-otel-resource-env",
+    "dir": "clones/opentofu_opentofu",
+    "rev": "9ffbb1c211bf",
+    "prompt": "OpenTofu's tracing is meant to follow the usual OpenTelemetry conventions, but the resource it describes itself with (`traceattrs.NewResource`) ignores the standard `OTEL_RESOURCE_ATTRIBUTES` environment variable. Honor the standard OpenTelemetry resource environment variables, `OTEL_RESOURCE_ATTRIBUTES` and `OTEL_SERVICE_NAME`: attributes from the environment take precedence over detected ones (such as `host.name`) and over the service name OpenTofu passes in, which stays the default.\n\nTests you cannot see will check this. They use the existing functions, types and fields by their current names and signatures, so keep those as they are; refactor around them as you need.",
+    "tests": "tests/tp-tofu-otel-resource-env",
+    "check": "go vet ./... && go test -count=1 -run '^(TestNewResource|TestNewResourceWithAttrsFromEnv)$' ./internal/tracing/traceattrs"
+  },
+  {
+    "name": "tp-tofu-lint-unused",
+    "dir": "clones/opentofu_opentofu",
+    "rev": "2c07e652ba52",
+    "prompt": "Add a linting rule, alongside the core rules in `internal/linting/corelinting`, that warns about input variables and locals that nothing references. For now it covers only the root module: unused variables and locals inside called modules are not reported. A variable or local is used if anything in the root module refers to it, such as an output, a resource, another local, or an argument of a module call. The warning is a lint diagnostic like the other rules', reported by `tofu validate` when linting is enabled.\n\nTests you cannot see will check this. They use the existing functions, types and fields by their current names and signatures, so keep those as they are; refactor around them as you need.",
+    "tests": "tests/tp-tofu-lint-unused",
+    "check": "go vet ./... && go test -count=1 -run '^(TestContext2Validate_unusedLocal|TestContext2Validate_unusedVariable)$' ./internal/tofu"
+  },
+  {
+    "name": "tp-gitea-npm-version",
+    "dir": "clones/go-gitea_gitea",
+    "rev": "d93bd06d0c29",
+    "prompt": "Gitea's npm registry answers `GET /{package}/{version}` with 501 Not Implemented. Implement it as the npm registry API specifies: `{version}` is a version number or a dist-tag, and the response is that version's metadata, the same object as the version's entry in the package document, with `_id` set to `name@version`. Answer 404 when the version or tag does not exist. Also fill `repository` on each version in the package document from that version's metadata, and leave the field out entirely (not an empty object) for versions that declare no repository; the package document itself has no top-level `repository`.\n\nTests you cannot see will check this. They use the existing functions, types and fields by their current names and signatures, so keep those as they are; refactor around them as you need.",
+    "tests": "tests/tp-gitea-npm-version",
+    "check": "go vet ./... && go test -count=1 -run '^(TestCreatePackageMetadataResponse)$' ./routers/api/packages/npm && go test -count=1 -run '^(TestPackageNpm)$' ./tests/integration"
+  },
+  {
+    "name": "tp-gitea-archive-etag",
+    "dir": "clones/go-gitea_gitea",
+    "rev": "31b4d79a8464",
+    "prompt": "Support conditional requests on streamed repository archives (when `[repository].STREAM_ARCHIVES` is on): send a weak ETag (`W/\"...\"`) that identifies the archive's content, so it differs for another commit or repository, another archive format, other requested paths (`?path=`), and settings that change the archive such as `PREFIX_ARCHIVE_FILES`; and answer 304 Not Modified when `If-None-Match` matches. Downloads that do not stream are unchanged. In the shared ETag handling in `modules/httpcache`, also support `If-None-Match: *`, which matches any current representation, and compare ETags weakly, as If-None-Match requires: `W/\"x\"` and `\"x\"` match each other.\n\nTests you cannot see will check this. They use the existing functions, types and fields by their current names and signatures, so keep those as they are; refactor around them as you need.",
+    "tests": "tests/tp-gitea-archive-etag",
+    "check": "go vet ./... && go test -count=1 -run '^(TestHandleGenericETagCache)$' ./modules/httpcache && go test -count=1 -run '^(TestRepoDownloadArchive)$' ./tests/integration"
+  }
+]
