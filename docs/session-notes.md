@@ -60,10 +60,15 @@ results are in `docs/cost-history.md`.
 
 ## Where the work stands (2026-10-20)
 
-- #121 (inspect without bodies, `targets`) needs measuring: rerun the
-  feature tasks and compare the read cost per run, weighted by turns,
-  with `ab-features-fixes` and `ab-features-coaching`. Whole-file reads
-  were 54-57% of read cost, greps 12-23%.
+- #121 (inspect without bodies, `targets`) was measured in
+  `ab-features-skeleton`: more `inspect`, fewer whole-file Reads, but the
+  same read cost, since the model read bodies with wide `sed -n` ranges
+  in Bash. Next test: a line about reading in the mcp arm's CLAUDE.md
+  (`eval-tasks/claude-md-refactor-first/mcp.md`), in a new directory so
+  earlier runs stay comparable.
+- PR #122 was merged without its second commit (this file), which was
+  pushed after the user had seen the PR. Put later work in a new PR
+  rather than adding commits to one the user may already be merging.
 - Open in roadmap item 15: refusals for ranges that start at the `func`
   line; one worked example of a batch in the instructions.
 - Smaller known bugs: `create_from_usage` infers odd result types for
