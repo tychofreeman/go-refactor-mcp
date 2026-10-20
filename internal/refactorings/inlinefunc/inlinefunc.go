@@ -17,6 +17,7 @@ import (
 	"go/token"
 	"go/types"
 	"os"
+	"sort"
 	"strings"
 
 	"golang.org/x/tools/go/packages"
@@ -44,7 +45,8 @@ Use it to undo an extraction that did not help, or to remove a small helper whos
 Identify the call by file, line and the called function's name (pass column if the name appears more than once on the line).
 The call can be a statement (f(a)), the whole right side of an assignment or declaration (x, err := f(a); var x = f(a)), a return (return f(a)), or part of an expression if the function's body is a single return statement. Parameters are replaced by the arguments where that is safe, and otherwise declared at the top of the inlined code (p := arg).
 Refuses if the function is generic or variadic, comes from another package, is called through an interface or a function value, uses defer or recover, has named results, or returns early (except when the call is "return f(a)"); if a name the body uses would mean something else at the call; or if a name the inlined code declares clashes with one in the calling block (rename one first).
-The function is deleted only if it is unexported and nothing else refers to it; pass keep_function to keep it anyway.`
+The function is deleted only if it is unexported and nothing else refers to it; pass keep_function to keep it anyway.
+With all_calls, every call to the function in the module is inlined, one after another, and then the function is deleted (unless keep_function); give file and name (Name or Type.Method), or the line of any call. If one call cannot be inlined, none is.`
 }
 
 func (*InlineFunction) InputSchema() json.RawMessage {
@@ -52,12 +54,13 @@ func (*InlineFunction) InputSchema() json.RawMessage {
   "type": "object",
   "properties": {
     "file":          {"type": "string",  "description": "Path of the file with the call, relative to the module root."},
-    "line":          {"type": "integer", "description": "1-based line of the call."},
+    "line":          {"type": "integer", "description": "1-based line of the call. With all_calls, optional: the line of any call or of the declaration."},
     "name":          {"type": "string",  "description": "Name of the called function or method (for a method call x.m(), m)."},
     "column":        {"type": "integer", "description": "Optional 1-based column of the name, only needed if it appears more than once on the line."},
-    "keep_function": {"type": "boolean", "description": "Keep the function even if no other call to it is left. Default false."}
+    "keep_function": {"type": "boolean", "description": "Keep the function even if no other call to it is left. Default false."},
+    "all_calls":     {"type": "boolean", "description": "Inline every call to the function in the module, then delete it (unless keep_function). Without line, name is the function (Name or Type.Method) of file's package."}
   },
-  "required": ["file", "line", "name"],
+  "required": ["file", "name"],
   "additionalProperties": false
 }`)
 }
@@ -68,6 +71,7 @@ type args struct {
 	Column       int    `json:"column,omitempty"`
 	Name         string `json:"name"`
 	KeepFunction bool   `json:"keep_function,omitempty"`
+	AllCalls     bool   `json:"all_calls,omitempty"`
 }
 
 // shape is how the call is used, which decides what replaces it.
@@ -152,6 +156,107 @@ func (*InlineFunction) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refa
 	return x.plan()
 }
 
+// Expand returns, with all_calls, one step per call to the function: all
+// but the last keep it, so the last deletes it unless keep_function.
+func (r *InlineFunction) Expand(ws *workspace.Workspace, raw json.RawMessage) ([]refactor.Step, error) {
+	var a args
+	if err := refactor.DecodeArgs(raw, &a); err != nil {
+		return nil, err
+	}
+	if !a.AllCalls {
+		return nil, nil
+	}
+	pkg, id, err := locate.Ident(ws, locate.IdentQuery{File: a.File, Line: a.Line, Column: a.Column, Name: a.Name})
+	if err != nil {
+		return nil, err
+	}
+	fn, ok := pkg.TypesInfo.Defs[id].(*types.Func)
+	if !ok {
+		fn, ok = pkg.TypesInfo.Uses[id].(*types.Func)
+	}
+	if !ok {
+		return nil, refactor.Refusef("%q at %s is not a function or method", id.Name, ws.Position(id.Pos()))
+	}
+	calls, decl := callsOf(ws, fn)
+	if len(calls) == 0 {
+		return nil, refactor.Refusef("nothing calls %s, so there is no call to inline", fn.Name())
+	}
+	for i, c := range calls {
+		if c.Filename == decl.Filename && decl.Offset <= c.Offset && c.Offset < decl.end {
+			return nil, refactor.Refusef("%s calls itself (at %s:%d), so its calls cannot all be inlined; inline the calls outside it one at a time", fn.Name(), ws.Rel(c.Filename), c.Line)
+		}
+		if i > 0 && c.Filename == calls[i-1].Filename && c.Line == calls[i-1].Line {
+			return nil, refactor.Refusef("two calls to %s are on the same line, %s:%d (columns %d and %d); inline them one at a time, giving column", fn.Name(), ws.Rel(c.Filename), c.Line, calls[i-1].Column, c.Column)
+		}
+	}
+	var steps []refactor.Step
+	for i, c := range calls {
+		b, err := json.Marshal(args{File: ws.Rel(c.Filename), Line: c.Line, Column: c.Column, Name: fn.Name(), KeepFunction: a.KeepFunction || i < len(calls)-1})
+		if err != nil {
+			return nil, err
+		}
+		steps = append(steps, refactor.Step{Refactoring: r, Args: b})
+	}
+	return steps, nil
+}
+
+// declSpan is where a function's declaration is: its file, and the byte
+// range from Offset to end.
+type declSpan struct {
+	token.Position
+	end int
+}
+
+// callsOf returns the calls to fn in the workspace's packages, by file
+// and position, and where fn is declared.
+func callsOf(ws *workspace.Workspace, fn *types.Func) ([]token.Position, declSpan) {
+	key := ws.Fset.Position(fn.Pos())
+	same := func(p token.Pos) bool {
+		q := ws.Fset.Position(p)
+		return q.Filename == key.Filename && q.Offset == key.Offset
+	}
+	var decl declSpan
+	seen := map[token.Position]bool{}
+	var calls []token.Position
+	for _, p := range ws.Pkgs {
+		if p.TypesInfo == nil {
+			continue
+		}
+		for _, f := range p.Syntax {
+			ast.Inspect(f, func(n ast.Node) bool {
+				switch n := n.(type) {
+				case *ast.FuncDecl:
+					if same(n.Name.Pos()) {
+						decl = declSpan{ws.Fset.Position(n.Pos()), ws.Fset.Position(n.End()).Offset}
+					}
+				case *ast.CallExpr:
+					id, ok := n.Fun.(*ast.Ident)
+					if sel, isSel := n.Fun.(*ast.SelectorExpr); isSel {
+						id, ok = sel.Sel, true
+					}
+					if !ok {
+						return true
+					}
+					if o := p.TypesInfo.Uses[id]; o != nil && same(o.Pos()) {
+						if pos := ws.Fset.Position(id.Pos()); !seen[pos] {
+							seen[pos] = true
+							calls = append(calls, pos)
+						}
+					}
+				}
+				return true
+			})
+		}
+	}
+	sort.Slice(calls, func(i, j int) bool {
+		if calls[i].Filename != calls[j].Filename {
+			return calls[i].Filename < calls[j].Filename
+		}
+		return calls[i].Offset < calls[j].Offset
+	})
+	return calls, decl
+}
+
 func (x *inliner) plan() (*refactor.Plan, error) {
 	steps := []func() error{
 		x.findCall, x.findCallee, x.scanBody, x.decideShape, x.decideMerges,
@@ -217,7 +322,7 @@ func (x *inliner) plan() (*refactor.Plan, error) {
 func (x *inliner) findCall() error {
 	name := x.id.Name
 	if o, ok := x.info.Defs[x.id].(*types.Func); ok {
-		return refactor.Refusef("%s is the declaration of %q; give the line of a call to it", x.ws.Position(x.id.Pos()), o.Name())
+		return refactor.Refusef("%s is the declaration of %q; give the line of a call to it, or all_calls to inline every call", x.ws.Position(x.id.Pos()), o.Name())
 	}
 	fn, ok := x.info.Uses[x.id].(*types.Func)
 	if !ok {
