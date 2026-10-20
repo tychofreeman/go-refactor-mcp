@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"go/types"
 	"os"
+	"regexp"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/gocode"
@@ -40,6 +41,7 @@ func (*AddField) InputSchema() json.RawMessage {
     "name":    {"type": "string",  "description": "The struct type's name; without line, it is found among the package-level names."},
     "column":  {"type": "integer", "description": "Optional 1-based column, only needed to disambiguate."},
     "field":   {"type": "string",  "description": "The fields to add, as Go source, e.g. \"timeout time.Duration // per try\"."},
+    "type":    {"type": "string",  "description": "Optional: the fields' type, when field gives only their names (field \"owner\", type \"string\")."},
     "after":   {"type": "string",  "description": "Optional: a field to put them just after."},
     "before":  {"type": "string",  "description": "Optional: a field to put them just before."},
     "imports": {"type": "array", "items": {"type": "string"}, "description": "Optional: import paths to use for package names the fields use, when the name alone is ambiguous."}
@@ -58,16 +60,26 @@ type args struct {
 	Column  int      `json:"column,omitempty"`
 	Name    string   `json:"name"`
 	Field   string   `json:"field"`
+	Type    string   `json:"type,omitempty"`
 	After   string   `json:"after,omitempty"`
 	Before  string   `json:"before,omitempty"`
 	Imports []string `json:"imports,omitempty"`
 }
+
+// fieldNames matches a field list without a type: "owner", "x, y".
+var fieldNames = regexp.MustCompile(`^\s*\w+(\s*,\s*\w+)*\s*$`)
 
 // Plan checks preconditions and computes the edits.
 func (*AddField) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
 	var a args
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
+	}
+	if a.Type != "" {
+		if !fieldNames.MatchString(a.Field) {
+			return nil, refactor.Refusef("field %q already gives a type; with type, give only the field's names, e.g. field \"owner\", type %q", a.Field, a.Type)
+		}
+		a.Field += " " + a.Type
 	}
 	if a.After != "" && a.Before != "" {
 		return nil, refactor.Refusef("give after or before, not both")
