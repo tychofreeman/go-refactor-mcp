@@ -277,7 +277,14 @@ hand or a tool got in the way.
       load, `check`, an edit with its undo in a package most of the
       module imports, and a `rename` of a widely used name, on real
       modules of growing size: this one, golang.org/x/tools, and
-      kubernetes. Record the numbers here, and per line of Go.
+      kubernetes. Record the numbers here, and per line of Go. *First
+      numbers (Oct 20, `eval-tasks/third-party/README.md`): five modules
+      of 128k to 341k lines of non-test Go all load and type-check, at
+      300 MB to 1.3 GB (2 to 8 MB per thousand lines). With a warm build
+      cache four load in under 5 s, and a rename preview across 650 to
+      1,350 references, its load included, takes 4 to 8 s; a first load
+      compiles the dependencies (18 s to 5.6 min, Gitea). Left: an edit
+      with its undo, and `check`, on these modules.*
     - **Decide on the numbers.** If memory or time is a problem at the
       sizes people work in, the usual remedies: load only the packages a
       step needs and those that import them, or keep the syntax only of
@@ -336,6 +343,21 @@ hand or a tool got in the way.
       did. *Done;* to be measured.
     - **One worked example** of a whole batch in the instructions.
     - **Measure** each with the A/B harness's feature and chain tasks.
+16. **A/B on other people's code.** The harness's tasks are all in this
+    repository, which the tools were built on and for. Real feature PRs of
+    large third-party modules test whether the tools help where nobody
+    shaped the code for them. `eval-tasks/third-party/` lists 172 feature
+    PRs merged after July 1, 2026 in cli/cli, Hugo, lazygit, OpenTofu and
+    Gitea, and verifies 74: 42 have tests that check the feature's
+    behavior against the code before the PR (black-box), 35 of them
+    enough to be the hidden check (recommended), 16 of those refactoring
+    on the way. In order:
+    - **Prompts** for the recommended candidates, from their issues,
+      written as requests; then `ab.json` tasks with their hidden tests.
+    - **A first run** on a few per repository, manual against hybrid, to
+      see whether a task needs more than the prompt (setup, a running
+      service) before running all of them, with at least five runs per
+      task and arm.
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the

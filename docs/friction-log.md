@@ -1145,3 +1145,11 @@ All through gorefactor: the test with add_declaration, the server change
 in one batch of 8 steps (add_field, add_declaration, replace_statements,
 insert_statements) with line numbers from one sed read, and these notes
 with replace_text.
+
+## 2026-10-20: third-party A/B candidates
+
+All by hand, and none of it a gorefactor gap: the new files are Python
+scripts, a README and JSON data, and this session's gorefactor server ran
+on the linked computer, not on this checkout. The roadmap and these notes
+were edited with Edit for the same reason; replace_text would have done
+them in a session with the server on the checkout.

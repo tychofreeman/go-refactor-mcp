@@ -92,7 +92,7 @@ def main():
     for repo, cs in by_repo.items():
         cs.sort(key=lambda c: (not c["recommended"], order[c["verification"]["outcome"]], "SML".index(c["size"]), c["date"]))
         print(f"### {repo}\n")
-        print("| PR | Issue | Title | Size (packages) | Refactored on the way | Outcome | Black-box test packages | Names a needs_api prompt must give |")
+        print("| PR | Issue | Title | Size (packages) | Refactored on the way | Outcome | Black-box of checking test packages | Names a needs_api prompt must give |")
         print("|---|---|---|---|---|---|---|---|")
         for c in cs:
             v = c["verification"]
@@ -106,7 +106,7 @@ def main():
             refac = ", ".join(sigs[:2] + moves[:2])
             bb = len(v.get("black_box", []))
             api = len(v.get("needs_api", []))
-            pk = f"{bb} of {bb + api + len(v.get('not_f2p', []))}" if bb else ""
+            pk = f"{bb} of {bb + api}" if bb else ""
             missing = ""
             if v["outcome"] == "needs_api":
                 names = [name_of(m) for m in v.get("missing") or [] if m not in ("bool", "int", "string")]
