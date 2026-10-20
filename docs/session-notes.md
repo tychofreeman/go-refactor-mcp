@@ -149,5 +149,7 @@ results are in `docs/cost-history.md`.
   extract_function's non-nil error: writes later in a loop count, and a
   helper with defer proves nothing), 14 (#150, remove_dead_code keeps a
   method through which its type implements a dependency's interface or
-  error). Change only
+  error), 15 (#151, rename refuses an exported field of a struct passed
+  as an interface: `analysis.PassedAsInterface` and `Holds`, which
+  extract_struct could use too). Change only
   this repo copy: the Claude Doc linked from #130 is not kept up to date.

@@ -1136,6 +1136,12 @@ helper with add_declaration, Plan's new body with replace_statements
 All through gorefactor: the test with insert_statements, the
 instructions and these notes with replace_text.
 
+## 2026-10-20: rename and fields reached by reflection, item 15 of the review
+
+All through gorefactor's CLI except the golden cases: the helpers with
+create_file, `checkReflected` with add_declaration (before the call to it,
+which a CLI edit cannot stub), the call and docs with replace_text.
+
 ## 2026-10-20: remove_dead_code and methods called dynamically, item 14 of the review
 
 All through gorefactor's CLI except the golden cases:
