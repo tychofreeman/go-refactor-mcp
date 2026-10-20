@@ -8,8 +8,10 @@ import (
 	"fmt"
 	"go/ast"
 	"go/parser"
+	"go/token"
 	"go/types"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
@@ -107,6 +109,9 @@ func (*ReplaceExpression) Plan(ws *workspace.Workspace, raw json.RawMessage) (*r
 	if err != nil {
 		return nil, err
 	}
+	removed := gocode.RemoveImports(pkg, file, adder, func(p token.Pos) bool {
+		return slices.ContainsFunc(targets, func(t ast.Expr) bool { return t.Pos() <= p && p < t.End() })
+	}, code)
 	var es []edit.TextEdit
 	for _, t := range targets {
 		text := strings.TrimSpace(a.New)
@@ -129,6 +134,9 @@ func (*ReplaceExpression) Plan(ws *workspace.Workspace, raw json.RawMessage) (*r
 	}
 	if len(added) > 0 {
 		plan.Notes = append(plan.Notes, gocode.ImportNote("added", added))
+	}
+	if len(removed) > 0 {
+		plan.Notes = append(plan.Notes, gocode.ImportNote("removed", removed)+", which only the replaced expression used")
 	}
 	return plan, nil
 }

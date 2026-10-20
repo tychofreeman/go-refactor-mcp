@@ -83,7 +83,7 @@ func (*RemoveDeadCode) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refa
 	from, to := t.span(ws.Fset.File(t.file.Pos()), src)
 	adder := imports.New(ws, pkg, t.file, src)
 	none, _ := gocode.ParseStatements("")
-	removed := gocode.RemoveImports(pkg, t.file, adder, t.node().Pos(), t.node().End(), none)
+	removed := gocode.RemoveImports(pkg, t.file, adder, gocode.Between(t.node().Pos(), t.node().End()), none)
 	plan := &refactor.Plan{
 		Summary: fmt.Sprintf("removed %s, which nothing uses, from %s", a.Name, a.File),
 		Edits:   []edit.FileEdit{{Path: t.path, Edits: append([]edit.TextEdit{{Start: from, End: to}}, adder.Edits()...)}},

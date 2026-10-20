@@ -1136,6 +1136,14 @@ helper with add_declaration, Plan's new body with replace_statements
 All through gorefactor: the test with insert_statements, the
 instructions and these notes with replace_text.
 
+## 2026-10-20: replace_expression removes imports it leaves unused
+
+All through `refactor batch`, the CLI's new batch (#160): RemoveImports's
+signature and its three callers in one batch with check "end", then
+replace_expression's change. Its two new imports (`go/token`, `slices`)
+went in as a replace_text of the import block, since replace_text does
+not add imports (the known gap). Fixtures by hand, `out/` from `-update`.
+
 ## 2026-10-20: create_file formats only Go files
 
 The fix through gorefactor's CLI (replace_text); the golden fixture by

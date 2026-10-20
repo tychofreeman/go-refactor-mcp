@@ -459,7 +459,9 @@ hand or a tool got in the way.
       Go 1.22). Each is described, with where, in the review.
       *Done so far: 19 (#161, introduce_parameter refuses an expression
       using the variadic parameter unless the call passes a slice with
-      `...`), 20 (#162, `create_file` formats only `.go` files).*
+      `...`), 20 (#162, `create_file` formats only `.go` files), 21
+      (#163, `replace_expression` removes an import only the replaced
+      expression used).*
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the

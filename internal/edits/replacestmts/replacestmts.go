@@ -108,7 +108,7 @@ func (*ReplaceStatements) Plan(ws *workspace.Workspace, raw json.RawMessage) (*r
 	if err != nil {
 		return nil, err
 	}
-	removed := gocode.RemoveImports(pkg, file, adder, stmts[0].Pos(), stmts[len(stmts)-1].End(), content)
+	removed := gocode.RemoveImports(pkg, file, adder, gocode.Between(stmts[0].Pos(), stmts[len(stmts)-1].End()), content)
 
 	text := ""
 	if strings.TrimSpace(a.Content) != "" {
@@ -146,7 +146,7 @@ func replaceBody(ws *workspace.Workspace, pkg *packages.Package, file *ast.File,
 	if err != nil {
 		return nil, err
 	}
-	removed := gocode.RemoveImports(pkg, file, adder, fd.Body.Lbrace, fd.Body.Rbrace, content)
+	removed := gocode.RemoveImports(pkg, file, adder, gocode.Between(fd.Body.Lbrace, fd.Body.Rbrace), content)
 
 	indent := gocode.IndentOf(src, tf.Offset(tf.LineStart(tf.Line(fd.Pos()))))
 	text := "\n"

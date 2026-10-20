@@ -261,9 +261,10 @@ func hasGoFiles(dir string) bool {
 	return false
 }
 
-// RemoveImports removes the file's imports that only the replaced range
-// [from, to) used and the content does not, and returns their paths.
-func RemoveImports(pkg *packages.Package, file *ast.File, adder *imports.Adder, from, to token.Pos, c *Code) []string {
+// RemoveImports removes the file's imports that only the replaced code,
+// the positions for which inside is true, used and the content does not,
+// and returns their paths.
+func RemoveImports(pkg *packages.Package, file *ast.File, adder *imports.Adder, inside func(token.Pos) bool, c *Code) []string {
 	refs := map[string]bool{}
 	for _, n := range c.packageRefs() {
 		refs[n] = true
@@ -274,23 +275,28 @@ func RemoveImports(pkg *packages.Package, file *ast.File, adder *imports.Adder, 
 		if pn == nil || refs[pn.Name()] {
 			continue
 		}
-		inside, outside := false, false
+		in, outside := false, false
 		for id, o := range pkg.TypesInfo.Uses {
 			if o != pn || id.Pos() < file.FileStart || id.Pos() >= file.FileEnd {
 				continue
 			}
-			if from <= id.Pos() && id.Pos() < to {
-				inside = true
+			if inside(id.Pos()) {
+				in = true
 			} else {
 				outside = true
 			}
 		}
-		if inside && !outside {
+		if in && !outside {
 			adder.Remove(imp)
 			removed = append(removed, pn.Imported().Path())
 		}
 	}
 	return removed
+}
+
+// Between reports whether a position is in [from, to).
+func Between(from, to token.Pos) func(token.Pos) bool {
+	return func(p token.Pos) bool { return from <= p && p < to }
 }
 
 // ImportNote describes, for a result's notes, the imports an edit added

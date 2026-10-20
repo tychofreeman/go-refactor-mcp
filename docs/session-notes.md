@@ -168,6 +168,8 @@ results are in `docs/cost-history.md`.
   (`analysis.Dependencies`, #158), one list of functions that run a
   closure during the call (`analysis.syncCalls`, #159), the CLI matching the server (#160), then the
   low items: 19 (#161, introduce_parameter and a variadic parameter),
-  20 (#162, create_file formats only `.go` files).
+  20 (#162, create_file formats only `.go` files), 21 (#163,
+  replace_expression removes imports it leaves unused;
+  `gocode.RemoveImports` takes a position test, `gocode.Between`).
   Change only
   this repo copy: the Claude Doc linked from #130 is not kept up to date.
