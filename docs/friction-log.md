@@ -1125,6 +1125,12 @@ All through gorefactor. replace_text still does not add imports
 (strings.TrimSpace in a replaced block); I dropped the call rather than
 add the import in another step.
 
+## 2026-10-20: the tip to batch single steps, removed
+
+The code was reverted with git checkout of the two files from before
+#119, a hand edit: gorefactor has no tool to remove a struct field or
+to restore a file. The notes went through replace_text.
+
 ## 2026-10-20: a tip to batch single steps
 
 All through gorefactor: the test with add_declaration, the server change

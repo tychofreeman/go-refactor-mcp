@@ -323,10 +323,10 @@ hand or a tool got in the way.
       `function`, which replaces the whole body.
     - **Coaching in results,** when a model does something a tool could
       have done (three single steps that could have been one batch).
-      The second step in a row sent on its own, with no inspect, check,
-      undo or batch between, now ends with a tip to batch such steps,
-      in place of the advice to re-inspect. *Done.* In the last runs,
-      more than half of the single edit steps came in runs of 3 to 10.
+      Tried in #119 (a tip on the second single step in a row) and
+      removed: the model never batched after it, and most single steps
+      in a row were parallel calls in one turn, which cost nothing
+      extra. Serial steps a batch would save came about once per run.
     - **One worked example** of a whole batch in the instructions.
     - **Measure** each with the A/B harness's feature and chain tasks.
 

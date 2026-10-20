@@ -68,6 +68,7 @@ refactorings, through gorefactor.
 | ab-features-2026-10-19 | batch refs, check "end", more tools | $2.83 · 6.77M · 8/8 | | |
 | ab-features-defaults | #113–#115: see below | $2.31 · 4.91M · 7/8 | | |
 | ab-features-fixes | #116–#117: stubs replaced, edits on code they fix, add_field type | $2.56 · 6.03M · 6/8 | | |
+| ab-features-coaching | #119: a tip to batch on the 2nd single step in a row (since removed) | $2.42 · 4.97M · 7/8 | | |
 
 Without a CLAUDE.md no arm used gorefactor at all: all three edited with
 Bash. Doing everything through gorefactor cost about 1.8× by hand at first,
@@ -86,6 +87,13 @@ tokens 27% down, below the earlier baseline:
 - an unknown argument name that can only mean one argument is taken as it
   (#114);
 - lines are followed through each step's own edits (#115).
+
+The tip to batch (#119) was removed after one run. It fired 9 times and
+the model never batched after it; the 18% drop is noise. Its premise was
+wrong: counted by calls, single steps came in runs of 3 to 10, but most
+of those were sent in parallel in one turn, which costs nothing extra.
+Counted by turns, a turn of steps right after another one (which a batch
+could have saved) happened about once per run.
 
 ## 4. Design in the way, and chains (Oct 18–19)
 
@@ -152,5 +160,7 @@ tools now do more of what that knowledge did (#113–#115).
 
 Next (README, roadmap item 15): ranges that start at a function's `func`
 line (5 refusals in the last chain run) answered with the body's lines,
-coaching in results, and more runs per task so that effects of 10% can be
-seen.
+the reading before the first edit (Bash, Grep and Read were about two
+thirds of the tool-call input in the last feature run), and more runs per
+task so that effects of 10% can be seen. Count waste by turns, not calls:
+parallel calls in one turn are not waste.
