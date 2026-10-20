@@ -389,6 +389,14 @@ func (x *inliner) decideShape() error {
 		}
 	case *ast.AssignStmt:
 		if len(p.Rhs) == 1 && (len(p.Lhs) == nres || (nres == 1 && len(p.Lhs) == 1)) {
+			// Go evaluates the left side's operands before the call; in place
+			// of a single return, the call's expression keeps that order.
+			if bad := x.lhsEvaluatedFirst(p); bad != nil {
+				if x.exprBody() == nil {
+					return refactor.Refusef("`%s` on the left of the assignment is evaluated before the call to %q, and inlining would run the body first; assign the call to a variable first", x.text(bad), name)
+				}
+				break // inline the expression in place
+			}
 			x.shape, x.stmt = assign, p
 		}
 	case *ast.ValueSpec:
@@ -450,6 +458,60 @@ func (x *inliner) decideShape() error {
 		x.ret, x.results = r, r.Results
 	} else if nres > 0 {
 		return refactor.Refusef("%q never returns normally (its last statement is not a return); there are no results to assign", name)
+	}
+	return nil
+}
+
+// lhsEvaluatedFirst returns the first operand on the left of as that Go
+// evaluates before the right side and that inlining could move after the
+// body: one with a call or that can panic, a package variable, or memory
+// read through a pointer or a slice, which the body could change. The
+// variables and fields assigned to are not operands; nil if there is none.
+func (x *inliner) lhsEvaluatedFirst(as *ast.AssignStmt) ast.Expr {
+	stable := func(e ast.Expr) bool {
+		_, ok := x.callerFA.Stable(e, false)
+		return ok && analysis.MayPanic(x.info, e) == nil
+	}
+	var check func(e ast.Expr) ast.Expr
+	check = func(e ast.Expr) ast.Expr {
+		switch e := e.(type) {
+		case *ast.Ident:
+			return nil
+		case *ast.ParenExpr:
+			return check(e.X)
+		case *ast.SelectorExpr:
+			s := x.info.Selections[e]
+			switch {
+			case s == nil: // a package-qualified variable
+				return nil
+			case s.Kind() == types.FieldVal && !s.Indirect() && !analysis.IsPointer(x.info.TypeOf(e.X)):
+				return check(e.X)
+			case !stable(e.X):
+				return e.X
+			}
+			return nil
+		case *ast.IndexExpr:
+			switch {
+			case !stable(e.Index):
+				return e.Index
+			case analysis.IsArray(x.info.TypeOf(e.X)):
+				return check(e.X)
+			case !stable(e.X):
+				return e.X
+			}
+			return nil
+		case *ast.StarExpr:
+			if !stable(e.X) {
+				return e.X
+			}
+			return nil
+		}
+		return e
+	}
+	for _, l := range as.Lhs {
+		if bad := check(l); bad != nil {
+			return bad
+		}
 	}
 	return nil
 }

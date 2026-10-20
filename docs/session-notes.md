@@ -138,5 +138,7 @@ results are in `docs/cost-history.md`.
   interfaces with the old or new name it implements before and after,
   by method set), and 4 (#144: rename also searches every package-level
   interface of every dependency, as changesig does). All high items are
-  done; the medium ones (8-18) remain, 8 already fixed. Change only
+  done; the medium ones (8-18) remain, 8 already fixed. The user asked
+  for those too, in the same chained way: 9 (#145, inline_function
+  checks the operands on the left of an assignment). Change only
   this repo copy: the Claude Doc linked from #130 is not kept up to date.

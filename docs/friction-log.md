@@ -1136,6 +1136,11 @@ helper with add_declaration, Plan's new body with replace_statements
 All through gorefactor: the test with insert_statements, the
 instructions and these notes with replace_text.
 
+## 2026-10-20: inline_function and the left of an assignment, item 9 of the review
+
+All through gorefactor's CLI except the golden cases: `lhsEvaluatedFirst`
+with add_declaration, the shape decision and docs with replace_text.
+
 ## 2026-10-20: rename and dependencies' interfaces, item 4 of the review
 
 All through gorefactor's CLI except the golden cases: the dependency walk
