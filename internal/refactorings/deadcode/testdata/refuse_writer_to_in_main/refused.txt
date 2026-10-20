@@ -1,0 +1,1 @@
+*src implements io.WriterTo through WriteTo

@@ -147,5 +147,7 @@ results are in `docs/cost-history.md`.
   call runs, `syncWalk`; a false refusal remains when such a literal
   names its parameters: "uses r, declared in the body"), 13 (#149,
   extract_function's non-nil error: writes later in a loop count, and a
-  helper with defer proves nothing). Change only
+  helper with defer proves nothing), 14 (#150, remove_dead_code keeps a
+  method through which its type implements a dependency's interface or
+  error). Change only
   this repo copy: the Claude Doc linked from #130 is not kept up to date.

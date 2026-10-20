@@ -1497,7 +1497,9 @@ reach any other way:
 - not `init`, `main`, or a `Test`, `Benchmark`, `Fuzz` or `Example`
   function in a test file, which run without being called;
 - a method that no interface in the workspace names (a type could
-  implement one through it);
+  implement one through it), and through which its type implements no
+  interface that a dependency declares, nor `error`: `fmt.Println`
+  calls `String`, and `io.Copy` calls `WriteTo`, without naming them;
 - a variable whose initializer has no side effects;
 - not a blank name (`var _ I = (*T)(nil)` checks something at compile
   time), and without a `//go:` or `//export` directive;

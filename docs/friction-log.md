@@ -1136,6 +1136,13 @@ helper with add_declaration, Plan's new body with replace_statements
 All through gorefactor: the test with insert_statements, the
 instructions and these notes with replace_text.
 
+## 2026-10-20: remove_dead_code and methods called dynamically, item 14 of the review
+
+All through gorefactor's CLI except the golden cases:
+`dependencyInterface` with add_declaration, the refusal and docs with
+replace_text. The dependency walk is now in rename and remove_dead_code
+(changesig has its own `visible`); a shared one in analysis would do.
+
 ## 2026-10-20: extract_function and errors that can be nil, item 13 of the review
 
 All through gorefactor's CLI except the golden cases. The loop fix
