@@ -73,8 +73,9 @@ def main():
                 # Recommended: the black-box packages are at least half of
                 # those whose tests check the PR, so the hidden check covers
                 # most of what the PR's own tests do.
-                c["recommended"] = v["outcome"] == "black_box" and bb >= api
-                rows.append(c)
+                c["recommended"] = c["kind"] == "feature" and v["outcome"] == "black_box" and bb >= api
+                if c["kind"] == "feature":
+                    rows.append(c)
             json.dump(c, out)
             out.write("\n")
 

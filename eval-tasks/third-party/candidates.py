@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """List candidate feature PRs of a Go repository for the A/B harness.
 
-    candidates.py REPO_DIR NAME [--since 2026-07-01]
+    candidates.py REPO_DIR NAME [--since 2026-07-01] [--rev HEAD]
 
 REPO_DIR is a clone with history back past --since. A candidate is a
 first-parent commit (a merged PR) after --since whose title does not mark
@@ -41,6 +41,9 @@ INTERNAL = re.compile(
     r"|tests from a tarball|^Move Github PR cache|^Add a skill|[Ss]kill (agents|host)|recording"
     r"|[Tt]elemetry|[Ll]uminance|[Ee]-mail templates|header \(#|optimi[sz]e"
 )
+# A scope before a title ("tpl: ", "enhance(actions): "), which INTERNAL's
+# patterns anchored at the start must look past.
+SCOPE = re.compile(r"^([\w./-]+(\([^)]*\))?!?:\s*)+")
 ISSUE = re.compile(r"\b(?:[Ff]ix(?:es|ed)?|[Cc]loses?|[Rr]esolves?|[Uu]pdates?|[Pp]art of|[Rr]efs?)[: ]+#(\d+)")
 SKIP_PATH = re.compile(r"(^|/)(vendor|testdata|third_party)/")
 # Test code that is not in _test.go files: lazygit's integration tests are
@@ -109,8 +112,8 @@ def refactor_signals(repo, parent, commit, go_files):
     return signature_changes, moves
 
 
-def candidates(repo, name, since):
-    log = git(repo, "log", "--first-parent", f"--since={since}", "--format=%H%x00%P%x00%cs%x00%s%x00%b%x01", "HEAD")
+def candidates(repo, name, since, rev="HEAD"):
+    log = git(repo, "log", "--first-parent", f"--since={since}", "--format=%H%x00%P%x00%cs%x00%s%x00%b%x01", rev)
     for rec in log.split("\x01"):
         rec = rec.strip("\n")
         if not rec:
@@ -150,7 +153,7 @@ def candidates(repo, name, since):
             "pr": pr,
             "issues": sorted({int(n) for n in ISSUE.findall(body)} - {pr}),
             "title": title,
-            "kind": "internal" if INTERNAL.search(title) else "feature",
+            "kind": "internal" if INTERNAL.search(SCOPE.sub("", title)) else "feature",
             "commit": commit[:12],
             "parent": parent[:12],
             "date": date,
@@ -173,8 +176,9 @@ def main():
     ap.add_argument("repo")
     ap.add_argument("name")
     ap.add_argument("--since", default="2026-07-01")
+    ap.add_argument("--rev", default="HEAD", help="the branch whose history to read")
     args = ap.parse_args()
-    for c in candidates(args.repo, args.name, args.since):
+    for c in candidates(args.repo, args.name, args.since, args.rev):
         json.dump(c, sys.stdout)
         sys.stdout.write("\n")
 
