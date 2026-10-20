@@ -193,3 +193,38 @@ func TestLineMap(t *testing.T) {
 		t.Errorf("a new file has no old lines to map: %v", got)
 	}
 }
+
+// LineMapOf follows lines through the edits that made after, so a line no
+// edit touched keeps its place even where a line diff would pair other
+// lines: here code moved below the function outnumbers the lines left.
+func TestLineMapOf(t *testing.T) {
+	before := "func f() {\nA\nB\nC\nD\nr\n}\n"
+	after := "func f() {\ng()\nr\n}\n\nfunc g() {\nA\nB\nC\nD\n}\n"
+	body := strings.Index(before, "A")
+	edits := []TextEdit{
+		{Start: body, End: strings.Index(before, "r"), NewText: "g()\n"},
+		{Start: len(before) - 1, End: len(before) - 1, NewText: "\n\nfunc g() {\nA\nB\nC\nD\n}"},
+	}
+	if got := LineMap([]byte(before), []byte(after)); got[6] != 0 {
+		t.Fatalf("the line diff no longer loses r, so this test shows nothing: %v", got)
+	}
+	got := LineMapOf([]byte(before), []byte(after), edits)
+	want := []int{0, 1, 0, 0, 0, 0, 3, 4}
+	if !slices.Equal(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+
+	// An insertion glued to a line's text rewrites that line.
+	got = LineMapOf([]byte("a\nb\n"), []byte("a\nxb\n"), []TextEdit{{Start: 2, End: 2, NewText: "x"}})
+	if want := []int{0, 1, 0}; !slices.Equal(got, want) {
+		t.Errorf("glued insertion: got %v, want %v", got, want)
+	}
+
+	// Where after is not what the edits make (gofmt changed it), a line
+	// diff follows the change: here b was reformatted.
+	before, after = "a\nb\nc\n", "a\nB\nc\n"
+	got = LineMapOf([]byte(before), []byte(after), []TextEdit{{Start: 0, End: 0, NewText: "x\n"}})
+	if want := LineMap([]byte(before), []byte(after)); !slices.Equal(got, want) {
+		t.Errorf("fallback: got %v, want %v", got, want)
+	}
+}

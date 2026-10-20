@@ -1091,3 +1091,21 @@ slip; add_declaration would have done it. Frictions:
   variable), and when one call's results can't be told. The batch now
   drops names that are not called and passes on any other refusal as a
   note.
+
+## 2026-10-19: following lines through a step's edits
+
+All through gorefactor. The batch's line diff did worse than refuse: in
+a test, a step after an extract that moved code below the function was
+put into the moved copy, silently. Lines are now followed through the
+step's own edits, with a line diff only for what gofmt changed after
+them. Frictions:
+- create_from_usage gave the stub LineMapOf a result of type S: the
+  result was compared with slices.Equal, and it took that generic
+  function's type parameter as the type. Passing results fixed it; it
+  should not infer a type from a generic parameter.
+- Its parameters were named p and p2 (after []byte(...) conversions);
+  two renames fixed them.
+- This server still ran the build before #114, so I sent
+  create_from_usage myself.
+- Replacing a parameter (before []byte by moved []int) took
+  replace_text on the signature; replace_parameter (item 13) would do.

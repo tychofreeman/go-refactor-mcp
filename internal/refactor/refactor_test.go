@@ -407,6 +407,45 @@ func (markLine) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Pl
 	}, nil
 }
 
+// extractBody moves F's body, but its return, into a new function G, as
+// extract_function does.
+type extractBody struct{}
+
+func (extractBody) Name() string                 { return "extract_body" }
+func (extractBody) Description() string          { return "" }
+func (extractBody) InputSchema() json.RawMessage { return json.RawMessage(`{}`) }
+func (extractBody) Plan(ws *workspace.Workspace, _ json.RawMessage) (*refactor.Plan, error) {
+	path := ws.Abs("m.go")
+	src, _ := os.ReadFile(path)
+	body := strings.Index(string(src), "\ta := 1")
+	ret := strings.Index(string(src), "\treturn a")
+	return &refactor.Plan{Summary: "extracted G", Edits: []edit.FileEdit{{Path: path, Edits: []edit.TextEdit{
+		{Start: body, End: ret, NewText: "\ta := G()\n"},
+		{Start: len(src), End: len(src), NewText: "\nfunc G() int {\n" + string(src[body:ret]) + "\treturn a\n}\n"},
+	}}}}, nil
+}
+
+// A line below code a step moved further down is followed through the
+// step's edits: a line diff would pair it with the moved copy's line.
+func TestBatchFollowsLinesBelowMovedCode(t *testing.T) {
+	const code = "package m\n\nfunc F() int {\n\ta := 1\n\ta++\n\ta++\n\treturn a\n}\n"
+	ws, path := setup(t, code)
+	b, err := refactor.RunBatch(ws, []refactor.Step{
+		{Refactoring: extractBody{}},
+		{Refactoring: markLine{}, Args: json.RawMessage(`{"file": "m.go", "line": 7}`)},
+	}, refactor.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !b.Applied {
+		t.Fatalf("want it applied, got:\n%s", b)
+	}
+	want := "func F() int {\n\ta := G()\n\t// mark\n\treturn a\n}\n"
+	if got, _ := os.ReadFile(path); !strings.Contains(string(got), want) {
+		t.Errorf("want the mark before F's return; file:\n%s", got)
+	}
+}
+
 // twoPlaces changes F's body and X's initializer: two places in m.go.
 type twoPlaces struct{}
 

@@ -461,22 +461,25 @@ func followStep(ws *workspace.Workspace, made []map[string]*stepLines, i int, li
 		made[i] = map[string]*stepLines{}
 		for p, before := range c.Before {
 			rel := ws.Rel(p)
-			if lines[rel] == nil {
-				lines[rel] = newLineMap(before)
-			}
-			lines[rel].follow(i+1, before, c.After[p])
-			for _, m := range made[:i] {
-				if s := m[rel]; s != nil {
-					s.follow(i+1, before, c.After[p])
-				}
-			}
 			var edits []edit.TextEdit
 			for _, fe := range res.edits {
 				if fe.Path == p {
 					edits = append(edits, fe.Edits...)
 				}
 			}
-			made[i][rel] = madeLines(before, c.After[p], edits, c.Created[p])
+			// Follow the lines through the step's own edits: a line diff can
+			// pair a line with a copy the step moved elsewhere.
+			moved := edit.LineMapOf(before, c.After[p], edits)
+			if lines[rel] == nil {
+				lines[rel] = newLineMap(before)
+			}
+			lines[rel].follow(i+1, moved)
+			for _, m := range made[:i] {
+				if s := m[rel]; s != nil {
+					s.follow(i+1, moved, c.After[p])
+				}
+			}
+			made[i][rel] = madeLines(before, c.After[p], moved, edits, c.Created[p])
 		}
 	}
 }
@@ -496,10 +499,9 @@ func newLineMap(before []byte) *lineMap {
 	return &lineMap{now: now, changed: make([]int, len(now)), created: before == nil}
 }
 
-// follow moves m's lines through step, which changed the file from before
-// to after.
-func (m *lineMap) follow(step int, before, after []byte) {
-	moved := edit.LineMap(before, after)
+// follow moves m's lines through step, which moved the file's lines as
+// moved says (see edit.LineMap).
+func (m *lineMap) follow(step int, moved []int) {
 	for i, cur := range m.now {
 		if cur == 0 {
 			continue

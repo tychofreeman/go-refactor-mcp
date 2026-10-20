@@ -1,6 +1,7 @@
 package edit
 
 import (
+	"bytes"
 	"fmt"
 	"strconv"
 	"strings"
@@ -320,4 +321,60 @@ func group(ops []op, ctx int) []hunk {
 		i = end
 	}
 	return hunks
+}
+
+// LineMapOf is LineMap for after, which edits made from before: a line no
+// edit touched goes where the edits before it moved it, even where a line
+// diff would pair other lines (code an edit moved below it, for one).
+// Where after differs from what the edits make of before (gofmt), a line
+// diff follows the lines from one to the other.
+func LineMapOf(before, after []byte, edits []TextEdit) []int {
+	applied, err := Apply(before, edits)
+	if err != nil {
+		return LineMap(before, after)
+	}
+	m := editLineMap(before, applied, edits)
+	if bytes.Equal(applied, after) {
+		return m
+	}
+	// Formatting (gofmt) changed some lines: a line diff follows them, as
+	// the changes are small and local.
+	formatted := LineMap(applied, after)
+	for i, l := range m {
+		m[i] = formatted[l]
+	}
+	return m
+}
+
+// editLineMap is LineMap for applied, which is exactly what edits make of
+// before.
+func editLineMap(before, applied []byte, edits []TextEdit) []int {
+	starts := map[int]int{0: 1} // applied's line numbers, by the offset each starts at
+	for i, c := range applied {
+		if c == '\n' {
+			starts[i+1] = len(starts) + 1
+		}
+	}
+	lines := splitLines(string(before))
+	m := make([]int, len(lines)+1)
+	s := 0 // where line i starts in before
+	for i, l := range lines {
+		text := s + len(strings.TrimSuffix(l, "\n")) // where its newline is
+		at, touched := s, false                      // where it starts in applied
+		for _, e := range edits {
+			switch {
+			case e.End <= s:
+				at += len(e.NewText) - (e.End - e.Start)
+			case e.Start < text:
+				touched = true
+			}
+		}
+		// An edit at the newline, or one just before the line, may still have
+		// changed it ("x" glued to its start): its text must be there, as a line.
+		if !touched && at+len(l) <= len(applied) && string(applied[at:at+len(l)]) == l {
+			m[i+1] = starts[at]
+		}
+		s += len(l)
+	}
+	return m
 }

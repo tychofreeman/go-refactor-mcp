@@ -298,7 +298,9 @@ hand or a tool got in the way.
       an unknown argument name that can only mean one missing argument
       is taken as it (`old_text` as `old`). *Done.*
     - **Follow lines through a step's own edits,** not a line diff, so a
-      step after `extract_function` can address the lines below it.
+      step after `extract_function` can address the lines below it. *Done:
+      a line diff could pair a line with the moved copy and put the
+      next step there, not only refuse it.*
     - **Coaching in results,** when a model does something a tool could
       have done (three single steps that could have been one batch).
     - **One worked example** of a whole batch in the instructions.

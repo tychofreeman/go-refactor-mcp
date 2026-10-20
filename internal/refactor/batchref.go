@@ -40,10 +40,11 @@ type stepLines struct {
 }
 
 // madeLines returns what a step made in a file it changed from before to
-// after with edits (its plan's, against before). A file it created is all
+// after with edits (its plan's, against before), which moved before's
+// lines as moved says (see edit.LineMap). A file it created is all
 // new. Lines in the import declarations are left out: a step that adds an
 // import still made one place, the code that needs it.
-func madeLines(before, after []byte, edits []edit.TextEdit, created bool) *stepLines {
+func madeLines(before, after []byte, moved []int, edits []edit.TextEdit, created bool) *stepLines {
 	n := bytes.Count(after, []byte("\n"))
 	if len(after) > 0 && after[len(after)-1] != '\n' {
 		n++
@@ -56,7 +57,6 @@ func madeLines(before, after []byte, edits []edit.TextEdit, created bool) *stepL
 		return s
 	}
 	s := &stepLines{places: places(before, edits)}
-	moved := edit.LineMap(before, after)
 	kept := map[int]bool{}
 	for _, l := range moved {
 		kept[l] = true
@@ -118,10 +118,9 @@ func importLines(src []byte) (first, last int) {
 	return fset.Position(f.Decls[0].Pos()).Line, fset.Position(f.Decls[len(f.Decls)-1].End()).Line
 }
 
-// follow moves s's lines through a later step, which changed the file from
-// before to after.
-func (s *stepLines) follow(step int, before, after []byte) {
-	moved := edit.LineMap(before, after)
+// follow moves s's lines through a later step, which moved the file's
+// lines as moved says (see edit.LineMap) and left it as after.
+func (s *stepLines) follow(step int, moved []int, after []byte) {
 	at := func(l int) int {
 		if l < len(moved) {
 			return moved[l]
