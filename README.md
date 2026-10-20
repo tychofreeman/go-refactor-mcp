@@ -1098,7 +1098,10 @@ Refused:
   a missing import is added); a name the inlined code declares that the
   calling block already declares, or that would hide a name used later in
   it; any declaration when the caller uses `goto`;
-- **the call:** in a `go` or `defer` statement; in an if, for or switch
+- **the call:** in a `go` or `defer` statement; assigned to something whose
+  operands Go evaluates before the call and the body could change or
+  run after (`m[k()] = f()`, `*p() = f()`, a package map), unless the
+  body is a single return, which is then inlined in place; in an if, for or switch
   header, unless the body is a single return; an argument whose name a
   local of the body would capture, inside an expression.
 
