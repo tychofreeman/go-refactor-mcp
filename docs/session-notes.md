@@ -51,6 +51,8 @@ results are in `docs/cost-history.md`.
   through the tools, with batches). A fresh model does not get that from
   the tools alone; it comes from how they are used (CLAUDE.md, "Using
   gorefactor well").
+- Input tokens are about requests × 39K in the feature runs, whatever
+  the reads; count requests and what each turn was for.
 - How the analyses were done: group a transcript's tool calls by
   assistant message id to count turns; weight each result's size by the
   number of turns after it to estimate what it cost in context.
@@ -63,9 +65,12 @@ results are in `docs/cost-history.md`.
 - #121 (inspect without bodies, `targets`) was measured in
   `ab-features-skeleton`: more `inspect`, fewer whole-file Reads, but the
   same read cost, since the model read bodies with wide `sed -n` ranges
-  in Bash. Next test: a line about reading in the mcp arm's CLAUDE.md
-  (`eval-tasks/claude-md-refactor-first/mcp.md`), in a new directory so
-  earlier runs stay comparable.
+  in Bash. With a reading paragraph in the mcp arm's CLAUDE.md
+  (`eval-tasks/claude-md-refactor-first-inspect`, run
+  `ab-features-read-inspect`), it read through `inspect` but just as
+  much. Input tokens track the number of requests (~39K each), so the
+  next lever is turns: the mcp arm's denied Write and Bash-write
+  attempts (about a fifth of its turns) and ToolSearch calls.
 - PR #122 was merged without its second commit (this file), which was
   pushed after the user had seen the PR. Put later work in a new PR
   rather than adding commits to one the user may already be merging.

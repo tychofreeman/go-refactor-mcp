@@ -70,6 +70,7 @@ refactorings, through gorefactor.
 | ab-features-fixes | #116–#117: stubs replaced, edits on code they fix, add_field type | $2.56 · 6.03M · 6/8 | | |
 | ab-features-coaching | #119: a tip to batch on the 2nd single step in a row (since removed) | $2.42 · 4.97M · 7/8 | | |
 | ab-features-skeleton | #121: inspect without bodies, targets | $2.62 · 6.27M · 7/8 | | |
+| ab-features-read-inspect | mcp arm's CLAUDE.md: read Go code with inspect, not Read, cat or sed | $2.42 · 5.55M · 7/8 | | |
 
 Without a CLAUDE.md no arm used gorefactor at all: all three edited with
 Bash. Doing everything through gorefactor cost about 1.8× by hand at first,
@@ -107,6 +108,24 @@ ranges (`sed -n 80,330p refactor.go; sed -n 1,200p createfile.go`),
 often after an `inspect` gave it the lines. The tool works; the habit
 does not follow from a description. The mcp arm's CLAUDE.md says nothing
 about reading, which a user's CLAUDE.md would.
+
+**Reading through inspect (Oct 20).** With one paragraph in the mcp arm's
+CLAUDE.md (`eval-tasks/claude-md-refactor-first-inspect`) saying to read
+Go code with `inspect`, not Read, `cat` or `sed`, the model did: 32
+`inspect` calls (14 with `targets`), 3 Reads, almost no `cat` or
+`sed -n`. But it read as much as before (3.2M characters carried,
+weighted by turns), now through wide `inspect` ranges such as lines
+66-224 or 125-380. How much a model reads is set by what it wants to
+understand, not by the tool it reads with.
+
+What sets input tokens is the number of requests. Across the last four
+feature runs, input tokens per request stayed at 38.5-40K (6.03M/151,
+4.97M/129, 6.27M/157, 5.55M/141), and the fixed context of a request
+(system prompt, tool list, CLAUDE.md) is about 21K of it. Fewer turns,
+not smaller reads, is what would cut cost now. In this run about a
+fifth of the turns went to things the mcp arm cannot do or need not do:
+15 Write attempts and 18 Bash commands that write, which it is denied,
+and 16 ToolSearch calls to load schemas.
 
 ## 4. Design in the way, and chains (Oct 18–19)
 
