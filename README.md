@@ -409,6 +409,8 @@ hand or a tool got in the way.
       imports (#173): in a Go file, `replace_text` imports the packages
       its new text names, as the other edits do.*
     - **One worked example** of a whole batch in the instructions.
+      *Done (#174): a test first, the real function replacing its stub,
+      and a rename, in one batch; a test runs it as written.*
     - **Measure** each with the A/B harness's feature and chain tasks,
       with more runs per task (noise is 10-25% at 2-3 runs), and count
       the waste each fix targets per run (turns refused, turns spent on
