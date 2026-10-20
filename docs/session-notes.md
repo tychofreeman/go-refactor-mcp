@@ -116,6 +116,10 @@ results are in `docs/cost-history.md`.
   25 findings, 7 of them silent behavior changes or broken guarantees,
   most from panicking expressions treated as stable and methods reached
   by reflection. Its fix order: batch rollback and undo after a step
-  breaks `go.mod` (items 6-7), then `analysis.Stable` (8, with 2);
-  the order is an open question at the end of the review. Change only
+  breaks `go.mod` (items 6-7), then `analysis.Stable` (8, with 2).
+  The user chose the panic class first (8, then 2, then 6-7). Item 8 is
+  fixed (#136): `analysis.MayPanic` names what can panic in an
+  expression `Stable` accepts; inline_variable, extract_variable's order
+  check and inline_function's substitution and dropped results use it,
+  while `all_occurrences` (one shared value) does not need it. Change only
   this repo copy: the Claude Doc linked from #130 is not kept up to date.

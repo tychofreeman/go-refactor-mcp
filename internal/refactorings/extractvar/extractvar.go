@@ -472,6 +472,10 @@ func (x *extraction) checkOrder(expr ast.Expr, stmt ast.Stmt) error {
 		return refactor.Refusef("extracting %s would evaluate it before %s (at %s), which comes first in the statement and could change what %s computes; extract %s first, or choose another expression",
 			x.quote(expr), x.quote(first), x.ws.Position(first.Pos()), x.quote(culprit), x.quote(first))
 	}
+	if p := analysis.MayPanic(x.info, expr); p != nil {
+		return refactor.Refusef("extracting %s would evaluate it before %s (at %s), which comes first in the statement, and %s can panic, which would then happen first; extract %s first, or choose another expression",
+			x.quote(expr), x.quote(first), x.ws.Position(first.Pos()), x.quote(p), x.quote(first))
+	}
 	return nil
 }
 

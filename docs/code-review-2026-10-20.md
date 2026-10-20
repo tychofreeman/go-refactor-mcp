@@ -46,7 +46,7 @@ Item 8 is the root of several others: one fix in `Stable` covers both of its con
 
 | # | Finding | Where | Example |
 | --- | --- | --- | --- |
-| 8 | Panicking expressions (`a/b`, `arr[i]`, `s[0]`, type assertions) are treated as stable | `analysis/analysis.go:239` | `inline_variable` moves `q := a/b` past `if b == 0 { return }`, so a panic disappears; `inline_function` substitutes `arr[i]` into `flag && ...`. |
+| 8 | Panicking expressions (`a/b`, `arr[i]`, `s[0]`, type assertions) are treated as stable. *Fixed in #136: `analysis.MayPanic`.* | `analysis/analysis.go:239` | `inline_variable` moves `q := a/b` past `if b == 0 { return }`, so a panic disappears; `inline_function` substitutes `arr[i]` into `flag && ...`. |
 | 9 | `inline_function` changes evaluation order on the left of an assignment | `inlinefunc/inlinefunc.go:390` | In `m[k()] = f()`, `f`'s body now runs before `k()`. |
 | 10 | `inline_function` assumes a parameter is dead after the call despite a backward `goto` | `inlinefunc/merge.go:245` | The repro's result changed from 27 to 34. `extract_function` already checks for `goto`. |
 | 11 | `inline_function` misses `else if` conditions and `for` post statements as conditional positions | `inlinefunc/params.go:493` | A `p.n` substituted into `else if p.n > 0` no longer panics for `p == nil` when the first branch is taken. |
@@ -82,4 +82,4 @@ Each is a separate PR under the repo's one-item-per-PR rule.
 2. **Item 8, by fixing `Stable`, together with item 2.** These cover most of the panic-class bugs.
 3. **Items 1 and 3–5:** each is a small, well-understood check.
 
-**Open question: confirm this order.** Items 6 and 7 come before the `Stable` fix because they break the core promises (every step type-checks, every step undoes), though they need an unusual step, one that breaks `go.mod`. The panic-class bugs (items 2 and 8) are likelier in real use. Decide which goes first before starting.
+**Order decided (2026-10-20): the panic class first,** items 8 and 2, since they are likelier in real use; then items 6 and 7, which need an unusual step (an edit that breaks `go.mod`). Item 8 is done (#136).

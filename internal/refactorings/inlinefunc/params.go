@@ -447,7 +447,7 @@ func (x *inliner) classify(p *param) int {
 	if tv := x.info.Types[p.arg]; tv.Value != nil {
 		return constArg
 	}
-	if _, ok := x.callerFA.Stable(p.arg, len(p.uses) > 1); ok {
+	if _, ok := x.callerFA.Stable(p.arg, len(p.uses) > 1); ok && analysis.MayPanic(x.info, p.arg) == nil {
 		return stableArg
 	}
 	if x.isVarPath(p.arg) {
