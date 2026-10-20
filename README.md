@@ -377,7 +377,19 @@ hand or a tool got in the way.
       a user would get as a prompt), new files and one-file `sed -i` 5.
       *Done for fixtures: the instructions say `create_file` makes any
       new file, Go or not, several in one batch; and for one change in
-      several files: `replace_text` takes `files` in place of `file`.*
+      several files: `replace_text` takes `files` in place of `file`.
+      Measured (`ab-features-denied`): no Write attempts (17 before),
+      `files` used in both symbol-addressing runs, refused turns 17 to
+      14 of 120.* Left:
+      - **One Bash try before the tool.** The model still tries `mkdir`
+        or `sed -i` once (8 turns in that run) before `create_file` or
+        `replace_text`. The mcp arm's CLAUDE.md could say its Bash
+        cannot change files; that changes the arm, not the tools.
+      - **Reads the allowlist refuses** (6 turns in that run): in
+        `claude -p`, Bash with loops, variables or brace expansion is
+        refused where a user would get a prompt. Count them apart from
+        the tools' waste in the analyses, or allow them in the arm if
+        that can be done without letting writes through.
     - **A smaller module overview.** `inspect` with no arguments lists
       every file with its line count, about 8.9K characters for this
       repo. In `ab-features-read-questions` it was read first in 4 of 8
@@ -392,7 +404,10 @@ hand or a tool got in the way.
       generic calls and names parameters p, p2; `replace_text` does not
       add the imports new code needs (hit again in #128).
     - **One worked example** of a whole batch in the instructions.
-    - **Measure** each with the A/B harness's feature and chain tasks.
+    - **Measure** each with the A/B harness's feature and chain tasks,
+      with more runs per task (noise is 10-25% at 2-3 runs), and count
+      the waste each fix targets per run (turns refused, turns spent on
+      ToolSearch alone), not only the totals.
 16. **A/B on other people's code.** The harness's tasks are all in this
     repository, which the tools were built on and for. Real feature PRs of
     large third-party modules test whether the tools help where nobody
