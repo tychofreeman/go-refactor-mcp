@@ -104,6 +104,9 @@ func TestToolsAndInstructions(t *testing.T) {
 	if !strings.Contains(cs.InitializeResult().Instructions, "load the schema of every tool its steps use") {
 		t.Error("server instructions do not say to load the schemas of a batch's tools")
 	}
+	if !strings.Contains(cs.InitializeResult().Instructions, "create_file for any new file") {
+		t.Error("server instructions do not say create_file makes files that are not Go")
+	}
 	res, err := cs.ListTools(context.Background(), nil)
 	if err != nil {
 		t.Fatal(err)

@@ -361,7 +361,15 @@ hand or a tool got in the way.
       Write attempts and 18 Bash commands that write (often test
       fixtures) were refused, about a tenth of the turns. Find what each
       was for and give the tools a way to do it: perhaps `create_file`
-      for several files, or for files that are not Go.
+      for several files, or for files that are not Go. Counted by turns
+      over the last three feature runs, 50 of 385 turns were refused:
+      test fixtures 20 (every case-clause run: heredocs, then Write,
+      then a ToolSearch for `create_file`), one `sed -i` across several
+      files 14 (symbol-addressing), reads the arm's Bash allowlist cannot
+      match 11 (loops, variables, brace expansion; a harness limit, which
+      a user would get as a prompt), new files and one-file `sed -i` 5.
+      *Done for fixtures: the instructions say `create_file` makes any
+      new file, Go or not, several in one batch.*
     - **A smaller module overview.** `inspect` with no arguments lists
       every file with its line count, about 8.9K characters for this
       repo. In `ab-features-read-questions` it was read first in 4 of 8
