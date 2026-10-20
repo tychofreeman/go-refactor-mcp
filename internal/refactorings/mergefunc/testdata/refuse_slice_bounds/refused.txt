@@ -1,0 +1,1 @@
+the bodies differ: a slice expression (s[n:]) at a.go:5:42 where head has a slice expression (s[:n])

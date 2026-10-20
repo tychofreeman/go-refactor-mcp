@@ -1136,6 +1136,11 @@ helper with add_declaration, Plan's new body with replace_statements
 All through gorefactor: the test with insert_statements, the
 instructions and these notes with replace_text.
 
+## 2026-10-20: merge_duplicate_function and optional parts, item 5 of the review
+
+All through gorefactor's CLI except the golden cases: the key and its doc
+comment with replace_text.
+
 ## 2026-10-20: remove_dead_code in a const group, item 1 of the review
 
 All through gorefactor's CLI except the golden cases. Moving

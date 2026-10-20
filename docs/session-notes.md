@@ -132,5 +132,7 @@ results are in `docs/cost-history.md`.
   does not load. The review's fix order is done; the user then asked
   for the rest of the high items, one PR each, branched one from the
   next and merged in order: 1 (#141, `analysis.DependsOnPosition`, now
-  shared with move_declaration), then 5, 3, 4. Change only
+  shared with move_declaration), 5 (#142: merge_duplicate_function's
+  key counts the optional parts of slices, for loops and `...` calls),
+  then 3, 4. Change only
   this repo copy: the Claude Doc linked from #130 is not kept up to date.
