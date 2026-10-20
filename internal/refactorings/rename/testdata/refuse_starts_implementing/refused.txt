@@ -1,0 +1,1 @@
+with the new name, type Square would implement interface example.com/m.Shape, which it does not now

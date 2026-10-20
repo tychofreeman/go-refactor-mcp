@@ -744,8 +744,11 @@ Refused (with an explanation):
 - the renamed symbol would **capture** an existing use of the new name
   (including builtins like `len` and imported package names)
 - a field/method clash on the type, including promoted members via embedding
-- a method that makes a type satisfy an interface, or whose name is commonly
-  called dynamically (`String`, `Error`, `MarshalJSON`, …)
+- a method that makes a type satisfy an interface, or would make it satisfy
+  one with the new name (`size` to `Area` when a `Shape` interface has
+  `Area() float64`, for the value type or the pointer); or whose old or
+  new name is commonly called dynamically (`String`, `Error`,
+  `MarshalJSON`, …)
 - unexporting a name that another package uses
 - symbols declared outside the workspace (stdlib, dependencies)
 
