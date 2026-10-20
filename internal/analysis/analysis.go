@@ -40,23 +40,6 @@ type Func struct {
 	Modified map[*types.Var][]ast.Node
 }
 
-// syncCallees call a function argument only before they return, and
-// never keep it.
-var syncCallees = map[string]bool{
-	"go/ast.Inspect": true,
-	"sort.Slice":     true, "sort.SliceStable": true, "sort.Search": true, "sort.SliceIsSorted": true,
-	"slices.SortFunc": true, "slices.SortStableFunc": true, "slices.IsSortedFunc": true,
-	"slices.IndexFunc": true, "slices.ContainsFunc": true, "slices.DeleteFunc": true,
-	"slices.CompactFunc": true, "slices.EqualFunc": true, "slices.MaxFunc": true, "slices.MinFunc": true,
-	"slices.BinarySearchFunc": true, "slices.CompareFunc": true,
-	"maps.DeleteFunc": true,
-	"strings.Map":     true, "strings.IndexFunc": true, "strings.LastIndexFunc": true, "strings.ContainsFunc": true,
-	"strings.FieldsFunc": true, "strings.TrimFunc": true, "strings.TrimLeftFunc": true, "strings.TrimRightFunc": true,
-	"bytes.Map": true, "bytes.IndexFunc": true, "bytes.LastIndexFunc": true, "bytes.ContainsFunc": true,
-	"bytes.FieldsFunc": true, "bytes.TrimFunc": true, "bytes.TrimLeftFunc": true, "bytes.TrimRightFunc": true,
-	"path/filepath.Walk": true, "path/filepath.WalkDir": true, "io/fs.WalkDir": true,
-}
-
 // SyncLit reports whether lit, whose parent node is parent, only runs
 // while the statement creating it runs: it is called immediately (not by
 // go or defer), or passed directly to a function known to call it only
@@ -76,7 +59,8 @@ func SyncLit(info *types.Info, lit *ast.FuncLit, parent ast.Node, goDefer map[*a
 	}
 	for _, a := range call.Args {
 		if ast.Unparen(a) == lit {
-			return syncCallees[fn.Pkg().Path()+"."+fn.Name()]
+			_, ok := syncCalls[fn.Pkg().Path()+"."+fn.Name()]
+			return ok
 		}
 	}
 	return false

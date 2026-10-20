@@ -437,7 +437,9 @@ hand or a tool got in the way.
       drifted apart: 22 of the first's are not in the second, among them
       the `bytes` functions, `filepath.Walk`, `slices.DeleteFunc` and
       `sort.Search`, so the effect summaries treat them as calls of a
-      function value.
+      function value. *Done (#159): one table, `syncCalls`, says for each
+      what it does with its other arguments (reads or changes the first,
+      reads all, walks the file system, panics on an empty slice).*
     - **The CLI matches the server:** `cmd/refactor` has no `batch`, and
       its edits get no stubs for the functions they call (the server
       passes `Declare`). Sessions in a cloud clone use the CLI, since the

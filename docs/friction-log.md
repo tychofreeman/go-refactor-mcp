@@ -1136,6 +1136,14 @@ helper with add_declaration, Plan's new body with replace_statements
 All through gorefactor: the test with insert_statements, the
 instructions and these notes with replace_text.
 
+## 2026-10-20: one list of functions that run a closure
+
+All through gorefactor's CLI with replace_text: the test, the merged
+table, and the old list deleted together with its one use in `SyncLit`
+(deleting the list alone was refused, since `SyncLit` still used it).
+Ranges this long were built as JSON with a script, since the CLI takes
+its arguments on the command line.
+
 ## 2026-10-20: one walk over dependencies' interfaces
 
 All through gorefactor's CLI: the new file with create_file, changesig's
