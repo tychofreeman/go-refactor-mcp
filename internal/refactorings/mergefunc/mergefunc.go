@@ -182,8 +182,8 @@ type tok struct {
 }
 
 // canon is the function's signature and body as a sequence of tokens: each
-// node's kind and operator, the end of each node, literals by value, and
-// names by what they mean. Its own locals (and parameters) are numbered in
+// node's kind, operator and optional parts, the end of each node, literals
+// by value, and names by what they mean. Its own locals (and parameters) are numbered in
 // order of appearance, so their names do not matter; a call of itself is
 // "self".
 func canon(ws *workspace.Workspace, f *fn) []tok {
@@ -223,6 +223,16 @@ func canon(ws *workspace.Workspace, f *fn) []tok {
 			t.key += " " + n.Tok.String()
 		case *ast.ChanType:
 			t.key += fmt.Sprint(" ", n.Dir)
+		// Optional children of one node give the same tokens wherever they
+		// stand (s[:n] and s[n:]), so which ones are there is part of the key.
+		case *ast.SliceExpr:
+			t.key += fmt.Sprintf(" low=%t high=%t max=%t", n.Low != nil, n.High != nil, n.Max != nil)
+		case *ast.ForStmt:
+			t.key += fmt.Sprintf(" init=%t cond=%t post=%t", n.Init != nil, n.Cond != nil, n.Post != nil)
+		case *ast.CallExpr:
+			if n.Ellipsis.IsValid() {
+				t.key += " ..." // append(xs, ys...), not append(xs, ys)
+			}
 		case *ast.Ellipsis:
 		case *ast.Ident:
 			t.show = n.Name

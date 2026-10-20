@@ -1456,7 +1456,9 @@ Identical means a call of one does exactly what a call of the other does:
 - bodies that match node for node, ignoring comments and layout:
   parameters and locals may be named differently, consistently (so
   `x - y` does not match `y - x` with the parameters swapped), and a call
-  of itself matches the other's call of itself;
+  of itself matches the other's call of itself. Optional parts count:
+  `s[:n]` does not match `s[n:]`, `append(xs, ys...)` does not match
+  `append(xs, ys)`, and a `for` loop's init does not match its post;
 - every other name means the same object in both: a function, variable,
   type, field or method, or an import of the same package
   (`strings.ToUpper` matches `strings.ToUpper`; one package's `helper`
