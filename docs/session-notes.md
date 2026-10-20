@@ -114,7 +114,8 @@ results are in `docs/cost-history.md`.
   instructions.
 - Sessions in a cloud clone have no MCP on that clone (the user's MCP
   runs on their own checkout); build `cmd/refactor` from the branch and
-  use it for every step. It has no `batch`, so steps go one at a time.
+  use it for every step: `refactor batch '<json>'` runs a batch, and
+  edits get stubs as through the server (#160).
 - Smaller known bugs: `create_from_usage` infers odd result types for
   generic calls and names parameters p, p2; `replace_text` does not add
   imports.
@@ -165,5 +166,6 @@ results are in `docs/cost-history.md`.
   refusal for a literal's own parameters (#156), extract_struct on the
   shared reflection helpers (#157), one dependency walk
   (`analysis.Dependencies`, #158), one list of functions that run a
-  closure during the call (`analysis.syncCalls`, #159). Change only
+  closure during the call (`analysis.syncCalls`, #159), the CLI matching the server (#160).
+  Change only
   this repo copy: the Claude Doc linked from #130 is not kept up to date.
