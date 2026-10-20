@@ -1,6 +1,7 @@
 // Command refactor-tokens reports where Claude Code sessions spent their
 // tokens, by tool, to compare working through the refactoring tools with
-// working by hand.
+// working by hand; and their turns that only loaded schemas or had a call
+// refused, and what reading cost by kind.
 //
 //	refactor-tokens [transcript.jsonl | dir]...
 //
