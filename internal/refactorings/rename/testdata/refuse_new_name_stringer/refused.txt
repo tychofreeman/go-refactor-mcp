@@ -1,0 +1,1 @@
+renaming point.text to String would probably make it implement fmt.Stringer, which is called dynamically

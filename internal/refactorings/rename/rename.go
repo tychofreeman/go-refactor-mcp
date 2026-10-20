@@ -418,20 +418,26 @@ var dynamicMethods = map[string]string{
 	"Scan": "sql.Scanner", "Value": "driver.Valuer",
 }
 
-// checkInterfaces refuses to rename a method that makes some type in the
-// workspace satisfy an interface mentioning the method's name.
+// checkInterfaces refuses to rename a method when some type in the
+// workspace would then implement, or stop implementing, an interface with
+// a method of the old or the new name.
 func (r *renamer) checkInterfaces(recv *types.Named) error {
 	if iface, ok := dynamicMethods[r.old]; ok {
 		return refactor.Refusef("method %s.%s probably implements %s, which is called dynamically; renaming it could silently change behavior",
 			recv.Obj().Name(), r.old, iface)
 	}
-	ifaces := r.interfacesWithMethod(r.old)
+	if iface, ok := dynamicMethods[r.new]; ok {
+		return refactor.Refusef("renaming %s.%s to %s would probably make it implement %s, which is called dynamically; that could silently change behavior",
+			recv.Obj().Name(), r.old, r.new, iface)
+	}
+	ifaces := append(r.interfacesWithMethod(r.old), r.interfacesWithMethod(r.new)...)
 	if len(ifaces) == 0 {
 		return nil
 	}
 	// Any workspace type whose method set reaches our method (directly or
-	// through embedding) must not be relying on it for an interface.
-	// Candidates are checked in source order so messages are deterministic.
+	// through embedding) must implement the same interfaces after the rename
+	// as before. Candidates are checked in source order so messages are
+	// deterministic.
 	var candidates []*types.Named
 	seen := map[string]bool{}
 	for _, p := range r.ws.Pkgs {
@@ -458,19 +464,62 @@ func (r *renamer) checkInterfaces(recv *types.Named) error {
 	sort.Slice(candidates, func(i, j int) bool {
 		return keyOf(r.ws.Fset, candidates[i].Obj()) < keyOf(r.ws.Fset, candidates[j].Obj())
 	})
+	noQualifier := func(*types.Package) string { return "" }
 	for _, named := range candidates {
 		if named.TypeParams().Len() > 0 {
-			return refactor.Refusef("method %s is on generic type %s and an interface with a method %q exists (%s); cannot prove renaming is safe",
-				r.old, named.Obj().Name(), r.old, ifaces[0].name)
+			return refactor.Refusef("method %s is on generic type %s and an interface with a method %q or %q exists (%s); cannot prove renaming is safe",
+				r.old, named.Obj().Name(), r.old, r.new, ifaces[0].name)
 		}
 		for _, it := range ifaces {
-			if types.Implements(named, it.iface) || types.Implements(types.NewPointer(named), it.iface) {
-				return refactor.Refusef("type %s implements interface %s through method %s; renaming the method would break that (rename the interface method instead, which is not supported yet)",
-					named.Obj().Name(), it.name, r.old)
+			for _, T := range []types.Type{named, types.NewPointer(named)} {
+				now, then := types.Implements(T, it.iface), r.implementsRenamed(T, it.iface)
+				switch {
+				case now && !then:
+					return refactor.Refusef("type %s implements interface %s through method %s; renaming the method would break that (rename the interface method instead, which is not supported yet)",
+						named.Obj().Name(), it.name, r.old)
+				case then && !now:
+					return refactor.Refusef("with the new name, type %s would implement interface %s, which it does not now; that could silently change what a type assertion or interface conversion does",
+						types.TypeString(T, noQualifier), it.name)
+				}
 			}
 		}
 	}
 	return nil
+}
+
+// implementsRenamed reports whether T would implement I once the method
+// being renamed has its new name, by T's method set: a method of the old
+// name that I needs is gone, and one of the new name is the renamed one.
+func (r *renamer) implementsRenamed(T types.Type, I *types.Interface) bool {
+	ms := types.NewMethodSet(T)
+	var ours *types.Func // the renamed method, as T has it
+	for i := 0; i < ms.Len(); i++ {
+		if f, ok := ms.At(i).Obj().(*types.Func); ok && keyOf(r.ws.Fset, f) == r.key {
+			ours = f
+		}
+	}
+	for i := 0; i < I.NumMethods(); i++ {
+		im := I.Method(i)
+		var got *types.Func
+		switch {
+		case ours != nil && im.Name() == r.new && (token.IsExported(r.new) || samePackage(im.Pkg(), ours.Pkg())):
+			got = ours
+		case ours != nil && im.Name() == r.old:
+			// the renamed method no longer has this name
+		default:
+			if sel := ms.Lookup(im.Pkg(), im.Name()); sel != nil {
+				got, _ = sel.Obj().(*types.Func)
+			}
+		}
+		if got == nil || !types.Identical(got.Type(), im.Type()) {
+			return false
+		}
+	}
+	return true
+}
+
+func samePackage(a, b *types.Package) bool {
+	return a != nil && b != nil && a.Path() == b.Path()
 }
 
 type namedIface struct {
