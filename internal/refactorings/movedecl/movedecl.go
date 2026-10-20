@@ -831,31 +831,16 @@ func (m *mover) checkLeavesGroup(decl *ast.GenDecl, spec ast.Spec) error {
 		return nil
 	}
 	name := spec.(*ast.ValueSpec).Names[0].Name
-	positional := func(vs *ast.ValueSpec) bool {
-		if len(vs.Values) == 0 {
-			return true
-		}
-		uses := false
-		for _, v := range vs.Values {
-			ast.Inspect(v, func(n ast.Node) bool {
-				if id, ok := n.(*ast.Ident); ok && m.pkg.TypesInfo.Uses[id] == types.Universe.Lookup("iota") {
-					uses = true
-				}
-				return !uses
-			})
-		}
-		return uses
-	}
 	i := slices.Index(decl.Specs, spec)
 	vs := spec.(*ast.ValueSpec)
 	switch {
 	case len(vs.Values) == 0:
 		return refactor.Refusef("%s has no value of its own: it repeats the expression of an earlier constant in the group, with its own iota; move the whole group (name the others in also)", name)
-	case positional(vs):
+	case analysis.DependsOnPosition(m.pkg.TypesInfo, vs):
 		return refactor.Refusef("%s uses iota, its position in the group; move the whole group (name the others in also)", name)
 	}
 	for _, later := range decl.Specs[i+1:] {
-		if lv := later.(*ast.ValueSpec); positional(lv) {
+		if lv := later.(*ast.ValueSpec); analysis.DependsOnPosition(m.pkg.TypesInfo, lv) {
 			return refactor.Refusef("%s (at %s) uses iota or repeats an earlier expression, so its value depends on the position of %s; move the whole group (name the others in also)",
 				lv.Names[0].Name, m.ws.Position(lv.Pos()), name)
 		}

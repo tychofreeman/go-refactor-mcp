@@ -4,6 +4,7 @@ import (
 	"go/ast"
 	"go/token"
 	"go/types"
+	"slices"
 	"strings"
 
 	"golang.org/x/tools/go/packages"
@@ -112,6 +113,13 @@ func (t *target) check(ws *workspace.Workspace) error {
 	if vs, ok := t.valueSpec(); ok {
 		if len(vs.Names) > 1 {
 			return refactor.Refusef("%s is declared together with other names (%s); deleting only some of them is not supported", name, names(vs))
+		}
+		if g, ok := t.decl.(*ast.GenDecl); ok && g.Tok == token.CONST {
+			for _, later := range g.Specs[slices.Index(g.Specs, ast.Spec(vs))+1:] {
+				if lv := later.(*ast.ValueSpec); analysis.DependsOnPosition(t.pkg.TypesInfo, lv) {
+					return refactor.Refusef("%s (at %s) uses iota or repeats an earlier expression, so deleting %s would change its value; delete the later constants too, or give them values of their own", lv.Names[0].Name, ws.Position(lv.Pos()), name)
+				}
+			}
 		}
 		for _, v := range vs.Values {
 			effect := false

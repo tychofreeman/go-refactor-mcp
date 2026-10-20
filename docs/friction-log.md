@@ -1136,6 +1136,15 @@ helper with add_declaration, Plan's new body with replace_statements
 All through gorefactor: the test with insert_statements, the
 instructions and these notes with replace_text.
 
+## 2026-10-20: remove_dead_code in a const group, item 1 of the review
+
+All through gorefactor's CLI except the golden cases. Moving
+move_declaration's `positional` closure into `analysis` took three
+steps, and the last had to be one replace_text over the function's
+middle: removing the closure and replacing its last use are refused
+each alone (one leaves it used, the other unused). A batch would have
+done both; the CLI has none. inline_function refuses a function value.
+
 ## 2026-10-20: undo while the module does not load
 
 All through gorefactor's CLI: the test and `notLoading` with

@@ -419,6 +419,26 @@ func MayPanic(info *types.Info, e ast.Expr) ast.Node {
 	return found
 }
 
+// DependsOnPosition reports whether the value of vs, a spec of a const
+// group, depends on where it stands in the group: it uses iota, the
+// spec's index, or it has no values and repeats an earlier spec's
+// expression. Taking out a spec before it changes its value.
+func DependsOnPosition(info *types.Info, vs *ast.ValueSpec) bool {
+	if len(vs.Values) == 0 {
+		return true
+	}
+	uses := false
+	for _, v := range vs.Values {
+		ast.Inspect(v, func(n ast.Node) bool {
+			if id, ok := n.(*ast.Ident); ok && info.Uses[id] == types.Universe.Lookup("iota") {
+				uses = true
+			}
+			return !uses
+		})
+	}
+	return uses
+}
+
 func isFloatOrComplex(t types.Type) bool {
 	b, ok := under(t).(*types.Basic)
 	return ok && b.Info()&(types.IsFloat|types.IsComplex) != 0

@@ -1,0 +1,1 @@
+high (at a.go:6:2) uses iota or repeats an earlier expression, so deleting mid would change its value

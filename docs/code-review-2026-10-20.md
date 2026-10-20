@@ -32,7 +32,7 @@ Each of these is accepted by the tool and changes what the program does, or brea
 
 | # | Finding | Where | Example |
 | --- | --- | --- | --- |
-| 1 | `remove_dead_code` deletes a member of an `iota` group | `deadcode/checks.go:112` | In `const ( low = iota; mid; high )`, removing an unused `mid` changes `high` from 2 to 1. `move_declaration` already refuses this case. |
+| 1 | `remove_dead_code` deletes a member of an `iota` group. *Fixed in #141.* | `deadcode/checks.go:112` | In `const ( low = iota; mid; high )`, removing an unused `mid` changes `high` from 2 to 1. `move_declaration` already refuses this case. |
 | 2 | `introduce_parameter` moves an expression past an early-return guard. *Fixed in #138, with a constant index into a string counted as able to panic.* | `changesig/evaluation.go:147` | From `if n == nil { return "<nil>" }; return n.name` it makes `label(n, n.name)`, so `label(nil)` now panics. Same for `xs[0]` after a `len(xs) == 0` check. |
 | 3 | `rename` can make a method start implementing an interface | `rename/rename.go:423` | Renaming `text` to `String` is accepted, and `fmt.Println(p)` output changes. Only the old name is checked; the signature-change tools check both directions. |
 | 4 | `rename` misses interfaces in dependencies the module never names | `rename/rename.go:488` | Renaming `WriteTo` silently stops `io.Copy` from using it. The signature-change tools already search every dependency. |
@@ -82,4 +82,4 @@ Each is a separate PR under the repo's one-item-per-PR rule.
 2. **Item 8, by fixing `Stable`, together with item 2.** These cover most of the panic-class bugs.
 3. **Items 1 and 3–5:** each is a small, well-understood check.
 
-**Order decided (2026-10-20): the panic class first,** items 8 and 2, since they are likelier in real use; then items 6 and 7, which need an unusual step (an edit that breaks `go.mod`). Items 8 (#136), 2 (#138), 6 (#139) and 7 (#139, #140) are done.
+**Order decided (2026-10-20): the panic class first,** items 8 and 2, since they are likelier in real use; then items 6 and 7, which need an unusual step (an edit that breaks `go.mod`). Items 8 (#136), 2 (#138), 6 (#139) and 7 (#139, #140) are done, then the rest of the high ones: 1 (#141).
