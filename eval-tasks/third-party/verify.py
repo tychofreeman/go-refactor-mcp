@@ -59,7 +59,7 @@ def run(repo, *cmd, timeout=600, env=None):
     cmd = as_user(cmd, env)
     t0 = time.time()
     try:
-        p = subprocess.run(cmd, cwd=repo, capture_output=True, text=True, timeout=timeout, env=env)
+        p = subprocess.run(cmd, cwd=repo, capture_output=True, text=True, errors="replace", timeout=timeout, env=env)
         return p.returncode, p.stdout + p.stderr, round(time.time() - t0, 1)
     except subprocess.TimeoutExpired as e:
         out = (e.stdout or b"").decode(errors="replace") if isinstance(e.stdout, bytes) else (e.stdout or "")
@@ -67,7 +67,7 @@ def run(repo, *cmd, timeout=600, env=None):
 
 
 def git(repo, *args):
-    return subprocess.run(as_user(["git", "-C", repo, *args]), check=True, capture_output=True, text=True).stdout
+    return subprocess.run(as_user(["git", "-C", repo, *args]), check=True, capture_output=True, text=True, errors="replace").stdout
 
 
 def checkout(repo, rev):
