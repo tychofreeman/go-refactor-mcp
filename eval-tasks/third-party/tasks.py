@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Builds the third-party A/B tasks (ab.json) from tasks.json.
 
-    tasks.py clone [--from DIR]   clones the repositories into clones/
-    tasks.py build                writes ab.json, and tests/NAME/ from the clones
+    tasks.py clone [--from DIR]   clones the repositories into testdata/clones/
+    tasks.py build                writes ab.json, and testdata/tests/NAME/ from the clones
     tasks.py validate [NAME ...]  checks each task as cmd/refactor-ab runs it
 
 tasks.json holds what is written by hand: each task's name, repository,
@@ -25,8 +25,10 @@ import tempfile
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-CLONES = os.path.join(HERE, "clones")
-TESTS = os.path.join(HERE, "tests")
+# Under testdata/, which go ./... skips: the hidden tests are Go files
+# without a module of their own.
+CLONES = os.path.join(HERE, "testdata", "clones")
+TESTS = os.path.join(HERE, "testdata", "tests")
 
 # Before the PR's tests, everything must still build. Not `go vet ./...`:
 # on Hugo, cold, it took 20 minutes and 18 GB of build space. So a run that

@@ -40,5 +40,4 @@ go.work.sum
 eval-runs/
 
 # Third-party A/B: clones and the hidden tests extracted from them
-/eval-tasks/third-party/clones/
-/eval-tasks/third-party/tests/
+/eval-tasks/third-party/testdata/

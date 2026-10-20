@@ -82,13 +82,14 @@ candidate (repository and commit) and the prompt.
 
 ```sh
 cd eval-tasks/third-party
-python3 tasks.py clone        # blobless clones of the five repositories into clones/
-python3 tasks.py build        # ab.json, and each task's hidden tests in tests/NAME/
+python3 tasks.py clone        # blobless clones of the five repositories into testdata/clones/
+python3 tasks.py build        # ab.json, and each task's hidden tests in testdata/tests/NAME/
 python3 tasks.py validate     # each check fails at the parent and passes at the PR
 ```
 
-`clones/` and `tests/` are not committed: the tests belong to their
-projects, and `build` extracts them again. Each task:
+`testdata/` is not committed: the tests belong to their projects, and
+`build` extracts them again. (It is `testdata/` so that `go ./...` in this
+repository skips the extracted Go files.) Each task:
 
 - **starts** at the PR's parent (`rev`), in a copy of the clone (`dir`);
 - **is told** the feature as a request, from the PR and its issues, with
@@ -112,7 +113,22 @@ check must pass. `--clean-cache` empties Go's build cache after each task.
 The first ten, two per repository, one that refactored on the way where
 there is one:
 
-TASK_TABLE
+| Task | PR | Size | Refactored on the way | Hidden tests | Check at the PR |
+|---|---|---|---|---|---|
+| `tp-cli-extension-env` | cli/cli [#14072](https://github.com/cli/cli/pull/14072) | S |  | 2 files | 22 s |
+| `tp-cli-comments-json` | cli/cli [#14215](https://github.com/cli/cli/pull/14215) | M |  | 3 files | 25 s |
+| `tp-hugo-render-context` | gohugoio/hugo [bcde80634](https://github.com/gohugoio/hugo/commit/bcde80634079) | S | yes | 1 file | 74 s |
+| `tp-hugo-frame-count` | gohugoio/hugo [c9f6e4d4a](https://github.com/gohugoio/hugo/commit/c9f6e4d4abc3) | S |  | 1 file | 119 s |
+| `tp-lazygit-stack-order` | jesseduffield/lazygit [#6024](https://github.com/jesseduffield/lazygit/pull/6024) | S | yes | 3 files | 36 s |
+| `tp-lazygit-cherry-pick-worktrees` | jesseduffield/lazygit [#6090](https://github.com/jesseduffield/lazygit/pull/6090) | S |  | 2 files | 37 s |
+| `tp-tofu-otel-resource-env` | opentofu/opentofu [4ac35bd5d](https://github.com/opentofu/opentofu/commit/4ac35bd5d9da) | S | yes | 1 file | 58 s |
+| `tp-tofu-lint-unused` | opentofu/opentofu [#4466](https://github.com/opentofu/opentofu/pull/4466) | S |  | 2 files | 68 s |
+| `tp-gitea-npm-version` | go-gitea/gitea [#39267](https://github.com/go-gitea/gitea/pull/39267) | S | yes | 2 files | 92 s |
+| `tp-gitea-archive-etag` | go-gitea/gitea [#39289](https://github.com/go-gitea/gitea/pull/39289) | S |  | 2 files | 108 s |
+
+All ten were validated on Oct 20. The check's time is right after the
+parent's copy had built, so with most of the module in the build cache, as
+in an A/B run; the first build of a module takes 1 to 4 minutes more.
 
 Two candidates were set aside while writing these. OpenTofu #4680's test
 compiles against the old code only because it compares the result with

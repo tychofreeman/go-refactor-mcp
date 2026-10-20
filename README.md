@@ -404,6 +404,12 @@ hand or a tool got in the way.
     on the way. In order:
     - **Prompts** for the recommended candidates, from their issues,
       written as requests; then `ab.json` tasks with their hidden tests.
+      *First ten done* (`eval-tasks/third-party/ab.json`, two per
+      repository, four that refactored on the way), each validated: it
+      fails at the PR's parent and passes at the PR. Two candidates were
+      set aside whose hidden tests pinned internal design or checked too
+      little; the other 23 recommended still need their tests read and a
+      prompt.
     - **A first run** on a few per repository, manual against hybrid, to
       see whether a task needs more than the prompt (setup, a running
       service) before running all of them, with at least five runs per
