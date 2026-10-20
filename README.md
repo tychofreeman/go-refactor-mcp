@@ -385,6 +385,8 @@ hand or a tool got in the way.
         or `sed -i` once (8 turns in that run) before `create_file` or
         `replace_text`. The mcp arm's CLAUDE.md could say its Bash
         cannot change files; that changes the arm, not the tools.
+        *Done (#175): `eval-tasks/claude-md-refactor-first-bash`, the
+        `-inspect` one with a paragraph saying so; not yet measured.*
       - **Reads the allowlist refuses** (6 turns in that run): in
         `claude -p`, Bash with loops, variables or brace expansion is
         refused where a user would get a prompt. Count them apart from
