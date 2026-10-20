@@ -472,130 +472,12 @@ func (x *extraction) checkTermination() error {
 	if body == nil || sig == nil || sig.Results().Len() == 0 {
 		return nil
 	}
-	if x.terminatingList(body.List, false) && !x.terminatingList(body.List, true) {
-		last := x.stmts[len(x.stmts)-1]
+	last := x.stmts[len(x.stmts)-1]
+	if analysis.TerminatingList(x.info, body.List, nil) && !analysis.TerminatingList(x.info, body.List, last) {
 		return refactor.Refusef("the selected lines end with %s at line %d, which is how %s ends without a return; a call to a new function does not count as that, so the code would no longer compile. Leave that statement out of the selection",
 			x.firstLine(last), x.line(last.Pos()), x.enclosingName())
 	}
 	return nil
-}
-
-// terminatingList reports whether a statement list ends in a terminating
-// statement, as defined by the Go spec. With extracted, the selected
-// statements count as already replaced by a call.
-func (x *extraction) terminatingList(list []ast.Stmt, extracted bool) bool {
-	for i := len(list) - 1; i >= 0; i-- {
-		s := list[i]
-		if _, empty := s.(*ast.EmptyStmt); empty {
-			continue
-		}
-		if extracted && s == x.stmts[len(x.stmts)-1] {
-			return false // the last statement is now the call
-		}
-		return x.terminating(s, extracted)
-	}
-	return false
-}
-
-func (x *extraction) terminating(s ast.Stmt, extracted bool) bool {
-	switch s := s.(type) {
-	case *ast.ReturnStmt:
-		return true
-	case *ast.BranchStmt:
-		return s.Tok == token.GOTO
-	case *ast.ExprStmt:
-		if call, ok := ast.Unparen(s.X).(*ast.CallExpr); ok {
-			if id, ok := ast.Unparen(call.Fun).(*ast.Ident); ok {
-				return x.info.Uses[id] == types.Universe.Lookup("panic")
-			}
-		}
-	case *ast.BlockStmt:
-		return x.terminatingList(s.List, extracted)
-	case *ast.IfStmt:
-		return s.Else != nil && x.terminating(s.Body, extracted) && x.terminating(s.Else, extracted)
-	case *ast.ForStmt:
-		return s.Cond == nil && !x.hasBreak(s)
-	case *ast.LabeledStmt:
-		return x.terminating(s.Stmt, extracted)
-	case *ast.SwitchStmt:
-		return x.terminatingClauses(s, s.Body, extracted)
-	case *ast.TypeSwitchStmt:
-		return x.terminatingClauses(s, s.Body, extracted)
-	case *ast.SelectStmt:
-		return x.terminatingClauses(s, s.Body, extracted)
-	}
-	return false
-}
-
-// terminatingClauses applies the spec's rule for switch and select
-// statements: no break refers to the statement, a switch has a default
-// case, and every clause ends in a terminating statement (or, in a
-// switch, a fallthrough).
-func (x *extraction) terminatingClauses(stmt ast.Stmt, body *ast.BlockStmt, extracted bool) bool {
-	if x.hasBreak(stmt) {
-		return false
-	}
-	_, isSelect := stmt.(*ast.SelectStmt)
-	hasDefault := false
-	for _, c := range body.List {
-		var list []ast.Stmt
-		switch c := c.(type) {
-		case *ast.CaseClause:
-			list, hasDefault = c.Body, hasDefault || c.List == nil
-		case *ast.CommClause:
-			list = c.Body
-		}
-		if n := len(list); n > 0 {
-			// A selected fallthrough is refused elsewhere, so this one stays.
-			if b, ok := list[n-1].(*ast.BranchStmt); ok && b.Tok == token.FALLTHROUGH {
-				continue
-			}
-		}
-		if !x.terminatingList(list, extracted) {
-			return false
-		}
-	}
-	return isSelect || hasDefault
-}
-
-// hasBreak reports whether a break statement inside stmt refers to it:
-// unlabeled and not nested in another for, switch or select, or labeled
-// with stmt's label.
-func (x *extraction) hasBreak(stmt ast.Stmt) bool {
-	var label types.Object
-	for _, n := range analysis.PathTo(x.file, stmt)[1:] {
-		if ls, ok := n.(*ast.LabeledStmt); ok && ls.Stmt == stmt {
-			label = x.info.Defs[ls.Label]
-		}
-		break
-	}
-	found := false
-	var walk func(n ast.Node, nested bool)
-	walk = func(n ast.Node, nested bool) {
-		ast.Inspect(n, func(c ast.Node) bool {
-			if found || c == nil {
-				return false
-			}
-			switch c := c.(type) {
-			case *ast.FuncLit:
-				return false
-			case *ast.BranchStmt:
-				if c.Tok == token.BREAK {
-					if c.Label == nil && !nested || c.Label != nil && label != nil && x.info.Uses[c.Label] == label {
-						found = true
-					}
-				}
-			case *ast.ForStmt, *ast.RangeStmt, *ast.SwitchStmt, *ast.TypeSwitchStmt, *ast.SelectStmt:
-				if c != n {
-					walk(c, true)
-					return false
-				}
-			}
-			return true
-		})
-	}
-	walk(stmt, false)
-	return found
 }
 
 // typeOf returns t as a T, or the zero T.
@@ -1772,7 +1654,7 @@ func (x *extraction) plan() (*refactor.Plan, error) {
 		for _, v := range f.results {
 			results = append(results, ts(v.Name(), v.Type()))
 		}
-		if len(f.results) > 0 && !x.terminatingList(x.stmts, false) {
+		if len(f.results) > 0 && !analysis.TerminatingList(x.info, x.stmts, nil) {
 			tail = strings.Join(names(f.results), ", ")
 		}
 	}

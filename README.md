@@ -492,7 +492,8 @@ hand or a tool got in the way.
       before Go 1.22). All the low items are done.*
     - **One check for terminating statements:** `extract_function`
       duplicates the logic of `analysis/flow.go` (the review's code
-      quality note).
+      quality note). *Done (#170): `analysis.TerminatingList` takes the
+      statement that becomes the call, and `extract_function` uses it.*
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the

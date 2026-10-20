@@ -1136,6 +1136,14 @@ helper with add_declaration, Plan's new body with replace_statements
 All through gorefactor: the test with insert_statements, the
 instructions and these notes with replace_text.
 
+## 2026-10-20: one check for terminating statements
+
+All through `refactor batch`. remove_dead_code could not delete
+extract_function's four methods one at a time, since they call each
+other (a refusal per step: "terminatingList is used at ..."); they went
+as one replace_text of their range. A dead-code removal of a group that
+only uses itself would have done it in one step.
+
 ## 2026-10-20: the review's item 25
 
 All through `refactor batch`: each of the three fixes with replace_text

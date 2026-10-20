@@ -72,7 +72,7 @@ Mostly false refusals, misleading results and one crash; none changes behavior e
 | 24 | Argument aliases in a batch skip line translation. *Fixed in #166.* | `refactor/refactor.go:373` | A step sent with `line_no` instead of `line` uses the untranslated number. |
 | 25 | Smaller behavior gaps. *Fixed in #167: `rename` refuses changing whether `go test` runs a function; `make` of a slice or channel with a size that is not a constant, length or capacity counts as able to panic; `extract_function` passes a loop variable a goroutine captures as a pointer before Go 1.22.* | `rename`, `slidestmt`, `extractfunc` | `rename` can stop a `Test…` function from running or start running a helper; `move_statement` doesn't count `make(n)` with a variable size as able to panic; pre-1.22 loop variables captured by goroutines. |
 
-**Code quality.** Two whitelists of synchronous-callee functions have drifted apart (`analysis.go:45`, `effects.go:143`; merged in #159). `extract_function` duplicates the terminating-statement logic in `analysis/flow.go`. The README said only `move_statement` uses the effect summaries, but the signature-change tools do too (corrected in #148).
+**Code quality.** Two whitelists of synchronous-callee functions have drifted apart (`analysis.go:45`, `effects.go:143`; merged in #159). `extract_function` duplicates the terminating-statement logic in `analysis/flow.go` (one check since #170). The README said only `move_statement` uses the effect summaries, but the signature-change tools do too (corrected in #148).
 
 ## What to fix first
 
