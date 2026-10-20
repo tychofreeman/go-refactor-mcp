@@ -56,7 +56,7 @@ Item 8 is the root of several others: one fix in `Stable` covers both of its con
 | 15 | `rename` of a struct field silently changes its JSON key. *Fixed in #151.* | `rename/rename.go:261` | Renaming `Name` to `name` drops it from `json.Marshal` output. |
 | 16 | Statement content can contain a `}` that closes the block and adds top-level declarations. *Fixed in #152, in add_case too.* | `edits/gocode/gocode.go:35` | The result still says "replaced the body of helper". A model pasting a range that runs past the function's end would trigger it. |
 | 17 | `undo` of a step that created a directory fails halfway if another file appeared there. *Fixed in #153.* | `workspace/workspace.go:541` | Files are restored only partly, and the undo entry stays on the stack. |
-| 18 | A relative path resolves differently for new files | `workspace/workspace.go:288` | With the server in a subdirectory, `create_file` puts a new file at the module root, while other tools resolve the same name in the subdirectory. |
+| 18 | A relative path resolves differently for new files. *Fixed in #154: the module root first, as the tools print paths.* | `workspace/workspace.go:288` | With the server in a subdirectory, `create_file` puts a new file at the module root, while other tools resolve the same name in the subdirectory. |
 
 ## Low
 
@@ -82,4 +82,4 @@ Each is a separate PR under the repo's one-item-per-PR rule.
 2. **Item 8, by fixing `Stable`, together with item 2.** These cover most of the panic-class bugs.
 3. **Items 1 and 3–5:** each is a small, well-understood check.
 
-**Order decided (2026-10-20): the panic class first,** items 8 and 2, since they are likelier in real use; then items 6 and 7, which need an unusual step (an edit that breaks `go.mod`). Items 8 (#136), 2 (#138), 6 (#139) and 7 (#139, #140) are done, then the rest of the high ones: 1 (#141), 5 (#142), 3 (#143) and 4 (#144). All high items are done.
+**Order decided (2026-10-20): the panic class first,** items 8 and 2, since they are likelier in real use; then items 6 and 7, which need an unusual step (an edit that breaks `go.mod`). Items 8 (#136), 2 (#138), 6 (#139) and 7 (#139, #140) are done, then the rest of the high ones: 1 (#141), 5 (#142), 3 (#143) and 4 (#144), and the medium ones, 9–18 (#145–#154). The low ones (19–25) remain.

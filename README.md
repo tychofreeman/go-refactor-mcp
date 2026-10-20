@@ -613,7 +613,9 @@ Exit status: `0` applied/previewed, `2` refused, `1` error.
 
 `-C` can be any directory inside a module: the tool always loads the whole
 enclosing module (nearest `go.mod`), so references in every package are
-updated. `file` is resolved relative to `-C` first, then to the module root.
+updated. `file` is resolved relative to the module root, as the tools print
+paths; a path that names no file there but one under `-C` means that one.
+A new file (`create_file`) goes at the module root.
 References in *other* modules (e.g. siblings in a `go.work`) are not
 updated; exported renames add a note saying so.
 

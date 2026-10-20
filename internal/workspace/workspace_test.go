@@ -289,6 +289,31 @@ func TestLoadFromSubdirUsesModuleRoot(t *testing.T) {
 	}
 }
 
+// Paths are relative to the module root, as the tools print them and
+// their descriptions say; one that names no file there but one under the
+// directory the tool was pointed at means that one.
+func TestAbsPrefersTheModuleRoot(t *testing.T) {
+	dir := writeModule(t, map[string]string{
+		"util.go":   "package m\n\nvar U = 1\n",
+		"a/util.go": "package a\n\nvar U = 2\n",
+		"a/only.go": "package a\n\nvar O = 3\n",
+	})
+	w, err := Load(filepath.Join(dir, "a"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct{ path, want string }{
+		{"util.go", filepath.Join(dir, "util.go")},        // in both: the root's
+		{"only.go", filepath.Join(dir, "a", "only.go")},   // only under a
+		{"new.go", filepath.Join(dir, "new.go")},          // neither: a new file, at the root
+		{"a/util.go", filepath.Join(dir, "a", "util.go")}, // as printed
+	} {
+		if got := w.Abs(c.path); got != c.want {
+			t.Errorf("Abs(%s) = %s, want %s", c.path, got, c.want)
+		}
+	}
+}
+
 func TestRefresh(t *testing.T) {
 	dir := writeModule(t, map[string]string{"m.go": "package m\n\nvar X = 1\n"})
 	w, err := Load(dir)
