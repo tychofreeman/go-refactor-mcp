@@ -369,7 +369,8 @@ hand or a tool got in the way.
       match 11 (loops, variables, brace expansion; a harness limit, which
       a user would get as a prompt), new files and one-file `sed -i` 5.
       *Done for fixtures: the instructions say `create_file` makes any
-      new file, Go or not, several in one batch.*
+      new file, Go or not, several in one batch; and for one change in
+      several files: `replace_text` takes `files` in place of `file`.*
     - **A smaller module overview.** `inspect` with no arguments lists
       every file with its line count, about 8.9K characters for this
       repo. In `ab-features-read-questions` it was read first in 4 of 8

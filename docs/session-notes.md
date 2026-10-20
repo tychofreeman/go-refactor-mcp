@@ -80,6 +80,13 @@ results are in `docs/cost-history.md`.
   to 12.5K characters). Measured in `ab-features-toolsearch`:
   ToolSearch-only turns 9 → 5, totals unchanged (5.54M, 8/8). Next by
   size: the denied Write and Bash-write turns (32 in that run).
+- Denied turns, by what they tried (50 of 385 turns in the last three
+  feature runs): fixtures 20, one `sed -i` over several files 14, reads
+  the mcp arm's Bash allowlist cannot match 11 (a harness limit: in
+  `-p` mode a command with loops, variables or brace expansion is
+  refused, where a user would get a prompt). #133 names fixtures in
+  the instructions under create_file; #134 lets replace_text take
+  `files`. Not yet measured: count fixture and sed turns per run.
 - Line ranges in that run: of 30 inspect ranges, 18 spanned several
   functions (80% of range lines), 8 were exactly one function; a
   `function` list in inspect would change little.

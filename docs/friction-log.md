@@ -1125,6 +1125,12 @@ All through gorefactor. replace_text still does not add imports
 (strings.TrimSpace in a replaced block); I dropped the call rather than
 add the import in another step.
 
+## 2026-10-20: replace_text across several files
+
+All through gorefactor: the fixtures with a batch of create_file, the
+helper with add_declaration, Plan's new body with replace_statements
+(`function`), the schema, description and docs with replace_text.
+
 ## 2026-10-20: create_file for files that are not Go, in the instructions
 
 All through gorefactor: the test with insert_statements, the

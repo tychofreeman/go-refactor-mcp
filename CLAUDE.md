@@ -89,7 +89,8 @@ until the MCP is reconnected.
    from code that does not type-check if it fixes some errors and adds
    none (`add_field` for a field the new test uses).
 7. **replace_text for everything else:** string literals, comments, and
-   files that are not Go (README, docs, JSON fixtures). `old` must match
+   files that are not Go (README, docs, JSON fixtures); `files` makes
+   the same replacement in several files. `old` must match
    the file exactly, after gofmt's alignment: if it is not found, grep for
    the line as it is.
 8. **Read refusals; they say what to send.** A refusal changes nothing. A
