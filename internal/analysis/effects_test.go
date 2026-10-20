@@ -350,6 +350,84 @@ func TestEffectsCallStandardLibrary(t *testing.T) {
 	}
 }
 
+// Functions that call a function literal during the call: what the call
+// itself does with its other arguments, and that the literal runs then.
+func TestEffectsCallSyncCallees(t *testing.T) {
+	src := `package p
+
+import (
+	"bytes"
+	"io/fs"
+	"maps"
+	"path/filepath"
+	"slices"
+	"sort"
+	"strings"
+)
+
+func f(s string, b []byte, xs, ys []int, m map[string]int, n int, root string) {
+	_ = strings.FieldsFunc(s, func(r rune) bool { return r == 32 })
+	_ = bytes.FieldsFunc(b, func(r rune) bool { return false })
+	_ = slices.DeleteFunc(xs, func(int) bool { return false })
+	_ = slices.EqualFunc(xs, ys, func(a, b int) bool { return a == b })
+	_ = slices.MinFunc(xs, func(a, b int) int { return a - b })
+	_ = sort.Search(n, func(i int) bool { return i > 2 })
+	_ = filepath.WalkDir(root, func(string, fs.DirEntry, error) error { return nil })
+	maps.DeleteFunc(m, func(string, int) bool { return false })
+	sort.Slice(xs, func(i, j int) bool { return xs[i] < xs[j] })
+}
+`
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "p.go", src, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	info := &types.Info{
+		Defs: map[*ast.Ident]types.Object{}, Uses: map[*ast.Ident]types.Object{},
+		Types: map[ast.Expr]types.TypeAndValue{}, Selections: map[*ast.SelectorExpr]*types.Selection{},
+	}
+	if _, err := (&types.Config{Importer: importer.Default()}).Check("example.com/p", fset, []*ast.File{file}, info); err != nil {
+		t.Fatal(err)
+	}
+	e := NewEffects()
+	e.AddPackage([]*ast.File{file}, info)
+	want := map[string][3]bool{ // effect, reads, unsafe
+		"strings.FieldsFunc": {false, false, false}, // strings cannot change
+		"bytes.FieldsFunc":   {false, true, false},
+		"slices.DeleteFunc":  {true, true, false},
+		"slices.EqualFunc":   {false, true, false},
+		"slices.MinFunc":     {false, true, true}, // panics on an empty slice
+		"sort.Search":        {false, false, false},
+		"filepath.WalkDir":   {true, false, false}, // the file system
+		"maps.DeleteFunc":    {true, true, false},
+		"sort.Slice":         {true, true, false},
+	}
+	seen := 0
+	ast.Inspect(file, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		name := types.ExprString(call.Fun)
+		w, ok := want[name]
+		if !ok {
+			return true
+		}
+		seen++
+		s := e.Call(info, call)
+		if got := [3]bool{s.Effect != "", s.Reads != "", s.Unsafe != ""}; got != w {
+			t.Errorf("%s: effect, reads, unsafe = %v, want %v (summary %+v)", name, got, w, s)
+		}
+		if lits := SyncLits(info, call); len(lits) != 1 {
+			t.Errorf("%s: %d literals run during the call, want 1", name, len(lits))
+		}
+		return true
+	})
+	if seen != len(want) {
+		t.Errorf("checked %d calls, want %d", seen, len(want))
+	}
+}
+
 func TestEffectsFuncStandardLibraryWrites(t *testing.T) {
 	pkg, f, info := checkStd(t)
 	e := NewEffects()

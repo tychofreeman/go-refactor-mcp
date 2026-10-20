@@ -134,21 +134,40 @@ var effectFreeFuncs = map[string]PanicKind{
 	"strconv.ParseFloat": NoPanic, "strconv.ParseBool": NoPanic,
 }
 
-// syncCall is how a function that calls a function argument only before
-// it returns (see syncCallees) uses its first argument.
-type syncCall struct{ reads, writes bool }
+// syncCall is how a function that calls its function arguments only
+// before it returns, and never keeps them, uses its other arguments.
+type syncCall struct {
+	reads, writes bool   // its first argument: it reads it, or changes it in place
+	readsAll      bool   // it reads every argument that is not a function
+	effect        string // what else it does, if anything
+	unsafe        string // how it can panic, if it can
+}
 
-// syncCalls lists the functions whose literal function arguments are
-// summarized as part of the caller: their bodies run during the call.
+var (
+	reads      = syncCall{reads: true}
+	readWrites = syncCall{reads: true, writes: true}
+)
+
+// syncCalls lists the functions whose literal function arguments run
+// during the call, so they are summarized as part of the caller.
 var syncCalls = map[string]syncCall{
-	"go/ast.Inspect":   {reads: true},
-	"sort.Slice":       {reads: true, writes: true},
-	"sort.SliceStable": {reads: true, writes: true},
-	"slices.SortFunc":  {reads: true, writes: true}, "slices.SortStableFunc": {reads: true, writes: true},
-	"slices.IndexFunc": {reads: true}, "slices.ContainsFunc": {reads: true},
-	"strings.Map": {}, "strings.IndexFunc": {}, "strings.LastIndexFunc": {},
-	"strings.ContainsFunc": {}, "strings.FieldsFunc": {}, "strings.TrimFunc": {},
-	"strings.TrimLeftFunc": {}, "strings.TrimRightFunc": {},
+	"go/ast.Inspect": reads,
+	"sort.Slice":     readWrites, "sort.SliceStable": readWrites, "sort.SliceIsSorted": reads, "sort.Search": {},
+	"slices.SortFunc": readWrites, "slices.SortStableFunc": readWrites, "slices.IsSortedFunc": reads,
+	"slices.IndexFunc": reads, "slices.ContainsFunc": reads, "slices.DeleteFunc": readWrites,
+	"slices.CompactFunc": readWrites, "slices.BinarySearchFunc": reads,
+	"slices.EqualFunc": {readsAll: true}, "slices.CompareFunc": {readsAll: true},
+	"slices.MaxFunc":  {reads: true, unsafe: "panics on an empty slice"},
+	"slices.MinFunc":  {reads: true, unsafe: "panics on an empty slice"},
+	"maps.DeleteFunc": readWrites,
+	// Strings cannot change; byte slices can.
+	"strings.Map": {}, "strings.IndexFunc": {}, "strings.LastIndexFunc": {}, "strings.ContainsFunc": {},
+	"strings.FieldsFunc": {}, "strings.TrimFunc": {}, "strings.TrimLeftFunc": {}, "strings.TrimRightFunc": {},
+	"bytes.Map": reads, "bytes.IndexFunc": reads, "bytes.LastIndexFunc": reads, "bytes.ContainsFunc": reads,
+	"bytes.FieldsFunc": reads, "bytes.TrimFunc": reads, "bytes.TrimLeftFunc": reads, "bytes.TrimRightFunc": reads,
+	"path/filepath.Walk":    {effect: "walks the file system"},
+	"path/filepath.WalkDir": {effect: "walks the file system"},
+	"io/fs.WalkDir":         {effect: "walks a file system"},
 }
 
 // SyncLits returns the function literals passed to call that run during
@@ -184,7 +203,7 @@ func syncCallSummary(info *types.Info, fn *types.Func, call *ast.CallExpr, priva
 	if !ok {
 		return Summary{}, false
 	}
-	var s Summary
+	s := Summary{Effect: sc.effect, Unsafe: sc.unsafe}
 	for i, a := range call.Args {
 		_, isLit := ast.Unparen(a).(*ast.FuncLit)
 		_, isFunc := info.TypeOf(a).Underlying().(*types.Signature)
@@ -192,11 +211,11 @@ func syncCallSummary(info *types.Info, fn *types.Func, call *ast.CallExpr, priva
 		case isLit:
 		case isFunc:
 			s.Effect = "passes " + types.ExprString(a) + " to " + types.ExprString(call.Fun)
-		case i == 0 && (private == nil || !private(a, false)):
+		case (i == 0 || sc.readsAll) && (private == nil || !private(a, false)):
 			if sc.writes && s.Effect == "" {
-				s.Effect = "sorts " + types.ExprString(a)
+				s.Effect = "changes " + types.ExprString(a)
 			}
-			if sc.reads {
+			if (sc.reads || sc.readsAll) && s.Reads == "" {
 				s.Reads = "reads " + types.ExprString(a)
 			}
 		}
