@@ -4,7 +4,7 @@ type Stack[T any] struct{ items []T }
 
 func (s *Stack[T]) Push(v T) { s.items = append(s.items, v) }
 
-func (s *Stack[T]) PushAll(p []T) {
+func (s *Stack[T]) PushAll(xs []T) {
 	panic("not implemented")
 }
 

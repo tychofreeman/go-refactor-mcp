@@ -409,7 +409,12 @@ hand or a tool got in the way.
       generic calls and names parameters p, p2; `replace_text` does not
       add the imports new code needs (hit again in #128). *Done for
       imports (#173): in a Go file, `replace_text` imports the packages
-      its new text names, as the other edits do.*
+      its new text names, as the other edits do. And for
+      `create_from_usage` (#176): a parameter is named after its type when
+      its argument has no name (`configs`, `m`, `ch`, `fn`, `err`, `id`
+      for `ids[0]`), and a generic callee whose type arguments could not
+      be inferred tells nothing about a result, so it is no longer
+      written as its type parameter (`S`).*
     - **One worked example** of a whole batch in the instructions.
       *Done (#174): a test first, the real function replacing its stub,
       and a rename, in one batch; a test runs it as written.*

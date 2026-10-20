@@ -139,9 +139,9 @@ results are in `docs/cost-history.md`.
   runs on their own checkout); build `cmd/refactor` from the branch and
   use it for every step: `refactor batch '<json>'` runs a batch, and
   edits get stubs as through the server (#160).
-- Smaller known bugs: `create_from_usage` infers odd result types for
-  generic calls and names parameters p, p2. (`replace_text` adds
-  imports since #173.)
+- The smaller known bugs are fixed: `replace_text` adds imports (#173);
+  `create_from_usage` names parameters by type and does not take a
+  result type from an uninstantiated generic callee (#176).
 - A full code review at a641b61 is in `docs/code-review-2026-10-20.md`:
   25 findings, 7 of them silent behavior changes or broken guarantees,
   most from panicking expressions treated as stable and methods reached
@@ -208,7 +208,7 @@ results are in `docs/cost-history.md`.
   in the instructions (#174), an mcp-arm CLAUDE.md saying its Bash
   cannot change files (#175, `eval-tasks/claude-md-refactor-first-bash`,
   now the features run's; the earlier dirs stay as baselines; not yet
-  measured). Counting refused Bash reads apart is done
+  measured), create_from_usage's names and generic results (#176). Counting refused Bash reads apart is done
   in #172 (refactor-tokens), not here.
   Change only
   this repo copy: the Claude Doc linked from #130 is not kept up to date.
