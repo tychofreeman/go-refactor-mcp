@@ -487,8 +487,9 @@ func (x *inliner) pureRead(e ast.Expr) bool {
 }
 
 // firstUseUnconditional reports whether p's first use in the body is
-// evaluated whenever the body runs (not in a nested block, a function
-// literal or the right side of && or ||), so a panic the argument would
+// evaluated whenever the body runs (not in a nested block, an else if, a
+// for loop's post statement, a function literal or the right side of &&
+// or ||), so a panic the argument would
 // have raised at the call still happens, before anything else.
 func (x *inliner) firstUseUnconditional(p *param) bool {
 	path := analysis.PathTo(x.decl.Body, p.uses[0])
@@ -496,6 +497,14 @@ func (x *inliner) firstUseUnconditional(p *param) bool {
 		switch n := path[i].(type) {
 		case *ast.BlockStmt, *ast.CaseClause, *ast.CommClause, *ast.FuncLit:
 			return false
+		case *ast.IfStmt: // path runs from the use outward
+			if outer, ok := path[i+1].(*ast.IfStmt); ok && outer.Else == n {
+				return false // an else if
+			}
+		case *ast.ForStmt:
+			if n.Post != nil && path[i-1] == n.Post {
+				return false // runs only after a pass
+			}
 		case *ast.BinaryExpr:
 			if (n.Op == token.LAND || n.Op == token.LOR) && path[i-1] == n.Y {
 				return false
