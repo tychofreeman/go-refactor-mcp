@@ -69,8 +69,13 @@ results are in `docs/cost-history.md`.
 - PR #122 was merged without its second commit (this file), which was
   pushed after the user had seen the PR. Put later work in a new PR
   rather than adding commits to one the user may already be merging.
-- Open in roadmap item 15: refusals for ranges that start at the `func`
-  line; one worked example of a batch in the instructions.
+- Roadmap item 15: refusals for ranges that start at the `func` line are
+  done (#124); they give the body's lines and, for `replace_statements`,
+  `function`. Still open: one worked example of a batch in the
+  instructions.
+- Sessions in a cloud clone have no MCP on that clone (the user's MCP
+  runs on their own checkout); build `cmd/refactor` from the branch and
+  use it for every step. It has no `batch`, so steps go one at a time.
 - Smaller known bugs: `create_from_usage` infers odd result types for
   generic calls and names parameters p, p2; `replace_text` does not add
   imports.
