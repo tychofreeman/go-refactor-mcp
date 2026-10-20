@@ -111,7 +111,7 @@ from this file. The usual runs:
 
     go run ./cmd/refactor-ab -model sonnet -arms mcp -runs 2 \
       -only feat-symbol-addressing,feat-case-clause,feat-no-echo,feat-compact-diffs \
-      -claude-md eval-tasks/claude-md-refactor-first -out eval-runs/NAME
+      -claude-md eval-tasks/claude-md-refactor-first-bash -out eval-runs/NAME
     go run ./cmd/refactor-ab -model sonnet -arms hybrid,manual -runs 3 \
       -only chain-duplication,chain-tangled,chain-currency,chain-address \
       -claude-md eval-tasks/claude-md-refactor-when-needed -out eval-runs/NAME

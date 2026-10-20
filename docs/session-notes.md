@@ -205,7 +205,10 @@ results are in `docs/cost-history.md`.
   (#170). Then roadmap item 15's open bullets, one PR each, chained from
   #170: a smaller module overview (#171, one line per package),
   replace_text adds imports (#173, `gocode.ImportNames`), a worked batch
-  in the instructions (#174). Counting refused Bash reads apart is done
+  in the instructions (#174), an mcp-arm CLAUDE.md saying its Bash
+  cannot change files (#175, `eval-tasks/claude-md-refactor-first-bash`,
+  now the features run's; the earlier dirs stay as baselines; not yet
+  measured). Counting refused Bash reads apart is done
   in #172 (refactor-tokens), not here.
   Change only
   this repo copy: the Claude Doc linked from #130 is not kept up to date.
