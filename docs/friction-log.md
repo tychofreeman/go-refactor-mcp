@@ -1136,6 +1136,12 @@ helper with add_declaration, Plan's new body with replace_statements
 All through gorefactor: the test with insert_statements, the
 instructions and these notes with replace_text.
 
+## 2026-10-20: extract_struct on the shared reflection helpers
+
+All through gorefactor's CLI except the golden cases: the check's body
+with replace_statements (`function`), its description and docs with
+replace_text.
+
 ## 2026-10-20: introduce_parameter and a literal's own names
 
 All through gorefactor's CLI except the golden case: both checks and the

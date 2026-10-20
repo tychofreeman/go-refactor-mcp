@@ -40,7 +40,7 @@ func (*ExtractStruct) Description() string {
 	return `Move some fields of a struct type into a new struct type, declared just before it and embedded in their place, so every use (m.path) keeps working through the embedded struct. Composite literals are rewritten: mover{path: p} becomes mover{source: source{path: p}}, point3{1, 2, 3} becomes point3{xy{1, 2}, 3}.
 Use it to split a struct that holds two things, before giving the new type its own methods (function_to_method) or its own file or package (move_declaration).
 Identify the struct by file, line and name, at its declaration or any use; give fields, the names to move (in any order; they keep the struct's order), and new_type.
-Only unexported struct types, and only when no value of the type (or pointer to it) is passed to an interface parameter or converted to an interface: reflection (fmt's %+v, encoding/json) would see the new embedded field. Assigning one to an interface variable is not checked.
+Only unexported struct types, and only when no value holding the type (itself, a pointer to it, or a slice, map or struct holding it) is passed to an interface parameter or converted to an interface: reflection (fmt's %+v, encoding/json) would see the new embedded field. Assigning one to an interface variable is not checked.
 Refuses a generic struct, an embedded field among those to move, part of a field group (x, y int), a new_type the package already declares or that is a field or method of the struct, a name another embedded field also has (it would become ambiguous), an unkeyed literal when the fields to move are not next to each other, and a multi-line literal with comments between its elements.`
 }
 
@@ -285,61 +285,27 @@ func sameObj(fset *token.FileSet, a, b types.Object) bool {
 	return pa == pb && a.Name() == b.Name()
 }
 
-// checkNotPassedAsInterface refuses a value of the type (or a pointer to
-// it) passed to an interface parameter or converted to an interface: what
-// reflection sees there would change.
+// checkNotPassedAsInterface refuses a value holding the type (itself, or
+// in a pointer, slice, map or field) passed to an interface parameter or
+// converted to an interface: what reflection sees there would change.
 func (x *extraction) checkNotPassedAsInterface() error {
+	match := func(t types.Type) bool {
+		n, ok := t.(*types.Named)
+		return ok && sameObj(x.ws.Fset, n.Obj(), x.tn)
+	}
 	for _, p := range x.ws.Pkgs {
 		if p.TypesInfo == nil {
 			continue
 		}
-		info := p.TypesInfo
-		for _, f := range p.Syntax {
-			var err error
-			ast.Inspect(f, func(n ast.Node) bool {
-				call, ok := n.(*ast.CallExpr)
-				if !ok || err != nil {
-					return err == nil
-				}
-				tv := info.Types[call.Fun]
-				var params func(i int) types.Type
-				switch {
-				case tv.IsType():
-					params = func(int) types.Type { return tv.Type }
-				case tv.IsBuiltin():
-					return true
-				default:
-					sig, ok := tv.Type.Underlying().(*types.Signature)
-					if !ok {
-						return true
-					}
-					params = func(i int) types.Type {
-						ps := sig.Params()
-						if sig.Variadic() && i >= ps.Len()-1 {
-							last := ps.At(ps.Len() - 1).Type()
-							if call.Ellipsis.IsValid() {
-								return last
-							}
-							return last.(*types.Slice).Elem()
-						}
-						if i < ps.Len() {
-							return ps.At(i).Type()
-						}
-						return nil
-					}
-				}
-				for i, arg := range call.Args {
-					if pt := params(i); pt != nil && types.IsInterface(pt) && x.isT(info.TypeOf(arg)) {
-						err = refactor.Refusef("a %s is passed as an interface at %s; reflection there (fmt's %%+v, encoding/json, reflect) sees the struct's fields, and would see the new embedded one", x.tn.Name(), x.ws.Position(arg.Pos()))
-						return false
-					}
-				}
-				return true
-			})
-			if err != nil {
-				return err
-			}
+		arg := analysis.PassedAsInterface(p.TypesInfo, p.Syntax, match)
+		if arg == nil {
+			continue
 		}
+		what := "a value holding " + x.tn.Name()
+		if x.isT(p.TypesInfo.TypeOf(arg)) {
+			what = "a " + x.tn.Name()
+		}
+		return refactor.Refusef("%s is passed as an interface at %s; reflection there (fmt's %%+v, encoding/json, reflect) sees the struct's fields, and would see the new embedded one", what, x.ws.Position(arg.Pos()))
 	}
 	return nil
 }

@@ -155,12 +155,13 @@ results are in `docs/cost-history.md`.
   helper with defer proves nothing), 14 (#150, remove_dead_code keeps a
   method through which its type implements a dependency's interface or
   error), 15 (#151, rename refuses an exported field of a struct passed
-  as an interface: `analysis.PassedAsInterface` and `Holds`, which
-  extract_struct could use too), 16 (#152, statement content may not
+  as an interface: `analysis.PassedAsInterface` and `Holds`, now used
+  by extract_struct too), 16 (#152, statement content may not
   close its block: `gocode.ParseStatements` and add_case), 17 (#153,
   undo removes a created directory last and only if empty), 18 (#154,
   paths resolve at the module root first). All high and medium items
   are done; what was found on the way, and the low items 19-25, are
   roadmap item 17, done one PR each, chained the same way: the false
-  refusal for a literal's own parameters (#156). Change only
+  refusal for a literal's own parameters (#156), extract_struct on the
+  shared reflection helpers (#157). Change only
   this repo copy: the Claude Doc linked from #130 is not kept up to date.
