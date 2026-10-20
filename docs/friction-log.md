@@ -1136,6 +1136,15 @@ helper with add_declaration, Plan's new body with replace_statements
 All through gorefactor: the test with insert_statements, the
 instructions and these notes with replace_text.
 
+## 2026-10-20: a step that breaks go.mod, items 6-7 of the review
+
+All through gorefactor's CLI: `Apply`'s body with replace_statements
+(`function`), the error, the tests and `Run`'s refusal with
+add_declaration and replace_text. The workspace test could not go first:
+it names a variable, `ErrBreaksLoading`, and only functions get stubs,
+so the variable was declared before it (an edit that does not
+type-check is refused).
+
 ## 2026-10-20: introduce_parameter after a guard, item 2 of the review
 
 All through gorefactor's CLI: the two changes to `checkEvaluation` and

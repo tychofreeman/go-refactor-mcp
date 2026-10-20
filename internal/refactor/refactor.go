@@ -198,6 +198,10 @@ func Run(ws *workspace.Workspace, r Refactoring, args json.RawMessage, opts Opti
 	}
 
 	c, err := ws.Apply(r.Name()+": "+plan.Summary, plan.Edits)
+	if errors.Is(err, workspace.ErrBreaksLoading) {
+		res.Refused, res.Summary = err.Error(), ""
+		return res, nil
+	}
 	if err != nil {
 		return nil, err
 	}

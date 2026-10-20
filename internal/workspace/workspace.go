@@ -10,6 +10,7 @@ package workspace
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"go/ast"
 	"go/format"
@@ -404,8 +405,14 @@ func (w *Workspace) Preview(label string, fes []edit.FileEdit) (Change, error) {
 	return c, nil
 }
 
-// Apply writes the edits to disk, pushes the change on the undo stack and
-// reloads the workspace.
+// ErrBreaksLoading is the error of an Apply whose change the module could
+// not be loaded with (a broken go.mod, say): the files were put back and
+// the change is not on the undo stack.
+var ErrBreaksLoading = errors.New("the module would no longer load, so the change was not applied")
+
+// Apply writes the edits to disk, reloads the workspace and pushes the
+// change on the undo stack. If the module no longer loads with the change,
+// it puts the files back and returns ErrBreaksLoading.
 func (w *Workspace) Apply(label string, fes []edit.FileEdit) (Change, error) {
 	c, err := w.Preview(label, fes)
 	if err != nil {
@@ -422,8 +429,20 @@ func (w *Workspace) Apply(label string, fes []edit.FileEdit) (Change, error) {
 		_ = c.restore()
 		return Change{}, err
 	}
+	if err := w.update(paths(c.After)); err != nil {
+		// The module does not load with the change: put the files back, and
+		// the workspace as it was with them.
+		if rerr := c.restore(); rerr != nil {
+			w.undo = append(w.undo, c) // still on disk: undo can try again
+			return Change{}, fmt.Errorf("%w: %v; putting the files back failed too: %v", ErrBreaksLoading, err, rerr)
+		}
+		if uerr := w.update(paths(c.Before)); uerr != nil {
+			return Change{}, fmt.Errorf("%w: %v; the files are back, but reloading them failed: %v", ErrBreaksLoading, err, uerr)
+		}
+		return Change{}, fmt.Errorf("%w: %v", ErrBreaksLoading, err)
+	}
 	w.undo = append(w.undo, c)
-	return c, w.update(paths(c.After))
+	return c, nil
 }
 
 // CanUndo reports whether there is a change to undo.

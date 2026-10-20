@@ -123,6 +123,10 @@ results are in `docs/cost-history.md`.
   check and inline_function's substitution and dropped results use it,
   while `all_occurrences` (one shared value) does not need it. Item 2 is
   fixed (#138): introduce_parameter refuses an expression that can panic
-  after a `return`, and counts `s[0]` on a string as able to panic. Next:
-  items 6-7. Change only
+  after a `return`, and counts `s[0]` on a string as able to panic.
+  Items 6-7 (#139): `workspace.Apply` reloads before pushing the change,
+  and when the module no longer loads it puts the files back and returns
+  `ErrBreaksLoading`, which `Run` refuses; a batch then rolls back its
+  earlier steps. Still open from 7: `undo` while the module does not
+  load, which the server's refresh before every call blocks. Change only
   this repo copy: the Claude Doc linked from #130 is not kept up to date.

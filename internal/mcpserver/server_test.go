@@ -354,6 +354,39 @@ func TestBatchRefusals(t *testing.T) {
 	mustContain(t, "argument beside the steps", out, `unknown field "file"`, "steps (required)", "each step's args")
 }
 
+// A step after which the module no longer loads is refused and put back,
+// alone or in a batch, whose earlier steps are rolled back with it.
+func TestStepThatBreaksLoadingIsRefused(t *testing.T) {
+	cs, dir := setup(t)
+	gomod := filepath.Join(dir, "go.mod")
+	calc := filepath.Join(dir, "calc", "calc.go")
+	modBefore, _ := os.ReadFile(gomod)
+	calcBefore, _ := os.ReadFile(calc)
+	breakMod := map[string]any{"file": "go.mod", "old": "module example.com/demo", "new": "modul example.com/demo"}
+
+	out, _ := call(t, cs, "replace_text", breakMod)
+	mustContain(t, "replace_text", out, "REFUSED", "would no longer load")
+	if got, _ := os.ReadFile(gomod); string(got) != string(modBefore) {
+		t.Errorf("go.mod not put back:\n%s", got)
+	}
+	out, _ = call(t, cs, "undo", map[string]any{})
+	mustContain(t, "undo", out, "Nothing to undo")
+
+	out, _ = call(t, cs, "batch", map[string]any{"steps": []any{
+		map[string]any{"tool": "rename", "args": map[string]any{"file": "calc/calc.go", "name": "Apply", "new_name": "Scale"}},
+		map[string]any{"tool": "replace_text", "args": breakMod},
+	}})
+	mustContain(t, "batch", out, "REFUSED", "step 2", "would no longer load")
+	if got, _ := os.ReadFile(calc); string(got) != string(calcBefore) {
+		t.Errorf("step 1 not rolled back:\n%s", got)
+	}
+	if got, _ := os.ReadFile(gomod); string(got) != string(modBefore) {
+		t.Errorf("go.mod not put back:\n%s", got)
+	}
+	out, _ = call(t, cs, "undo", map[string]any{})
+	mustContain(t, "undo", out, "Nothing to undo")
+}
+
 // replace_text edits text no other tool reaches, such as a string
 // literal, and, addressing text rather than lines, works after an earlier
 // step of a batch changed the file.

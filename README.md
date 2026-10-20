@@ -627,7 +627,9 @@ updated; exported renames add a note saying so.
   that doesn't type-check, and after applying a step it re-type-checks and
   rolls back if anything broke. A rollback is reported as a bug in that
   refactoring's preconditions; the golden tests exist to keep that from
-  happening.
+  happening. A step after which the module no longer loads at all (a
+  broken `go.mod`) is put back and refused too, and a batch with such a
+  step rolls back its earlier steps.
 - **Incremental updates.** After an edit, only the changed files are
   re-parsed, and only the packages containing them and the workspace packages
   that import those (including test variants such as `h [a.test]`, which
