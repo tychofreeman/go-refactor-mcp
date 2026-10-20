@@ -241,7 +241,8 @@ func (x *inliner) argsRead(o types.Object) bool {
 
 // deadAfter reports whether the caller never reads v again after the call:
 // the call is a terminal return, or v has no uses after the call's
-// statement and the statement is not in a loop that v outlives.
+// statement and the statement is not in a loop that v outlives, nor in a
+// function with goto, which can jump back over it.
 func (x *inliner) deadAfter(v *types.Var) bool {
 	if !x.callerFA.IsLocal(v) || x.callerFA.Escapes(v) {
 		return false
@@ -261,7 +262,7 @@ func (x *inliner) deadAfter(v *types.Var) bool {
 				return false
 			}
 		case *ast.FuncLit, *ast.FuncDecl:
-			return true
+			return !x.callerHasGoto() // a backward goto is a loop too
 		}
 	}
 	return true

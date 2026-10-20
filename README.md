@@ -1076,7 +1076,8 @@ body sees, and otherwise declared at the top with the arguments' values
   body changes nothing before using it, or the variable is never assigned;
   `&v` (uses of `*p` and `p.f` become `v` and `v.f`); a parameter the body
   assigns, if its argument is a variable of the same name that the caller
-  assigns the result back to (`v = step(v)`) or never reads again; and, in
+  assigns the result back to (`v = step(v)`) or never reads again (not in a
+  loop around the call, nor in a caller with `goto`); and, in
   an expression, an argument with calls used exactly once, unconditionally,
   in argument order;
 - **declared:** everything else, such as an argument with calls, or a

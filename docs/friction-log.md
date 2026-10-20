@@ -1136,6 +1136,11 @@ helper with add_declaration, Plan's new body with replace_statements
 All through gorefactor: the test with insert_statements, the
 instructions and these notes with replace_text.
 
+## 2026-10-20: inline_function and goto, item 10 of the review
+
+All through gorefactor's CLI except the golden case: `deadAfter` and its
+doc comment with replace_text.
+
 ## 2026-10-20: inline_function and the left of an assignment, item 9 of the review
 
 All through gorefactor's CLI except the golden cases: `lhsEvaluatedFirst`

@@ -140,5 +140,6 @@ results are in `docs/cost-history.md`.
   interface of every dependency, as changesig does). All high items are
   done; the medium ones (8-18) remain, 8 already fixed. The user asked
   for those too, in the same chained way: 9 (#145, inline_function
-  checks the operands on the left of an assignment). Change only
+  checks the operands on the left of an assignment), 10 (#146, no
+  variable is dead after the call in a caller with goto). Change only
   this repo copy: the Claude Doc linked from #130 is not kept up to date.

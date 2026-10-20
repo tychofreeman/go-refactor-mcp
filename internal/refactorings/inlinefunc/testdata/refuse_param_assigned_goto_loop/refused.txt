@@ -1,0 +1,1 @@
+the calling function uses goto, and the inlined code declares parameter n
