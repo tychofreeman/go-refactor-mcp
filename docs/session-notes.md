@@ -130,7 +130,11 @@ results are in `docs/cost-history.md`.
   for the harness so the server is built with it too): $1.96 each arm,
   8/10 and 9/10; the hybrid arm never refactored. A failure in both arms
   can be the prompt: read `check_output` in results.jsonl against the
-  hidden test first. What making them taught:
+  hidden test first. The mcp arm on the four refactor-on-the-way tasks
+  (`tp-mcp-refactor-first`): 4/4, $0.98 against ~$0.72 by hand; it
+  edits through the tools fine on large code but still does not
+  refactor structurally, even told to. Its first `inspect` waits for
+  the module to load (296 s on Hugo). What making them taught:
   - Read each hidden test before writing a prompt. "Black-box" only
     means it compiles against the old code: one compared a function's
     result with `reflect.DeepEqual` (pins a `[]string` return), one only
