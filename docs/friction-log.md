@@ -1109,3 +1109,12 @@ them. Frictions:
   create_from_usage myself.
 - Replacing a parameter (before []byte by moved []int) took
   replace_text on the signature; replace_parameter (item 13) would do.
+
+## 2026-10-19: stubs replaced, edits on code they fix
+
+From the A/B rerun (docs/cost-history.md). All through gorefactor, but
+one fixture line edited with sed. Found on the way: an incremental update
+after undoing an edit that broke a file's package clause panicked (the
+file's syntax tree has no position); it now reloads instead. The golden
+harness let only fixes start from code that does not type-check; edits
+may now too.

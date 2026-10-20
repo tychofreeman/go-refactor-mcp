@@ -28,7 +28,8 @@ func (*AddDeclaration) Description() string {
 	return `Add new top-level declarations (functions, methods, types, variables, constants) to a file. This is an edit, not a refactoring: it may change behavior.
 Use it to add a function, a type or a method to an existing file; use create_file for a new file, and the refactorings to move or change declarations that exist.
 Give file and content, the declarations as Go source with their doc comments, but without a package clause or imports: packages the code names are imported, as replace_statements does (imports chooses when a name is ambiguous). They go at the end of the file, or just after or before the top-level declaration named in after or before (a method as Type.Method).
-Like every step, the result must type-check (so a name the package already declares is refused with the compiler's error), or nothing changes.`
+A function or method with the name of a stub (one whose body is only panic("not implemented"), as create_from_usage writes) replaces that stub, wherever in the package it is; the result notes it.
+Like every step, the result must type-check (so another name the package already declares is refused with the compiler's error), or nothing changes.`
 }
 
 func (*AddDeclaration) InputSchema() json.RawMessage {
@@ -94,5 +95,11 @@ func (*AddDeclaration) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refa
 	if len(added) > 0 {
 		plan.Notes = append(plan.Notes, gocode.ImportNote("added", added))
 	}
+	stubs, notes, err := replacedStubs(ws, pkg, decls)
+	if err != nil {
+		return nil, err
+	}
+	plan.Edits = append(plan.Edits, stubs...)
+	plan.Notes = append(plan.Notes, notes...)
 	return plan, nil
 }

@@ -86,7 +86,11 @@ func runCase(t *testing.T, r refactor.Refactoring, caseDir string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, fix := r.(refactor.Fix); !fix && len(ws.Errors()) > 0 {
+	// Fixes and edits may start from code that does not type-check, if they
+	// fix some of it; refactorings may not.
+	_, fix := r.(refactor.Fix)
+	_, isEdit := r.(refactor.Edit)
+	if !fix && !isEdit && len(ws.Errors()) > 0 {
 		t.Fatalf("input does not type-check: %v", ws.Errors())
 	}
 	loads := newFreshLoads(t, ws)

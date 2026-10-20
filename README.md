@@ -301,6 +301,20 @@ hand or a tool got in the way.
       step after `extract_function` can address the lines below it. *Done:
       a line diff could pair a line with the moved copy and put the
       next step there, not only refuse it.*
+    - **Fixes from the rerun** (`docs/cost-history.md`): the features'
+      mcp arm fell from 6.77M to 4.91M input tokens; chains did not
+      change. In order:
+      - **`add_declaration` replaces a stub.** The model writes a call,
+        then declares the helper; the stub the call already got made that
+        declaration a "redeclared" refusal (4 in 8 runs). A function whose
+        body is only `panic("not implemented")` is replaced, with a note.
+      - **Edits may start from code they fix.** A test written first used
+        a field that `add_field` was then refused to add, since the code
+        did not type-check. Like `create_from_usage`, an edit may run on
+        code that does not type-check if it leaves fewer errors and no
+        new one.
+      - **`add_field` takes the type separately** (`field` and `type`, as
+        the model sent twice) and joins them.
     - **Coaching in results,** when a model does something a tool could
       have done (three single steps that could have been one batch).
     - **One worked example** of a whole batch in the instructions.

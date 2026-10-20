@@ -1,0 +1,1 @@
+replaced the stub of shape.perimeter (panic("not implemented")) at b.go:4

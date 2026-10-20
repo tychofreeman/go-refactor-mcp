@@ -157,8 +157,10 @@ func Run(ws *workspace.Workspace, r Refactoring, args json.RawMessage, opts Opti
 	before := ws.Errors()
 	_, isEdit := r.(Edit)
 	_, isFix := r.(Fix)
-	if len(before) > 0 && !isFix && !(opts.Unchecked && isEdit) {
-		res.Refused = fmt.Sprintf("the code does not type-check, so refactorings cannot be verified. Fix these first:\n  %s",
+	// An edit may start from code that does not type-check: then, like a
+	// fix, it must leave fewer errors (see afterRefusal).
+	if len(before) > 0 && !isFix && !isEdit {
+		res.Refused = fmt.Sprintf("the code does not type-check, so refactorings cannot be verified. Fix these first (an edit, such as add_field for a field a test already uses, may run on code that does not type-check if it fixes some of the errors):\n  %s",
 			strings.Join(limit(before, 10), "\n  "))
 		if opts.Unchecked {
 			res.Refused = fmt.Sprintf("the code does not type-check here, after an earlier edit of this batch, and a refactoring runs only on code that type-checks; put it before that edit, or after the step that completes it. Errors were:\n  %s",
@@ -218,7 +220,7 @@ func afterRefusal(r Refactoring, isEdit, isFix, unchecked bool, before, after []
 	switch {
 	case len(after) == 0 || unchecked && isEdit:
 		return ""
-	case isFix:
+	case isFix, isEdit && len(before) > 0:
 		return fixRefusal(before, after)
 	case isEdit:
 		return fmt.Sprintf("the result does not type-check, so it was not applied; change the code you gave so that it compiles. Errors were:\n  %s",
