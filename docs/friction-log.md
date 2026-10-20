@@ -1125,6 +1125,14 @@ All through gorefactor. replace_text still does not add imports
 (strings.TrimSpace in a replaced block); I dropped the call rather than
 add the import in another step.
 
+## 2026-10-20: inspect without bodies, and targets
+
+All through gorefactor except two size checks: a temporary test file
+written with a heredoc and removed, to print inspect's output on real
+files (the running server is the old binary). replace_text refused a
+field comment I gave as I wrote it, before gofmt aligned it; I grepped
+for the aligned text.
+
 ## 2026-10-20: the tip to batch single steps, removed
 
 The code was reverted with git checkout of the two files from before

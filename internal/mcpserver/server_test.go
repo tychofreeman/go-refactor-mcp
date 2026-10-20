@@ -236,6 +236,35 @@ func TestRenameListsLocations(t *testing.T) {
 	}
 }
 
+// inspect shows a file without its function bodies, and reads several
+// targets in one call.
+func TestInspectSkeletonAndTargets(t *testing.T) {
+	cs, _ := setup(t)
+	out, _ := call(t, cs, "inspect", map[string]any{"file": "calc/calc.go"})
+	mustContain(t, "file", out, "function bodies elided", "6  func Apply(n int) int { return n * Rate }")
+	out, _ = call(t, cs, "inspect", map[string]any{"targets": []any{
+		map[string]any{"file": "calc/calc.go", "function": "Apply"},
+		map[string]any{"file": "app/app.go", "start_line": 5, "end_line": 5},
+	}})
+	mustContain(t, "targets", out, "6  func Apply", "5  func Run() int")
+
+	tools, err := cs.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tool := range tools.Tools {
+		if tool.Name != "inspect" {
+			continue
+		}
+		schema, _ := tool.InputSchema.(map[string]any)
+		props, _ := schema["properties"].(map[string]any)
+		if props["targets"] == nil {
+			t.Errorf("inspect's schema has no targets: %v", schema)
+		}
+		mustContain(t, "inspect description", tool.Description, "targets", "without their bodies")
+	}
+}
+
 // A batch runs several steps in one call, addressed by name so that a
 // later step can use what an earlier one made, and undoes as one.
 func TestBatch(t *testing.T) {

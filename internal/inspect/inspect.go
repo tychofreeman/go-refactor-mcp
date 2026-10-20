@@ -1,6 +1,6 @@
 // Package inspect renders code for a model to read: a module overview, a
-// per-file outline with simple complexity metrics, and source with line
-// numbers.
+// file without its function bodies (each with simple complexity metrics in
+// its place), and source with line numbers.
 //
 // Line numbers matter: every refactoring addresses code by line, so the
 // model should read code through this view rather than guess.
@@ -27,7 +27,8 @@ import (
 )
 
 // MaxLines is the largest number of source lines shown without an
-// explicit range; longer files show the outline and ask for a range.
+// explicit range; a file longer than that without its bodies shows the
+// outline and asks for a range.
 const MaxLines = 400
 
 // Query selects what to show. All fields are optional.
@@ -36,11 +37,18 @@ type Query struct {
 	Function  string `json:"function,omitempty"` // "Name" or "Type.Method"
 	StartLine int    `json:"start_line,omitempty"`
 	EndLine   int    `json:"end_line,omitempty"`
+	// Targets reads several of the views above in one call, in place of
+	// the fields above.
+	Targets []Query `json:"targets,omitempty"`
 }
 
 // Run renders the view selected by q: the module overview when File is
-// empty, otherwise the file's outline plus numbered source.
+// empty, otherwise the file without its function bodies, or the function
+// or lines asked for; or each of its targets.
 func Run(ws *workspace.Workspace, q Query) (string, error) {
+	if len(q.Targets) > 0 {
+		return targets(ws, q)
+	}
 	if q.File == "" {
 		if q.Function != "" || q.StartLine != 0 || q.EndLine != 0 {
 			return "", refactor.Refusef("file is required when function or a line range is given")
@@ -104,22 +112,24 @@ func Module(ws *workspace.Workspace) string {
 		fmt.Fprintf(&sb, "\nthe module does not type-check (%d errors); refactorings are disabled until it does:\n  %s\n",
 			len(errs), strings.Join(errs, "\n  "))
 	}
-	sb.WriteString("\nUse inspect with file (and optionally function or start_line/end_line) to read code.\n")
+	sb.WriteString("\nUse inspect with file (and optionally function or start_line/end_line), or targets for several, to read code.\n")
 	return sb.String()
 }
 
 // Decl summarizes one top-level declaration.
 type Decl struct {
-	Kind       string // func, method, type, var, const
-	Name       string // "Name" or "Type.Method"
-	Signature  string
-	Start, End int    // lines, including the doc comment
-	Complexity int    // cyclomatic complexity (functions only)
-	Nesting    int    // maximum control-flow nesting depth (functions only)
-	Effects    string // functions: "no side effects", or "side effects: <why>"; "" when not known
+	Kind               string // func, method, type, var, const
+	Name               string // "Name" or "Type.Method"
+	Signature          string
+	Start, End         int    // lines, including the doc comment
+	Complexity         int    // cyclomatic complexity (functions only)
+	Nesting            int    // maximum control-flow nesting depth (functions only)
+	Effects            string // functions: "no side effects", or "side effects: <why>"; "" when not known
+	BodyStart, BodyEnd int    // functions: the lines inside the braces; 0 when there are fewer than 2
 }
 
-// File renders the outline of q.File and its source (or the requested part).
+// File renders q.File without its function bodies, or the function or
+// lines q asks for.
 func File(ws *workspace.Workspace, q Query) (string, error) {
 	path := ws.Abs(q.File)
 	pkg, file := ws.FileSyntax(path)
@@ -138,16 +148,16 @@ func File(ws *workspace.Workspace, q Query) (string, error) {
 	}
 
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "%s  (package %s, %d lines)\n\n", ws.Rel(path), file.Name.Name, len(lines))
-	writeOutline(&sb, decls)
+	fmt.Fprintf(&sb, "%s  (package %s, %d lines)\n", ws.Rel(path), file.Name.Name, len(lines))
 
 	start, end := 1, len(lines)
 	switch {
 	case q.Function != "":
 		d := find(decls, q.Function)
 		if d == nil {
-			return "", refactor.Refusef("no function %q in %s; the outline lists what is there", q.Function, q.File)
+			return "", refactor.Refusef("no function %q in %s; inspect the file to see what is there", q.Function, q.File)
 		}
+		sb.WriteString(outlineLine(*d))
 		start, end = d.Start, d.End
 	case q.StartLine != 0 || q.EndLine != 0:
 		if q.StartLine > 0 {
@@ -160,16 +170,23 @@ func File(ws *workspace.Workspace, q Query) (string, error) {
 			return "", refactor.Refusef("invalid line range %d-%d; %s has %d lines", start, end, q.File, len(lines))
 		}
 		end = min(end, len(lines))
-	case len(lines) > MaxLines:
-		fmt.Fprintf(&sb, "\nThe file has %d lines; pass function or start_line/end_line to see source.\n", len(lines))
+	default:
+		sk := skeleton(lines, decls)
+		if len(sk) > MaxLines {
+			sb.WriteByte('\n')
+			writeOutline(&sb, decls)
+			fmt.Fprintf(&sb, "\nWithout its function bodies the file still has %d lines; pass function or start_line/end_line to see source.\n", len(sk))
+			return sb.String(), nil
+		}
+		sb.WriteString("\nsource, function bodies elided (inspect with function, or start_line/end_line, to read one):\n")
+		sb.WriteString(strings.Join(sk, ""))
 		return sb.String(), nil
 	}
 
 	fmt.Fprintf(&sb, "\nsource (lines %d-%d):\n", start, end)
 	width := len(fmt.Sprint(end))
 	for i := start; i <= end; i++ {
-		fmt.Fprintf(&sb, "%*d  %s", width, i, strings.TrimRight(lines[i-1], "\n"))
-		sb.WriteByte('\n')
+		sb.WriteString(numbered(width, i, lines[i-1]))
 	}
 	return sb.String(), nil
 }
@@ -179,17 +196,92 @@ func File(ws *workspace.Workspace, q Query) (string, error) {
 func writeOutline(sb *strings.Builder, decls []Decl) {
 	sb.WriteString("outline:\n")
 	for _, d := range decls {
-		metrics := ""
-		if d.Kind == "func" || d.Kind == "method" {
-			n := d.End - d.Start + 1
-			facts := []string{fmt.Sprintf("%d line%s", n, textutil.Plural(n)), fmt.Sprintf("complexity %d", d.Complexity), fmt.Sprintf("nesting %d", d.Nesting)}
-			if d.Effects != "" {
-				facts = append(facts, d.Effects)
-			}
-			metrics = "   [" + strings.Join(facts, ", ") + "]"
-		}
-		fmt.Fprintf(sb, "  %4d-%-4d %s%s\n", d.Start, d.End, d.Signature, metrics)
+		sb.WriteString(outlineLine(d))
 	}
+}
+
+// outlineLine is d's line of the outline: its line range and signature,
+// with metrics for functions.
+func outlineLine(d Decl) string {
+	f := facts(d)
+	if f != "" {
+		f = "   " + f
+	}
+	return fmt.Sprintf("  %4d-%-4d %s%s\n", d.Start, d.End, d.Signature, f)
+}
+
+// facts returns a function's length, metrics and effects in brackets, or
+// "" for other declarations.
+func facts(d Decl) string {
+	if d.Kind != "func" && d.Kind != "method" {
+		return ""
+	}
+	n := d.End - d.Start + 1
+	facts := []string{fmt.Sprintf("%d line%s", n, textutil.Plural(n)), fmt.Sprintf("complexity %d", d.Complexity), fmt.Sprintf("nesting %d", d.Nesting)}
+	if d.Effects != "" {
+		facts = append(facts, d.Effects)
+	}
+	return "[" + strings.Join(facts, ", ") + "]"
+}
+
+// skeleton returns lines, numbered, with each function's body elided: in
+// its place a line says which lines it takes and gives the function's
+// facts, which follow a function written on one line.
+func skeleton(lines []string, decls []Decl) []string {
+	width := len(fmt.Sprint(len(lines)))
+	pad := strings.Repeat(" ", width+6)
+	byBody := map[int]Decl{} // by the first line of the body
+	byEnd := map[int]Decl{}  // functions without body lines, by their last line
+	for _, d := range decls {
+		switch {
+		case d.Kind != "func" && d.Kind != "method":
+		case d.BodyStart > 0:
+			byBody[d.BodyStart] = d
+		default:
+			byEnd[d.End] = d
+		}
+	}
+	var out []string
+	for l := 1; l <= len(lines); l++ {
+		if d, ok := byBody[l]; ok {
+			out = append(out, fmt.Sprintf("%s… lines %d-%d   %s\n", pad, d.BodyStart, d.BodyEnd, facts(d)))
+			l = d.BodyEnd
+			continue
+		}
+		out = append(out, numbered(width, l, lines[l-1]))
+		if d, ok := byEnd[l]; ok {
+			out = append(out, pad+facts(d)+"\n")
+		}
+	}
+	return out
+}
+
+// numbered is line l of the source, numbered in a column width wide.
+func numbered(width, l int, line string) string {
+	return fmt.Sprintf("%*d  %s\n", width, l, strings.TrimRight(line, "\n"))
+}
+
+// targets renders each of q's targets in turn; one that is refused says
+// so in its place.
+func targets(ws *workspace.Workspace, q Query) (string, error) {
+	if q.File != "" || q.Function != "" || q.StartLine != 0 || q.EndLine != 0 {
+		return "", refactor.Refusef("give either targets or file (with function or start_line/end_line), not both")
+	}
+	var parts []string
+	for i, t := range q.Targets {
+		if len(t.Targets) > 0 {
+			return "", refactor.Refusef("target %d has targets of its own; give one flat list", i+1)
+		}
+		out, err := Run(ws, t)
+		switch {
+		case refactor.IsRefusal(err):
+			out = fmt.Sprintf("target %d: %v\n", i+1, err)
+		case err != nil:
+			return "", err
+		}
+		parts = append(parts, out)
+	}
+	return strings.Join(parts, "\n"), nil
 }
 
 func find(decls []Decl, name string) *Decl {
@@ -230,6 +322,9 @@ func Outline(fset *token.FileSet, f *ast.File) []Decl {
 			dd.Signature = header(fset, d)
 			if d.Body != nil {
 				dd.Complexity, dd.Nesting = Metrics(d.Body)
+				if lb, rb := line(d.Body.Lbrace), line(d.Body.Rbrace); rb-lb > 2 {
+					dd.BodyStart, dd.BodyEnd = lb+1, rb-1
+				}
 			}
 			out = append(out, dd)
 		case *ast.GenDecl:
