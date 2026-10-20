@@ -126,7 +126,7 @@ func (s *Server) MCP() *mcp.Server {
 
 	srv.AddTool(&mcp.Tool{
 		Name:        "undo",
-		Description: "Revert the most recent refactoring or edit applied in this session and return the reverting diff. Can be called repeatedly to step further back. Refuses if a changed file was edited since.",
+		Description: "Revert the most recent refactoring or edit applied in this session and return the reverting diff. Can be called repeatedly to step further back. Refuses if a changed file was edited since. Works while the module does not load.",
 		InputSchema: json.RawMessage(`{"type": "object", "properties": {}, "additionalProperties": false}`),
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: &notDestructive},
 	}, func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -291,18 +291,37 @@ func (s *Server) inspect(args json.RawMessage) *mcp.CallToolResult {
 func (s *Server) undo() *mcp.CallToolResult {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	ws, err := s.workspace()
-	if err != nil {
-		return toolError(err)
+	// Undoing only needs the files, so it goes ahead even when the module
+	// does not load (a go.mod broken by hand, say), and says so.
+	var loadErr error
+	ws := s.ws
+	if ws == nil {
+		var err error
+		if ws, err = s.workspace(); err != nil {
+			return toolError(err)
+		}
+	} else if _, err := ws.Refresh(); err != nil {
+		loadErr = err
 	}
 	if !ws.CanUndo() {
-		return textResult("Nothing to undo: no refactoring has been applied in this session.")
+		return textResult("Nothing to undo: no refactoring has been applied in this session." + notLoading(loadErr))
 	}
 	c, err := ws.Undo()
-	if err != nil {
-		return textResult("Cannot undo: " + err.Error())
+	if c.Label == "" { // not undone
+		return textResult("Cannot undo: " + err.Error() + notLoading(loadErr))
 	}
-	return textResult(fmt.Sprintf("UNDONE %s\n\n%s", strings.TrimPrefix(c.Label, "undo "), c.Diff))
+	if err == nil {
+		err = loadErr
+	}
+	return textResult(fmt.Sprintf("UNDONE %s\n\n%s", strings.TrimPrefix(c.Label, "undo "), c.Diff) + notLoading(err))
+}
+
+// notLoading is the line undo adds when the module does not load, or "".
+func notLoading(err error) string {
+	if err == nil {
+		return ""
+	}
+	return "\nThe module does not load, so the other tools cannot run until it does: " + err.Error()
 }
 
 // batch runs the steps of one batch call; see the tool's description.

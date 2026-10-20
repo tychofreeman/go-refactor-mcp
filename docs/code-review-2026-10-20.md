@@ -38,7 +38,7 @@ Each of these is accepted by the tool and changes what the program does, or brea
 | 4 | `rename` misses interfaces in dependencies the module never names | `rename/rename.go:488` | Renaming `WriteTo` silently stops `io.Copy` from using it. The signature-change tools already search every dependency. |
 | 5 | `merge_duplicate_function` treats `s[:n]` and `s[n:]` as identical | `mergefunc/mergefunc.go:189` | The comparison ignores which slice bounds are given and whether a call spreads with `...`, so `append(xs, ys...)` matches `append(xs, ys)`. |
 | 6 | A batch isn't rolled back when a step breaks the module's loading. *Fixed in #139.* | `refactor/refactor.go:361`, `workspace/workspace.go:409` | A `replace_text` that breaks `go.mod` as step 2: rollback undoes the wrong entry, so `go.mod` is restored but step 1 stays applied, unreported. |
-| 7 | An edit that breaks `go.mod` is applied and can't be undone through the server. *The edit is refused and put back since #139; `undo` while the module doesn't load (broken outside the tools) is still open.* | `workspace/workspace.go:420`, `mcpserver/server.go:291` | The write happens, then `undo`, like every other tool, reloads the module first and fails. Every tool is stuck until the file is fixed by hand. |
+| 7 | An edit that breaks `go.mod` is applied and can't be undone through the server. *Fixed: the edit is refused and put back (#139), and `undo` works while the module doesn't load (#140).* | `workspace/workspace.go:420`, `mcpserver/server.go:291` | The write happens, then `undo`, like every other tool, reloads the module first and fails. Every tool is stuck until the file is fixed by hand. |
 
 ## Medium
 
@@ -82,4 +82,4 @@ Each is a separate PR under the repo's one-item-per-PR rule.
 2. **Item 8, by fixing `Stable`, together with item 2.** These cover most of the panic-class bugs.
 3. **Items 1 and 3–5:** each is a small, well-understood check.
 
-**Order decided (2026-10-20): the panic class first,** items 8 and 2, since they are likelier in real use; then items 6 and 7, which need an unusual step (an edit that breaks `go.mod`). Items 8 (#136), 2 (#138) and 6 (#139) are done, and 7 in part (#139).
+**Order decided (2026-10-20): the panic class first,** items 8 and 2, since they are likelier in real use; then items 6 and 7, which need an unusual step (an edit that breaks `go.mod`). Items 8 (#136), 2 (#138), 6 (#139) and 7 (#139, #140) are done.
