@@ -202,6 +202,7 @@ results are in `docs/cost-history.md`.
   cap can panic; extract_function's `sharedLoopVar` before Go 1.22, by
   `info.FileVersions`). All 25 review items are done, and item 17 with
   them: one check for terminating statements, `analysis.TerminatingList`
-  (#170).
+  (#170). Then roadmap item 15's open bullets, one PR each, chained from
+  #170: a smaller module overview (#171, one line per package).
   Change only
   this repo copy: the Claude Doc linked from #130 is not kept up to date.

@@ -256,7 +256,8 @@ func TestFileErrors(t *testing.T) {
 
 func TestModule(t *testing.T) {
 	out := Module(load(t))
-	for _, want := range []string{"./  (package shapes)", "shapes.go", "shapes_test.go", "1 packages, 2 files"} {
+	// One line per package: its files with their line counts.
+	for _, want := range []string{"\n. (package shapes, ", " lines): shapes.go 35, shapes_test.go ", "1 packages, 2 files"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("module overview lacks %q:\n%s", want, out)
 		}
