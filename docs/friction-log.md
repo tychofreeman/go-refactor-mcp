@@ -1136,6 +1136,12 @@ helper with add_declaration, Plan's new body with replace_statements
 All through gorefactor: the test with insert_statements, the
 instructions and these notes with replace_text.
 
+## 2026-10-20: extract_function and errors that can be nil, item 13 of the review
+
+All through gorefactor's CLI except the golden cases. The loop fix
+called `hasGoto` before it existed, which a CLI edit refuses (no stubs):
+declared it first with add_declaration.
+
 ## 2026-10-20: changesig and synchronous closures, item 12 of the review
 
 All through gorefactor's CLI except the golden cases: the helpers with

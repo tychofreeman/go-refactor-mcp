@@ -245,8 +245,9 @@ func (x *extraction) nonNilValue(info *types.Info, e ast.Expr) bool {
 // its last result: errors.New and fmt.Errorf do, and so does a function in
 // the loaded source whose results are unnamed (a deferred function could
 // otherwise change them) and whose every return passes a value that
-// nonNilValue accepts, such as `return &Refusal{...}`. A function that
-// calls itself proves nothing by doing so.
+// nonNilValue accepts, such as `return &Refusal{...}`, and that defers
+// nothing (a deferred recover() returns the zero values instead). A
+// function that calls itself proves nothing by doing so.
 func (x *extraction) alwaysNonNil(fn *types.Func) bool {
 	fn = fn.Origin()
 	if fn.Pkg() == nil {
@@ -284,6 +285,8 @@ func (x *extraction) alwaysNonNil(fn *types.Func) bool {
 		switch node := node.(type) {
 		case *ast.FuncLit:
 			return false
+		case *ast.DeferStmt:
+			ok = false // a deferred recover() returns the zero values: a nil error
 		case *ast.ReturnStmt:
 			// `return g()` with several results is not looked into.
 			if len(node.Results) != n || !x.nonNilValue(info, node.Results[n-1]) {
@@ -323,22 +326,27 @@ func (x *extraction) funcDecl(fn *types.Func) (*types.Info, *ast.FuncDecl) {
 }
 
 // checkedNonNil reports whether r is inside the body of an if statement
-// whose condition requires v != nil, with no write to v in between and no
+// whose condition requires v != nil, with no write to v in between (nor
+// after r in the body, if a loop or goto there can run r again) and no
 // other code that can change it.
 func (x *extraction) checkedNonNil(v *types.Var, r *ast.ReturnStmt) bool {
 	if x.fa.Escapes(v) {
 		return false
 	}
+	again := false // r can run again after code later in the if body
 	for _, n := range analysis.PathTo(x.file, r) {
 		switch n := n.(type) {
 		case *ast.FuncLit, *ast.FuncDecl:
 			return false
+		case *ast.ForStmt, *ast.RangeStmt:
+			again = true
 		case *ast.IfStmt:
 			if !(n.Body.Pos() <= r.Pos() && r.End() <= n.Body.End()) || !x.requiresNonNil(n.Cond, v) {
 				continue
 			}
+			again = again || hasGoto(n.Body)
 			for _, m := range x.fa.Modified[v] {
-				if m.Pos() >= n.Body.Pos() && m.Pos() < r.Pos() {
+				if m.Pos() >= n.Body.Pos() && (m.Pos() < r.Pos() || again && m.Pos() < n.Body.End()) {
 					return false
 				}
 			}
@@ -346,6 +354,21 @@ func (x *extraction) checkedNonNil(v *types.Var, r *ast.ReturnStmt) bool {
 		}
 	}
 	return false
+}
+
+// hasGoto reports whether n holds a goto outside function literals.
+func hasGoto(n ast.Node) bool {
+	found := false
+	ast.Inspect(n, func(c ast.Node) bool {
+		if _, ok := c.(*ast.FuncLit); ok {
+			return false
+		}
+		if b, ok := c.(*ast.BranchStmt); ok && b.Tok == token.GOTO {
+			found = true
+		}
+		return !found
+	})
+	return found
 }
 
 // requiresNonNil reports whether cond can only be true when v != nil:

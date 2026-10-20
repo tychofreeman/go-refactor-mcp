@@ -979,12 +979,15 @@ so the call site passes them on. Two shapes are supported:
   Inside it, the early returns become `return <zero values>, err`, and
   falling off the end returns `..., nil`. An error counts as non-nil when
   the return is inside `if v != nil` (possibly `&&` other conditions) with no
-  write to `v` in between, when it comes from `errors.New` or `fmt.Errorf`,
+  write to `v` in between (nor after it in the `if`, when a loop or `goto`
+  there can come back to the return), when it comes from `errors.New` or `fmt.Errorf`,
   when it is a non-pointer value or `&T{...}`, or when it comes from a
   function in the loaded source (in any package of the module) whose every
   `return` passes such a value, like a `refusef` helper that returns
   `&Refusal{...}`. Such a function must have unnamed results (a deferred
-  function could change named ones), and calling itself proves nothing.
+  function could change named ones) and no `defer` at all (a deferred
+  `recover()` returns the zero values, a nil error), and calling itself
+  proves nothing.
   Interface methods and function values never count. With no other
   results, the call site declares the error in the `if` that checks it
   (`if err := f(...); err != nil {`), where it hides nothing; otherwise it
