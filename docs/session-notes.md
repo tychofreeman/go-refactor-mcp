@@ -175,6 +175,7 @@ results are in `docs/cost-history.md`.
   20 (#162, create_file formats only `.go` files), 21 (#163,
   replace_expression removes imports it leaves unused;
   `gocode.RemoveImports` takes a position test, `gocode.Between`), 22
-  (#164, unfinished A/B runs are marked and left out of the means).
+  (#164, unfinished A/B runs are marked and left out of the means), 23
+  (#165, `edit.LineMapOf` compares lines without their alignment).
   Change only
   this repo copy: the Claude Doc linked from #130 is not kept up to date.

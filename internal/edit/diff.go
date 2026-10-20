@@ -338,12 +338,24 @@ func LineMapOf(before, after []byte, edits []TextEdit) []int {
 		return m
 	}
 	// Formatting (gofmt) changed some lines: a line diff follows them, as
-	// the changes are small and local.
-	formatted := LineMap(applied, after)
+	// the changes are small and local. A line it only realigned is the
+	// same line.
+	formatted := LineMap(squeezeSpace(applied), squeezeSpace(after))
 	for i, l := range m {
 		m[i] = formatted[l]
 	}
 	return m
+}
+
+// squeezeSpace writes each line of src with its spaces and tabs made one
+// space between words, so that lines gofmt only realigned compare equal.
+func squeezeSpace(src []byte) []byte {
+	var b bytes.Buffer
+	for _, l := range splitLines(string(src)) {
+		b.WriteString(strings.Join(strings.Fields(l), " "))
+		b.WriteByte('\n')
+	}
+	return b.Bytes()
 }
 
 // editLineMap is LineMap for applied, which is exactly what edits make of

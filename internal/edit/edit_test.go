@@ -227,4 +227,12 @@ func TestLineMapOf(t *testing.T) {
 	if want := LineMap([]byte(before), []byte(after)); !slices.Equal(got, want) {
 		t.Errorf("fallback: got %v, want %v", got, want)
 	}
+
+	// A line gofmt only realigned is still the same line.
+	before = "type T struct {\n\ta int\n\tbb int\n}\n"
+	after = "type T struct {\n\tccc int\n\tbb  int\n}\n"
+	got = LineMapOf([]byte(before), []byte(after), []TextEdit{{Start: 17, End: 18, NewText: "ccc"}})
+	if want := []int{0, 1, 0, 3, 4}; !slices.Equal(got, want) {
+		t.Errorf("realigned: got %v, want %v", got, want)
+	}
 }
