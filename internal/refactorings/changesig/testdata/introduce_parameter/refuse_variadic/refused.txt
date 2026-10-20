@@ -1,0 +1,1 @@
+uses the variadic parameter parts, which the call at a.go:9:28 passes as separate arguments

@@ -204,6 +204,14 @@ func (t *target) checkCall(info *types.Info, expr ast.Expr, c call, csrc []byte)
 		return err
 	}
 	isParam := t.paramObjects(info)
+	if sig := t.obj.Signature(); sig.Variadic() && !c.expr.Ellipsis.IsValid() {
+		// The call passes the variadic arguments one by one, if any.
+		for _, id := range analysis.ScopeRefs(info, expr) {
+			if i, ok := isParam[info.Uses[id]]; ok && i == sig.Params().Len()-1 {
+				return refactor.Refusef("%s uses the variadic parameter %s, which the call at %s passes as separate arguments", types.ExprString(expr), id.Name, where)
+			}
+		}
+	}
 	scope := c.pkg.Types.Scope().Innermost(c.expr.Pos())
 	for _, id := range analysis.ScopeRefs(info, expr) {
 		o := info.Uses[id]

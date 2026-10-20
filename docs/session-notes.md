@@ -166,6 +166,7 @@ results are in `docs/cost-history.md`.
   refusal for a literal's own parameters (#156), extract_struct on the
   shared reflection helpers (#157), one dependency walk
   (`analysis.Dependencies`, #158), one list of functions that run a
-  closure during the call (`analysis.syncCalls`, #159), the CLI matching the server (#160).
+  closure during the call (`analysis.syncCalls`, #159), the CLI matching the server (#160), then the
+  low items: 19 (#161, introduce_parameter and a variadic parameter).
   Change only
   this repo copy: the Claude Doc linked from #130 is not kept up to date.
