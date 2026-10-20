@@ -62,6 +62,10 @@ results are in `docs/cost-history.md`.
 - How the analyses were done: group a transcript's tool calls by
   assistant message id to count turns; weight each result's size by the
   number of turns after it to estimate what it cost in context.
+  `refactor-tokens` now does this (turns, ToolSearch-only turns, refused
+  turns by kind, reads by kind); the `ab-analyze` skill says how to use
+  it on a run and a baseline. Pairing "Q:" lines with reads was a
+  one-off and is not in it.
 - Harness details: the MCP binary is built into the output directory at
   the start, so checking out another branch during a run is safe. The mcp
   arm cannot use Edit or Write, and its Bash may not change files: in

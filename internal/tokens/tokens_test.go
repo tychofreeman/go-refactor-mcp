@@ -202,3 +202,74 @@ func TestAnalyzeTinyResultsUseDefaultRatio(t *testing.T) {
 		t.Errorf("Bash input tokens = %d, want 202 (708 chars / 3.5)", got)
 	}
 }
+
+func callOf(id, name string, input map[string]any) map[string]any {
+	return map[string]any{"type": "tool_use", "id": id, "name": name, "input": input}
+}
+
+func (t *transcript) errResult(id, text string) {
+	t.add(map[string]any{"type": "user", "message": map[string]any{"content": []any{
+		map[string]any{"type": "tool_result", "tool_use_id": id, "is_error": true, "content": text},
+	}}})
+}
+
+func (t *transcript) textResult(id, text string) {
+	t.add(map[string]any{"type": "user", "message": map[string]any{"content": []any{
+		map[string]any{"type": "tool_result", "tool_use_id": id, "content": text},
+	}}})
+}
+
+func TestAnalyzeWaste(t *testing.T) {
+	var tr transcript
+	tr.request("r1", 1000, 10, callOf("t1", "ToolSearch", map[string]any{"query": "select:mcp__gorefactor__batch"}))
+	tr.result("t1", 10)
+	tr.request("r2", 1100, 10,
+		callOf("t2", "Write", map[string]any{"file_path": "a/testdata/x.go"}),
+		callOf("t3", "Read", map[string]any{"file_path": "a.go"}))
+	tr.errResult("t2", "<tool_use_error>Error: No such tool available: Write.</tool_use_error>")
+	tr.result("t3", 300)
+	tr.request("r3", 1500, 10, callOf("t4", "Bash", map[string]any{"command": "sed -i 's/a/b/' x.go y.go"}))
+	tr.errResult("t4", "This Bash command contains multiple operations.")
+	tr.request("r4", 1600, 10, callOf("t5", "Bash", map[string]any{"command": "go test ./..."}))
+	tr.errResult("t5", "Exit code 1\nFAIL")
+	tr.request("r5", 1700, 10,
+		callOf("t6", "mcp__gorefactor__inspect", map[string]any{}),
+		callOf("t7", "mcp__gorefactor__inspect", map[string]any{"file": "a.go"}),
+		callOf("t8", "mcp__gorefactor__rename", map[string]any{"file": "a.go"}))
+	tr.result("t6", 900)
+	tr.result("t7", 200)
+	tr.textResult("t8", "REFUSED rename: no symbol")
+	tr.request("r6", 3000, 10, map[string]any{"type": "text", "text": "done"})
+
+	r, err := Analyze(strings.NewReader(tr.String()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.ToolTurns != 5 || r.SchemaOnlyTurns != 1 {
+		t.Errorf("tool turns %d, ToolSearch-only %d; want 5 and 1", r.ToolTurns, r.SchemaOnlyTurns)
+	}
+	want := map[string]int{RefusedWrite: 1, RefusedBashWrite: 1, RefusedTool: 1}
+	if len(r.Refused) != len(want) {
+		t.Errorf("refused turns %v, want %v", r.Refused, want)
+	}
+	for k, n := range want {
+		if r.Refused[k] != n {
+			t.Errorf("refused turns %v, want %v", r.Refused, want)
+		}
+	}
+	reads := map[string]int{}
+	for _, s := range r.Reads {
+		reads[s.Name] = s.Calls
+	}
+	for _, k := range []string{"inspect: module overview", "inspect: file", "Read"} {
+		if reads[k] != 1 {
+			t.Errorf("reads %v: want one %q", r.Reads, k)
+		}
+	}
+	md := r.Markdown()
+	for _, s := range []string{"| turns with tool calls | 5 |", "| ToolSearch only | 1 |", "| " + RefusedBashWrite + " | 1 |", "| inspect: module overview |"} {
+		if !strings.Contains(md, s) {
+			t.Errorf("Markdown lacks %q:\n%s", s, md)
+		}
+	}
+}

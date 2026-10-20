@@ -1125,6 +1125,14 @@ All through gorefactor. replace_text still does not add imports
 (strings.TrimSpace in a replaced block); I dropped the call rather than
 add the import in another step.
 
+## 2026-10-20: refactor-tokens counts turns, refusals and reads; ab-analyze skill
+
+All through gorefactor: the test with add_declaration (refused alone
+until the fields existed, so in a batch with check "end" after
+add_field), the fields with add_field, the new functions with
+add_declaration, report, Merge and sortTools with replace_statements
+(`function`), the rest and the skill with replace_text and create_file.
+
 ## 2026-10-20: replace_text across several files
 
 All through gorefactor: the fixtures with a batch of create_file, the

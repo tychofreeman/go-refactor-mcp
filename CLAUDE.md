@@ -118,7 +118,10 @@ from this file. The usual runs:
       -claude-md eval-tasks/claude-md-refactor-when-needed -out eval-runs/NAME
 
 The features run takes about 15 minutes. `cmd/refactor-tokens` measures
-session transcripts. The history and what moved cost are in
+session transcripts: tokens by tool, turns that only loaded schemas or
+had a call refused, and what reading cost by kind. The `ab-analyze`
+skill (`.claude/skills/ab-analyze`) runs it on a run and a baseline and
+says what to report. The history and what moved cost are in
 `docs/cost-history.md`. Lessons so far:
 
 * Run-to-run noise is 10-25% at 2-3 runs per task; a fix that saves a few
