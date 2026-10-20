@@ -101,3 +101,8 @@ results are in `docs/cost-history.md`.
 - Smaller known bugs: `create_from_usage` infers odd result types for
   generic calls and names parameters p, p2; `replace_text` does not add
   imports.
+- A full code review at a641b61 is in `docs/code-review-2026-10-20.md`:
+  25 findings, 7 of them silent behavior changes or broken guarantees,
+  most from panicking expressions treated as stable and methods reached
+  by reflection. Its fix order: batch rollback and undo after a step
+  breaks `go.mod` (items 6-7), then `analysis.Stable` (8, with 2).
