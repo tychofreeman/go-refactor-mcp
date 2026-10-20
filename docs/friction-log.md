@@ -1125,6 +1125,11 @@ All through gorefactor. replace_text still does not add imports
 (strings.TrimSpace in a replaced block); I dropped the call rather than
 add the import in another step.
 
+## 2026-10-20: create_file for files that are not Go, in the instructions
+
+All through gorefactor: the test with insert_statements, the
+instructions and these notes with replace_text.
+
 ## 2026-10-20: schemas loaded alongside another call, shorter definitions
 
 All through gorefactor's CLI: the test with add_declaration, the
