@@ -77,7 +77,9 @@ results are in `docs/cost-history.md`.
   8 tools, 7 turns saved, under 1% of tokens), since a loaded schema is
   resent every request. #128 asks for schemas to be loaded alongside
   another call and shortens the most-loaded definitions (8 tools: 15.7K
-  to 12.5K characters); not yet measured. Count ToolSearch-only turns.
+  to 12.5K characters). Measured in `ab-features-toolsearch`:
+  ToolSearch-only turns 9 → 5, totals unchanged (5.54M, 8/8). Next by
+  size: the denied Write and Bash-write turns (32 in that run).
 - Line ranges in that run: of 30 inspect ranges, 18 spanned several
   functions (80% of range lines), 8 were exactly one function; a
   `function` list in inspect would change little.
