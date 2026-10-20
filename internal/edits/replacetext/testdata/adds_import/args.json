@@ -1,0 +1,1 @@
+{"file": "a.go", "old": "fmt.Sprint(len(xs))", "new": "fmt.Sprint(len(xs)) + strings.Join(xs, \",\")"}

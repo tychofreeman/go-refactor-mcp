@@ -120,9 +120,16 @@ func (c *Code) packageRefs() []string {
 // AddImports imports the packages the content names that are not visible
 // at pos, and returns their paths.
 func AddImports(ws *workspace.Workspace, pkg *packages.Package, file *ast.File, adder *imports.Adder, pos token.Pos, c *Code, chosen []string) ([]string, error) {
+	return ImportNames(ws, pkg, file, adder, pos, c.packageRefs(), chosen)
+}
+
+// ImportNames imports the packages that names, used as package names at
+// pos, mean, for each name nothing in scope there has, and returns their
+// paths. It resolves a name as AddImports does.
+func ImportNames(ws *workspace.Workspace, pkg *packages.Package, file *ast.File, adder *imports.Adder, pos token.Pos, names, chosen []string) ([]string, error) {
 	scope := pkg.Types.Scope().Innermost(pos)
 	var added []string
-	for _, name := range c.packageRefs() {
+	for _, name := range names {
 		if scope != nil {
 			if _, o := scope.LookupParent(name, pos); o != nil {
 				continue // a package already imported, or something else in scope
@@ -214,6 +221,11 @@ func importName(path string) string {
 	}
 	return base
 }
+
+// ImportName is the name a package with import path is known by, unless
+// its package clause says otherwise: the last element of the path, or
+// the one before a major version ("v2").
+func ImportName(path string) string { return importName(path) }
 
 var (
 	stdOnce sync.Once
