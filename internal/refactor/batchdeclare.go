@@ -49,10 +49,10 @@ func declareMissing(ws *workspace.Workspace, errs []string, opts Options) ([]*Re
 		if err != nil {
 			return declared, skipped, err
 		}
+		if why != "" {
+			skipped = append(skipped, why)
+		}
 		if res == nil {
-			if why != "" {
-				skipped = append(skipped, why)
-			}
 			continue
 		}
 		it, check := "it", "it is"
@@ -71,22 +71,36 @@ var notCalled = regexp.MustCompile(`calls no undeclared function (\w+)$`)
 
 // declareIn runs opts.Declare on file for names, leaving out each name it
 // refuses as not called. It returns the step, if one applied, and the
-// names it declared, or else why it declared none.
+// names it declared; and why it declared none, or left some out.
 func declareIn(ws *workspace.Workspace, file string, names []string, opts Options) (*Result, []string, string, error) {
+	var dropped []string // names opts.Declare refused as not called
+	notCalledNote := func() string {
+		return fmt.Sprintf("no stub was declared for %s, which %s not called (a stub is for a function or method called, or passed where a function is needed, or a type made with a literal)", orList(dropped, "and"), map[bool]string{true: "is", false: "are"}[len(dropped) == 1])
+	}
 	for len(names) > 0 {
 		args, err := json.Marshal(map[string]any{"file": file, "names": names})
 		if err != nil {
 			return nil, nil, "", err
 		}
 		res, err := Run(ws, opts.Declare, args, Options{Compact: opts.Compact, Unchecked: true})
-		if err != nil || res.Applied {
+		if err != nil {
 			return res, names, "", err
+		}
+		if res.Applied && len(dropped) > 0 {
+			return res, names, notCalledNote(), nil
+		}
+		if res.Applied {
+			return res, names, "", nil
 		}
 		m := notCalled.FindStringSubmatch(res.Refused)
 		if m == nil || !slices.Contains(names, m[1]) {
 			return nil, nil, fmt.Sprintf("no stubs were declared for %s: %s", orList(names, "and"), res.Refused), nil
 		}
+		dropped = append(dropped, m[1])
 		names = slices.DeleteFunc(slices.Clone(names), func(n string) bool { return n == m[1] })
+	}
+	if len(dropped) > 0 {
+		return nil, nil, notCalledNote(), nil
 	}
 	return nil, nil, "", nil
 }

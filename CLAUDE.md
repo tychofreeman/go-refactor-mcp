@@ -83,7 +83,8 @@ until the MCP is reconnected.
    `after`/`before`. Names stay valid after earlier steps; a reference such
    as `$prev.end` addresses what an earlier step of the batch made.
 6. **Test first through the tools.** Add the test with `add_declaration`
-   (or `create_file`). Functions and methods it calls that nothing
+   (or `create_file`). Functions and methods it calls (or passes as
+   values) and types it makes with keyed literals that nothing
    declares get stubs (`panic("not implemented")`) automatically, and
    `add_declaration` of the real one replaces the stub. An edit may start
    from code that does not type-check if it fixes some errors and adds

@@ -543,6 +543,12 @@ func TestStubsForWhatEditsCall(t *testing.T) {
 	if strings.Contains(out, "undefined: Triple") {
 		t.Errorf("Triple should have had a stub:\n%s", out)
 	}
+	mustContain(t, "replace_statements", out, "no stub was declared for factor, which is not called")
+
+	// A function passed as a value, and a type made with a keyed literal,
+	// get stubs too.
+	out, _ = call(t, cs, "replace_statements", map[string]any{"file": "calc/calc.go", "function": "Apply", "content": "xs := []int{n}\nsort.Slice(xs, byValue)\np := pair{a: xs[0], b: Rate}\nreturn p.a"})
+	mustContain(t, "replace_statements", out, "APPLIED batch: 2 steps", "func byValue(i int, j int) bool", "type pair struct with a, b")
 }
 
 // TestRefactoringLoop walks the loop the model is meant to follow.
