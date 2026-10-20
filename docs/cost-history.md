@@ -246,6 +246,23 @@ that version has none (the integration test checks it). Fixed in
 `tasks.json`. The hybrid arm's `tp-tofu-lint-unused` reported unused
 locals but not unused variables, a miss of its own.
 
+**The mcp arm (Oct 20).** The four tasks that refactored on the way,
+with the refactor-first CLAUDE.md and every edit through gorefactor
+(`tp-mcp-refactor-first`, 1 run each, the Gitea prompt fixed):
+$0.98 · 2.03M · 4/4, against $0.75 (hybrid) and $0.70 (manual) on the
+same four in `tp-first`, 3/4 each before the fix. It edited through
+the tools throughout (replace_statements 9, add_declaration 6,
+replace_text 7 with `files` once, create_file 4, batch 3) and made
+one refactoring, a rename it needed for its edit; none extracted,
+moved or changed a signature, as the real PRs did. Turns: 52, of
+which 9 had a gorefactor refusal (code that did not type-check, a
+range with a signature, content closing its block), 4 a refused Bash,
+1 ToolSearch alone. The first `inspect` loads the module: 296 s on
+Hugo, 27-37 s on the others; steps after it took at most 12 s. Two
+refusals show gaps: a test using a type not declared yet (stubs are
+declared for functions and methods only), and a call whose results
+could not be inferred, so no stub.
+
 ## What made the difference
 
 - **Smaller results** (#75, rename locations): the largest single win when

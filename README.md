@@ -449,7 +449,16 @@ hand or a tool got in the way.
       needed", the hybrid arm judged no refactoring needed in any of the
       ten, the four that refactored on the way included. Try the
       refactor-first CLAUDE.md, or the mcp arm, on the four, before
-      running all tasks at five runs each.
+      running all tasks at five runs each. *Mcp arm done
+      (`tp-mcp-refactor-first`): 4/4 at about 1.35x by hand, every edit
+      through the tools, but one rename and no structural refactoring.*
+    - **Load the module before the first call.** The first `inspect` of
+      a run waited 296 s for Hugo to load (27-37 s elsewhere). The
+      server could start loading when it starts, so the model's
+      reading overlaps it.
+    - **Stubs for types.** A test written first that uses a type not
+      declared yet (`stackEntry` in lazygit) is refused; stubs are
+      declared only for functions and methods.
 17. **Follow-ups from the code review** (`docs/code-review-2026-10-20.md`).
     Its high and medium items are fixed (#136-#154); these were found on
     the way, or are its low items:
