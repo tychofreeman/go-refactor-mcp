@@ -145,5 +145,7 @@ results are in `docs/cost-history.md`.
   else if and a for post count as conditional uses; analysis.PathTo
   runs from the node outward), 12 (#148, changesig walks the literals a
   call runs, `syncWalk`; a false refusal remains when such a literal
-  names its parameters: "uses r, declared in the body"). Change only
+  names its parameters: "uses r, declared in the body"), 13 (#149,
+  extract_function's non-nil error: writes later in a loop count, and a
+  helper with defer proves nothing). Change only
   this repo copy: the Claude Doc linked from #130 is not kept up to date.
