@@ -1,0 +1,1 @@
+s[0] could panic: it indexes, and println("first") (at a.go:4:2) has side effects before it

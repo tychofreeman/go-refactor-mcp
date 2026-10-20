@@ -121,5 +121,8 @@ results are in `docs/cost-history.md`.
   fixed (#136): `analysis.MayPanic` names what can panic in an
   expression `Stable` accepts; inline_variable, extract_variable's order
   check and inline_function's substitution and dropped results use it,
-  while `all_occurrences` (one shared value) does not need it. Change only
+  while `all_occurrences` (one shared value) does not need it. Item 2 is
+  fixed (#138): introduce_parameter refuses an expression that can panic
+  after a `return`, and counts `s[0]` on a string as able to panic. Next:
+  items 6-7. Change only
   this repo copy: the Claude Doc linked from #130 is not kept up to date.
