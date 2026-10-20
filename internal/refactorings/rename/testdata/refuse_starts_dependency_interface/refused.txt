@@ -1,0 +1,1 @@
+with the new name, type *src would implement interface io.WriterTo, which it does not now
