@@ -1425,3 +1425,10 @@ By hand, and not a gorefactor gap: `tasks.py`, the fixes to the other
 scripts, `tasks.json` and the docs are Python, JSON and Markdown, and no
 Go changed. As in the PR before, the gorefactor server of this cloud
 session ran on the linked computer, not on this checkout.
+
+## 2026-10-20: inline_function all_calls
+
+All through gorefactor: the fixtures with a batch of create_file, the
+engine's Expander, runExpanded and the inliner's Expand and callsOf
+with add_declaration, the arguments with add_field, the schema,
+description and docs with replace_text.

@@ -249,6 +249,42 @@ func TestBatchIsOneChange(t *testing.T) {
 	}
 }
 
+// both expands to bump and setX.
+type both struct{ bump }
+
+func (both) Name() string { return "both" }
+func (both) Expand(*workspace.Workspace, json.RawMessage) ([]refactor.Step, error) {
+	return []refactor.Step{{Refactoring: bump{}}, {Refactoring: setX{}}}, nil
+}
+
+func TestExpandedStepIsOneChange(t *testing.T) {
+	ws, path := setup(t, src)
+	res, err := refactor.Run(ws, both{}, nil, refactor.Options{DryRun: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(path); res.Applied || string(got) != src || ws.CanUndo() {
+		t.Fatalf("a dry run changed the file or the undo stack: %+v\n%s", res, got)
+	}
+	// In a batch, after another step: one step of the batch, one undo.
+	b, err := refactor.RunBatch(ws, []refactor.Step{{Refactoring: setX{}}, {Refactoring: both{}}}, refactor.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !b.Applied || len(b.Steps) != 2 || b.Steps[1].Summary != "bumped; set X" {
+		t.Fatalf("want the batch applied with both's steps as one, got %+v", b)
+	}
+	if got, _ := os.ReadFile(path); !strings.Contains(string(got), "var X = F() + 1 + 1") {
+		t.Errorf("file:\n%s", got)
+	}
+	if _, err := ws.Undo(); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(path); string(got) != src || ws.CanUndo() {
+		t.Errorf("one undo should undo the batch; file:\n%s", got)
+	}
+}
+
 func TestBatchRollsBackOnRefusal(t *testing.T) {
 	ws, path := setup(t, src)
 	b, err := refactor.RunBatch(ws, []refactor.Step{{Refactoring: bump{}}, {Refactoring: buggy{}}}, refactor.Options{Compact: true})

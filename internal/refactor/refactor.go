@@ -75,6 +75,15 @@ type CompileChecked interface {
 	ChecksByCompiling()
 }
 
+// Expander is a refactoring that, for some arguments, is a sequence of
+// its own steps (inline_function with all_calls: one step per call).
+// Expand returns them, which Run runs as one batch, or nil to plan the
+// step as usual.
+type Expander interface {
+	Refactoring
+	Expand(ws *workspace.Workspace, args json.RawMessage) ([]Step, error)
+}
+
 // Refusal is a precondition failure. Its message is written for the model:
 // it should say what is wrong and, where possible, what to do instead.
 type Refusal struct{ Reason string }
@@ -170,6 +179,19 @@ func Run(ws *workspace.Workspace, r Refactoring, args json.RawMessage, opts Opti
 	}
 
 	args, took := aliasArgs(r.InputSchema(), args)
+	if ex, ok := r.(Expander); ok {
+		steps, err := ex.Expand(ws, args)
+		if err != nil && IsRefusal(err) {
+			res.Refused = err.Error()
+			return res, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		if steps != nil {
+			return runExpanded(ws, steps, opts, res, took)
+		}
+	}
 	plan, err := r.Plan(ws, args)
 	if err != nil {
 		if IsRefusal(err) {
@@ -215,6 +237,57 @@ func Run(ws *workspace.Workspace, r Refactoring, args json.RawMessage, opts Opti
 	res.Applied = true
 	res.Diff, res.Files = edit.ElideSupplied(diffOf(ws, c, opts, plan), plan.Supplied), c.Files(ws.Root)
 	return res, nil
+}
+
+// runExpanded runs the steps a step expanded to as one batch, and reports
+// them in res as that step: applied as a whole, or refused as a whole.
+func runExpanded(ws *workspace.Workspace, steps []Step, opts Options, res *Result, took string) (*Result, error) {
+	b, err := RunBatch(ws, steps, Options{Compact: opts.Compact, Unchecked: opts.Unchecked})
+	if err != nil {
+		return nil, err
+	}
+	if !b.Applied {
+		res.Refused = fmt.Sprintf("this is %d steps of %s, run one after another; step %d%s was refused, so none was applied: %s",
+			b.Total, res.Refactoring, b.FailedStep, stepPlace(steps[b.FailedStep-1].Args), b.Refused)
+		return res, nil
+	}
+	var summaries []string
+	seen := map[string]bool{}
+	for _, s := range b.Steps {
+		summaries = append(summaries, s.Summary)
+		for _, n := range s.Notes {
+			if !seen[n] {
+				seen[n] = true
+				res.Notes = append(res.Notes, n)
+			}
+		}
+	}
+	res.Notes = append(res.Notes, b.Notes...)
+	if took != "" {
+		res.Notes = append(res.Notes, took)
+	}
+	res.Summary = strings.Join(summaries, "; ")
+	res.Diff, res.Files = b.Diff, b.Files
+	if opts.DryRun {
+		if _, err := ws.Undo(); err != nil {
+			return nil, err
+		}
+		return res, nil
+	}
+	res.Applied = true
+	return res, nil
+}
+
+// stepPlace is " (file:line)" for a step's args that give both, or "".
+func stepPlace(args json.RawMessage) string {
+	var a struct {
+		File string `json:"file"`
+		Line int    `json:"line"`
+	}
+	if json.Unmarshal(args, &a) != nil || a.File == "" || a.Line == 0 {
+		return ""
+	}
+	return fmt.Sprintf(" (%s:%d)", a.File, a.Line)
 }
 
 // afterRefusal says why the step r, which left the errors after
