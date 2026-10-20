@@ -424,6 +424,7 @@ hand or a tool got in the way.
       `ms []mover`, or a struct holding a `mover` field, is accepted and
       the printed shape changes. `analysis.PassedAsInterface` and `Holds`
       (#151) follow slices, maps, pointers and fields; switch to them.
+      *Done (#157).*
     - **One walk over dependencies' interfaces:** `rename`
       (`interfacesWithMethod`), `remove_dead_code`
       (`dependencyInterface`) and the signature changes (`visible`) each
@@ -1486,8 +1487,10 @@ Embedding keeps uses, but changes the struct's shape, so:
 
 - only unexported struct types: code outside the module could write an
   exported type's literals, or see its fields by reflection;
-- no value of the type (or pointer to it) may be passed to an interface
-  parameter or converted to an interface (`fmt.Printf("%+v", m)`,
+- no value holding the type (itself, a pointer to it, or a slice, map or
+  struct holding it) may be passed to an interface parameter or converted
+  to an interface (`fmt.Printf("%+v", m)`, `fmt.Println(ms)` with
+  `ms []mover`,
   `json.Marshal(m)`, `any(m)`): reflection would see the new embedded
   field. A value assigned to an interface variable is not checked;
 - the moved fields are one level deeper, so another embedded field that
