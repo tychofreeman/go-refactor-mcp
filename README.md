@@ -465,7 +465,8 @@ hand or a tool got in the way.
       before their result out of the means and lists them; `Bash(cat:*)`
       does not let `cat > file` through, checked with `claude -p`), 23
       (#165, a line gofmt only realigned keeps its place in batch line
-      translation).*
+      translation), 24 (#166, a batch takes argument aliases such as
+      `line_no` before translating lines).*
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the

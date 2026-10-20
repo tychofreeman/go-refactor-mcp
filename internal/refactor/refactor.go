@@ -373,10 +373,11 @@ func runBatch(ws *workspace.Workspace, steps []Step, opts Options) (*BatchResult
 	var names []string
 	for i, s := range steps {
 		name := s.Refactoring.Name()
-		args := s.Args
-		if file, byLine := lineAddressed(s.Args); byLine {
+		// Names first, so that a line given as line_no is translated too.
+		args, took := aliasArgs(s.Refactoring.InputSchema(), s.Args)
+		if file, byLine := lineAddressed(args); byLine {
 			rel := ws.Rel(ws.Abs(file))
-			resolvedArgs, resolved, err := resolveRefs(s.Args, rel, i, steps, made)
+			resolvedArgs, resolved, err := resolveRefs(args, rel, i, steps, made)
 			if m := lines[rel]; err == nil && m != nil {
 				resolvedArgs, err = translateLines(resolvedArgs, rel, m, resolved)
 			}
@@ -392,6 +393,9 @@ func runBatch(ws *workspace.Workspace, steps []Step, opts Options) (*BatchResult
 				return nil, fmt.Errorf("step %d (%s): %v; %v", i+1, name, err, rerr)
 			}
 			return nil, fmt.Errorf("step %d (%s): %w", i+1, name, err)
+		}
+		if took != "" {
+			res.Notes = append(res.Notes, took)
 		}
 		b.Steps = append(b.Steps, res)
 		if !res.Applied {

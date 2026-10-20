@@ -176,6 +176,7 @@ results are in `docs/cost-history.md`.
   replace_expression removes imports it leaves unused;
   `gocode.RemoveImports` takes a position test, `gocode.Between`), 22
   (#164, unfinished A/B runs are marked and left out of the means), 23
-  (#165, `edit.LineMapOf` compares lines without their alignment).
+  (#165, `edit.LineMapOf` compares lines without their alignment), 24
+  (#166, a batch applies `aliasArgs` before line translation).
   Change only
   this repo copy: the Claude Doc linked from #130 is not kept up to date.
