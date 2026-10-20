@@ -42,7 +42,21 @@ MISSING = [
 ]
 
 
+# Set by --as-user: the user git and go run as, and the environment they
+# get (os.environ, with that user's HOME, TMPDIR and Go build cache).
+AS_USER = None
+USER_ENV = {}
+
+
+def as_user(cmd, env=None):
+    if not AS_USER:
+        return list(cmd)
+    env = dict(env or os.environ, **USER_ENV)
+    return ["runuser", "-u", AS_USER, "--", "env", "-i", *[f"{k}={v}" for k, v in env.items()], *cmd]
+
+
 def run(repo, *cmd, timeout=600, env=None):
+    cmd = as_user(cmd, env)
     t0 = time.time()
     try:
         p = subprocess.run(cmd, cwd=repo, capture_output=True, text=True, timeout=timeout, env=env)
@@ -53,7 +67,7 @@ def run(repo, *cmd, timeout=600, env=None):
 
 
 def git(repo, *args):
-    return subprocess.run(["git", "-C", repo, *args], check=True, capture_output=True, text=True).stdout
+    return subprocess.run(as_user(["git", "-C", repo, *args]), check=True, capture_output=True, text=True).stdout
 
 
 def checkout(repo, rev):
@@ -218,8 +232,17 @@ def main():
     ap.add_argument("candidates")
     ap.add_argument("--only", default="", help="commits to verify, comma-separated (default: every feature)")
     ap.add_argument("--timeout", type=int, default=600, help="seconds per go command")
+    ap.add_argument("--as-user", help="run git and go as this user, who must own REPO_DIR (Gitea's tests refuse to run as root)")
     ap.add_argument("--clean-cache", action="store_true", help="empty Go's build cache after each candidate (each builds its own test binaries; a large repository fills a disk in a few dozen)")
     args = ap.parse_args()
+    if args.as_user:
+        global AS_USER
+        modcache = subprocess.run(["go", "env", "GOMODCACHE"], check=True, capture_output=True, text=True).stdout.strip()
+        home = os.path.expanduser("~" + args.as_user)
+        AS_USER = args.as_user
+        tmp = os.path.join(home, "tmp")
+        subprocess.run(["runuser", "-u", AS_USER, "--", "mkdir", "-p", tmp], check=True)
+        USER_ENV.update(HOME=home, TMPDIR=tmp, GOCACHE=os.path.join(home, ".cache", "go-build"), GOMODCACHE=modcache)
     only = {s for s in args.only.split(",") if s}
     start = git(args.repo, "rev-parse", "HEAD").strip()
     try:
