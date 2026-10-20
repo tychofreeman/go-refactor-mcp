@@ -175,41 +175,11 @@ func dependencyInterface(ws *workspace.Workspace, fn *types.Func) string {
 	if s := check(types.Universe.Lookup("error").Type().Underlying().(*types.Interface), "error"); s != "" {
 		return s
 	}
-	done := map[string]bool{}
-	var walk func(p *packages.Package) string
-	walk = func(p *packages.Package) string {
-		paths := make([]string, 0, len(p.Imports))
-		for path := range p.Imports {
-			paths = append(paths, path)
-		}
-		slices.Sort(paths)
-		for _, path := range paths {
-			d := p.Imports[path]
-			if done[d.PkgPath] {
-				continue
-			}
-			done[d.PkgPath] = true
-			if d.Types != nil {
-				scope := d.Types.Scope()
-				for _, n := range scope.Names() {
-					if tn, ok := scope.Lookup(n).(*types.TypeName); ok && !tn.IsAlias() {
-						if it, ok := tn.Type().Underlying().(*types.Interface); ok {
-							if s := check(it, tn.Type().String()); s != "" {
-								return s
-							}
-						}
-					}
-				}
-			}
-			if s := walk(d); s != "" {
+	for _, d := range analysis.Dependencies(ws.Pkgs...) {
+		for _, tn := range analysis.PackageInterfaces(d.Types) {
+			if s := check(tn.Type().Underlying().(*types.Interface), tn.Type().String()); s != "" {
 				return s
 			}
-		}
-		return ""
-	}
-	for _, p := range ws.Pkgs {
-		if s := walk(p); s != "" {
-			return s
 		}
 	}
 	return ""

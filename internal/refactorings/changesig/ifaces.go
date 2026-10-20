@@ -10,6 +10,7 @@ import (
 
 	"golang.org/x/tools/go/packages"
 
+	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 )
 
@@ -111,7 +112,7 @@ func (t *target) visible(p *packages.Package) ([]iface, []*types.TypeName) {
 	for _, tn := range defs {
 		addName(tn)
 	}
-	for _, dep := range dependencies(p) {
+	for _, dep := range analysis.Dependencies(p) {
 		scope := dep.Types.Scope()
 		for _, n := range scope.Names() {
 			if tn, ok := scope.Lookup(n).(*types.TypeName); ok {
@@ -132,26 +133,6 @@ func (t *target) visible(p *packages.Package) ([]iface, []*types.TypeName) {
 		addIface(p.TypesInfo.Types[e].Type, e.Pos())
 	}
 	return ifaces, named
-}
-
-// dependencies returns every package p imports, directly or not, sorted
-// by path.
-func dependencies(p *packages.Package) []*packages.Package {
-	seen := map[*packages.Package]bool{}
-	var deps []*packages.Package
-	var walk func(*packages.Package)
-	walk = func(q *packages.Package) {
-		for _, d := range q.Imports {
-			if !seen[d] && d.Types != nil {
-				seen[d] = true
-				deps = append(deps, d)
-				walk(d)
-			}
-		}
-	}
-	walk(p)
-	sort.Slice(deps, func(i, j int) bool { return deps[i].PkgPath < deps[j].PkgPath })
-	return deps
 }
 
 // holders returns the named types (and pointers to them) whose method set
