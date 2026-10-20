@@ -218,6 +218,7 @@ def main():
     ap.add_argument("candidates")
     ap.add_argument("--only", default="", help="commits to verify, comma-separated (default: every feature)")
     ap.add_argument("--timeout", type=int, default=600, help="seconds per go command")
+    ap.add_argument("--clean-cache", action="store_true", help="empty Go's build cache after each candidate (each builds its own test binaries; a large repository fills a disk in a few dozen)")
     args = ap.parse_args()
     only = {s for s in args.only.split(",") if s}
     start = git(args.repo, "rev-parse", "HEAD").strip()
@@ -234,6 +235,8 @@ def main():
                     v = {"outcome": "broken", "why": f"git: {e.stderr.strip()[:200]}"}
                 v.update(repo=c["repo"], commit=c["commit"], seconds=round(time.time() - t0, 1))
                 print(json.dumps(v), flush=True)
+                if args.clean_cache:
+                    run(args.repo, "go", "clean", "-cache")
     finally:
         checkout(args.repo, start)
 
