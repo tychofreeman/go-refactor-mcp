@@ -315,7 +315,7 @@ hand or a tool got in the way.
         code that does not type-check if it leaves fewer errors and no
         new one. *Done.*
       - **`add_field` takes the type separately** (`field` and `type`, as
-        the model sent twice) and joins them.
+        the model sent twice) and joins them. *Done.*
     - **Coaching in results,** when a model does something a tool could
       have done (three single steps that could have been one batch).
     - **One worked example** of a whole batch in the instructions.

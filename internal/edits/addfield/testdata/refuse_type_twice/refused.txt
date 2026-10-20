@@ -1,0 +1,1 @@
+field "owner string" already gives a type; with type, give only the field's names, e.g. field "owner", type "int"

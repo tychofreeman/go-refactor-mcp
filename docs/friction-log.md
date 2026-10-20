@@ -1118,3 +1118,9 @@ after undoing an edit that broke a file's package clause panicked (the
 file's syntax tree has no position); it now reloads instead. The golden
 harness let only fixes start from code that does not type-check; edits
 may now too.
+
+## 2026-10-19: add_field takes the type separately
+
+All through gorefactor. replace_text still does not add imports
+(strings.TrimSpace in a replaced block); I dropped the call rather than
+add the import in another step.
