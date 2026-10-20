@@ -86,7 +86,9 @@ results are in `docs/cost-history.md`.
   `-p` mode a command with loops, variables or brace expansion is
   refused, where a user would get a prompt). #133 names fixtures in
   the instructions under create_file; #134 lets replace_text take
-  `files`. Not yet measured: count fixture and sed turns per run.
+  `files`. Measured in `ab-features-denied`: no Write attempts (17
+  before), `files` used in both symbol-addressing runs, refused turns
+  17 → 14 of 120; the model still tries Bash once before the tool.
 - Line ranges in that run: of 30 inspect ranges, 18 spanned several
   functions (80% of range lines), 8 were exactly one function; a
   `function` list in inspect would change little.

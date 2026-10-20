@@ -73,6 +73,7 @@ refactorings, through gorefactor.
 | ab-features-read-inspect | mcp arm's CLAUDE.md: read Go code with inspect, not Read, cat or sed | $2.42 · 5.55M · 7/8 | | |
 | ab-features-read-questions | the same, and a "Q:" line before each read saying what it is to answer | $2.38 · 5.12M · 7/8 | | |
 | ab-features-toolsearch | #128: load schemas alongside another call; shorter definitions | $2.46 · 5.54M · 8/8 | | |
+| ab-features-denied | #133–#134: create_file for any file in the instructions; replace_text `files` | $2.34 · 5.21M · 7/8 | | |
 
 Without a CLAUDE.md no arm used gorefactor at all: all three edited with
 Bash. Doing everything through gorefactor cost about 1.8× by hand at first,
@@ -158,6 +159,16 @@ of the five were `create_file`. Totals did not move (5.54M input against
 5.55M, 8/8 passed), as a change of four turns in 130 would not. The
 largest waste left is the denied writes: 17 Write attempts and 15 Bash
 commands that write, all refused.
+
+**Denied writes (#133–#134, Oct 20).** Same arm CLAUDE.md. Write
+attempts fell from 17 to none: the case-clause runs wrote their
+fixtures with create_file after one refused `mkdir` in Bash, and cost
+0.43M input per run against 0.76M. Both symbol-addressing runs made
+the schema change with one `replace_text` over `files`, after one
+refused `sed -i` each. Turns refused fell from 17 to 14 of 120: fixture
+4, `sed -i` 4, and reads the arm's Bash allowlist cannot match 6 (a
+harness limit). Totals 5.54M → 5.21M, within noise; one
+symbol-addressing run failed its hidden tests, as in earlier runs.
 
 ## 4. Design in the way, and chains (Oct 18–19)
 
