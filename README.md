@@ -356,6 +356,24 @@ hand or a tool got in the way.
       sentence every refactoring and edit ends with, are shorter: the 8
       tools a model loads most went from 15.7K to 12.5K characters. To
       measure: turns of only ToolSearch per run.*
+    - **Turns denied to the mcp arm.** In `ab-features-read-inspect`, 15
+      Write attempts and 18 Bash commands that write (often test
+      fixtures) were refused, about a tenth of the turns. Find what each
+      was for and give the tools a way to do it: perhaps `create_file`
+      for several files, or for files that are not Go.
+    - **A smaller module overview.** `inspect` with no arguments lists
+      every file with its line count, about 8.9K characters for this
+      repo. In `ab-features-read-questions` it was read first in 4 of 8
+      runs and was 17% of what reading cost. Packages with their file
+      names on one line could be a quarter of it.
+    - **"Where is X used" without broad greps.** The same run asked it
+      2.6 times per run, 22% of read cost; four greps of 7-12K
+      characters (such as `\.Line\b`) were 12%. Evidence for the
+      type-aware find tool on the back burner (check gopls's MCP server
+      first). Reads are about 15% of input, so a small win in total.
+    - **Smaller bugs:** `create_from_usage` infers odd result types for
+      generic calls and names parameters p, p2; `replace_text` does not
+      add the imports new code needs (hit again in #128).
     - **One worked example** of a whole batch in the instructions.
     - **Measure** each with the A/B harness's feature and chain tasks.
 
