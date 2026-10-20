@@ -73,6 +73,9 @@ type Server struct {
 
 	mu sync.Mutex
 	ws *workspace.Workspace // loaded lazily, refreshed before each call
+	// singles counts the steps applied in a row, each sent on its own,
+	// since the last inspect, check, undo or batch.
+	singles int
 }
 
 // New returns a server for the module containing dir.
@@ -253,7 +256,7 @@ func (s *Server) refactor(r refactor.Refactoring, args json.RawMessage) *mcp.Cal
 			return toolError(err)
 		}
 		if b.Applied {
-			return textResult(b.String())
+			return textResult(s.afterStep(b.String()))
 		}
 		if b.FailedStep == 0 && len(b.Steps) > 1 {
 			res.Refused = fmt.Sprintf("the result does not type-check, so it was not applied; change the code you gave so that it compiles. With stubs for the functions it calls, the errors left were:\n  %s", strings.Join(b.Errors, "\n  "))
@@ -262,9 +265,20 @@ func (s *Server) refactor(r refactor.Refactoring, args json.RawMessage) *mcp.Cal
 	}
 	text := res.String()
 	if res.Applied {
-		text += "\nRe-inspect the changed code before the next step; line numbers may have shifted.\n"
+		text = s.afterStep(text)
 	}
 	return textResult(text)
+}
+
+// afterStep counts a step applied on its own and ends its result text:
+// the second in a row with nothing read between them gets a tip to send
+// such steps in one batch, the others the advice to re-inspect.
+func (s *Server) afterStep(text string) string {
+	s.singles++
+	if s.singles == 2 {
+		return text + "\ntip: this is the 2nd step in a row sent on its own. When you can plan the next steps from what you have read, send them in one batch call: one turn instead of one per step, and its line numbers are the ones you read (the batch moves them past the earlier steps), so there is nothing to re-inspect in between.\n"
+	}
+	return text + "\nRe-inspect the changed code before the next step; line numbers may have shifted.\n"
 }
 
 func (s *Server) inspect(args json.RawMessage) *mcp.CallToolResult {
@@ -273,6 +287,7 @@ func (s *Server) inspect(args json.RawMessage) *mcp.CallToolResult {
 		return textResult(err.Error())
 	}
 	s.mu.Lock()
+	s.singles = 0
 	defer s.mu.Unlock()
 	ws, err := s.workspace()
 	if err != nil {
@@ -290,6 +305,7 @@ func (s *Server) inspect(args json.RawMessage) *mcp.CallToolResult {
 
 func (s *Server) undo() *mcp.CallToolResult {
 	s.mu.Lock()
+	s.singles = 0
 	defer s.mu.Unlock()
 	ws, err := s.workspace()
 	if err != nil {
@@ -342,6 +358,7 @@ func (s *Server) batch(args json.RawMessage) *mcp.CallToolResult {
 	}
 
 	s.mu.Lock()
+	s.singles = 0
 	defer s.mu.Unlock()
 	ws, err := s.workspace()
 	if err != nil {
@@ -369,6 +386,7 @@ func (s *Server) check(ctx context.Context, args json.RawMessage) *mcp.CallToolR
 		return textResult(err.Error())
 	}
 	s.mu.Lock()
+	s.singles = 0
 	ws, err := s.workspace()
 	var errs []string
 	var root string

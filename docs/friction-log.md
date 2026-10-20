@@ -1124,3 +1124,10 @@ may now too.
 All through gorefactor. replace_text still does not add imports
 (strings.TrimSpace in a replaced block); I dropped the call rather than
 add the import in another step.
+
+## 2026-10-20: a tip to batch single steps
+
+All through gorefactor: the test with add_declaration, the server change
+in one batch of 8 steps (add_field, add_declaration, replace_statements,
+insert_statements) with line numbers from one sed read, and these notes
+with replace_text.
