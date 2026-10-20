@@ -308,11 +308,12 @@ hand or a tool got in the way.
         then declares the helper; the stub the call already got made that
         declaration a "redeclared" refusal (4 in 8 runs). A function whose
         body is only `panic("not implemented")` is replaced, with a note.
+        *Done.*
       - **Edits may start from code they fix.** A test written first used
         a field that `add_field` was then refused to add, since the code
         did not type-check. Like `create_from_usage`, an edit may run on
         code that does not type-check if it leaves fewer errors and no
-        new one.
+        new one. *Done.*
       - **`add_field` takes the type separately** (`field` and `type`, as
         the model sent twice) and joins them.
     - **Coaching in results,** when a model does something a tool could
