@@ -97,8 +97,7 @@ until the MCP is reconnected.
    range that cuts a statement is refused with the range to use. Every
    step can be undone with `undo`.
 
-Known gaps (do these by hand and log them): `replace_text` does not add
-imports; nothing removes a struct field or restores a file;
+Known gaps (do these by hand and log them): nothing removes a struct field or restores a file;
 `create_from_usage` can infer odd result types for generic calls and names
 parameters p, p2.
 

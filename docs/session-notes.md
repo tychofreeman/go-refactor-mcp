@@ -140,8 +140,8 @@ results are in `docs/cost-history.md`.
   use it for every step: `refactor batch '<json>'` runs a batch, and
   edits get stubs as through the server (#160).
 - Smaller known bugs: `create_from_usage` infers odd result types for
-  generic calls and names parameters p, p2; `replace_text` does not add
-  imports.
+  generic calls and names parameters p, p2. (`replace_text` adds
+  imports since #172.)
 - A full code review at a641b61 is in `docs/code-review-2026-10-20.md`:
   25 findings, 7 of them silent behavior changes or broken guarantees,
   most from panicking expressions treated as stable and methods reached
@@ -203,6 +203,7 @@ results are in `docs/cost-history.md`.
   `info.FileVersions`). All 25 review items are done, and item 17 with
   them: one check for terminating statements, `analysis.TerminatingList`
   (#170). Then roadmap item 15's open bullets, one PR each, chained from
-  #170: a smaller module overview (#171, one line per package).
+  #170: a smaller module overview (#171, one line per package),
+  replace_text adds imports (#172, `gocode.ImportNames`).
   Change only
   this repo copy: the Claude Doc linked from #130 is not kept up to date.

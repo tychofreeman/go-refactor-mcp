@@ -1136,6 +1136,12 @@ helper with add_declaration, Plan's new body with replace_statements
 All through gorefactor: the test with insert_statements, the
 instructions and these notes with replace_text.
 
+## 2026-10-20: replace_text adds imports
+
+All through `refactor batch`, and for the last time with the import
+block replaced by hand-written replace_text (`go/ast`, `go/parser`,
+`go/token`, `slices`, `gocode`, `imports`): that is the gap this fixes.
+
 ## 2026-10-20: a smaller module overview
 
 All through `refactor batch`; `path` added as a replace_text of the

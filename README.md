@@ -405,7 +405,9 @@ hand or a tool got in the way.
       first). Reads are about 15% of input, so a small win in total.
     - **Smaller bugs:** `create_from_usage` infers odd result types for
       generic calls and names parameters p, p2; `replace_text` does not
-      add the imports new code needs (hit again in #128).
+      add the imports new code needs (hit again in #128). *Done for
+      imports (#172): in a Go file, `replace_text` imports the packages
+      its new text names, as the other edits do.*
     - **One worked example** of a whole batch in the instructions.
     - **Measure** each with the A/B harness's feature and chain tasks,
       with more runs per task (noise is 10-25% at 2-3 runs), and count
