@@ -123,7 +123,7 @@ def candidates(repo, name, since, rev="HEAD"):
         if not parent:
             continue
         title, pr = title_of(subject, body)
-        if SKIP_TITLE.search(title):
+        if SKIP_TITLE.search(title) or SKIP_TITLE.search(SCOPE.sub("", title)):
             continue
         numstat = git(repo, "diff", "--numstat", parent, commit)
         code, tests, other = [], [], []
