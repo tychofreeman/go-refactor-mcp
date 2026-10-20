@@ -108,22 +108,22 @@ func riskOf(info *types.Info, n ast.Node, eff *analysis.Effects) (r risk, ok boo
 }
 
 // risks lists what evaluating e could do or depend on, in source order.
-// Function literals are not evaluated (defining one runs nothing), nor
-// are constant expressions.
+// Function literals are not evaluated (defining one runs nothing), except
+// those a call in e runs before it returns; nor are constant expressions.
 func risks(info *types.Info, e ast.Node, eff *analysis.Effects) []risk {
 	var out []risk
-	ast.Inspect(e, func(n ast.Node) bool {
-		if _, ok := n.(*ast.FuncLit); ok {
-			return false
-		}
+	ast.Inspect(e, syncWalk(info, func(n ast.Node) bool {
 		if ex, ok := n.(ast.Expr); ok && info.Types[ex].Value != nil {
 			return false
+		}
+		if l := assignsOutside(info, n, e); l != nil {
+			out = append(out, risk{node: n, why: "has side effects: it assigns " + types.ExprString(l), effect: true})
 		}
 		if r, ok := riskOf(info, n, eff); ok {
 			out = append(out, r)
 		}
 		return true
-	})
+	}))
 	return out
 }
 
@@ -179,11 +179,8 @@ func (t *target) checkEvaluation(info *types.Info, file *ast.File, expr ast.Expr
 
 	fa := analysis.AnalyzeFunc(info, t.decl)
 	var err error
-	ast.Inspect(t.decl.Body, func(n ast.Node) bool {
+	ast.Inspect(t.decl.Body, syncWalk(info, func(n ast.Node) bool {
 		if n == nil || err != nil || n.Pos() >= expr.Pos() {
-			return false
-		}
-		if _, ok := n.(*ast.FuncLit); ok {
 			return false
 		}
 		if n.End() > expr.Pos() {
@@ -203,7 +200,7 @@ func (t *target) checkEvaluation(info *types.Info, file *ast.File, expr ast.Expr
 			err = refactor.Refusef("%s %s, and %s (at %s) could panic before it", q, canPanic.why, t.brief(n), t.ws.Position(n.Pos()))
 		}
 		return err == nil
-	})
+	}))
 	return err
 }
 

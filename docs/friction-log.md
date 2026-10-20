@@ -1136,6 +1136,13 @@ helper with add_declaration, Plan's new body with replace_statements
 All through gorefactor: the test with insert_statements, the
 instructions and these notes with replace_text.
 
+## 2026-10-20: changesig and synchronous closures, item 12 of the review
+
+All through gorefactor's CLI except the golden cases: the helpers with
+add_declaration, the three walks with replace_text. Two of the walks had
+to be one replace_text each from `ast.Inspect(` to its closing `})`,
+since wrapping the visitor changes both ends.
+
 ## 2026-10-20: inline_function and conditional uses, item 11 of the review
 
 All through gorefactor's CLI except the golden cases: the two cases and
