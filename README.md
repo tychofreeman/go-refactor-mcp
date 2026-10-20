@@ -354,8 +354,9 @@ hand or a tool got in the way.
       schemas in the same response as another call, and the definitions
       of `batch`, `replace_statements` and `add_declaration`, and the
       sentence every refactoring and edit ends with, are shorter: the 8
-      tools a model loads most went from 15.7K to 12.5K characters. To
-      measure: turns of only ToolSearch per run.*
+      tools a model loads most went from 15.7K to 12.5K characters.
+      Measured: turns of only ToolSearch fell from 9 to 5 in 130; totals
+      did not move.*
     - **Turns denied to the mcp arm.** In `ab-features-read-inspect`, 15
       Write attempts and 18 Bash commands that write (often test
       fixtures) were refused, about a tenth of the turns. Find what each

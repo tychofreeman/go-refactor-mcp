@@ -72,6 +72,7 @@ refactorings, through gorefactor.
 | ab-features-skeleton | #121: inspect without bodies, targets | $2.62 · 6.27M · 7/8 | | |
 | ab-features-read-inspect | mcp arm's CLAUDE.md: read Go code with inspect, not Read, cat or sed | $2.42 · 5.55M · 7/8 | | |
 | ab-features-read-questions | the same, and a "Q:" line before each read saying what it is to answer | $2.38 · 5.12M · 7/8 | | |
+| ab-features-toolsearch | #128: load schemas alongside another call; shorter definitions | $2.46 · 5.54M · 8/8 | | |
 
 Without a CLAUDE.md no arm used gorefactor at all: all three edited with
 Bash. Doing everything through gorefactor cost about 1.8× by hand at first,
@@ -148,6 +149,15 @@ through every later turn. Four broad greps (7-12K characters each, such
 as `\.Line\b`) were another 12%, all "where is X used" questions.
 All reads together are about 0.8M of the 5.1M input tokens, so even
 halving them would save under 10%; turns still matter more.
+
+**Schemas loaded alongside another call (#128, Oct 20).** Same arm
+CLAUDE.md as `ab-features-read-inspect`. Turns that did nothing but
+load schemas fell from 9 to 5 (12 in `ab-features-read-questions`), and
+turns that loaded them together with another call rose from 7 to 9; two
+of the five were `create_file`. Totals did not move (5.54M input against
+5.55M, 8/8 passed), as a change of four turns in 130 would not. The
+largest waste left is the denied writes: 17 Write attempts and 15 Bash
+commands that write, all refused.
 
 ## 4. Design in the way, and chains (Oct 18–19)
 
