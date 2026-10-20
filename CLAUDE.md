@@ -91,8 +91,7 @@ until the MCP is reconnected.
 Known gaps (do these by hand and log them): `replace_text` does not add
 imports; nothing removes a struct field or restores a file;
 `create_from_usage` can infer odd result types for generic calls and names
-parameters p, p2; ranges that start at a function's `func` line are
-refused (give the body's lines, or `function`).
+parameters p, p2.
 
 ## Measuring cost
 

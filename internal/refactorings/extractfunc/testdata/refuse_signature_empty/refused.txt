@@ -1,0 +1,1 @@
+lines 28-29 include the signature of Empty on line 28; its body has no statements to extract
