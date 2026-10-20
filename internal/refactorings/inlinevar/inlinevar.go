@@ -315,7 +315,14 @@ func (x *inliner) checkVariable() error {
 func (x *inliner) checkEvaluation() error {
 	culprit, ok := x.fa.Stable(x.init, true)
 	if ok {
-		return nil // same value and no effects however often and wherever it is evaluated
+		culprit = analysis.MayPanic(x.info, x.init)
+		if culprit == nil {
+			return nil // same value and no effects however often and wherever it is evaluated
+		}
+		if len(x.uses) > 1 {
+			return refactor.Refusef("%q is used %d times, and its initializer %s can panic (%s), which inlining would move to the first use; inlining requires a single use",
+				x.obj.Name(), len(x.uses), x.quote(x.init), x.quote(culprit))
+		}
 	}
 	if len(x.uses) > 1 {
 		return refactor.Refusef("%q is used %d times, and its initializer %s could give a different value or do something each time it is evaluated (because of %s); inlining requires a single use",
@@ -326,7 +333,7 @@ func (x *inliner) checkEvaluation() error {
 	if err != nil {
 		return err
 	}
-	if _, ok := x.fa.Stable(x.init, false); ok {
+	if _, ok := x.fa.Stable(x.init, false); ok && analysis.MayPanic(x.info, x.init) == nil {
 		return nil // no effects and nothing else can change it: only the count mattered
 	}
 	if x.owner == nil {

@@ -235,6 +235,9 @@ func (f *Func) LocalsRead(e ast.Expr) []*types.Var {
 // map literal, say), so that one shared value is equivalent to evaluating
 // e repeatedly.
 //
+// A stable expression can still panic (a / b, s[i]): moving its
+// evaluation also needs MayPanic.
+//
 // It returns the first offending sub-expression.
 func (f *Func) Stable(e ast.Expr, sharing bool) (ast.Node, bool) {
 	info := f.Info
@@ -349,6 +352,81 @@ func (f *Func) Stable(e ast.Expr, sharing bool) (ast.Node, bool) {
 		return nil, true
 	}
 	return e, false
+}
+
+// MayPanic returns the first sub-expression of e whose evaluation can panic,
+// or nil: an integer division or remainder by a divisor that is not
+// constant, a shift by a signed count that is not constant, an index that
+// can be out of range or of a nil pointer, a slice expression with bounds,
+// a type assertion, or a conversion of a slice to an array. It does not
+// look into calls or function literals; it is meant for expressions Stable
+// accepts, whose known calls cannot panic.
+func MayPanic(info *types.Info, e ast.Expr) ast.Node {
+	var found ast.Node
+	ast.Inspect(e, func(n ast.Node) bool {
+		if found != nil {
+			return false
+		}
+		switch n := n.(type) {
+		case *ast.FuncLit:
+			return false
+		case *ast.BinaryExpr:
+			switch n.Op {
+			case token.QUO, token.REM:
+				if !isFloatOrComplex(info.TypeOf(n)) && info.Types[n.Y].Value == nil {
+					found = n
+				}
+			case token.SHL, token.SHR:
+				if !isUnsigned(info.TypeOf(n.Y)) && info.Types[n.Y].Value == nil {
+					found = n
+				}
+			}
+		case *ast.IndexExpr:
+			switch t := info.TypeOf(n.X); {
+			case IsArray(t):
+				if info.Types[n.Index].Value == nil {
+					found = n
+				}
+			case IsString(t):
+				if info.Types[n.X].Value == nil || info.Types[n.Index].Value == nil {
+					found = n
+				}
+			case IsSlice(t), IsPointer(t):
+				found = n
+			}
+		case *ast.SliceExpr:
+			if n.Low != nil || n.High != nil || n.Max != nil || IsPointer(info.TypeOf(n.X)) {
+				found = n
+			}
+		case *ast.TypeAssertExpr:
+			if n.Type != nil {
+				found = n
+			}
+		case *ast.CallExpr:
+			if tv, isConv := info.Types[n.Fun]; isConv && tv.IsType() && len(n.Args) == 1 && IsSlice(info.TypeOf(n.Args[0])) {
+				switch u := tv.Type.Underlying().(type) {
+				case *types.Array:
+					found = n
+				case *types.Pointer:
+					if _, ok := u.Elem().Underlying().(*types.Array); ok {
+						found = n
+					}
+				}
+			}
+		}
+		return found == nil
+	})
+	return found
+}
+
+func isFloatOrComplex(t types.Type) bool {
+	b, ok := under(t).(*types.Basic)
+	return ok && b.Info()&(types.IsFloat|types.IsComplex) != 0
+}
+
+func isUnsigned(t types.Type) bool {
+	b, ok := under(t).(*types.Basic)
+	return ok && b.Info()&types.IsUnsigned != 0
 }
 
 // HasEffect reports whether n itself (not its children) is a call with

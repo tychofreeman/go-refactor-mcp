@@ -82,3 +82,78 @@ func f(s string, xs []string, b []byte, o types.Object, pkg *types.Package) {
 		t.Errorf("checked %d calls, want %d", seen, len(want))
 	}
 }
+
+func TestMayPanic(t *testing.T) {
+	src := `package p
+
+const k = "abc"
+
+func f[N int | float64](a, b int, u uint, x, y float64, s string, arr [4]int, xs []int, p *[4]int, v any, n, m N) {
+	_ = a / b
+	_ = a % b
+	_ = a / 2
+	_ = x / y
+	_ = n / m
+	_ = a << b
+	_ = a << u
+	_ = a << 3
+	_ = s[0]
+	_ = k[1]
+	_ = arr[a]
+	_ = arr[1]
+	_ = xs[0]
+	_ = p[1]
+	_ = s[1:]
+	_ = s[:]
+	_ = xs[:]
+	_ = v.(int)
+	_ = [2]int(xs)
+	_ = (*[2]int)(xs)
+	_ = []byte(s)
+	_ = -a + len(s)
+	_ = 1 + a/b
+}
+`
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "p.go", src, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	info := &types.Info{Uses: map[*ast.Ident]types.Object{}, Types: map[ast.Expr]types.TypeAndValue{}, Selections: map[*ast.SelectorExpr]*types.Selection{}}
+	if _, err := (&types.Config{}).Check("example.com/p", fset, []*ast.File{f}, info); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{ // expression -> the part that can panic, "" for none
+		"a / b": "a / b", "a % b": "a % b", "a / 2": "", "x / y": "", "n / m": "n / m",
+		"a << b": "a << b", "a << u": "", "a << 3": "",
+		"s[0]": "s[0]", "k[1]": "", "arr[a]": "arr[a]", "arr[1]": "", "xs[0]": "xs[0]", "p[1]": "p[1]",
+		"s[1:]": "s[1:]", "s[:]": "", "xs[:]": "",
+		"v.(int)": "v.(int)", "[2]int(xs)": "[2]int(xs)", "(*[2]int)(xs)": "(*[2]int)(xs)", "[]byte(s)": "",
+		"-a + len(s)": "", "1 + a / b": "a / b",
+	}
+	seen := 0
+	ast.Inspect(f, func(n ast.Node) bool {
+		as, ok := n.(*ast.AssignStmt)
+		if !ok {
+			return true
+		}
+		e := as.Rhs[0]
+		w, ok := want[types.ExprString(e)]
+		if !ok {
+			t.Errorf("no expectation for %s", types.ExprString(e))
+			return true
+		}
+		seen++
+		got := ""
+		if p := MayPanic(info, e); p != nil {
+			got = types.ExprString(p.(ast.Expr))
+		}
+		if got != w {
+			t.Errorf("MayPanic(%s) = %q, want %q", types.ExprString(e), got, w)
+		}
+		return true
+	})
+	if seen != len(want) {
+		t.Errorf("checked %d expressions, want %d", seen, len(want))
+	}
+}

@@ -759,7 +759,8 @@ change behavior:
   (constants are exempt);
 - it would move ahead of a call or channel receive earlier in the same
   statement (`read() - read2()`), unless its value depends only on constants
-  and local variables that nothing else can reach;
+  and local variables that nothing else can reach and it cannot panic
+  (`a / b`, `s[i]`, a type assertion: the panic would come first);
 - it would move ahead of an assignment or `++`/`--` earlier in the same
   statement that could change its value (`!ok` in
   `if v, ok = x.(T); !ok`): with only unreachable local variables, when
@@ -811,10 +812,13 @@ Refused (with an explanation):
 - the variable is assigned anywhere, its address is taken, it is sliced, or a
   pointer-receiver method is called on it;
 - its initializer is not stable (it has calls, or reads globals, pointers,
-  slice/map elements or escaping variables) and the variable is used more than
-  once, or its one use is not evaluated exactly once right after the
-  declaration: inside a loop or closure, in a nested block, after `&&`/`||`, in
-  an `else if`, or with a call, write or `return` in between;
+  slice/map elements or escaping variables) or can panic (`a / b` with a
+  divisor that is not constant, `s[i]`, `arr[i]`, a type assertion), and
+  the variable is used more than once, or its one use is not evaluated
+  exactly once right after the declaration: inside a loop or closure, in a
+  nested block, after `&&`/`||`, in an `else if`, or with a call, write or
+  `return` in between (so `q := a / b; if b == 0 { return 0 }; return q`
+  is refused);
 - a variable the initializer reads is modified before a use (or anywhere in a
   loop or closure that contains a use but not the declaration);
 - a name in the initializer would refer to something else at a use;
@@ -1036,7 +1040,9 @@ body sees, and otherwise declared at the top with the arguments' values
 (`p := arg`, one statement for all, which keeps the evaluation order):
 
 - **replaced:** a constant used as a whole value; an expression that cannot
-  change (locals no other code reaches, no calls); a variable read when the
+  change (locals no other code reaches, no calls) and cannot panic, or one
+  that can (`arr[i]`, `a / b`) if its first use is evaluated whenever the
+  body runs; a variable read when the
   body changes nothing before using it, or the variable is never assigned;
   `&v` (uses of `*p` and `p.f` become `v` and `v.f`); a parameter the body
   assigns, if its argument is a variable of the same name that the caller
@@ -1045,8 +1051,10 @@ body sees, and otherwise declared at the top with the arguments' values
   in argument order;
 - **declared:** everything else, such as an argument with calls, or a
   parameter the body assigns or captures in a closure while the argument
-  could still change. Unused parameters drop their argument unless it has
-  effects (`_ = arg`).
+  could still change, or one that can panic and is first used conditionally
+  (`x && b > 0` with `arr[i]` for `b`). Unused parameters drop their
+  argument unless it has effects (`_ = arg`), and a result nobody receives
+  is kept as `_ = a / b` when it can panic.
 
 Refused:
 

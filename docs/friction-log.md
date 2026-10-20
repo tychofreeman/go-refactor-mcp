@@ -1136,6 +1136,13 @@ helper with add_declaration, Plan's new body with replace_statements
 All through gorefactor: the test with insert_statements, the
 instructions and these notes with replace_text.
 
+## 2026-10-20: expressions that can panic, item 8 of the review
+
+All through gorefactor's CLI: `analysis.MayPanic`, its helpers and its
+test with add_declaration, the four call sites and the docs with
+replace_text. By hand: the golden cases (`in/` and `args.json`; `out/`
+from `-update`).
+
 ## 2026-10-20: schemas loaded alongside another call, shorter definitions
 
 All through gorefactor's CLI: the test with add_declaration, the
