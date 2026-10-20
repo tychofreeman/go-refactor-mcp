@@ -151,6 +151,8 @@ def cmd_validate(args):
         if after["exit"] == 0:
             after["tail"] = []
         print(json.dumps({"name": t["name"], "valid": good, "vet_before": vet, "before": before, "after": after}), flush=True)
+        if args.clean_cache:
+            subprocess.run(["go", "clean", "-cache"], check=False)
     sys.exit(0 if ok else 1)
 
 
@@ -163,6 +165,7 @@ def main():
     v = sub.add_parser("validate")
     v.add_argument("names", nargs="*")
     v.add_argument("--timeout", type=int, default=1800, help="seconds per check")
+    v.add_argument("--clean-cache", action="store_true", help="empty Go's build cache after each task (a cold Hugo or Gitea check takes over 15 GB)")
     args = ap.parse_args()
     {"clone": cmd_clone, "build": cmd_build, "validate": cmd_validate}[args.cmd](args)
 
