@@ -1071,8 +1071,9 @@ body sees, and otherwise declared at the top with the arguments' values
 
 - **replaced:** a constant used as a whole value; an expression that cannot
   change (locals no other code reaches, no calls) and cannot panic, or one
-  that can (`arr[i]`, `a / b`) if its first use is evaluated whenever the
-  body runs; a variable read when the
+  that can (`arr[i]`, `a / b`, `p.n`) if its first use is evaluated
+  whenever the body runs (not in a block, an `else if`, a `for` post
+  statement, or after `&&`/`||`); a variable read when the
   body changes nothing before using it, or the variable is never assigned;
   `&v` (uses of `*p` and `p.f` become `v` and `v.f`); a parameter the body
   assigns, if its argument is a variable of the same name that the caller

@@ -141,5 +141,7 @@ results are in `docs/cost-history.md`.
   done; the medium ones (8-18) remain, 8 already fixed. The user asked
   for those too, in the same chained way: 9 (#145, inline_function
   checks the operands on the left of an assignment), 10 (#146, no
-  variable is dead after the call in a caller with goto). Change only
+  variable is dead after the call in a caller with goto), 11 (#147, an
+  else if and a for post count as conditional uses; analysis.PathTo
+  runs from the node outward). Change only
   this repo copy: the Claude Doc linked from #130 is not kept up to date.
