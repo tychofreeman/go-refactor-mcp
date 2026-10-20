@@ -181,12 +181,9 @@ func (r *InlineFunction) Expand(ws *workspace.Workspace, raw json.RawMessage) ([
 	if len(calls) == 0 {
 		return nil, refactor.Refusef("nothing calls %s, so there is no call to inline", fn.Name())
 	}
-	for i, c := range calls {
+	for _, c := range calls {
 		if c.Filename == decl.Filename && decl.Offset <= c.Offset && c.Offset < decl.end {
 			return nil, refactor.Refusef("%s calls itself (at %s:%d), so its calls cannot all be inlined; inline the calls outside it one at a time", fn.Name(), ws.Rel(c.Filename), c.Line)
-		}
-		if i > 0 && c.Filename == calls[i-1].Filename && c.Line == calls[i-1].Line {
-			return nil, refactor.Refusef("two calls to %s are on the same line, %s:%d (columns %d and %d); inline them one at a time, giving column", fn.Name(), ws.Rel(c.Filename), c.Line, calls[i-1].Column, c.Column)
 		}
 	}
 	var steps []refactor.Step
@@ -208,7 +205,8 @@ type declSpan struct {
 }
 
 // callsOf returns the calls to fn in the workspace's packages, by file
-// and position, and where fn is declared.
+// and from the end of each file back, so that a call nested in another's
+// arguments comes first; and where fn is declared.
 func callsOf(ws *workspace.Workspace, fn *types.Func) ([]token.Position, declSpan) {
 	key := ws.Fset.Position(fn.Pos())
 	same := func(p token.Pos) bool {
@@ -252,7 +250,7 @@ func callsOf(ws *workspace.Workspace, fn *types.Func) ([]token.Position, declSpa
 		if calls[i].Filename != calls[j].Filename {
 			return calls[i].Filename < calls[j].Filename
 		}
-		return calls[i].Offset < calls[j].Offset
+		return calls[i].Offset > calls[j].Offset
 	})
 	return calls, decl
 }

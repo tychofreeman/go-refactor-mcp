@@ -5,7 +5,12 @@ A step of a batch addresses lines as they were when the batch began, and
 (`translateLines`). A line an earlier step rewrote or removed, and any line
 of a file created in the batch, cannot be addressed: the refusal says to
 address what that step made by name, or to send the step in a later call
-after a new `inspect`.
+after a new `inspect`. A line given with its column is followed as a
+position instead (`edit.PosMapOf`): through the step's own edits, then,
+where gofmt changed the spacing of a line, by the bytes other than spaces
+before it. So it stays addressable on a line an earlier step changed, as
+long as what is at it was not replaced (two calls on one line, inlined
+one after the other).
 
 So the most common follow-up has no address: "after what the previous step
 made". The friction log has it twice (2026-10-18: line numbers in a batch,

@@ -557,6 +557,8 @@ func followStep(ws *workspace.Workspace, made []map[string]*stepLines, i int, li
 				lines[rel] = newLineMap(before)
 			}
 			lines[rel].follow(i+1, moved)
+			lines[rel].pos = append(lines[rel].pos, posStep{i + 1, edit.PosMapOf(before, c.After[p], edits)})
+			lines[rel].cur = c.After[p]
 			for _, m := range made[:i] {
 				if s := m[rel]; s != nil {
 					s.follow(i+1, moved, c.After[p])
@@ -575,11 +577,21 @@ type lineMap struct {
 	now     []int
 	changed []int
 	created bool // the file did not exist when the batch began
+	// orig is the file when the batch began, cur as it is now, and pos
+	// follows a byte offset of orig through each step since.
+	orig, cur []byte
+	pos       []posStep
+}
+
+// posStep is how one step moved a file's byte offsets (see edit.PosMapOf).
+type posStep struct {
+	step int
+	at   func(off int) int
 }
 
 func newLineMap(before []byte) *lineMap {
 	now := edit.LineMap(before, before)
-	return &lineMap{now: now, changed: make([]int, len(now)), created: before == nil}
+	return &lineMap{now: now, changed: make([]int, len(now)), created: before == nil, orig: before, cur: before}
 }
 
 // follow moves m's lines through step, which moved the file's lines as
@@ -600,6 +612,27 @@ func (m *lineMap) follow(step int, moved []int) {
 	}
 }
 
+// position returns where line and column (1-based, as when the batch
+// began) are now, or the step that rewrote what was there.
+func (m *lineMap) position(line, column int) (int, int, int) {
+	off := 0
+	for n := 1; n < line; n++ {
+		i := bytes.IndexByte(m.orig[off:], '\n')
+		if i < 0 {
+			return 0, 0, 0
+		}
+		off += i + 1
+	}
+	off += column - 1
+	for _, p := range m.pos {
+		if off = p.at(off); off < 0 {
+			return 0, 0, p.step
+		}
+	}
+	start := bytes.LastIndexByte(m.cur[:off], '\n') + 1
+	return bytes.Count(m.cur[:off], []byte("\n")) + 1, off - start + 1, 0
+}
+
 // translateLines rewrites a step's line arguments (line, start_line,
 // end_line), given as of the start of the batch, to where those lines are
 // now, except the keys in now, which already are. A line an earlier step
@@ -608,6 +641,21 @@ func translateLines(args json.RawMessage, rel string, m *lineMap, now map[string
 	var a map[string]json.RawMessage
 	if err := json.Unmarshal(args, &a); err != nil {
 		return args, nil
+	}
+	// A line with a column is followed as a position, which stays
+	// addressable while what is at it does, even on a line a step changed.
+	var line, column int
+	if json.Unmarshal(a["line"], &line) == nil && json.Unmarshal(a["column"], &column) == nil &&
+		line > 0 && column > 0 && !now["line"] && !m.created && line < len(m.now) {
+		l, c, step := m.position(line, column)
+		if step != 0 {
+			return nil, fmt.Errorf("line %d, column %d of %s (as it was when the batch began) was rewritten by step %d, so it is not there to address; address what step %d made by name, or by reference ($%d.start, ...), or send this step in a later call with positions from a new inspect", line, column, rel, step, step, step)
+		}
+		if l > 0 {
+			a["line"], _ = json.Marshal(l)
+			a["column"], _ = json.Marshal(c)
+			now = map[string]bool{"line": true, "start_line": now["start_line"], "end_line": now["end_line"]}
+		}
 	}
 	for _, key := range []string{"line", "start_line", "end_line"} {
 		var n int

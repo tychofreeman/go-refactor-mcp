@@ -1426,6 +1426,13 @@ scripts, `tasks.json` and the docs are Python, JSON and Markdown, and no
 Go changed. As in the PR before, the gorefactor server of this cloud
 session ran on the linked computer, not on this checkout.
 
+## 2026-10-20: batches follow columns
+
+Through gorefactor, but for one thing: the fixture of the same-line
+refusal, which became a success case, was removed with `git rm`;
+nothing removes a file. PosMapOf began as a stub in a batch with its
+test, so the test could fail first.
+
 ## 2026-10-20: inline_function all_calls
 
 All through gorefactor: the fixtures with a batch of create_file, the

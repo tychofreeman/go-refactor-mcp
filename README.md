@@ -1228,9 +1228,10 @@ it. `keep_function` keeps it anyway.
 after another as a batch, and then deletes the function as above; the
 function is given by `file` and `name` (`Name` or `Type.Method`), or by
 the line of any call. If any call cannot be inlined, none is, and the
-refusal names the call. Refused up front: a function that calls itself,
-and two calls on one line (the later one's column would move). The
-engine runs such a step through `refactor.Expander`: a refactoring that
+refusal names the call. The calls go from the end of each file back, so
+that a call nested in another's arguments goes first, and the batch
+follows each call's line and column through the steps before it. Refused
+up front: a function that calls itself. The engine runs such a step through `refactor.Expander`: a refactoring that
 expands to steps of its own runs them as one batch, one undo.
 
 ## Invert if and remove else: what they check
