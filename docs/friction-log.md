@@ -1136,6 +1136,11 @@ helper with add_declaration, Plan's new body with replace_statements
 All through gorefactor: the test with insert_statements, the
 instructions and these notes with replace_text.
 
+## 2026-10-20: create_file formats only Go files
+
+The fix through gorefactor's CLI (replace_text); the golden fixture by
+hand, since its `out/` is the unformatted file `-update` could not make.
+
 ## 2026-10-20: introduce_parameter and a variadic parameter
 
 The check through gorefactor's CLI (replace_text). The two golden

@@ -391,7 +391,8 @@ func (w *Workspace) Preview(label string, fes []edit.FileEdit) (Change, error) {
 		}
 		if created {
 			c.Created[fe.Path] = true
-			if fa, err := format.Source(after); err == nil {
+			// Only Go source: a golden file may parse as Go too.
+			if fa, err := format.Source(after); err == nil && strings.HasSuffix(fe.Path, ".go") {
 				after = fa
 			}
 		} else {

@@ -167,6 +167,7 @@ results are in `docs/cost-history.md`.
   shared reflection helpers (#157), one dependency walk
   (`analysis.Dependencies`, #158), one list of functions that run a
   closure during the call (`analysis.syncCalls`, #159), the CLI matching the server (#160), then the
-  low items: 19 (#161, introduce_parameter and a variadic parameter).
+  low items: 19 (#161, introduce_parameter and a variadic parameter),
+  20 (#162, create_file formats only `.go` files).
   Change only
   this repo copy: the Claude Doc linked from #130 is not kept up to date.
