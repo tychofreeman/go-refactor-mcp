@@ -20,6 +20,7 @@ import (
 	"golang.org/x/tools/go/ast/astutil"
 	"golang.org/x/tools/go/packages"
 
+	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
@@ -387,6 +388,9 @@ func (r *renamer) checkFieldOrMethod() error {
 				}
 			}
 		}
+		if err := r.checkReflected(st, named); err != nil {
+			return err
+		}
 		if named != nil {
 			if m, _, _ := types.LookupFieldOrMethod(types.NewPointer(named), false, obj.Pkg(), r.new); m != nil {
 				return refactor.Refusef("type %s already has a %s %q (at %s)", named.Obj().Name(), kind(m), r.new, declaredAt(ws, m))
@@ -401,6 +405,38 @@ func (r *renamer) checkFieldOrMethod() error {
 			return refactor.Refusef("type %s already has a %s %q (at %s)", named.Obj().Name(), kind(m), r.new, declaredAt(ws, m))
 		}
 		return r.checkInterfaces(named)
+	}
+	return nil
+}
+
+// checkReflected refuses renaming a field of st (named, if the struct has
+// a name) that is exported before or after, when a value holding the
+// struct is passed as an interface: reflection there (encoding/json,
+// text/template, fmt's %+v) finds fields by name.
+func (r *renamer) checkReflected(st *types.Struct, named *types.Named) error {
+	if st == nil || !token.IsExported(r.old) && !token.IsExported(r.new) {
+		return nil
+	}
+	what := "the struct"
+	match := func(t types.Type) bool {
+		s, ok := t.(*types.Struct)
+		return ok && types.Identical(s, st)
+	}
+	if named != nil {
+		what = named.Obj().Name()
+		match = func(t types.Type) bool {
+			n, ok := t.(*types.Named)
+			return ok && keyOf(r.ws.Fset, n.Obj()) == keyOf(r.ws.Fset, named.Obj())
+		}
+	}
+	for _, p := range r.ws.Pkgs {
+		if p.TypesInfo == nil {
+			continue
+		}
+		if arg := analysis.PassedAsInterface(p.TypesInfo, p.Syntax, match); arg != nil {
+			return refactor.Refusef("a value holding %s is passed as an interface at %s; reflection there (encoding/json, text/template, fmt's %%+v) sees field names, so renaming the field %s to %s could change what it encodes or finds",
+				what, r.ws.Position(arg.Pos()), r.old, r.new)
+		}
 	}
 	return nil
 }

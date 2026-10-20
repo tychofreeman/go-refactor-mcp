@@ -1,0 +1,1 @@
+a value holding rec is passed as an interface at m.go:10:58; reflection there (encoding/json, text/template, fmt's %+v) sees field names

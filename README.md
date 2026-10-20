@@ -753,6 +753,11 @@ Refused (with an explanation):
   new name is commonly called dynamically (`String`, `Error`,
   `MarshalJSON`, …)
 - unexporting a name that another package uses
+- a field, exported before or after, of a struct that a call passes as an
+  interface, on its own or inside a slice, map, pointer or other struct
+  (`json.Marshal(r)`, `fmt.Printf("%+v", items)`): reflection finds fields
+  by name, so `Name` to `name` drops the JSON key, and `{{.Name}}` in a
+  template stops working
 - symbols declared outside the workspace (stdlib, dependencies)
 
 Not supported yet: imports, labels, embedded fields (and types that are
