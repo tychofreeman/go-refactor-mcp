@@ -1136,6 +1136,11 @@ helper with add_declaration, Plan's new body with replace_statements
 All through gorefactor: the test with insert_statements, the
 instructions and these notes with replace_text.
 
+## 2026-10-20: introduce_parameter and a variadic parameter
+
+The check through gorefactor's CLI (replace_text). The two golden
+fixtures by hand, as usual, and `out/` from `-update`.
+
 ## 2026-10-20: the CLI runs batches
 
 All through gorefactor's CLI: the test with create_file, `declarer` renamed

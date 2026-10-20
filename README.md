@@ -457,6 +457,9 @@ hand or a tool got in the way.
       translation; and smaller gaps (`rename` and `Test` functions,
       `make(n)` able to panic in `move_statement`, loop variables before
       Go 1.22). Each is described, with where, in the review.
+      *Done so far: 19 (#161, introduce_parameter refuses an expression
+      using the variadic parameter unless the call passes a slice with
+      `...`).*
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
