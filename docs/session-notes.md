@@ -163,5 +163,6 @@ results are in `docs/cost-history.md`.
   are done; what was found on the way, and the low items 19-25, are
   roadmap item 17, done one PR each, chained the same way: the false
   refusal for a literal's own parameters (#156), extract_struct on the
-  shared reflection helpers (#157). Change only
+  shared reflection helpers (#157), one dependency walk
+  (`analysis.Dependencies`, #158). Change only
   this repo copy: the Claude Doc linked from #130 is not kept up to date.

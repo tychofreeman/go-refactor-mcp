@@ -1136,6 +1136,13 @@ helper with add_declaration, Plan's new body with replace_statements
 All through gorefactor: the test with insert_statements, the
 instructions and these notes with replace_text.
 
+## 2026-10-20: one walk over dependencies' interfaces
+
+All through gorefactor's CLI: the new file with create_file, changesig's
+call with replace_expression (replace_text was refused: it does not add
+the `analysis` import, the known gap), its old `dependencies` deleted
+with remove_dead_code, and the two other walks with replace_text.
+
 ## 2026-10-20: extract_struct on the shared reflection helpers
 
 All through gorefactor's CLI except the golden cases: the check's body

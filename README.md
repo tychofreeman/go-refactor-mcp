@@ -429,7 +429,9 @@ hand or a tool got in the way.
       (`interfacesWithMethod`), `remove_dead_code`
       (`dependencyInterface`) and the signature changes (`visible`) each
       walk every package-level interface of every dependency. One
-      function in `analysis` would do.
+      function in `analysis` would do. *Done (#158): `analysis.Dependencies`
+      and `PackageInterfaces`. merge_duplicate_function keeps its own
+      `dependencies`, which finds import cycles.*
     - **One list of functions that call a closure during the call:**
       `analysis.go`'s `syncCallees` and `effects.go`'s `syncCalls` have
       drifted apart: 22 of the first's are not in the second, among them
