@@ -162,7 +162,7 @@ func TestEffectsFunc(t *testing.T) {
 		"bump":       {true, true, false},
 		"first":      {false, true, true},
 		"setFirst":   {true, true, true},
-		"build":      {false, false, false},
+		"build":      {false, false, true}, // make with a size of n, which may be negative
 		"fill":       {false, false, true},
 		"mapBuild":   {false, true, false},
 		"callsPure":  {false, false, false},
@@ -428,13 +428,60 @@ func f(s string, b []byte, xs, ys []int, m map[string]int, n int, root string) {
 	}
 }
 
+// make panics on a slice length or capacity, or a channel buffer size,
+// that is negative or too large; a map's size is only a hint.
+func TestEffectsCallMake(t *testing.T) {
+	src := `package p
+
+func f(n int, u uint, s []int) {
+	_ = make([]int, 4)
+	_ = make([]int, n)
+	_ = make([]int, 0, u)
+	_ = make(map[int]int, n)
+	_ = make(chan int, n)
+	_ = make(chan int)
+	_ = new(int)
+	_ = make([]int, len(s), cap(s)+1)
+}
+`
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "p.go", src, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	info := &types.Info{Uses: map[*ast.Ident]types.Object{}, Types: map[ast.Expr]types.TypeAndValue{}}
+	if _, err := (&types.Config{}).Check("example.com/p", fset, []*ast.File{file}, info); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]bool{ // unsafe
+		"make([]int, 4)":                false,
+		"make([]int, n)":                true,
+		"make([]int, 0, u)":             true,
+		"make(map[int]int, n)":          false,
+		"make(chan int, n)":             true,
+		"make(chan int)":                false,
+		"new(int)":                      false,
+		"make([]int, len(s), cap(s)+1)": false,
+	}
+	e := NewEffects()
+	ast.Inspect(file, func(n ast.Node) bool {
+		if call, ok := n.(*ast.CallExpr); ok {
+			text := types.ExprString(call)
+			if s := e.Call(info, call); (s.Unsafe != "") != want[text] || s.Effect != "" || s.Reads != "" {
+				t.Errorf("%s: %+v, want unsafe %v and nothing else", text, s, want[text])
+			}
+		}
+		return true
+	})
+}
+
 func TestEffectsFuncStandardLibraryWrites(t *testing.T) {
 	pkg, f, info := checkStd(t)
 	e := NewEffects()
 	e.AddPackage([]*ast.File{f}, info)
 	want := map[string][3]bool{
 		"builder":    {false, true, false},
-		"sorted":     {false, false, false},
+		"sorted":     {false, false, true}, // make with a size of n
 		"sortsParam": {true, true, false},
 	}
 	for name, w := range want {

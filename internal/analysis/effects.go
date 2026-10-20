@@ -79,7 +79,7 @@ func (e *Effects) call(info *types.Info, call *ast.CallExpr, private func(target
 		return Summary{} // a conversion
 	}
 	if b, ok := info.Uses[IdentOf(call.Fun)].(*types.Builtin); ok {
-		return builtinCall(b.Name())
+		return builtinCall(info, call, b.Name())
 	}
 	if fn, ok := info.Uses[IdentOf(call.Fun)].(*types.Func); ok {
 		if s, ok := stdCall(info, fn, call, private); ok {
@@ -236,16 +236,40 @@ func staticCallee(info *types.Info, call *ast.CallExpr) *types.Func {
 	return fn
 }
 
-// builtinCall summarizes a call of a built-in function, as far as the
-// call shows: writes through its arguments count as side effects.
-func builtinCall(name string) Summary {
+// builtinCall summarizes a call of the built-in function name, as far as
+// the call shows: writes through its arguments count as side effects.
+func builtinCall(info *types.Info, call *ast.CallExpr, name string) Summary {
 	switch name {
-	case "len", "cap", "min", "max", "real", "imag", "complex", "new", "make":
+	case "make":
+		// A slice's length or capacity, or a channel's buffer size, that is
+		// negative or too large panics; a map's size is only a hint.
+		if _, isMap := under(info.TypeOf(call)).(*types.Map); !isMap {
+			for _, a := range call.Args[1:] {
+				if !nonNegative(info, a) {
+					return Summary{Unsafe: "makes " + types.ExprString(call.Args[0]) + " of a size that may be out of range"}
+				}
+			}
+		}
+		return Summary{}
+	case "len", "cap", "min", "max", "real", "imag", "complex", "new":
 		return Summary{}
 	case "panic":
 		return Summary{Unsafe: "panics"}
 	}
 	return Summary{Effect: "calls " + name}
+}
+
+// nonNegative reports whether size, an integer, cannot be negative as far
+// as it shows: a constant, a length or capacity, or a sum of them.
+func nonNegative(info *types.Info, size ast.Expr) bool {
+	switch x := ast.Unparen(size).(type) {
+	case *ast.CallExpr:
+		b, ok := info.Uses[IdentOf(x.Fun)].(*types.Builtin)
+		return ok && (b.Name() == "len" || b.Name() == "cap")
+	case *ast.BinaryExpr:
+		return x.Op == token.ADD && nonNegative(info, x.X) && nonNegative(info, x.Y)
+	}
+	return info.Types[size].Value != nil
 }
 
 // freshLocals returns the local variables of fd that only ever hold

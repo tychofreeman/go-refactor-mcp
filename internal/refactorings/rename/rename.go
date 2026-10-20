@@ -16,6 +16,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"golang.org/x/tools/go/ast/astutil"
 	"golang.org/x/tools/go/packages"
@@ -254,8 +256,33 @@ func (r *renamer) checkNewName() error {
 		if r.new == "main" && r.first.Pkg().Name() == "main" {
 			return refactor.Refusef("main is reserved in package main")
 		}
+		if _, isFunc := r.first.(*types.Func); isFunc && strings.HasSuffix(r.ws.Fset.Position(r.first.Pos()).Filename, "_test.go") {
+			switch from, to := testKind(r.old), testKind(r.new); {
+			case from == to:
+			case to == "":
+				return refactor.Refusef("%s is a %s function, which go test runs; renaming it to %s would stop that", r.old, from, r.new)
+			case from == "":
+				return refactor.Refusef("renaming %s to %s would make go test run it as a %s function", r.old, r.new, to)
+			default:
+				return refactor.Refusef("renaming %s to %s would make go test run it as a %s function instead of a %s function", r.old, r.new, to, from)
+			}
+		}
 	}
 	return nil
+}
+
+// testKind is what go test runs a function of a _test.go file named name
+// as: "test", "benchmark", "fuzz" or "example", or "" for none. The
+// prefix must end the name or be followed by a character that is not a
+// lower-case letter.
+func testKind(name string) string {
+	for _, k := range []struct{ prefix, kind string }{{"Test", "test"}, {"Benchmark", "benchmark"}, {"Fuzz", "fuzz"}, {"Example", "example"}} {
+		rest, ok := strings.CutPrefix(name, k.prefix)
+		if r, _ := utf8.DecodeRuneInString(rest); ok && (rest == "" || !unicode.IsLower(r)) {
+			return k.kind
+		}
+	}
+	return ""
 }
 
 // checkExport refuses to unexport a symbol that another package uses.

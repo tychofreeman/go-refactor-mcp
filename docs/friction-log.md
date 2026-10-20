@@ -1136,6 +1136,15 @@ helper with add_declaration, Plan's new body with replace_statements
 All through gorefactor: the test with insert_statements, the
 instructions and these notes with replace_text.
 
+## 2026-10-20: the review's item 25
+
+All through `refactor batch`: each of the three fixes with replace_text
+and add_declaration in one batch, imports (`unicode`, `unicode/utf8`,
+`go/version`) as replace_text of the import block (the known gap).
+By hand: the golden fixtures, and moving `builder_func_past_effect` to
+`refuse_builder_func_past_effect` with git mv, since nothing renames a
+fixture directory.
+
 ## 2026-10-20: argument aliases in a batch
 
 All through `refactor batch`. The test's first try used `slices`, which

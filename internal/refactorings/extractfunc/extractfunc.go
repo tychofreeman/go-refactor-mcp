@@ -29,6 +29,7 @@ import (
 	"go/ast"
 	"go/token"
 	"go/types"
+	"go/version"
 	"os"
 	"slices"
 	"sort"
@@ -714,7 +715,8 @@ func (x *extraction) analyzeDataFlow() error {
 	for _, v := range order {
 		switch {
 		case x.fa.Addressed[v], x.declaredOutsideLit(v) && len(x.fa.Modified[v]) > 0,
-			x.fa.CapturedAsync[v] && len(x.fa.Modified[v]) > 0 && x.sharedWithCaller(v):
+			x.fa.CapturedAsync[v] && len(x.fa.Modified[v]) > 0 && x.sharedWithCaller(v),
+			x.fa.CapturedAsync[v] && x.sharedLoopVar(v):
 			// Other code can reach v while the statements run: pass a
 			// pointer, so that both work on the same variable. (A variable
 			// that function literals use but nothing ever assigns cannot
@@ -1399,6 +1401,29 @@ func (x *extraction) sharedWithCaller(v *types.Var) bool {
 		}
 	}
 	return x.usedOutside(v) || x.loopAround(v)
+}
+
+// sharedLoopVar reports whether v is the variable of a for or range loop
+// around the selection and the file's Go version is before 1.22, when
+// every iteration shares the variable: the loop changes v after a literal
+// of the selection that can run later has captured it.
+func (x *extraction) sharedLoopVar(v *types.Var) bool {
+	if fv := x.info.FileVersions[x.file]; fv == "" || version.Compare(fv, "go1.22") >= 0 {
+		return false
+	}
+	for _, n := range analysis.PathTo(x.file, x.stmts[0]) {
+		var body *ast.BlockStmt
+		switch n := n.(type) {
+		case *ast.ForStmt:
+			body = n.Body
+		case *ast.RangeStmt:
+			body = n.Body
+		}
+		if body != nil && n.Pos() <= v.Pos() && v.Pos() < body.Pos() {
+			return true
+		}
+	}
+	return false
 }
 
 // assignedFirst reports whether the selection's first reference to v is a

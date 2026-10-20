@@ -64,15 +64,15 @@ Mostly false refusals, misleading results and one crash; none changes behavior e
 
 | # | Finding | Where | Example |
 | --- | --- | --- | --- |
-| 19 | Crash: `introduce_parameter` on an expression using a variadic parameter | `changesig/introparam.go:316` | Panics with index out of range when a call passes no variadic arguments. |
-| 20 | `create_file` gofmts any content that parses as Go, including non-`.go` golden fixtures | `workspace/workspace.go:388` | The result still says "added as written". |
-| 21 | `replace_expression` never removes an import it leaves unused | `edits/replaceexpr/replaceexpr.go:97` | The refusal blames the model's code: "strings imported and not used". |
-| 22 | A/B harness: runs that time out count as cost 0 in the per-arm means; the `Bash(cat:*)` rule may allow `cat > file` in the mcp arm *(not reproduced)* | `ab/ab.go:330`, `:59` | An arm that times out more often looks cheaper. |
-| 23 | A line gofmt realigned after an earlier batch step is read as rewritten | `edit/diff.go:331` | A later step addressing that line is refused as "rewritten by step 1". |
-| 24 | Argument aliases in a batch skip line translation | `refactor/refactor.go:373` | A step sent with `line_no` instead of `line` uses the untranslated number. |
-| 25 | Smaller behavior gaps | `rename`, `slidestmt`, `extractfunc` | `rename` can stop a `Test…` function from running or start running a helper; `move_statement` doesn't count `make(n)` with a variable size as able to panic; pre-1.22 loop variables captured by goroutines. |
+| 19 | Crash: `introduce_parameter` on an expression using a variadic parameter. *Fixed in #161: refused unless the call passes a slice with `...`.* | `changesig/introparam.go:316` | Panics with index out of range when a call passes no variadic arguments. |
+| 20 | `create_file` gofmts any content that parses as Go, including non-`.go` golden fixtures. *Fixed in #162.* | `workspace/workspace.go:388` | The result still says "added as written". |
+| 21 | `replace_expression` never removes an import it leaves unused. *Fixed in #163.* | `edits/replaceexpr/replaceexpr.go:97` | The refusal blames the model's code: "strings imported and not used". |
+| 22 | A/B harness: runs that time out count as cost 0 in the per-arm means; the `Bash(cat:*)` rule may allow `cat > file` in the mcp arm *(not reproduced)*. *Fixed in #164: unfinished runs are left out of the means; `claude -p` denies the redirect, so the rule was safe.* | `ab/ab.go:330`, `:59` | An arm that times out more often looks cheaper. |
+| 23 | A line gofmt realigned after an earlier batch step is read as rewritten. *Fixed in #165.* | `edit/diff.go:331` | A later step addressing that line is refused as "rewritten by step 1". |
+| 24 | Argument aliases in a batch skip line translation. *Fixed in #166.* | `refactor/refactor.go:373` | A step sent with `line_no` instead of `line` uses the untranslated number. |
+| 25 | Smaller behavior gaps. *Fixed in #167: `rename` refuses changing whether `go test` runs a function; `make` of a slice or channel with a size that is not a constant, length or capacity counts as able to panic; `extract_function` passes a loop variable a goroutine captures as a pointer before Go 1.22.* | `rename`, `slidestmt`, `extractfunc` | `rename` can stop a `Test…` function from running or start running a helper; `move_statement` doesn't count `make(n)` with a variable size as able to panic; pre-1.22 loop variables captured by goroutines. |
 
-**Code quality.** Two whitelists of synchronous-callee functions have drifted apart (`analysis.go:45`, `effects.go:143`). `extract_function` duplicates the terminating-statement logic in `analysis/flow.go`. The README said only `move_statement` uses the effect summaries, but the signature-change tools do too (corrected in #148).
+**Code quality.** Two whitelists of synchronous-callee functions have drifted apart (`analysis.go:45`, `effects.go:143`; merged in #159). `extract_function` duplicates the terminating-statement logic in `analysis/flow.go`. The README said only `move_statement` uses the effect summaries, but the signature-change tools do too (corrected in #148).
 
 ## What to fix first
 
@@ -82,4 +82,4 @@ Each is a separate PR under the repo's one-item-per-PR rule.
 2. **Item 8, by fixing `Stable`, together with item 2.** These cover most of the panic-class bugs.
 3. **Items 1 and 3–5:** each is a small, well-understood check.
 
-**Order decided (2026-10-20): the panic class first,** items 8 and 2, since they are likelier in real use; then items 6 and 7, which need an unusual step (an edit that breaks `go.mod`). Items 8 (#136), 2 (#138), 6 (#139) and 7 (#139, #140) are done, then the rest of the high ones: 1 (#141), 5 (#142), 3 (#143) and 4 (#144), and the medium ones, 9–18 (#145–#154). The low ones (19–25) remain.
+**Order decided (2026-10-20): the panic class first,** items 8 and 2, since they are likelier in real use; then items 6 and 7, which need an unusual step (an edit that breaks `go.mod`). Items 8 (#136), 2 (#138), 6 (#139) and 7 (#139, #140) are done, then the rest of the high ones: 1 (#141), 5 (#142), 3 (#143) and 4 (#144), and the medium ones, 9–18 (#145–#154), and the low ones, 19–25 (#161–#167).

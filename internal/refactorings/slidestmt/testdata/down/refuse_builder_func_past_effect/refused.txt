@@ -1,0 +1,1 @@
+line 14 could panic or not finish (it calls squares, which makes []int of a size that may be out of range)

@@ -1,0 +1,1 @@
+TestSum is a test function, which go test runs; renaming it to sumCase would stop that
