@@ -21,6 +21,12 @@ results are in `docs/cost-history.md`.
   reverted in #120 after its rerun showed nothing).
 - Stacked PRs: if one fails CI, fix the lowest branch and merge upward;
   do not force-push. (#41 failed on gofmt after an import added with sed.)
+- Record findings, open issues and decisions in the repo, in the PR of
+  the work: the roadmap in README for anything to do later, these notes
+  for context, the friction log and docs/ for the rest. Not in claude.ai
+  Project docs or memory: the user works in Claude Code, whose sessions
+  read only the repo (2026-10-20, after review follow-ups had reached
+  only these notes and the friction log, not the roadmap).
 
 ## Decisions and their reasons
 
@@ -155,5 +161,6 @@ results are in `docs/cost-history.md`.
   close its block: `gocode.ParseStatements` and add_case), 17 (#153,
   undo removes a created directory last and only if empty), 18 (#154,
   paths resolve at the module root first). All high and medium items
-  are done; the low ones (19-25) remain. Change only
+  are done; what was found on the way, and the low items 19-25, are
+  roadmap item 17. Change only
   this repo copy: the Claude Doc linked from #130 is not kept up to date.
