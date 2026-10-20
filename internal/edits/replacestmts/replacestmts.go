@@ -31,23 +31,21 @@ func New() *ReplaceStatements { return &ReplaceStatements{} }
 func (*ReplaceStatements) Name() string { return "replace_statements" }
 
 func (*ReplaceStatements) Description() string {
-	return `Replace whole statements of one block with new Go statements. This is an edit, not a refactoring: it may change behavior.
-Use it to write a function's body (a stub's "return nil, errors.New(...)" becomes the implementation), or to change what some statements do; use the refactorings to restructure code without changing it.
-Identify the statements by file, start_line and end_line (inclusive, as inspect numbers them); the lines must cover whole statements of one block, and comments and blank lines in them are replaced too. Or give function ("Name", or "Type.Method" for a method) instead of the lines to replace the whole body: also one written on the same line as the signature, which lines cannot select; a name stays valid after earlier steps of a batch. content is the new statements, without the enclosing braces; it is re-indented to the block.
-Packages the new code names are imported: one another file of the package imports under that name, else a workspace package, else a standard library package of that name; when several fit (rand), list the import path to use in imports. Imports only the replaced statements used are removed.
-Like every step, the result must type-check, or it is refused with the errors and nothing changes.`
+	return `Replace whole statements of one block with new Go statements: an edit, so it may change behavior. Use it to write a function's body (a stub becomes the implementation) or to change what statements do.
+Give start_line and end_line (inclusive, as inspect numbers them) covering whole statements of one block, comments and blank lines included; or function ("Name" or "Type.Method") to replace the whole body, which also works for a body on the signature's line and stays valid after earlier steps of a batch. content is re-indented to the block.
+Packages content names are imported (imports picks one when several fit, such as rand); imports only the replaced statements used are removed.`
 }
 
 func (*ReplaceStatements) InputSchema() json.RawMessage {
 	return json.RawMessage(`{
   "type": "object",
   "properties": {
-    "file":       {"type": "string",  "description": "Path of the file, relative to the workspace root."},
-    "function":   {"type": "string",  "description": "Instead of start_line and end_line: a function (\"Name\") or method (\"Type.Method\") of file whose whole body content replaces."},
-    "start_line": {"type": "integer", "description": "1-based first line of the statements to replace."},
-    "end_line":   {"type": "integer", "description": "1-based last line of the statements to replace (inclusive)."},
-    "content":    {"type": "string",  "description": "The new statements, as Go source, without enclosing braces."},
-    "imports":    {"type": "array", "items": {"type": "string"}, "description": "Optional: import paths to use for package names the content uses, when the name alone is ambiguous (e.g. math/rand)."}
+    "file":       {"type": "string",  "description": "Relative to the workspace root."},
+    "function":   {"type": "string",  "description": "Instead of the lines: the function (\"Name\") or method (\"Type.Method\") whose whole body to replace."},
+    "start_line": {"type": "integer", "description": "First line (1-based)."},
+    "end_line":   {"type": "integer", "description": "Last line (inclusive)."},
+    "content":    {"type": "string",  "description": "The new statements, without braces."},
+    "imports":    {"type": "array", "items": {"type": "string"}, "description": "Optional: import paths for ambiguous package names (e.g. math/rand)."}
   },
   "required": ["file", "content"],
   "additionalProperties": false

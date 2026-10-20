@@ -70,7 +70,17 @@ results are in `docs/cost-history.md`.
   `ab-features-read-inspect`), it read through `inspect` but just as
   much. Input tokens track the number of requests (~39K each), so the
   next lever is turns: the mcp arm's denied Write and Bash-write
-  attempts (about a fifth of its turns) and ToolSearch calls.
+  attempts and ToolSearch calls (together about a fifth of its turns).
+- ToolSearch in `ab-features-read-inspect`: 9 of 141 turns loaded only
+  a schema (6.5% of input), mostly `batch`, `create_file` and
+  `replace_text` at the edit phase. A turn-0 preload barely pays (best:
+  8 tools, 7 turns saved, under 1% of tokens), since a loaded schema is
+  resent every request. #128 asks for schemas to be loaded alongside
+  another call and shortens the most-loaded definitions (8 tools: 15.7K
+  to 12.5K characters); not yet measured. Count ToolSearch-only turns.
+- Line ranges in that run: of 30 inspect ranges, 18 spanned several
+  functions (80% of range lines), 8 were exactly one function; a
+  `function` list in inspect would change little.
 - What reads are for (`ab-features-read-questions`, a "Q:" line before
   each read): orientation 41% of read cost (the 8.9K module overview
   alone 17%), how the code to change works 30%, where X is used 22%

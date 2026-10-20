@@ -25,22 +25,20 @@ func New() *AddDeclaration { return &AddDeclaration{} }
 func (*AddDeclaration) Name() string { return "add_declaration" }
 
 func (*AddDeclaration) Description() string {
-	return `Add new top-level declarations (functions, methods, types, variables, constants) to a file. This is an edit, not a refactoring: it may change behavior.
-Use it to add a function, a type or a method to an existing file; use create_file for a new file, and the refactorings to move or change declarations that exist.
-Give file and content, the declarations as Go source with their doc comments, but without a package clause or imports: packages the code names are imported, as replace_statements does (imports chooses when a name is ambiguous). They go at the end of the file, or just after or before the top-level declaration named in after or before (a method as Type.Method).
-A function or method with the name of a stub (one whose body is only panic("not implemented"), as create_from_usage writes) replaces that stub, wherever in the package it is; the result notes it.
-Like every step, the result must type-check (so another name the package already declares is refused with the compiler's error), or nothing changes.`
+	return `Add top-level declarations (functions, methods, types, variables, constants) to an existing file: an edit, so it may change behavior. For a new file, use create_file.
+content is Go source with doc comments, without package clause or imports: packages it names are imported (imports picks one when a name is ambiguous). The declarations go at the end of the file, or just after or before the declaration named in after or before (Type.Method for a method).
+A function or method named like a stub (a body of only panic("not implemented"), as create_from_usage writes) replaces the stub, wherever it is in the package.`
 }
 
 func (*AddDeclaration) InputSchema() json.RawMessage {
 	return json.RawMessage(`{
   "type": "object",
   "properties": {
-    "file":    {"type": "string", "description": "Path of the file, relative to the workspace root."},
-    "content": {"type": "string", "description": "The declarations, as Go source, without package clause or imports."},
-    "after":   {"type": "string", "description": "Optional: a top-level declaration of the file (a function, type, variable or constant name, or Type.Method for a method) to put the new ones just after."},
-    "before":  {"type": "string", "description": "Optional: a top-level declaration of the file (or Type.Method) to put the new ones just before."},
-    "imports": {"type": "array", "items": {"type": "string"}, "description": "Optional: import paths to use for package names the content uses, when the name alone is ambiguous."}
+    "file":    {"type": "string", "description": "Relative to the workspace root."},
+    "content": {"type": "string", "description": "Go declarations, without package clause or imports."},
+    "after":   {"type": "string", "description": "Optional: put them just after this declaration of file (Name, or Type.Method)."},
+    "before":  {"type": "string", "description": "Optional: put them just before this declaration of file."},
+    "imports": {"type": "array", "items": {"type": "string"}, "description": "Optional: import paths for ambiguous package names."}
   },
   "required": ["file", "content"],
   "additionalProperties": false
