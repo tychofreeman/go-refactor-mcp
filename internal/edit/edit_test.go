@@ -236,3 +236,44 @@ func TestLineMapOf(t *testing.T) {
 		t.Errorf("realigned: got %v, want %v", got, want)
 	}
 }
+
+func TestPosMapOf(t *testing.T) {
+	before := []byte("x := f() + f()\n")
+	// Replace the first f() with 1.
+	edits := []TextEdit{{Start: 5, End: 8, NewText: "1"}}
+	after := []byte("x := 1 + f()\n")
+	m := PosMapOf(before, after, edits)
+	for _, c := range []struct{ off, want int }{
+		{0, 0},   // x, before the edit
+		{11, 9},  // the second f, after it
+		{6, -1},  // inside the replaced f()
+		{5, -1},  // where the replacement starts
+		{14, 12}, // the newline
+	} {
+		if got := m(c.off); got != c.want {
+			t.Errorf("offset %d: got %d, want %d", c.off, got, c.want)
+		}
+	}
+	// An insertion at an offset pushes what was there right.
+	m = PosMapOf([]byte("ab\n"), []byte("aXb\n"), []TextEdit{{Start: 1, End: 1, NewText: "X"}})
+	if got := m(1); got != 2 {
+		t.Errorf("insertion: got %d, want 2", got)
+	}
+	// gofmt realigned the line after the edits: the same word, moved.
+	before = []byte("a := 1\nbb  := 2\n")
+	after = []byte("a := 1\nbb := 2\n")
+	m = PosMapOf(before, after, nil)
+	if got := m(14); got != 13 { // the 2
+		t.Errorf("realigned: got %d, want 13", got)
+	}
+	// gofmt's spacing inside an expression: the same token, moved.
+	m = PosMapOf([]byte("f(x * 2 + y)\n"), []byte("f(x*2 + y)\n"), nil)
+	if got := m(10); got != 8 { // the y
+		t.Errorf("respaced: got %d, want 8", got)
+	}
+	// A line whose tokens changed is not followed.
+	m = PosMapOf([]byte("a := 1\n"), []byte("a := (1)\n"), nil)
+	if got := m(5); got != -1 {
+		t.Errorf("reformatted: got %d, want -1", got)
+	}
+}

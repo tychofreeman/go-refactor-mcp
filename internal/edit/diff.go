@@ -3,6 +3,7 @@ package edit
 import (
 	"bytes"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -347,12 +348,98 @@ func LineMapOf(before, after []byte, edits []TextEdit) []int {
 	return m
 }
 
+// PosMapOf maps byte offsets of before to after, which edits made from
+// before (and gofmt may then have realigned): it returns the offset in
+// after of what was at off in before, or -1 if an edit replaced it or
+// formatting changed its line beyond realigning.
+func PosMapOf(before, after []byte, edits []TextEdit) func(off int) int {
+	applied, err := Apply(before, edits)
+	if err != nil {
+		applied, edits = before, nil
+	}
+	sorted := append([]TextEdit(nil), edits...)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Start < sorted[j].Start })
+	// throughEdits maps an offset of before to applied: an insertion at it
+	// pushes it right, and a replaced range takes it away.
+	throughEdits := func(off int) int {
+		delta := 0
+		for _, e := range sorted {
+			switch {
+			case e.Start == e.End && e.Start <= off, e.Start < e.End && e.End <= off:
+				delta += len(e.NewText) - (e.End - e.Start)
+			case e.Start <= off && off < e.End:
+				return -1
+			}
+		}
+		return off + delta
+	}
+	if bytes.Equal(applied, after) {
+		return throughEdits
+	}
+	// Formatting changed some lines: follow a line whose spacing alone it
+	// changed (gofmt moves no token), and in it the same byte, by the bytes
+	// other than spaces before it.
+	lines := LineMap(stripSpace(applied), stripSpace(after))
+	return func(off int) int {
+		off = throughEdits(off)
+		if off < 0 || off > len(applied) {
+			return -1
+		}
+		l := lines[bytes.Count(applied[:off], []byte("\n"))+1]
+		if l == 0 {
+			return -1
+		}
+		k := nonSpace(applied[bytes.LastIndexByte(applied[:off], '\n')+1 : off])
+		j := 0
+		for n := 1; n < l; n++ {
+			j += bytes.IndexByte(after[j:], '\n') + 1
+		}
+		for n := 0; j < len(after); j++ {
+			switch c := after[j]; {
+			case c == '\n':
+				if n == k {
+					return j
+				}
+				return -1
+			case c != ' ' && c != '\t':
+				if n == k {
+					return j
+				}
+				n++
+			}
+		}
+		return -1
+	}
+}
+
+// nonSpace counts the bytes of b other than spaces and tabs.
+func nonSpace(b []byte) int {
+	n := 0
+	for _, c := range b {
+		if c != ' ' && c != '\t' {
+			n++
+		}
+	}
+	return n
+}
+
 // squeezeSpace writes each line of src with its spaces and tabs made one
 // space between words, so that lines gofmt only realigned compare equal.
 func squeezeSpace(src []byte) []byte {
 	var b bytes.Buffer
 	for _, l := range splitLines(string(src)) {
 		b.WriteString(strings.Join(strings.Fields(l), " "))
+		b.WriteByte('\n')
+	}
+	return b.Bytes()
+}
+
+// stripSpace writes each line of src without its spaces and tabs, so that
+// lines differing only in spacing compare equal.
+func stripSpace(src []byte) []byte {
+	var b bytes.Buffer
+	for _, l := range splitLines(string(src)) {
+		b.WriteString(strings.Join(strings.Fields(l), ""))
 		b.WriteByte('\n')
 	}
 	return b.Bytes()
