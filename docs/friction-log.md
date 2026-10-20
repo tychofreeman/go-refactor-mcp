@@ -1136,6 +1136,12 @@ helper with add_declaration, Plan's new body with replace_statements
 All through gorefactor: the test with insert_statements, the
 instructions and these notes with replace_text.
 
+## 2026-10-20: unfinished A/B runs
+
+All through `refactor batch`: the two fields with add_field ahead of the
+tests that use them, the test with add_declaration and replace_text,
+then the fix in one batch of replace_text.
+
 ## 2026-10-20: replace_expression removes imports it leaves unused
 
 All through `refactor batch`, the CLI's new batch (#160): RemoveImports's

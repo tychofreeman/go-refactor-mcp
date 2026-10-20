@@ -64,7 +64,11 @@ results are in `docs/cost-history.md`.
   number of turns after it to estimate what it cost in context.
 - Harness details: the MCP binary is built into the output directory at
   the start, so checking out another branch during a run is safe. The mcp
-  arm cannot use Edit or Write, and its Bash may not change files.
+  arm cannot use Edit or Write, and its Bash may not change files: in
+  `claude -p`, an allow rule such as `Bash(cat:*)` does not cover a
+  redirect that writes a file (checked 2026-10-20). A run cut off before
+  its result (a timeout) is marked `unfinished` and left out of the
+  means of cost, tokens and turns (#164); before that it counted as 0.
 
 ## Where the work stands (2026-10-20)
 
@@ -170,6 +174,7 @@ results are in `docs/cost-history.md`.
   low items: 19 (#161, introduce_parameter and a variadic parameter),
   20 (#162, create_file formats only `.go` files), 21 (#163,
   replace_expression removes imports it leaves unused;
-  `gocode.RemoveImports` takes a position test, `gocode.Between`).
+  `gocode.RemoveImports` takes a position test, `gocode.Between`), 22
+  (#164, unfinished A/B runs are marked and left out of the means).
   Change only
   this repo copy: the Claude Doc linked from #130 is not kept up to date.

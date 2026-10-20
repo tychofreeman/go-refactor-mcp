@@ -175,8 +175,14 @@ func TestAnalyzeStreamJSON(t *testing.T) {
 	if r.Requests != 2 || len(r.Tools) != 1 || stats(t, r, "Read").ResultTokens != 100 {
 		t.Errorf("%+v", r)
 	}
-	if r.CostUSD != 0.25 || r.Turns != 2 {
-		t.Errorf("cost %v, turns %d: want 0.25, 2", r.CostUSD, r.Turns)
+	if r.CostUSD != 0.25 || r.Turns != 2 || !r.Finished {
+		t.Errorf("cost %v, turns %d, finished %v: want 0.25, 2, true", r.CostUSD, r.Turns, r.Finished)
+	}
+
+	// A session cut off before its result, by a timeout say.
+	cut := tr.String()[:strings.LastIndex(strings.TrimSpace(tr.String()), "\n")+1]
+	if r, err := Analyze(strings.NewReader(cut)); err != nil || r.Finished || r.CostUSD != 0 {
+		t.Errorf("cut off: finished %v, cost %v, err %v; want false, 0", r.Finished, r.CostUSD, err)
 	}
 }
 
