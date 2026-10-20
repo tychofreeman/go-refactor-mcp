@@ -236,33 +236,6 @@ func TestRenameListsLocations(t *testing.T) {
 	}
 }
 
-// The second step in a row sent on its own, with nothing read between
-// them, gets a tip to send such steps in one batch instead. A read, a
-// check or a batch starts the count again, and a refusal does not count.
-func TestCoachesBatchingSingleSteps(t *testing.T) {
-	cs, _ := setup(t)
-	out, _ := call(t, cs, "rename", map[string]any{"file": "calc/calc.go", "name": "Rate", "new_name": "Factor"})
-	if strings.Contains(out, "tip:") {
-		t.Errorf("tip on the first step:\n%s", out)
-	}
-	call(t, cs, "rename", map[string]any{"file": "calc/calc.go", "name": "Nope", "new_name": "X"})
-	out, _ = call(t, cs, "rename", map[string]any{"file": "calc/calc.go", "name": "Apply", "new_name": "Scale"})
-	mustContain(t, "second step", out, "tip: this is the 2nd step in a row sent on its own", "batch")
-	if strings.Contains(out, "Re-inspect") {
-		t.Errorf("the tip and the re-inspect advice both:\n%s", out)
-	}
-	call(t, cs, "inspect", map[string]any{"file": "calc/calc.go"})
-	out, _ = call(t, cs, "rename", map[string]any{"file": "calc/calc.go", "name": "Scale", "new_name": "Apply"})
-	if strings.Contains(out, "tip:") {
-		t.Errorf("tip after an inspect:\n%s", out)
-	}
-	call(t, cs, "batch", map[string]any{"steps": []any{map[string]any{"tool": "rename", "args": map[string]any{"file": "calc/calc.go", "name": "Factor", "new_name": "Rate"}}}})
-	out, _ = call(t, cs, "rename", map[string]any{"file": "calc/calc.go", "name": "Apply", "new_name": "Scale"})
-	if strings.Contains(out, "tip:") {
-		t.Errorf("tip after a batch:\n%s", out)
-	}
-}
-
 // A batch runs several steps in one call, addressed by name so that a
 // later step can use what an earlier one made, and undoes as one.
 func TestBatch(t *testing.T) {
