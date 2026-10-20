@@ -1144,6 +1144,11 @@ helper with add_declaration, Plan's new body with replace_statements
 All through gorefactor: the test with insert_statements, the
 instructions and these notes with replace_text.
 
+## 2026-10-20: create_from_usage's names and generic results
+
+All through `refactor batch`; the golden fixtures and the one expected
+choice by hand.
+
 ## 2026-10-20: the mcp arm's CLAUDE.md on Bash
 
 All through `refactor batch` (create_file for the three files,
