@@ -442,7 +442,14 @@ hand or a tool got in the way.
     - **A first run** on a few per repository, manual against hybrid, to
       see whether a task needs more than the prompt (setup, a running
       service) before running all of them, with at least five runs per
-      task and arm.
+      task and arm. *Done (`tp-first`, `docs/cost-history.md` section
+      6): no task needed setup; one prompt was wrong and is fixed. The
+      hybrid arm never refactored, so the tools were not exercised.*
+    - **Get the tools used on this code.** With "refactor only when
+      needed", the hybrid arm judged no refactoring needed in any of the
+      ten, the four that refactored on the way included. Try the
+      refactor-first CLAUDE.md, or the mcp arm, on the four, before
+      running all tasks at five runs each.
 17. **Follow-ups from the code review** (`docs/code-review-2026-10-20.md`).
     Its high and medium items are fixed (#136-#154); these were found on
     the way, or are its low items:

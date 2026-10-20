@@ -125,7 +125,12 @@ results are in `docs/cost-history.md`.
   tasks, built by `tasks.py` from `tasks.json` (prompts by hand) and
   validated: at the parent the code builds and the hidden tests fail, at
   the PR all pass. The check starts with `go build ./...`, not `go vet
-  ./...` (20 minutes and 18 GB cold on Hugo). Not yet run. What making them taught:
+  ./...` (20 minutes and 18 GB cold on Hugo). First run (`tp-first`,
+  hybrid vs manual, 1 run each, Go 1.27.3 via `GOTOOLCHAIN=go1.27.3`
+  for the harness so the server is built with it too): $1.96 each arm,
+  8/10 and 9/10; the hybrid arm never refactored. A failure in both arms
+  can be the prompt: read `check_output` in results.jsonl against the
+  hidden test first. What making them taught:
   - Read each hidden test before writing a prompt. "Black-box" only
     means it compiles against the old code: one compared a function's
     result with `reflect.DeepEqual` (pins a `[]string` return), one only

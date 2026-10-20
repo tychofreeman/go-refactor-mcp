@@ -221,6 +221,31 @@ A model that knows the tools well spends six to ten times less per step.
 A fresh model gets little of that. Sections 3 and 4 measure it, and the
 tools now do more of what that knowledge did (#113–#115).
 
+## 6. Third-party tasks (Oct 20)
+
+The first ten tasks of `eval-tasks/third-party/ab.json` (feature PRs of
+cli/cli, Hugo, lazygit, OpenTofu and Gitea; hidden tests are the PR's),
+hybrid against manual, one run each, with the "refactor only when
+needed" CLAUDE.md, Go 1.27.3.
+
+| Run | hybrid | manual |
+|---|---|---|
+| tp-first | $1.96 · 3.64M · 8/10 | $1.96 · 3.71M · 9/10 |
+
+No task needed setup beyond the prompt, and none timed out (runs of 1-5
+minutes). The hybrid arm refactored nothing: its only gorefactor calls
+were two `create_file`, so this run says nothing yet about the tools on
+this code, only that the arms cost the same without them. Both arms made
+most of their edits in Bash, with Python and `sed -i` scripts (about 25
+of 78 Bash calls each), rather than with Edit (5 and 12 calls).
+
+Failures: `tp-gitea-npm-version` failed in both arms because its prompt
+was wrong: it said the package document has no top-level `repository`,
+but the PR sets it from the latest version and leaves it out only when
+that version has none (the integration test checks it). Fixed in
+`tasks.json`. The hybrid arm's `tp-tofu-lint-unused` reported unused
+locals but not unused variables, a miss of its own.
+
 ## What made the difference
 
 - **Smaller results** (#75, rename locations): the largest single win when

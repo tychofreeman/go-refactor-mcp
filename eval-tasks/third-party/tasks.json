@@ -51,7 +51,7 @@
     "name": "tp-gitea-npm-version",
     "repo": "go-gitea/gitea",
     "commit": "459fc1378",
-    "prompt": "Gitea's npm registry answers `GET /{package}/{version}` with 501 Not Implemented. Implement it as the npm registry API specifies: `{version}` is a version number or a dist-tag, and the response is that version's metadata, the same object as the version's entry in the package document, with `_id` set to `name@version`. Answer 404 when the version or tag does not exist. Also fill `repository` on each version in the package document from that version's metadata, and leave the field out entirely (not an empty object) for versions that declare no repository; the package document itself has no top-level `repository`."
+    "prompt": "Gitea's npm registry answers `GET /{package}/{version}` with 501 Not Implemented. Implement it as the npm registry API specifies: `{version}` is a version number or a dist-tag, and the response is that version's metadata, the same object as the version's entry in the package document, with `_id` set to `name@version`. Answer 404 when the version or tag does not exist. Also fill `repository` on each version in the package document from that version's metadata, and leave the field out entirely (not an empty object) for versions that declare no repository; the package document's own top-level `repository` is the latest version's, left out in the same way when that version declares none."
   },
   {
     "name": "tp-gitea-archive-etag",
