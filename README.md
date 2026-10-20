@@ -342,6 +342,20 @@ hand or a tool got in the way.
       did. *Done.* Measured: the model used it more (3 → 10 calls) and
       read fewer whole files, but read the bodies with wide `sed -n`
       ranges in Bash instead, so reading cost the same.
+    - **Turns spent only on loading schemas.** The tools' definitions are
+      about 77K characters, so Claude Code defers them and a model loads
+      each schema with ToolSearch. In `ab-features-read-inspect` it loaded
+      the first ones alongside its first read, for free, but 9 of 141
+      turns (6.5% of input tokens) did nothing but load a schema it then
+      needed: `batch` (4), `create_file` (3), `replace_text` (3).
+      Loading more up front barely pays, since a loaded schema is sent
+      again with every later request (the best set, 8 tools, saved 7
+      turns but under 1% of tokens). *Done: the instructions say to load
+      schemas in the same response as another call, and the definitions
+      of `batch`, `replace_statements` and `add_declaration`, and the
+      sentence every refactoring and edit ends with, are shorter: the 8
+      tools a model loads most went from 15.7K to 12.5K characters. To
+      measure: turns of only ToolSearch per run.*
     - **One worked example** of a whole batch in the instructions.
     - **Measure** each with the A/B harness's feature and chain tasks.
 

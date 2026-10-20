@@ -2,6 +2,7 @@ package mcpserver
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -202,6 +203,32 @@ func TestDescriptionsAreCurrent(t *testing.T) {
 	if strings.Contains(instr, "never reuse old ones") {
 		t.Error("instructions still say never to reuse line numbers, which a batch now does")
 	}
+}
+
+// A loaded tool's definition is sent again with every later request, so
+// the tools a model loads most stay small, and the instructions say to
+// load schemas alongside another call rather than in a turn of their own.
+func TestLoadedToolsStaySmall(t *testing.T) {
+	cs, _ := setup(t)
+	res, err := cs.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	budget := map[string]int{"batch": 2500, "replace_statements": 1700, "add_declaration": 1500}
+	for _, tool := range res.Tools {
+		max, ok := budget[tool.Name]
+		if !ok {
+			continue
+		}
+		b, err := json.Marshal(tool)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(b) > max {
+			t.Errorf("%s: definition is %d characters, more than %d", tool.Name, len(b), max)
+		}
+	}
+	mustContain(t, "instructions", cs.InitializeResult().Instructions, "in the same response as another call")
 }
 
 func TestRenameBySymbol(t *testing.T) {

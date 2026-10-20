@@ -58,7 +58,7 @@ Which tool, by what you want to do:
 How to work with them:
 1. Call inspect (no arguments) for an overview. Inspect a file to see its declarations without their bodies, with line numbers: a third to a half of reading the whole file. Then read what you will change: inspect with function, or start_line/end_line, or several at once with targets. Each function shows its complexity, nesting, and whether calling it has side effects (calls of a function without them are easier to move or reorder).
 2. To change a feature, first refactor so the change is easy, then make the change with an edit: "make the change easy, then make the easy change".
-3. Apply ONE tool per call, or, when you can plan several steps from what you have read, send them together with batch: one call, rolled back as a whole if any step is refused. A step's args are that tool's own arguments, so if your client loads tool schemas on demand, first load the schema of every tool its steps use, all in one request, rather than guessing their names. Each call returns APPLIED with what changed, or REFUSED with the reason; a refusal changes nothing, so read it and choose differently.
+3. Apply ONE tool per call, or, when you can plan several steps from what you have read, send them together with batch: one call, rolled back as a whole if any step is refused. A step's args are that tool's own arguments, so if your client loads tool schemas on demand, first load the schema of every tool its steps use, all in one request, rather than guessing their names. Load schemas in the same response as another call, never in a turn of their own: when you read the code you will change, load the tools you will change it with in that response. Each call returns APPLIED with what changed, or REFUSED with the reason; a refusal changes nothing, so read it and choose differently.
 4. Line numbers change after edits. Before a single step that needs them, re-inspect the code an earlier step changed. In a batch, give line numbers as they were when the batch began (from the inspect you planned it with): the batch moves them past the earlier steps. To address what an earlier step of the batch made, give a reference instead of a number: "$prev.end", "$2.start", "$helper.end+1" (see batch). Tools that target a declaration (rename, add_parameter, move_declaration, ...) also accept file and name without line: name is then a package-level symbol of file's package (Name, Type.Method or Type.Field), which stays valid after edits.
 5. Use check (with run_tests) at the end, and undo if a step made the code worse. Every step can be undone.
 
@@ -92,7 +92,7 @@ func (s *Server) MCP() *mcp.Server {
 		r := r
 		srv.AddTool(&mcp.Tool{
 			Name:        r.Name(),
-			Description: r.Description() + symbolNote(r) + "\nApplies the change to disk and returns what changed (the changed lines without context; for a rename, where they are); it can be reverted with undo.",
+			Description: r.Description() + symbolNote(r) + "\nApplies the change and returns what changed; undo reverts it.",
 			InputSchema: r.InputSchema(),
 			Annotations: &mcp.ToolAnnotations{DestructiveHint: &notDestructive},
 		}, func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -150,13 +150,10 @@ func (s *Server) MCP() *mcp.Server {
 	})
 	srv.AddTool(&mcp.Tool{
 		Name: "batch",
-		Description: `Run several refactorings and edits in order, in one call: plan the sequence from one inspect and send it here instead of calling the tools one at a time.
-Each step is {tool, args}: a refactoring or edit (rename, add_parameter, extract_function, replace_statements, ...) and the arguments that tool takes. Each step runs on the code the earlier steps left and, like any step, must leave code that type-checks.
-Give every line number as it is in the code you inspected before the batch: the batch moves it to where that line is after the earlier steps. So one inspect is enough to plan a whole sequence, e.g. extract_function the duplicated lines in each of three files, then merge_duplicate_function the new functions, then add_parameter to the one left. A line an earlier step rewrote cannot be addressed by number; address what that step made by name (file and name, no line), which also works for declarations generally, or by reference: in place of a number, line, start_line or end_line may be "$prev.start" or "$prev.end" (the first or last line the step before added or changed in the step's file, as it is now), "$2.end" (step 2's), or "$helper.end" (the step with "id": "helper"), with an offset such as "$prev.end+1". E.g. insert_statements with line "$prev.end" and where "after" adds code right after what the step before inserted. A step that changed several places of the file, such as a rename, has no one range to refer to.
-Independent steps can also be sent as separate tool calls in one turn; a batch is for steps that build on each other.
-If a step is refused, the steps before it are rolled back, so nothing changes, and the result says which step and why. If all apply, the result lists each step's summary and then the change as a whole; one undo reverts the whole batch.
-report: "diff" (default) shows the change; "summary" shows only the steps' summaries.
-check: "each" (default) type-checks after every step; "end" only after the last, so edits may pass through code that does not compile yet, such as a variable declared in one step and first used in the next. A refactoring in such a batch still needs code that type-checks where it runs. If the code does not type-check at the end, the whole batch is rolled back. A batch checked at each step, whose edit does not type-check, runs again with "end" by itself; and functions and methods the steps call but nothing declares get stubs (create_from_usage), unless a name is close to a declared one.`,
+		Description: `Run several refactorings and edits in order, in one call, planned from one inspect. Each step is {tool, args}: a tool and the arguments it takes when called alone; each runs on the code the earlier steps left.
+Give line numbers as in the code you inspected before the batch: the batch moves them past the earlier steps. A line an earlier step rewrote cannot be given by number. Address a declaration by name (file and name, no line), or give a reference in place of line, start_line or end_line: "$prev.start" or "$prev.end" (the first or last line the step before added or changed in that file), "$2.end" (step 2's), "$helper.end" (the step with "id": "helper"), with an offset such as "$prev.end+1". A step that changed several places, such as a rename, has no range.
+If a step is refused, nothing changes and the result says which step and why; one undo reverts the whole batch. Independent steps can instead be separate calls in one turn.
+check "end" type-checks only after the last step, so edits may pass through code that does not compile yet (a declaration, then its first use); refactorings still need code that type-checks. A batch whose edit does not type-check runs again with "end", and functions the steps call but nothing declares get stubs (create_from_usage).`,
 		InputSchema: json.RawMessage(`{
   "type": "object",
   "properties": {
@@ -166,16 +163,16 @@ check: "each" (default) type-checks after every step; "end" only after the last,
       "items": {
         "type": "object",
         "properties": {
-          "id":   {"type": "string", "description": "Optional: a name for the step, so later steps can address the lines it made as $id.start or $id.end."},
-          "tool": {"type": "string", "description": "A refactoring or edit, e.g. rename."},
-          "args": {"type": "object", "description": "The arguments that tool takes, as when calling it alone (see its schema)."}
+          "id":   {"type": "string", "description": "Optional: later steps address its lines as $id.start, $id.end."},
+          "tool": {"type": "string", "description": "A refactoring or edit."},
+          "args": {"type": "object", "description": "That tool's arguments (see its schema)."}
         },
         "required": ["tool", "args"],
         "additionalProperties": false
       }
     },
-    "report": {"type": "string", "enum": ["diff", "summary"], "description": "What the result shows after the steps' summaries: the change (default) or nothing more."},
-    "check":  {"type": "string", "enum": ["each", "end"], "description": "When the code must type-check: after each step (default), or only after the last, so that edits can pass through code that does not compile yet (a declaration, then its first use). Refactorings still need code that type-checks."}
+    "report": {"type": "string", "enum": ["diff", "summary"], "description": "After the steps' summaries, the change (default) or nothing more."},
+    "check":  {"type": "string", "enum": ["each", "end"], "description": "Type-check after each step (default) or only after the last."}
   },
   "required": ["steps"],
   "additionalProperties": false

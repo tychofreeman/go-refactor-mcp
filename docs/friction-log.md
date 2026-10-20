@@ -1125,6 +1125,16 @@ All through gorefactor. replace_text still does not add imports
 (strings.TrimSpace in a replaced block); I dropped the call rather than
 add the import in another step.
 
+## 2026-10-20: schemas loaded alongside another call, shorter definitions
+
+All through gorefactor's CLI: the test with add_declaration, the
+add_declaration and replace_statements definitions with
+replace_statements (`function` addressing their Description and
+InputSchema methods), and the batch definition, the instructions and
+these notes with replace_text. The batch definition is a literal inside
+`New`, so only replace_text could reach it; its old text, about 2.6K
+characters, had to be sent whole as `old`.
+
 ## 2026-10-20: ranges that start at the `func` line
 
 All through gorefactor, with the CLI (`refactor`) built from the branch:
