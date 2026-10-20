@@ -99,14 +99,15 @@ projects, and `build` extracts them again. Each task:
   files are the PR's whole files, and some are internal tests: a run that
   renamed what they use would fail however well it delivered the feature,
   which would count against refactoring;
-- **is checked** by `go vet ./...` (everything still builds, tests
-  included) and then the tests the PR added or changed in its black-box
-  packages, with the PR's test files and fixtures copied over the copy
-  (`tests`).
+- **is checked** by `go build ./...` and then the tests the PR added or
+  changed in its black-box packages, with the PR's test files and fixtures
+  copied over the copy (`tests`). Not `go vet ./...`, which would also
+  catch a test broken in another package: on Hugo, cold, it took 20
+  minutes and 18 GB of build space.
 
-`validate` makes the copies as the harness does: at the parent `go vet`
-must pass and the hidden tests fail, and at the PR's commit the whole
-check must pass.
+`validate` makes the copies as the harness does: at the parent the code
+must build and the hidden tests fail, and at the PR's commit the whole
+check must pass. `--clean-cache` empties Go's build cache after each task.
 
 The first ten, two per repository, one that refactored on the way where
 there is one:

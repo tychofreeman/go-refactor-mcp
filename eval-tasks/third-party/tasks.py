@@ -28,9 +28,10 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 CLONES = os.path.join(HERE, "clones")
 TESTS = os.path.join(HERE, "tests")
 
-# Before the PR's tests, everything must still build and vet, test files
-# included: a run that breaks code elsewhere fails the task.
-CHECK = "go vet ./... && "
+# Before the PR's tests, everything must still build. Not `go vet ./...`:
+# on Hugo, cold, it took 20 minutes and 18 GB of build space. So a run that
+# breaks a test in another package is not caught.
+CHECK = "go build ./... && "
 
 # The hidden tests are the PR's versions of whole test files, and some are
 # internal tests that use the package's functions, types and fields as they
@@ -142,15 +143,15 @@ def cmd_validate(args):
         a = ab_task(t, c)
         repo, tests = os.path.join(HERE, a["dir"]), os.path.join(HERE, a["tests"])
         hidden = c["hidden_check"]["command"]
-        # At the parent the code must vet and the hidden tests must fail;
+        # At the parent the code must build and the hidden tests must fail;
         # at the PR's commit the whole check must pass.
-        vet, before = run_checks(repo, c["parent"], tests, [CHECK.removesuffix(" && "), hidden], args.timeout)
+        build, before = run_checks(repo, c["parent"], tests, [CHECK.removesuffix(" && "), hidden], args.timeout)
         after, = run_checks(repo, c["commit"], tests, [a["check"]], args.timeout)
-        good = vet["exit"] == 0 and before["exit"] not in (0, "timeout") and after["exit"] == 0
+        good = build["exit"] == 0 and before["exit"] not in (0, "timeout") and after["exit"] == 0
         ok = ok and good
         if after["exit"] == 0:
             after["tail"] = []
-        print(json.dumps({"name": t["name"], "valid": good, "vet_before": vet, "before": before, "after": after}), flush=True)
+        print(json.dumps({"name": t["name"], "valid": good, "build_before": build, "before": before, "after": after}), flush=True)
         if args.clean_cache:
             subprocess.run(["go", "clean", "-cache"], check=False)
     sys.exit(0 if ok else 1)

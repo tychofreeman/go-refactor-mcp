@@ -109,8 +109,9 @@ results are in `docs/cost-history.md`.
 - Third-party A/B (roadmap item 16): `eval-tasks/third-party/` has 172
   candidate PRs from five large repos, and `ab.json` there the first ten
   tasks, built by `tasks.py` from `tasks.json` (prompts by hand) and
-  validated: at the parent `go vet` passes and the hidden tests fail, at
-  the PR all pass. Not yet run. What making them taught:
+  validated: at the parent the code builds and the hidden tests fail, at
+  the PR all pass. The check starts with `go build ./...`, not `go vet
+  ./...` (20 minutes and 18 GB cold on Hugo). Not yet run. What making them taught:
   - Read each hidden test before writing a prompt. "Black-box" only
     means it compiles against the old code: one compared a function's
     result with `reflect.DeepEqual` (pins a `[]string` return), one only
