@@ -466,7 +466,12 @@ hand or a tool got in the way.
       does not let `cat > file` through, checked with `claude -p`), 23
       (#165, a line gofmt only realigned keeps its place in batch line
       translation), 24 (#166, a batch takes argument aliases such as
-      `line_no` before translating lines).*
+      `line_no` before translating lines), 25 (#167: `rename` and test
+      functions, `make` with a size that may be negative, loop variables
+      before Go 1.22). All the low items are done.*
+    - **One check for terminating statements:** `extract_function`
+      duplicates the logic of `analysis/flow.go` (the review's code
+      quality note).
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the

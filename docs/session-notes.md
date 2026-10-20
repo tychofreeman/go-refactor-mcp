@@ -177,6 +177,11 @@ results are in `docs/cost-history.md`.
   `gocode.RemoveImports` takes a position test, `gocode.Between`), 22
   (#164, unfinished A/B runs are marked and left out of the means), 23
   (#165, `edit.LineMapOf` compares lines without their alignment), 24
-  (#166, a batch applies `aliasArgs` before line translation).
+  (#166, a batch applies `aliasArgs` before line translation), 25 (#167:
+  rename refuses changing whether go test runs a function, `testKind`;
+  `make` of a slice or channel sized other than by a constant, len or
+  cap can panic; extract_function's `sharedLoopVar` before Go 1.22, by
+  `info.FileVersions`). All 25 review items are done; left on item 17:
+  one check for terminating statements.
   Change only
   this repo copy: the Claude Doc linked from #130 is not kept up to date.

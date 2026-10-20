@@ -1,0 +1,1 @@
+renaming check to TestCheck would make go test run it as a test function
