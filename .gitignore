@@ -38,3 +38,6 @@ go.work.sum
 
 # refactor-eval output
 eval-runs/
+
+# Third-party A/B: clones and the hidden tests extracted from them
+/eval-tasks/third-party/testdata/

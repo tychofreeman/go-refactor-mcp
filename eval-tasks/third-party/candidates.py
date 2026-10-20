@@ -46,6 +46,10 @@ INTERNAL = re.compile(
 SCOPE = re.compile(r"^([\w./-]+(\([^)]*\))?!?:\s*)+")
 ISSUE = re.compile(r"\b(?:[Ff]ix(?:es|ed)?|[Cc]loses?|[Rr]esolves?|[Uu]pdates?|[Pp]art of|[Rr]efs?)[: ]+#(\d+)")
 SKIP_PATH = re.compile(r"(^|/)(vendor|testdata|third_party)/")
+# Fixtures the tests read. A PR's go with its tests: a test that reads a new
+# one fails before the PR whatever the code does.
+TEST_DATA = re.compile(r"(^|/)testdata/")
+VENDORED = re.compile(r"(^|/)(vendor|third_party)/")
 # Test code that is not in _test.go files: lazygit's integration tests are
 # ordinary Go files registered in tests/test_list.go.
 TEST_PATH = re.compile(r"(_test\.go$|^pkg/integration/tests/)")
@@ -126,7 +130,7 @@ def candidates(repo, name, since, rev="HEAD"):
         if SKIP_TITLE.search(title) or SKIP_TITLE.search(SCOPE.sub("", title)):
             continue
         numstat = git(repo, "diff", "--numstat", parent, commit)
-        code, tests, other = [], [], []
+        code, tests, data, other = [], [], [], []
         added = deleted = 0
         for line in numstat.splitlines():
             a, d, path = line.split("\t", 2)
@@ -141,6 +145,8 @@ def candidates(repo, name, since, rev="HEAD"):
                     code.append(path)
                     added += int(a) if a != "-" else 0
                     deleted += int(d) if d != "-" else 0
+            elif TEST_DATA.search(path) and not VENDORED.search(path):
+                data.append(path)
             elif not SKIP_PATH.search(path):
                 other.append(path)
         packages = sorted({os.path.dirname(p) for p in code})
@@ -163,6 +169,7 @@ def candidates(repo, name, since, rev="HEAD"):
             "lines_added": added,
             "lines_deleted": deleted,
             "test_files": sorted(tests),
+            "test_data": sorted(data),
             "other_files": len(other),
             "other_kinds": sorted({os.path.splitext(p)[1] or os.path.basename(p) for p in other}),
             "signature_changes": sigs,

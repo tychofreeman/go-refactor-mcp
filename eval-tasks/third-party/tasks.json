@@ -1,0 +1,62 @@
+[
+  {
+    "name": "tp-cli-extension-env",
+    "repo": "cli/cli",
+    "commit": "5ccd971df",
+    "prompt": "An extension can be run as `gh <name>` or directly as `./gh-<name>`, and today it cannot tell which. When gh runs an extension, of any kind (script or binary), set `GH_EXTENSION=1` in the extension's environment. Keep the rest of the environment the extension gets now, and override a `GH_EXTENSION` that is already set to another value. Running the extension directly is unchanged. Also document the variable in `gh help environment`."
+  },
+  {
+    "name": "tp-cli-comments-json",
+    "repo": "cli/cli",
+    "commit": "7ca1a7518",
+    "prompt": "`gh issue view`, `gh pr view` and `gh discussion view` accept `--comments` together with `--json`, but the JSON output silently ignores `--comments`. Reject that combination in all three commands, the way they already reject other conflicting flags, with the error `specify only one of --comments or --json`. The `--comments` search qualifier of `gh search` must keep working with `--json`."
+  },
+  {
+    "name": "tp-hugo-render-context",
+    "repo": "gohugoio/hugo",
+    "commit": "bcde80634",
+    "prompt": "A page's `.Render VIEW` renders the page with the view template VIEW, always with the page as the template's data context. Let it take an optional context, as `partial` does: `PAGE.Render VIEW [CONTEXT]`. When CONTEXT is given, it replaces the page as the template's data context; without it, rendering is as before, and `.Render` without a view still fails. With more than two arguments, fail with an error containing `too many arguments, expected VIEW [CONTEXT]`. When the view argument is not a string, fail with an error containing `failed to convert view argument to string: ` followed by the error from `cast.ToStringE`."
+  },
+  {
+    "name": "tp-hugo-frame-count",
+    "repo": "gohugoio/hugo",
+    "commit": "c9f6e4d4a",
+    "prompt": "Add `FrameCount` to image resources, every resource for which `reflect.IsImageResourceWithMeta` is true, so templates can use `$img.FrameCount`. It is the number of frames in the image: more than 1 for an animated image (GIF, WebP, AVIF), otherwise 1. For a processed image it counts the frames of the image Hugo wrote: resizing an animated GIF keeps its frames, also when converting it to WebP, while a JPEG has 1, and so does a processed AVIF, since Hugo writes AVIF with one frame. For JPEG XL it may always be 1."
+  },
+  {
+    "name": "tp-lazygit-stack-order",
+    "repo": "jesseduffield/lazygit",
+    "commit": "ea377d44e",
+    "prompt": "With the branch sort order `date`, branches are sorted by committer date. Rebasing a stack of branches gives all their tip commits the same committer date, and git then falls back to alphabetical order, so the stack shows up scrambled. Within each group of branches that share a committer date, order them so that a branch comes before the branches it is based on (its ancestors), and otherwise keep their current order. Do this for local branches (`git.localBranchSortOrder`) and for remote branches (`git.remoteBranchSortOrder`). The checked-out branch stays first, and groups with different dates stay in date order."
+  },
+  {
+    "name": "tp-lazygit-cherry-pick-worktrees",
+    "repo": "jesseduffield/lazygit",
+    "commit": "a5497bacf",
+    "prompt": "Commits copied for cherry-picking (`C` in the commits view) are forgotten when you switch to another worktree, so you cannot paste them there (`V`). Keep the copied commits when switching to another worktree or repo, so that the information view still shows how many commits are copied and pasting them in the other worktree works. If the other repo does not have the copied commits, pasting may fail, and the error is shown."
+  },
+  {
+    "name": "tp-tofu-otel-resource-env",
+    "repo": "opentofu/opentofu",
+    "commit": "4ac35bd5d",
+    "prompt": "OpenTofu's tracing is meant to follow the usual OpenTelemetry conventions, but the resource it describes itself with (`traceattrs.NewResource`) ignores the standard `OTEL_RESOURCE_ATTRIBUTES` environment variable. Honor the standard OpenTelemetry resource environment variables, `OTEL_RESOURCE_ATTRIBUTES` and `OTEL_SERVICE_NAME`: attributes from the environment take precedence over detected ones (such as `host.name`) and over the service name OpenTofu passes in, which stays the default."
+  },
+  {
+    "name": "tp-tofu-lint-unused",
+    "repo": "opentofu/opentofu",
+    "commit": "1aae2e03d",
+    "prompt": "Add a linting rule, alongside the core rules in `internal/linting/corelinting`, that warns about input variables and locals that nothing references. For now it covers only the root module: unused variables and locals inside called modules are not reported. A variable or local is used if anything in the root module refers to it, such as an output, a resource, another local, or an argument of a module call. The warning is a lint diagnostic like the other rules', reported by `tofu validate` when linting is enabled."
+  },
+  {
+    "name": "tp-gitea-npm-version",
+    "repo": "go-gitea/gitea",
+    "commit": "459fc1378",
+    "prompt": "Gitea's npm registry answers `GET /{package}/{version}` with 501 Not Implemented. Implement it as the npm registry API specifies: `{version}` is a version number or a dist-tag, and the response is that version's metadata, the same object as the version's entry in the package document, with `_id` set to `name@version`. Answer 404 when the version or tag does not exist. Also fill `repository` on each version in the package document from that version's metadata, and leave the field out entirely (not an empty object) for versions that declare no repository; the package document itself has no top-level `repository`."
+  },
+  {
+    "name": "tp-gitea-archive-etag",
+    "repo": "go-gitea/gitea",
+    "commit": "c04802b6b",
+    "prompt": "Support conditional requests on streamed repository archives (when `[repository].STREAM_ARCHIVES` is on): send a weak ETag (`W/\"...\"`) that identifies the archive's content, so it differs for another commit or repository, another archive format, other requested paths (`?path=`), and settings that change the archive such as `PREFIX_ARCHIVE_FILES`; and answer 304 Not Modified when `If-None-Match` matches. Downloads that do not stream are unchanged. In the shared ETag handling in `modules/httpcache`, also support `If-None-Match: *`, which matches any current representation, and compare ETags weakly, as If-None-Match requires: `W/\"x\"` and `\"x\"` match each other."
+  }
+]

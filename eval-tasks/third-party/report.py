@@ -31,6 +31,8 @@ def check_for(c, v):
         files += [f for f in c["test_files"] if os.path.dirname(f) == pkg and f.endswith("_test.go")]
         names = v["go_tests"].get(pkg, [])
         cmds.append(f"go test -count=1 -run '^({'|'.join(names)})$' ./{pkg}")
+    # All of the PR's fixtures: a test may read another package's testdata.
+    files += c.get("test_data", [])
     return {"files": sorted(set(files)), "command": " && ".join(cmds)} if files else None
 
 
