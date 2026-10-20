@@ -1,0 +1,1 @@
+{"file": "testdata/want.golden", "content": "package p\nfunc  f( ) {}\n"}
