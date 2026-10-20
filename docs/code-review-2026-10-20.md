@@ -81,3 +81,5 @@ Each is a separate PR under the repo's one-item-per-PR rule.
 1. **Items 6 and 7:** the guarantees that every step type-checks and every step undoes. On a failed reload, restore the files and refuse the step; let `undo` run without reloading first.
 2. **Item 8, by fixing `Stable`, together with item 2.** These cover most of the panic-class bugs.
 3. **Items 1 and 3–5:** each is a small, well-understood check.
+
+**Open question: confirm this order.** Items 6 and 7 come before the `Stable` fix because they break the core promises (every step type-checks, every step undoes), though they need an unusual step, one that breaks `go.mod`. The panic-class bugs (items 2 and 8) are likelier in real use. Decide which goes first before starting.

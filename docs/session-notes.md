@@ -105,4 +105,6 @@ results are in `docs/cost-history.md`.
   25 findings, 7 of them silent behavior changes or broken guarantees,
   most from panicking expressions treated as stable and methods reached
   by reflection. Its fix order: batch rollback and undo after a step
-  breaks `go.mod` (items 6-7), then `analysis.Stable` (8, with 2).
+  breaks `go.mod` (items 6-7), then `analysis.Stable` (8, with 2);
+  the order is an open question at the end of the review. Change only
+  this repo copy: the Claude Doc linked from #130 is not kept up to date.
