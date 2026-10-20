@@ -152,5 +152,6 @@ results are in `docs/cost-history.md`.
   error), 15 (#151, rename refuses an exported field of a struct passed
   as an interface: `analysis.PassedAsInterface` and `Holds`, which
   extract_struct could use too), 16 (#152, statement content may not
-  close its block: `gocode.ParseStatements` and add_case). Change only
+  close its block: `gocode.ParseStatements` and add_case), 17 (#153,
+  undo removes a created directory last and only if empty). Change only
   this repo copy: the Claude Doc linked from #130 is not kept up to date.

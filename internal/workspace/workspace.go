@@ -558,7 +558,7 @@ func paths(files map[string][]byte) []string {
 }
 
 // restore puts back the files as they were before the change, removing
-// the ones it created.
+// the ones it created, and the directories it created if they are empty.
 func (c Change) restore() error {
 	before := map[string][]byte{}
 	for p, data := range c.Before {
@@ -568,12 +568,20 @@ func (c Change) restore() error {
 			return err
 		}
 	}
+	if err := writeAll(before); err != nil {
+		return err
+	}
+	// The directories it created go last, and only if empty: one that has
+	// since gained another file stays, with that file.
 	for i := len(c.Dirs) - 1; i >= 0; i-- {
+		if entries, err := os.ReadDir(c.Dirs[i]); err == nil && len(entries) > 0 {
+			continue
+		}
 		if err := os.Remove(c.Dirs[i]); err != nil && !os.IsNotExist(err) {
 			return err
 		}
 	}
-	return writeAll(before)
+	return nil
 }
 
 // addDirs records the directories from dir up that do not exist yet,
