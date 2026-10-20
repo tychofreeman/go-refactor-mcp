@@ -1136,6 +1136,11 @@ helper with add_declaration, Plan's new body with replace_statements
 All through gorefactor: the test with insert_statements, the
 instructions and these notes with replace_text.
 
+## 2026-10-20: statement content that closes its block, item 16 of the review
+
+All through gorefactor's CLI except the golden cases: both checks and
+the docs with replace_text.
+
 ## 2026-10-20: rename and fields reached by reflection, item 15 of the review
 
 All through gorefactor's CLI except the golden cases: the helpers with

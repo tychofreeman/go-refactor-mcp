@@ -54,7 +54,7 @@ Item 8 is the root of several others: one fix in `Stable` covers both of its con
 | 13 | `extract_function`'s error-exit shape misses a later write to `err` in a loop, and its non-nil helper check ignores `defer`/`recover`. *Fixed in #149.* | `extractfunc/returns.go:328`, `:250` | A helper that recovers from a panic returns a nil error, though every `return` passes a non-nil one. |
 | 14 | `remove_dead_code` deletes `String` or `WriteTo` in package main. *Fixed in #150.* | `deadcode/checks.go:95` | They're unused in code, but `fmt` and `io` call them dynamically. |
 | 15 | `rename` of a struct field silently changes its JSON key. *Fixed in #151.* | `rename/rename.go:261` | Renaming `Name` to `name` drops it from `json.Marshal` output. |
-| 16 | Statement content can contain a `}` that closes the block and adds top-level declarations | `edits/gocode/gocode.go:35` | The result still says "replaced the body of helper". A model pasting a range that runs past the function's end would trigger it. |
+| 16 | Statement content can contain a `}` that closes the block and adds top-level declarations. *Fixed in #152, in add_case too.* | `edits/gocode/gocode.go:35` | The result still says "replaced the body of helper". A model pasting a range that runs past the function's end would trigger it. |
 | 17 | `undo` of a step that created a directory fails halfway if another file appeared there | `workspace/workspace.go:541` | Files are restored only partly, and the undo entry stays on the stack. |
 | 18 | A relative path resolves differently for new files | `workspace/workspace.go:288` | With the server in a subdirectory, `create_file` puts a new file at the module root, while other tools resolve the same name in the subdirectory. |
 
