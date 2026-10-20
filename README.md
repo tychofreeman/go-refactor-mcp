@@ -1696,7 +1696,8 @@ Refused, besides the checks above:
   (`internal`); a use through a dot import.
 
 A directory without a Go package gets one, created by the move (the
-directories too, if missing; undo removes them): it is named after the
+directories too, if missing; undo removes them, unless another file has
+appeared in one since): it is named after the
 directory, with the import path of the module plus the directory, and the
 result notes it. Refused: a directory the go command ignores (`testdata`,
 or a name starting with `_` or `.`), one whose name is not a valid

@@ -176,6 +176,45 @@ func TestApplyCreatesDirectoriesAndUndoRemovesThem(t *testing.T) {
 	}
 }
 
+// A directory a change created that has since gained another file stays,
+// with that file, and the rest of the change is still undone.
+func TestUndoKeepsACreatedDirectoryWithOtherFiles(t *testing.T) {
+	src := "package m\n\nfunc F() int { return 1 }\n"
+	dir := writeModule(t, map[string]string{"m.go": src})
+	w, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := filepath.Join(dir, "m.go")
+	g := filepath.Join(dir, "sub", "g.go")
+	i := strings.Index(src, "1")
+	if _, err := w.Apply("new file and an edit", []edit.FileEdit{
+		{Path: g, Edits: []edit.TextEdit{{NewText: "package sub\n\nfunc G() int { return 1 }\n"}}},
+		{Path: m, Edits: []edit.TextEdit{{Start: i, End: i + 1, NewText: "2"}}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	stray := filepath.Join(dir, "sub", "notes.txt")
+	if err := os.WriteFile(stray, []byte("not ours\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.Undo(); err != nil {
+		t.Fatalf("undo: %v", err)
+	}
+	if got, _ := os.ReadFile(m); string(got) != src {
+		t.Errorf("m.go not restored:\n%s", got)
+	}
+	if _, err := os.Stat(g); !os.IsNotExist(err) {
+		t.Errorf("the created file is still there: %v", err)
+	}
+	if _, err := os.Stat(stray); err != nil {
+		t.Errorf("the other file in the directory was removed: %v", err)
+	}
+	if w.CanUndo() {
+		t.Error("the undone change is still on the stack")
+	}
+}
+
 func TestUndoRefusesAfterExternalEdit(t *testing.T) {
 	src := "package m\n\nvar X = 1\n"
 	dir := writeModule(t, map[string]string{"m.go": src})
