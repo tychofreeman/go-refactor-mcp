@@ -1486,7 +1486,11 @@ reach any other way:
 - not a blank name (`var _ I = (*T)(nil)` checks something at compile
   time), and without a `//go:` or `//export` directive;
 - a type without methods (remove them first), and a spec that declares
-  only that name.
+  only that name;
+- in a `const` group, a spec that no later one depends on by position:
+  deleting `mid` from `const ( low = iota; mid; high )` would change
+  `high` from 2 to 1, so it is refused, as is deleting `b` from
+  `const ( a = 1; b = 2; c )`, where `c` repeats `b`'s expression.
 
 Uses inside the declaration itself (a recursive call) do not count.
 
