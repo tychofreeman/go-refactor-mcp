@@ -408,6 +408,44 @@ hand or a tool got in the way.
       see whether a task needs more than the prompt (setup, a running
       service) before running all of them, with at least five runs per
       task and arm.
+17. **Follow-ups from the code review** (`docs/code-review-2026-10-20.md`).
+    Its high and medium items are fixed (#136-#154); these were found on
+    the way, or are its low items:
+    - **A false refusal in `introduce_parameter`:** an expression whose
+      function literal names its own parameters
+      (`strings.FieldsFunc(s, func(r rune) bool { return r == 32 })`) is
+      refused with "uses r, declared in the body of f"; the literal's
+      parameters are its own, not the body's.
+    - **`extract_struct` reaching reflection:** its own check
+      (`checkNotPassedAsInterface`) finds the type passed as an interface
+      only by itself or through a pointer, so `fmt.Printf("%+v", ms)` with
+      `ms []mover`, or a struct holding a `mover` field, is accepted and
+      the printed shape changes. `analysis.PassedAsInterface` and `Holds`
+      (#151) follow slices, maps, pointers and fields; switch to them.
+    - **One walk over dependencies' interfaces:** `rename`
+      (`interfacesWithMethod`), `remove_dead_code`
+      (`dependencyInterface`) and the signature changes (`visible`) each
+      walk every package-level interface of every dependency. One
+      function in `analysis` would do.
+    - **One list of functions that call a closure during the call:**
+      `analysis.go`'s `syncCallees` and `effects.go`'s `syncCalls` have
+      drifted apart: 22 of the first's are not in the second, among them
+      the `bytes` functions, `filepath.Walk`, `slices.DeleteFunc` and
+      `sort.Search`, so the effect summaries treat them as calls of a
+      function value.
+    - **The CLI matches the server:** `cmd/refactor` has no `batch`, and
+      its edits get no stubs for the functions they call (the server
+      passes `Declare`). Sessions in a cloud clone use the CLI, since the
+      MCP runs on the user's own checkout, so they order steps by hand.
+    - **The review's low items, 19-25:** a crash in `introduce_parameter`
+      on a variadic parameter with no variadic arguments; `create_file`
+      gofmt-ing any file that parses as Go; `replace_expression` not
+      removing an import it leaves unused; the A/B harness counting timed
+      out runs at cost 0, and maybe letting the mcp arm write with
+      `cat >`; a line gofmt realigned, and argument aliases, in batch line
+      translation; and smaller gaps (`rename` and `Test` functions,
+      `make(n)` able to panic in `move_statement`, loop variables before
+      Go 1.22). Each is described, with where, in the review.
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
