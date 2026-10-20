@@ -172,8 +172,8 @@ func (t *target) checkReads(info *types.Info, expr ast.Expr, q string) error {
 	isParam := t.paramObjects(info)
 	for _, id := range analysis.ScopeRefs(info, expr) {
 		v, ok := info.Uses[id].(*types.Var)
-		if !ok || !fa.IsLocal(v) {
-			continue
+		if !ok || !fa.IsLocal(v) || expr.Pos() <= v.Pos() && v.Pos() < expr.End() {
+			continue // declared in expr itself, such as a function literal's parameter: it goes with expr
 		}
 		if _, ok := isParam[v]; !ok {
 			return refactor.Refusef("%s uses %s, declared in the body of %s, which the calls cannot see", q, v.Name(), t.obj.Name())
@@ -207,8 +207,8 @@ func (t *target) checkCall(info *types.Info, expr ast.Expr, c call, csrc []byte)
 	scope := c.pkg.Types.Scope().Innermost(c.expr.Pos())
 	for _, id := range analysis.ScopeRefs(info, expr) {
 		o := info.Uses[id]
-		if _, ok := isParam[o]; ok || o == nil {
-			continue
+		if _, ok := isParam[o]; ok || o == nil || expr.Pos() <= o.Pos() && o.Pos() < expr.End() {
+			continue // a parameter, or declared in expr itself (it goes with expr)
 		}
 		var there types.Object
 		if scope != nil {

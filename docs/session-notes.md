@@ -150,8 +150,7 @@ results are in `docs/cost-history.md`.
   variable is dead after the call in a caller with goto), 11 (#147, an
   else if and a for post count as conditional uses; analysis.PathTo
   runs from the node outward), 12 (#148, changesig walks the literals a
-  call runs, `syncWalk`; a false refusal remains when such a literal
-  names its parameters: "uses r, declared in the body"), 13 (#149,
+  call runs, `syncWalk`), 13 (#149,
   extract_function's non-nil error: writes later in a loop count, and a
   helper with defer proves nothing), 14 (#150, remove_dead_code keeps a
   method through which its type implements a dependency's interface or
@@ -162,5 +161,6 @@ results are in `docs/cost-history.md`.
   undo removes a created directory last and only if empty), 18 (#154,
   paths resolve at the module root first). All high and medium items
   are done; what was found on the way, and the low items 19-25, are
-  roadmap item 17. Change only
+  roadmap item 17, done one PR each, chained the same way: the false
+  refusal for a literal's own parameters (#156). Change only
   this repo copy: the Claude Doc linked from #130 is not kept up to date.
