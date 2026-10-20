@@ -529,7 +529,7 @@ func TestRefactoringLoop(t *testing.T) {
 	calcPath := filepath.Join(dir, "calc", "calc.go")
 
 	out, _ := call(t, cs, "inspect", nil)
-	mustContain(t, "overview", out, "calc/  (package calc)", "app/  (package app)", "calc_test.go")
+	mustContain(t, "overview", out, "calc (", "app (", "calc_test.go")
 
 	out, _ = call(t, cs, "inspect", map[string]any{"file": "calc/calc.go", "function": "Apply"})
 	mustContain(t, "inspect function", out, "func Apply(n int) int   [1 line, complexity 1, nesting 0, no side effects]", "6  func Apply")

@@ -394,7 +394,10 @@ hand or a tool got in the way.
       every file with its line count, about 8.9K characters for this
       repo. In `ab-features-read-questions` it was read first in 4 of 8
       runs and was 17% of what reading cost. Packages with their file
-      names on one line could be a quarter of it.
+      names on one line could be a quarter of it. *Done (#171): one line
+      per package, its files with their line counts, the package name
+      only where it is not the directory's; 10.7K to 4.8K characters for
+      this repo as it is now.*
     - **"Where is X used" without broad greps.** The same run asked it
       2.6 times per run, 22% of read cost; four greps of 7-12K
       characters (such as `\.Line\b`) were 12%. Evidence for the

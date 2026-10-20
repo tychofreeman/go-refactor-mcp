@@ -14,6 +14,7 @@ import (
 	"go/token"
 	"go/types"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -98,14 +99,21 @@ func Module(ws *workspace.Workspace) string {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "module root: %s\n", ws.Root)
 	total := 0
+	sb.WriteString("\nPackages, one a line, with their files' line counts (and the package name where it is not the directory's):\n")
 	for _, d := range names {
 		pi := dirs[d]
 		sort.Slice(pi.files, func(i, j int) bool { return pi.files[i].rel < pi.files[j].rel })
-		fmt.Fprintf(&sb, "\n%s/  (package %s)\n", d, pi.name)
-		for _, f := range pi.files {
-			fmt.Fprintf(&sb, "  %-40s %5d lines\n", filepath.Base(f.rel), f.lines)
-			total += f.lines
+		files, lines := make([]string, len(pi.files)), 0
+		for i, f := range pi.files {
+			files[i] = fmt.Sprintf("%s %d", filepath.Base(f.rel), f.lines)
+			lines += f.lines
 		}
+		total += lines
+		name := "" // the package's name, when it is not the directory's
+		if pi.name != path.Base(d) {
+			name = "package " + pi.name + ", "
+		}
+		fmt.Fprintf(&sb, "%s (%s%d lines): %s\n", d, name, lines, strings.Join(files, ", "))
 	}
 	fmt.Fprintf(&sb, "\n%d packages, %d files, %d lines\n", len(names), len(seen), total)
 	if errs := ws.Errors(); len(errs) > 0 {

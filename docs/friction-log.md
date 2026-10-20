@@ -1136,6 +1136,12 @@ helper with add_declaration, Plan's new body with replace_statements
 All through gorefactor: the test with insert_statements, the
 instructions and these notes with replace_text.
 
+## 2026-10-20: a smaller module overview
+
+All through `refactor batch`; `path` added as a replace_text of the
+import block (the known gap). Measuring the old overview's size took a
+throwaway command, built and deleted by hand.
+
 ## 2026-10-20: one check for terminating statements
 
 All through `refactor batch`. remove_dead_code could not delete
