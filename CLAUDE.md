@@ -41,6 +41,14 @@ an item *Done.* when it is), `docs/friction-log.md`, and
 Match the surrounding code: its comment density, naming and idiom. Doc
 comments say what a thing is or does, plainly.
 
+What earlier sessions learned (the user's preferences, why past choices
+were made, where the work stands) is in `docs/session-notes.md`, imported
+here. Keep it current: add what a later session would need, in the same
+PR as the work, and fix what has become wrong. Notes saved anywhere else
+do not reach sessions on other machines.
+
+@docs/session-notes.md
+
 ## Using gorefactor well
 
 The server is started from this checkout (`.mcp.json` runs

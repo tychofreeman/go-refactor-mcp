@@ -69,6 +69,7 @@ refactorings, through gorefactor.
 | ab-features-defaults | #113–#115: see below | $2.31 · 4.91M · 7/8 | | |
 | ab-features-fixes | #116–#117: stubs replaced, edits on code they fix, add_field type | $2.56 · 6.03M · 6/8 | | |
 | ab-features-coaching | #119: a tip to batch on the 2nd single step in a row (since removed) | $2.42 · 4.97M · 7/8 | | |
+| ab-features-skeleton | #121: inspect without bodies, targets | $2.62 · 6.27M · 7/8 | | |
 
 Without a CLAUDE.md no arm used gorefactor at all: all three edited with
 Bash. Doing everything through gorefactor cost about 1.8× by hand at first,
@@ -94,6 +95,18 @@ wrong: counted by calls, single steps came in runs of 3 to 10, but most
 of those were sent in parallel in one turn, which costs nothing extra.
 Counted by turns, a turn of steps right after another one (which a batch
 could have saved) happened about once per run.
+
+**#121 (Oct 20).** Where the model used `inspect`, it read less: a
+file's view was 3.0-6.6K characters where it had been 9-15K, and
+`inspect` calls went from 3 to 10 (one with `targets`), whole-file Reads
+from 8-10 to 4. But reading did not get cheaper in total (3.1M
+characters carried, weighted by turns, against 3.0M and 4.0M in the two
+runs before), and input tokens did not fall (6.27M): the model moved its
+reading to Bash, where it reads several files a turn with wide `sed -n`
+ranges (`sed -n 80,330p refactor.go; sed -n 1,200p createfile.go`),
+often after an `inspect` gave it the lines. The tool works; the habit
+does not follow from a description. The mcp arm's CLAUDE.md says nothing
+about reading, which a user's CLAUDE.md would.
 
 ## 4. Design in the way, and chains (Oct 18–19)
 

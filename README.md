@@ -333,7 +333,9 @@ hand or a tool got in the way.
       `inspect` of a file now shows it without function bodies, a third to
       a half of the file; a function or range shows only that, without the
       outline; and `targets` reads several in one call, as `cat a; cat b`
-      did. *Done;* to be measured.
+      did. *Done.* Measured: the model used it more (3 → 10 calls) and
+      read fewer whole files, but read the bodies with wide `sed -n`
+      ranges in Bash instead, so reading cost the same.
     - **One worked example** of a whole batch in the instructions.
     - **Measure** each with the A/B harness's feature and chain tasks.
 
