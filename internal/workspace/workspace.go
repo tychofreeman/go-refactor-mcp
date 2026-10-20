@@ -42,7 +42,7 @@ const loadMode = packages.NeedName |
 // It is not safe for concurrent use.
 type Workspace struct {
 	Root     string   // module root (absolute); only files under it are edited
-	Base     string   // directory the caller pointed at; relative paths resolve here first
+	Base     string   // directory the caller pointed at; a relative path that names no file at the root resolves here
 	Patterns []string // package patterns relative to Root, e.g. "./..."
 
 	Fset *token.FileSet
@@ -284,18 +284,21 @@ func (w *Workspace) Contains(path string) bool {
 	return err == nil && r != ".." && !strings.HasPrefix(r, ".."+string(filepath.Separator))
 }
 
-// Abs resolves a path given relative to Base (where the caller pointed the
-// tool) or, failing that, to the module root. Absolute paths are cleaned.
+// Abs resolves a path given relative to the module root, as the tools
+// print paths, or, when no file is there but one is relative to Base
+// (where the caller pointed the tool), that one. A new file is at the
+// root. Absolute paths are cleaned.
 func (w *Workspace) Abs(path string) string {
 	if filepath.IsAbs(path) {
 		return filepath.Clean(path)
 	}
-	if w.Base != "" && w.Base != w.Root {
-		if p := filepath.Join(w.Base, path); fileExists(p) {
-			return p
+	p := filepath.Join(w.Root, path)
+	if !fileExists(p) && w.Base != "" && w.Base != w.Root {
+		if b := filepath.Join(w.Base, path); fileExists(b) {
+			return b
 		}
 	}
-	return filepath.Join(w.Root, path)
+	return p
 }
 
 // moduleRoot returns the nearest ancestor of dir (inclusive) containing a

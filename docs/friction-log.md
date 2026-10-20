@@ -1136,6 +1136,12 @@ helper with add_declaration, Plan's new body with replace_statements
 All through gorefactor: the test with insert_statements, the
 instructions and these notes with replace_text.
 
+## 2026-10-20: relative paths at the module root first, item 18 of the review
+
+All through gorefactor's CLI: the test with add_declaration, `Abs`'s body
+with replace_statements (`function`), the comments and docs with
+replace_text.
+
 ## 2026-10-20: undo and a created directory that is not empty, item 17 of the review
 
 All through gorefactor's CLI: the test with add_declaration, `restore`'s

@@ -153,5 +153,7 @@ results are in `docs/cost-history.md`.
   as an interface: `analysis.PassedAsInterface` and `Holds`, which
   extract_struct could use too), 16 (#152, statement content may not
   close its block: `gocode.ParseStatements` and add_case), 17 (#153,
-  undo removes a created directory last and only if empty). Change only
+  undo removes a created directory last and only if empty), 18 (#154,
+  paths resolve at the module root first). All high and medium items
+  are done; the low ones (19-25) remain. Change only
   this repo copy: the Claude Doc linked from #130 is not kept up to date.
