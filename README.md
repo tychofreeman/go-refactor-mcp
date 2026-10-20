@@ -316,6 +316,11 @@ hand or a tool got in the way.
         new one. *Done.*
       - **`add_field` takes the type separately** (`field` and `type`, as
         the model sent twice) and joins them. *Done.*
+    - **Ranges that start at the `func` line.** In the last chain run the
+      model selected a whole function, signature included, for
+      `extract_function` (3) and `replace_statements` (2). The refusal
+      could give the body's lines, and for `replace_statements` point to
+      `function`, which replaces the whole body.
     - **Coaching in results,** when a model does something a tool could
       have done (three single steps that could have been one batch).
     - **One worked example** of a whole batch in the instructions.

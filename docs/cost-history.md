@@ -67,6 +67,7 @@ refactorings, through gorefactor.
 | ab-features-mcp-overhead | replace_text, argument lists in refusals (#80) | $2.07 · 5.53M · 7/8 | | |
 | ab-features-2026-10-19 | batch refs, check "end", more tools | $2.83 · 6.77M · 8/8 | | |
 | ab-features-defaults | #113–#115: see below | $2.31 · 4.91M · 7/8 | | |
+| ab-features-fixes | #116–#117: stubs replaced, edits on code they fix, add_field type | $2.56 · 6.03M · 6/8 | | |
 
 Without a CLAUDE.md no arm used gorefactor at all: all three edited with
 Bash. Doing everything through gorefactor cost about 1.8× by hand at first,
@@ -101,12 +102,25 @@ back.
 | ab-chain-when-needed | refactor only when needed | $2.24 · 3.48M | $1.95 · 2.85M | $1.79 · 3.00M |
 | ab-chain-when-needed-2026-10-19 | Oct 19 tools | $2.71 · 3.91M | $2.13 · 2.82M | |
 | ab-chain-defaults | #113–#115 | $2.68 · 3.85M | $2.11 · 2.86M | |
+| ab-chain-fixes | #116–#117 | $2.84 · 4.10M | $2.15 · 2.86M | |
 
 With the design in the way, the hybrid arm refactored in every run, with
 the fitting tool. But on a module this small, refactoring first did not
 make the second change cheaper, and plain editing stayed cheapest. The
 hybrid arm makes its edits with Edit and uses gorefactor only to refactor,
 so #113–#115 did not change it.
+
+**#116–#117 (Oct 19).** Each fix did what it was for: in the features,
+stubs were replaced 10 times and no `add_declaration` was refused as
+redeclared, and `add_field` took the type separately. But both sets cost
+more than the run before: features 4.91M → 6.03M input, with more
+reading (Read 9 → 15, Grep 8 → 12), more `check` calls (9 → 16) and more
+`Write` attempts (6 → 16), none of which the fixes touch; chains' hybrid
+3.85M → 4.10M, manual flat. Both failed features were the interface
+method case that fails in earlier runs too. At 2–3 runs per task, swings
+of this size come from how a run goes, not from the tools: a fix that
+removes a few refusals per run is below what these sets can show.
+Fewer refusals and turns lost per run measure it better than the total.
 
 ## 5. Sessions building this project (Oct 17–19)
 
@@ -136,6 +150,7 @@ tools now do more of what that knowledge did (#113–#115).
 - **Not:** more tools or longer descriptions. Each adds to every request's
   context, and a fresh model uses few of them.
 
-Next (README, roadmap item 15): `add_declaration` replacing a stub, edits
-that may start from code they fix, `add_field` taking a separate type, and
-coaching in results.
+Next (README, roadmap item 15): ranges that start at a function's `func`
+line (5 refusals in the last chain run) answered with the body's lines,
+coaching in results, and more runs per task so that effects of 10% can be
+seen.
