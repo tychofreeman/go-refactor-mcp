@@ -71,6 +71,13 @@ results are in `docs/cost-history.md`.
   much. Input tokens track the number of requests (~39K each), so the
   next lever is turns: the mcp arm's denied Write and Bash-write
   attempts (about a fifth of its turns) and ToolSearch calls.
+- What reads are for (`ab-features-read-questions`, a "Q:" line before
+  each read): orientation 41% of read cost (the 8.9K module overview
+  alone 17%), how the code to change works 30%, where X is used 22%
+  (broad greps), how tests are written 8%. Cheap wins: a smaller module
+  overview; the find tool on the back burner now has evidence (2.6
+  where-is-X reads per run). Reads are ~15% of input, so turns matter
+  more.
 - PR #122 was merged without its second commit (this file), which was
   pushed after the user had seen the PR. Put later work in a new PR
   rather than adding commits to one the user may already be merging.

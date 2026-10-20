@@ -71,6 +71,7 @@ refactorings, through gorefactor.
 | ab-features-coaching | #119: a tip to batch on the 2nd single step in a row (since removed) | $2.42 · 4.97M · 7/8 | | |
 | ab-features-skeleton | #121: inspect without bodies, targets | $2.62 · 6.27M · 7/8 | | |
 | ab-features-read-inspect | mcp arm's CLAUDE.md: read Go code with inspect, not Read, cat or sed | $2.42 · 5.55M · 7/8 | | |
+| ab-features-read-questions | the same, and a "Q:" line before each read saying what it is to answer | $2.38 · 5.12M · 7/8 | | |
 
 Without a CLAUDE.md no arm used gorefactor at all: all three edited with
 Bash. Doing everything through gorefactor cost about 1.8× by hand at first,
@@ -126,6 +127,27 @@ not smaller reads, is what would cut cost now. In this run about a
 fifth of the turns went to things the mcp arm cannot do or need not do:
 15 Write attempts and 18 Bash commands that write, which it is denied,
 and 16 ToolSearch calls to load schemas.
+
+**What the reads are for (Oct 20).** In `ab-features-read-questions`
+the mcp arm's CLAUDE.md (`eval-tasks/claude-md-read-questions`) also
+asks for a line "Q: ..." before each read, saying what it is to answer.
+The run cost about the same (5.12M input, 130 requests, 39K each), so
+asking did not change how it read much. Its 79 reads, sorted by
+question, with their cost carried through later turns:
+
+| Question | Reads per run | Share of read cost |
+|---|---|---|
+| What is in this module, package or file? | 2.8 | 41% |
+| How does the code I will change work? | 2.4 | 30% |
+| Where is X, who calls it, where is it made? | 2.6 | 22% |
+| How are the existing tests written? | 2.1 | 8% |
+
+The module overview (`inspect` with no arguments) alone was 17%: about
+8.9K characters, read at the start of 4 of the 8 runs and so carried
+through every later turn. Four broad greps (7-12K characters each, such
+as `\.Line\b`) were another 12%, all "where is X used" questions.
+All reads together are about 0.8M of the 5.1M input tokens, so even
+halving them would save under 10%; turns still matter more.
 
 ## 4. Design in the way, and chains (Oct 18–19)
 
