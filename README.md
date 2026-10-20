@@ -415,7 +415,9 @@ hand or a tool got in the way.
       function literal names its own parameters
       (`strings.FieldsFunc(s, func(r rune) bool { return r == 32 })`) is
       refused with "uses r, declared in the body of f"; the literal's
-      parameters are its own, not the body's.
+      parameters are its own, not the body's. *Done (#156): names the
+      expression declares itself go with it, in both the body check and
+      the call-site check.*
     - **`extract_struct` reaching reflection:** its own check
       (`checkNotPassedAsInterface`) finds the type passed as an interface
       only by itself or through a pointer, so `fmt.Printf("%+v", ms)` with
