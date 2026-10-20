@@ -463,7 +463,9 @@ hand or a tool got in the way.
       (#163, `replace_expression` removes an import only the replaced
       expression used), 22 (#164, the A/B summary leaves runs cut off
       before their result out of the means and lists them; `Bash(cat:*)`
-      does not let `cat > file` through, checked with `claude -p`).*
+      does not let `cat > file` through, checked with `claude -p`), 23
+      (#165, a line gofmt only realigned keeps its place in batch line
+      translation).*
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the

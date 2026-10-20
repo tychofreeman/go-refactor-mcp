@@ -1136,6 +1136,11 @@ helper with add_declaration, Plan's new body with replace_statements
 All through gorefactor: the test with insert_statements, the
 instructions and these notes with replace_text.
 
+## 2026-10-20: lines gofmt realigned keep their place
+
+All through `refactor batch`: the test with replace_text, the fix with
+replace_text and add_declaration in one batch.
+
 ## 2026-10-20: unfinished A/B runs
 
 All through `refactor batch`: the two fields with add_field ahead of the
