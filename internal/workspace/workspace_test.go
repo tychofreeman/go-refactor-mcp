@@ -1,6 +1,7 @@
 package workspace
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -190,6 +191,39 @@ func TestUndoRefusesAfterExternalEdit(t *testing.T) {
 	os.WriteFile(path, []byte("package m\n\nvar X = 3\n"), 0o644)
 	if _, err := w.Undo(); err == nil || !strings.Contains(err.Error(), "modified since") {
 		t.Errorf("want modified-since error, got %v", err)
+	}
+}
+
+// An edit after which the module no longer loads (a broken go.mod) is put
+// back, kept off the undo stack and reported as ErrBreaksLoading, and the
+// workspace goes on working.
+func TestApplyThatBreaksLoadingIsRestored(t *testing.T) {
+	src := "package m\n\nvar X = 1\n"
+	dir := writeModule(t, map[string]string{"m.go": src})
+	w, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gomod := filepath.Join(dir, "go.mod")
+	before, _ := os.ReadFile(gomod)
+	i := strings.Index(string(before), "module")
+	_, err = w.Apply("break go.mod", []edit.FileEdit{{Path: gomod, Edits: []edit.TextEdit{{Start: i, End: i + len("module"), NewText: "modul"}}}})
+	if !errors.Is(err, ErrBreaksLoading) {
+		t.Fatalf("want ErrBreaksLoading, got %v", err)
+	}
+	if got, _ := os.ReadFile(gomod); string(got) != string(before) {
+		t.Errorf("go.mod not restored:\n%s", got)
+	}
+	if w.CanUndo() {
+		t.Error("the change that was put back is on the undo stack")
+	}
+	path := filepath.Join(dir, "m.go")
+	j := strings.Index(src, "1")
+	if _, err := w.Apply("x", []edit.FileEdit{{Path: path, Edits: []edit.TextEdit{{Start: j, End: j + 1, NewText: "2"}}}}); err != nil {
+		t.Fatalf("the workspace no longer works: %v", err)
+	}
+	if errs := w.Errors(); len(errs) != 0 {
+		t.Errorf("errors after the next edit: %v", errs)
 	}
 }
 
