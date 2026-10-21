@@ -662,8 +662,12 @@ hand or a tool got in the way.
       fresh model's mcp runs derive about a tenth of what changes.
     - **Collect derivations** from the user, by posing small problems,
       as recipes: the shape before, the operations, the shape after.
+      *Five done* (`docs/derivations.md`), each run with the tools.
     - **Catalog the missing operations**: what the code the model writes
-      through edits does, which no operation does yet.
+      through edits does, which no operation does yet. *From the five:
+      14 gaps (A-N in `docs/derivations.md`); first, fold (I, with D
+      and J): replace occurrences of an expression or call with a call
+      that means the same, checked by inlining back.*
     - **Teach and measure:** recipes and planning a change as a
       derivation, against the current instructions, on tasks with a
       derivation as the reference solution.
