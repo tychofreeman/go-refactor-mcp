@@ -1566,6 +1566,13 @@ in the other order. On the roadmap (item 18).
 All through gorefactor: the test with add_declaration, the error type
 with add_declaration, the rest with replace_text.
 
+## 2026-10-20: fold
+
+All through gorefactor: the fixtures and a stub of the tool with
+create_file (the test alone was refused, its package having no other
+file, which the refusal said), the tool with add_declaration and
+replace_statements in one batch checked at its end.
+
 ## 2026-10-20: tasks that call for the type-error help
 
 All through gorefactor: the seeded module, the hidden tests and the
