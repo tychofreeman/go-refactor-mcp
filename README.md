@@ -642,6 +642,9 @@ hand or a tool got in the way.
       `var untypeable`): it takes the name for a package to import, and
       refuses when there is none, though the batch is checked at its
       end. Leave such a name alone instead, for the type check to judge.
+      *Done: a name no package has is left to the type check
+      (`gocode.NoPackageError`); an ambiguous one still asks for
+      `imports`.*
     - **Measure** by counting these refusals per run, by kind.
 
 Alongside: **edits**, steps that change behavior on purpose, so the

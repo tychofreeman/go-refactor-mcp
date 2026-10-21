@@ -1454,6 +1454,11 @@ refusal, which became a success case, was removed with `git rm`;
 nothing removes a file. PosMapOf began as a stub in a batch with its
 test, so the test could fail first.
 
+## 2026-10-20: replace_text leaves a later step's name alone
+
+All through gorefactor: the test with add_declaration, the error type
+with add_declaration, the rest with replace_text.
+
 ## 2026-10-20: stubs for a call used as a case
 
 All through gorefactor: the fixture with create_file, the case in
