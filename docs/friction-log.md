@@ -1566,6 +1566,13 @@ in the other order. On the roadmap (item 18).
 All through gorefactor: the test with add_declaration, the error type
 with add_declaration, the rest with replace_text.
 
+## 2026-10-20: tasks that call for the type-error help
+
+All through gorefactor: the seeded module, the hidden tests and the
+task file with create_file, the hidden tests' renames with replace_text.
+The reference solutions that validate the tasks are a scratch script,
+not committed.
+
 ## 2026-10-20: move_file and delete_file
 
 All through `refactor batch`; the golden fixtures by hand, as files for

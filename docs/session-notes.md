@@ -189,6 +189,11 @@ results are in `docs/cost-history.md`.
   - The GitHub API is closed to repos outside the session; read PRs and
     issues with WebFetch. Gitea's tests refuse to run as root (use
     `--as-user`), and verifying fills the disk (`--clean-cache`).
+- The type-error help, measured on tasks that call for it
+  (`eval-tasks/mechanisms.json`, mech-now vs mech-before): it fires and
+  removes the refusals it targets, but cost and turns stay the same.
+  Hidden tests there are named TestAccept... so that a model's own test
+  does not clash with them.
 - Sessions in a cloud clone have no MCP on that clone (the user's MCP
   runs on their own checkout); build `cmd/refactor` from the branch and
   use it for every step: `refactor batch '<json>'` runs a batch, and
