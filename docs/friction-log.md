@@ -1667,3 +1667,7 @@ moved to `analysis`, in one batch with remove_dead_code. Tried on a
 copy of notify-large with `cmd/refactor`: the shared-record derivation
 now needs the alias in every Send method before fold matches them
 (gap O).
+
+## 2026-10-21: gap K as fold through a setter
+
+Docs only, all with replace_text.
