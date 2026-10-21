@@ -1621,3 +1621,8 @@ All through gorefactor: fixtures with create_file; the struct and its
 helpers with add_declaration; try and first replaced whole with
 replace_declaration (#204), the rest with replace_text, in one batch
 checked at its end.
+
+## 2026-10-20: roadmap item 20, loops and containers
+
+All through `refactor batch` (replace_text in README, the session
+notes and this log), from one JSON file.

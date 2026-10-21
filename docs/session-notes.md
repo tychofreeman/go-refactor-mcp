@@ -39,6 +39,9 @@ results are in `docs/cost-history.md`.
   the tools, and the gaps. Pose problems rather than ask for examples:
   the user said they could not think of many off the top of their head.
 
+- **Loops and containers** (2026-10-20): the user asked for
+  refactorings that convert between kinds of loop, and edits that make
+  a block the body of a loop, an `if` and the like. Roadmap item 20.
 - **The model reasons about intent, the engine about types**
   (2026-10-20). The user's concern with type-check refusals for the
   model's own code: the project is to take type-safe code off the
