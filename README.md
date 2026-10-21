@@ -740,6 +740,8 @@ hand or a tool got in the way.
       against 11% (Contacts left out); no run used `pointer`, since
       none tried to extract `e.Sent`. Next: K (*done*) and L, then Contacts
       again, and a recipe or gap O so the shared record is derived.
+      *L done:* `remove_dead_code` of `Type.Field`; its `exported`
+      option also does N.
 
 20. **Loops and containers** (asked for by the user, 2026-10-20): the
     structural moves on control flow that derivations need and no tool

@@ -99,8 +99,9 @@ until the MCP is reconnected.
    range that cuts a statement is refused with the range to use. Every
    step can be undone with `undo`.
 
-Known gaps (do these by hand and log them): nothing removes a struct
-field or restores a file. Files and directories move and go with
+Known gaps (do these by hand and log them): nothing restores a file.
+remove_dead_code removes an unused struct field (`Type.Field`), and
+exported code with `exported`. Files and directories move and go with
 move_file and delete_file.
 
 ## Measuring cost
