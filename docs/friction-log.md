@@ -1559,6 +1559,13 @@ All through `refactor batch`. The test used `Quality.Unmeasured` before
 it existed, and the new field stubs declared it (#183), which
 replace_text then gave its tag and comment.
 
+## 2026-10-20: fold
+
+All through gorefactor: the fixtures and a stub of the tool with
+create_file (the test alone was refused, its package having no other
+file, which the refusal said), the tool with add_declaration and
+replace_statements in one batch checked at its end.
+
 ## 2026-10-20: tasks that call for the type-error help
 
 All through gorefactor: the seeded module, the hidden tests and the

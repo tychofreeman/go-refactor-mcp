@@ -668,6 +668,13 @@ hand or a tool got in the way.
       14 gaps (A-N in `docs/derivations.md`); first, fold (I, with D
       and J): replace occurrences of an expression or call with a call
       that means the same, checked by inlining back.*
+    - **Fold.** *Stage 1 done:* `fold` replaces every match of a
+      function's one-return body (its parameters are typed holes) with a
+      call, a method's receiver bound from the match or from the method
+      the match is in, one line at a time with `line`. Next: a struct
+      parameter used only by its fields (`f(b.Users, b.Message)` from
+      `f(users, m)`, problem 5), statement bodies (extract with
+      duplicates, problem 1), then parameterize (J).
     - **Teach and measure:** recipes and planning a change as a
       derivation, against the current instructions, on tasks with a
       derivation as the reference solution.

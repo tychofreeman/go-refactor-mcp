@@ -110,6 +110,8 @@ The migration at each call site is I.
 The user's derivations reshape without changing behavior, then make
 one small edit; the reshaping falls in three families: naming and
 aliasing (A, B), folding and unfolding (D, I, J), and containers
-(C, K). Folding came up in four of the five. Its engine is the
+(C, K). Folding came up in four of the five; `fold` (stage 1: one-return
+bodies) now does problem 4's redirect and problem 3's reads through a
+getter. Its engine is the
 before/after templates with typed holes of `docs/user-transformations.md`
 (option 3): one well-made fold covers D, I and J.
