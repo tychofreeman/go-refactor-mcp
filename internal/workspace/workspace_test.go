@@ -143,6 +143,55 @@ func TestApplyDeletesFileAndUndoRestoresIt(t *testing.T) {
 	}
 }
 
+// Deleting the last files of a directory removes it, and the directories
+// above it it leaves empty; undo puts them back with the files.
+func TestApplyRemovesEmptiedDirectoriesAndUndoRestoresThem(t *testing.T) {
+	dir := writeModule(t, map[string]string{
+		"m.go":                      "package m\n",
+		"testdata/case/in/a.txt":    "a\n",
+		"testdata/case/refused.txt": "no\n",
+		"testdata/other/keep.txt":   "keep\n",
+	})
+	w, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, refused := filepath.Join(dir, "testdata/case/in/a.txt"), filepath.Join(dir, "testdata/case/refused.txt")
+	if _, err := w.Apply("delete case", []edit.FileEdit{{Path: a, Delete: true}, {Path: refused, Delete: true}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "testdata/case")); !os.IsNotExist(err) {
+		t.Errorf("testdata/case was left: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "testdata/other/keep.txt")); err != nil {
+		t.Errorf("a directory with other files was removed: %v", err)
+	}
+	if _, err := w.Undo(); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(a); string(got) != "a\n" {
+		t.Errorf("undo did not restore in/a.txt: %q", got)
+	}
+}
+
+// A file created Verbatim is written as given, even Go that gofmt would
+// change (a fixture of unformatted code).
+func TestApplyWritesVerbatim(t *testing.T) {
+	dir := writeModule(t, map[string]string{"m.go": "package m\n"})
+	w, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := "package p\nfunc  f( ) {}\n"
+	p := filepath.Join(dir, "testdata/x/in/p.go")
+	if _, err := w.Apply("create", []edit.FileEdit{{Path: p, Edits: []edit.TextEdit{{NewText: src}}, Verbatim: true}}); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(p); string(got) != src {
+		t.Errorf("file not written verbatim: %q", got)
+	}
+}
+
 func TestApplyCreatesDirectoriesAndUndoRemovesThem(t *testing.T) {
 	dir := writeModule(t, map[string]string{"m.go": "package m\n\nfunc F() int { return 1 }\n"})
 	w, err := Load(dir)

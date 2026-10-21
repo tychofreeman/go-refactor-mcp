@@ -1553,6 +1553,12 @@ golden fixtures by hand, their `out/` written by hand first.
 All through `refactor batch`; the golden fixtures by hand, their `out/`
 written by hand first and matched.
 
+## 2026-10-20: move_file and delete_file
+
+All through `refactor batch`; the golden fixtures by hand, as files for
+these tools to move and delete. The tools' own fixtures are the first
+that could have been made, and later renamed, with them.
+
 ## 2026-10-20: A/B quality numbers when a file does not parse
 
 All through `refactor batch`. The test used `Quality.Unmeasured` before

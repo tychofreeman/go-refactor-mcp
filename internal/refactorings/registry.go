@@ -14,6 +14,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/changetype"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/createfile"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/createfromusage"
+	"github.com/tychofreeman/go-refactor-mcp/internal/edits/files"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/fiximports"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/insertstmts"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/replaceexpr"
@@ -71,6 +72,8 @@ func All() []refactor.Refactoring {
 		changesig.NewAddResult(),
 		changesig.NewChangeFieldType(),
 		changetype.New(),
+		files.NewMove(),
+		files.NewDelete(),
 	}
 }
 
