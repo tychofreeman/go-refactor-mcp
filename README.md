@@ -848,6 +848,11 @@ hand or a tool got in the way.
       unexported name, refuse only a method that changes which
       interfaces of the module and its dependencies the type
       implements, as rename checks; note it for other modules.
+      *Done:* `analysis.MethodInterface` (rename's list of methods
+      called at run time, now `analysis.DynamicMethods`, and the
+      package-level interfaces of the module and its dependencies
+      whose other methods the type has); `function_to_method` takes
+      calls in other packages when the name is exported.
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the

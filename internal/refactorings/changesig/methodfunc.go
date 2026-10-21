@@ -28,7 +28,7 @@ func (*MethodToFunction) Description() string {
 	return `Turn a method into a function whose first parameter is the receiver, and change every call x.m(a) into m(x, a) (m(&x, a) where the call took x's address, m(*p, a) where it dereferenced p, m(&o.inner, a) for a method promoted from an embedded field).
 Use it before moving a method to another package (move_declaration does not move methods there), or when a method uses so little of its receiver that it is really a helper: follow with introduce_parameter and remove_parameter to pass only what it uses.
 Identify the method by file, line and name, at its declaration or any call. The function keeps the method's name unless new_name is given; an unnamed receiver gets a name.
-Only unexported methods: an exported one could satisfy an interface outside this module (fmt looks for String, errors for Error), and losing it would not be a compile error. Refuses if any interface in the workspace has a method of that name, if the method is used other than by calling it (a method value or method expression), if its receiver type has type parameters, if the package already declares the name, if the name means something else at a call, or for a call whose receiver contains another call of the method.`
+An exported method too, unless the type may implement through it an interface code checks for at run time (String, Error, MarshalJSON and the like, or one of the module or its dependencies), which losing it would change with no compile error; the result notes that the module's API changed. Refuses if any interface in the workspace has a method of that name, if the method is used other than by calling it (a method value or method expression), if its receiver type has type parameters, if the package already declares the name, if the name means something else at a call, or for a call whose receiver contains another call of the method.`
 }
 
 func (*MethodToFunction) InputSchema() json.RawMessage {
@@ -70,8 +70,8 @@ func (*MethodToFunction) Plan(ws *workspace.Workspace, raw json.RawMessage) (*re
 	}
 	named := recvNamed(recv.Type())
 	switch {
-	case t.obj.Exported():
-		return nil, refactor.Refusef("%s is exported, so an interface outside this module could need it (fmt looks for String, errors for Error), and losing the method would not be a compile error; only unexported methods can become functions", t.obj.Name())
+	case t.obj.Exported() && named != nil && analysis.MethodInterface(ws.Pkgs, named, t.obj.Name(), false) != "":
+		return nil, refactor.Refusef("%s may be how %s implements %s, which code checks for at run time; losing the method would change behavior with no compile error", t.obj.Name(), named.Obj().Name(), analysis.MethodInterface(ws.Pkgs, named, t.obj.Name(), false))
 	case named != nil && named.TypeParams().Len() > 0:
 		return nil, refactor.Refusef("the receiver type %s has type parameters, which the function would have to declare; this is not supported yet", named.Obj().Name())
 	}

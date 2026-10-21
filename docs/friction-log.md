@@ -1738,6 +1738,13 @@ tool copies a file). The Contacts derivation was run with the
 two getter lines it counts, and the field deletions by replace_text
 after `remove_dead_code` refused falsely.
 
+## 2026-10-21: exported methods made, moved and dropped
+
+All through gorefactor: the golden cases with move_file, delete_file,
+create_file and replace_text, the code with add_declaration and
+replace_text, rename's old list with remove_dead_code, the docs with
+replace_text.
+
 ## 2026-10-21: extract_struct of an exported struct
 
 All through gorefactor: the golden case with move_file, delete_file,
