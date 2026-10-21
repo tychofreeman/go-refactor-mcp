@@ -1738,6 +1738,13 @@ tool copies a file). The Contacts derivation was run with the
 two getter lines it counts, and the field deletions by replace_text
 after `remove_dead_code` refused falsely.
 
+## 2026-10-21: move_declaration sees cycles through test files
+
+All through gorefactor: the golden case with create_file and
+replace_text, the fix with replace_text, the docs with replace_text.
+Reproduced by replaying batch run 3's calls with the `refactor` CLI
+(a script pulled them from the transcript).
+
 ## 2026-10-21: add_parameter and introduce_parameter qualify per call
 
 All through gorefactor: the golden cases with create_file and

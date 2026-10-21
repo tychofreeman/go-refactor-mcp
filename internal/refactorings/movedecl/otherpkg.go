@@ -353,7 +353,9 @@ func (m *mover) inMoved(path string, off int) bool {
 }
 
 // checkNoCycle refuses a move after which the destination would depend on
-// a package that imports it: its own imports and the moved code's.
+// a package that imports it: its own imports, those of its test files
+// (they build with it, so a cycle through them breaks go test), and the
+// moved code's.
 func (m *mover) checkNoCycle(users map[string]bool) error {
 	deps := map[string]string{} // path -> the package that brings it in
 	var walk func(p *packages.Package, via string)
@@ -365,7 +367,11 @@ func (m *mover) checkNoCycle(users map[string]bool) error {
 			}
 		}
 	}
-	walk(m.dest, m.dest.PkgPath)
+	for _, p := range m.ws.Pkgs {
+		if p.PkgPath == m.dest.PkgPath {
+			walk(p, m.dest.PkgPath)
+		}
+	}
 	for _, imp := range m.allImports() {
 		path := pkgNameOf(m.pkg.TypesInfo, imp).Imported().Path()
 		if d := m.pkg.Imports[path]; d != nil && path != m.dest.PkgPath {
