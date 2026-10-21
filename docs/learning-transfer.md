@@ -191,6 +191,14 @@ The user accepted that reading (the same line at many call sites is one edit: wh
 
 **Explorer 7 on all five tasks** (`eval-runs/explore-seven-all`, 3 runs a task, $8.12, after #233-#238 changed exported code), against explorer 5 (`explore-five`, $7.62): shared record 3/3 (2/3), opt-out 3/3 (3/3), Contacts 3/3 (0/3), fit 3/3 (3/3), batch 1/3 (3/3); 13 of 15 against 11. Batch's two failures followed the rule: five sequences, none within one line, all undone. Every route met one gap: `add_parameter` and `introduce_parameter` write one value at every call, and a value of the new type is `notify.Batch{...}` in `campaigns` but `Batch{...}` in `notify`'s test; an alias, a qualified value and moving the callers in and back (an import cycle) all failed. The passing run pointed the test at an extracted helper so that one package was left calling it. The refusals for exported code were gone, but the change had a bug: `extract_struct` of the exported `User` wrote the new type unqualified in other packages' literals, caught after the fact as a bug in its checks, in all three Contacts runs (fixed: qualified, and an unexported new type refused there). A `move_declaration` in batch run 3 also left code that did not compile.
 
+**Batch again after the fixes** (#239-#241: values qualified per call, `extract_struct` qualified, the cycle check through tests; `eval-runs/explore-seven-batch`, explorer 7, 3 runs, $2.20): 3/3, each within one line per change, by three different routes:
+
+- `add_parameter b Batch` with `Batch{Users: users, Message: m}` after `extract_variable` named the message `m` at each of the 11 calls; written `notify.Batch{...}` in `campaigns` and `Batch{...}` in `notify`'s test. Then `extract_function` the body, its wrapper's one line `return send(b.Users, c, b.Message)`, `remove_parameter` twice.
+- `introduce_parameter` of a literal written once in the body: `extract_function` the body, its wrapper's one line using `Batch{Users: users, Message: m}`, `extract_variable` with `all_occurrences` to merge its two uses, `introduce_parameter` (which writes the literal at every call, translated and qualified), `inline_variable`, `remove_parameter` twice, `inline_function` the helper. No `extract_variable` per call.
+- The user's expand, migrate, contract: a one-line wrapper `BroadcastBatch(c, b)` over the old function, `fold` it (every call in every package becomes `BroadcastBatch(c, notify.Batch{...})`), `inline_function` the old one with `all_calls`, `rename`. Two lines, the type and the wrapper, one per fact.
+
+The type came from a test literal (`create_from_usage`) in two runs.
+
 The learned lessons (`claude-md-learned`) are the explore run's, less
 Contacts, with lesson 3 from the shared-record trial. The learner runs
 on B have not been run.
