@@ -11,6 +11,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/adddecl"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/addelement"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/addfield"
+	"github.com/tychofreeman/go-refactor-mcp/internal/edits/changetype"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/createfile"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/createfromusage"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/fiximports"
@@ -69,6 +70,7 @@ func All() []refactor.Refactoring {
 		changesig.NewChangeParameterType(),
 		changesig.NewAddResult(),
 		changesig.NewChangeFieldType(),
+		changetype.New(),
 	}
 }
 

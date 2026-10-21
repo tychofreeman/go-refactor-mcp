@@ -39,7 +39,7 @@ results are in `docs/cost-history.md`.
   user's way by hand is to declare an alias of the old type, write the
   parameter with it, then change the alias and fix what follows. So
   change_parameter_type re-spells to an identical type (#193), and
-  `change_type`, which retargets the alias, is to be an **edit**, so
+  `change_type` (#194), which retargets the alias, is an **edit**, so
   that a batch with check "end" checks it together with the fixes its
   result lists (the user's decision; a refactoring there would have to
   compile on its own).

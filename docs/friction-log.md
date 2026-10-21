@@ -1500,6 +1500,15 @@ engine's Expander, runExpanded and the inliner's Expand and callsOf
 with add_declaration, the arguments with add_field, the schema,
 description and docs with replace_text.
 
+## 2026-10-20: change_type
+
+All through `refactor batch`: the package and its test with create_file
+in one batch, the engine's note with replace_text and add_declaration,
+the workflow test with add_declaration and its imports. One refusal: a
+call of `plural`, which the refactor package names `textutil.Plural`;
+the stub could not be declared, since its result was unknown. The
+golden fixtures by hand, their `out/` written by hand first.
+
 ## 2026-10-20: change_parameter_type writes a parameter with an alias
 
 All through `refactor batch`; the golden fixtures by hand, their `out/`
