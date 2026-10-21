@@ -1671,3 +1671,8 @@ now needs the alias in every Send method before fold matches them
 ## 2026-10-21: gap K as fold through a setter
 
 Docs only, all with replace_text.
+
+## 2026-10-21: the project history through 21 October
+
+All through `refactor batch`: replace_text steps in
+`docs/how-this-project-was-built.md` and this log, from JSON files.
