@@ -66,3 +66,35 @@ By refusals removed per unit of work:
    test files and it fixes them, checked on the rest of the module.
 
 To measure: count these refusals per run before and after, by kind.
+
+## Measured after #181-#190 (Oct 20)
+
+The mcp arm, the four third-party tasks that refactored on the way
+(`tp-mcp-type-errors`, 2 runs each, against `tp-mcp-refactor-first`, 1
+each) and the four feature tasks (`ab-features-type-errors`, against
+`ab-features-denied`, 2 each):
+
+| Set | Type-check refusals per run | Passed | Cost per run |
+|---|---|---|---|
+| third-party, before | 2.0 (8 in 4) | 4/4 | $0.25 |
+| third-party, after | 0.5 (4 in 8) | 8/8 | $0.24 |
+| features, before | 0.1 (1 in 8) | 7/8 | $0.29 |
+| features, after | 0.25 (2 in 8) | 6/8 | $0.28 |
+
+The third-party drop is real but is mostly how the runs went, not the
+new help: type and field stubs, fix_imports and family changes fired
+not once in the third-party runs (function stubs did, twice). The
+models did not again change a signature by text or use a type before
+writing it. What was left:
+
+- **Stubs that could not tell the results** (3): a test calling a
+  generic helper the model meant to write (`orderStacksByAncestry(refs,
+  ...)` returning a slice of refs; the results only show in how the
+  test ranges over them), and `case isClause(s):` in a switch without
+  a tag, whose context needs a bool but is not read as one yet.
+- **The model's own** (3): a field made a pointer again (Gitea), a
+  field added twice, a member of the module's own `json` package that
+  does not exist.
+
+The features' failures (symbol-addressing, 0/2) were both the same
+hidden test, an interface method by name, not a refusal.
