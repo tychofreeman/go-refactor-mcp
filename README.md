@@ -701,8 +701,17 @@ hand or a tool got in the way.
       struct parameter the body uses only by its fields makes each field
       a hole, and the call passes a literal (`Send(p, us, m)` to
       `Send2(p, Batch{Users: us, Message: m})`, problem 5), also across
-      packages. Next: statement bodies (extract with duplicates, problem
-      1), then parameterize (J).
+      packages. *Stage 3 done:* a function without results whose body
+      is statements folds runs of the same statements in any block (its
+      locals renamed freely), so extract_function and then fold replaces
+      duplicates (problem 1). Matching is by syntax tree: `a+b+c` does
+      not match `a+(b+c)`. Then parameterize (J).
+    - **Parameterize (J).** *Done for constants:* `parameterize` makes
+      functions that are the same but for constants calls of one new
+      function that takes them (`logEmail`, `logSMS` to `logTo(to,
+      format)`); `inline_function` with `all_calls` then retires them.
+      Next: functions that differ in an expression, such as problem 3's
+      `u.Email` and `u.Phone`, by a switch on a new parameter.
     - **Teach and measure:** recipes and planning a change as a
       derivation, against the current instructions, on tasks with a
       derivation as the reference solution.

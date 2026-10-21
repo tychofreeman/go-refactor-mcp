@@ -1622,7 +1622,21 @@ helpers with add_declaration; try and first replaced whole with
 replace_declaration (#204), the rest with replace_text, in one batch
 checked at its end.
 
-## 2026-10-20: roadmap item 20, loops and containers
+## 2026-10-21: fold, stage 3: statement bodies
+
+All through gorefactor: fixtures with create_file, the statement
+matching and the shared call builder with add_declaration, the rest
+with replace_text in one batch checked at its end. A fixture was wrong:
+`a+": "+b+"!"` is not the tree of `a+": "+text`, which the fixture now
+reaches the way the derivation does, through a variable.
+
+## 2026-10-21: parameterize
+
+All through gorefactor: the package's stub, test and fixtures with
+create_file, the tool with replace_declaration and add_declaration in
+one batch checked at its end.
+
+## 2026-10-21: roadmap item 20, loops and containers
 
 All through `refactor batch` (replace_text in README, the session
 notes and this log), from one JSON file.

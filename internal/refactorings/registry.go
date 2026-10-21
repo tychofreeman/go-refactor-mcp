@@ -33,6 +33,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/invertif"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/mergefunc"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/movedecl"
+	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/parameterize"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/rename"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/slidestmt"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
@@ -45,6 +46,7 @@ func All() []refactor.Refactoring {
 		extractvar.New(),
 		inlinevar.New(),
 		fold.New(),
+		parameterize.New(),
 		extractfunc.New(),
 		inlinefunc.New(),
 		invertif.New(),
