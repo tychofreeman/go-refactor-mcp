@@ -33,6 +33,7 @@ func (*Fold) Name() string { return "fold" }
 func (*Fold) Description() string {
 	return `Replace code that does what an existing function does with calls to it: every expression in the module that matches the function's body, with its parameters standing for any expressions of their types, becomes a call. The function stays. Not extract_function, which makes a new function from lines at one place: fold reuses a function that exists, written or extracted, at every other place.
 Use it after writing a small function to name what code does (a getter, a helper, a method that calls an old function), so the code uses it: u.Email becomes u.email() for func (u User) email() string { return u.Email }; truncate(subject, 20) inside a method of SMS becomes s.fit(subject) for func (s *SMS) fit(text string) string { return truncate(text, 20) }.
+A struct parameter the body uses only by its fields makes each field a hole, and the call passes a literal: Send(p, us, m) becomes Send2(p, Batch{Users: us, Message: m}) for func Send2(p string, b Batch) string { return Send(p, b.Users, b.Message) }, to move callers to a parameter object.
 Identify the function by file and name (Name or Type.Method). Its body must be one return of one value, using every parameter. Every other name in the body must mean the same at a match. A method's receiver is what matched it, or, when the body does not use it, the receiver of the method of the same type the match is in. With line, only matches starting on that line of file (or of in) are folded, to move callers over one at a time.
 Leaves, and says why: a match that is assigned or has its address taken, one where an argument with effects or that could panic would be evaluated a different number of times or in another order, one in another package when the function is not exported, and one in no method of the receiver's type when the call needs the receiver from there.`
 }
@@ -66,13 +67,33 @@ type folder struct {
 	decl  *ast.FuncDecl
 	body  ast.Expr             // what fn returns: the pattern
 	holes map[types.Object]int // fn's parameters (and receiver), and how often the body uses each
-	recv  types.Object         // fn's receiver, or nil
+	// fields are the struct parameters the body uses only by their fields:
+	// the fields, in the order the body first uses them. Each field is a
+	// hole of its own, and the call passes a literal of the struct.
+	fields map[types.Object][]string
+	uses   map[holeKey]int // how often the body uses each of those fields
+	recv   types.Object    // fn's receiver, or nil
 
 	n       int      // occurrences folded
 	skipped []string // why matches were left, "file:line: reason"
 	by      map[string][]edit.TextEdit
 	adders  map[string]*imports.Adder
 	order   []string
+}
+
+// holeKey is a hole: a parameter, or with field one field of a struct
+// parameter the body uses only by its fields.
+type holeKey struct {
+	obj   types.Object
+	field string
+}
+
+// count is how often the body uses the hole k.
+func (f *folder) count(k holeKey) int {
+	if k.field != "" {
+		return f.uses[k]
+	}
+	return f.holes[k.obj]
 }
 
 // pattern reads fn's declaration: its body must be one return of one
@@ -125,6 +146,35 @@ func (f *folder) pattern(id *ast.Ident) error {
 		}
 		return true
 	})
+	f.fields, f.uses = map[types.Object][]string{}, map[holeKey]int{}
+	for o := range f.holes {
+		if _, named := o.Type().(*types.Named); o == f.recv || !named {
+			continue
+		}
+		if _, isStruct := o.Type().Underlying().(*types.Struct); !isStruct {
+			continue
+		}
+		var order []string
+		byField := 0
+		ast.Inspect(f.body, func(n ast.Node) bool {
+			sel, ok := n.(*ast.SelectorExpr)
+			if id := identOf(selX(sel)); !ok || id == nil || info.Uses[id] != o {
+				return true
+			}
+			if s := info.Selections[sel]; s != nil && s.Kind() == types.FieldVal && len(s.Index()) == 1 {
+				k := holeKey{o, sel.Sel.Name}
+				if f.uses[k] == 0 {
+					order = append(order, sel.Sel.Name)
+				}
+				f.uses[k]++
+				byField++
+			}
+			return true
+		})
+		if byField > 0 && byField == f.holes[o] {
+			f.fields[o] = order
+		}
+	}
 	for o, c := range f.holes {
 		if c == 0 && o != f.recv {
 			return refactor.Refusef("%s's body does not use its parameter %s, so a call could not be built from what matches", name, o.Name())
@@ -188,7 +238,7 @@ func (f *folder) try(p *packages.Package, file *ast.File, x ast.Expr, stack []as
 	if tv, ok := info.Types[x]; !ok || !tv.IsValue() || tv.Value != nil {
 		return false, nil // a type, or a constant: nothing to fold
 	}
-	b := map[types.Object]ast.Expr{}
+	b := map[holeKey]ast.Expr{}
 	if !f.match(f.body, x, info, b) {
 		return false, nil
 	}
@@ -207,13 +257,13 @@ func (f *folder) try(p *packages.Package, file *ast.File, x ast.Expr, stack []as
 	// or could panic must be used once, and be what the body evaluates
 	// first.
 	impure := 0
-	for o, e := range b {
+	for k, e := range b {
 		if analysis.HasEffect(info, e) || analysis.MayPanic(info, e) != nil {
 			impure++
-			if f.holes[o] > 1 {
-				return skip(fmt.Sprintf("%s, used %d times in the body, would be evaluated once", types.ExprString(e), f.holes[o]))
+			if n := f.count(k); n > 1 {
+				return skip(fmt.Sprintf("%s, used %d times in the body, would be evaluated once", types.ExprString(e), n))
 			}
-			if !f.first(o) {
+			if !f.first(k) {
 				return skip(fmt.Sprintf("%s would be evaluated before the rest of the body, not in its order", types.ExprString(e)))
 			}
 		}
@@ -221,39 +271,55 @@ func (f *folder) try(p *packages.Package, file *ast.File, x ast.Expr, stack []as
 	if impure > 1 {
 		return skip("more than one argument has effects or could panic")
 	}
-	src, err := os.ReadFile(f.ws.Fset.Position(file.Pos()).Filename)
+	path := f.ws.Fset.Position(file.Pos()).Filename
+	src, err := os.ReadFile(path)
 	if err != nil {
 		return false, err
 	}
 	text := func(e ast.Expr) string {
 		return string(src[f.ws.Fset.Position(e.Pos()).Offset:f.ws.Fset.Position(e.End()).Offset])
 	}
+	// qualify writes name, of fn's package, for code in file.
+	qualify := func(name string) (string, error) {
+		if p.PkgPath == f.pkg.PkgPath {
+			return name, nil
+		}
+		if f.adders[path] == nil {
+			f.adders[path] = imports.New(f.ws, p, file, src)
+		}
+		q, err := f.adders[path].Name(f.fn.Pkg())
+		return q + "." + name, err
+	}
 	var args []string
 	for _, fl := range f.decl.Type.Params.List {
 		for _, n := range fl.Names {
-			args = append(args, text(b[f.pkg.TypesInfo.Defs[n]]))
+			o := f.pkg.TypesInfo.Defs[n]
+			fs, byField := f.fields[o]
+			if !byField {
+				args = append(args, text(b[holeKey{o, ""}]))
+				continue
+			}
+			t, err := qualify(o.Type().(*types.Named).Obj().Name())
+			if err != nil {
+				return skip(err.Error())
+			}
+			var elts []string
+			for _, fld := range fs {
+				elts = append(elts, fld+": "+text(b[holeKey{o, fld}]))
+			}
+			args = append(args, t+"{"+strings.Join(elts, ", ")+"}")
 		}
 	}
 	call := f.fn.Name() + "(" + strings.Join(args, ", ") + ")"
-	switch {
-	case f.fn.Signature().Recv() != nil:
+	if f.fn.Signature().Recv() != nil {
 		recv, why := f.receiver(info, b, stack, text)
 		if why != "" {
 			return skip(why)
 		}
 		call = recv + "." + call
-	case p.PkgPath != f.pkg.PkgPath:
-		path := f.ws.Fset.Position(file.Pos()).Filename
-		if f.adders[path] == nil {
-			f.adders[path] = imports.New(f.ws, p, file, src)
-		}
-		q, err := f.adders[path].Name(f.fn.Pkg())
-		if err != nil {
-			return skip(err.Error())
-		}
-		call = q + "." + call
+	} else if call, err = qualify(call); err != nil {
+		return skip(err.Error())
 	}
-	path := f.ws.Fset.Position(x.Pos()).Filename
 	if f.by[path] == nil {
 		f.order = append(f.order, path)
 	}
@@ -262,11 +328,11 @@ func (f *folder) try(p *packages.Package, file *ast.File, x ast.Expr, stack []as
 	return true, nil
 }
 
-// first reports whether the hole o is the first thing the body evaluates
+// first reports whether the hole k is the first thing the body evaluates
 // that matters: the body has neither effects nor panics but in its
-// holes, or o is an argument of the body's outermost call whose other
+// holes, or k is an argument of the body's outermost call whose other
 // arguments have neither.
-func (f *folder) first(o types.Object) bool {
+func (f *folder) first(k holeKey) bool {
 	info := f.pkg.TypesInfo
 	if !analysis.HasEffect(info, f.body) && analysis.MayPanic(info, f.body) == nil {
 		return true
@@ -275,11 +341,18 @@ func (f *folder) first(o types.Object) bool {
 	if !ok {
 		return false
 	}
-	for _, a := range call.Args {
-		if id, ok := ast.Unparen(a).(*ast.Ident); ok && info.Uses[id] == o {
-			continue
+	is := func(a ast.Expr) bool {
+		switch a := ast.Unparen(a).(type) {
+		case *ast.Ident:
+			return k.field == "" && info.Uses[a] == k.obj
+		case *ast.SelectorExpr:
+			id := identOf(a.X)
+			return k.field == a.Sel.Name && id != nil && info.Uses[id] == k.obj
 		}
-		if analysis.HasEffect(info, a) || analysis.MayPanic(info, a) != nil {
+		return false
+	}
+	for _, a := range call.Args {
+		if !is(a) && (analysis.HasEffect(info, a) || analysis.MayPanic(info, a) != nil) {
 			return false
 		}
 	}
@@ -296,10 +369,10 @@ func (f *folder) first(o types.Object) bool {
 // receiver is the receiver of the call: what matched the body's receiver,
 // or, when the body does not use it, the receiver of the method of the
 // same type the occurrence is in; or why there is none.
-func (f *folder) receiver(info *types.Info, b map[types.Object]ast.Expr, stack []ast.Node, text func(ast.Expr) string) (string, string) {
+func (f *folder) receiver(info *types.Info, b map[holeKey]ast.Expr, stack []ast.Node, text func(ast.Expr) string) (string, string) {
 	recvT := f.fn.Signature().Recv().Type()
 	_, ptr := recvT.(*types.Pointer)
-	if e, ok := b[f.recv]; ok {
+	if e, ok := b[holeKey{f.recv, ""}]; ok {
 		_, isPtr := info.TypeOf(e).(*types.Pointer)
 		switch ast.Unparen(e).(type) {
 		case *ast.Ident, *ast.SelectorExpr, *ast.IndexExpr:
@@ -344,7 +417,7 @@ func (f *folder) edits() []edit.FileEdit {
 
 // match reports whether x, of the package whose info is info, is the
 // pattern p (of fn's package) with its holes filled in b.
-func (f *folder) match(p, x ast.Expr, info *types.Info, b map[types.Object]ast.Expr) bool {
+func (f *folder) match(p, x ast.Expr, info *types.Info, b map[holeKey]ast.Expr) bool {
 	p, x = ast.Unparen(p), ast.Unparen(x)
 	pinfo := f.pkg.TypesInfo
 	sub := func(p, x ast.Expr) bool {
@@ -357,7 +430,7 @@ func (f *folder) match(p, x ast.Expr, info *types.Info, b map[types.Object]ast.E
 	case *ast.Ident:
 		po := pinfo.Uses[pp]
 		if _, hole := f.holes[po]; hole && po != nil {
-			if prev, ok := b[po]; ok {
+			if prev, ok := b[holeKey{po, ""}]; ok {
 				return types.ExprString(prev) == types.ExprString(x)
 			}
 			xt := info.TypeOf(x)
@@ -371,15 +444,41 @@ func (f *folder) match(p, x ast.Expr, info *types.Info, b map[types.Object]ast.E
 			} else if !types.AssignableTo(xt, po.Type()) && types.TypeString(xt, nil) != types.TypeString(po.Type(), nil) {
 				return false
 			}
-			b[po] = x
+			b[holeKey{po, ""}] = x
 			return true
 		}
-		xi, ok := x.(*ast.Ident)
-		return ok && xi.Name == pp.Name && sameObj(po, info.Uses[xi])
+		switch x := x.(type) {
+		case *ast.Ident:
+			return x.Name == pp.Name && sameObj(po, info.Uses[x])
+		case *ast.SelectorExpr: // pkg.Name in another package
+			_, pkgName := info.Uses[identOf(x.X)].(*types.PkgName)
+			return pkgName && x.Sel.Name == pp.Name && sameObj(po, info.Uses[x.Sel])
+		}
+		return false
 	case *ast.BasicLit:
 		xb, ok := x.(*ast.BasicLit)
 		return ok && xb.Kind == pp.Kind && xb.Value == pp.Value
 	case *ast.SelectorExpr:
+		if id := identOf(pp.X); id != nil {
+			po := pinfo.Uses[id]
+			if _, byField := f.fields[po]; byField {
+				k := holeKey{po, pp.Sel.Name}
+				if prev, ok := b[k]; ok {
+					return types.ExprString(prev) == types.ExprString(x)
+				}
+				xt := info.TypeOf(x)
+				if xt == nil || !info.Types[x].IsValue() || !types.AssignableTo(xt, pinfo.TypeOf(pp)) && types.TypeString(xt, nil) != types.TypeString(pinfo.TypeOf(pp), nil) {
+					return false
+				}
+				b[k] = x
+				return true
+			}
+			if _, pkgName := po.(*types.PkgName); pkgName {
+				if xi, ok := x.(*ast.Ident); ok { // Name in the package itself
+					return xi.Name == pp.Sel.Name && sameObj(pinfo.Uses[pp.Sel], info.Uses[xi])
+				}
+			}
+		}
 		xs, ok := x.(*ast.SelectorExpr)
 		return ok && xs.Sel.Name == pp.Sel.Name && sub(pp.X, xs.X) && sameObj(pinfo.Uses[pp.Sel], info.Uses[xs.Sel])
 	case *ast.CallExpr:
@@ -462,6 +561,14 @@ func baseName(t types.Type) types.Object {
 func identOf(e ast.Expr) *ast.Ident {
 	id, _ := ast.Unparen(e).(*ast.Ident)
 	return id
+}
+
+// selX is sel's operand, or nil for a nil sel.
+func selX(sel *ast.SelectorExpr) ast.Expr {
+	if sel == nil {
+		return nil
+	}
+	return sel.X
 }
 
 // assigned reports whether x is written by parent: the left of an
