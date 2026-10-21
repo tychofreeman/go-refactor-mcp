@@ -612,6 +612,16 @@ hand or a tool got in the way.
       whose only errors are in `_test.go` files, and like a fix must
       fix some and add none. Stubs, declared for what a test calls, can
       get there first; then the refactoring meets the stub.*
+    - **Stubs declared lazily** (the user's decision, 2026-10-20). In a
+      batch checked at its end, stubs and imports were added only after
+      the last step, so a refactoring after a test written first met
+      code that did not type-check and was refused. *Done (#197): just
+      before a refactoring, the engine adds the imports and stubs the
+      earlier edits need, and later steps' lines follow what it added;
+      the end still adds whatever is left.*
+    - **Checkpoints in a batch** (the user's decision, 2026-10-20): a
+      step that type-checks, and optionally runs tests, at that point,
+      so a batch refused later keeps what passed before it. Next.
     - **Measure** by counting these refusals per run, by kind.
 
 Alongside: **edits**, steps that change behavior on purpose, so the

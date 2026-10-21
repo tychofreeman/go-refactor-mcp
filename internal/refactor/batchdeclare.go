@@ -21,8 +21,9 @@ var (
 // declareMissing runs opts.Declare on each file whose errors errs name
 // functions or methods nothing declares, for those names, except a name
 // close to one its package declares, which may be misspelled instead. It
-// returns the steps it applied, and a note on each name it left.
-func declareMissing(ws *workspace.Workspace, errs []string, opts Options) ([]*Result, []string, error) {
+// returns the steps it applied, and a note on each name it left; it calls
+// done on each step just after applying it.
+func declareMissing(ws *workspace.Workspace, errs []string, opts Options, done func(*Result)) ([]*Result, []string, error) {
 	byFile := map[string][]string{}
 	var files, skipped []string
 	for _, e := range errs {
@@ -65,6 +66,7 @@ func declareMissing(ws *workspace.Workspace, errs []string, opts Options) ([]*Re
 		}
 		res.Notes = append(res.Notes, fmt.Sprintf("added by the batch, since the steps call %s and nothing declares %s; check that %s meant to be new, not a misspelled name", orList(names, "and"), it, check))
 		declared = append(declared, res)
+		done(res)
 	}
 	return declared, skipped, nil
 }
@@ -74,8 +76,9 @@ func declareMissing(ws *workspace.Workspace, errs []string, opts Options) ([]*Re
 var importError = regexp.MustCompile(`^(.+\.go):\d+:\d+: (".+" imported (as \w+ )?and not used|undefined: \w+)$`)
 
 // fixImports runs opts.Imports on each file whose errors errs may be
-// imports to add or remove, and returns the steps it applied.
-func fixImports(ws *workspace.Workspace, errs []string, opts Options) ([]*Result, error) {
+// imports to add or remove, and returns the steps it applied; it calls
+// done on each step just after applying it.
+func fixImports(ws *workspace.Workspace, errs []string, opts Options, done func(*Result)) ([]*Result, error) {
 	var files []string
 	for _, e := range errs {
 		if m := importError.FindStringSubmatch(e); m != nil && !slices.Contains(files, m[1]) {
@@ -94,6 +97,7 @@ func fixImports(ws *workspace.Workspace, errs []string, opts Options) ([]*Result
 		}
 		if res.Applied {
 			fixed = append(fixed, res)
+			done(res)
 		}
 	}
 	return fixed, nil
