@@ -336,6 +336,33 @@ grows with the code, and these tasks have two or three uses of
 anything. The test of the thesis needs the same derivations on code
 with many uses.
 
+**On code with many uses (Oct 21).** The same five problems on a
+larger seeded module (`eval-tasks/testdata/notify-large`, 388 lines in
+three packages: four near-duplicate senders, five SMS methods that
+truncate, a report package reading `u.Email` and `u.Phone` about 30
+times, ten campaign functions calling `Broadcast`;
+`eval-tasks/derivations-large.json`), the same two arms, 3 runs each.
+Every run passed.
+
+| Run | mcp | turns per run | derived share | steps writing nothing | production lines written per run |
+|---|---|---|---|---|---|
+| large-base | $2.40 · 3.78M | 11.0 | 34% | 9% | 15.6 |
+| large-guided | $2.07 · 3.37M | 9.7 | 50% | 31% | 9.5 |
+
+Here the guidance paid: 14% less cost, 11% fewer input tokens, 39%
+fewer lines written by hand. The gap is where a derivation replaces
+rewriting each use: fit (6.3 lines written per run against 17.3,
+$0.11 against $0.14, 7.3 turns against 11: fold the five call sites
+onto `fit`, inline `truncate`) and Batch (15.7 against 32.0, 12 of 17
+steps writing nothing: expand, fold the ten callers, inline, rename).
+The control, opt-out, did not move (7.3 against 7.7), nor did the
+shared record, where neither arm used fold (the derivation needs a
+pointer alias, gap A). Contacts was cheaper ($0.18 against $0.23) but
+still mostly rewritten by text: the literals (gap K) and a getter for
+each of two fields, which fold took only twice. Three runs per task
+is within the noise for the totals; the written lines and the
+operations used are the clearer signal, and they point the same way.
+
 ## What made the difference
 
 - **Smaller results** (#75, rename locations): the largest single win when

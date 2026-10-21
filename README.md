@@ -718,9 +718,12 @@ hand or a tool got in the way.
       (cost-history section 8): the guidance made the model use the
       recipes where they fit (37% of steps writing nothing, against
       22%), at the same cost; on the seeded module manual edits are
-      small either way. Next: the same derivations on code with many
-      uses, where rewriting each use by hand grows and a derivation
-      does not.
+      small either way. *On code with many uses* (notify-large): the
+      guided arm cost 14% less, wrote 39% fewer lines by hand and 31%
+      of its steps wrote nothing (9% without), the gap on the tasks
+      where a derivation replaces rewriting each use (fit, Batch). Next:
+      the gaps those runs hit (pointer alias A for the shared record,
+      literal rewrite K for Contacts), and more runs per task.
 
 20. **Loops and containers** (asked for by the user, 2026-10-20): the
     structural moves on control flow that derivations need and no tool

@@ -1,0 +1,12 @@
+[
+  {"name": "large-shared-record", "dir": "testdata/notify-large", "tests": "testdata/large-shared-record", "check": "go vet ./... && go test ./...",
+   "prompt": "The Send methods of Email, SMS, Slack and Push in package notify do nearly the same thing. Make all four call one package-level function record(sent *[]string, channel, to, text string), which logs \"<channel> to <to>\" with the standard logger and appends \"<to>: <text>\" to *sent. What they send and log must not change."},
+  {"name": "large-optout", "dir": "testdata/notify-large", "tests": "testdata/large-optout", "check": "go vet ./... && go test ./...",
+   "prompt": "Users can opt out of channels. Add a field OptOut map[string]bool to notify.User, keyed by a channel's name (what Notifier.Name returns). Broadcast does not send on a channel the user opted out of, and that user's summary line lists only the channels it sent on."},
+  {"name": "large-contacts", "dir": "testdata/notify-large", "tests": "testdata/large-contacts", "check": "go vet ./... && go test ./...",
+   "prompt": "Replace the fields Email and Phone of notify.User with one field Contacts map[string]string, keyed by channel name: \"email\" for the email address and \"sms\" for the phone number. Everything that used them, in every package, must work as before."},
+  {"name": "large-fit", "dir": "testdata/notify-large", "tests": "testdata/large-fit", "check": "go vet ./... && go test ./...",
+   "prompt": "truncate is used only by SMS. Replace it with a method func (s *SMS) fit(text string) string that cuts text to the 20 bytes a text message holds, and remove truncate. What SMS's methods return and send must not change."},
+  {"name": "large-batch", "dir": "testdata/notify-large", "tests": "testdata/large-batch", "check": "go vet ./... && go test ./...",
+   "prompt": "Broadcast should take its users and message as one value. Add a type notify.Batch struct { Users []User; Message Message } and change Broadcast to func Broadcast(c Config, b Batch) []string, updating every caller in every package. What it sends and returns must not change."}
+]
