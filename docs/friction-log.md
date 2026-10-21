@@ -1688,3 +1688,12 @@ wanted `folder.assignedHole`), the docs with replace_text.
 
 All through `refactor batch`: replace_text steps in
 `docs/how-this-project-was-built.md` and this log, from JSON files.
+
+## 2026-10-21: remove a struct field (gaps L and N)
+
+All through gorefactor: fixtures with create_file (a struct written on
+one line with two fields was gofmt-ed onto lines, so that fixture
+became a one-field struct, by replace_text), the field support with
+replace_text and add_declaration in one batch checked at its end, the
+docs with replace_text. A batch of docs was refused once: its README
+text was from the K branch, not main.

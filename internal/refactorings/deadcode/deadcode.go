@@ -28,10 +28,11 @@ func New() *RemoveDeadCode { return &RemoveDeadCode{} }
 func (*RemoveDeadCode) Name() string { return "remove_dead_code" }
 
 func (*RemoveDeadCode) Description() string {
-	return `Delete a top-level declaration (function, method, type, variable or constant) that nothing uses, with its doc comment and the imports only it used.
+	return `Delete a top-level declaration (function, method, type, variable or constant), or a field of a struct type, that nothing uses, with its doc comment and the imports only it used.
 Use it to clean up after a change: a helper whose last call went, a copy that was merged, a variable no longer read.
-Identify it by file, line and name; also names more declarations of the package to remove with it, such as functions that only call each other or a type and its methods. It must be unused anywhere in the workspace (its own body, and those removed with it, aside), unexported (except in a main package, which nothing imports), not init, main or a test, benchmark, fuzz or example function, and not a method an interface in the workspace names. A variable's initializer must have no side effects. In a parenthesized group only its spec goes.
-Refuses blank names (var _ I = (*T)(nil) checks something at compile time), declarations with a //go:embed, //go:linkname or //export directive, a type that still has methods (remove them first), and a spec that declares other names still used.`
+Identify it by file, line and name; also names more declarations of the package to remove with it, such as functions that only call each other or a type and its methods. It must be unused anywhere in the workspace (its own body, and those removed with it, aside), unexported (except in a main package, which nothing imports, or with exported, when you know no other module uses it), not init, main or a test, benchmark, fuzz or example function, and not a method an interface in the workspace names. A variable's initializer must have no side effects. In a parenthesized group only its spec goes.
+Refuses blank names (var _ I = (*T)(nil) checks something at compile time), declarations with a //go:embed, //go:linkname or //export directive, a type that still has methods (remove them first), and a spec that declares other names still used.
+A field (Type.Field) goes when nothing reads, writes or names it in a literal, after its last use was moved elsewhere (a change of representation: fold literals through a setter, then remove the old fields). Refuses an embedded field, one declared with others (a, b int), a struct with an unkeyed literal, and one a value of which is passed as an interface (fmt, encoding/json and reflect see its fields).`
 }
 
 func (*RemoveDeadCode) InputSchema() json.RawMessage {
@@ -40,7 +41,8 @@ func (*RemoveDeadCode) InputSchema() json.RawMessage {
   "properties": {
     "file":   {"type": "string",  "description": "Path of the file declaring it, relative to the workspace root."},
     "line":   {"type": "integer", "description": "1-based line of its declaration. Omit it to find name as a symbol of the package of file."},
-    "name":   {"type": "string",  "description": "The declared name: with line, just the method name for a method; without line, the package-level name or Type.Method."},
+    "name":   {"type": "string",  "description": "The declared name: with line, just the method or field name; without line, the package-level name, Type.Method or Type.Field."},
+    "exported": {"type": "boolean", "description": "Optional: delete exported code too, when no other module uses it."},
     "column": {"type": "integer", "description": "Optional 1-based column, only needed to disambiguate."},
     "also":   {"type": "array", "items": {"type": "string"}, "description": "Optional: more names of the package to remove with it (Name or Type.Method); uses among them do not count."}
   },
@@ -50,11 +52,12 @@ func (*RemoveDeadCode) InputSchema() json.RawMessage {
 }
 
 type args struct {
-	File   string   `json:"file"`
-	Line   int      `json:"line"`
-	Column int      `json:"column,omitempty"`
-	Name   string   `json:"name"`
-	Also   []string `json:"also,omitempty"`
+	File     string   `json:"file"`
+	Line     int      `json:"line"`
+	Column   int      `json:"column,omitempty"`
+	Name     string   `json:"name"`
+	Exported bool     `json:"exported,omitempty"`
+	Also     []string `json:"also,omitempty"`
 }
 
 // Plan checks preconditions and computes the edits.
@@ -73,7 +76,7 @@ func (*RemoveDeadCode) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refa
 	}
 	for _, t := range group {
 		t.group = group
-		if err := t.check(ws); err != nil {
+		if err := t.check(ws, a.Exported); err != nil {
 			return nil, err
 		}
 	}
@@ -138,6 +141,9 @@ func targetOf(ws *workspace.Workspace, q locate.IdentQuery) (*target, error) {
 	obj := pkg.TypesInfo.ObjectOf(id)
 	if obj == nil || obj.Pkg() == nil {
 		return nil, refactor.Refusef("%s at %s is not a declared name", q.Name, ws.Position(id.Pos()))
+	}
+	if v, ok := obj.(*types.Var); ok && v.IsField() {
+		return findField(ws, pkg, v)
 	}
 	if fn, ok := obj.(*types.Func); !(ok && fn.Signature().Recv() != nil) && obj.Parent() != obj.Pkg().Scope() {
 		return nil, refactor.Refusef("%s is not declared at the top level; only top-level declarations are supported", q.Name)
