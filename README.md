@@ -843,6 +843,15 @@ hand or a tool got in the way.
       interfaces in every package (`analysis.InterfaceWithMethod`).
     - `extract_struct` of an exported struct. *Done:* the note adds
       that other modules' literals cannot name the moved fields.
+      Literals in other packages of this module wrote the new type
+      unqualified (found by explorer 7, three Contacts runs); *fixed:*
+      qualified, and an unexported new type is refused there.
+    - Next, from explorer 7 on all five tasks: `add_parameter` and
+      `introduce_parameter` write one value for every call, so a value
+      of a type of the callee's package cannot be both `notify.Batch`
+      in other packages and `Batch` in its own (batch failed 2 of 3);
+      write it qualified per call. And a `move_declaration` that left
+      code that did not compile (batch run 3), to reproduce.
     - The method guards (`extract_function` from a method,
       `function_to_method`, `method_to_function`): in place of an
       unexported name, refuse only a method that changes which

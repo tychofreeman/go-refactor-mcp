@@ -1738,6 +1738,13 @@ tool copies a file). The Contacts derivation was run with the
 two getter lines it counts, and the field deletions by replace_text
 after `remove_dead_code` refused falsely.
 
+## 2026-10-21: extract_struct qualifies the new type in other packages
+
+All through gorefactor: the golden cases with create_file, the fix with
+replace_text and add_declaration in one batch, the docs with
+replace_text. Checked on a copy of notify-large with the `refactor`
+CLI.
+
 ## 2026-10-21: exported methods made, moved and dropped
 
 All through gorefactor: the golden cases with move_file, delete_file,

@@ -22,6 +22,7 @@ import (
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
+	"github.com/tychofreeman/go-refactor-mcp/internal/imports"
 	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
@@ -40,7 +41,7 @@ func (*ExtractStruct) Description() string {
 	return `Move some fields of a struct type into a new struct type, declared just before it and embedded in their place, so every use (m.path) keeps working through the embedded struct. Composite literals are rewritten: mover{path: p} becomes mover{source: source{path: p}}, point3{1, 2, 3} becomes point3{xy{1, 2}, 3}.
 Use it to split a struct that holds two things, before giving the new type its own methods (function_to_method) or its own file or package (move_declaration).
 Identify the struct by file, line and name, at its declaration or any use; give fields, the names to move (in any order; they keep the struct's order), and new_type.
-An exported struct type too, with a note that the module's API changed. Only when no value holding the type (itself, a pointer to it, or a slice, map or struct holding it) is passed to an interface parameter or converted to an interface: reflection (fmt's %+v, encoding/json) would see the new embedded field. Assigning one to an interface variable is not checked.
+An exported struct type too, with a note that the module's API changed; its literals in other packages name the new type qualified (pkg.T), so new_type must then be exported. Only when no value holding the type (itself, a pointer to it, or a slice, map or struct holding it) is passed to an interface parameter or converted to an interface: reflection (fmt's %+v, encoding/json) would see the new embedded field. Assigning one to an interface variable is not checked.
 Refuses a generic struct, an embedded field among those to move, part of a field group (x, y int), a new_type the package already declares or that is a field or method of the struct, a name another embedded field also has (it would become ambiguous), an unkeyed literal when the fields to move are not next to each other, and a multi-line literal with comments between its elements.`
 }
 
@@ -80,6 +81,7 @@ type extraction struct {
 	path    string // the declaring file
 	src     []byte
 	newType string
+	adders  map[string]*imports.Adder // by file, for literals outside the struct's package
 
 	moving  map[string]bool // the field names that move
 	fields  []*ast.Field    // the fields that move, in order
@@ -122,6 +124,9 @@ func (*ExtractStruct) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refac
 	}
 	var fes []edit.FileEdit
 	for path, es := range x.litEdit {
+		if a := x.adders[path]; a != nil {
+			es = append(es, a.Edits()...)
+		}
 		fes = append(fes, edit.FileEdit{Path: path, Edits: es})
 	}
 	fes = append(fes, edit.FileEdit{Path: x.path, Edits: x.declEdits()})
@@ -372,6 +377,10 @@ func (x *extraction) rewrite(l lit) (bool, error) {
 	}
 	cl := l.expr
 	text := func(e ast.Node) string { return x.textWithEdits(l.path, src, e) }
+	typ, err := x.typeText(l, src)
+	if err != nil {
+		return false, err
+	}
 	var elts []string
 	if _, keyed := cl.Elts[0].(*ast.KeyValueExpr); keyed {
 		var group []string
@@ -391,7 +400,7 @@ func (x *extraction) rewrite(l lit) (bool, error) {
 		if at < 0 {
 			return false, nil
 		}
-		elts[at] = x.newType + ": " + x.newType + "{" + strings.Join(group, ", ") + "}"
+		elts[at] = x.newType + ": " + typ + "{" + strings.Join(group, ", ") + "}"
 	} else {
 		if !x.contig {
 			var names []string
@@ -415,7 +424,7 @@ func (x *extraction) rewrite(l lit) (bool, error) {
 				group = append(group, text(e))
 			}
 		}
-		elts[x.lo] = x.newType + "{" + strings.Join(group, ", ") + "}"
+		elts[x.lo] = typ + "{" + strings.Join(group, ", ") + "}"
 	}
 
 	tf := x.ws.Fset.File(cl.Pos())
@@ -438,6 +447,32 @@ func (x *extraction) rewrite(l lit) (bool, error) {
 	b.WriteString(closing + "}")
 	x.replace(l.path, src, cl.Lbrace, cl.Rbrace+1, b.String())
 	return true, nil
+}
+
+// typeText is how l's file writes the new type: by its name in the
+// struct's package, qualified in another (importing the struct's package
+// if the file does not).
+func (x *extraction) typeText(l lit, src []byte) (string, error) {
+	if l.pkg.Types == nil || l.pkg.Types.Path() == x.tn.Pkg().Path() {
+		return x.newType, nil
+	}
+	if !token.IsExported(x.newType) {
+		return "", refactor.Refusef("the literal at %s is in package %s, and package %s cannot name the unexported %s; give new_type an exported name",
+			x.ws.Position(l.expr.Pos()), l.pkg.Name, l.pkg.Name, x.newType)
+	}
+	if x.adders == nil {
+		x.adders = map[string]*imports.Adder{}
+	}
+	a := x.adders[l.path]
+	if a == nil {
+		a = imports.New(x.ws, l.pkg, fileOf(l.pkg, l.path), src)
+		x.adders[l.path] = a
+	}
+	name, err := a.Name(x.tn.Pkg())
+	if err != nil {
+		return "", err
+	}
+	return name + "." + x.newType, nil
 }
 
 // textWithEdits returns n's source with the literal rewrites inside it
