@@ -52,7 +52,7 @@ func (*InlineVariable) Description() string {
 	return `Replace every use of a local variable (or local constant) with the expression it is initialized with, and delete its declaration. The inverse of extract_variable.
 Use it to remove a variable whose name adds nothing, such as one that is set and then used once immediately, or to undo an unhelpful extraction.
 Identify the variable by file, line and name, at its declaration or at any use; or by file, function ("Name" or "Type.Method") and name, which stays valid after edits, e.g. later in a batch.
-Works for "x := expr", "var x [T] = expr" and "const x [T] = expr", also in an if or switch header. If the variable's type differs from the expression's own type (an explicit type, an untyped constant, an interface), the expression is converted so the type is kept.
+Works for "x := expr", "var x [T] = expr" and "const x [T] = expr", also in an if or switch header. A pointer alias (p := &e.f, as extract_variable with pointer makes) is inlined as e.f where it is dereferenced (*p, p.x) and &e.f elsewhere. If the variable's type differs from the expression's own type (an explicit type, an untyped constant, an interface), the expression is converted so the type is kept.
 Refuses if the variable is ever assigned or its address is taken; if inlining would evaluate the expression a different number of times or in a different order (an initializer with function calls, or that reads data other code can change, needs exactly one use, evaluated exactly once in the same block with no calls in between); if a variable the expression reads is modified before a use; or if a name in the expression would mean something else at a use.`
 }
 
@@ -144,12 +144,12 @@ func (x *inliner) plan() (*refactor.Plan, error) {
 	var edits []edit.TextEdit
 	converted := false
 	for _, u := range x.uses {
-		text, conv, err := x.replacement(u)
+		n, text, conv, err := x.replacement(u)
 		if err != nil {
 			return nil, err
 		}
 		converted = converted || conv
-		edits = append(edits, edit.TextEdit{Start: x.off(u.Pos()), End: x.off(u.End()), NewText: text})
+		edits = append(edits, edit.TextEdit{Start: x.off(n.Pos()), End: x.off(n.End()), NewText: text})
 	}
 	edits = append(edits, x.deletion())
 
@@ -313,7 +313,7 @@ func (x *inliner) checkVariable() error {
 // checkEvaluation ensures the initializer is evaluated as often and in the
 // same order relative to other effects after inlining.
 func (x *inliner) checkEvaluation() error {
-	culprit, ok := x.fa.Stable(x.init, true)
+	culprit, ok := x.stable(true)
 	if ok {
 		culprit = analysis.MayPanic(x.info, x.init)
 		if culprit == nil {
@@ -333,7 +333,7 @@ func (x *inliner) checkEvaluation() error {
 	if err != nil {
 		return err
 	}
-	if _, ok := x.fa.Stable(x.init, false); ok && analysis.MayPanic(x.info, x.init) == nil {
+	if _, ok := x.stable(false); ok && analysis.MayPanic(x.info, x.init) == nil {
 		return nil // no effects and nothing else can change it: only the count mattered
 	}
 	if x.owner == nil {
@@ -481,7 +481,7 @@ func (x *inliner) firstEffectBetween(stmt ast.Stmt) ast.Node {
 // again later).
 func (x *inliner) checkReadsUnchanged() error {
 	last := x.uses[len(x.uses)-1].Pos()
-	for _, v := range x.fa.LocalsRead(x.init) {
+	for _, v := range x.reads() {
 		for _, m := range x.fa.Modified[v] {
 			if m.Pos() <= x.declStmt.End() {
 				continue
@@ -567,15 +567,21 @@ func (x *inliner) checkScopes() error {
 // ---------------------------------------------------------------------------
 // The replacement text
 
-// replacement returns the text to put in place of use: the initializer,
-// converted to the variable's type if needed and parenthesized if the
-// context requires it.
-func (x *inliner) replacement(use *ast.Ident) (string, bool, error) {
+// replacement returns the node to replace at use and the text to put
+// there: the initializer, converted to the variable's type if needed and
+// parenthesized if the context requires it; or, where a pointer alias is
+// dereferenced, what it points to.
+func (x *inliner) replacement(use *ast.Ident) (ast.Node, string, bool, error) {
 	path := analysis.PathTo(x.file, use)
 	parent := path[1]
+	if e := x.aliased(); e != nil {
+		if n, text, ok := x.dereference(path, e); ok {
+			return n, text, false, nil
+		}
+	}
 	text := string(x.text(x.init))
 	if err := x.checkConstantContext(use, parent); err != nil {
-		return "", false, err
+		return nil, "", false, err
 	}
 	if x.needsConversion(use, parent) {
 		t := x.typeName()
@@ -583,14 +589,78 @@ func (x *inliner) replacement(use *ast.Ident) (string, bool, error) {
 			t = "(" + t + ")"
 		}
 		if _, missing := analysis.TypeString(x.obj.Type(), x.file, x.pkg.Types, analysis.ImportMap(x.pkg.Types)); missing != "" {
-			return "", false, refactor.Refusef("the inlined expression needs a conversion to %s, but this file does not import %q", x.typeName(), missing)
+			return nil, "", false, refactor.Refusef("the inlined expression needs a conversion to %s, but this file does not import %q", x.typeName(), missing)
 		}
-		return t + "(" + strings.TrimSpace(string(x.text(ast.Unparen(x.init)))) + ")", true, nil
+		return use, t + "(" + strings.TrimSpace(string(x.text(ast.Unparen(x.init)))) + ")", true, nil
 	}
 	if analysis.NeedsParens(ast.Unparen(x.init), parent, use) || analysis.InControlHeader(x.init, path) {
-		return "(" + text + ")", false, nil
+		return use, "(" + text + ")", false, nil
 	}
-	return text, false, nil
+	return use, text, false, nil
+}
+
+// aliased returns what a pointer alias points to: e, when the initializer
+// is &e for an addressable e (not &T{...}, which makes a new value), or
+// nil.
+func (x *inliner) aliased() ast.Expr {
+	u, ok := ast.Unparen(x.init).(*ast.UnaryExpr)
+	if !ok || u.Op != token.AND || !x.info.Types[u.X].Addressable() {
+		return nil
+	}
+	return u.X
+}
+
+// dereference returns, for a use of a pointer alias that goes through the
+// pointer (*p, p.f, p[i]), the node to replace and the expression it
+// points to, written for that place.
+func (x *inliner) dereference(path []ast.Node, target ast.Expr) (ast.Node, string, bool) {
+	text := string(x.text(target))
+	n, parent := path[0].(ast.Expr), path[1]
+	switch p := parent.(type) {
+	case *ast.StarExpr:
+		if paren, ok := path[2].(*ast.ParenExpr); ok && !analysis.NeedsParens(target, path[3], paren) {
+			return paren, text, true // (*p).f becomes e.f
+		}
+		n, parent = p, path[2]
+	case *ast.SelectorExpr:
+		if p.X != n {
+			return nil, "", false
+		}
+	case *ast.IndexExpr:
+		if p.X != n {
+			return nil, "", false
+		}
+	default:
+		return nil, "", false
+	}
+	if analysis.NeedsParens(target, parent, n) {
+		text = "(" + text + ")"
+	}
+	return n, text, true
+}
+
+// stable is Func.Stable for the initializer, or, for a pointer alias,
+// Func.StableAddress for what it points to.
+func (x *inliner) stable(sharing bool) (ast.Node, bool) {
+	if e := x.aliased(); e != nil {
+		return x.fa.StableAddress(e)
+	}
+	return x.fa.Stable(x.init, sharing)
+}
+
+// reads returns the locals the initializer's value depends on: for a
+// pointer alias, those its address depends on.
+func (x *inliner) reads() []*types.Var {
+	e := x.aliased()
+	if e == nil {
+		return x.fa.LocalsRead(x.init)
+	}
+	ops, _ := x.fa.AddressOperands(e)
+	var vs []*types.Var
+	for _, op := range ops {
+		vs = append(vs, x.fa.LocalsRead(op)...)
+	}
+	return vs
 }
 
 func (x *inliner) typeName() string {

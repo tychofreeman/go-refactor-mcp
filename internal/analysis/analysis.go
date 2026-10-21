@@ -338,6 +338,53 @@ func (f *Func) Stable(e ast.Expr, sharing bool) (ast.Node, bool) {
 	return e, false
 }
 
+// AddressOperands returns the operands whose values e's address depends
+// on (a pointer it goes through, a slice and the index into it), or, if
+// its address is not made of variables and such operands, the
+// sub-expression that is not.
+func (f *Func) AddressOperands(e ast.Expr) ([]ast.Expr, ast.Node) {
+	switch e := ast.Unparen(e).(type) {
+	case *ast.Ident:
+		if _, ok := f.Info.Uses[e].(*types.Var); ok {
+			return nil, nil
+		}
+	case *ast.SelectorExpr:
+		if sel := f.Info.Selections[e]; sel != nil && sel.Kind() == types.FieldVal {
+			if sel.Indirect() || IsPointer(f.Info.TypeOf(e.X)) {
+				return []ast.Expr{e.X}, nil
+			}
+			return f.AddressOperands(e.X)
+		}
+	case *ast.IndexExpr:
+		if IsArray(f.Info.TypeOf(e.X)) {
+			ops, c := f.AddressOperands(e.X)
+			if c != nil {
+				return nil, c
+			}
+			return append(ops, e.Index), nil
+		}
+		return []ast.Expr{e.X, e.Index}, nil
+	case *ast.StarExpr:
+		return []ast.Expr{e.X}, nil
+	}
+	return nil, e
+}
+
+// StableAddress is Stable for e's address rather than its value: it
+// depends only on operands that are stable.
+func (f *Func) StableAddress(e ast.Expr) (ast.Node, bool) {
+	ops, culprit := f.AddressOperands(e)
+	if culprit != nil {
+		return culprit, false
+	}
+	for _, op := range ops {
+		if c, ok := f.Stable(op, false); !ok {
+			return c, false
+		}
+	}
+	return nil, true
+}
+
 // MayPanic returns the first sub-expression of e whose evaluation can panic,
 // or nil: an integer division or remainder by a divisor that is not
 // constant, a shift by a signed count that is not constant, an index that

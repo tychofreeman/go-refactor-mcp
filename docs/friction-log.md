@@ -1655,3 +1655,15 @@ by a generator script in the scratchpad, not through gorefactor; the
 tasks, hidden tests and docs through gorefactor. Validating against
 reference solutions caught a wrong expected value in a hidden test,
 fixed with replace_text.
+
+## 2026-10-21: extract_variable with pointer
+
+All through gorefactor: fixtures with create_file, the option with
+add_field, replace_statements, replace_text and add_declaration in two
+batches; fold's message for statement bodies in one more. The
+round-trip test (extract, then inline back) asked for the inverse:
+inline_variable now inlines a pointer alias, with the address check
+moved to `analysis`, in one batch with remove_dead_code. Tried on a
+copy of notify-large with `cmd/refactor`: the shared-record derivation
+now needs the alias in every Send method before fold matches them
+(gap O).
