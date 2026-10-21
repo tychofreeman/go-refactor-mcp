@@ -1737,3 +1737,9 @@ tool copies a file). The Contacts derivation was run with the
 `refactor` CLI on a scratch copy of the module: no hand edits but the
 two getter lines it counts, and the field deletions by replace_text
 after `remove_dead_code` refused falsely.
+
+## 2026-10-21: sort.Slice is not reflection on fields
+
+All through gorefactor: the golden cases with create_file, the fix
+with replace_text and add_declaration in one batch, the docs with
+replace_text.

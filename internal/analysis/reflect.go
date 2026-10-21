@@ -5,11 +5,22 @@ import (
 	"go/types"
 )
 
+// swapsOnly holds the functions that take a slice as an interface and
+// whose reflection only measures it and swaps its elements, never
+// looking at what they hold.
+var swapsOnly = map[string]bool{
+	"sort.Slice":         true,
+	"sort.SliceStable":   true,
+	"sort.SliceIsSorted": true,
+	"reflect.Swapper":    true,
+}
+
 // PassedAsInterface returns the first argument in files that is passed to
 // an interface parameter, or converted to an interface type, and whose
 // type holds a type match accepts, or nil. Reflection there (encoding/json,
 // text/template, fmt's %+v) sees what the value holds: its field names
-// among others. Assignments to interface variables and returns are not
+// among others. Arguments of sort.Slice and the like, which only swap
+// elements, and assignments to interface variables and returns are not
 // looked at.
 func PassedAsInterface(info *types.Info, files []*ast.File, match func(types.Type) bool) ast.Expr {
 	var found ast.Expr
@@ -18,6 +29,9 @@ func PassedAsInterface(info *types.Info, files []*ast.File, match func(types.Typ
 			call, ok := n.(*ast.CallExpr)
 			if !ok || found != nil {
 				return found == nil
+			}
+			if fn := staticCallee(info, call); fn != nil && swapsOnly[fn.FullName()] {
+				return true
 			}
 			tv := info.Types[call.Fun]
 			var param func(i int) types.Type
