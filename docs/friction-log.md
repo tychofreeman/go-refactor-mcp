@@ -1454,6 +1454,12 @@ refusal, which became a success case, was removed with `git rm`;
 nothing removes a file. PosMapOf began as a stub in a batch with its
 test, so the test could fail first.
 
+## 2026-10-20: change_field_type
+
+All through gorefactor: fixtures and the tool with create_file (the
+test's call of NewChangeFieldType got a stub, removed in the batch that
+created the file), a fixture's column with replace_text.
+
 ## 2026-10-20: a signature changed by text points to the tools
 
 All through gorefactor: the test with add_declaration, the note and its
