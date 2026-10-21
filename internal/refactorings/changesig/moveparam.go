@@ -28,7 +28,8 @@ func (*MoveParameter) Description() string {
 Use it to prepare a feature change, for example to put parameters in the order a new caller or an interface wants.
 Identify the function by file, line and name, at its declaration or any call. Give the parameter to move and optionally before: the parameter it should go just before (default: the end, or just before a variadic parameter).
 Moving an argument changes the order in which a call evaluates its arguments, so this is refused at any call where that order could matter: the moved argument and one it passes over where one has side effects and the other reads a variable, or both could have side effects or panic.
-Refuses if the function is used other than by calling it (as a function value or method expression), if a method would stop or start implementing an interface declared outside the module (which could silently change a type assertion). An interface method of the module changes with every method of the module's types that implements it, and such a method with the interface: name any of them, if the parameter is variadic, or if a moved argument contains another call of the function.`
+Refuses if the function is used other than by calling it (as a function value or method expression), if a method would stop or start implementing an interface declared outside the module (which could silently change a type assertion), if the parameter is variadic, or if a moved argument contains another call of the function.
+An interface method of the module changes with every method of the module's types that implements it, and such a method with the interface: name any of them.`
 }
 
 func (*MoveParameter) InputSchema() json.RawMessage {
