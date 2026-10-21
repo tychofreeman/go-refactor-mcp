@@ -120,7 +120,7 @@ func runBatch(argv []string, dir, pattern string, dryRun bool) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	b, err := refactor.RunBatch(ws, batch.Steps, refactor.Options{Unchecked: batch.Unchecked, Declare: refactorings.Declarer()})
+	b, err := refactor.RunBatch(ws, batch.Steps, refactor.Options{Unchecked: batch.Unchecked, Declare: refactorings.Declarer(), Imports: refactorings.Importer()})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		return 1

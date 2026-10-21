@@ -537,7 +537,12 @@ hand or a tool got in the way.
       typed by their use, and `struct{}` for a type named only as a
       field's or parameter's type.
     - **Imports in every edit:** `replace_text` adds those new code needs,
-      and every edit removes those it leaves unused.
+      and every edit removes those it leaves unused. *Done: replace_text
+      adds them (#173), and when an edit leaves code that does not
+      type-check, the engine runs `fix_imports` (not a tool of its own)
+      on the files with import errors before it declares stubs: it adds
+      the imports names unambiguously need and removes those nothing
+      uses.*
     - **Signature and type changes that carry their consequences:**
       `change_signature` (parameters and results, every call, and for a
       method its interface and the interface's other implementers), and

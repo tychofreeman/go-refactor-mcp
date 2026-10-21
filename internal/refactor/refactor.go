@@ -147,6 +147,7 @@ type Options struct {
 	Compact   bool        // show the diff without context lines: what changed and where, at less cost to read
 	Unchecked bool        // an edit may start from and leave code that does not type-check: a batch checked at its end
 	Declare   Refactoring // with Unchecked, in a batch: declares what the steps call but nothing declares (create_from_usage)
+	Imports   Refactoring // with Unchecked, in a batch: adds the imports the steps' code needs and removes those it leaves unused (fix_imports)
 }
 
 // Run executes one refactoring step.
@@ -393,7 +394,7 @@ func RunBatch(ws *workspace.Workspace, steps []Step, opts Options) (*BatchResult
 	if err != nil || b.Applied || opts.Unchecked || !retriable(b, opts) {
 		return b, err
 	}
-	retry, err := runBatch(ws, steps, Options{Compact: opts.Compact, Unchecked: true, Declare: opts.Declare})
+	retry, err := runBatch(ws, steps, Options{Compact: opts.Compact, Unchecked: true, Declare: opts.Declare, Imports: opts.Imports})
 	if err != nil {
 		return nil, err
 	}
@@ -418,7 +419,7 @@ func RunBatch(ws *workspace.Workspace, steps []Step, opts Options) (*BatchResult
 // apply checked at its end: an edit that does not type-check, before the
 // last step or with something to declare what it calls.
 func retriable(b *BatchResult, opts Options) bool {
-	return b.FailedStep > 0 && strings.HasPrefix(b.Refused, "the result does not type-check") && (b.FailedStep < b.Total || opts.Declare != nil)
+	return b.FailedStep > 0 && strings.HasPrefix(b.Refused, "the result does not type-check") && (b.FailedStep < b.Total || opts.Declare != nil || opts.Imports != nil)
 }
 
 // runBatch runs steps once, type-checked as opts says.
@@ -481,6 +482,21 @@ func runBatch(ws *workspace.Workspace, steps []Step, opts Options) (*BatchResult
 	}
 	if opts.Unchecked {
 		errs := ws.Errors()
+		if len(errs) > 0 && opts.Imports != nil {
+			fixed, err := fixImports(ws, errs, opts)
+			for _, res := range fixed {
+				b.Steps = append(b.Steps, res)
+				applied++
+				names = append(names, res.Refactoring)
+			}
+			if err != nil {
+				if rerr := rollback(); rerr != nil {
+					return nil, fmt.Errorf("fixing imports: %v; %v", err, rerr)
+				}
+				return nil, fmt.Errorf("fixing imports: %w", err)
+			}
+			errs = ws.Errors()
+		}
 		var skipped []string
 		if len(errs) > 0 && opts.Declare != nil {
 			declared, notDeclared, err := declareMissing(ws, errs, opts)

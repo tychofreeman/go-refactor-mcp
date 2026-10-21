@@ -65,6 +65,36 @@ func declareMissing(ws *workspace.Workspace, errs []string, opts Options) ([]*Re
 	return declared, skipped, nil
 }
 
+// importError is an error an import fix may clear: an import nothing
+// uses, or a name that may be a package not imported.
+var importError = regexp.MustCompile(`^(.+\.go):\d+:\d+: (".+" imported (as \w+ )?and not used|undefined: \w+)$`)
+
+// fixImports runs opts.Imports on each file whose errors errs may be
+// imports to add or remove, and returns the steps it applied.
+func fixImports(ws *workspace.Workspace, errs []string, opts Options) ([]*Result, error) {
+	var files []string
+	for _, e := range errs {
+		if m := importError.FindStringSubmatch(e); m != nil && !slices.Contains(files, m[1]) {
+			files = append(files, m[1])
+		}
+	}
+	var fixed []*Result
+	for _, file := range files {
+		args, err := json.Marshal(map[string]any{"file": file})
+		if err != nil {
+			return fixed, err
+		}
+		res, err := Run(ws, opts.Imports, args, Options{Compact: opts.Compact, Unchecked: true})
+		if err != nil {
+			return fixed, err
+		}
+		if res.Applied {
+			fixed = append(fixed, res)
+		}
+	}
+	return fixed, nil
+}
+
 // notCalled is opts.Declare's refusal of a name the file does not call,
 // such as an undefined variable.
 var notCalled = regexp.MustCompile(`calls no undeclared function (\w+)$`)

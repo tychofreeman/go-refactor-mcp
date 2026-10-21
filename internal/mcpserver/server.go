@@ -317,7 +317,7 @@ func (s *Server) batch(args json.RawMessage) *mcp.CallToolResult {
 	if err != nil {
 		return toolError(err)
 	}
-	b, err := refactor.RunBatch(ws, batch.Steps, refactor.Options{Compact: !s.FullDiffs, Unchecked: batch.Unchecked, Declare: refactorings.Declarer()})
+	b, err := refactor.RunBatch(ws, batch.Steps, refactor.Options{Compact: !s.FullDiffs, Unchecked: batch.Unchecked, Declare: refactorings.Declarer(), Imports: refactorings.Importer()})
 	if err != nil {
 		return toolError(err)
 	}
