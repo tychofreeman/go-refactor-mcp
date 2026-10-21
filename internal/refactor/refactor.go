@@ -535,8 +535,54 @@ func runBatch(ws *workspace.Workspace, steps []Step, opts Options) (*BatchResult
 		return nil
 	}
 	var names []string
+	// complete adds what the engine supplies for the steps' edits: the
+	// imports their code needs, then stubs for what it calls but nothing
+	// declares. Before step next (an index; len(steps) at the end), the
+	// later steps' lines follow what it adds. It returns notes on the
+	// names it did not declare.
+	complete := func(next int) ([]string, error) {
+		done := func(res *Result) {
+			b.Steps = append(b.Steps, res)
+			applied++
+			names = append(names, res.Refactoring)
+			if next < len(steps) {
+				followStep(ws, made, next, lines, res)
+			}
+		}
+		errs := ws.Errors()
+		if len(errs) > 0 && opts.Imports != nil {
+			_, err := fixImports(ws, errs, opts, done)
+			if err != nil {
+				if rerr := rollback(); rerr != nil {
+					return nil, fmt.Errorf("fixing imports: %v; %v", err, rerr)
+				}
+				return nil, fmt.Errorf("fixing imports: %w", err)
+			}
+			errs = ws.Errors()
+		}
+		if len(errs) == 0 || opts.Declare == nil {
+			return nil, nil
+		}
+		_, notDeclared, err := declareMissing(ws, errs, opts, done)
+		if err != nil {
+			if rerr := rollback(); rerr != nil {
+				return nil, fmt.Errorf("declaring what the steps call: %v; %v", err, rerr)
+			}
+			return nil, fmt.Errorf("declaring what the steps call: %w", err)
+		}
+		return notDeclared, nil
+	}
 	for i, s := range steps {
 		name := s.Refactoring.Name()
+		_, isEdit := s.Refactoring.(Edit)
+		_, isFix := s.Refactoring.(Fix)
+		if opts.Unchecked && !isEdit && !isFix && len(ws.Errors()) > 0 {
+			// A refactoring needs code that type-checks: supply now what
+			// would otherwise be supplied at the end.
+			if _, err := complete(i); err != nil {
+				return nil, err
+			}
+		}
 		// Names first, so that a line given as line_no is translated too.
 		args, took := aliasArgs(s.Refactoring.InputSchema(), s.Args)
 		if file, byLine := lineAddressed(args); byLine {
@@ -571,39 +617,11 @@ func runBatch(ws *workspace.Workspace, steps []Step, opts Options) (*BatchResult
 		followStep(ws, made, i, lines, res)
 	}
 	if opts.Unchecked {
+		skipped, err := complete(len(steps))
+		if err != nil {
+			return nil, err
+		}
 		errs := ws.Errors()
-		if len(errs) > 0 && opts.Imports != nil {
-			fixed, err := fixImports(ws, errs, opts)
-			for _, res := range fixed {
-				b.Steps = append(b.Steps, res)
-				applied++
-				names = append(names, res.Refactoring)
-			}
-			if err != nil {
-				if rerr := rollback(); rerr != nil {
-					return nil, fmt.Errorf("fixing imports: %v; %v", err, rerr)
-				}
-				return nil, fmt.Errorf("fixing imports: %w", err)
-			}
-			errs = ws.Errors()
-		}
-		var skipped []string
-		if len(errs) > 0 && opts.Declare != nil {
-			declared, notDeclared, err := declareMissing(ws, errs, opts)
-			for _, res := range declared {
-				b.Steps = append(b.Steps, res)
-				applied++
-				names = append(names, res.Refactoring)
-			}
-			if err != nil {
-				if rerr := rollback(); rerr != nil {
-					return nil, fmt.Errorf("declaring what the steps call: %v; %v", err, rerr)
-				}
-				return nil, fmt.Errorf("declaring what the steps call: %w", err)
-			}
-			skipped = notDeclared
-			errs = ws.Errors()
-		}
 		if len(errs) > 0 {
 			b.Refused = fmt.Sprintf("after all %d step%s the code does not type-check, so the batch was rolled back. Errors were:\n  %s",
 				len(steps), textutil.Plural(len(steps)), strings.Join(limit(errs, 10), "\n  "))

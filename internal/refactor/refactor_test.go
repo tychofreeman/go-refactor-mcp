@@ -891,6 +891,71 @@ func TestBatchDeclaresMissing(t *testing.T) {
 	}
 }
 
+// A refactoring after an edit that calls what nothing declares yet runs
+// on code with the stubs in place: they are declared just before it, not
+// only at the end of the batch.
+func TestBatchDeclaresBeforeARefactoring(t *testing.T) {
+	opts := refactor.Options{Unchecked: true, Declare: declare{"\nfunc G() int { return 0 }\n"}}
+	ws, path := setup(t, src)
+	b, err := refactor.RunBatch(ws, []refactor.Step{
+		{Refactoring: callG{"G"}},
+		{Refactoring: markLine{}, Args: json.RawMessage(`{"file": "m.go", "line": 3}`)},
+	}, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := b.String()
+	if !b.Applied || !strings.Contains(out, "1. call_g") || !strings.Contains(out, "2. declare") || !strings.Contains(out, "3. mark_line") {
+		t.Fatalf("want G declared between the edit and the refactoring, got:\n%s", out)
+	}
+	if got, _ := os.ReadFile(path); !strings.Contains(string(got), "// mark\nfunc F()") || !strings.Contains(string(got), "func G() int") {
+		t.Errorf("file:\n%s", got)
+	}
+	if _, err := ws.Undo(); err != nil || ws.CanUndo() {
+		t.Errorf("want one undo for the batch: %v", err)
+	}
+}
+
+// declareTop is a fix like declare, but puts decl after the package
+// clause, above the lines later steps address.
+type declareTop struct{ decl string }
+
+func (declareTop) Name() string                 { return "declare" }
+func (declareTop) Description() string          { return "" }
+func (declareTop) InputSchema() json.RawMessage { return json.RawMessage(`{}`) }
+func (declareTop) ChangesBehavior()             {}
+func (declareTop) Fixes()                       {}
+func (d declareTop) Plan(ws *workspace.Workspace, _ json.RawMessage) (*refactor.Plan, error) {
+	path := ws.Abs("m.go")
+	src, _ := os.ReadFile(path)
+	at := strings.Index(string(src), "\n\n") + 2
+	return &refactor.Plan{
+		Summary: "declared",
+		Edits:   []edit.FileEdit{{Path: path, Edits: []edit.TextEdit{{Start: at, End: at, NewText: d.decl}}}},
+		Choices: []string{strings.TrimSpace(d.decl)},
+	}, nil
+}
+
+// A stub declared before a refactoring moves the lines below it; a later
+// step's line, given as it was when the batch began, follows.
+func TestBatchFollowsLinesThroughStubs(t *testing.T) {
+	opts := refactor.Options{Unchecked: true, Declare: declareTop{"func G() int { return 0 }\n\n"}}
+	ws, path := setup(t, src)
+	b, err := refactor.RunBatch(ws, []refactor.Step{
+		{Refactoring: callG{"G"}},
+		{Refactoring: markLine{}, Args: json.RawMessage(`{"file": "m.go", "line": 3}`)},
+	}, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !b.Applied {
+		t.Fatalf("batch refused: %s", b)
+	}
+	if got, _ := os.ReadFile(path); !strings.Contains(string(got), "// mark\nfunc F()") {
+		t.Errorf("the mark is not on func F's line:\n%s", got)
+	}
+}
+
 // echo is a tool that shows the arguments it was given, as JSON.
 type echo struct{}
 

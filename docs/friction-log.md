@@ -1500,6 +1500,12 @@ engine's Expander, runExpanded and the inliner's Expand and callsOf
 with add_declaration, the arguments with add_field, the schema,
 description and docs with replace_text.
 
+## 2026-10-20: stubs declared before a refactoring
+
+All through `refactor batch`: the tests with add_declaration, the
+engine's change with replace_text. One wrong test, mine: it addressed a
+line the first step had rewritten, which the batch rightly refused.
+
 ## 2026-10-20: change_type
 
 All through `refactor batch`: the package and its test with create_file

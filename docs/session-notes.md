@@ -44,6 +44,14 @@ results are in `docs/cost-history.md`.
   result lists (the user's decision; a refactoring there would have to
   compile on its own).
 
+- **Stubs are declared lazily, and batches get checkpoints**
+  (2026-10-20, the user's decision). In a batch checked at its end,
+  stubs and imports for earlier edits are added just before a
+  refactoring (#197), not only after the last step: there was no
+  recorded reason for the end only, and it made a refactoring after a
+  test written first fail. Checkpoints (a step that type-checks, and
+  may run tests, keeping what passed) come next.
+
 - **Every step must type-check** (2026-10-17). The user rejected letting
   edits leave type errors. Test-first still works: stubs for what a new
   test calls are declared automatically, and an edit may start from
