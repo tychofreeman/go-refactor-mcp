@@ -1,0 +1,14 @@
+[
+  {"name": "notify-quiet", "dir": "testdata/notify", "tests": "testdata/notify-quiet", "check": "go vet ./... && go test ./...",
+   "prompt": "Add a field Quiet bool to notify.Config: when it is true, Broadcast still sends every message but returns no summary lines."},
+  {"name": "notify-send-error", "dir": "testdata/notify", "tests": "testdata/notify-send-error", "check": "go vet ./... && go test ./...",
+   "prompt": "Sending can fail. Give the Send method of notify.Notifier an error result: Email's Send fails, sending nothing, when the user has no email address, and SMS's Send when the user has no phone; each error message includes the user's name. Broadcast keeps going after a failure, and marks a failed channel in the summary with \"!\" after its name, as in \"Ann: email,sms!\"."},
+  {"name": "notify-priority", "dir": "testdata/notify", "tests": "testdata/notify-priority", "check": "go vet ./... && go test ./...",
+   "prompt": "Messages now have a priority. Add a type notify.Priority with constants Low, Normal and High, in that order. The Send method of notify.Notifier takes a priority as its last parameter, and so does Broadcast, which passes it on. Text messages are sent only for Normal and High priority; email is sent for every priority."},
+  {"name": "notify-userid", "dir": "testdata/notify", "tests": "testdata/notify-userid", "check": "go vet ./... && go test ./...",
+   "prompt": "User IDs get a type of their own: the field User.ID becomes a notify.UserID, a string type with a method Valid() bool that reports whether the ID is not empty and has no spaces. Broadcast skips users whose ID is not valid: it sends them nothing and gives them no summary line."},
+  {"name": "notify-sorted", "dir": "testdata/notify", "tests": "testdata/notify-sorted", "check": "go vet ./... && go test ./...",
+   "prompt": "Broadcast should handle users in order of name, then of ID, whatever order they are given in, without changing the order of the caller's slice."},
+  {"name": "notify-no-logging", "dir": "testdata/notify", "tests": "testdata/notify-no-logging", "check": "go vet ./... && go test ./...",
+   "prompt": "Sending must not write to the standard logger any more: remove the logging from Email and SMS."}
+]

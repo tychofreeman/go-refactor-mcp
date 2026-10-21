@@ -117,7 +117,10 @@ from this file. The usual runs:
       -only chain-duplication,chain-tangled,chain-currency,chain-address \
       -claude-md eval-tasks/claude-md-refactor-when-needed -out eval-runs/NAME
 
-The features run takes about 15 minutes. `cmd/refactor-tokens` measures
+The features run takes about 15 minutes. `-tasks eval-tasks/mechanisms.json`
+runs six tasks that call for the type-error help (stubs, families,
+add_result, change_field_type, fix_imports); `-mcp BINARY` runs an
+older server for comparison. `cmd/refactor-tokens` measures
 session transcripts: tokens by tool, turns that only loaded schemas or
 had a call refused, and what reading cost by kind. The `ab-analyze`
 skill (`.claude/skills/ab-analyze`) runs it on a run and a baseline and
