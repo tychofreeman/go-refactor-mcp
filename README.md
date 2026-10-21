@@ -705,7 +705,13 @@ hand or a tool got in the way.
       is statements folds runs of the same statements in any block (its
       locals renamed freely), so extract_function and then fold replaces
       duplicates (problem 1). Matching is by syntax tree: `a+b+c` does
-      not match `a+(b+c)`. Next: parameterize (J).
+      not match `a+(b+c)`. Then parameterize (J).
+    - **Parameterize (J).** *Done for constants:* `parameterize` makes
+      functions that are the same but for constants calls of one new
+      function that takes them (`logEmail`, `logSMS` to `logTo(to,
+      format)`); `inline_function` with `all_calls` then retires them.
+      Next: functions that differ in an expression, such as problem 3's
+      `u.Email` and `u.Phone`, by a switch on a new parameter.
     - **Teach and measure:** recipes and planning a change as a
       derivation, against the current instructions, on tasks with a
       derivation as the reference solution.
