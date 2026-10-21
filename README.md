@@ -620,7 +620,14 @@ hand or a tool got in the way.
       the end still adds whatever is left.*
     - **Checkpoints in a batch** (the user's decision, 2026-10-20): a
       step that type-checks, and optionally runs tests, at that point,
-      so a batch refused later keeps what passed before it. Next.
+      so a batch refused later keeps what passed before it. *Done
+      (#198): a step `{"tool": "check"}`, with `run_tests` and
+      `packages` as the check tool takes them, first adds the stubs and
+      imports earlier edits need (in a batch checked at its end). If a
+      later step is refused, or the batch's end does not type-check, the
+      steps through the last checkpoint that passed stay applied as one
+      change (one undo), and the result says so; a batch with a kept
+      part is not run again with check "end".*
     - **Measure** by counting these refusals per run, by kind.
 
 Alongside: **edits**, steps that change behavior on purpose, so the

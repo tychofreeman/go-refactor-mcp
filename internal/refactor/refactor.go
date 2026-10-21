@@ -153,11 +153,12 @@ func (r *Result) String() string {
 
 // Options controls Run.
 type Options struct {
-	DryRun    bool        // compute and show the diff without writing
-	Compact   bool        // show the diff without context lines: what changed and where, at less cost to read
-	Unchecked bool        // an edit may start from and leave code that does not type-check: a batch checked at its end
-	Declare   Refactoring // with Unchecked, in a batch: declares what the steps call but nothing declares (create_from_usage)
-	Imports   Refactoring // with Unchecked, in a batch: adds the imports the steps' code needs and removes those it leaves unused (fix_imports)
+	DryRun    bool                                            // compute and show the diff without writing
+	Compact   bool                                            // show the diff without context lines: what changed and where, at less cost to read
+	Unchecked bool                                            // an edit may start from and leave code that does not type-check: a batch checked at its end
+	Declare   Refactoring                                     // with Unchecked, in a batch: declares what the steps call but nothing declares (create_from_usage)
+	Imports   Refactoring                                     // with Unchecked, in a batch: adds the imports the steps' code needs and removes those it leaves unused (fix_imports)
+	Test      func(pattern string) (output string, err error) // a checkpoint's tests; GoTest if nil
 }
 
 // Run executes one refactoring step.
@@ -462,6 +463,7 @@ type BatchResult struct {
 	Files      []string
 	Notes      []string // about the batch as a whole, when applied
 	Errors     []string // when refused at its end: the errors left
+	Kept       int      // when refused: the 1-based step of the last checkpoint that passed, through which the steps were kept; 0 if none
 }
 
 // RunBatch runs steps in order, each through Run, as one change: if a
@@ -481,7 +483,7 @@ type BatchResult struct {
 // too, the first refusal stands, with the second's.
 func RunBatch(ws *workspace.Workspace, steps []Step, opts Options) (*BatchResult, error) {
 	b, err := runBatch(ws, steps, opts)
-	if err != nil || b.Applied || opts.Unchecked || !retriable(b, opts) {
+	if err != nil || b.Applied || b.Kept > 0 || opts.Unchecked || !retriable(b, opts) {
 		return b, err
 	}
 	retry, err := runBatch(ws, steps, Options{Compact: opts.Compact, Unchecked: true, Declare: opts.Declare, Imports: opts.Imports})
@@ -526,15 +528,30 @@ func runBatch(ws *workspace.Workspace, steps []Step, opts Options) (*BatchResult
 	lines := map[string]*lineMap{}                    // by file, relative to the root: its lines through the batch
 	made := make([]map[string]*stepLines, len(steps)) // by step, then file: the lines it made
 	applied := 0
+	kept, keptStep, keptNames := 0, 0, 0 // at the last checkpoint that passed: changes applied, its step, names of the steps
+	var names []string
+	// rollback undoes the steps after the last checkpoint that passed, and
+	// makes those before it one change.
 	rollback := func() error {
-		for ; applied > 0; applied-- {
+		for ; applied > kept; applied-- {
 			if _, err := ws.Undo(); err != nil {
 				return fmt.Errorf("rolling back the batch: %w", err)
 			}
 		}
+		if kept == 0 {
+			return nil
+		}
+		b.Kept = keptStep
+		c, err := ws.Squash(kept, fmt.Sprintf("batch through step %d: %s", keptStep, strings.Join(names[:keptNames], ", ")))
+		if err != nil {
+			return err
+		}
+		b.Files, b.Diff = c.Files(ws.Root), c.Diff
+		if opts.Compact {
+			b.Diff = c.DiffContext(ws.Root, 0)
+		}
 		return nil
 	}
-	var names []string
 	// complete adds what the engine supplies for the steps' edits: the
 	// imports their code needs, then stubs for what it calls but nothing
 	// declares. Before step next (an index; len(steps) at the end), the
@@ -573,6 +590,22 @@ func runBatch(ws *workspace.Workspace, steps []Step, opts Options) (*BatchResult
 		return notDeclared, nil
 	}
 	for i, s := range steps {
+		if _, ok := s.Refactoring.(*Checkpoint); ok {
+			res, err := checkpoint(ws, s.Args, opts, func() error { _, err := complete(i); return err })
+			if err != nil {
+				if rerr := rollback(); rerr != nil {
+					return nil, fmt.Errorf("step %d (check): %v; %v", i+1, err, rerr)
+				}
+				return nil, fmt.Errorf("step %d (check): %w", i+1, err)
+			}
+			b.Steps = append(b.Steps, res)
+			if !res.Applied {
+				b.FailedStep, b.FailedTool, b.Refused = i+1, "check", res.Refused
+				return b, rollback()
+			}
+			kept, keptStep, keptNames = applied, i+1, len(names)
+			continue
+		}
 		name := s.Refactoring.Name()
 		_, isEdit := s.Refactoring.(Edit)
 		_, isFix := s.Refactoring.(Fix)
@@ -802,6 +835,18 @@ func translateLines(args json.RawMessage, rel string, m *lineMap, now map[string
 // String renders the batch result as plain text, the format sent to models.
 func (b *BatchResult) String() string {
 	var sb strings.Builder
+	if !b.Applied && b.Kept > 0 {
+		if b.FailedStep > 0 {
+			fmt.Fprintf(&sb, "REFUSED batch at step %d of %d (%s): %s\n", b.FailedStep, b.Total, b.FailedTool, b.Refused)
+		} else {
+			fmt.Fprintf(&sb, "REFUSED batch: %s\n", b.Refused)
+		}
+		fmt.Fprintf(&sb, "Steps 1-%d, through the checkpoint at step %d, were kept, as one change; the steps after it were rolled back.\n", b.Kept, b.Kept)
+		if b.Diff != "" {
+			sb.WriteString("\n" + b.Diff)
+		}
+		return sb.String()
+	}
 	if !b.Applied && b.FailedStep == 0 {
 		fmt.Fprintf(&sb, "REFUSED batch: %s\nNothing changed.\n", b.Refused)
 		return sb.String()

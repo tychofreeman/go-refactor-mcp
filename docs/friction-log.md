@@ -1500,6 +1500,17 @@ engine's Expander, runExpanded and the inliner's Expand and callsOf
 with add_declaration, the arguments with add_field, the schema,
 description and docs with replace_text.
 
+## 2026-10-20: checkpoints in a batch
+
+All through `refactor batch`, the code and its tests in one batch of
+nine steps. Two hitches. Stubs were not declared for what the test, in
+the external package `refactor_test`, used before it existed
+(`refactor.NewCheckpoint`, the fields `Kept` and `Options.Test`): the
+batch was refused with the errors instead, so the code went in the same
+batch. And Go string escapes (`\n`) in a batch built with an unquoted
+shell heredoc became newlines, so one replace_text did not match; the
+heredoc must be quoted.
+
 ## 2026-10-20: stubs declared before a refactoring
 
 All through `refactor batch`: the tests with add_declaration, the

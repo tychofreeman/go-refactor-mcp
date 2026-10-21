@@ -2,6 +2,7 @@ package refactor_test
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -953,6 +954,86 @@ func TestBatchFollowsLinesThroughStubs(t *testing.T) {
 	}
 	if got, _ := os.ReadFile(path); !strings.Contains(string(got), "// mark\nfunc F()") {
 		t.Errorf("the mark is not on func F's line:\n%s", got)
+	}
+}
+
+// A checkpoint that passes keeps the steps before it when a later step is
+// refused: they stay applied, as one change, and only the steps after it
+// are rolled back.
+func TestBatchCheckpointKeepsWhatPassed(t *testing.T) {
+	ws, path := setup(t, src)
+	b, err := refactor.RunBatch(ws, []refactor.Step{
+		{Refactoring: markLine{}, Args: json.RawMessage(`{"file": "m.go", "line": 3}`)},
+		{Refactoring: refactor.NewCheckpoint(), Args: json.RawMessage(`{}`)},
+		{Refactoring: callG{"x"}},
+	}, refactor.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.Applied || b.FailedStep != 3 || b.Kept != 2 {
+		t.Fatalf("want step 3 refused and steps 1-2 kept, got applied %v, failed step %d, kept %d:\n%s", b.Applied, b.FailedStep, b.Kept, b)
+	}
+	if out := b.String(); !strings.Contains(out, "Steps 1-2, through the checkpoint at step 2, were kept") {
+		t.Errorf("result does not say what was kept:\n%s", out)
+	}
+	if got, _ := os.ReadFile(path); !strings.Contains(string(got), "// mark") || strings.Contains(string(got), "x()") {
+		t.Errorf("want the mark kept and the call rolled back, file:\n%s", got)
+	}
+	if _, err := ws.Undo(); err != nil || ws.CanUndo() {
+		t.Errorf("want one undo for what was kept: %v", err)
+	}
+	if got, _ := os.ReadFile(path); string(got) != src {
+		t.Errorf("undo did not restore the file:\n%s", got)
+	}
+}
+
+// A checkpoint refuses code that does not type-check there, and a batch
+// with no checkpoint before it is rolled back as a whole.
+func TestBatchCheckpointRefusesErrors(t *testing.T) {
+	ws, path := setup(t, src)
+	b, err := refactor.RunBatch(ws, []refactor.Step{
+		{Refactoring: callG{"x"}},
+		{Refactoring: refactor.NewCheckpoint(), Args: json.RawMessage(`{}`)},
+	}, refactor.Options{Unchecked: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.Applied || b.FailedStep != 2 || b.Kept != 0 || !strings.Contains(b.Refused, "undefined: x") {
+		t.Fatalf("want the checkpoint refused with the error, got:\n%s", b)
+	}
+	if got, _ := os.ReadFile(path); string(got) != src || ws.CanUndo() {
+		t.Errorf("not rolled back; file:\n%s", got)
+	}
+}
+
+// A checkpoint may run tests; failing tests refuse it with their output.
+func TestBatchCheckpointRunsTests(t *testing.T) {
+	for _, pass := range []bool{true, false} {
+		ws, _ := setup(t, src)
+		var ran string
+		test := func(pattern string) (string, error) {
+			ran = pattern
+			if pass {
+				return "ok  \texample.com/m", nil
+			}
+			return "--- FAIL: TestF", errors.New("exit status 1")
+		}
+		b, err := refactor.RunBatch(ws, []refactor.Step{
+			{Refactoring: markLine{}, Args: json.RawMessage(`{"file": "m.go", "line": 3}`)},
+			{Refactoring: refactor.NewCheckpoint(), Args: json.RawMessage(`{"run_tests": true, "packages": "./m/..."}`)},
+		}, refactor.Options{Test: test})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if ran != "./m/..." {
+			t.Errorf("tests ran on %q, want ./m/...", ran)
+		}
+		if pass && (!b.Applied || !strings.Contains(b.String(), "2. check: type-checks; tests pass")) {
+			t.Errorf("want the batch applied with the checkpoint passed, got:\n%s", b)
+		}
+		if !pass && (b.Applied || b.FailedStep != 2 || !strings.Contains(b.Refused, "--- FAIL: TestF")) {
+			t.Errorf("want the checkpoint refused with the test output, got:\n%s", b)
+		}
 	}
 }
 
