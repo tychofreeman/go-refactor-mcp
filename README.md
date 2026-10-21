@@ -819,7 +819,9 @@ hand or a tool got in the way.
       receiver's panic moves, which the target itself does: a
       decision for the user, shared by gap O); `remove_dead_code`
       takes `sort.Slice`/`SliceStable` of a struct slice for
-      reflection on its fields.
+      reflection on its fields (so does `rename` of a field);
+      `inline_variable` refuses to inline a call of a function
+      without side effects, such as a getter, used twice.
     - **Search in the engine** (the long shot): given the target shape
       (a struct's new declaration, a function's new signature), search
       sequences of operations that reach it and return the shortest.
