@@ -853,7 +853,9 @@ hand or a tool got in the way.
       write it qualified per call. *Done:* each call's value names the
       function's package as its file imports it (importing it if
       needed), and drops the qualifier inside that package. And a `move_declaration` that left
-      code that did not compile (batch run 3), to reproduce.
+      code that did not compile (batch run 3). *Fixed:* its cycle
+      check missed the destination's test files (`campaigns_test.go`
+      imports `notify`, which would import `campaigns`).
     - The method guards (`extract_function` from a method,
       `function_to_method`, `method_to_function`): in place of an
       unexported name, refuse only a method that changes which
