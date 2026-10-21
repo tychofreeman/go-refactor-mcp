@@ -194,6 +194,14 @@ results are in `docs/cost-history.md`.
   removes the refusals it targets, but cost and turns stay the same.
   Hidden tests there are named TestAccept... so that a model's own test
   does not clash with them.
+- **Working algebraically** (the user's aim, 2026-10-20): the user sees
+  code as a structure manipulated by type-safe operations, like algebra,
+  and believes 99% of changes can be reached so, which lets one think
+  above syntax. They want to know whether that has a measurable benefit
+  for the model. `docs/algebraic.md` defines the measure (the derived
+  share, in refactor-tokens) and the baseline: fresh mcp runs derive
+  about a tenth. Derivations are being collected from the user by
+  posing small problems; they become recipes. Roadmap item 19.
 - Sessions in a cloud clone have no MCP on that clone (the user's MCP
   runs on their own checkout); build `cmd/refactor` from the branch and
   use it for every step: `refactor batch '<json>'` runs a batch, and

@@ -1599,3 +1599,11 @@ By a script, a hand edit: each entry was dated by the commit that first
 added its heading (`git log -S`), and the entries were written back in
 that order, every line kept. No tool moves blocks of text within a
 file; replace_text would have had to restate the whole log.
+
+## 2026-10-20: the algebraic measure
+
+All through the `refactor` CLI built from the branch (the session's MCP
+served the main checkout, and the work was in a worktree), with batches
+of add_declaration, add_field, replace_statements and replace_text sent
+as JSON files. A local type unmarshalled from JSON first had unexported
+fields, so its arguments were silently empty; the test caught it.
