@@ -468,28 +468,15 @@ func (r *renamer) checkReflected(st *types.Struct, named *types.Named) error {
 	return nil
 }
 
-// dynamicMethods are method names that are commonly called through
-// interfaces the type checker cannot see at the call site (fmt.Println
-// takes `any` but calls String; encoding/json calls MarshalJSON, ...).
-var dynamicMethods = map[string]string{
-	"String": "fmt.Stringer", "GoString": "fmt.GoStringer", "Format": "fmt.Formatter", "Error": "error",
-	"Unwrap": "errors.Unwrap", "Is": "errors.Is", "As": "errors.As",
-	"MarshalJSON": "json.Marshaler", "UnmarshalJSON": "json.Unmarshaler",
-	"MarshalText": "encoding.TextMarshaler", "UnmarshalText": "encoding.TextUnmarshaler",
-	"MarshalBinary": "encoding.BinaryMarshaler", "UnmarshalBinary": "encoding.BinaryUnmarshaler",
-	"MarshalYAML": "yaml.Marshaler", "UnmarshalYAML": "yaml.Unmarshaler",
-	"Scan": "sql.Scanner", "Value": "driver.Valuer",
-}
-
 // checkInterfaces refuses to rename a method when some type in the
 // workspace would then implement, or stop implementing, an interface with
 // a method of the old or the new name.
 func (r *renamer) checkInterfaces(recv *types.Named) error {
-	if iface, ok := dynamicMethods[r.old]; ok {
+	if iface, ok := analysis.DynamicMethods[r.old]; ok {
 		return refactor.Refusef("method %s.%s probably implements %s, which is called dynamically; renaming it could silently change behavior",
 			recv.Obj().Name(), r.old, iface)
 	}
-	if iface, ok := dynamicMethods[r.new]; ok {
+	if iface, ok := analysis.DynamicMethods[r.new]; ok {
 		return refactor.Refusef("renaming %s.%s to %s would probably make it implement %s, which is called dynamically; that could silently change behavior",
 			recv.Obj().Name(), r.old, r.new, iface)
 	}

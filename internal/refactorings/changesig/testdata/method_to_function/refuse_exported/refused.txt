@@ -1,1 +1,0 @@
-String is exported, so an interface outside this module could need it

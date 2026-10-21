@@ -27,7 +27,7 @@ func (*FunctionToMethod) Description() string {
 	return `Turn a function into a method of its first parameter's type, and change every call m(x, a) into x.m(a) (v.m(a) for m(&v, a), p.m(a) for m(*p, a), (*T)(nil).m(a) for m(nil, a)). The reverse of method_to_function.
 Use it to put a function that works on one type with that type, e.g. a helper that a refactoring left taking the receiver it came from.
 Identify the function by file, line and name, at its declaration or any call. The method keeps the function's name unless new_name is given. The receiver is the first parameter (to choose another, move it first with move_parameter); its type must be T or *T for a non-generic type T declared in the function's package.
-The method's name must be unexported: an exported method could make the type satisfy an interface checked at run time (fmt looks for String), with no compile error. For the same reason it refuses if any interface in the workspace has a method of that name, if T or a type embedding T already has a field or method of that name (the new method could change what x.name means), if a call is in another package, if the function is used other than by calling it, is generic, or for a call whose receiver argument contains another call of it.`
+An exported name is refused if the type could then implement an interface code checks for at run time, with no compile error: String, Error, MarshalJSON and the like, or one of the module or its dependencies whose other methods the type has; the result notes that the module's API changed. It refuses if any interface in the workspace has a method of that name, if T or a type embedding T already has a field or method of that name (the new method could change what x.name means), if a call is in another package and the name is unexported, if the function is used other than by calling it, is generic, or for a call whose receiver argument contains another call of it.`
 }
 
 func (*FunctionToMethod) InputSchema() json.RawMessage {
@@ -85,8 +85,6 @@ func (*FunctionToMethod) Plan(ws *workspace.Workspace, raw json.RawMessage) (*re
 	switch {
 	case !token.IsIdentifier(name):
 		return nil, refactor.Refusef("new_name %q is not a valid Go identifier", name)
-	case token.IsExported(name):
-		return nil, refactor.Refusef("the method %s would be exported, which could make its type satisfy an interface outside this module that is checked at run time (fmt looks for String), with no compile error; pass an unexported new_name", name)
 	}
 	recvVar := sig.Params().At(0)
 	named := recvNamed(recvVar.Type())
@@ -103,6 +101,11 @@ func (*FunctionToMethod) Plan(ws *workspace.Workspace, raw json.RawMessage) (*re
 	if err := t.checkNoInterface(name); err != nil {
 		return nil, err
 	}
+	if token.IsExported(name) {
+		if iface := analysis.MethodInterface(ws.Pkgs, named, name, true); iface != "" {
+			return nil, refactor.Refusef("a method %s could make %s implement %s, which code checks for at run time, and change behavior with no compile error; pass another new_name", name, named.Obj().Name(), iface)
+		}
+	}
 	if err := t.checkNoSelector(named, name); err != nil {
 		return nil, err
 	}
@@ -112,7 +115,7 @@ func (*FunctionToMethod) Plan(ws *workspace.Workspace, raw json.RawMessage) (*re
 	srcs := map[string][]byte{path: t.src}
 	for _, c := range t.calls {
 		where := ws.Position(c.expr.Pos())
-		if c.pkg.PkgPath != t.pkg.PkgPath {
+		if c.pkg.PkgPath != t.pkg.PkgPath && !token.IsExported(name) {
 			return nil, refactor.Refusef("the call at %s is in another package, which cannot call the unexported method %s", where, name)
 		}
 		if err := checkNoSpread(c, where); err != nil {
