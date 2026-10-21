@@ -159,8 +159,11 @@ func ParseBatch(args json.RawMessage) (Batch, string) {
 	b := Batch{Steps: make([]refactor.Step, len(a.Steps)), Unchecked: a.Check == "end", Summary: a.Report == "summary"}
 	for i, st := range a.Steps {
 		r, ok := Lookup(st.Tool)
+		if st.Tool == "check" {
+			r, ok = refactor.NewCheckpoint(), true
+		}
 		if !ok {
-			return Batch{}, fmt.Sprintf("REFUSED batch: step %d: %q is not a refactoring or edit; a batch runs tools such as rename, add_parameter or replace_statements, not inspect, undo, check or batch. Nothing changed.", i+1, st.Tool)
+			return Batch{}, fmt.Sprintf("REFUSED batch: step %d: %q is not a refactoring or edit; a batch runs tools such as rename, add_parameter or replace_statements, and check as a checkpoint, not inspect, undo or batch. Nothing changed.", i+1, st.Tool)
 		}
 		b.Steps[i] = refactor.Step{ID: st.ID, Refactoring: r, Args: st.Args}
 	}

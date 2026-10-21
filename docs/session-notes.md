@@ -49,8 +49,11 @@ results are in `docs/cost-history.md`.
   stubs and imports for earlier edits are added just before a
   refactoring (#197), not only after the last step: there was no
   recorded reason for the end only, and it made a refactoring after a
-  test written first fail. Checkpoints (a step that type-checks, and
-  may run tests, keeping what passed) come next.
+  test written first fail. Checkpoints (#198): a `check` step
+  type-checks, and may run tests; a later refusal keeps the steps
+  through the last passing one, as one change. The user left open
+  whether a failure should keep what passed or stop; keeping is what
+  was built, since that is what a checkpoint is for.
 
 - **Every step must type-check** (2026-10-17). The user rejected letting
   edits leave type errors. Test-first still works: stubs for what a new
