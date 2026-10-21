@@ -108,21 +108,33 @@ type Quality struct {
 	OverThreshold int `json:"over_threshold_delta"` // functions over the complexity threshold, plus those over the nesting one: after minus before
 	DupBefore     int `json:"dup_lines_before"`
 	DupAfter      int `json:"dup_lines_after"`
+	// Unmeasured says why the function numbers above could not be
+	// measured (a Go file of the module that does not parse), if they
+	// could not; the duplicated lines, counted from the text, still are.
+	Unmeasured string `json:"unmeasured,omitempty"`
 }
 
 // measureQuality compares the module's Go files (path -> source) before
 // and after a run.
 func measureQuality(before, after map[string][]byte) Quality {
 	q := Quality{DupBefore: metrics.Duplicated(before), DupAfter: metrics.Duplicated(after)}
-	changed, _ := metrics.Changed(before, after)
+	fb, err := metrics.Measure(before)
+	if err != nil {
+		q.Unmeasured = "before the run: " + err.Error()
+		return q
+	}
+	changed, err := metrics.Changed(before, after)
+	if err != nil {
+		q.Unmeasured = err.Error()
+		return q
+	}
 	for _, f := range changed {
 		q.Changed++
 		q.MaxComplexity = max(q.MaxComplexity, f.Complexity)
 		q.MaxNesting = max(q.MaxNesting, f.Nesting)
 		q.MaxLines = max(q.MaxLines, f.Lines)
 	}
-	fb, _ := metrics.Measure(before)
-	fa, _ := metrics.Measure(after)
+	fa, _ := metrics.Measure(after) // it parsed in Changed
 	sb, sa := metrics.Summarize(fb), metrics.Summarize(fa)
 	q.Complexity = sa.Complexity - sb.Complexity
 	q.OverThreshold = sa.OverComplexity + sa.OverNesting - sb.OverComplexity - sb.OverNesting
@@ -264,24 +276,44 @@ func Summary(results []Result) string {
 }
 
 // writeQuality writes the table of the quality of the code each task and
-// arm left behind.
+// arm left behind. The means of the function columns leave out runs whose
+// functions could not be measured, which it lists below the table.
 func writeQuality(sb *strings.Builder, order []taskArm, groups map[taskArm][]Result) {
 	sb.WriteString("\nQuality of the code left behind, means per run: the functions the run added or changed (how many; their highest complexity, nesting and length), " +
 		"the change in the module's total complexity and in functions over the thresholds, and its duplicated lines.\n\n" +
 		"| task | arm | changed funcs | max complexity | max nesting | longest | Δ complexity | Δ over threshold | dup lines before → after |\n|---|---|---|---|---|---|---|---|---|\n")
+	var unmeasured []string
 	for _, k := range order {
 		rs := groups[k]
-		sums := make([]float64, len(Quality{}.values()))
+		n := len(Quality{}.values())
+		sums := make([]float64, n)
+		measured := 0
 		for _, r := range rs {
+			if r.Quality.Unmeasured != "" {
+				unmeasured = append(unmeasured, fmt.Sprintf("%s %s run %d: %s", k.task, k.arm, r.Run, r.Quality.Unmeasured))
+			} else {
+				measured++
+			}
 			for i, v := range r.Quality.values() {
+				if i < n-2 && r.Quality.Unmeasured != "" {
+					continue // a function column
+				}
 				sums[i] += float64(v)
 			}
 		}
 		means := []any{k.task, k.arm}
-		for _, s := range sums {
-			means = append(means, s/float64(len(rs)))
+		for i, s := range sums {
+			if i < n-2 {
+				s /= float64(max(measured, 1))
+			} else {
+				s /= float64(len(rs))
+			}
+			means = append(means, s)
 		}
 		fmt.Fprintf(sb, "| %s | %s | %.1f | %.1f | %.1f | %.1f | %.1f | %.1f | %.0f → %.0f |\n", means...)
+	}
+	if len(unmeasured) > 0 {
+		fmt.Fprintf(sb, "\nRuns whose functions could not be measured, left out of the function columns: %s.\n", strings.Join(unmeasured, "; "))
 	}
 }
 

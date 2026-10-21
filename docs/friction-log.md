@@ -1499,3 +1499,9 @@ All through gorefactor: the fixtures with a batch of create_file, the
 engine's Expander, runExpanded and the inliner's Expand and callsOf
 with add_declaration, the arguments with add_field, the schema,
 description and docs with replace_text.
+
+## 2026-10-20: A/B quality numbers when a file does not parse
+
+All through `refactor batch`. The test used `Quality.Unmeasured` before
+it existed, and the new field stubs declared it (#183), which
+replace_text then gave its tag and comment.

@@ -258,7 +258,10 @@ moved or changed a signature, as the real PRs did. Turns: 52, of
 which 9 had a gorefactor refusal (code that did not type-check, a
 range with a signature, content closing its block), 4 a refused Bash,
 1 ToolSearch alone. The first `inspect` loads the module: 296 s on
-Hugo, 27-37 s on the others; steps after it took at most 12 s. Two
+Hugo, 27-37 s on the others; steps after it took at most 12 s. (Its quality row
+for lazygit, 0 changed functions and Δ complexity -10699, is not a
+measurement: a Go file of the copy did not parse, and the harness read
+that as an empty module; fixed to say so.) Two
 refusals show gaps: a test using a type not declared yet (stubs are
 declared for functions and methods only), and a call whose results
 could not be inferred, so no stub.
