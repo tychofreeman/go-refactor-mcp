@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -889,6 +890,47 @@ func TestBatchDeclaresMissing(t *testing.T) {
 	}
 	if got, _ := os.ReadFile(path); string(got) != src || ws.CanUndo() {
 		t.Errorf("not rolled back; file:\n%s", got)
+	}
+}
+
+// declarePicky is a fix like declare that cannot tell B's results: asked
+// for B it refuses, as create_from_usage does; asked for A alone, it
+// declares A.
+type declarePicky struct{}
+
+func (declarePicky) Name() string                 { return "declare" }
+func (declarePicky) Description() string          { return "" }
+func (declarePicky) InputSchema() json.RawMessage { return json.RawMessage(`{}`) }
+func (declarePicky) ChangesBehavior()             {}
+func (declarePicky) Fixes()                       {}
+func (declarePicky) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
+	var a struct{ Names []string }
+	json.Unmarshal(raw, &a)
+	if slices.Contains(a.Names, "B") {
+		return nil, refactor.Refusef(`cannot tell the results of B from its use on line 5 of m.go; give them in results, e.g. {"B": "(int, error)"}`)
+	}
+	path := ws.Abs("m.go")
+	src, _ := os.ReadFile(path)
+	return &refactor.Plan{
+		Summary: "declared",
+		Edits:   []edit.FileEdit{{Path: path, Edits: []edit.TextEdit{{Start: len(src), End: len(src), NewText: "\nfunc A() int { return 0 }\n"}}}},
+	}, nil
+}
+
+// A name whose stub cannot be typed does not keep the others from theirs:
+// A is declared, and only B is left, with why.
+func TestBatchDeclaresWhatCanBeTyped(t *testing.T) {
+	ws, _ := setup(t, src)
+	b, err := refactor.RunBatch(ws, []refactor.Step{{Refactoring: callG{"A() + B"}}}, refactor.Options{Unchecked: true, Declare: declarePicky{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := b.String()
+	if b.Applied || !strings.Contains(out, "undefined: B") || strings.Contains(out, "undefined: A") {
+		t.Errorf("want A declared and only B left undefined, got:\n%s", out)
+	}
+	if !strings.Contains(out, "no stub was declared for B: cannot tell the results of B") {
+		t.Errorf("want why B has no stub, got:\n%s", out)
 	}
 }
 

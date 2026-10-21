@@ -107,13 +107,23 @@ func fixImports(ws *workspace.Workspace, errs []string, opts Options, done func(
 // such as an undefined variable.
 var notCalled = regexp.MustCompile(`calls no undeclared function (\w+)$`)
 
+// untypeable is opts.Declare's refusal of a name whose stub it cannot
+// type from how the file uses it: a function's results, a field's type,
+// or a new type a keyed literal gives a field the type of.
+var untypeable = regexp.MustCompile(`^cannot tell the (?:results of (\w+) from|type of field (\w+) of \w+ from how|type of field \w+ of (\w+) from)`)
+
 // declareIn runs opts.Declare on file for names, leaving out each name it
 // refuses as not called. It returns the step, if one applied, and the
 // names it declared; and why it declared none, or left some out.
 func declareIn(ws *workspace.Workspace, file string, names []string, opts Options) (*Result, []string, string, error) {
 	var dropped []string // names opts.Declare refused as not called
-	notCalledNote := func() string {
-		return fmt.Sprintf("no stub was declared for %s, which %s not called (a stub is for a function or method called, or passed where a function is needed, or a type made with a literal)", orList(dropped, "and"), map[bool]string{true: "is", false: "are"}[len(dropped) == 1])
+	var untyped []string // why each name opts.Declare could not type has no stub
+	why := func() string {
+		notes := slices.Clone(untyped)
+		if len(dropped) > 0 {
+			notes = append(notes, fmt.Sprintf("no stub was declared for %s, which %s not called (a stub is for a function or method called, or passed where a function is needed, or a type made with a literal)", orList(dropped, "and"), map[bool]string{true: "is", false: "are"}[len(dropped) == 1]))
+		}
+		return strings.Join(notes, "\n")
 	}
 	for len(names) > 0 {
 		args, err := json.Marshal(map[string]any{"file": file, "names": names})
@@ -124,23 +134,24 @@ func declareIn(ws *workspace.Workspace, file string, names []string, opts Option
 		if err != nil {
 			return res, names, "", err
 		}
-		if res.Applied && len(dropped) > 0 {
-			return res, names, notCalledNote(), nil
-		}
 		if res.Applied {
-			return res, names, "", nil
+			return res, names, why(), nil
 		}
-		m := notCalled.FindStringSubmatch(res.Refused)
-		if m == nil || !slices.Contains(names, m[1]) {
+		// A name it refuses does not keep the others from their stubs.
+		name := ""
+		if m := notCalled.FindStringSubmatch(res.Refused); m != nil {
+			name = m[1]
+			dropped = append(dropped, name)
+		} else if m := untypeable.FindStringSubmatch(res.Refused); m != nil {
+			name = m[1] + m[2] + m[3]
+			untyped = append(untyped, fmt.Sprintf("no stub was declared for %s: %s", name, res.Refused))
+		}
+		if !slices.Contains(names, name) {
 			return nil, nil, fmt.Sprintf("no stubs were declared for %s: %s", orList(names, "and"), res.Refused), nil
 		}
-		dropped = append(dropped, m[1])
-		names = slices.DeleteFunc(slices.Clone(names), func(n string) bool { return n == m[1] })
+		names = slices.DeleteFunc(slices.Clone(names), func(n string) bool { return n == name })
 	}
-	if len(dropped) > 0 {
-		return nil, nil, notCalledNote(), nil
-	}
-	return nil, nil, "", nil
+	return nil, nil, why(), nil
 }
 
 // closeName returns a name file's package declares that name may be a
