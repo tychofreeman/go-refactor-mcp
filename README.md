@@ -841,7 +841,8 @@ hand or a tool got in the way.
       exported function (inline_function must then look for uses in
       every package, not only its own). *Done:* and for a method,
       interfaces in every package (`analysis.InterfaceWithMethod`).
-    - `extract_struct` of an exported struct.
+    - `extract_struct` of an exported struct. *Done:* the note adds
+      that other modules' literals cannot name the moved fields.
     - The method guards (`extract_function` from a method,
       `function_to_method`, `method_to_function`): in place of an
       unexported name, refuse only a method that changes which

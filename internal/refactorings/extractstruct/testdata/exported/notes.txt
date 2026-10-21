@@ -1,0 +1,1 @@
+Point is exported: moving its fields into xy changes the module's API

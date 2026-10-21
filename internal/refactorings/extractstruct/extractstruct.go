@@ -40,7 +40,7 @@ func (*ExtractStruct) Description() string {
 	return `Move some fields of a struct type into a new struct type, declared just before it and embedded in their place, so every use (m.path) keeps working through the embedded struct. Composite literals are rewritten: mover{path: p} becomes mover{source: source{path: p}}, point3{1, 2, 3} becomes point3{xy{1, 2}, 3}.
 Use it to split a struct that holds two things, before giving the new type its own methods (function_to_method) or its own file or package (move_declaration).
 Identify the struct by file, line and name, at its declaration or any use; give fields, the names to move (in any order; they keep the struct's order), and new_type.
-Only unexported struct types, and only when no value holding the type (itself, a pointer to it, or a slice, map or struct holding it) is passed to an interface parameter or converted to an interface: reflection (fmt's %+v, encoding/json) would see the new embedded field. Assigning one to an interface variable is not checked.
+An exported struct type too, with a note that the module's API changed. Only when no value holding the type (itself, a pointer to it, or a slice, map or struct holding it) is passed to an interface parameter or converted to an interface: reflection (fmt's %+v, encoding/json) would see the new embedded field. Assigning one to an interface variable is not checked.
 Refuses a generic struct, an embedded field among those to move, part of a field group (x, y int), a new_type the package already declares or that is a field or method of the struct, a name another embedded field also has (it would become ambiguous), an unkeyed literal when the fields to move are not next to each other, and a multi-line literal with comments between its elements.`
 }
 
@@ -125,11 +125,15 @@ func (*ExtractStruct) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refac
 		fes = append(fes, edit.FileEdit{Path: path, Edits: es})
 	}
 	fes = append(fes, edit.FileEdit{Path: x.path, Edits: x.declEdits()})
-	return &refactor.Plan{
+	plan := &refactor.Plan{
 		Summary: fmt.Sprintf("moved fields %s of %s into %s, embedded (%d literal%s updated)",
 			strings.Join(a.Fields, ", "), x.tn.Name(), x.newType, n, textutil.Plural(n)),
 		Edits: edit.Merge(fes),
-	}, nil
+	}
+	if analysis.PublicAPI(x.tn, ws.Pkgs) {
+		plan.Notes = append(plan.Notes, refactor.APINote(x.tn.Name(), "moving its fields into "+x.newType)+" (their literals cannot name the moved fields; reflection sees the embedded field)")
+	}
+	return plan, nil
 }
 
 // find resolves the struct type and its declaration.
@@ -141,9 +145,6 @@ func find(ws *workspace.Workspace, q locate.IdentQuery) (*extraction, error) {
 	tn, ok := pkg.TypesInfo.ObjectOf(id).(*types.TypeName)
 	if !ok || tn.Pkg() == nil || tn.Parent() != tn.Pkg().Scope() {
 		return nil, refactor.Refusef("%s at %s is not a package-level type", id.Name, ws.Position(id.Pos()))
-	}
-	if tn.Exported() {
-		return nil, refactor.Refusef("%s is exported, so code outside this module could see its fields by reflection (fmt's %%+v, encoding/json) or write its literals; only unexported struct types are supported", tn.Name())
 	}
 	path := ws.Fset.Position(tn.Pos()).Filename
 	for _, f := range pkg.Syntax {
