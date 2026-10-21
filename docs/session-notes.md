@@ -147,7 +147,11 @@ results are in `docs/cost-history.md`.
   (`tp-mcp-refactor-first`): 4/4, $0.98 against ~$0.72 by hand; it
   edits through the tools fine on large code but still does not
   refactor structurally, even told to. Its first `inspect` waits for
-  the module to load (296 s on Hugo). What making them taught:
+  the module to load (296 s on Hugo). Rerun after #181-#190
+  (`tp-mcp-type-errors`): type-check refusals 2.0 to 0.5 per run, 8/8,
+  same cost; the new stubs, fix_imports and family changes rarely
+  fired, so most of the drop is how the runs went. Preload did not
+  help Hugo's first call (the load itself is slow in a fresh copy). What making them taught:
   - Read each hidden test before writing a prompt. "Black-box" only
     means it compiles against the old code: one compared a function's
     result with `reflect.DeepEqual` (pins a `[]string` return), one only

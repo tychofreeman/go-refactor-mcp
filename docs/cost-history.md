@@ -246,6 +246,15 @@ that version has none (the integration test checks it). Fixed in
 `tasks.json`. The hybrid arm's `tp-tofu-lint-unused` reported unused
 locals but not unused variables, a miss of its own.
 
+**After #181-#190 (Oct 20).** The same four with the type-error work
+(stubs for types, fields and values, fix_imports, families,
+add_result, change_field_type, Preload; `tp-mcp-type-errors`, 2 runs
+each): $1.88 · 3.89M · 8/8, the same cost per run; type-check refusals
+fell from 2.0 to 0.5 per run, though the new help itself rarely fired
+(`docs/type-errors.md`). Preload did not shorten Hugo's first call
+(328 and 331 s): the model calls `inspect` at once, and the load
+itself is slow in a fresh copy.
+
 **The mcp arm (Oct 20).** The four tasks that refactored on the way,
 with the refactor-first CLAUDE.md and every edit through gorefactor
 (`tp-mcp-refactor-first`, 1 run each, the Gitea prompt fixed):
