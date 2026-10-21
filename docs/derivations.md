@@ -113,7 +113,7 @@ nothing, as well as by the derived share.
 | H | `all_occurrences` reaches back to occurrences before the one named | small |
 | I | Fold: replace each occurrence of an expression or call with a call that means the same (`u.Email` to `u.Contact("email")`, `f(a, b)` to `g(T{a, b})`), checked by inlining the call back | operation |
 | J | Parameterize: functions differing only in a constant or a field become one with a parameter | operation |
-| K | Fold literals through a setter: `User{ID: id, Email: v}` becomes `withEmail(User{ID: id}, v)` for `func withEmail(u User, v string) User { u.Email = v; return u }`, so that a change of representation is made in the setter's body, for any struct and any new representation. (A one-shot `fields_to_map`, fields into a map with literals and reads, was tried in #217 and dropped: it fit one shape and skipped the derivation.) | operation |
+| K | Fold literals through a setter: `User{ID: id, Email: v}` becomes `withEmail(User{ID: id}, v)` for `func withEmail(u User, v string) User { u.Email = v; return u }`, so that a change of representation is made in the setter's body, for any struct and any new representation. (A one-shot `fields_to_map`, fields into a map with literals and reads, was tried in #217 and dropped: it fit one shape and skipped the derivation.) *Done:* `fold` of a setter, which may set several fields to expressions of its parameters; pointer setters are on the roadmap | operation |
 | L | Remove a struct field (refused while used) | operation |
 | M | Inlining substitutes a constant argument used more than once | analysis |
 | N | Remove exported code the module no longer uses, when asked to | operation |

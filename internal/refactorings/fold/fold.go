@@ -34,8 +34,9 @@ func (*Fold) Description() string {
 	return `Replace code that does what an existing function does with calls to it: every expression in the module that matches the function's body, with its parameters standing for any expressions of their types, becomes a call. The function stays. Not extract_function, which makes a new function from lines at one place: fold reuses a function that exists, written or extracted, at every other place.
 Use it after writing a small function to name what code does (a getter, a helper, a method that calls an old function), so the code uses it: u.Email becomes u.email() for func (u User) email() string { return u.Email }; truncate(subject, 20) inside a method of SMS becomes s.fit(subject) for func (s *SMS) fit(text string) string { return truncate(text, 20) }.
 A struct parameter the body uses only by its fields makes each field a hole, and the call passes a literal: Send(p, us, m) becomes Send2(p, Batch{Users: us, Message: m}) for func Send2(p string, b Batch) string { return Send(p, b.Users, b.Message) }, to move callers to a parameter object.
+A function that sets fields of a struct parameter (or value receiver) and returns it, a setter, folds literals of the struct that give those fields as it sets them: User{ID: id, Email: v} becomes withEmail(User{ID: id}, v) for func withEmail(u User, v string) User { u.Email = v; return u }, so that a change to how the field is kept is made in the setter. Not a literal whose & is elided ([]*User{{...}}), nor one whose fields with effects would be evaluated in another order.
 A function without results whose body is statements folds runs of statements: the same statements in any block, its locals named anything there, become one call statement; so extract_function on lines in one place, then fold, replaces the same lines elsewhere. Not when the body returns, defers, jumps to a label or assigns a parameter, nor where the run declares a variable used after it, or an argument with effects or that could panic would move before the statements.
-Identify the function by file and name (Name or Type.Method). Its body must be one return of one value or statements without results, using every parameter. Every other name in the body must mean the same at a match. A method's receiver is what matched it, or, when the body does not use it, the receiver of the method of the same type the match is in. With line, only matches starting on that line of file (or of in) are folded, to move callers over one at a time.
+Identify the function by file and name (Name or Type.Method). Its body must be one return of one value, a setter, or statements without results, using every parameter. Every other name in the body must mean the same at a match. A method's receiver is what matched it, or, when the body does not use it, the receiver of the method of the same type the match is in. With line, only matches starting on that line of file (or of in) are folded, to move callers over one at a time.
 Leaves, and says why: a match that is assigned or has its address taken, one where an argument with effects or that could panic would be evaluated a different number of times or in another order, one in another package when the function is not exported, and one in no method of the receiver's type when the call needs the receiver from there.`
 }
 
@@ -80,6 +81,11 @@ type folder struct {
 	fields map[types.Object][]string
 	uses   map[holeKey]int // how often the body uses each of those fields
 	recv   types.Object    // fn's receiver, or nil
+	// self and sets are a setter's: the struct parameter it sets fields
+	// of and returns, and the fields with what it sets them to, in order.
+	self types.Object
+	sets []set
+	rest map[ast.Expr]rest // literals folded through the setter, by what to write for them
 
 	n       int      // occurrences folded
 	skipped []string // why matches were left, "file:line: reason"
@@ -127,8 +133,10 @@ func (f *folder) pattern(id *ast.Ident) error {
 	list := f.decl.Body.List
 	if ret, ok := list[0].(*ast.ReturnStmt); len(list) == 1 && ok && len(ret.Results) == 1 {
 		f.body, f.root = ret.Results[0], ret.Results[0]
+	} else if sig.Results().Len() == 1 && f.setter(list) {
+		f.root = f.decl.Body
 	} else if sig.Results().Len() > 0 {
-		return refactor.Refusef("fold takes a function whose body is one return statement of one value, or one without results; %s is neither", name)
+		return refactor.Refusef("fold takes a function whose body is one return statement of one value, sets fields of a struct parameter and returns it, or has no results; %s is none of these", name)
 	} else if why := statementsOnly(f.decl.Body); why != "" {
 		return refactor.Refusef("%s %s, which a call of it would not do in place of its statements", name, why)
 	} else {
@@ -202,6 +210,13 @@ func (f *folder) pattern(id *ast.Ident) error {
 // shape describes the function's body for a message: its expression, or
 // how many statements it has.
 func (f *folder) shape() string {
+	if f.sets != nil {
+		var fields []string
+		for _, s := range f.sets {
+			fields = append(fields, s.field)
+		}
+		return "literals of " + baseName(f.self.Type()).Name() + " giving " + strings.Join(fields, ", ")
+	}
 	if f.body != nil {
 		return types.ExprString(f.body)
 	}
@@ -262,10 +277,80 @@ func (f *folder) assignedHole() string {
 	return name
 }
 
+// set is a field a setter sets, and the expression it sets it to.
+type set struct {
+	field string
+	value ast.Expr
+}
+
+// rest is what a literal folded through a setter becomes: itself without
+// the elements drop, with its type written out when it is elided.
+type rest struct {
+	drop []int
+	typ  string
+}
+
+// setter reads a body that sets fields of a struct parameter or value
+// receiver to expressions of the other parameters, then returns it; it
+// reports whether the body is one.
+func (f *folder) setter(list []ast.Stmt) bool {
+	info := f.pkg.TypesInfo
+	ret, ok := list[len(list)-1].(*ast.ReturnStmt)
+	if len(list) < 2 || !ok || len(ret.Results) != 1 || identOf(ret.Results[0]) == nil {
+		return false
+	}
+	self := info.Uses[identOf(ret.Results[0])]
+	params := slices.Clone(f.decl.Type.Params.List)
+	if f.decl.Recv != nil {
+		params = append(params, f.decl.Recv.List...)
+	}
+	param := false
+	for _, fl := range params {
+		for _, n := range fl.Names {
+			param = param || info.Defs[n] == self
+		}
+	}
+	if !param {
+		return false
+	}
+	if _, named := types.Unalias(self.Type()).(*types.Named); !named {
+		return false
+	}
+	if _, isStruct := self.Type().Underlying().(*types.Struct); !isStruct {
+		return false
+	}
+	var sets []set
+	for _, s := range list[:len(list)-1] {
+		as, ok := s.(*ast.AssignStmt)
+		if !ok || as.Tok != token.ASSIGN || len(as.Lhs) != 1 || len(as.Rhs) != 1 {
+			return false
+		}
+		sel, ok := as.Lhs[0].(*ast.SelectorExpr)
+		if !ok || identOf(sel.X) == nil || info.Uses[identOf(sel.X)] != self {
+			return false
+		}
+		if s := info.Selections[sel]; s == nil || s.Kind() != types.FieldVal || len(s.Index()) != 1 {
+			return false
+		}
+		uses := false
+		ast.Inspect(as.Rhs[0], func(n ast.Node) bool {
+			id, ok := n.(*ast.Ident)
+			uses = uses || ok && info.Uses[id] == self
+			return !uses
+		})
+		if uses || slices.ContainsFunc(sets, func(s set) bool { return s.field == sel.Sel.Name }) {
+			return false
+		}
+		sets = append(sets, set{sel.Sel.Name, as.Rhs[0]})
+	}
+	f.self, f.sets = self, sets
+	return true
+}
+
 // find folds every match of the pattern in the workspace, or with line
 // only those that start on that line of the file in.
 func (f *folder) find(in string, line int) error {
-	f.by, f.adders = map[string][]edit.TextEdit{}, map[string]*imports.Adder{}
+	f.by, f.adders, f.rest = map[string][]edit.TextEdit{}, map[string]*imports.Adder{}, map[ast.Expr]rest{}
 	seen := map[token.Position]bool{}
 	declFile := f.ws.Fset.Position(f.decl.Pos()).Filename
 	for _, p := range f.ws.Pkgs {
@@ -322,6 +407,9 @@ func (f *folder) try(p *packages.Package, file *ast.File, x ast.Expr, stack []as
 	if tv, ok := info.Types[x]; !ok || !tv.IsValue() || tv.Value != nil {
 		return false, nil // a type, or a constant: nothing to fold
 	}
+	if f.sets != nil {
+		return f.trySetter(p, file, x, stack)
+	}
 	b := map[holeKey]ast.Expr{}
 	if !f.match(f.body, x, info, b) {
 		return false, nil
@@ -362,13 +450,160 @@ func (f *folder) try(p *packages.Package, file *ast.File, x ast.Expr, stack []as
 	if why != "" {
 		return skip(why)
 	}
+	f.replace(file, x, call)
+	return true, nil
+}
+
+// replace records that x, an expression of file, becomes call.
+func (f *folder) replace(file *ast.File, x ast.Expr, call string) {
 	path := f.ws.Fset.Position(file.Pos()).Filename
 	if f.by[path] == nil {
 		f.order = append(f.order, path)
 	}
 	f.by[path] = append(f.by[path], edit.TextEdit{Start: f.ws.Fset.Position(x.Pos()).Offset, End: f.ws.Fset.Position(x.End()).Offset, NewText: call})
 	f.n++
+}
+
+// trySetter folds x, an expression of file of package p inside stack, if
+// it is a literal of the setter's struct giving the fields the setter
+// sets as it sets them: the literal without them becomes the call's
+// struct argument.
+func (f *folder) trySetter(p *packages.Package, file *ast.File, x ast.Expr, stack []ast.Node) (bool, error) {
+	info := p.TypesInfo
+	lit, ok := x.(*ast.CompositeLit)
+	if !ok || !sameObj(baseName(info.TypeOf(lit)), baseName(f.self.Type())) {
+		return false, nil
+	}
+	b := map[holeKey]ast.Expr{{f.self, ""}: lit}
+	var drop []int
+	for _, s := range f.sets {
+		i := slices.IndexFunc(lit.Elts, func(e ast.Expr) bool {
+			kv, ok := e.(*ast.KeyValueExpr)
+			return ok && identOf(kv.Key) != nil && identOf(kv.Key).Name == s.field
+		})
+		if i < 0 || !f.match(s.value, lit.Elts[i].(*ast.KeyValueExpr).Value, info, b) {
+			return false, nil
+		}
+		drop = append(drop, i)
+	}
+	where := f.ws.Position(x.Pos())
+	skip := func(why string) (bool, error) {
+		f.skipped = append(f.skipped, where+": "+why)
+		return false, nil
+	}
+	if len(stack) > 0 && assigned(stack[len(stack)-1], x) {
+		return skip("it has its address taken")
+	}
+	if p.PkgPath != f.pkg.PkgPath && !f.fn.Exported() {
+		return skip(fmt.Sprintf("%s is not exported, so package %s cannot call it", f.fn.Name(), p.Name))
+	}
+	typ, why := f.elided(p, lit, stack)
+	if why != "" {
+		return skip(why)
+	}
+	// The fields set are evaluated after the rest of the literal, in the
+	// setter's order.
+	moved, others := 0, 0
+	for i, e := range lit.Elts {
+		if kv, ok := e.(*ast.KeyValueExpr); ok && (analysis.HasEffect(info, kv.Value) || analysis.MayPanic(info, kv.Value) != nil) {
+			if slices.Contains(drop, i) {
+				moved++
+			} else {
+				others++
+			}
+		}
+	}
+	if moved > 0 && moved+others > 1 {
+		return skip("fields with effects or that could panic would be evaluated in another order")
+	}
+	for k, e := range b {
+		if n := f.count(k); k.obj != f.self && n > 1 && (analysis.HasEffect(info, e) || analysis.MayPanic(info, e) != nil) {
+			return skip(fmt.Sprintf("%s, used %d times in the body, would be evaluated once", types.ExprString(e), n))
+		}
+	}
+	f.rest[lit] = rest{drop, typ}
+	call, why, err := f.call(p, file, b, stack)
+	if err != nil {
+		return false, err
+	}
+	if why != "" {
+		return skip(why)
+	}
+	f.replace(file, x, call)
 	return true, nil
+}
+
+// elided is the type to write for lit, of package p inside stack, when
+// an enclosing literal elides it, or ""; or why it cannot be written.
+func (f *folder) elided(p *packages.Package, lit *ast.CompositeLit, stack []ast.Node) (string, string) {
+	if lit.Type != nil {
+		return "", ""
+	}
+	var outer ast.Expr
+	key := false
+	switch parent := stack[len(stack)-1].(type) {
+	case *ast.CompositeLit:
+		outer = parent
+	case *ast.KeyValueExpr:
+		outer, key = stack[len(stack)-2].(ast.Expr), parent.Key == lit
+	}
+	t := types.Unalias(p.TypesInfo.TypeOf(outer))
+	if ptr, ok := t.(*types.Pointer); ok {
+		t = ptr.Elem()
+	}
+	var slot types.Type
+	switch u := t.Underlying().(type) {
+	case *types.Slice:
+		slot = u.Elem()
+	case *types.Array:
+		slot = u.Elem()
+	case *types.Map:
+		slot = u.Elem()
+		if key {
+			slot = u.Key()
+		}
+	}
+	if _, ptr := slot.(*types.Pointer); ptr {
+		return "", "its & is elided in the enclosing literal"
+	}
+	if p.PkgPath != f.pkg.PkgPath {
+		return "", "its type is elided in the enclosing literal, of another package"
+	}
+	return baseName(f.self.Type()).Name(), ""
+}
+
+// literal is lit's source in src, at offsets off, as r says to write it.
+func (r rest) literal(lit *ast.CompositeLit, src []byte, off func(token.Pos) int) string {
+	kept := -1 // the last element kept
+	for i := range lit.Elts {
+		if !slices.Contains(r.drop, i) {
+			kept = i
+		}
+	}
+	if kept < 0 {
+		return r.typ + string(src[off(lit.Pos()):off(lit.Lbrace)]) + "{}"
+	}
+	// Cut each element dropped up to the next one; a run of them at the
+	// end, from the end of the last element kept.
+	var cuts [][2]int
+	for _, i := range r.drop {
+		if i < kept {
+			cuts = append(cuts, [2]int{off(lit.Elts[i].Pos()), off(lit.Elts[i+1].Pos())})
+		}
+	}
+	if kept < len(lit.Elts)-1 {
+		cuts = append(cuts, [2]int{off(lit.Elts[kept].End()), off(lit.Elts[len(lit.Elts)-1].End())})
+	}
+	slices.SortFunc(cuts, func(a, b [2]int) int { return a[0] - b[0] })
+	var sb strings.Builder
+	sb.WriteString(r.typ)
+	at := off(lit.Pos())
+	for _, c := range cuts {
+		sb.Write(src[at:c[0]])
+		at = c[1]
+	}
+	sb.Write(src[at:off(lit.End())])
+	return sb.String()
 }
 
 // call is the call of fn that a match with holes b in file of package p,
@@ -380,6 +615,9 @@ func (f *folder) call(p *packages.Package, file *ast.File, b map[holeKey]ast.Exp
 		return "", "", err
 	}
 	text := func(e ast.Expr) string {
+		if r, ok := f.rest[e]; ok {
+			return r.literal(e.(*ast.CompositeLit), src, func(p token.Pos) int { return f.ws.Fset.Position(p).Offset })
+		}
 		return string(src[f.ws.Fset.Position(e.Pos()).Offset:f.ws.Fset.Position(e.End()).Offset])
 	}
 	// qualify writes name, of fn's package, for code in file.
@@ -474,7 +712,7 @@ func (f *folder) receiver(info *types.Info, b map[holeKey]ast.Expr, stack []ast.
 	if e, ok := b[holeKey{f.recv, ""}]; ok {
 		_, isPtr := info.TypeOf(e).(*types.Pointer)
 		switch ast.Unparen(e).(type) {
-		case *ast.Ident, *ast.SelectorExpr, *ast.IndexExpr:
+		case *ast.Ident, *ast.SelectorExpr, *ast.IndexExpr, *ast.CompositeLit:
 			return text(e), ""
 		case *ast.CallExpr:
 			if ptr && !isPtr {
