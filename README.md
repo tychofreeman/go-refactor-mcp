@@ -458,10 +458,11 @@ hand or a tool got in the way.
       reading overlaps it. *Done: refactor-mcp calls `Preload` at
       start; calls wait for it as they waited for the first load.
       Measured: no shorter on Hugo (328 s), since the model calls
-      `inspect` at once. Next: why a fresh copy loads so slowly (4 s
-      warm in the clone). Each copy is at a new path, which may keep
-      Go's build cache from serving the module's own packages; try
-      `-trimpath` in the load's build flags.*
+      `inspect` at once. Then: a fresh copy of Hugo loaded in 288 s
+      however warm the cache, as Go's build cache keys a package by
+      its directory; with `-trimpath` in the load's build flags, the
+      second copy loads in 2.2 s (the first fills the cache, 302 s).
+      Done; a cross-package rename finds the same 24 occurrences.*
     - **Stubs for types.** A test written first that uses a type not
       declared yet (`stackEntry` in lazygit) is refused; stubs are
       declared only for functions and methods. *Done: a type made with

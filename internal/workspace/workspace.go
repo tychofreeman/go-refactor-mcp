@@ -217,6 +217,10 @@ func (w *Workspace) Reload() error {
 		Dir:   w.Root,
 		Fset:  fset,
 		Tests: true,
+		// Without -trimpath, go's build cache keys a package by its
+		// directory, so a module copied to a new path (each A/B run)
+		// compiles again: minutes for Hugo, 2 s with it.
+		BuildFlags: []string{"-trimpath"},
 	}
 	pkgs, err := packages.Load(cfg, w.Patterns...)
 	if err != nil {

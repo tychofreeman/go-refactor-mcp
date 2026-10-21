@@ -1454,6 +1454,11 @@ refusal, which became a success case, was removed with `git rm`;
 nothing removes a file. PosMapOf began as a stub in a batch with its
 test, so the test could fail first.
 
+## 2026-10-20: loading with -trimpath
+
+One line through replace_text. Timed by hand in the scratchpad: fresh
+copies of Hugo with and without GOFLAGS=-trimpath.
+
 ## 2026-10-20: the workspace loads when the server starts
 
 All through gorefactor. The test receives from what Preload returns
