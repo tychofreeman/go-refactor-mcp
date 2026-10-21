@@ -199,6 +199,15 @@ func (f *folder) pattern(id *ast.Ident) error {
 	return nil
 }
 
+// shape describes the function's body for a message: its expression, or
+// how many statements it has.
+func (f *folder) shape() string {
+	if f.body != nil {
+		return types.ExprString(f.body)
+	}
+	return fmt.Sprintf("%d statement%s", len(f.stmts), textutil.Plural(len(f.stmts)))
+}
+
 // statementsOnly is why a body of statements does not do in place what a
 // call of it does: it returns, defers or jumps; or "".
 func statementsOnly(body *ast.BlockStmt) string {
@@ -951,10 +960,10 @@ func (*Fold) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan,
 		if len(f.skipped) > 0 {
 			why = "; what matched was left: " + strings.Join(limit(f.skipped, 5), "; ")
 		}
-		return nil, refactor.Refusef("nothing in the module matches the body of %s (%s)%s", fn.Name(), types.ExprString(f.body), why)
+		return nil, refactor.Refusef("nothing in the module matches the body of %s (%s)%s", fn.Name(), f.shape(), why)
 	}
 	plan := &refactor.Plan{
-		Summary: fmt.Sprintf("folded %d occurrence%s of %s into calls of %s", f.n, textutil.Plural(f.n), types.ExprString(f.body), fn.Name()),
+		Summary: fmt.Sprintf("folded %d occurrence%s of %s into calls of %s", f.n, textutil.Plural(f.n), f.shape(), fn.Name()),
 		Edits:   f.edits(),
 	}
 	if len(f.skipped) > 0 {

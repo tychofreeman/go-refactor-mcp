@@ -51,6 +51,12 @@ results are in `docs/cost-history.md`.
   the tools, and the gaps. Pose problems rather than ask for examples:
   the user said they could not think of many off the top of their head.
 
+- **Options over new tools** (2026-10-21): the pointer alias (gap A)
+  is `pointer` on `extract_variable`, not a tool of its own: the model
+  already reaches for extract_variable, and its refusal for a field
+  that is assigned to now names the option. More tools did not help a
+  fresh model (CLAUDE.md lessons).
+
 - **Loops and containers** (2026-10-20): the user asked for
   refactorings that convert between kinds of loop, and edits that make
   a block the body of a loop, an `if` and the like. Roadmap item 20.

@@ -103,7 +103,7 @@ nothing, as well as by the derived share.
 
 | | Gap | Kind |
 |---|---|---|
-| A | A pointer alias: `e.Sent` becomes `sent := &e.Sent` and its uses `*sent` | operation |
+| A | A pointer alias: `e.Sent` becomes `sent := &e.Sent` and its uses `*sent`. *Done:* `extract_variable` with `pointer` | operation |
 | B | Rewrite a constant into an equal expression (`"email to %s"` to `"email" + " to %s"`), the engine checking they are equal | operation |
 | C | Wrap statements in `if true { ... }` (or a loop, a closure) | operation |
 | D | `extract_function` replaces the same statements elsewhere too, and is told what becomes a parameter | operation |
@@ -117,6 +117,7 @@ nothing, as well as by the derived share.
 | L | Remove a struct field (refused while used) | operation |
 | M | Inlining substitutes a constant argument used more than once | analysis |
 | N | Remove exported code the module no longer uses, when asked to | operation |
+| O | Fold through a pointer parameter: `*sent` in the body matches `s.Sent`, passed as `&s.Sent`, so only one method needs the alias of A | operation |
 
 The user's derivations reshape without changing behavior, then make
 one small edit; the reshaping falls in three families: naming and

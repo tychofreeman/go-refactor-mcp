@@ -53,6 +53,7 @@ func (*ExtractVariable) Description() string {
 Use it to give a meaningful name to a complex sub-expression, to split up a long line, or (with all_occurrences) to replace a repeated expression.
 Identify the expression by file, the line where it starts, and its exact source text (whitespace may differ); add column only if that text occurs more than once on the line.
 all_occurrences also replaces identical occurrences later in the same block; it is only allowed for expressions without function calls (other than known ones without side effects, like strings.ToLower) whose variables are not modified afterwards.
+pointer declares a pointer to the expression instead (sent := &e.Sent) and writes *sent in its place, for a field or element that is assigned to or whose address is taken: then all_occurrences replaces writes too, and only what the address depends on (e) must not change.
 Refuses if moving the expression before its statement could change behavior: when it is only evaluated conditionally or repeatedly (right side of && or ||, loop condition or post statement, else-if, case expression), when it would run before other calls in the same statement, when it is assigned to or its address is taken, or when it uses variables declared inside the statement.`
 }
 
@@ -65,7 +66,8 @@ func (*ExtractVariable) InputSchema() json.RawMessage {
     "expression":      {"type": "string",  "description": "Source text of the expression, e.g. \"len(items) * unitPrice\"."},
     "name":            {"type": "string",  "description": "Name for the new variable."},
     "column":          {"type": "integer", "description": "Optional 1-based column where the expression starts, only needed if the text occurs more than once on the line."},
-    "all_occurrences": {"type": "boolean", "description": "Also replace identical occurrences later in the same block."}
+    "all_occurrences": {"type": "boolean", "description": "Also replace identical occurrences later in the same block."},
+    "pointer":         {"type": "boolean", "description": "Declare a pointer to the expression (name := &e.f) and use *name in its place, so writes still reach the original."}
   },
   "required": ["file", "line", "expression", "name"],
   "additionalProperties": false
@@ -79,17 +81,19 @@ type args struct {
 	Expression     string `json:"expression"`
 	Name           string `json:"name"`
 	AllOccurrences bool   `json:"all_occurrences,omitempty"`
+	Pointer        bool   `json:"pointer,omitempty"`
 }
 
 // extraction holds the state of one planning run.
 type extraction struct {
-	ws   *workspace.Workspace
-	pkg  *packages.Package
-	info *types.Info
-	file *ast.File
-	tf   *token.File
-	src  []byte
-	name string
+	ws      *workspace.Workspace
+	pkg     *packages.Package
+	info    *types.Info
+	file    *ast.File
+	tf      *token.File
+	src     []byte
+	name    string
+	pointer bool // the variable is a pointer to the expression
 
 	fn ast.Node       // outermost enclosing function (FuncDecl or FuncLit)
 	fa *analysis.Func // facts about fn's locals
@@ -122,7 +126,7 @@ func (*ExtractVariable) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 		return nil, err
 	}
 	x := &extraction{
-		ws: ws, pkg: pkg, info: pkg.TypesInfo, file: file, src: src, name: a.Name,
+		ws: ws, pkg: pkg, info: pkg.TypesInfo, file: file, src: src, name: a.Name, pointer: a.Pointer,
 		tf: ws.Fset.File(file.Pos()),
 	}
 
@@ -228,13 +232,16 @@ func (x *extraction) plan(expr ast.Expr, all bool) (*refactor.Plan, error) {
 		NewText: decl + "\n" + x.indentOf(insertPos),
 	}}
 	for _, s := range sites {
-		w := x.widenParens(s) // "(a + b)" becomes "name", not "(name)"
-		edits = append(edits, edit.TextEdit{Start: x.off(w.Pos()), End: x.off(w.End()), NewText: x.name})
+		n, text := x.replacement(s)
+		edits = append(edits, edit.TextEdit{Start: x.off(n.Pos()), End: x.off(n.End()), NewText: text})
 	}
 
 	kind := "variable"
-	if isConst {
+	switch {
+	case isConst:
 		kind = "constant"
+	case x.pointer:
+		kind = "pointer"
 	}
 	return &refactor.Plan{
 		Summary: fmt.Sprintf("extracted %s into %s %q (%d occurrence%s replaced)",
@@ -242,6 +249,33 @@ func (x *extraction) plan(expr ast.Expr, all bool) (*refactor.Plan, error) {
 		Edits: []edit.FileEdit{{Path: path0, Edits: edits}},
 		Notes: notes,
 	}, nil
+}
+
+// replacement returns the node to replace at an occurrence and what to
+// write in its place.
+func (x *extraction) replacement(site ast.Expr) (ast.Node, string) {
+	w := x.widenParens(site) // "(a + b)" becomes "name", not "(name)"
+	if !x.pointer {
+		return w, x.name
+	}
+	if path := analysis.PathTo(x.file, w); len(path) > 1 {
+		if u, ok := path[1].(*ast.UnaryExpr); ok && u.Op == token.AND {
+			return u, x.name // &e.f becomes name
+		}
+		if analysis.NeedsParens(&ast.StarExpr{X: ast.NewIdent(x.name)}, path[1], w) {
+			return w, "(*" + x.name + ")"
+		}
+	}
+	return w, "*" + x.name
+}
+
+// stable is Func.Stable for what the new variable holds: with pointer,
+// the expression's address rather than its value.
+func (x *extraction) stable(expr ast.Expr, sharing bool) (ast.Node, bool) {
+	if !x.pointer {
+		return x.fa.Stable(expr, sharing)
+	}
+	return x.fa.StableAddress(expr)
 }
 
 // ---------------------------------------------------------------------------
@@ -304,8 +338,16 @@ func (x *extraction) validate(expr ast.Expr, path []ast.Node) (types.TypeAndValu
 	if usesIota {
 		return tv, refactor.Refusef("%s uses iota, whose value depends on its position in the const declaration", q)
 	}
-	if why := analysis.UsedAsVariable(x.info, path); why != "" {
-		return tv, refactor.Refusef("%s %s; a new variable would be a copy, so the change would no longer reach the original", q, why)
+	if x.pointer {
+		if !tv.Addressable() {
+			return tv, refactor.Refusef("%s is not addressable (a map element, a call's result or a computed value), so there is no pointer to it; extract it without pointer", q)
+		}
+	} else if why := analysis.UsedAsVariable(x.info, path); why != "" {
+		hint := ""
+		if tv.Addressable() {
+			hint = "; pass pointer to declare a pointer to it instead"
+		}
+		return tv, refactor.Refusef("%s %s; a new variable would be a copy, so the change would no longer reach the original%s", q, why, hint)
 	}
 	if len(path) > 1 {
 		switch p := path[1].(type) {
@@ -468,7 +510,7 @@ func (x *extraction) checkOrder(expr ast.Expr, stmt ast.Stmt) error {
 	if first == nil {
 		return nil
 	}
-	if culprit, ok := x.fa.Stable(expr, false); !ok {
+	if culprit, ok := x.stable(expr, false); !ok {
 		return refactor.Refusef("extracting %s would evaluate it before %s (at %s), which comes first in the statement and could change what %s computes; extract %s first, or choose another expression",
 			x.quote(expr), x.quote(first), x.ws.Position(first.Pos()), x.quote(culprit), x.quote(first))
 	}
@@ -511,7 +553,7 @@ func (x *extraction) checkWritesBefore(expr ast.Expr, stmt ast.Stmt) error {
 	if len(writes) == 0 {
 		return nil
 	}
-	_, stable := x.fa.Stable(expr, false)
+	_, stable := x.stable(expr, false)
 	reads := map[*types.Var]bool{}
 	for _, v := range x.fa.LocalsRead(expr) {
 		reads[v] = true
@@ -619,6 +661,9 @@ func (x *extraction) declaration(expr ast.Expr, tv types.TypeAndValue, isConst b
 	if isConst {
 		return "const " + x.name + " = " + rhs, nil
 	}
+	if x.pointer {
+		return x.name + " := &" + rhs, nil
+	}
 	// "v := e" gives v the type of e on its own. For untyped non-constant
 	// expressions (comparisons, shifts of untyped constants) that is the
 	// default type, which may differ from the type the context gave it.
@@ -674,11 +719,11 @@ func (x *extraction) typeString(t types.Type) (string, error) {
 // the end of its block, after checking that one shared value is
 // equivalent to recomputing it at each of them.
 func (x *extraction) occurrences(expr ast.Expr, tv types.TypeAndValue, container ast.Node, insertPos token.Pos) ([]ast.Expr, []string, error) {
-	if culprit, ok := x.fa.Stable(expr, true); !ok {
+	if culprit, ok := x.stable(expr, true); !ok {
 		return nil, nil, refactor.Refusef("all_occurrences requires an expression whose value cannot change between its occurrences, but %s could (it involves %s); extract a single occurrence instead (omit all_occurrences)",
 			x.quote(expr), x.quote(culprit))
 	}
-	for _, id := range analysis.ScopeRefs(x.info, expr) {
+	for _, id := range x.dependsOn(expr) {
 		v, ok := x.info.Uses[id].(*types.Var)
 		if !ok {
 			continue
@@ -698,7 +743,7 @@ func (x *extraction) occurrences(expr ast.Expr, tv types.TypeAndValue, container
 		if !ok || e.Pos() < insertPos || !x.same(e, expr, tv) {
 			return true
 		}
-		if why := analysis.UsedAsVariable(x.info, analysis.PathTo(x.file, e)); why != "" {
+		if why := analysis.UsedAsVariable(x.info, analysis.PathTo(x.file, e)); why != "" && !x.pointer {
 			skippedWrites = append(skippedWrites, x.ws.Position(e.Pos()))
 			return false
 		}
@@ -728,10 +773,25 @@ func (x *extraction) occurrences(expr ast.Expr, tv types.TypeAndValue, container
 	return sites, notes, nil
 }
 
+// dependsOn returns the names whose values the new variable's value
+// depends on: those of the expression, or with pointer, those of the
+// operands its address depends on.
+func (x *extraction) dependsOn(expr ast.Expr) []*ast.Ident {
+	if !x.pointer {
+		return analysis.ScopeRefs(x.info, expr)
+	}
+	ops, _ := x.fa.AddressOperands(expr)
+	var ids []*ast.Ident
+	for _, op := range ops {
+		ids = append(ids, analysis.ScopeRefs(x.info, op)...)
+	}
+	return ids
+}
+
 // laterCopies lists positions of other identical occurrences after the
 // insertion point that all_occurrences could replace, for a helpful note.
 func (x *extraction) laterCopies(expr ast.Expr, tv types.TypeAndValue, container ast.Node, insertPos token.Pos) []string {
-	if _, ok := x.fa.Stable(expr, true); !ok {
+	if _, ok := x.stable(expr, true); !ok {
 		return nil
 	}
 	var out []string
