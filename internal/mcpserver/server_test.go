@@ -560,6 +560,22 @@ func TestStubsForWhatEditsCall(t *testing.T) {
 	mustContain(t, "replace_statements", out, "APPLIED batch: 2 steps", "field Limit int, in struct Conf")
 }
 
+// An edit, replace_text too, gets the imports its code needs, and loses
+// those it leaves unused.
+func TestImportsForWhatEditsUse(t *testing.T) {
+	cs, dir := setup(t)
+	out, _ := call(t, cs, "replace_text", map[string]any{"file": "calc/calc.go", "old": "return n * Rate", "new": "return n * Rate * len(strings.TrimSpace(\" x \"))"})
+	mustContain(t, "replace_text", out, "APPLIED replace_text", `added import "strings"`)
+	got, _ := os.ReadFile(filepath.Join(dir, "calc", "calc.go"))
+	mustContain(t, "calc.go", string(got), `import "strings"`)
+
+	out, _ = call(t, cs, "replace_text", map[string]any{"file": "calc/calc.go", "old": " * len(strings.TrimSpace(\" x \"))", "new": ""})
+	mustContain(t, "replace_text", out, "APPLIED batch: 2 steps", `removed import "strings", which nothing uses any more`)
+	if got, _ := os.ReadFile(filepath.Join(dir, "calc", "calc.go")); string(got) != calcSrc {
+		t.Errorf("calc.go:\n%s\nwant:\n%s", got, calcSrc)
+	}
+}
+
 // TestRefactoringLoop walks the loop the model is meant to follow.
 func TestRefactoringLoop(t *testing.T) {
 	cs, dir := setup(t)

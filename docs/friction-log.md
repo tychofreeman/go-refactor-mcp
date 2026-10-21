@@ -1426,6 +1426,14 @@ scripts, `tasks.json` and the docs are Python, JSON and Markdown, and no
 Go changed. As in the PR before, the gorefactor server of this cloud
 session ran on the linked computer, not on this checkout.
 
+## 2026-10-20: imports fixed after every edit
+
+All through gorefactor: the package and its fixtures with create_file,
+the Plan with replace_statements, the engine's wiring with add_field,
+add_declaration and replace_text. A fixture's expected import grouping
+was wrong (the module's import goes in its own group), fixed with
+replace_text.
+
 ## 2026-10-20: stubs for fields
 
 All through gorefactor: fixtures with create_file, the new functions

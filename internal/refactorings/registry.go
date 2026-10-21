@@ -13,6 +13,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/addfield"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/createfile"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/createfromusage"
+	"github.com/tychofreeman/go-refactor-mcp/internal/edits/fiximports"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/insertstmts"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/replaceexpr"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/replacestmts"
@@ -90,6 +91,10 @@ func Declarer() refactor.Refactoring {
 	return nil
 }
 
+// Importer is fix_imports, which a batch runs to add the imports its
+// steps' code needs and remove those it leaves unused.
+func Importer() refactor.Refactoring { return fiximports.New() }
+
 // RunStep runs one refactoring or edit as the tools do: an edit whose
 // result does not type-check is run again as a batch, which declares the
 // functions it calls. It returns the result to show and whether the step
@@ -100,7 +105,7 @@ func RunStep(ws *workspace.Workspace, r refactor.Refactoring, args json.RawMessa
 		return "", false, err
 	}
 	if _, edit := r.(refactor.Edit); edit && !opts.DryRun && strings.HasPrefix(res.Refused, "the result does not type-check") {
-		opts.Unchecked, opts.Declare = true, Declarer()
+		opts.Unchecked, opts.Declare, opts.Imports = true, Declarer(), Importer()
 		b, err := refactor.RunBatch(ws, []refactor.Step{{Refactoring: r, Args: args}}, opts)
 		if err != nil {
 			return "", false, err
