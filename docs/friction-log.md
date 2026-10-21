@@ -1647,3 +1647,11 @@ The arm's CLAUDE.md files were copied with `cp` (nothing copies a
 file), then the derivation section added with replace_text; the tasks,
 hidden tests and docs through gorefactor. The reference solutions that
 validate the tasks are a scratch script, not committed.
+
+## 2026-10-21: the derivation experiment on code with many uses
+
+The seeded module `notify-large` (388 lines of test data) was written
+by a generator script in the scratchpad, not through gorefactor; the
+tasks, hidden tests and docs through gorefactor. Validating against
+reference solutions caught a wrong expected value in a hidden test,
+fixed with replace_text.

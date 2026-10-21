@@ -37,7 +37,10 @@ results are in `docs/cost-history.md`.
   derived share. The experiment of cost-history section 8: guidance in
   the user's moves changed how the model worked where a recipe fit,
   but not cost, on a module too small for rewriting by hand to cost
-  much; next is the same on code with many uses.
+  much. On code with many uses (`notify-large`, cost-history section
+  8) the guided arm cost 14% less and wrote 39% fewer lines by hand,
+  the gap on fit and Batch, where a derivation replaces rewriting each
+  use: the first measured support for the user's thesis.
 
 - **Derivations from the user** (2026-10-20): asked how they would
   reach five shapes with operations, the user answered with moves such
