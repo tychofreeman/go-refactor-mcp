@@ -451,8 +451,8 @@ func (t *target) newPlan(what string, fes []edit.FileEdit) *refactor.Plan {
 		// result lists where.
 		Locations: true,
 	}
-	if t.obj.Exported() {
-		plan.Notes = append(plan.Notes, fmt.Sprintf("%s is exported: calls in other modules are not updated", t.obj.Name()))
+	if analysis.PublicAPI(t.obj, t.ws.Pkgs) {
+		plan.Notes = append(plan.Notes, refactor.APINote(t.obj.Name(), "changing its signature"))
 		if t.obj.Signature().Recv() != nil {
 			plan.Notes = append(plan.Notes, "interfaces declared inside functions outside this module (such as the ones errors.Is and errors.As look for) cannot be checked")
 		}

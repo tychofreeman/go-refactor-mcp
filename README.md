@@ -825,6 +825,27 @@ hand or a tool got in the way.
     - **Search in the engine** (the long shot): given the target shape
       (a struct's new declaration, a function's new signature), search
       sequences of operations that reach it and return the shortest.
+22. **Exported code** (the user, 2026-10-21): refactorings change
+    exported code as gopls does, update this module, and note that the
+    module's API changed, so the model can mark a breaking change (a
+    new major version). Not API: a main package, or one under an
+    internal directory. Refusals for exported code met in the
+    exploration runs: `extract_struct` 12, `remove_dead_code` 4,
+    `function_to_method` 1. In order, one PR each:
+    - **The note, and `remove_dead_code`.** *Done:* `refactor.APINote`,
+      `analysis.PublicAPI`; rename, the signature tools,
+      `change_field_type` and `move_declaration` use the note;
+      `remove_dead_code` no longer refuses exported code (its
+      `exported` option is no longer needed).
+    - `merge_duplicate_function` and `inline_function` delete an
+      exported function (inline_function must then look for uses in
+      every package, not only its own).
+    - `extract_struct` of an exported struct.
+    - The method guards (`extract_function` from a method,
+      `function_to_method`, `method_to_function`): in place of an
+      unexported name, refuse only a method that changes which
+      interfaces of the module and its dependencies the type
+      implements, as rename checks; note it for other modules.
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the

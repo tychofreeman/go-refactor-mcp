@@ -100,8 +100,9 @@ until the MCP is reconnected.
    step can be undone with `undo`.
 
 Known gaps (do these by hand and log them): nothing restores a file.
-remove_dead_code removes an unused struct field (`Type.Field`), and
-exported code with `exported`. Files and directories move and go with
+remove_dead_code removes an unused struct field (`Type.Field`).
+Refactorings change exported code and note when the module's API
+changed. Files and directories move and go with
 move_file and delete_file.
 
 ## Measuring cost

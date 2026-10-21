@@ -1,0 +1,2 @@
+Helper is exported: removing it changes the module's API
+new major version

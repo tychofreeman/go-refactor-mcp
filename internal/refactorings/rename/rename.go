@@ -893,8 +893,8 @@ func (r *renamer) plan() (*refactor.Plan, error) {
 		Edits:     fes,
 		Locations: true,
 	}
-	if token.IsExported(r.old) && token.IsExported(r.new) && (isPackageLevel(r.first) || r.first.Parent() == nil) {
-		plan.Notes = append(plan.Notes, fmt.Sprintf("%q is exported: code outside this workspace that uses it was not updated", r.old))
+	if analysis.PublicAPI(r.first, r.ws.Pkgs) && (isPackageLevel(r.first) || r.first.Parent() == nil) {
+		plan.Notes = append(plan.Notes, refactor.APINote(r.old, "renaming it"))
 	}
 	if len(docFes) > 0 {
 		plan.Notes = append(plan.Notes, fmt.Sprintf("renamed %q in the doc comment that starts with it", r.old))

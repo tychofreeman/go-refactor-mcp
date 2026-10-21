@@ -61,6 +61,12 @@ type Plan struct {
 	Choices   []string        // what the tool decided for the model (a signature, a file), for it to check
 }
 
+// APINote is the note for a change to name, which is part of the
+// module's API; change says what was done to it ("removing it").
+func APINote(name, change string) string {
+	return fmt.Sprintf("%s is exported: %s changes the module's API; code in other modules that uses it is not updated and breaks, so a release needs a new major version", name, change)
+}
+
 // Fix is an edit that may start from code that does not type-check, such
 // as a call of a function not declared yet. It must leave fewer errors,
 // and no new one.
