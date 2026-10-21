@@ -363,6 +363,36 @@ each of two fields, which fold took only twice. Three runs per task
 is within the noise for the totals; the written lines and the
 operations used are the clearer signal, and they point the same way.
 
+**Six runs per task** (`large6-base`, `large6-guided`), with a server
+that had `extract_variable`'s `pointer` (#216) and `fields_to_map`
+(#217, since closed). Every run passed. Contacts is left out: both arms
+did it in one `fields_to_map` call ($0.08, 5 turns), which measures
+that tool, not the guidance. The earlier runs are recounted the same
+way (production lines in what each step wrote, test files left out),
+which counts more than the table above did:
+
+| Run | runs | cost | input | turns per run | steps writing nothing | production lines written per run |
+|---|---|---|---|---|---|---|
+| large-base | 12 | $1.68 | 2.77M | 10.8 | 17% | 22.9 |
+| large-guided | 12 | $1.54 | 2.41M | 8.9 | 40% | 15.1 |
+| large6-base | 24 | $3.18 | 5.30M | 10.2 | 11% | 15.7 |
+| large6-guided | 24 | $3.05 | 4.81M | 9.1 | 55% | 10.9 |
+
+With twice the runs the direction holds and the cost gap shrinks: 4%
+less cost (8% at three runs), 9% fewer input tokens, 11% fewer turns,
+31% fewer lines written by hand, and over half the guided arm's steps
+write nothing. By task: fit is the steady win (3.3 lines against 13.5,
+$0.12 against $0.14, 8.0 turns against 11.8; fold and inline_function
+in every guided run); Batch is derived (56 of 70 steps write nothing:
+rename, fold, inline_function) but costs the same, and its lines
+written are close (21.7 against 24.2), since declaring Batch and the
+delegate is most of them; opt-out 9.3 against 13.5; the shared record
+9.3 against 11.5. The same arm varies a lot between the two runs
+(base Batch 48.7 then 24.2 lines), so per-task numbers at this size
+are rough. No run used `pointer`: both arms wrote the shared helper
+with replace_statements and never tried to extract `e.Sent`, so the
+refusal that names the option never came up.
+
 ## What made the difference
 
 - **Smaller results** (#75, rename locations): the largest single win when

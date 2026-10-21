@@ -40,7 +40,12 @@ results are in `docs/cost-history.md`.
   much. On code with many uses (`notify-large`, cost-history section
   8) the guided arm cost 14% less and wrote 39% fewer lines by hand,
   the gap on fit and Batch, where a derivation replaces rewriting each
-  use: the first measured support for the user's thesis.
+  use: the first measured support for the user's thesis. At six runs
+  per task (cost-history section 8) it held but smaller: 4% less
+  cost, 31% fewer lines by hand, 55% of steps writing nothing against
+  11%; fit is the steady win. A new option the model is not led to
+  (`pointer`) went unused: options surface through refusals and
+  recipes, so a gap's fix needs one of them to be used.
 
 - **Derivations from the user** (2026-10-20): asked how they would
   reach five shapes with operations, the user answered with moves such

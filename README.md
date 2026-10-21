@@ -725,8 +725,11 @@ hand or a tool got in the way.
       the gaps those runs hit (pointer alias A for the shared record,
       *done* as `extract_variable` with `pointer`; fold through a
       pointer parameter, O; for Contacts, fold literals through a setter,
-      K, then remove the fields, L), and more
-      runs per task.
+      K, then remove the fields, L). *Six runs per task done*: 4% less
+      cost, 31% fewer lines by hand, 55% of steps writing nothing
+      against 11% (Contacts left out); no run used `pointer`, since
+      none tried to extract `e.Sent`. Next: K and L, then Contacts
+      again, and a recipe or gap O so the shared record is derived.
 
 20. **Loops and containers** (asked for by the user, 2026-10-20): the
     structural moves on control flow that derivations need and no tool

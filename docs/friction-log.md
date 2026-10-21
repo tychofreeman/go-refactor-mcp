@@ -1672,6 +1672,10 @@ now needs the alias in every Send method before fold matches them
 
 Docs only, all with replace_text.
 
+## 2026-10-21: six runs per task on notify-large
+
+Docs only, all with replace_text. The counts of lines written and
+steps writing nothing are a scratch script, not committed.
 ## 2026-10-21: the project history through 21 October
 
 All through `refactor batch`: replace_text steps in
