@@ -393,6 +393,22 @@ are rough. No run used `pointer`: both arms wrote the shared helper
 with replace_statements and never tried to extract `e.Sent`, so the
 refusal that names the option never came up.
 
+**Contacts after K and L** (`contacts-kl-base`, `contacts-kl-guided`,
+six runs each, server at main after #222): 6/6 each, $0.185 a run in
+both arms, 14.3 turns against 10.7. The guided arm took the recipe in
+three runs: getters and `WithEmail`/`WithPhone` setters, folds of all
+13 reads of Email and 10 of Phone, then the setter fold, which folded
+one literal and left the rest: they were `[]notify.User{{...}}` in
+test files of other packages, and an elided type there was refused
+(not qualified). One run wrote the types out with replace_text and
+folded them, changing the representation in the four functions only;
+two rewrote the literals by hand, so the guided arm wrote more lines
+(35.0 a run against 25.5) and 17% of its steps wrote nothing (5%).
+No run used remove_dead_code on the fields: with no uses left, they
+replaced the `User` declaration whole. The base arm never folded.
+Fixed next: the setter fold qualifies an elided type in another
+package.
+
 ## What made the difference
 
 - **Smaller results** (#75, rename locations): the largest single win when
