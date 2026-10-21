@@ -171,7 +171,7 @@ results are in `docs/cost-history.md`.
   same cost; the new stubs, fix_imports and family changes rarely
   fired, so most of the drop is how the runs went. Preload did not
   help Hugo's first call (the load itself is slow in a fresh copy).
-  Fixed by loading with `-trimpath` (#193): Go's build cache keyed the
+  Fixed by loading with `-trimpath` (#195): Go's build cache keyed the
   module's packages by directory, so every A/B copy compiled Hugo again
   (288 s); with it, a second copy loads in 2.2 s. The first load after
   the change still fills the cache, so time a run's second task, not
