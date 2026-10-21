@@ -590,6 +590,12 @@ hand or a tool got in the way.
           (`f(xs...)`) among them, for the model to fix in the same
           batch. An edit, not a refactoring, so that a batch with check
           "end" checks it with those fixes (the user's decision).
+          *Done (#194): change_type changes an alias's target or a
+          defined type's underlying type, with the imports that follow;
+          in a batch with check "end" its result lists the type errors
+          it left (`refactor.BreakageNoter`). The list is the compiler's
+          errors, not a classification of uses; that can come if the
+          errors prove hard to act on.*
       - **Later: one `change_signature`** taking the new signature, which
         works out the parameters added, removed, moved and retyped and
         the results, and needs a value at each call for a new one.
