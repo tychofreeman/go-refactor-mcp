@@ -4,6 +4,7 @@ package replacetext
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -202,9 +203,16 @@ func addImports(ws *workspace.Workspace, fe *edit.FileEdit, chosen []string) ([]
 	}
 	adder := imports.New(ws, pkg, file, src)
 	pos := ws.Fset.File(file.Pos()).Pos(fe.Edits[0].Start)
-	added, err := gocode.ImportNames(ws, pkg, file, adder, pos, names, chosen)
-	if err != nil {
-		return nil, err
+	var added []string
+	for _, name := range names {
+		paths, err := gocode.ImportNames(ws, pkg, file, adder, pos, []string{name}, chosen)
+		if errors.As(err, new(gocode.NoPackageError)) {
+			continue // no package: a name the type check judges, such as one a later step declares
+		}
+		if err != nil {
+			return nil, err
+		}
+		added = append(added, paths...)
 	}
 	fe.Edits = append(fe.Edits, adder.Edits()...)
 	return added, nil

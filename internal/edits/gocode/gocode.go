@@ -188,8 +188,16 @@ func resolve(ws *workspace.Workspace, pkg *packages.Package, name string, chosen
 			return "", refactor.Refusef("%s could be %s; name the one to import in imports", name, joinOr(paths))
 		}
 	}
-	return "", refactor.Refusef("the content uses %s, which is not in scope there and no package of that name was found; declare it, or name the package to import in imports", name)
+	return "", NoPackageError{refactor.Refusef("the content uses %s, which is not in scope there and no package of that name was found; declare it, or name the package to import in imports", name)}
 }
+
+// NoPackageError is the refusal of a name no package has: not imported,
+// and no package of that name found. A caller that leaves such a name to
+// the type check (a variable a later step declares) can tell it from an
+// ambiguous name.
+type NoPackageError struct{ error }
+
+func (e NoPackageError) Unwrap() error { return e.error }
 
 // importedAs returns the paths that the files of the workspace's packages
 // for which in is true import as name.

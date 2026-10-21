@@ -591,6 +591,17 @@ func TestImportsForWhatEditsUse(t *testing.T) {
 	}
 }
 
+// replace_text leaves alone a selector on a name no package has, such as
+// a variable a later step of the batch declares.
+func TestReplaceTextLeavesLaterNames(t *testing.T) {
+	cs, _ := setup(t)
+	out, _ := call(t, cs, "batch", map[string]any{"check": "end", "steps": []any{
+		map[string]any{"tool": "replace_text", "args": map[string]any{"file": "calc/calc.go", "old": "return n * Rate", "new": "return n * Rate * len(words.FindString(\"x\"))"}},
+		map[string]any{"tool": "add_declaration", "args": map[string]any{"file": "calc/calc.go", "content": "var words = regexp.MustCompile(`\\w+`)"}},
+	}})
+	mustContain(t, "batch", out, "APPLIED batch")
+}
+
 // An edit that changes a signature as text, and breaks its calls, is
 // refused with the tools that change a signature with every call.
 func TestSignatureEditPointsToTools(t *testing.T) {
