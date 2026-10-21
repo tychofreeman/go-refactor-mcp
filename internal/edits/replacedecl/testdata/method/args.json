@@ -1,0 +1,1 @@
+{"file": "m.go", "name": "point.sum", "content": "func (p point) sum() int {\n\ts := p.x\n\treturn s + p.y\n}"}

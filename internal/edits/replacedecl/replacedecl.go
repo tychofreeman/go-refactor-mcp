@@ -1,0 +1,243 @@
+// Package replacedecl implements replace_declaration, an edit that
+// replaces a top-level declaration, found by name, with new source.
+package replacedecl
+
+import (
+	"encoding/json"
+	"fmt"
+	"go/ast"
+	"go/token"
+	"os"
+	"slices"
+	"strings"
+
+	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
+	"github.com/tychofreeman/go-refactor-mcp/internal/edits/gocode"
+	"github.com/tychofreeman/go-refactor-mcp/internal/imports"
+	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
+	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
+)
+
+// ReplaceDeclaration is the "replace_declaration" edit.
+type ReplaceDeclaration struct{}
+
+// New returns the replace_declaration edit.
+func New() *ReplaceDeclaration { return &ReplaceDeclaration{} }
+
+func (*ReplaceDeclaration) Name() string { return "replace_declaration" }
+
+func (*ReplaceDeclaration) Description() string {
+	return `Replace a whole top-level declaration, found by name, with new source: a function or method with its signature, a type, a variable (a table, say) or a constant; in a parenthesized group, just its spec. This is an edit, not a refactoring: it may change behavior.
+Use it when the signature and body change together, or for a declaration too long to restate as replace_text's old; for a body alone, replace_statements with function.
+Give file, name (Name or Type.Method) and content: the one new declaration, which must declare the same name (to rename, use rename). The old doc comment stays, unless content has one of its own. Packages content names are imported, and those only the old declaration used are removed (imports chooses when a name is ambiguous). Like every step, the result must type-check: callers a new signature breaks are refused, or fixed in the same batch with check "end".`
+}
+
+func (*ReplaceDeclaration) InputSchema() json.RawMessage {
+	return json.RawMessage(`{
+  "type": "object",
+  "properties": {
+    "file":    {"type": "string",  "description": "Path of a file containing the declaration or a use, relative to the workspace root."},
+    "line":    {"type": "integer", "description": "1-based line of that occurrence. Omit it to find name as a symbol of the package of file."},
+    "name":    {"type": "string",  "description": "The declared name: Name, or Type.Method for a method."},
+    "column":  {"type": "integer", "description": "Optional 1-based column, only needed to disambiguate."},
+    "content": {"type": "string",  "description": "The new declaration, as Go source, with a doc comment to replace the old one."},
+    "imports": {"type": "array", "items": {"type": "string"}, "description": "Optional: import paths to use for package names content uses, when the name alone is ambiguous."}
+  },
+  "required": ["file", "name", "content"],
+  "additionalProperties": false
+}`)
+}
+
+// ChangesBehavior marks this as an edit.
+func (*ReplaceDeclaration) ChangesBehavior() {}
+
+type args struct {
+	File    string   `json:"file"`
+	Line    int      `json:"line"`
+	Column  int      `json:"column,omitempty"`
+	Name    string   `json:"name"`
+	Content string   `json:"content"`
+	Imports []string `json:"imports,omitempty"`
+}
+
+// header is what gocode.ParseDeclarations puts before content.
+const header = "package p\n"
+
+// Plan checks preconditions and computes the edits.
+func (*ReplaceDeclaration) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
+	var a args
+	if err := refactor.DecodeArgs(raw, &a); err != nil {
+		return nil, err
+	}
+	pkg, id, err := locate.Ident(ws, locate.IdentQuery{File: a.File, Line: a.Line, Column: a.Column, Name: a.Name})
+	if err != nil {
+		return nil, err
+	}
+	obj := pkg.TypesInfo.ObjectOf(id)
+	if obj == nil {
+		return nil, refactor.Refusef("%s at %s is not a declared name", a.Name, ws.Position(id.Pos()))
+	}
+	path := ws.Fset.Position(obj.Pos()).Filename
+	dpkg, file := ws.FileSyntax(path)
+	if file == nil {
+		return nil, refactor.Refusef("%s is declared outside the loaded packages", a.Name)
+	}
+	decl, spec := declOf(file, obj.Pos())
+	if decl == nil {
+		return nil, refactor.Refusef("%s is not a top-level declaration", a.Name)
+	}
+	code, decls, err := gocode.ParseDeclarations(a.Content)
+	if err != nil {
+		return nil, err
+	}
+	if len(decls) != 1 {
+		return nil, refactor.Refusef("content must be one declaration, the new %s; it has %d", obj.Name(), len(decls))
+	}
+	nd := decls[0]
+	if names := declared(nd); !slices.Contains(names, obj.Name()) {
+		return nil, refactor.Refusef("content declares %s, not %s; to rename it, use rename", strings.Join(names, ", "), obj.Name())
+	}
+	if err := sameKind(decl, nd); err != nil {
+		return nil, err
+	}
+	src, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	tf := ws.Fset.File(file.Pos())
+	text := strings.TrimSpace(a.Content)
+	start, end := decl.Pos(), decl.End()
+	switch {
+	case spec != nil:
+		// One spec of a group: its doc stays, and the new spec's text goes in.
+		g := nd.(*ast.GenDecl)
+		if len(g.Specs) != 1 {
+			return nil, refactor.Refusef("%s is one spec of a group; content must declare just it", obj.Name())
+		}
+		text = textOf(a.Content, g.Specs[0])
+		start, end = spec.Pos(), spec.End()
+	case docOf(nd) != nil:
+		if d := docOf(decl); d != nil {
+			start = d.Pos()
+		}
+	}
+	adder := imports.New(ws, dpkg, file, src)
+	added, err := gocode.AddImports(ws, dpkg, file, adder, file.Name.Pos(), code, a.Imports)
+	if err != nil {
+		return nil, err
+	}
+	removed := gocode.RemoveImports(dpkg, file, adder, gocode.Between(start, end), code)
+	plan := &refactor.Plan{
+		Summary:  fmt.Sprintf("replaced %s in %s", a.Name, ws.Rel(path)),
+		Edits:    []edit.FileEdit{{Path: path, Edits: append([]edit.TextEdit{{Start: tf.Offset(start), End: tf.Offset(end), NewText: text}}, adder.Edits()...)}},
+		Supplied: a.Content,
+	}
+	if len(added) > 0 {
+		plan.Notes = append(plan.Notes, gocode.ImportNote("added", added))
+	}
+	if len(removed) > 0 {
+		plan.Notes = append(plan.Notes, gocode.ImportNote("removed", removed)+", which only the old declaration used")
+	}
+	return plan, nil
+}
+
+// declOf is the top-level declaration of file that declares the name at
+// pos, and its spec when that is one of several in a group.
+func declOf(file *ast.File, pos token.Pos) (ast.Decl, ast.Spec) {
+	for _, d := range file.Decls {
+		if slices.Contains(declaredAt(d), pos) {
+			if g, ok := d.(*ast.GenDecl); ok && len(g.Specs) > 1 {
+				for _, s := range g.Specs {
+					if slices.Contains(specAt(s), pos) {
+						return d, s
+					}
+				}
+			}
+			return d, nil
+		}
+	}
+	return nil, nil
+}
+
+// declaredAt are the positions of the names d declares.
+func declaredAt(d ast.Decl) []token.Pos {
+	var out []token.Pos
+	switch d := d.(type) {
+	case *ast.FuncDecl:
+		out = append(out, d.Name.Pos())
+	case *ast.GenDecl:
+		for _, s := range d.Specs {
+			out = append(out, specAt(s)...)
+		}
+	}
+	return out
+}
+
+// specAt are the positions of the names s declares.
+func specAt(s ast.Spec) []token.Pos {
+	switch s := s.(type) {
+	case *ast.TypeSpec:
+		return []token.Pos{s.Name.Pos()}
+	case *ast.ValueSpec:
+		var out []token.Pos
+		for _, n := range s.Names {
+			out = append(out, n.Pos())
+		}
+		return out
+	}
+	return nil
+}
+
+// declared are the names d declares.
+func declared(d ast.Decl) []string {
+	var out []string
+	switch d := d.(type) {
+	case *ast.FuncDecl:
+		out = append(out, d.Name.Name)
+	case *ast.GenDecl:
+		for _, s := range d.Specs {
+			switch s := s.(type) {
+			case *ast.TypeSpec:
+				out = append(out, s.Name.Name)
+			case *ast.ValueSpec:
+				for _, n := range s.Names {
+					out = append(out, n.Name)
+				}
+			}
+		}
+	}
+	return out
+}
+
+// sameKind refuses new, the replacement of old, when it is another kind of
+// declaration: a function for a variable, a const for a var.
+func sameKind(old, new ast.Decl) error {
+	og, oldGen := old.(*ast.GenDecl)
+	ng, newGen := new.(*ast.GenDecl)
+	switch {
+	case oldGen != newGen:
+		return refactor.Refusef("content is another kind of declaration than the old one (a function for a %s, or the reverse)", map[bool]string{true: og.Tok.String(), false: "func"}[oldGen])
+	case oldGen && og.Tok != ng.Tok:
+		return refactor.Refusef("content is a %s declaration, the old one a %s", ng.Tok, og.Tok)
+	}
+	return nil
+}
+
+// docOf is d's doc comment, or nil.
+func docOf(d ast.Decl) *ast.CommentGroup {
+	switch d := d.(type) {
+	case *ast.FuncDecl:
+		return d.Doc
+	case *ast.GenDecl:
+		return d.Doc
+	}
+	return nil
+}
+
+// textOf is the source of n in content, as gocode.ParseDeclarations parsed
+// it after the header.
+func textOf(content string, n ast.Node) string {
+	off := func(p token.Pos) int { return int(p) - 1 - len(header) }
+	return content[off(n.Pos()):off(n.End())]
+}

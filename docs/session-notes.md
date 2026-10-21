@@ -205,7 +205,10 @@ results are in `docs/cost-history.md`.
 - Sessions in a cloud clone have no MCP on that clone (the user's MCP
   runs on their own checkout); build `cmd/refactor` from the branch and
   use it for every step: `refactor batch '<json>'` runs a batch, and
-  edits get stubs as through the server (#160).
+  edits get stubs as through the server (#160). Write long JSON to a
+  file in the scratchpad and pass `@path` (or `-` for stdin, #205):
+  Go escapes such as `\n` then survive, which an unquoted heredoc
+  turned into newlines.
 - The smaller known bugs are fixed: `replace_text` adds imports (#173);
   `create_from_usage` names parameters by type and does not take a
   result type from an uninstantiated generic callee (#176).
