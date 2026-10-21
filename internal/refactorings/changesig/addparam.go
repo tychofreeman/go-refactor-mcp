@@ -7,10 +7,13 @@ import (
 	"go/parser"
 	"go/token"
 	"go/types"
+	"os"
 	"slices"
+	"sort"
 	"strings"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
+	"github.com/tychofreeman/go-refactor-mcp/internal/imports"
 	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
@@ -27,7 +30,7 @@ func (*AddParameter) Name() string { return "add_parameter" }
 func (*AddParameter) Description() string {
 	return `Add a parameter to a function or method, and pass the given value for it at every call in the workspace.
 Use it to prepare a feature change: add the parameter first, then change the body to use it.
-Identify the function by file, line and name, at its declaration or any call. Give the new parameter's name and type, the value every call passes (written as Go source, e.g. "", nil, 0, or a name in scope at each call such as cfg.OutDir), and optionally before: the existing parameter to insert it ahead of (default: at the end, or just before a variadic parameter).
+Identify the function by file, line and name, at its declaration or any call. Give the new parameter's name and type, the value every call passes (written as Go source, e.g. "", nil, 0, or a name in scope at each call such as cfg.OutDir; a name of the function's package is qualified at calls in other packages, Batch{} becoming notify.Batch{}), and optionally before: the existing parameter to insert it ahead of (default: at the end, or just before a variadic parameter).
 The body does not use the new parameter yet, so behavior is unchanged; the value must therefore have no side effects and must not be able to panic (no calls other than to known functions without side effects such as strings.ToUpper, no pointer dereferences, indexing or non-constant division).
 Refuses if the function is used other than by calling it (as a function value or method expression), if a method would stop or start implementing an interface declared outside the module (which could silently change a type assertion), if the new name clashes with a parameter, result or top-level local or would hide a name the body uses, or if the value does not type-check at some call.
 An interface method of the module changes with every method of the module's types that implements it, and such a method with the interface: name any of them.`
@@ -113,6 +116,7 @@ func (*AddParameter) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refact
 		return nil, err
 	}
 	var fes []edit.FileEdit
+	adders := map[string]*imports.Adder{}
 	for _, m := range t.group() {
 		if err := m.checkNewName(a.Parameter); err != nil {
 			return nil, err
@@ -120,16 +124,23 @@ func (*AddParameter) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refact
 		if err := m.checkInterfaces(func(ps []string) []string { return slices.Insert(ps, at, typeKey(typ)) }); err != nil {
 			return nil, err
 		}
-		for _, c := range m.calls {
-			if err := m.checkValue(c, value, typ); err != nil {
+		values := make([]string, len(m.calls))
+		for i, c := range m.calls {
+			if values[i], err = m.valueAt(c, value, adders); err != nil {
+				return nil, err
+			}
+			if err := m.checkValue(c, values[i], typ); err != nil {
 				return nil, err
 			}
 		}
 		fes = append(fes, edit.FileEdit{Path: m.declFile(), Edits: []edit.TextEdit{m.paramEdit(at, a.Parameter, a.Type)}})
-		for _, c := range m.calls {
+		for i, c := range m.calls {
 			path := ws.Fset.Position(c.expr.Pos()).Filename
-			fes = append(fes, edit.FileEdit{Path: path, Edits: []edit.TextEdit{m.argEdit(c.expr, at, value)}})
+			fes = append(fes, edit.FileEdit{Path: path, Edits: []edit.TextEdit{m.argEdit(c.expr, at, values[i])}})
 		}
+	}
+	for path, ad := range adders {
+		fes = append(fes, edit.FileEdit{Path: path, Edits: ad.Edits()})
 	}
 	return t.newPlan(fmt.Sprintf("added parameter %q to %s", a.Parameter+" "+a.Type, t.groupName()), fes), nil
 }
@@ -240,6 +251,87 @@ func (t *target) checkValue(c call, value string, typ types.Type) error {
 		return refactor.Refusef("the value %s (of type %s) cannot be used as %s at the call at %s", value, vt, typ, where)
 	}
 	return nil
+}
+
+// valueAt is value as the call c writes it. A name of the function's
+// package that c's package does not see is qualified there (Batch is
+// notify.Batch in another package), and in the function's package a
+// qualified one is not (notify.Batch is Batch); keys of composite
+// literals are left alone. adders give c's file the import it needs.
+func (t *target) valueAt(c call, value string, adders map[string]*imports.Adder) (string, error) {
+	home := t.obj.Pkg()
+	fset := token.NewFileSet()
+	e, err := parser.ParseExprFrom(fset, "", value, 0)
+	if err != nil || home == nil || c.pkg.Types == nil {
+		return value, nil // checkValue reports a value that does not parse
+	}
+	base := fset.File(e.Pos()).Base()
+	scope := c.pkg.Types.Scope().Innermost(c.expr.Lparen)
+	visible := func(name string) bool {
+		if scope == nil {
+			return false
+		}
+		_, o := scope.LookupParent(name, c.expr.Lparen)
+		return o != nil
+	}
+	atHome := c.pkg.Types.Path() == home.Path()
+	type repl struct {
+		start, end int
+		text       string
+	}
+	var rs []repl
+	skip := map[*ast.Ident]bool{}
+	ast.Inspect(e, func(n ast.Node) bool {
+		switch n := n.(type) {
+		case *ast.KeyValueExpr:
+			if id, ok := n.Key.(*ast.Ident); ok {
+				skip[id] = true
+			}
+		case *ast.SelectorExpr:
+			skip[n.Sel] = true
+			if x, ok := n.X.(*ast.Ident); ok && atHome && x.Name == home.Name() && !visible(x.Name) && home.Scope().Lookup(n.Sel.Name) != nil {
+				skip[x] = true
+				rs = append(rs, repl{int(x.Pos()) - base, int(n.Sel.Pos()) - base, ""})
+			}
+		case *ast.Ident:
+			if skip[n] || atHome || visible(n.Name) || !n.IsExported() || home.Scope().Lookup(n.Name) == nil {
+				return true
+			}
+			q, err := t.importName(c, home, adders)
+			if err != nil {
+				return false
+			}
+			rs = append(rs, repl{int(n.Pos()) - base, int(n.Pos()) - base, q + "."})
+		}
+		return true
+	})
+	sort.Slice(rs, func(i, j int) bool { return rs[i].start > rs[j].start })
+	for _, r := range rs {
+		value = value[:r.start] + r.text + value[r.end:]
+	}
+	return value, nil
+}
+
+// importName is the name c's file imports pkg as, importing it if it
+// does not.
+func (t *target) importName(c call, pkg *types.Package, adders map[string]*imports.Adder) (string, error) {
+	path := t.ws.Fset.Position(c.expr.Pos()).Filename
+	a := adders[path]
+	if a == nil {
+		src, err := os.ReadFile(path)
+		if err != nil {
+			return "", err
+		}
+		var file *ast.File
+		for _, f := range c.pkg.Syntax {
+			if f.Pos() <= c.expr.Pos() && c.expr.Pos() < f.End() {
+				file = f
+			}
+		}
+		a = imports.New(t.ws, c.pkg, file, src)
+		adders[path] = a
+	}
+	return a.Name(pkg)
 }
 
 // assignable is types.AssignableTo, also accepting a type that matches by
