@@ -61,6 +61,15 @@ results are in `docs/cost-history.md`.
   the tools, and the gaps. Pose problems rather than ask for examples:
   the user said they could not think of many off the top of their head.
 
+- **Exported code is changed, with a note** (2026-10-21, the user):
+  refactorings no longer refuse exported code because other modules
+  might use it. As gopls does, they update this module and say the
+  module's API changed, so the model can mark a breaking change. The
+  alternatives were a per-call option (as `exported` was), a
+  workspace setting that the module is closed, or inferring it only
+  for main and internal packages. Checks that guard behavior inside
+  the module (reflection, interfaces) stay. Roadmap item 22.
+
 - **Options over new tools** (2026-10-21): the pointer alias (gap A)
   is `pointer` on `extract_variable`, not a tool of its own: the model
   already reaches for extract_variable, and its refusal for a field

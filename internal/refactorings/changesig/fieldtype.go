@@ -11,6 +11,7 @@ import (
 	"golang.org/x/tools/go/ast/astutil"
 	"golang.org/x/tools/go/packages"
 
+	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
@@ -123,8 +124,8 @@ func (*ChangeFieldType) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 		Summary: fmt.Sprintf("changed field %s from %s to %s (%d use%s)", field.Name(), t.typeName(field.Type()), t.typeName(newT), uses, map[bool]string{true: "", false: "s"}[uses == 1]),
 		Edits:   edit.Merge(c.files.all()),
 	}
-	if field.Exported() {
-		plan.Notes = append(plan.Notes, fmt.Sprintf("%s is exported: uses in other modules are not updated", field.Name()))
+	if analysis.PublicAPI(field, ws.Pkgs) {
+		plan.Notes = append(plan.Notes, refactor.APINote(field.Name(), "changing its type"))
 	}
 	return plan, nil
 }

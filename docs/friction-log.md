@@ -1738,6 +1738,13 @@ tool copies a file). The Contacts derivation was run with the
 two getter lines it counts, and the field deletions by replace_text
 after `remove_dead_code` refused falsely.
 
+## 2026-10-21: exported code, the API note
+
+All through gorefactor: the golden cases with move_file, delete_file
+and create_file, the code with create_file, add_declaration,
+replace_declaration and replace_text in batches, the docs with
+replace_text.
+
 ## 2026-10-21: sort.Slice is not reflection on fields
 
 All through gorefactor: the golden cases with create_file, the fix

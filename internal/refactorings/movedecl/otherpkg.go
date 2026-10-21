@@ -103,8 +103,8 @@ func (m *mover) planOtherPackage(to string) (*refactor.Plan, error) {
 	}
 	plan.Notes = append(plan.Notes, m.emptiedNotes()...)
 	for _, d := range m.decls {
-		if d.obj.Exported() {
-			plan.Notes = append(plan.Notes, fmt.Sprintf("%s was exported: references in other modules are not updated", d.obj.Name()))
+		if analysis.PublicAPI(d.obj, m.ws.Pkgs) {
+			plan.Notes = append(plan.Notes, refactor.APINote(d.obj.Name(), "moving it to package "+m.dest.Name))
 		}
 	}
 	return plan, nil

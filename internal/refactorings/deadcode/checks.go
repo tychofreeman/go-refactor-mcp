@@ -83,15 +83,14 @@ func find(ws *workspace.Workspace, pkg *packages.Package, obj types.Object) (*ta
 	return nil, refactor.Refusef("%s (at %s) is not a top-level declaration", obj.Name(), ws.Position(obj.Pos()))
 }
 
-// check refuses a declaration whose deletion could change something; an
-// exported one unless exported.
-func (t *target) check(ws *workspace.Workspace, exported bool) error {
+// check refuses a declaration whose deletion could change something.
+func (t *target) check(ws *workspace.Workspace) error {
 	name := t.obj.Name()
 	inTest := strings.HasSuffix(t.path, "_test.go")
 	fn, isFunc := t.obj.(*types.Func)
 	method := isFunc && fn.Signature().Recv() != nil
 	if t.field != nil {
-		return t.checkField(ws, exported)
+		return t.checkField(ws)
 	}
 	switch {
 	case name == "_":
@@ -102,8 +101,6 @@ func (t *target) check(ws *workspace.Workspace, exported bool) error {
 		return refactor.Refusef("main is the program's entry point")
 	case inTest && isFunc && !method && testFunc(name):
 		return refactor.Refusef("%s is run by go test, without being called", name)
-	case t.obj.Exported() && t.pkg.Name != "main" && !exported:
-		return refactor.Refusef("%s is exported, so code in other modules could use it; pass exported to delete it when none does", name)
 	}
 	if doc := docOf(t); hasDirective(doc) {
 		return refactor.Refusef("%s has a //go: or //export directive, which the toolchain reads; deleting it is not supported", name)
@@ -158,6 +155,22 @@ func (t *target) check(ws *workspace.Workspace, exported bool) error {
 		}
 	}
 	return t.checkUnused(ws)
+}
+
+// apiNote is the note for removing t when it is part of the module's
+// API.
+func (t *target) apiNote() (string, bool) {
+	if !analysis.PublicAPI(t.obj, []*packages.Package{t.pkg}) {
+		return "", false
+	}
+	name := t.obj.Name()
+	if t.field != nil {
+		if !t.typeName.Exported() {
+			return "", false
+		}
+		name = t.typeName.Name() + "." + name
+	}
+	return refactor.APINote(name, "removing it"), true
 }
 
 // dependencyInterface says which interface, declared by a dependency or
@@ -383,9 +396,8 @@ func findField(ws *workspace.Workspace, pkg *packages.Package, field *types.Var)
 	return nil, refactor.Refusef("%s (at %s) is not a field of a declared struct type; only those of a type's own struct are supported", field.Name(), ws.Position(field.Pos()))
 }
 
-// checkField refuses a field whose deletion could change something; an
-// exported one unless exported.
-func (t *target) checkField(ws *workspace.Workspace, exported bool) error {
+// checkField refuses a field whose deletion could change something.
+func (t *target) checkField(ws *workspace.Workspace) error {
 	name, tn := t.obj.Name(), t.typeName.Name()
 	switch {
 	case name == "_":
@@ -396,8 +408,6 @@ func (t *target) checkField(ws *workspace.Workspace, exported bool) error {
 			ns = append(ns, n.Name)
 		}
 		return refactor.Refusef("%s is declared together with other fields (%s); deleting only some of them is not supported", name, strings.Join(ns, ", "))
-	case t.obj.Exported() && t.typeName.Exported() && t.pkg.Name != "main" && !exported:
-		return refactor.Refusef("%s.%s is exported, so code in other modules could use it; pass exported to delete it when none does", tn, name)
 	}
 	if t.obj.(*types.Var).Embedded() {
 		return refactor.Refusef("%s is embedded in %s: the fields and methods it promotes would go with it", name, tn)
