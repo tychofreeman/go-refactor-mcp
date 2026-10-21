@@ -30,6 +30,15 @@ results are in `docs/cost-history.md`.
 
 ## Decisions and their reasons
 
+- **Manual edits as small as possible** (2026-10-21, the user's
+  principle): not every operation will exist; use the ones there are,
+  keep manual edits to the smallest size, avoid them when possible.
+  Judge runs and gaps by the size of the manual edits, not only the
+  derived share. The experiment of cost-history section 8: guidance in
+  the user's moves changed how the model worked where a recipe fit,
+  but not cost, on a module too small for rewriting by hand to cost
+  much; next is the same on code with many uses.
+
 - **Derivations from the user** (2026-10-20): asked how they would
   reach five shapes with operations, the user answered with moves such
   as "extract variables for what differs, move them to the top, extract

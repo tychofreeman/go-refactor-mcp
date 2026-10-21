@@ -714,7 +714,13 @@ hand or a tool got in the way.
       `u.Email` and `u.Phone`, by a switch on a new parameter.
     - **Teach and measure:** recipes and planning a change as a
       derivation, against the current instructions, on tasks with a
-      derivation as the reference solution.
+      derivation as the reference solution. *First run done*
+      (cost-history section 8): the guidance made the model use the
+      recipes where they fit (37% of steps writing nothing, against
+      22%), at the same cost; on the seeded module manual edits are
+      small either way. Next: the same derivations on code with many
+      uses, where rewriting each use by hand grows and a derivation
+      does not.
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the

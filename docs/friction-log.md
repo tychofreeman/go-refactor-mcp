@@ -1634,3 +1634,10 @@ reaches the way the derivation does, through a variable.
 All through gorefactor: the package's stub, test and fixtures with
 create_file, the tool with replace_declaration and add_declaration in
 one batch checked at its end.
+
+## 2026-10-21: the derivation experiment
+
+The arm's CLAUDE.md files were copied with `cp` (nothing copies a
+file), then the derivation section added with replace_text; the tasks,
+hidden tests and docs through gorefactor. The reference solutions that
+validate the tasks are a scratch script, not committed.

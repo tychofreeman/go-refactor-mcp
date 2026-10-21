@@ -305,6 +305,37 @@ that cut a loop (6, both arms). The three failures were the task's:
 the model wrote its own TestSendErrors, which the hidden test's name
 clashed with; the hidden tests are now named TestAccept....
 
+## 8. Working as a derivation (Oct 21)
+
+The user's five derivations (`docs/derivations.md`) as tasks with
+hidden tests (`eval-tasks/derivations.json`: shared record, opt-out,
+Contacts map, fit method, Batch parameter) and the six mechanism tasks
+as a control, the mcp arm, 3 runs each, with the current instructions
+and with `eval-tasks/claude-md-derivations`: the same, plus "work as a
+derivation" (operations that keep behavior, then one small edit; use
+the operations you have, and keep manual edits as small as they can
+be) and the user's moves as recipes. One server for all, with fold and
+parameterize. Every run passed.
+
+| Run | Tasks | mcp | turns per run | derived share | steps writing nothing | production lines written per run |
+|---|---|---|---|---|---|---|
+| deriv-base | derivations | $1.77 · 2.88M | 10.0 | 35% | 22% | 10.6 |
+| deriv-guided | derivations | $1.89 · 3.15M | 9.7 | 41% | 37% | 9.7 |
+| mech-base2 | mechanisms | $2.13 · 3.96M | 11.7 | 12% | 6% | 13.0 |
+| mech-guided | mechanisms | $2.22 · 3.82M | 11.3 | 9% | 1% | 14.2 |
+
+On the derivation tasks the guidance changed how the model worked
+where a recipe fit: for the Batch parameter it expanded, migrated and
+contracted (fold, inline_function, rename), 14 of 19 steps writing
+nothing (2 of 10 without); for fit and Contacts it reached for
+inline_function and fold. It did not cut cost or turns, and on the
+feature tasks it changed nothing. On a module this small the plain
+model's manual edits are already small (a median of one or two
+lines): what a derivation saves, the rewriting of every use by hand,
+grows with the code, and these tasks have two or three uses of
+anything. The test of the thesis needs the same derivations on code
+with many uses.
+
 ## What made the difference
 
 - **Smaller results** (#75, rename locations): the largest single win when
