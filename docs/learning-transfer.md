@@ -139,6 +139,52 @@ refused run 2's fields because `SortUsers` passes `[]User` to
 sees a field: a false refusal, where `replace_text` then deleted the
 same fields with no check of reflection at all.
 
+**All five tasks, told to try at least five sequences and to fail
+rather than write more than one line by hand** (the user's wording,
+`claude-md-explorer-5`: a sequence counts only once its operations are
+called, each is undone before the next, the best is carried out again;
+test files and comments do not count; `eval-runs/explore-five`, 3 runs
+per task, $7.62). 12 of 15 reached the goal within one line: opt-out
+3/3, fit 3/3, batch 3/3, shared record 2/3, Contacts 0/3. The runs
+made 170 refactoring calls (97% derived) and up to 30 undos each. New
+derivations, each found by two or more runs:
+
+- *Shared record, one line:* per copy, extract only the append,
+  `method_to_function`, `extract_variable` with `pointer`,
+  `introduce_parameter` for `&x.Sent`, `to` and `text` (the pointer now
+  comes first, so nothing refuses it), `remove_parameter` the rest;
+  `add_parameter` `channel` with each copy's value; `merge_duplicate_function`
+  the copies into one; `insert_statements` the log line once (the one
+  line); delete the old log lines (`replace_statements` with no content).
+  It goes around the nil-receiver refusal rather than through it.
+- *Fit, one line:* insert `n = 20` as the body's first statement;
+  `remove_parameter` then takes `n` (assigned first) and leaves
+  `n := 20`; `add_parameter` of the receiver, `function_to_method`.
+- *Batch, one line:* declare `Batch` by a test that uses it
+  (`create_from_usage`); `extract_variable` the message at every call
+  with one name, so one `add_parameter` value (`Batch{Users: users,
+  Message: msg}`) fits every call; `extract_function` the body; the
+  wrapper's body becomes one line; `remove_parameter` the old ones.
+- *A getter with no code by hand:* `extract_variable` the field read,
+  `extract_function` that line, `inline_variable` in the new function;
+  `fold` it (Contacts, two runs).
+
+Contacts' best was two or three lines: the two getter bodies must
+change, so one line is out of reach with these tools. No run found the
+setter fold or `remove_dead_code` of a field (deleting the field lines
+with `replace_text` and no content counted as no code).
+
+Limits the runs met, to check: `parameterize` refuses methods of
+different receivers; `extract_struct` refuses an exported struct;
+`remove_parameter` takes `n = c` but not `a, b = x, y` as assigned
+first; `rename` of a field refused over `sort.SliceStable` (as
+`remove_dead_code` was); `introduce_parameter` of the literal
+`"email"` reportedly made code that did not compile; a `replace_text`
+that deleted a field still in use was followed by a stub that declared
+it again, reported as applied; `add_parameter`'s value cannot be both
+qualified and unqualified, so a test in the declaring package blocks a
+value of the new type.
+
 The learned lessons (`claude-md-learned`) are the explore run's, less
 Contacts, with lesson 3 from the shared-record trial. The learner runs
 on B have not been run.
