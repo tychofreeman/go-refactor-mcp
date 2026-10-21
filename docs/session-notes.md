@@ -30,6 +30,15 @@ results are in `docs/cost-history.md`.
 
 ## Decisions and their reasons
 
+- **Derivations from the user** (2026-10-20): asked how they would
+  reach five shapes with operations, the user answered with moves such
+  as "extract variables for what differs, move them to the top, extract
+  the rest", "wrap in an if and move the statements in", "encapsulate,
+  then change the representation", "delegate, redirect, inline",
+  "expand, migrate, contract". `docs/derivations.md` has them, run with
+  the tools, and the gaps. Pose problems rather than ask for examples:
+  the user said they could not think of many off the top of their head.
+
 - **The model reasons about intent, the engine about types**
   (2026-10-20). The user's concern with type-check refusals for the
   model's own code: the project is to take type-safe code off the
