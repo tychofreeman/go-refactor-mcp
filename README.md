@@ -558,7 +558,9 @@ hand or a tool got in the way.
         return gives it (callers `v, _ := f()`), for families too.
         Removing or retyping a result is still to do.*
       - **Edits that change a signature by text** are refused with the
-        tool to use.
+        tool to use. *Done: such an edit still applies if everything
+        compiles; when it does not, the refusal notes which signature it
+        changed and the tools that change one with every call.*
       - **`change_field_type`,** adjusting uses only where safe and
         refusing each other use by name.
       - **Later: one `change_signature`** taking the new signature, which

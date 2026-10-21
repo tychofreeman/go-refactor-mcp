@@ -16,6 +16,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"go/ast"
+	"go/token"
 	"regexp"
 	"slices"
 	"strings"
@@ -220,6 +222,10 @@ func Run(ws *workspace.Workspace, r Refactoring, args json.RawMessage, opts Opti
 		return res, nil
 	}
 
+	sigNote := ""
+	if isEdit {
+		sigNote = signatureNote(ws, plan.Edits)
+	}
 	c, err := ws.Apply(r.Name()+": "+plan.Summary, plan.Edits)
 	if errors.Is(err, workspace.ErrBreaksLoading) {
 		res.Refused, res.Summary = err.Error(), ""
@@ -233,6 +239,9 @@ func Run(ws *workspace.Workspace, r Refactoring, args json.RawMessage, opts Opti
 			return nil, fmt.Errorf("the step broke the build and undo failed: %v (%s)", uerr, reason)
 		}
 		res.Refused, res.Summary = reason, ""
+		if sigNote != "" {
+			res.Notes = append(res.Notes, sigNote)
+		}
 		return res, nil
 	}
 	res.Applied = true
@@ -309,6 +318,47 @@ func afterRefusal(r Refactoring, isEdit, isFix, unchecked bool, before, after []
 	}
 	return fmt.Sprintf("the change would not compile, so it was rolled back. This is a bug in the %q precondition checks; errors were:\n  %s",
 		r.Name(), strings.Join(limit(after, 10), "\n  "))
+}
+
+// signatureNote is, for edits that change the signature of a function or
+// interface method (its name, parameters or results), a note naming the
+// tools that change one with every call; "" for other edits.
+func signatureNote(ws *workspace.Workspace, fes []edit.FileEdit) string {
+	var names []string
+	for _, fe := range fes {
+		_, f := ws.FileSyntax(fe.Path)
+		if f == nil {
+			continue
+		}
+		off := func(p token.Pos) int { return ws.Fset.Position(p).Offset }
+		touched := func(from, to token.Pos) bool {
+			for _, e := range fe.Edits {
+				if e.Start < off(to) && (e.End > off(from) || e.Start == e.End && e.Start > off(from)) {
+					return true
+				}
+			}
+			return false
+		}
+		ast.Inspect(f, func(n ast.Node) bool {
+			switch n := n.(type) {
+			case *ast.FuncDecl:
+				if touched(n.Name.Pos(), n.Type.End()) && !slices.Contains(names, n.Name.Name) {
+					names = append(names, n.Name.Name)
+				}
+			case *ast.InterfaceType:
+				for _, m := range n.Methods.List {
+					if _, ok := m.Type.(*ast.FuncType); ok && len(m.Names) == 1 && touched(m.Pos(), m.End()) && !slices.Contains(names, m.Names[0].Name) {
+						names = append(names, m.Names[0].Name)
+					}
+				}
+			}
+			return true
+		})
+	}
+	if len(names) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("this edit changes the signature of %s; add_parameter, remove_parameter, move_parameter, change_parameter_type and add_result change a signature with every call (and an interface method with its implementations), and rename a name", orList(names, "and"))
 }
 
 // fixRefusal says why a fix that left the errors after, from before, is
