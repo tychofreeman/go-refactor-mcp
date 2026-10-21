@@ -88,6 +88,17 @@ temporaries), but kept `Broadcast`, being exported, and
 `remove_dead_code` refuses exported code, so the rename met a clash: N.
 The migration at each call site is I.
 
+## The user's principle
+
+Not every operation will exist. Use the operations there are; where
+none does a step, make the manual edit as small as it can be, and
+avoid manual edits entirely when possible. So a gap matters by the
+size of the manual edit it forces, not by how often it comes up: the
+constant split (B) costs one small replacement, a fold for reads (I)
+saved rewriting every use. Measure runs by the size of their manual
+edits (largest, median, total) and the share of steps that write
+nothing, as well as by the derived share.
+
 ## The gaps
 
 | | Gap | Kind |

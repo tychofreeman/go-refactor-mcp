@@ -1640,3 +1640,10 @@ one batch checked at its end.
 
 All through `refactor batch` (replace_text in README, the session
 notes and this log), from one JSON file.
+
+## 2026-10-21: the derivation experiment
+
+The arm's CLAUDE.md files were copied with `cp` (nothing copies a
+file), then the derivation section added with replace_text; the tasks,
+hidden tests and docs through gorefactor. The reference solutions that
+validate the tasks are a scratch script, not committed.
