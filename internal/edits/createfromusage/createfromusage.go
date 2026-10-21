@@ -34,7 +34,7 @@ func (*CreateFromUsage) Name() string { return "create_from_usage" }
 
 func (*CreateFromUsage) Description() string {
 	return `Declare the functions and types code uses before they exist, as stubs ("create from usage"). This is an edit, not a refactoring, and the one step that may start from code that does not type-check: it must leave fewer errors and no new one.
-Use it after writing a test or code that calls functions not written yet: give the file with the calls. Every function it calls that is not declared gets a stub, or only those in names; a call pkg.F declares F in that package of the module, and a call x.M, where x is (or points to) a type of the module without a field or method M, declares the method M on that type, with a receiver like its other methods'. On a generic type, the method is written with its type parameters: called on a Stack[string], a string argument becomes a T parameter. If that type is an interface, M is added to it, with a stub on each type of the module that implemented it, so that they still do. A type of the module used as an interface it lacks methods of (assigned, passed or returned as one, e.g. var _ io.Writer = (*T)(nil)) gets stubs of those methods, with the interface's signatures. A function or method passed as a value where a function is needed (sort.Slice(xs, less), f(x.m)) gets the signature that place needs. A type made with keyed literals (T{name: v}, or []T{{name: v}}) is declared as a struct with those fields, typed as their values.
+Use it after writing a test or code that calls functions not written yet: give the file with the calls. Every function it calls that is not declared gets a stub, or only those in names; a call pkg.F declares F in that package of the module, and a call x.M, where x is (or points to) a type of the module without a field or method M, declares the method M on that type, with a receiver like its other methods'. On a generic type, the method is written with its type parameters: called on a Stack[string], a string argument becomes a T parameter. If that type is an interface, M is added to it, with a stub on each type of the module that implemented it, so that they still do. A type of the module used as an interface it lacks methods of (assigned, passed or returned as one, e.g. var _ io.Writer = (*T)(nil)) gets stubs of those methods, with the interface's signatures. A function or method passed as a value where a function is needed (sort.Slice(xs, less), f(x.m)) gets the signature that place needs. A type made with keyed literals (T{name: v}, or []T{{name: v}}) is declared as a struct with those fields, typed as their values; a type only named (a field's or parameter's type) as struct{}. A field a struct of the module lacks, read or assigned (x.F) or set in a literal (T{F: v}), is added to it, typed by that use; not a name close to one the type has, which may be misspelled.
 Each parameter has its argument's type and is named after it (a variable or field) or its type. The results come from how the value is used: a call as a statement has none, a returned call has the function's results, err is an error and ok a bool, and a variable has the type it is compared with, passed as, assigned to or returned as. When the use does not tell, give them in results. The body is panic("not implemented").
 A stub goes in to_file; else a method goes in the file of its type, and a function in the calling file, if it is of that package and not a test; else in the file the test is named after (m.go for m_test.go), or the package's first file. The result's "chose:" lines give each signature and file: check them.`
 }
@@ -76,6 +76,7 @@ func (*CreateFromUsage) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 		return nil, refactor.Refusef("file %s is not part of the loaded packages", a.File)
 	}
 	stubs := append(undeclaredTypes(pkg, file), undeclared(ws, pkg, file)...)
+	stubs = append(stubs, undeclaredFields(ws, pkg, file)...)
 	stubs = append(stubs, unimplemented(ws, pkg, file)...)
 	if len(a.Names) > 0 {
 		var chosen []stub
@@ -146,7 +147,11 @@ func writeStubs(ws *workspace.Workspace, decls []decl, paths map[string][]string
 				continue
 			}
 			tes = append(tes, edit.TextEdit{Start: d.at, End: d.at, NewText: d.text})
-			all += "\ntype _ interface {\n" + d.text + "}\n"
+			kind := "interface"
+			if d.field {
+				kind = "struct"
+			}
+			all += "\ntype _ " + kind + " {\n" + d.text + "}\n"
 		}
 		if end != "" {
 			tes = append(tes, edit.TextEdit{Start: len(src), End: len(src), NewText: end})
@@ -173,6 +178,7 @@ type decl struct {
 	at     int
 	text   string
 	choice string
+	field  bool // text is fields of a struct, not methods of an interface
 }
 
 // stubber declares the stubs for the calls of one file.
@@ -183,6 +189,7 @@ type stubber struct {
 	caller  string // its path
 	args    args
 	imports map[string][]string // by destination file: the packages its stubs' types are from
+	spread  map[token.Pos]bool  // one-line structs a field stub has spread over lines, by opening brace
 }
 
 // writer is writer for code in the file dest, of the package at path:
@@ -223,6 +230,8 @@ func (st *stubber) declare(s stub) ([]decl, error) {
 	switch {
 	case s.typ:
 		return st.declareType(s)
+	case s.field:
+		return st.declareField(s)
 	case s.method != nil:
 		return st.implement(s)
 	case s.recv != nil && types.IsInterface(s.recv):
@@ -276,6 +285,9 @@ func (st *stubber) declareType(s stub) ([]decl, error) {
 			fieldTypes[key.Name] = write(t)
 		}
 	}
+	if len(s.lits) == 0 {
+		return []decl{{file: dest, at: -1, text: fmt.Sprintf("\ntype %s struct{}\n", s.name), choice: fmt.Sprintf("type %s struct{}, in %s: it is only named as a type; add its fields", s.name, st.ws.Rel(dest))}}, nil
+	}
 	if len(names) == 0 {
 		return nil, refactor.Refusef("cannot tell the fields of %s: no literal of it names them; write one with field names (%s{name: value}), or declare %s with add_declaration", s.name, s.name, s.name)
 	}
@@ -286,6 +298,71 @@ func (st *stubber) declareType(s stub) ([]decl, error) {
 	}
 	b.WriteString("}\n")
 	return []decl{{file: dest, at: -1, text: b.String(), choice: fmt.Sprintf("type %s struct with %s, in %s", s.name, strings.Join(names, ", "), st.ws.Rel(dest))}}, nil
+}
+
+// declareField adds s, a field, to its struct, s.recv.
+func (st *stubber) declareField(s stub) ([]decl, error) {
+	obj := s.recv.Obj()
+	var have []string
+	if st, ok := s.recv.Underlying().(*types.Struct); ok {
+		for i := range st.NumFields() {
+			have = append(have, st.Field(i).Name())
+		}
+	}
+	for i := range s.recv.NumMethods() {
+		have = append(have, s.recv.Method(i).Name())
+	}
+	for _, n := range have {
+		if refactor.Close(n, s.name) {
+			return nil, refactor.Refusef("%s is close to %s, which %s has; if %s is meant to be new, add it with add_field", s.name, n, obj.Name(), s.name)
+		}
+	}
+	if s.ftype == nil {
+		return nil, refactor.Refusef("cannot tell the type of field %s of %s from how %s uses it; add it with add_field", s.name, obj.Name(), st.args.File)
+	}
+	pos := st.ws.Fset.Position(obj.Pos())
+	_, f := st.ws.FileSyntax(pos.Filename)
+	var fields *ast.FieldList
+	ast.Inspect(f, func(n ast.Node) bool {
+		if ts, ok := n.(*ast.TypeSpec); ok && ts.Name.Pos() == obj.Pos() {
+			if t, ok := ts.Type.(*ast.StructType); ok {
+				fields = t.Fields
+			}
+		}
+		return fields == nil
+	})
+	if fields == nil {
+		return nil, refactor.Refusef("cannot find the declaration of struct %s", obj.Name())
+	}
+	tf := st.ws.Fset.File(f.Pos())
+	src, err := os.ReadFile(pos.Filename)
+	if err != nil {
+		return nil, err
+	}
+	field := s.name + " " + st.writer(pos.Filename, obj.Pkg().Path(), nil)(s.ftype)
+	choice := fmt.Sprintf("field %s, in struct %s in %s", field, obj.Name(), st.ws.Rel(pos.Filename))
+	if tf.Line(fields.Opening) != tf.Line(fields.Closing) {
+		at := tf.Offset(tf.LineStart(tf.Line(fields.Closing)))
+		return []decl{{file: pos.Filename, at: at, text: gocode.IndentOf(src, at) + "\t" + field + "\n", choice: choice, field: true}}, nil
+	}
+	// A struct on one line: spread it over lines, which gofmt then indents,
+	// once for all its new fields.
+	at := tf.Offset(fields.Opening) + 1
+	if n := len(fields.List); n > 0 {
+		at = tf.Offset(fields.List[n-1].End())
+	}
+	text := field + "\n"
+	if st.spread == nil {
+		st.spread = map[token.Pos]bool{}
+	}
+	if !st.spread[fields.Opening] {
+		st.spread[fields.Opening] = true
+		text = "\n" + text
+		if len(fields.List) > 0 {
+			return []decl{{file: pos.Filename, at: tf.Offset(fields.Opening) + 1, text: "\n", field: true}, {file: pos.Filename, at: at, text: text, choice: choice, field: true}}, nil
+		}
+	}
+	return []decl{{file: pos.Filename, at: at, text: text, choice: choice, field: true}}, nil
 }
 
 // signature is that of s's function, from its call: "Name(params)
@@ -553,6 +630,8 @@ type stub struct {
 	sig    *types.Signature // for a function or method passed as a value, the type the call it is passed to needs
 	typ    bool             // a type, not a function: a struct with the fields its literals, lits, name
 	lits   []*ast.CompositeLit
+	field  bool // a field of recv, a struct, of type ftype (nil if its use does not tell)
+	ftype  types.Type
 }
 
 // undeclared returns the functions of the module file calls that are not
@@ -630,6 +709,30 @@ func undeclaredTypes(pkg *packages.Package, file *ast.File) []stub {
 		}
 	}
 	ast.Inspect(file, func(n ast.Node) bool {
+		if f, ok := n.(*ast.Field); ok {
+			t := f.Type
+			for {
+				switch e := t.(type) {
+				case *ast.StarExpr:
+					t = e.X
+					continue
+				case *ast.ArrayType:
+					t = e.Elt
+					continue
+				case *ast.MapType:
+					t = e.Value
+					continue
+				case *ast.Ellipsis:
+					t = e.Elt
+					continue
+				}
+				break
+			}
+			if id := undefined(t); id != nil {
+				note(id, nil)
+			}
+			return true
+		}
 		lit, ok := n.(*ast.CompositeLit)
 		if !ok {
 			return true
@@ -659,6 +762,89 @@ func undeclaredTypes(pkg *packages.Package, file *ast.File) []stub {
 		return true
 	})
 	return out
+}
+
+// undeclaredFields returns the fields file uses of the module's struct
+// types that they lack: read or assigned as x.F, or set in a literal
+// T{F: v}; each typed by its first use that tells.
+func undeclaredFields(ws *workspace.Workspace, pkg *packages.Package, file *ast.File) []stub {
+	info := pkg.TypesInfo
+	called := map[ast.Expr]bool{}
+	ast.Inspect(file, func(n ast.Node) bool {
+		if c, ok := n.(*ast.CallExpr); ok {
+			called[c.Fun] = true
+		}
+		return true
+	})
+	byKey := map[string]int{}
+	var out []stub
+	note := func(named *types.Named, name string, t types.Type) {
+		home, _ := ws.FileSyntax(ws.Fset.Position(named.Obj().Pos()).Filename)
+		if home == nil {
+			return
+		}
+		key := types.TypeString(named, nil) + "." + name
+		if i, ok := byKey[key]; ok {
+			if out[i].ftype == nil {
+				out[i].ftype = t
+			}
+			return
+		}
+		byKey[key] = len(out)
+		out = append(out, stub{name: name, target: home, recv: named, field: true, ftype: t})
+	}
+	struct_ := func(named *types.Named) bool {
+		_, ok := named.Underlying().(*types.Struct)
+		return ok && named.TypeArgs().Len() == 0
+	}
+	ast.Inspect(file, func(n ast.Node) bool {
+		switch n := n.(type) {
+		case *ast.SelectorExpr:
+			if named := receiverType(ws, info, n); named != nil && !called[n] && struct_(named) {
+				t := fieldUse(info, file, n)
+				if t != nil {
+					if _, fn := t.Underlying().(*types.Signature); fn {
+						return true // a method passed as a value: valueStub's
+					}
+				}
+				note(named, n.Sel.Name, t)
+			}
+		case *ast.CompositeLit:
+			named := moduleType(ws, info.TypeOf(n))
+			if named == nil || !struct_(named) {
+				return true
+			}
+			for _, e := range n.Elts {
+				kv, ok := e.(*ast.KeyValueExpr)
+				if !ok {
+					continue
+				}
+				if key, ok := kv.Key.(*ast.Ident); ok {
+					if obj, _, _ := types.LookupFieldOrMethod(named, false, named.Obj().Pkg(), key.Name); obj == nil {
+						note(named, key.Name, typeOf(info, kv.Value))
+					}
+				}
+			}
+		}
+		return true
+	})
+	return out
+}
+
+// fieldUse is the type a field sel must have for how it is used: what
+// is assigned to it, or what its context needs; nil if that does not
+// tell.
+func fieldUse(info *types.Info, file *ast.File, sel *ast.SelectorExpr) types.Type {
+	path, _ := astutil.PathEnclosingInterval(file, sel.Pos(), sel.End())
+	if len(path) < 2 || path[0] != sel {
+		return nil
+	}
+	if a, ok := path[1].(*ast.AssignStmt); ok && len(a.Lhs) == len(a.Rhs) {
+		if j := slices.Index(a.Lhs, ast.Expr(sel)); j >= 0 {
+			return typeOf(info, a.Rhs[j])
+		}
+	}
+	return expected(info, path)
 }
 
 // valueStub is the stub for arg, an argument of call, if it names a

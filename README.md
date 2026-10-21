@@ -535,7 +535,9 @@ hand or a tool got in the way.
     ranks what the engine could take over, in order:
     - **Stubs for fields** used before they exist (`x.F`, `T{F: v}`),
       typed by their use, and `struct{}` for a type named only as a
-      field's or parameter's type.
+      field's or parameter's type. *Done; a name one letter or one swap
+      from a field or method the type has is refused as a likely
+      misspelling.*
     - **Imports in every edit:** `replace_text` adds those new code needs,
       and every edit removes those it leaves unused.
     - **Signature and type changes that carry their consequences:**
