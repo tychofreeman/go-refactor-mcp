@@ -183,6 +183,23 @@ func TestSummaryLeavesOutUnfinishedRuns(t *testing.T) {
 	}
 }
 
+// A run whose functions could not be measured is left out of the means
+// of the function columns, and the table says why.
+func TestSummaryLeavesOutUnmeasuredRuns(t *testing.T) {
+	md := Summary([]Result{
+		{Task: "rename", Arm: "mcp", Run: 1, Passed: true, Quality: Quality{Changed: 2, MaxComplexity: 4, Complexity: 3, DupBefore: 10, DupAfter: 10}},
+		{Task: "rename", Arm: "mcp", Run: 2, Passed: true, Quality: Quality{Unmeasured: "bad.go:2:7: expected ')'", DupBefore: 10, DupAfter: 14}},
+	})
+	for _, want := range []string{
+		"| rename | mcp | 2.0 | 4.0 | 0.0 | 0.0 | 3.0 | 0.0 | 10 → 12 |",
+		"rename mcp run 2: bad.go:2:7: expected ')'",
+	} {
+		if !strings.Contains(md, want) {
+			t.Errorf("missing %q in:\n%s", want, md)
+		}
+	}
+}
+
 func TestMeasureQuality(t *testing.T) {
 	f := "package p\n\nfunc F(x int) int {\n\tif x > 0 {\n\t\treturn 1\n\t}\n\treturn 0\n}\n"
 	g := "\nfunc G(x int) int {\n\tfor i := 0; i < x; i++ {\n\t\tif i > 2 {\n\t\t\treturn i\n\t\t}\n\t}\n\treturn 0\n}\n"
@@ -190,6 +207,13 @@ func TestMeasureQuality(t *testing.T) {
 	want := Quality{Changed: 1, MaxComplexity: 3, MaxNesting: 2, MaxLines: 8, Complexity: 3}
 	if got != want {
 		t.Errorf("measureQuality:\n got %+v\nwant %+v", got, want)
+	}
+
+	// A file that does not parse leaves the functions unmeasured, and says
+	// which; the duplicated lines, counted from the text, are still there.
+	got = measureQuality(map[string][]byte{"p.go": []byte(f)}, map[string][]byte{"p.go": []byte(f + g), "bad.go": []byte("package p\nfunc (")})
+	if !strings.Contains(got.Unmeasured, "bad.go") || got.Changed != 0 || got.Complexity != 0 {
+		t.Errorf("unparsable file: %+v, want Unmeasured naming bad.go and no function numbers", got)
 	}
 }
 

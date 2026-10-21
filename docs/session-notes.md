@@ -81,6 +81,11 @@ results are in `docs/cost-history.md`.
   redirect that writes a file (checked 2026-10-20). A run cut off before
   its result (a timeout) is marked `unfinished` and left out of the
   means of cost, tokens and turns (#164); before that it counted as 0.
+  Likewise a run whose module has a Go file that does not parse gets
+  `quality.unmeasured` (the parse error) and is left out of the quality
+  table's function columns; before, its numbers came out as zero and
+  minus the module's whole complexity (lazygit in
+  `tp-mcp-refactor-first`: 0 changed functions, Δ complexity -10699).
 
 ## Where the work stands (2026-10-20)
 
