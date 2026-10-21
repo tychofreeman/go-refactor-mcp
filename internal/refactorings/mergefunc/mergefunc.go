@@ -41,7 +41,7 @@ func (*MergeDuplicate) Description() string {
 Use it to remove copies of a helper: move one copy where the others can reach it (move_declaration), then merge each of the others into it.
 Identify the function to delete by file, line and name, at its declaration or any use, and the one to keep by keep_file (any file of its package) and keep_name.
 Identical means: the same signature, and bodies that match node for node, ignoring comments and layout; parameters and locals may be named differently (consistently), and every other name (functions, variables, types, fields, methods, imported packages) must mean the same thing in both. The refusal shows the first difference.
-Refuses methods and generic functions, an exported function to delete (code in other modules could call it), a function to keep that a user cannot see (unexported, in another package) or could only import by making an import cycle, and a use where the new name (or its package's name) would mean something else.`
+An exported function goes too, with a note that the module's API changed. Refuses methods and generic functions, a function to keep that a user cannot see (unexported, in another package) or could only import by making an import cycle, and a use where the new name (or its package's name) would mean something else.`
 }
 
 func (*MergeDuplicate) InputSchema() json.RawMessage {
@@ -103,8 +103,6 @@ func (*MergeDuplicate) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refa
 	switch {
 	case analysis.ObjectKey(ws.Fset, dup.obj) == analysis.ObjectKey(ws.Fset, keep.obj):
 		return nil, refactor.Refusef("%s and %s are the same function", a.Name, a.KeepName)
-	case dup.obj.Exported():
-		return nil, refactor.Refusef("%s is exported, so code in other modules could call it, and deleting it would break them", dup.obj.Name())
 	}
 	if err := sameSignature(dup.obj, keep.obj); err != nil {
 		return nil, err
@@ -464,11 +462,15 @@ func replaceUses(ws *workspace.Workspace, dup, keep *fn) (*refactor.Plan, error)
 	for path, fe := range files {
 		fes = append(fes, edit.FileEdit{Path: path, Edits: append(fe.edits, fe.adder.Edits()...)})
 	}
-	return &refactor.Plan{
+	plan := &refactor.Plan{
 		Summary: fmt.Sprintf("replaced %s with %s.%s (%d reference%s updated) and deleted %s",
 			dup.obj.Name(), keep.pkg.Name, keep.obj.Name(), refs, textutil.Plural(refs), dup.obj.Name()),
 		Edits: edit.Merge(fes),
-	}, nil
+	}
+	if analysis.PublicAPI(dup.obj, ws.Pkgs) {
+		plan.Notes = append(plan.Notes, refactor.APINote(dup.obj.Name(), "deleting it"))
+	}
+	return plan, nil
 }
 
 func shadowed(ws *workspace.Workspace, where, name string, o types.Object) error {

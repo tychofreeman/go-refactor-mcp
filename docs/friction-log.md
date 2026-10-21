@@ -1738,6 +1738,12 @@ tool copies a file). The Contacts derivation was run with the
 two getter lines it counts, and the field deletions by replace_text
 after `remove_dead_code` refused falsely.
 
+## 2026-10-21: exported functions merged and inlined away
+
+All through gorefactor: the golden cases with move_file, delete_file,
+create_file and replace_text (one batch refused: a case name already
+taken), the code and docs with replace_text.
+
 ## 2026-10-21: exported code, the API note
 
 All through gorefactor: the golden cases with move_file, delete_file

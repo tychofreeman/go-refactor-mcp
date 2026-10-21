@@ -839,7 +839,8 @@ hand or a tool got in the way.
       `exported` option is no longer needed).
     - `merge_duplicate_function` and `inline_function` delete an
       exported function (inline_function must then look for uses in
-      every package, not only its own).
+      every package, not only its own). *Done:* and for a method,
+      interfaces in every package (`analysis.InterfaceWithMethod`).
     - `extract_struct` of an exported struct.
     - The method guards (`extract_function` from a method,
       `function_to_method`, `method_to_function`): in place of an
