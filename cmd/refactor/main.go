@@ -7,6 +7,7 @@
 //	refactor [-C dir] [-n] rename file=main.go line=7 name=t new_name=total
 //	refactor rename '{"file":"main.go","line":7,"name":"t","new_name":"total"}'
 //	refactor batch '{"steps":[{"tool":"rename","args":{...}}, ...]}'
+//	refactor batch @steps.json      (the JSON from a file; - reads stdin)
 //
 // Exit status: 0 applied (or previewed), 2 refused, 1 error.
 package main
@@ -15,6 +16,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -35,7 +37,7 @@ func run(argv []string) int {
 	dryRun := fs.Bool("n", false, "dry run: print the diff without writing")
 	asJSON := fs.Bool("json", false, "print the result as JSON (without declaring what an edit calls)")
 	fs.Usage = func() {
-		fmt.Fprintf(fs.Output(), "usage: refactor [flags] list\n       refactor [flags] <refactoring> key=value... | '<json>'\n       refactor [flags] batch '<json>'\n\nflags:\n")
+		fmt.Fprintf(fs.Output(), "usage: refactor [flags] list\n       refactor [flags] <refactoring> key=value... | '<json>' | @file | -\n       refactor [flags] batch '<json>' | @file | -\n\n@file reads the JSON from a file, - from stdin.\n\nflags:\n")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(argv); err != nil {
@@ -47,6 +49,11 @@ func run(argv []string) int {
 	}
 
 	name := fs.Arg(0)
+	rest, err := jsonFrom(fs.Args()[1:])
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
 	if name == "list" {
 		for _, r := range refactorings.All() {
 			fmt.Printf("%s\n  %s\n\n", r.Name(), strings.ReplaceAll(r.Description(), "\n", "\n  "))
@@ -54,14 +61,14 @@ func run(argv []string) int {
 		return 0
 	}
 	if name == "batch" {
-		return runBatch(fs.Args()[1:], *dir, *pattern, *dryRun)
+		return runBatch(rest, *dir, *pattern, *dryRun)
 	}
 	r, ok := refactorings.Lookup(name)
 	if !ok {
 		fmt.Fprintf(os.Stderr, "unknown refactoring %q (try: refactor list)\n", name)
 		return 1
 	}
-	args, err := parseArgs(fs.Args()[1:])
+	args, err := parseArgs(rest)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
@@ -159,4 +166,29 @@ func parseArgs(kv []string) (json.RawMessage, error) {
 		}
 	}
 	return json.Marshal(m)
+}
+
+// stdin is what an argument "-" reads.
+var stdin io.Reader = os.Stdin
+
+// jsonFrom replaces an only argument "@path" with the file's contents,
+// and "-" with stdin's, so that long JSON needs no shell quoting.
+func jsonFrom(argv []string) ([]string, error) {
+	if len(argv) != 1 {
+		return argv, nil
+	}
+	var data []byte
+	var err error
+	switch a := argv[0]; {
+	case a == "-":
+		data, err = io.ReadAll(stdin)
+	case strings.HasPrefix(a, "@"):
+		data, err = os.ReadFile(a[1:])
+	default:
+		return argv, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return []string{string(data)}, nil
 }
