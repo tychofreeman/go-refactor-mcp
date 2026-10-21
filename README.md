@@ -554,7 +554,9 @@ hand or a tool got in the way.
         through it), and every call through any of them; name any
         member. Interfaces outside the module are still checked.
       - **Results:** a tool to change a function's results, with every
-        call.
+        call. *Done: add_result adds one, last, with the value every
+        return gives it (callers `v, _ := f()`), for families too.
+        Removing or retyping a result is still to do.*
       - **Edits that change a signature by text** are refused with the
         tool to use.
       - **`change_field_type`,** adjusting uses only where safe and

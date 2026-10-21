@@ -1454,6 +1454,14 @@ refusal, which became a success case, was removed with `git rm`;
 nothing removes a file. PosMapOf began as a stub in a batch with its
 test, so the test could fail first.
 
+## 2026-10-20: add_result
+
+All through gorefactor: fixtures with create_file (the test's call of
+NewAddResult got a stub, replaced in the same batch that created the
+file), the tool with create_file, the rest with replace_text. Three
+tools' descriptions had a sentence inserted mid-list by the last PR,
+fixed with one replace_text over `files`.
+
 ## 2026-10-20: signature tools change interface families
 
 Through gorefactor but for one thing: four fixtures that expected a

@@ -67,6 +67,7 @@ func All() []refactor.Refactoring {
 		addelement.New(),
 		createfromusage.New(),
 		changesig.NewChangeParameterType(),
+		changesig.NewAddResult(),
 	}
 }
 

@@ -41,6 +41,12 @@ type holder struct {
 // written in the workspace, those declared at package level in any
 // dependency, and error.
 func (t *target) checkInterfaces(change paramChange) error {
+	return t.checkSignatures(func(sig *types.Signature) string { return sigKey(change(paramKeys(sig)), sig) })
+}
+
+// checkSignatures is checkInterfaces for a change of the method's
+// signature that after writes, as sigKey does, from the signature now.
+func (t *target) checkSignatures(afterOf func(*types.Signature) string) error {
 	recv := t.obj.Signature().Recv()
 	if recv == nil {
 		return nil
@@ -58,7 +64,7 @@ func (t *target) checkInterfaces(change paramChange) error {
 				base.Obj().Name(), t.typeName(ifaces[0].typ), t.where(ifaces[0]), t.obj.Name())
 		}
 		for _, h := range t.holders(named) {
-			after := sigKey(change(paramKeys(h.sig)), h.sig)
+			after := afterOf(h.sig)
 			for _, i := range ifaces {
 				if t.inFamily(i.under) {
 					continue // it changes with the target

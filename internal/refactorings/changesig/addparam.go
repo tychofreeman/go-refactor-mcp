@@ -29,7 +29,8 @@ func (*AddParameter) Description() string {
 Use it to prepare a feature change: add the parameter first, then change the body to use it.
 Identify the function by file, line and name, at its declaration or any call. Give the new parameter's name and type, the value every call passes (written as Go source, e.g. "", nil, 0, or a name in scope at each call such as cfg.OutDir), and optionally before: the existing parameter to insert it ahead of (default: at the end, or just before a variadic parameter).
 The body does not use the new parameter yet, so behavior is unchanged; the value must therefore have no side effects and must not be able to panic (no calls other than to known functions without side effects such as strings.ToUpper, no pointer dereferences, indexing or non-constant division).
-Refuses if the function is used other than by calling it (as a function value or method expression), if a method would stop or start implementing an interface declared outside the module (which could silently change a type assertion). An interface method of the module changes with every method of the module's types that implements it, and such a method with the interface: name any of them, if the new name clashes with a parameter, result or top-level local or would hide a name the body uses, or if the value does not type-check at some call.`
+Refuses if the function is used other than by calling it (as a function value or method expression), if a method would stop or start implementing an interface declared outside the module (which could silently change a type assertion), if the new name clashes with a parameter, result or top-level local or would hide a name the body uses, or if the value does not type-check at some call.
+An interface method of the module changes with every method of the module's types that implements it, and such a method with the interface: name any of them.`
 }
 
 func (*AddParameter) InputSchema() json.RawMessage {
