@@ -576,6 +576,15 @@ func TestImportsForWhatEditsUse(t *testing.T) {
 	}
 }
 
+// An edit that changes a signature as text, and breaks its calls, is
+// refused with the tools that change a signature with every call.
+func TestSignatureEditPointsToTools(t *testing.T) {
+	cs, _ := setup(t)
+	out, _ := call(t, cs, "replace_text", map[string]any{"file": "calc/calc.go", "old": "func Apply(n int) int", "new": "func Apply(n, m int) int"})
+	mustContain(t, "replace_text", out, "REFUSED", "not enough arguments in call to calc.Apply",
+		"this edit changes the signature of Apply", "add_parameter")
+}
+
 // TestRefactoringLoop walks the loop the model is meant to follow.
 func TestRefactoringLoop(t *testing.T) {
 	cs, dir := setup(t)
