@@ -36,7 +36,7 @@ Identify the function by file, line and name, at its declaration or any call, an
 Two kinds of change keep behavior:
 - To an interface the old type implements (*bytes.Buffer to io.Writer): calls are unchanged, and the body must compile with the new type. Refused if the body compares the parameter with nil and the old type is not an interface (a nil pointer in an interface is not nil).
 - Between types with the same underlying type (string and UserID), or to a number type that holds every value of the old one (int32 to int64): typed arguments are converted at calls (UserID(name)), and the body converts the parameter back (string(id)) wherever its type could matter: everywhere but indexing, len, cap, range, and comparisons with a constant. Refused if the body assigns the parameter or takes its address.
-Also refuses a variadic parameter, generic types, a call that passes another call's results, and a method that would stop or start implementing an interface the program can see.`
+Also refuses a variadic parameter, generic types, a call that passes another call's results, and a method that would stop or start implementing an interface declared outside the module. An interface method of the module changes with every method of the module's types that implements it, and such a method with the interface: name any of them.`
 }
 
 func (*ChangeParameterType) InputSchema() json.RawMessage {
@@ -74,11 +74,11 @@ func (*ChangeParameterType) Plan(ws *workspace.Workspace, raw json.RawMessage) (
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
-	t, err := findTarget(ws, locate.IdentQuery{File: a.File, Line: a.Line, Column: a.Column, Name: a.Name})
+	t, err := findFamily(ws, locate.IdentQuery{File: a.File, Line: a.Line, Column: a.Column, Name: a.Name})
 	if err != nil {
 		return nil, err
 	}
-	at, err := t.paramIndex(a.Parameter)
+	at, err := t.named().paramIndex(a.Parameter)
 	if err != nil {
 		return nil, err
 	}
@@ -101,30 +101,31 @@ func (*ChangeParameterType) Plan(ws *workspace.Workspace, raw json.RawMessage) (
 	if err != nil {
 		return nil, err
 	}
-	if err := t.checkInterfaces(func(ps []string) []string { ps[at] = typeKey(newT); return ps }); err != nil {
-		return nil, err
-	}
-
 	files := newFileEdits(ws)
-	decl, err := files.of(t.pkg, t.decl.Pos())
-	if err != nil {
-		return nil, err
-	}
-	p := t.params[at]
-	decl.edits = append(decl.edits, t.fieldEdit(p, decl.write(newT)))
-	body, err := t.bodyEdits(p, old, newT, widen, decl)
-	if err != nil {
-		return nil, err
-	}
-	decl.edits = append(decl.edits, body...)
-	if !widen {
-		for _, c := range t.calls {
-			if err := t.convertArg(files, c, at, newT); err != nil {
-				return nil, err
+	for _, m := range t.group() {
+		if err := m.checkInterfaces(func(ps []string) []string { ps[at] = typeKey(newT); return ps }); err != nil {
+			return nil, err
+		}
+		decl, err := files.of(m.pkg, m.declPos())
+		if err != nil {
+			return nil, err
+		}
+		p := m.params[at]
+		decl.edits = append(decl.edits, m.fieldEdit(p, decl.write(newT)))
+		body, err := m.bodyEdits(p, old, newT, widen, decl)
+		if err != nil {
+			return nil, err
+		}
+		decl.edits = append(decl.edits, body...)
+		if !widen {
+			for _, c := range m.calls {
+				if err := m.convertArg(files, c, at, newT); err != nil {
+					return nil, err
+				}
 			}
 		}
 	}
-	return t.newPlan(fmt.Sprintf("changed parameter %q of %s from %s to %s", a.Parameter, t.obj.Name(), t.typeName(old), t.typeName(newT)), files.all()), nil
+	return t.newPlan(fmt.Sprintf("changed parameter %q of %s from %s to %s", a.Parameter, t.groupName(), t.typeName(old), t.typeName(newT)), files.all()), nil
 }
 
 // checkConversion checks that every value of type old means the same as
@@ -162,7 +163,7 @@ func (t *target) parseType(src string) (types.Type, error) {
 		scope.Scope().Insert(t.pkg.Types.Scope().Lookup(n))
 	}
 	for _, f := range t.pkg.Syntax {
-		if t.ws.Fset.File(f.Pos()) != t.ws.Fset.File(t.decl.Pos()) {
+		if t.ws.Fset.File(f.Pos()) != t.ws.Fset.File(t.declPos()) {
 			continue
 		}
 		for _, spec := range f.Imports {
@@ -186,9 +187,9 @@ func (t *target) parseType(src string) (types.Type, error) {
 		case 1:
 			scope.Scope().Insert(types.NewPkgName(token.NoPos, scope, x.Name, found[0]))
 		case 0:
-			missing = refactor.Refusef("no package %s is loaded; import it in %s first", x.Name, t.ws.Rel(t.ws.Fset.Position(t.decl.Pos()).Filename))
+			missing = refactor.Refusef("no package %s is loaded; import it in %s first", x.Name, t.ws.Rel(t.declFile()))
 		default:
-			missing = refactor.Refusef("several packages are named %s; import the one you mean in %s first", x.Name, t.ws.Rel(t.ws.Fset.Position(t.decl.Pos()).Filename))
+			missing = refactor.Refusef("several packages are named %s; import the one you mean in %s first", x.Name, t.ws.Rel(t.declFile()))
 		}
 		return false
 	})
@@ -225,7 +226,7 @@ func loadedPackages(ws *workspace.Workspace) map[string][]*types.Package {
 // it shares one (a, b string to a string, b Name).
 func (t *target) fieldEdit(p param, typ string) edit.TextEdit {
 	f := p.field
-	if len(f.Names) == 1 {
+	if len(f.Names) <= 1 {
 		return edit.TextEdit{Start: t.off(f.Type.Pos()), End: t.off(f.Type.End()), NewText: typ}
 	}
 	old := t.text(f.Type)
@@ -250,6 +251,9 @@ func (t *target) fieldEdit(p param, typ string) edit.TextEdit {
 // bodyEdits checks the body's uses of p, and when its type is converted,
 // converts it back where its type could matter.
 func (t *target) bodyEdits(p param, old, newT types.Type, widen bool, decl *fileEdits) ([]edit.TextEdit, error) {
+	if t.decl == nil {
+		return nil, nil // an interface method has no body
+	}
 	info := t.pkg.TypesInfo
 	v := info.Defs[p.field.Names[p.index]]
 	var file *ast.File

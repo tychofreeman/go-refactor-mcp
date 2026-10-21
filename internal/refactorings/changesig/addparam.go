@@ -29,7 +29,7 @@ func (*AddParameter) Description() string {
 Use it to prepare a feature change: add the parameter first, then change the body to use it.
 Identify the function by file, line and name, at its declaration or any call. Give the new parameter's name and type, the value every call passes (written as Go source, e.g. "", nil, 0, or a name in scope at each call such as cfg.OutDir), and optionally before: the existing parameter to insert it ahead of (default: at the end, or just before a variadic parameter).
 The body does not use the new parameter yet, so behavior is unchanged; the value must therefore have no side effects and must not be able to panic (no calls other than to known functions without side effects such as strings.ToUpper, no pointer dereferences, indexing or non-constant division).
-Refuses if the function is used other than by calling it (as a function value or method expression), if it is an interface method, if a method would stop or start implementing an interface the program can see (which could silently change a type assertion), if the new name clashes with a parameter, result or top-level local or would hide a name the body uses, or if the value does not type-check at some call.`
+Refuses if the function is used other than by calling it (as a function value or method expression), if a method would stop or start implementing an interface declared outside the module (which could silently change a type assertion). An interface method of the module changes with every method of the module's types that implements it, and such a method with the interface: name any of them, if the new name clashes with a parameter, result or top-level local or would hide a name the body uses, or if the value does not type-check at some call.`
 }
 
 func (*AddParameter) InputSchema() json.RawMessage {
@@ -99,36 +99,38 @@ func (*AddParameter) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refact
 	case value == "":
 		return nil, refactor.Refusef("value is required: the expression every call passes for the new parameter")
 	}
-	t, err := findTarget(ws, locate.IdentQuery{File: a.File, Line: a.Line, Column: a.Column, Name: a.Name})
+	t, err := findFamily(ws, locate.IdentQuery{File: a.File, Line: a.Line, Column: a.Column, Name: a.Name})
 	if err != nil {
 		return nil, err
 	}
-	at, err := t.insertIndex(a.Before)
+	at, err := t.named().insertIndex(a.Before)
 	if err != nil {
-		return nil, err
-	}
-	if err := t.checkNewName(a.Parameter); err != nil {
 		return nil, err
 	}
 	typ, err := t.evalType(a.Type)
 	if err != nil {
 		return nil, err
 	}
-	if err := t.checkInterfaces(func(ps []string) []string { return slices.Insert(ps, at, typeKey(typ)) }); err != nil {
-		return nil, err
-	}
-	for _, c := range t.calls {
-		if err := t.checkValue(c, value, typ); err != nil {
+	var fes []edit.FileEdit
+	for _, m := range t.group() {
+		if err := m.checkNewName(a.Parameter); err != nil {
 			return nil, err
 		}
+		if err := m.checkInterfaces(func(ps []string) []string { return slices.Insert(ps, at, typeKey(typ)) }); err != nil {
+			return nil, err
+		}
+		for _, c := range m.calls {
+			if err := m.checkValue(c, value, typ); err != nil {
+				return nil, err
+			}
+		}
+		fes = append(fes, edit.FileEdit{Path: m.declFile(), Edits: []edit.TextEdit{m.paramEdit(at, a.Parameter, a.Type)}})
+		for _, c := range m.calls {
+			path := ws.Fset.Position(c.expr.Pos()).Filename
+			fes = append(fes, edit.FileEdit{Path: path, Edits: []edit.TextEdit{m.argEdit(c.expr, at, value)}})
+		}
 	}
-
-	fes := []edit.FileEdit{{Path: ws.Fset.Position(t.decl.Pos()).Filename, Edits: []edit.TextEdit{t.paramEdit(at, a.Parameter, a.Type)}}}
-	for _, c := range t.calls {
-		path := ws.Fset.Position(c.expr.Pos()).Filename
-		fes = append(fes, edit.FileEdit{Path: path, Edits: []edit.TextEdit{t.argEdit(c.expr, at, value)}})
-	}
-	return t.newPlan(fmt.Sprintf("added parameter %q to %s", a.Parameter+" "+a.Type, t.obj.Name()), fes), nil
+	return t.newPlan(fmt.Sprintf("added parameter %q to %s", a.Parameter+" "+a.Type, t.groupName()), fes), nil
 }
 
 // insertIndex returns the position in the flattened parameter list where
@@ -157,6 +159,9 @@ func (t *target) insertIndex(before string) (int, error) {
 // body's top level, which share that scope), or that the body uses for
 // something declared outside the function, which the parameter would hide.
 func (t *target) checkNewName(name string) error {
+	if t.decl == nil {
+		return nil // an interface method: a parameter's name there is only documentation
+	}
 	info := t.pkg.TypesInfo
 	if fs := info.Scopes[t.decl.Type]; fs != nil {
 		if o := fs.Lookup(name); o != nil {
@@ -190,13 +195,13 @@ func (t *target) checkNewName(name string) error {
 // evalType checks the type expression in the declaring file, where the
 // parameter list is (so type parameters are visible).
 func (t *target) evalType(src string) (types.Type, error) {
-	tv, err := types.Eval(t.ws.Fset, t.pkg.Types, t.decl.Type.Params.Closing, src)
+	tv, err := types.Eval(t.ws.Fset, t.pkg.Types, t.ftype.Params.Closing, src)
 	if err != nil || !tv.IsType() {
 		reason := "it is not a type"
 		if err != nil {
 			reason = err.Error()
 		}
-		return nil, refactor.Refusef("the type %q is not valid in %s: %s", src, t.ws.Rel(t.ws.Fset.Position(t.decl.Pos()).Filename), reason)
+		return nil, refactor.Refusef("the type %q is not valid in %s: %s", src, t.ws.Rel(t.declFile()), reason)
 	}
 	return tv.Type, nil
 }
@@ -297,7 +302,14 @@ func (t *target) paramEdit(at int, name, typ string) edit.TextEdit {
 		return edit.TextEdit{Start: o, End: o, NewText: text}
 	}
 	if len(t.params) == 0 {
-		return insert(t.decl.Type.Params.Opening+1, name+" "+typ)
+		return insert(t.ftype.Params.Opening+1, name+" "+typ)
+	}
+	if t.params[0].name == "" {
+		// An interface method's parameters without names: the type alone.
+		if at == len(t.params) {
+			return insert(t.params[at-1].field.End(), ", "+typ)
+		}
+		return insert(t.params[at].field.Pos(), typ+", ")
 	}
 	if at == len(t.params) {
 		last := t.params[at-1].field

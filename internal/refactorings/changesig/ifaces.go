@@ -60,6 +60,9 @@ func (t *target) checkInterfaces(change paramChange) error {
 		for _, h := range t.holders(named) {
 			after := sigKey(change(paramKeys(h.sig)), h.sig)
 			for _, i := range ifaces {
+				if t.inFamily(i.under) {
+					continue // it changes with the target
+				}
 				now, then := t.implements(h.typ, i.under, ""), t.implements(h.typ, i.under, after)
 				switch {
 				case now && !then:
@@ -75,22 +78,39 @@ func (t *target) checkInterfaces(change paramChange) error {
 	return nil
 }
 
+// inFamily reports whether it's method of the target's name is a member
+// of the target's family, and so changes with it.
+func (t *target) inFamily(it *types.Interface) bool {
+	for i := range it.NumMethods() {
+		if m := it.Method(i); m.Id() == t.obj.Id() && t.familyKeys[keyOf(t.ws.Fset, m)] {
+			return true
+		}
+	}
+	return false
+}
+
 // visible returns, from package variant p's point of view, the interfaces
 // that have a method with the target's name (named ones first), and every
 // named type.
 func (t *target) visible(p *packages.Package) ([]iface, []*types.TypeName) {
 	var ifaces []iface
 	var named []*types.TypeName
-	seen := map[string]bool{}
+	seen := map[string]int{} // index in ifaces, by typeKey
 	addIface := func(typ types.Type, pos token.Pos) {
 		it, ok := typ.Underlying().(*types.Interface)
 		if !ok || !it.IsMethodSet() || !t.hasMethod(it) {
 			return
 		}
 		k := typeKey(it) // a named interface and its literal are one interface
-		if !seen[k] {
-			seen[k] = true
+		i, ok := seen[k]
+		switch {
+		case !ok:
+			seen[k] = len(ifaces)
 			ifaces = append(ifaces, iface{typ: typ, under: it, pos: pos})
+		case t.inFamily(ifaces[i].under) && !t.inFamily(it):
+			// One the change does not reach (fmt.Stringer for a family's
+			// own Namer), which must still be implemented.
+			ifaces[i] = iface{typ: typ, under: it, pos: pos}
 		}
 	}
 	addName := func(tn *types.TypeName) {

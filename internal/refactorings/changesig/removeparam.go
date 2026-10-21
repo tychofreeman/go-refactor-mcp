@@ -29,7 +29,7 @@ func (*RemoveParameter) Description() string {
 Use it to finish removing a feature: first change the body so it no longer uses the parameter, then remove it.
 Identify the function by file, line and name, at its declaration or any call, and give the parameter's name. Removing a variadic parameter drops all of its arguments.
 Each dropped argument must have no side effects and must not be able to panic (no calls other than to known functions without side effects such as strings.ToUpper, no pointer dereferences, indexing or non-constant division), so that not evaluating it changes nothing.
-Refuses if the body uses the parameter (unless it never reads the value it is called with: the first statement that mentions it assigns it a value of its type, as in "n, err := f()" or "err = f()", which then declares it), if the function is used other than by calling it, if it is an interface method, if a method would stop or start implementing an interface the program can see (which could silently change a type assertion), if a dropped argument would leave a local variable or an import unused, or if the parameter's type is all that lets calls infer a type parameter.`
+Refuses if the body uses the parameter (unless it never reads the value it is called with: the first statement that mentions it assigns it a value of its type, as in "n, err := f()" or "err = f()", which then declares it), if the function is used other than by calling it, if a method would stop or start implementing an interface declared outside the module (which could silently change a type assertion). An interface method of the module changes with every method of the module's types that implements it, and such a method with the interface: name any of them, if a dropped argument would leave a local variable or an import unused, or if the parameter's type is all that lets calls infer a type parameter.`
 }
 
 func (*RemoveParameter) InputSchema() json.RawMessage {
@@ -67,42 +67,44 @@ func (*RemoveParameter) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
-	t, err := findTarget(ws, locate.IdentQuery{File: a.File, Line: a.Line, Column: a.Column, Name: a.Name})
+	t, err := findFamily(ws, locate.IdentQuery{File: a.File, Line: a.Line, Column: a.Column, Name: a.Name})
 	if err != nil {
 		return nil, err
 	}
-	at, err := t.paramIndex(a.Parameter)
+	at, err := t.named().paramIndex(a.Parameter)
 	if err != nil {
 		return nil, err
 	}
-	if err := t.checkUnused(t.params[at]); err != nil {
-		return nil, err
-	}
-	if err := t.checkInterfaces(func(ps []string) []string { return slices.Delete(ps, at, at+1) }); err != nil {
-		return nil, err
-	}
-	variadic := t.obj.Signature().Variadic() && at == len(t.params)-1
-
-	cuts := []cut{t.paramCut(t.params[at])}
-	for _, c := range t.calls {
-		if err := checkNoSpread(c, t.ws.Position(c.expr.Pos())); err != nil {
+	var cuts []cut
+	for _, m := range t.group() {
+		if err := m.checkUnused(m.params[at]); err != nil {
 			return nil, err
 		}
-		args := c.expr.Args
-		if at >= len(args) {
-			continue // a variadic parameter given no arguments
+		if err := m.checkInterfaces(func(ps []string) []string { return slices.Delete(ps, at, at+1) }); err != nil {
+			return nil, err
 		}
-		dropped := args[at : at+1]
-		if variadic {
-			dropped = args[at:]
-		}
-		for _, arg := range dropped {
-			if bad, why := unsafeValue(c.pkg.TypesInfo, arg, t.effects()); bad != nil {
-				return nil, refactor.Refusef("the argument %s at %s %s (%s), so not passing it would change behavior; move it out of the call first (for example `_ = %s`)",
-					types.ExprString(arg), t.ws.Position(arg.Pos()), why, types.ExprString(bad.(ast.Expr)), types.ExprString(arg))
+		variadic := m.obj.Signature().Variadic() && at == len(m.params)-1
+		cuts = append(cuts, m.paramCut(m.params[at]))
+		for _, c := range m.calls {
+			if err := checkNoSpread(c, m.ws.Position(c.expr.Pos())); err != nil {
+				return nil, err
 			}
+			args := c.expr.Args
+			if at >= len(args) {
+				continue // a variadic parameter given no arguments
+			}
+			dropped := args[at : at+1]
+			if variadic {
+				dropped = args[at:]
+			}
+			for _, arg := range dropped {
+				if bad, why := unsafeValue(c.pkg.TypesInfo, arg, m.effects()); bad != nil {
+					return nil, refactor.Refusef("the argument %s at %s %s (%s), so not passing it would change behavior; move it out of the call first (for example `_ = %s`)",
+						types.ExprString(arg), m.ws.Position(arg.Pos()), why, types.ExprString(bad.(ast.Expr)), types.ExprString(arg))
+				}
+			}
+			cuts = append(cuts, m.argCut(c.expr, at, variadic))
 		}
-		cuts = append(cuts, t.argCut(c.expr, at, variadic))
 	}
 	if err := t.checkNothingLeftUnused(cuts); err != nil {
 		return nil, err
@@ -112,8 +114,10 @@ func (*RemoveParameter) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 	for _, c := range cuts {
 		fes = append(fes, c.fileEdit())
 	}
-	fes = append(fes, t.fixes...)
-	return t.newPlan(fmt.Sprintf("removed parameter %q from %s", a.Parameter, t.obj.Name()), fes), nil
+	for _, m := range t.group() {
+		fes = append(fes, m.fixes...)
+	}
+	return t.newPlan(fmt.Sprintf("removed parameter %q from %s", a.Parameter, t.groupName()), fes), nil
 }
 
 // paramIndex returns the index of the named parameter in the flattened
@@ -140,6 +144,9 @@ func (t *target) paramIndex(name string) (int, error) {
 // checkUnused refuses a parameter the body uses, or whose type is needed
 // to infer a type parameter at calls.
 func (t *target) checkUnused(p param) error {
+	if t.decl == nil {
+		return nil // an interface method has no body
+	}
 	info := t.pkg.TypesInfo
 	v := info.Defs[p.field.Names[p.index]]
 	for id, o := range info.Uses {
@@ -225,7 +232,7 @@ func (t *target) paramCut(p param) cut {
 		}
 		return t.cut(names[p.index-1].End(), names[p.index].End())
 	}
-	list := t.decl.Type.Params.List
+	list := t.ftype.Params.List
 	j := 0
 	for list[j] != p.field {
 		j++

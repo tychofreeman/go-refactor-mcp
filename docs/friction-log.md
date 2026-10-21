@@ -1454,6 +1454,15 @@ refusal, which became a success case, was removed with `git rm`;
 nothing removes a file. PosMapOf began as a stub in a batch with its
 test, so the test could fail first.
 
+## 2026-10-20: signature tools change interface families
+
+Through gorefactor but for one thing: four fixtures that expected a
+refusal now apply (the interface changes with its implementations), so
+they were renamed with `git mv` and their refused.txt removed with `git
+rm`; nothing renames or removes a file. Their expected output was
+written with create_file, the descriptions of three tools with one
+replace_text over `files`.
+
 ## 2026-10-20: inline_function all_calls
 
 All through gorefactor: the fixtures with a batch of create_file, the

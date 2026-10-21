@@ -545,11 +545,24 @@ hand or a tool got in the way.
       on the files with import errors before it declares stubs: it adds
       the imports names unambiguously need and removes those nothing
       uses.*
-    - **Signature and type changes that carry their consequences:**
-      `change_signature` (parameters and results, every call, and for a
-      method its interface and the interface's other implementers), and
-      `change_field_type` with uses adjusted where mechanical; an edit
-      that changes a signature by text is pointed to them.
+    - **Signature and type changes that carry their consequences.** The
+      user chose to extend the parameter tools first (2026-10-20):
+      - **Interface families.** *Done:* add_parameter, remove_parameter,
+        move_parameter and change_parameter_type change an interface
+        method of the module with every method of the module's types
+        that implements it (and other module interfaces those satisfy
+        through it), and every call through any of them; name any
+        member. Interfaces outside the module are still checked.
+      - **Results:** a tool to change a function's results, with every
+        call.
+      - **Edits that change a signature by text** are refused with the
+        tool to use.
+      - **`change_field_type`,** adjusting uses only where safe and
+        refusing each other use by name.
+      - **Later: one `change_signature`** taking the new signature, which
+        works out the parameters added, removed, moved and retyped and
+        the results, and needs a value at each call for a new one.
+        More general than the separate tools; harder to keep safe.
     - **Mechanical repairs with a note:** `:=` to `=`, exporting a helper
       another package calls, "already declared at ..." with how to
       replace it.
