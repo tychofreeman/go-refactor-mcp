@@ -724,7 +724,8 @@ hand or a tool got in the way.
       where a derivation replaces rewriting each use (fit, Batch). Next:
       the gaps those runs hit (pointer alias A for the shared record,
       *done* as `extract_variable` with `pointer`; fold through a
-      pointer parameter, O; literal rewrite K for Contacts), and more
+      pointer parameter, O; for Contacts, fold literals through a setter,
+      K, then remove the fields, L), and more
       runs per task.
 
 20. **Loops and containers** (asked for by the user, 2026-10-20): the

@@ -57,6 +57,13 @@ results are in `docs/cost-history.md`.
   that is assigned to now names the option. More tools did not help a
   fresh model (CLAUDE.md lessons).
 
+- **General operations, not task-shaped tools** (2026-10-21, the
+  user): `fields_to_map` (#217, closed) did the Contacts task in one
+  call, but fit one shape (fields into a `map[string]T`) and went
+  around the derivation the experiment measures. A gap becomes an
+  operation that composes with the others, for any type and target:
+  K is now fold literals through a setter, then L removes the fields.
+
 - **Loops and containers** (2026-10-20): the user asked for
   refactorings that convert between kinds of loop, and edits that make
   a block the body of a loop, an `if` and the like. Roadmap item 20.
