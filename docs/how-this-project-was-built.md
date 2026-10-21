@@ -1,9 +1,11 @@
 # How this project was built
 
 A record of the practices behind go-refactor-mcp, written to decide which
-are worth repeating. It covers 15–18 October 2026: 159 commits, PRs #1–#65.
-It draws on the git history, `docs/friction-log.md`, `docs/edits.md` and
-the notes kept between sessions; judgments are Claude's.
+are worth repeating. It covers 15–21 October 2026: about 500 commits, PRs
+#1–#218. It was written on 18 October for the first four days (#1–#65)
+and extended on 21 October. It draws on the git history,
+`docs/friction-log.md`, `docs/edits.md`, `docs/cost-history.md` and
+`docs/session-notes.md`; judgments are Claude's.
 
 ## The arc in brief
 
@@ -33,6 +35,44 @@ the notes kept between sessions; judgments are Claude's.
 6. **Day 4 (18 Oct): statement refactorings and effect analysis.**
    `move_statement_up/down`, opt-in stress tests driving their design, and
    summaries of which of the module's own functions have side effects.
+7. **Day 4 (18 Oct): measuring cost.** `refactor-tokens` (#72) counted
+   what sessions spent by tool, and `refactor-ab` (#74) gave the same
+   task to fresh models through the MCP and by hand, checked by hidden
+   tests. The first findings shaped the next PRs: results were most of
+   the cost, so they shrank (#73, #75, #76), and dependent steps cost a
+   turn each, so `batch` came (#77), with line numbers as of the start
+   of the batch (#82) and a check at its end (#87).
+8. **Day 5 (19 Oct): what a fresh model gets wrong.** Tools listed by
+   intention, `create_from_usage`, locals addressed by name, references
+   to what an earlier step made (#90–#104), then the fresh-model fixes:
+   arguments checked up front, ranges suggested in refusals, stubs that
+   `add_declaration` replaces, edits allowed on code they fix
+   (#113–#117). In this project's own sessions, input tokens per edit
+   step fell from 1.2–1.9M (Oct 17) to 170–190k.
+9. **Day 6 (20 Oct): turns, not reads.** A coaching tip in results did
+   not help and was reverted (#119, #120). Reading through `inspect`
+   without bodies (#121) changed how the model read, not how much. The
+   finding that input tokens track requests (about 39K each) moved the
+   work to wasted turns: schema loads (#128), denied writes (#133,
+   #134).
+10. **Day 6: a full code review** (#130) found 25 problems, 7 of them
+    silent behavior changes. All were fixed, one PR each, chained and
+    merged in order (#136–#170).
+11. **Day 6: other people's code, and type reasoning off the model.**
+    172 candidate PRs from five large repositories became A/B tasks
+    (#137, #168). The transcripts showed type-check refusals of the
+    model's own code, which led to more stubs, imports fixed after every
+    edit, signature changes across interface families (#181–#190), the
+    user's alias workflow for a parameter's type (#193, #194), lazy
+    stubs and checkpoints in a batch (#197, #198), and edits for files
+    and whole declarations (#203, #204).
+12. **Days 6–7 (20–21 Oct): working algebraically.** The user's thesis:
+    code is a structure reached by type-safe operations, with small
+    edits at the leaves. A measure of it (#207), five problems the user
+    solved as derivations (#208), the operations they lacked (`fold`,
+    `parameterize`, #209–#212), and an A/B of guidance in the user's
+    moves (#214, #215): no saving on a small module, but on code with
+    many uses 14% less cost and 39% fewer lines written by hand.
 
 ## Practices and what they did for decision-making
 
@@ -194,7 +234,7 @@ fast counts-only mode, and compare versions on identical input.
 
 ### 9. Small, stacked PRs and a written roadmap
 
-Work went out as small PRs (65 in four days), stacked when two touched
+Work went out as small PRs (65 in four days, 218 in seven), stacked when two touched
 the same files, each with a summary, follow-ups and a test plan. The
 README carries status, a roadmap ordered by what the workflow needed, and
 a "what it checks" section per tool.
@@ -218,10 +258,115 @@ not re-argue settled questions (e.g. returning to the Ollama loop).
 
 *Worth repeating:* yes, limited to decisions and their reasons.
 
+*Later.* The notes became `docs/session-notes.md`, imported by
+CLAUDE.md, with a rule to update them in the PR of the work. Two lessons
+shaped that. Notes kept in a claude.ai Project and in memory did not
+reach the user's Claude Code sessions, which read only the repo; review
+follow-ups recorded only there and in the notes never reached the
+roadmap. And a note pushed as a second commit after the user had seen
+the PR was lost when the PR was merged without it (#122): later work
+goes in a new PR.
+
+### 11. A/B runs with fresh models
+
+`cmd/refactor-ab` runs each task in a fresh copy with a fresh model per
+arm (mcp: gorefactor only; hybrid: both; manual: built-in tools only),
+checks the result with hidden tests, and records cost, tokens, turns and
+the quality of the code left behind. `docs/cost-history.md` keeps every
+run with what changed before it.
+
+*Effect on decisions.* It replaced opinion about the tools with numbers,
+and many of the numbers were unwelcome:
+
+- Without a CLAUDE.md asking for it, a fresh model never used gorefactor.
+- With the design in the way, the hybrid arm refactored with the right
+  tool every time, but on a small module refactoring first did not make
+  the second change cheaper, and plain editing stayed cheapest.
+- Editing only through the MCP cost about 1.5 times editing by hand.
+  What made this project's own sessions cheap (batches, checking at the
+  end) came from knowing the tools, not from the tools alone.
+- More tools, longer descriptions and a coaching tip did not help; doing
+  for the model what it would get wrong did.
+
+These findings set the work of days 5 and 6. The harness also needed
+care of its own: a run cut off by a timeout first counted as costing
+nothing (#164), and a module that no longer parsed produced a complexity
+change of −10699 (#191). Both are marked now and left out of the means.
+
+*Worth repeating:* yes, with hidden tests rather than the model's own,
+and with tasks chosen to need the thing measured: additive features gave
+the model "nothing to refactor first".
+
+### 12. Counting waste, not totals
+
+Run-to-run noise was 10–25% at two or three runs per task, so a fix that
+saved a few refusals did not show in totals. The analyses moved to what
+each turn was for: group a transcript's calls by assistant message to
+count turns; weight each result by the turns it stays in context. That
+showed input tokens track the number of requests, so reading less mattered
+less than wasting fewer turns. `refactor-tokens` now does this, and the
+`ab-analyze` skill says how to compare a run with a baseline.
+
+*Worth repeating:* yes. Decide what a change is meant to remove, and
+count that per run.
+
+### 13. A code review as a backlog
+
+A full review of the code at one commit (`docs/code-review-2026-10-20.md`)
+listed 25 findings with a severity and a suggested fix order. The user
+chose the order (the panic class first), and each finding became one PR,
+branched from the one before and merged in order, with the review
+document marking each fixed.
+
+*Effect.* In one day every finding was fixed, and the shared analyses
+they exposed were unified on the way (one dependency walk, one list of
+functions that run a closure, one check for terminating statements). The
+review found what the golden tests could not: rules that held for the
+cases written but not for expressions that can panic or methods reached
+by reflection.
+
+*Worth repeating:* yes, once the tools had grown fast: a review written
+down is a backlog that a session can take item by item.
+
+### 14. Parallel sessions on one repository
+
+From day 6, more than one session worked at once (one on third-party
+prompts or A/B runs, another on tools), each with its own branches.
+
+*Effect.* More got done, at the cost of conflicts in the shared docs: PR
+numbers written into docs before the PR existed were taken by another
+session's PR, and the friction log, appended to by every PR, conflicted
+on most merges. The fixes: check the next PR number before writing it,
+and order the friction log by the commit that added each entry, so a
+merge places an entry rather than guesses.
+
+*Worth repeating:* yes, with docs that tolerate concurrent appends.
+
+### 15. Derivations from the user
+
+Asked for examples of refactoring-first changes, the user could not think
+of many off the top of their head. Posing small problems worked better:
+the user answered with moves ("extract variables for what differs, move
+them to the top, extract the rest", "delegate, redirect, inline",
+"expand, migrate, contract"). Each was run with the tools, and what no
+tool could do became a lettered gap (`docs/derivations.md`).
+
+*Effect on decisions.* The gaps chose the next tools (`fold`,
+`parameterize`, `extract_variable` with `pointer`), and the user steered
+their shape: a tool that did one task in one call (`fields_to_map`, #217)
+was closed in favor of a general operation that composes with the others
+(fold literals through a setter, #218). The A/B of guidance in these
+moves gave the first measured support for the thesis.
+
+*Worth repeating:* yes. Ask how the user would do a concrete change, not
+for a list; prefer options on existing tools and general operations to
+task-shaped tools.
+
 ## What did not work as well
 
 - **Line numbers.** Several tool calls reused line numbers from before an
-  edit and were refused; re-inspecting after every change avoids that.
+  edit and were refused; re-inspecting after every change avoided that
+  until batches translated lines through earlier steps (#82, #115).
 - **Process leaks.** Long-running background jobs need an explicit check
   that they stopped; the recursive stress tests ran on unnoticed for a
   while.
@@ -229,6 +374,16 @@ not re-argue settled questions (e.g. returning to the Ollama loop).
   strength of a refusal count, without first breaking down *which* calls
   were refused. A ten-minute breakdown first would have pointed at the
   standard library.
+- **Tips and guidance in place of mechanisms.** A coaching tip in results
+  (#119) and a reading paragraph in CLAUDE.md changed nothing measurable;
+  checking arguments, suggesting ranges and declaring stubs did.
+- **Tasks too small for the thesis.** Refactoring first, and later
+  working as a derivation, showed no saving on modules with two or three
+  uses of anything. Choosing tasks where the measured effect can appear
+  took a second round each time.
+- **Doc numbers and stale state.** PR numbers guessed in docs, roadmap
+  items left open after the work, and notes kept outside the repo each
+  cost a follow-up PR.
 
 ## Recommendations for future projects
 
@@ -252,3 +407,13 @@ In rough order of value for the cost:
 10. Use your own tools to build the project, and log every manual step,
     but balance that with ordinary feature work so the evidence is not
     only about building the tools.
+11. Measure with fresh models and hidden tests, on tasks that need what
+    is measured; count the waste a change targets per run, since totals
+    are noisy.
+12. Keep notes and findings in the repository, the one place every
+    session reads, and make docs that many sessions append to safe to
+    merge.
+13. Take a full code review as a backlog, one PR per finding, in an
+    order the user chooses.
+14. Collect the user's own derivations by posing problems; build general
+    operations from their gaps rather than tools shaped to one task.

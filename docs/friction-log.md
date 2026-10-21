@@ -1676,3 +1676,7 @@ Docs only, all with replace_text.
 
 Docs only, all with replace_text. The counts of lines written and
 steps writing nothing are a scratch script, not committed.
+## 2026-10-21: the project history through 21 October
+
+All through `refactor batch`: replace_text steps in
+`docs/how-this-project-was-built.md` and this log, from JSON files.
