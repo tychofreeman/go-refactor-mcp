@@ -1655,3 +1655,11 @@ by a generator script in the scratchpad, not through gorefactor; the
 tasks, hidden tests and docs through gorefactor. Validating against
 reference solutions caught a wrong expected value in a hidden test,
 fixed with replace_text.
+
+## 2026-10-21: fields_to_map
+
+All through gorefactor: the package, its test and fixtures with
+create_file in one batch; registered with replace_text, which added
+the import. One fixture had a wrong column, fixed with replace_text.
+Tried on a copy of notify-large with `cmd/refactor`: one step does the
+Contacts task, and its hidden test passes.

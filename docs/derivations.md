@@ -113,7 +113,7 @@ nothing, as well as by the derived share.
 | H | `all_occurrences` reaches back to occurrences before the one named | small |
 | I | Fold: replace each occurrence of an expression or call with a call that means the same (`u.Email` to `u.Contact("email")`, `f(a, b)` to `g(T{a, b})`), checked by inlining the call back | operation |
 | J | Parameterize: functions differing only in a constant or a field become one with a parameter | operation |
-| K | Rewrite literals when fields move into another (`User{Email: v}` to `User{Contacts: ...}`) | operation |
+| K | Rewrite literals when fields move into another (`User{Email: v}` to `User{Contacts: ...}`). *Done* for a map: `fields_to_map` moves the fields, literals and reads in one step (the Contacts task); writes are refused | operation |
 | L | Remove a struct field (refused while used) | operation |
 | M | Inlining substitutes a constant argument used more than once | analysis |
 | N | Remove exported code the module no longer uses, when asked to | operation |

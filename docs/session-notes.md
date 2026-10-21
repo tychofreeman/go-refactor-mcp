@@ -51,6 +51,12 @@ results are in `docs/cost-history.md`.
   the tools, and the gaps. Pose problems rather than ask for examples:
   the user said they could not think of many off the top of their head.
 
+- **Representation changes as edits** (2026-10-21): gap K became
+  `fields_to_map`, an edit (reflection and equality see the map), not
+  a literal-only rewrite: moving fields, literals and reads together
+  is one step where the reads alone took a getter and fold. Writes are
+  refused, since a write to a nil map panics.
+
 - **Loops and containers** (2026-10-20): the user asked for
   refactorings that convert between kinds of loop, and edits that make
   a block the body of a loop, an `if` and the like. Roadmap item 20.

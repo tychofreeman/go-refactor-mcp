@@ -1,0 +1,1 @@
+Email is a string and Age an int; the fields of one map must have one type
