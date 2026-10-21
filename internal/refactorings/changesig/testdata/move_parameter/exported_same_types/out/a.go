@@ -1,6 +1,6 @@
 package m
 
-type Spanner interface{ Span(lo, hi int) int }
+type Spanner interface{ Span(hi, lo int) int }
 
 type T struct{}
 

@@ -28,7 +28,7 @@ func (*MoveParameter) Description() string {
 Use it to prepare a feature change, for example to put parameters in the order a new caller or an interface wants.
 Identify the function by file, line and name, at its declaration or any call. Give the parameter to move and optionally before: the parameter it should go just before (default: the end, or just before a variadic parameter).
 Moving an argument changes the order in which a call evaluates its arguments, so this is refused at any call where that order could matter: the moved argument and one it passes over where one has side effects and the other reads a variable, or both could have side effects or panic.
-Refuses if the function is used other than by calling it (as a function value or method expression), if it is an interface method, if a method would stop or start implementing an interface the program can see (which could silently change a type assertion), if the parameter is variadic, or if a moved argument contains another call of the function.`
+Refuses if the function is used other than by calling it (as a function value or method expression), if a method would stop or start implementing an interface declared outside the module (which could silently change a type assertion). An interface method of the module changes with every method of the module's types that implements it, and such a method with the interface: name any of them, if the parameter is variadic, or if a moved argument contains another call of the function.`
 }
 
 func (*MoveParameter) InputSchema() json.RawMessage {
@@ -62,18 +62,18 @@ func (*MoveParameter) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refac
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
-	t, err := findTarget(ws, locate.IdentQuery{File: a.File, Line: a.Line, Column: a.Column, Name: a.Name})
+	t, err := findFamily(ws, locate.IdentQuery{File: a.File, Line: a.Line, Column: a.Column, Name: a.Name})
 	if err != nil {
 		return nil, err
 	}
-	from, err := t.paramIndex(a.Parameter)
+	from, err := t.named().paramIndex(a.Parameter)
 	if err != nil {
 		return nil, err
 	}
 	if from == len(t.params)-1 && t.obj.Signature().Variadic() {
 		return nil, refactor.Refusef("%s is variadic and must stay last", a.Parameter)
 	}
-	to, err := t.insertIndex(a.Before)
+	to, err := t.named().insertIndex(a.Before)
 	if err != nil {
 		return nil, err
 	}
@@ -81,40 +81,43 @@ func (*MoveParameter) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refac
 		return nil, refactor.Refusef("%s is already there: nothing to move", a.Parameter)
 	}
 
-	if err := t.checkInterfaces(func(ps []string) []string {
-		k := ps[from]
-		ps = slices.Delete(ps, from, from+1)
-		if to > from {
-			return slices.Insert(ps, to-1, k)
-		}
-		return slices.Insert(ps, to, k)
-	}); err != nil {
-		return nil, err
-	}
-	p := t.params[from]
-	fes := []edit.FileEdit{t.paramCut(p).fileEdit(), {Path: t.ws.Fset.Position(t.decl.Pos()).Filename, Edits: []edit.TextEdit{t.paramEdit(to, p.name, t.text(p.field.Type))}}}
+	var fes []edit.FileEdit
 	srcs := map[string][]byte{}
-	for _, c := range t.calls {
-		if err := checkNoSpread(c, t.ws.Position(c.expr.Pos())); err != nil {
+	for _, m := range t.group() {
+		if err := m.checkInterfaces(func(ps []string) []string {
+			k := ps[from]
+			ps = slices.Delete(ps, from, from+1)
+			if to > from {
+				return slices.Insert(ps, to-1, k)
+			}
+			return slices.Insert(ps, to, k)
+		}); err != nil {
 			return nil, err
 		}
-		moved := c.expr.Args[from]
-		if err := t.checkOrder(c, from, to); err != nil {
-			return nil, err
-		}
-		if err := t.checkNoCallIn(moved); err != nil {
-			return nil, err
-		}
-		path := t.ws.Fset.Position(moved.Pos()).Filename
-		if srcs[path] == nil {
-			if srcs[path], err = os.ReadFile(path); err != nil {
+		p := m.params[from]
+		fes = append(fes, m.paramCut(p).fileEdit(), edit.FileEdit{Path: m.declFile(), Edits: []edit.TextEdit{m.paramEdit(to, p.name, m.text(p.field.Type))}})
+		for _, c := range m.calls {
+			if err := checkNoSpread(c, m.ws.Position(c.expr.Pos())); err != nil {
 				return nil, err
 			}
+			moved := c.expr.Args[from]
+			if err := m.checkOrder(c, from, to); err != nil {
+				return nil, err
+			}
+			if err := m.checkNoCallIn(moved); err != nil {
+				return nil, err
+			}
+			path := m.ws.Fset.Position(moved.Pos()).Filename
+			if srcs[path] == nil {
+				if srcs[path], err = os.ReadFile(path); err != nil {
+					return nil, err
+				}
+			}
+			text := string(srcs[path][m.off(moved.Pos()):m.off(moved.End())])
+			fes = append(fes, m.argCut(c.expr, from, false).fileEdit(), edit.FileEdit{Path: path, Edits: []edit.TextEdit{m.argEdit(c.expr, to, text)}})
 		}
-		text := string(srcs[path][t.off(moved.Pos()):t.off(moved.End())])
-		fes = append(fes, t.argCut(c.expr, from, false).fileEdit(), edit.FileEdit{Path: path, Edits: []edit.TextEdit{t.argEdit(c.expr, to, text)}})
 	}
-	return t.newPlan(fmt.Sprintf("moved parameter %q of %s", a.Parameter, t.obj.Name()), fes), nil
+	return t.newPlan(fmt.Sprintf("moved parameter %q of %s", a.Parameter, t.groupName()), fes), nil
 }
 
 // checkOrder refuses a call where moving the argument at index from to
