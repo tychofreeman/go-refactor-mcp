@@ -1,0 +1,37 @@
+[
+  {
+    "name": "billing-book",
+    "dir": "testdata/billing-large",
+    "tests": "testdata/billing-book",
+    "check": "go vet ./... && go test ./...",
+    "prompt": "The Charge methods of CardPayer, BankPayer, WalletPayer and VoucherPayer in package billing do nearly the same thing. Make all four call one package-level function book(charged *[]string, method, to, text string), which logs \"<method> charge to <to>\" with the standard logger and appends \"<to>: <text>\" to *charged. What they charge and log must not change."
+  },
+  {
+    "name": "billing-blocked",
+    "dir": "testdata/billing-large",
+    "tests": "testdata/billing-blocked",
+    "check": "go vet ./... && go test ./...",
+    "prompt": "Accounts can block payment methods. Add a field Blocked map[string]bool to billing.Account, keyed by a method's name (what Payer.Name returns). Collect does not charge through a method the account blocked, and that account's summary line lists only the methods it charged through."
+  },
+  {
+    "name": "billing-methods",
+    "dir": "testdata/billing-large",
+    "tests": "testdata/billing-methods",
+    "check": "go vet ./... && go test ./...",
+    "prompt": "Replace the fields Card and Bank of billing.Account with one field Methods map[string]string, keyed by method name: \"card\" for the card number and \"bank\" for the bank account number. Everything that used them, in every package, must work as before."
+  },
+  {
+    "name": "billing-tail",
+    "dir": "testdata/billing-large",
+    "tests": "testdata/billing-tail",
+    "check": "go vet ./... && go test ./...",
+    "prompt": "last is used only by CardPayer. Replace it with a method func (c *CardPayer) tail(number string) string that keeps the last 4 bytes of number, the digits a card shows, and remove last. What CardPayer's methods return and charge must not change."
+  },
+  {
+    "name": "billing-run",
+    "dir": "testdata/billing-large",
+    "tests": "testdata/billing-run",
+    "check": "go vet ./... && go test ./...",
+    "prompt": "Collect should take its accounts and invoice as one value. Add a type billing.Run struct { Accounts []Account; Invoice Invoice } and change Collect to func Collect(c Config, r Run) []string, updating every caller in every package. What it charges and returns must not change."
+  }
+]

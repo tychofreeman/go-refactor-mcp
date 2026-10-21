@@ -79,7 +79,11 @@ results are in `docs/cost-history.md`.
   want a fresh model to get that benefit even at a short-term cost.
   Roadmap item 21, in the order the user accepted: lessons in
   refusals, `try`, a recipe library in the repo, exploration runs,
-  search in the engine.
+  search in the engine. The user then asked for the exploration
+  experiment first (whether a model told to try several approaches can
+  teach later ones): `docs/learning-transfer.md`. Its later tasks are
+  on a second module of the same shapes, so lessons carry technique,
+  not answers; keep set A and set B apart.
 
 - **Loops and containers** (2026-10-20): the user asked for
   refactorings that convert between kinds of loop, and edits that make
