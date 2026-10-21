@@ -1703,3 +1703,7 @@ text was from the K branch, not main.
 All through gorefactor: the fixture with create_file, the change with
 replace_text, the results with replace_text. The run analysis was a
 scratch script, as before.
+
+## 2026-10-21: Contacts rerun
+
+Docs only, all with replace_text.

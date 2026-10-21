@@ -409,6 +409,21 @@ replaced the `User` declaration whole. The base arm never folded.
 Fixed next: the setter fold qualifies an elided type in another
 package.
 
+**Contacts after the qualified setter fold** (`contacts-q-base`,
+`contacts-q-guided`, six runs each, main after #223): 6/6 each;
+$0.208 a run against $0.175, 13.7 turns against 10.7. Three guided
+runs went the whole derivation through the tools: getters and
+setters, folds of the 23 reads and of all 7 literals (4 for Email, 3
+for Phone), then the representation changed in the four functions
+and the struct ($0.140, $0.147, $0.200). The other three guided runs
+and three base runs did it in one textual batch: replace_text of
+`u.Email` with `u.Contacts["email"]` over several files, then the
+literals ($0.14-0.16); the remaining base runs rewrote each use with
+replace_expression ($0.22-0.31). Lines written by hand mislead here:
+the derived runs restate whole declarations with replace_declaration
+(58-66 lines for a change of a few), and a textual replacement over
+every file counts as one line.
+
 ## What made the difference
 
 - **Smaller results** (#75, rename locations): the largest single win when

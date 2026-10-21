@@ -744,7 +744,11 @@ hand or a tool got in the way.
       option also does N. *Contacts rerun* (cost-history section 8):
       same cost; the guided arm folded reads and setters, but the
       setter fold refused literals with an elided type in another
-      package, the test literals; now qualified. Next: Contacts again.
+      package, the test literals; now qualified. *Rerun done:* three
+      of six guided runs derived the whole change (reads and all
+      literals folded, representation changed in four functions),
+      guided $0.175 against base $0.208 a run. Next: gap O or a
+      recipe so the shared record is derived.
 
 20. **Loops and containers** (asked for by the user, 2026-10-20): the
     structural moves on control flow that derivations need and no tool
