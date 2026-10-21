@@ -84,7 +84,8 @@ until the MCP is reconnected.
    as `$prev.end` addresses what an earlier step of the batch made.
 6. **Test first through the tools.** Add the test with `add_declaration`
    (or `create_file`). Functions and methods it calls (or passes as
-   values) and types it makes with keyed literals that nothing
+   values), types it makes with keyed literals, and fields of the
+   module's structs it uses, that nothing
    declares get stubs (`panic("not implemented")`) automatically, and
    `add_declaration` of the real one replaces the stub. An edit may start
    from code that does not type-check if it fixes some errors and adds

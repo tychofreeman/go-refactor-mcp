@@ -549,6 +549,15 @@ func TestStubsForWhatEditsCall(t *testing.T) {
 	// get stubs too.
 	out, _ = call(t, cs, "replace_statements", map[string]any{"file": "calc/calc.go", "function": "Apply", "content": "xs := []int{n}\nsort.Slice(xs, byValue)\np := pair{a: xs[0], b: Rate}\nreturn p.a"})
 	mustContain(t, "replace_statements", out, "APPLIED batch: 2 steps", "func byValue(i int, j int) bool", "type pair struct with a, b")
+
+	// Fields a struct lacks, set in a literal or read, get added to it.
+	out, _ = call(t, cs, "batch", map[string]any{"steps": []any{
+		map[string]any{"tool": "create_file", "args": map[string]any{"file": "calc/conf.go", "content": "package calc\n\ntype Conf struct{ n int }\n"}},
+		map[string]any{"tool": "replace_statements", "args": map[string]any{"file": "calc/calc.go", "function": "Apply", "content": "c := Conf{n: n, Scale: Rate}\nif c.Strict {\n\treturn 0\n}\nreturn c.n * c.Scale"}},
+	}})
+	mustContain(t, "batch", out, "APPLIED batch: 3 steps", "field Scale int, in struct Conf", "field Strict bool, in struct Conf")
+	out, _ = call(t, cs, "replace_statements", map[string]any{"file": "calc/calc.go", "function": "Apply", "content": "c := Conf{n: n, Scale: Rate, Limit: 2}\nreturn c.n * c.Scale"})
+	mustContain(t, "replace_statements", out, "APPLIED batch: 2 steps", "field Limit int, in struct Conf")
 }
 
 // An edit, replace_text too, gets the imports its code needs, and loses

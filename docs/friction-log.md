@@ -1434,6 +1434,12 @@ add_declaration and replace_text. A fixture's expected import grouping
 was wrong (the module's import goes in its own group), fixed with
 replace_text.
 
+## 2026-10-20: stubs for fields
+
+All through gorefactor: fixtures with create_file, the new functions
+with add_declaration, fields with add_field, editDistance with
+replace_statements, the rest with replace_text.
+
 ## 2026-10-20: stubs for types, values and aliased imports
 
 All through gorefactor: fixtures with a batch of create_file, the new

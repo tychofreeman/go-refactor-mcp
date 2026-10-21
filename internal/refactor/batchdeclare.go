@@ -10,10 +10,12 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
 
-// The errors of a call of a function or method nothing declares.
+// The errors of a use of a function, method, type or field nothing
+// declares.
 var (
 	undefinedName = regexp.MustCompile(`^(.+\.go):\d+:\d+: undefined: (?:(\w+)\.)?(\w+)$`)
 	missingMethod = regexp.MustCompile(`^(.+\.go):\d+:\d+: .* undefined \(type .* has no field or method (\w+)\)$`)
+	unknownField  = regexp.MustCompile(`^(.+\.go):\d+:\d+: unknown field (\w+) in struct literal`)
 )
 
 // declareMissing runs opts.Declare on each file whose errors errs name
@@ -32,6 +34,8 @@ func declareMissing(ws *workspace.Workspace, errs []string, opts Options) ([]*Re
 				continue
 			}
 		} else if m := missingMethod.FindStringSubmatch(e); m != nil {
+			file, name = m[1], m[2]
+		} else if m := unknownField.FindStringSubmatch(e); m != nil {
 			file, name = m[1], m[2]
 		} else {
 			continue
@@ -143,30 +147,42 @@ func closeName(ws *workspace.Workspace, file, name string) string {
 		return ""
 	}
 	for _, n := range pkg.Types.Scope().Names() {
-		if n != name && (strings.EqualFold(n, name) || len(name) >= 4 && editDistance(n, name) <= 1) {
+		if Close(n, name) {
 			return n
 		}
 	}
 	return ""
 }
 
-// editDistance is the Levenshtein distance between a and b.
+// Close reports whether name, which is not n, may be a misspelling of
+// it: the same but for case, or for one letter in a name of four or more.
+func Close(n, name string) bool {
+	return n != name && (strings.EqualFold(n, name) || len(name) >= 4 && editDistance(n, name) <= 1)
+}
+
+// editDistance is the edit distance between a and b, counting two
+// adjacent letters swapped as one edit (Scael for Scale).
 func editDistance(a, b string) int {
-	prev := make([]int, len(b)+1)
-	for j := range prev {
-		prev[j] = j
+	// d[i][j] is the distance between a[:i] and b[:j].
+	d := make([][]int, len(a)+1)
+	for i := range d {
+		d[i] = make([]int, len(b)+1)
+		d[i][0] = i
+	}
+	for j := range d[0] {
+		d[0][j] = j
 	}
 	for i := 1; i <= len(a); i++ {
-		cur := make([]int, len(b)+1)
-		cur[0] = i
 		for j := 1; j <= len(b); j++ {
 			cost := 1
 			if a[i-1] == b[j-1] {
 				cost = 0
 			}
-			cur[j] = min(prev[j]+1, cur[j-1]+1, prev[j-1]+cost)
+			d[i][j] = min(d[i-1][j]+1, d[i][j-1]+1, d[i-1][j-1]+cost)
+			if i > 1 && j > 1 && a[i-1] == b[j-2] && a[i-2] == b[j-1] {
+				d[i][j] = min(d[i][j], d[i-2][j-2]+1) // two letters swapped
+			}
 		}
-		prev = cur
 	}
-	return prev[len(b)]
+	return d[len(a)][len(b)]
 }
