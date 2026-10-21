@@ -850,7 +850,9 @@ hand or a tool got in the way.
       `introduce_parameter` write one value for every call, so a value
       of a type of the callee's package cannot be both `notify.Batch`
       in other packages and `Batch` in its own (batch failed 2 of 3);
-      write it qualified per call. And a `move_declaration` that left
+      write it qualified per call. *Done:* each call's value names the
+      function's package as its file imports it (importing it if
+      needed), and drops the qualifier inside that package. And a `move_declaration` that left
       code that did not compile (batch run 3), to reproduce.
     - The method guards (`extract_function` from a method,
       `function_to_method`, `method_to_function`): in place of an

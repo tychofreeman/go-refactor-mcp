@@ -13,6 +13,7 @@ import (
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
+	"github.com/tychofreeman/go-refactor-mcp/internal/imports"
 	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
@@ -129,6 +130,7 @@ func (*IntroduceParameter) Plan(ws *workspace.Workspace, raw json.RawMessage) (*
 		{Start: o, End: t.off(expr.End()), NewText: a.Parameter},
 	}}}
 	srcs := map[string][]byte{path: src}
+	adders := map[string]*imports.Adder{}
 	for _, c := range t.calls {
 		cpath := ws.Fset.Position(c.expr.Pos()).Filename
 		if srcs[cpath] == nil {
@@ -139,8 +141,14 @@ func (*IntroduceParameter) Plan(ws *workspace.Workspace, raw json.RawMessage) (*
 		if err := t.checkCall(pkg.TypesInfo, expr, c, srcs[cpath]); err != nil {
 			return nil, err
 		}
-		value := t.substitute(pkg.TypesInfo, src, expr, c, srcs[cpath])
+		value, err := t.substitute(pkg.TypesInfo, src, expr, c, srcs[cpath], adders)
+		if err != nil {
+			return nil, err
+		}
 		fes = append(fes, edit.FileEdit{Path: cpath, Edits: []edit.TextEdit{t.argEdit(c.expr, at, value)}})
+	}
+	for p, ad := range adders {
+		fes = append(fes, edit.FileEdit{Path: p, Edits: ad.Edits()})
 	}
 	return t.newPlan(fmt.Sprintf("introduced parameter %q for %s in %s", a.Parameter+" "+typSrc, a.Expression, t.obj.Name()), fes), nil
 }
@@ -222,11 +230,22 @@ func (t *target) checkCall(info *types.Info, expr ast.Expr, c call, csrc []byte)
 		if scope != nil {
 			_, there = scope.LookupParent(id.Name, c.expr.Pos())
 		}
+		if t.qualified(o, c) && there == nil {
+			continue // written pkg.Name at the call
+		}
 		if !sameObject(t.ws.Fset, o, there) {
 			return refactor.Refusef("%s means something else at the call at %s (or is not visible there)", id.Name, where)
 		}
 	}
 	return nil
+}
+
+// qualified reports whether o, used in the introduced expression, is
+// written qualified at the call c: an exported package-level name of the
+// function's package, and c in another package.
+func (t *target) qualified(o types.Object, c call) bool {
+	home := t.obj.Pkg()
+	return home != nil && o.Exported() && o.Parent() == home.Scope() && c.pkg.Types != nil && c.pkg.Types.Path() != home.Path()
 }
 
 // checkArgEffects refuses a call whose arguments or receiver have side
@@ -309,7 +328,7 @@ func isTuple(t types.Type) bool {
 // substitute writes expr (from the declaring file, whose source is src) as
 // the call c passes it: each parameter it uses replaced by the argument
 // for it, taken from csrc, the calling file's source.
-func (t *target) substitute(info *types.Info, src []byte, expr ast.Expr, c call, csrc []byte) string {
+func (t *target) substitute(info *types.Info, src []byte, expr ast.Expr, c call, csrc []byte, adders map[string]*imports.Adder) (string, error) {
 	params := t.paramObjects(info)
 	type repl struct {
 		start, end int
@@ -317,6 +336,14 @@ func (t *target) substitute(info *types.Info, src []byte, expr ast.Expr, c call,
 	}
 	var rs []repl
 	for _, id := range analysis.ScopeRefs(info, expr) {
+		if o := info.Uses[id]; o != nil && t.qualified(o, c) {
+			q, err := t.importName(c, o.Pkg(), adders)
+			if err != nil {
+				return "", err
+			}
+			rs = append(rs, repl{t.off(id.Pos()), t.off(id.Pos()), q + "."})
+			continue
+		}
 		i, ok := params[info.Uses[id]]
 		if !ok {
 			continue
@@ -350,7 +377,7 @@ func (t *target) substitute(info *types.Info, src []byte, expr ast.Expr, c call,
 	for _, r := range rs {
 		s = s[:r.start-base] + r.text + s[r.end-base:]
 	}
-	return strings.TrimSpace(s)
+	return strings.TrimSpace(s), nil
 }
 
 // selected reports whether id is the operand of a selector in expr (id.f
