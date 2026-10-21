@@ -1676,6 +1676,14 @@ Docs only, all with replace_text.
 
 Docs only, all with replace_text. The counts of lines written and
 steps writing nothing are a scratch script, not committed.
+
+## 2026-10-21: fold literals through a setter (gap K)
+
+All through gorefactor: the fixtures with create_file in one batch,
+the setter with add_field, add_declaration and replace_text in another
+(the first refused: `after` named a method without its type, so it
+wanted `folder.assignedHole`), the docs with replace_text.
+
 ## 2026-10-21: the project history through 21 October
 
 All through `refactor batch`: replace_text steps in

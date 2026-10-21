@@ -705,7 +705,17 @@ hand or a tool got in the way.
       is statements folds runs of the same statements in any block (its
       locals renamed freely), so extract_function and then fold replaces
       duplicates (problem 1). Matching is by syntax tree: `a+b+c` does
-      not match `a+(b+c)`. Then parameterize (J).
+      not match `a+(b+c)`. Then parameterize (J). *Literals through a
+      setter (K) done:* a function that sets fields of a struct
+      parameter and returns it folds the literals that give those
+      fields (`User{ID: id, Email: v}` to `withEmail(User{ID: id}, v)`),
+      for any struct, field and value. Next: **pointer setters**
+      (`func (u *User) SetEmail(v string)`, asked for by the user), for
+      a literal that initializes a variable only (`u := User{...}` to
+      `u := User{...}` and `u.SetEmail(v)`): elsewhere the literal would
+      have to be hoisted out of its expression into a new variable, which
+      changes evaluation order and is impossible in a condition, a loop's
+      header or a package-level initializer.
     - **Parameterize (J).** *Done for constants:* `parameterize` makes
       functions that are the same but for constants calls of one new
       function that takes them (`logEmail`, `logSMS` to `logTo(to,
@@ -728,7 +738,7 @@ hand or a tool got in the way.
       K, then remove the fields, L). *Six runs per task done*: 4% less
       cost, 31% fewer lines by hand, 55% of steps writing nothing
       against 11% (Contacts left out); no run used `pointer`, since
-      none tried to extract `e.Sent`. Next: K and L, then Contacts
+      none tried to extract `e.Sent`. Next: K (*done*) and L, then Contacts
       again, and a recipe or gap O so the shared record is derived.
 
 20. **Loops and containers** (asked for by the user, 2026-10-20): the
