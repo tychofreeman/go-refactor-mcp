@@ -74,6 +74,13 @@ results are in `docs/cost-history.md`.
   operation that composes with the others, for any type and target:
   K is now fold literals through a setter, then L removes the fields.
 
+- **Experience for a fresh model** (2026-10-21): the user tries several
+  approaches when refactoring and builds a library from them; they
+  want a fresh model to get that benefit even at a short-term cost.
+  Roadmap item 21, in the order the user accepted: lessons in
+  refusals, `try`, a recipe library in the repo, exploration runs,
+  search in the engine.
+
 - **Loops and containers** (2026-10-20): the user asked for
   refactorings that convert between kinds of loop, and edits that make
   a block the body of a loop, an `if` and the like. Roadmap item 20.
