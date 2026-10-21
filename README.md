@@ -562,7 +562,13 @@ hand or a tool got in the way.
         compiles; when it does not, the refusal notes which signature it
         changed and the tools that change one with every call.*
       - **`change_field_type`,** adjusting uses only where safe and
-        refusing each other use by name.
+        refusing each other use by name. *Done: to a type with the same
+        underlying type, a wider number type or an interface the old one
+        implements; writes are converted, reads converted back where the
+        type matters, and a use that cannot follow (its address taken,
+        a read needing the old type under an interface) is listed by
+        position in the refusal. T to *T is not among them: every read
+        could then dereference nil.*
       - **Later: one `change_signature`** taking the new signature, which
         works out the parameters added, removed, moved and retyped and
         the results, and needs a value at each call for a new one.

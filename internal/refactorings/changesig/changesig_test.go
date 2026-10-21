@@ -18,6 +18,10 @@ func TestGoldenMoveParameter(t *testing.T) {
 	refactortest.Run(t, NewMoveParameter(), "testdata/move_parameter")
 }
 
+func TestGoldenChangeFieldType(t *testing.T) {
+	refactortest.Run(t, NewChangeFieldType(), "testdata/change_field_type")
+}
+
 func TestGoldenAddResult(t *testing.T) {
 	refactortest.Run(t, NewAddResult(), "testdata/add_result")
 }
