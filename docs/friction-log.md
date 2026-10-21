@@ -1614,3 +1614,10 @@ served the main checkout, and the work was in a worktree), with batches
 of add_declaration, add_field, replace_statements and replace_text sent
 as JSON files. A local type unmarshalled from JSON first had unexported
 fields, so its arguments were silently empty; the test caught it.
+
+## 2026-10-21: fold, stage 2: struct parameters used by their fields
+
+All through gorefactor: fixtures with create_file; the struct and its
+helpers with add_declaration; try and first replaced whole with
+replace_declaration (#204), the rest with replace_text, in one batch
+checked at its end.
