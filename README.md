@@ -741,7 +741,10 @@ hand or a tool got in the way.
       none tried to extract `e.Sent`. Next: K (*done*) and L, then Contacts
       again, and a recipe or gap O so the shared record is derived.
       *L done:* `remove_dead_code` of `Type.Field`; its `exported`
-      option also does N.
+      option also does N. *Contacts rerun* (cost-history section 8):
+      same cost; the guided arm folded reads and setters, but the
+      setter fold refused literals with an elided type in another
+      package, the test literals; now qualified. Next: Contacts again.
 
 20. **Loops and containers** (asked for by the user, 2026-10-20): the
     structural moves on control flow that derivations need and no tool

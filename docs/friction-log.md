@@ -1697,3 +1697,9 @@ became a one-field struct, by replace_text), the field support with
 replace_text and add_declaration in one batch checked at its end, the
 docs with replace_text. A batch of docs was refused once: its README
 text was from the K branch, not main.
+
+## 2026-10-21: the setter fold qualifies elided types
+
+All through gorefactor: the fixture with create_file, the change with
+replace_text, the results with replace_text. The run analysis was a
+scratch script, as before.

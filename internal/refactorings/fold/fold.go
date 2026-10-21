@@ -534,7 +534,8 @@ func (f *folder) trySetter(p *packages.Package, file *ast.File, x ast.Expr, stac
 }
 
 // elided is the type to write for lit, of package p inside stack, when
-// an enclosing literal elides it, or ""; or why it cannot be written.
+// an enclosing literal elides it (call qualifies it), or ""; or why it
+// cannot be written.
 func (f *folder) elided(p *packages.Package, lit *ast.CompositeLit, stack []ast.Node) (string, string) {
 	if lit.Type != nil {
 		return "", ""
@@ -566,8 +567,8 @@ func (f *folder) elided(p *packages.Package, lit *ast.CompositeLit, stack []ast.
 	if _, ptr := slot.(*types.Pointer); ptr {
 		return "", "its & is elided in the enclosing literal"
 	}
-	if p.PkgPath != f.pkg.PkgPath {
-		return "", "its type is elided in the enclosing literal, of another package"
+	if tn := baseName(f.self.Type()); tn.Pkg().Path() != f.fn.Pkg().Path() {
+		return "", fmt.Sprintf("its type is elided in the enclosing literal, and %s is declared in another package than %s", tn.Name(), f.fn.Name())
 	}
 	return baseName(f.self.Type()).Name(), ""
 }
@@ -630,6 +631,13 @@ func (f *folder) call(p *packages.Package, file *ast.File, b map[holeKey]ast.Exp
 		}
 		q, err := f.adders[path].Name(f.fn.Pkg())
 		return q + "." + name, err
+	}
+	if lit := b[holeKey{f.self, ""}]; lit != nil && f.rest[lit].typ != "" {
+		r := f.rest[lit]
+		if r.typ, err = qualify(r.typ); err != nil {
+			return "", err.Error(), nil
+		}
+		f.rest[lit] = r
 	}
 	var args []string
 	for _, fl := range f.decl.Type.Params.List {
