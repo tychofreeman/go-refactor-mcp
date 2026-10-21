@@ -6,6 +6,7 @@ import (
 	"go/token"
 	"go/types"
 
+	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 )
 
@@ -15,16 +16,13 @@ func (x *inliner) deletable() (bool, string) {
 	if x.keep {
 		return false, ""
 	}
-	if x.fn.Exported() {
-		return false, "it is exported, so code outside this module may use it; delete it yourself if nothing does"
-	}
 	if x.inDecl(x.id.Pos()) {
 		return false, "the call is inside it, so the inlined code still calls it"
 	}
 	key := x.posKey(x.fn.Pos())
 	call := x.posKey(x.id.Pos())
 	for _, p := range x.ws.Pkgs {
-		if p.PkgPath != x.pkg.PkgPath || p.TypesInfo == nil {
+		if p.TypesInfo == nil || !x.fn.Exported() && p.PkgPath != x.pkg.PkgPath {
 			continue
 		}
 		for id, o := range p.TypesInfo.Uses {
@@ -42,25 +40,8 @@ func (x *inliner) deletable() (bool, string) {
 		}
 	}
 	if x.sig.Recv() != nil {
-		var iface string
-		for _, f := range x.pkg.Syntax {
-			ast.Inspect(f, func(n ast.Node) bool {
-				it, ok := n.(*ast.InterfaceType)
-				if !ok || iface != "" {
-					return iface == ""
-				}
-				for _, m := range it.Methods.List {
-					for _, nm := range m.Names {
-						if nm.Name == x.fn.Name() {
-							iface = x.ws.Position(it.Pos())
-						}
-					}
-				}
-				return true
-			})
-		}
-		if iface != "" {
-			return false, fmt.Sprintf("an interface at %s has a method named %s, which this method may be needed to implement", iface, x.fn.Name())
+		if _, at, found := analysis.InterfaceWithMethod(x.ws.TypesInfos(), x.fn.Pkg().Path(), x.fn.Name()); found {
+			return false, fmt.Sprintf("an interface at %s has a method named %s, which this method may be needed to implement", x.ws.Position(at), x.fn.Name())
 		}
 	}
 	return true, ""

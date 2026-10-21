@@ -45,7 +45,7 @@ Use it to undo an extraction that did not help, or to remove a small helper whos
 Identify the call by file, line and the called function's name (pass column if the name appears more than once on the line).
 The call can be a statement (f(a)), the whole right side of an assignment or declaration (x, err := f(a); var x = f(a)), a return (return f(a)), or part of an expression if the function's body is a single return statement. Parameters are replaced by the arguments where that is safe, and otherwise declared at the top of the inlined code (p := arg).
 Refuses if the function is generic or variadic, comes from another package, is called through an interface or a function value, uses defer or recover, has named results, or returns early (except when the call is "return f(a)"); if a name the body uses would mean something else at the call; or if a name the inlined code declares clashes with one in the calling block (rename one first).
-The function is deleted only if it is unexported and nothing else refers to it; pass keep_function to keep it anyway.
+The function is deleted only if nothing else refers to it; an exported one with a note that the module's API changed. Pass keep_function to keep it anyway.
 With all_calls, every call to the function in the module is inlined, one after another, and then the function is deleted (unless keep_function); give file and name (Name or Type.Method), or the line of any call. If one call cannot be inlined, none is.`
 }
 
@@ -307,6 +307,9 @@ func (x *inliner) plan() (*refactor.Plan, error) {
 	}
 	if !deleted && why != "" {
 		notes = append(notes, fmt.Sprintf("kept %s: %s", x.fn.Name(), why))
+	}
+	if deleted && analysis.PublicAPI(x.fn, x.ws.Pkgs) {
+		notes = append(notes, refactor.APINote(x.fn.Name(), "deleting it"))
 	}
 	if added := x.imp.Paths(); len(added) > 0 {
 		notes = append(notes, "added import "+strings.Join(quoteAll(added), ", ")+" for the inlined code")
