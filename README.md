@@ -817,10 +817,10 @@ hand or a tool got in the way.
       refusal names no nearest miss; `introduce_parameter`'s refusal
       of `&e.Sent` after a call gives the wrong reason (the nil
       receiver's panic moves, which the target itself does: a
-      decision for the user, shared by gap O); `remove_dead_code`
-      takes `sort.Slice`/`SliceStable` of a struct slice for
-      reflection on its fields (so does `rename` of a field);
-      `inline_variable` refuses to inline a call of a function
+      decision for the user, shared by gap O); `remove_dead_code`,
+      `rename` and `extract_struct` took `sort.Slice`/`SliceStable` of
+      a struct slice for reflection on its fields (*Done:* those
+      arguments are not looked at); `inline_variable` refuses to inline a call of a function
       without side effects, such as a getter, used twice.
     - **Search in the engine** (the long shot): given the target shape
       (a struct's new declaration, a function's new signature), search
