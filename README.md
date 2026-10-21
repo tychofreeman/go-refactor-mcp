@@ -782,6 +782,40 @@ hand or a tool got in the way.
       (`docs/edits.md`) gives "wrap in an if and move the statements
       in", one of the user's derivations.
 
+21. **Experience for a fresh model** (asked for by the user, 2026-10-21):
+    refactoring by hand, the user tries several approaches before one
+    works, and each try adds to a library for later. A fresh model has
+    neither the habit nor the library. Short-term cost may rise; the
+    measure is whether later tasks get cheaper. Context is costly (about
+    39K tokens a request) and longer instructions did not help, so what
+    is learned must reach the model where it is stuck: in a refusal, or
+    a recipe it is pointed to. In order:
+    - **Lessons in refusals.** Each known dead end becomes a line in the
+      refusal the model meets there, naming the way through: e.g.
+      `change_field_type` asked to make two fields one map points to
+      getters, fold, then the representation. Evidence: two runs in
+      `contacts-q-guided` went textual at that refusal.
+    - **`try`: several candidates at once.** Run two or more candidate
+      batches on scratch copies of the same code, apply none, and report
+      for each whether it type-checks, whether the tests pass, and the
+      size of the manual edits left; the model applies the one it
+      picks. One turn in place of apply, undo and retry per approach.
+    - **A recipe library in the repository** (with item 11's saved
+      batches with parameters as the format): derivations that worked,
+      the shape before, the operations, the shape after, with
+      parameters; and what did not work, and why. Taken from runs
+      (`refactor-tokens` already separates derived steps) and from this
+      project's own PRs, each of which adds what it used, as the
+      friction log collects hand edits. Served as a short index or a
+      skill loaded when it fits, not in the instructions.
+    - **Exploration runs.** A/B runs told to try two or three approaches
+      and say which worked and why, distilled into the library; then a
+      "with library" arm on later tasks, counting the exploration as a
+      one-time cost.
+    - **Search in the engine** (the long shot): given the target shape
+      (a struct's new declaration, a function's new signature), search
+      sequences of operations that reach it and return the shortest.
+
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
 candidates and the evidence for each, gathered from the friction log.

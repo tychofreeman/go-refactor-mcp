@@ -1714,3 +1714,7 @@ All through `refactor batch`: the two golden cases with create_file,
 the fix with replace_text and add_declaration, the docs with
 replace_text. Found by reading the `contacts-q-guided` transcripts:
 two runs lost turns to the bug.
+
+## 2026-10-21: roadmap item 21, experience for a fresh model
+
+Docs only, all through `refactor batch` with replace_text.
