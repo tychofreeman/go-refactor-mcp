@@ -46,6 +46,11 @@ results are in `docs/cost-history.md`.
   11%; fit is the steady win. A new option the model is not led to
   (`pointer`) went unused: options surface through refusals and
   recipes, so a gap's fix needs one of them to be used.
+  In `contacts-q-guided` two runs went textual because no one tool did
+  the change (`change_field_type` cannot make two fields a map) and
+  never loaded fold; a pointer to the recipe from that refusal is a
+  candidate. The user wants to think before rerunning Contacts
+  (2026-10-21).
 
 - **Derivations from the user** (2026-10-20): asked how they would
   reach five shapes with operations, the user answered with moves such

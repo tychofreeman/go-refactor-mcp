@@ -1707,3 +1707,10 @@ scratch script, as before.
 ## 2026-10-21: Contacts rerun
 
 Docs only, all with replace_text.
+
+## 2026-10-21: fold onto a function getter
+
+All through `refactor batch`: the two golden cases with create_file,
+the fix with replace_text and add_declaration, the docs with
+replace_text. Found by reading the `contacts-q-guided` transcripts:
+two runs lost turns to the bug.

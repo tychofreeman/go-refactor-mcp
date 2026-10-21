@@ -1,0 +1,1 @@
+the body of same is only its parameter s, so every value of its type would match
