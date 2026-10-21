@@ -1718,3 +1718,12 @@ two runs lost turns to the bug.
 ## 2026-10-21: roadmap item 21, experience for a fresh model
 
 Docs only, all through `refactor batch` with replace_text.
+
+## 2026-10-21: exploration runs set up
+
+By hand: the `billing-large` module, its five hidden tests and the
+explorer's CLAUDE.md, written with heredocs in Bash, and the task file
+and the lesson script with Python; the docs too. create_file would have
+done the fixtures, one call per file; I wrote them in the shell to check
+each hidden test against a reference solution in scratch copies as I
+went, which no tool does (roadmap item 21's `try` would).

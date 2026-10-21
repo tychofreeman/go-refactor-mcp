@@ -811,7 +811,9 @@ hand or a tool got in the way.
     - **Exploration runs.** A/B runs told to try two or three approaches
       and say which worked and why, distilled into the library; then a
       "with library" arm on later tasks, counting the exploration as a
-      one-time cost.
+      one-time cost. *Set up:* `docs/learning-transfer.md`, with a
+      second module of the same five shapes (`derivations-billing.json`)
+      for the later tasks.
     - **Search in the engine** (the long shot): given the target shape
       (a struct's new declaration, a function's new signature), search
       sequences of operations that reach it and return the shortest.
