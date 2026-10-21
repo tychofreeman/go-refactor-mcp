@@ -121,6 +121,24 @@ ways: it can satisfy the second by reasoning. And it did not count
 `replace_expression` and `replace_text` as writing code by hand,
 though the instructions name them.
 
+**Contacts again, with the wording that worked and two sentences
+more** (`claude-md-explorer-4`: an operation counts as tried only once
+called; replace_statements, replace_declaration, replace_expression and
+replace_text on Go code are writing by hand; `eval-runs/explore-contacts-calls`,
+6 runs, $1.32, 6/6). Now the model made calls: five called
+`change_field_type` first (refused: a string cannot become a map) and
+then went textual; run 2 called `remove_dead_code` on the old fields;
+run 6 took the user's derivation unprompted: getters `EmailAddr` and
+`PhoneNumber` by `add_declaration`, `fold` on each (13 and 10 reads in
+every package, two calls), `add_field`, the getters' bodies changed
+with `replace_declaration`. It still wrote the keyed literals with
+`replace_text` (it did not know a setter folds them) and deleted the
+fields with `replace_text`. Found on the way: `remove_dead_code`
+refused run 2's fields because `SortUsers` passes `[]User` to
+`sort.SliceStable`, which only swaps elements by reflection and never
+sees a field: a false refusal, where `replace_text` then deleted the
+same fields with no check of reflection at all.
+
 The learned lessons (`claude-md-learned`) are the explore run's, less
 Contacts, with lesson 3 from the shared-record trial. The learner runs
 on B have not been run.

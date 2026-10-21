@@ -813,7 +813,13 @@ hand or a tool got in the way.
       "with library" arm on later tasks, counting the exploration as a
       one-time cost. *Set up:* `docs/learning-transfer.md`, with a
       second module of the same five shapes (`derivations-billing.json`)
-      for the later tasks.
+      for the later tasks. Found by the runs, to fix: `fold`'s
+      refusal names no nearest miss; `introduce_parameter`'s refusal
+      of `&e.Sent` after a call gives the wrong reason (the nil
+      receiver's panic moves, which the target itself does: a
+      decision for the user, shared by gap O); `remove_dead_code`
+      takes `sort.Slice`/`SliceStable` of a struct slice for
+      reflection on its fields.
     - **Search in the engine** (the long shot): given the target shape
       (a struct's new declaration, a function's new signature), search
       sequences of operations that reach it and return the shortest.
