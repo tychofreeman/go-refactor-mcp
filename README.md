@@ -665,7 +665,15 @@ hand or a tool got in the way.
         their text** (6 hits of a long `old` in replace_text: a 2.6K
         literal, a 124-line range of methods), and **remove several
         declarations at once** (3 hits: functions that only call each
-        other, a list and its last use).
+        other, a list and its last use). *Done (#204):
+        `replace_declaration` replaces a whole top-level declaration (a
+        function with its signature, a method, a type, a variable such as
+        a table, one spec of a group) by name, keeping the old doc comment
+        unless the new source has one; and `remove_dead_code` takes
+        `also`, more declarations to remove with the first, uses among
+        them not counting (a cycle of helpers, a type and its methods).
+        A literal inside a function, like the 2.6K batch definition,
+        still needs replace_text or replace_statements.*
       - **`refactor batch` reads its JSON from a file or stdin** (14
         hits of batches built in the shell, one broken by an unquoted
         heredoc; cloud sessions use the CLI).

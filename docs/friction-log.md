@@ -1553,6 +1553,15 @@ golden fixtures by hand, their `out/` written by hand first.
 All through `refactor batch`; the golden fixtures by hand, their `out/`
 written by hand first and matched.
 
+## 2026-10-20: declarations replaced and removed by name
+
+All through `refactor batch`. remove_dead_code's `also`: the fields with
+add_field, the helpers with add_declaration, Plan's body with
+replace_statements (`function`), the checks with replace_text.
+replace_declaration with create_file. Golden fixtures by hand, `out/`
+written by hand first; one expected line number of mine was off by
+one, which the refusal showed.
+
 ## 2026-10-20: move_file and delete_file
 
 All through `refactor batch`; the golden fixtures by hand, as files for
