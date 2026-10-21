@@ -167,6 +167,11 @@ func (f *folder) pattern(id *ast.Ident) error {
 		}
 		return true
 	})
+	if id, ok := ast.Unparen(f.body).(*ast.Ident); ok {
+		if _, hole := f.holes[info.Uses[id]]; hole {
+			return refactor.Refusef("the body of %s is only its parameter %s, so every value of its type would match", name, id.Name)
+		}
+	}
 	f.fields, f.uses = map[types.Object][]string{}, map[holeKey]int{}
 	for o := range f.holes {
 		if _, named := o.Type().(*types.Named); o == f.recv || !named {
@@ -192,7 +197,9 @@ func (f *folder) pattern(id *ast.Ident) error {
 			}
 			return true
 		})
-		if byField > 0 && byField == f.holes[o] {
+		// A body that is only one field of o would match every value of
+		// the field's type: o stays one hole.
+		if byField > 0 && byField == f.holes[o] && !fieldOf(info, f.body, o) {
 			f.fields[o] = order
 		}
 	}
@@ -1147,6 +1154,12 @@ func selX(sel *ast.SelectorExpr) ast.Expr {
 		return nil
 	}
 	return sel.X
+}
+
+// fieldOf reports whether e is a field of the variable o.
+func fieldOf(info *types.Info, e ast.Expr, o types.Object) bool {
+	sel, ok := ast.Unparen(e).(*ast.SelectorExpr)
+	return ok && info.Uses[identOf(selX(sel))] == o
 }
 
 // assigned reports whether x is written by parent: the left of an

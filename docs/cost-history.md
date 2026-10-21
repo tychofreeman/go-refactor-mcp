@@ -415,11 +415,19 @@ $0.208 a run against $0.175, 13.7 turns against 10.7. Three guided
 runs went the whole derivation through the tools: getters and
 setters, folds of the 23 reads and of all 7 literals (4 for Email, 3
 for Phone), then the representation changed in the four functions
-and the struct ($0.140, $0.147, $0.200). The other three guided runs
-and three base runs did it in one textual batch: replace_text of
+and the struct ($0.140, $0.147, $0.200). Two other guided runs and
+three base runs did it in one textual batch: replace_text of
 `u.Email` with `u.Contacts["email"]` over several files, then the
 literals ($0.14-0.16); the remaining base runs rewrote each use with
-replace_expression ($0.22-0.31). Lines written by hand mislead here:
+replace_expression ($0.22-0.31). The two guided runs say why: they
+loaded `change_field_type`, found it could not turn two fields into a
+map, and never loaded fold. The last guided run took the recipe with a
+function getter, `GetEmail(u User)`, and fold failed with overlapping
+edits: a body that is only a field of a struct parameter made that
+field a hole of its own, which matched every string. It fell back to
+replace_expression per file. The derived run at $0.200 hit the same
+error and switched to methods. Fixed since: such a body keeps the
+parameter one hole, and a body that is only a parameter is refused. Lines written by hand mislead here:
 the derived runs restate whole declarations with replace_declaration
 (58-66 lines for a change of a few), and a textual replacement over
 every file counts as one line.
