@@ -676,7 +676,9 @@ hand or a tool got in the way.
         still needs replace_text or replace_statements.*
       - **`refactor batch` reads its JSON from a file or stdin** (14
         hits of batches built in the shell, one broken by an unquoted
-        heredoc; cloud sessions use the CLI).
+        heredoc; cloud sessions use the CLI). *Done (#205): an only
+        argument `@path` is read from the file, and `-` from stdin, for
+        a batch or a single step.*
     - **Measure** by counting these refusals per run, by kind.
 
 Alongside: **edits**, steps that change behavior on purpose, so the

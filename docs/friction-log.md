@@ -1553,6 +1553,11 @@ golden fixtures by hand, their `out/` written by hand first.
 All through `refactor batch`; the golden fixtures by hand, their `out/`
 written by hand first and matched.
 
+## 2026-10-20: the CLI reads JSON from a file or stdin
+
+All through `refactor batch`; this entry and the docs went in with
+`@path`, the new form, from a file written by a script.
+
 ## 2026-10-20: declarations replaced and removed by name
 
 All through `refactor batch`. remove_dead_code's `also`: the fields with

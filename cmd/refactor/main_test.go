@@ -60,3 +60,33 @@ func TestRunBatchRefused(t *testing.T) {
 		t.Errorf("file changed:\n%s", got)
 	}
 }
+
+// A batch's JSON can come from a file (@path), so long content needs no
+// shell quoting; escapes such as \n in Go strings stay as written.
+func TestRunBatchFromFile(t *testing.T) {
+	dir := module(t, "package m\n\nfunc f() {}\n")
+	steps := `{"steps":[{"tool":"add_declaration","args":{"file":"p.go","content":"func g() string { return \"a\\nb\" }"}}]}`
+	path := filepath.Join(t.TempDir(), "batch.json")
+	if err := os.WriteFile(path, []byte(steps), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code := run([]string{"-C", dir, "batch", "@" + path}); code != 0 {
+		t.Fatalf("exit status %d, want 0", code)
+	}
+	if got := read(t, dir); !strings.Contains(got, `return "a\nb"`) {
+		t.Errorf("batch from file not applied as written:\n%s", got)
+	}
+}
+
+// A step's JSON can come from stdin (-).
+func TestRunFromStdin(t *testing.T) {
+	dir := module(t, "package m\n\nfunc f() {}\n")
+	stdin = strings.NewReader(`{"file":"p.go","content":"func g() {}"}`)
+	defer func() { stdin = os.Stdin }()
+	if code := run([]string{"-C", dir, "add_declaration", "-"}); code != 0 {
+		t.Fatalf("exit status %d, want 0", code)
+	}
+	if got := read(t, dir); !strings.Contains(got, "func g() {}") {
+		t.Errorf("step from stdin not applied:\n%s", got)
+	}
+}
