@@ -36,7 +36,7 @@ Identify the function by file, line and name, at its declaration or any call, an
 Two kinds of change keep behavior:
 - To an interface the old type implements (*bytes.Buffer to io.Writer): calls are unchanged, and the body must compile with the new type. Refused if the body compares the parameter with nil and the old type is not an interface (a nil pointer in an interface is not nil).
 - Between types with the same underlying type (string and UserID), or to a number type that holds every value of the old one (int32 to int64): typed arguments are converted at calls (UserID(name)), and the body converts the parameter back (string(id)) wherever its type could matter: everywhere but indexing, len, cap, range, and comparisons with a constant. Refused if the body assigns the parameter or takes its address.
-Also refuses a variadic parameter, generic types, a call that passes another call's results, and a method that would stop or start implementing an interface declared outside the module. An interface method of the module changes with every method of the module's types that implements it, and such a method with the interface: name any of them.`
+To write a parameter's type another way that is the same type (an alias declared for it, type renderArg = string), give that: only the declarations change, a variadic parameter's too (give renderArg or ...renderArg). A variadic parameter's type cannot otherwise change. Also refuses generic types, a call that passes another call's results, and a method that would stop or start implementing an interface declared outside the module. An interface method of the module changes with every method of the module's types that implements it, and such a method with the interface: name any of them.`
 }
 
 func (*ChangeParameterType) InputSchema() json.RawMessage {
@@ -83,11 +83,16 @@ func (*ChangeParameterType) Plan(ws *workspace.Workspace, raw json.RawMessage) (
 		return nil, err
 	}
 	sig := t.obj.Signature()
-	if sig.Variadic() && at == len(t.params)-1 {
-		return nil, refactor.Refusef("%s is variadic; changing the type of a variadic parameter is not supported", a.Parameter)
+	variadic := sig.Variadic() && at == len(t.params)-1
+	spelled, dots := strings.CutPrefix(strings.TrimSpace(a.Type), "...")
+	if dots && !variadic {
+		return nil, refactor.Refusef("%s is not variadic, so its type cannot be %s", a.Parameter, a.Type)
 	}
 	old := sig.Params().At(at).Type()
-	newT, err := t.parseType(a.Type)
+	if variadic {
+		old = old.(*types.Slice).Elem() // the type of each argument, as written after "..."
+	}
+	newT, err := t.parseType(spelled)
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +100,10 @@ func (*ChangeParameterType) Plan(ws *workspace.Workspace, raw json.RawMessage) (
 		return nil, refactor.Refusef("changing a parameter to or from a type with type parameters is not supported")
 	}
 	if types.Identical(old, newT) {
-		return nil, refactor.Refusef("%s is already of type %s", a.Parameter, t.typeName(old))
+		return t.respell(a.Parameter, at, old, newT, variadic)
+	}
+	if variadic {
+		return nil, refactor.Refusef("%s is variadic; its type can only be written another way that is the same type (an alias of %s), not changed", a.Parameter, t.typeName(old))
 	}
 	widen, err := t.checkConversion(old, newT)
 	if err != nil {
@@ -126,6 +134,35 @@ func (*ChangeParameterType) Plan(ws *workspace.Workspace, raw json.RawMessage) (
 		}
 	}
 	return t.newPlan(fmt.Sprintf("changed parameter %q of %s from %s to %s", a.Parameter, t.groupName(), t.typeName(old), t.typeName(newT)), files.all()), nil
+}
+
+// respell writes the parameter name, at index at, as newT, a type
+// identical to its own type old but written another way (an alias), in
+// the declaration of every member of the family. Nothing else changes:
+// the calls and bodies already use the same type.
+func (t *target) respell(name string, at int, old, newT types.Type, variadic bool) (*refactor.Plan, error) {
+	files := newFileEdits(t.ws)
+	changed := false
+	for _, m := range t.group() {
+		decl, err := files.of(m.pkg, m.declPos())
+		if err != nil {
+			return nil, err
+		}
+		p := m.params[at]
+		typ := decl.write(newT)
+		if variadic {
+			typ = "..." + typ
+		}
+		if typ == m.text(p.field.Type) {
+			continue
+		}
+		decl.edits = append(decl.edits, m.fieldEdit(p, typ))
+		changed = true
+	}
+	if !changed {
+		return nil, refactor.Refusef("%s is already of type %s", name, t.typeName(old))
+	}
+	return t.newPlan(fmt.Sprintf("wrote parameter %q of %s as %s, the same type as %s", name, t.groupName(), t.typeName(newT), t.typeName(old)), files.all()), nil
 }
 
 // checkConversion checks that every value of type old means the same as
