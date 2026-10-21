@@ -716,6 +716,38 @@ hand or a tool got in the way.
       derivation, against the current instructions, on tasks with a
       derivation as the reference solution.
 
+20. **Loops and containers** (asked for by the user, 2026-10-20): the
+    structural moves on control flow that derivations need and no tool
+    does, so the model writes `for` and `if` by hand. Each is a
+    refactoring where it can be proved not to change behavior, and an
+    edit otherwise.
+    - **Convert between kinds of loop.** A three-clause `for i := 0; i <
+      n; i++` to `for i := range n` (Go 1.22) or `for i := range s`, and
+      back; `range` by index to `range` by value (`s[i]` uses become `v`)
+      and back; a condition loop `for c { }` to `for { if !c { break } }`
+      and back; a loop that appends, sums or finds to the `slices` or
+      `maps` call that does it, and back; a loop over a function's
+      results to range-over-func (Go 1.23). What each must check: the
+      loop variable is not assigned in the body; the bound or the slice
+      is evaluated once in a `range` but every iteration in a condition
+      (it must be stable and not written in the body); per-iteration
+      variables before Go 1.22 (`info.FileVersions`, as in
+      `sharedLoopVar`); `break`, `continue`, `goto` and labels keep
+      their targets; the post statement and condition have no effects
+      the new form reorders; a value copy where the body wrote `s[i]`.
+    - **Wrap statements in a container** (gap C in
+      `docs/derivations.md`; `introduce_block`, `introduce_if` and
+      `introduce_loop` in `docs/edits.md`): make a range of statements
+      the body of a block, an `if`, a loop, a closure called at once, or
+      a `switch` case. A refactoring for `{ }` when nothing declared is
+      used after it, `if true`, `for range 1`, and `func() { ... }()`
+      without `return`, `defer`, `break` or `continue` that would change
+      targets; an edit with a real condition or clause, which the model
+      then gives. The inverse, unwrapping a body into its parent, is the
+      same checks backward, and with `move_statement_in`/`_out`
+      (`docs/edits.md`) gives "wrap in an if and move the statements
+      in", one of the user's derivations.
+
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
 candidates and the evidence for each, gathered from the friction log.
