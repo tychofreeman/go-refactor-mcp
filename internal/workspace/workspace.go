@@ -396,7 +396,7 @@ func (w *Workspace) Preview(label string, fes []edit.FileEdit) (Change, error) {
 		if created {
 			c.Created[fe.Path] = true
 			// Only Go source: a golden file may parse as Go too.
-			if fa, err := format.Source(after); err == nil && strings.HasSuffix(fe.Path, ".go") {
+			if fa, err := format.Source(after); err == nil && strings.HasSuffix(fe.Path, ".go") && !fe.Verbatim {
 				after = fa
 			}
 		} else {
@@ -572,6 +572,10 @@ func (c Change) restore() error {
 	for p, data := range c.Before {
 		if !c.Created[p] {
 			before[p] = data
+			// A deleted file's directory may have gone with it.
+			if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+				return err
+			}
 		} else if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
 			return err
 		}
@@ -617,7 +621,8 @@ func (c *Change) addDirs(dir string) error {
 	return nil
 }
 
-// write writes the files the change leaves and deletes those it deletes.
+// write writes the files the change leaves and deletes those it deletes,
+// with the directories that leaves empty.
 func (c Change) write() error {
 	after := map[string][]byte{}
 	for p, data := range c.After {
@@ -627,7 +632,30 @@ func (c Change) write() error {
 			return err
 		}
 	}
-	return writeAll(after)
+	if err := writeAll(after); err != nil {
+		return err
+	}
+	for p := range c.Deleted {
+		if err := removeEmpty(filepath.Dir(p)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// removeEmpty removes dir if it is empty, and then each directory above
+// it that this leaves empty.
+func removeEmpty(dir string) error {
+	for {
+		entries, err := os.ReadDir(dir)
+		if err != nil || len(entries) > 0 {
+			return nil // gone already, or still in use
+		}
+		if err := os.Remove(dir); err != nil {
+			return err
+		}
+		dir = filepath.Dir(dir)
+	}
 }
 
 func writeAll(files map[string][]byte) error {

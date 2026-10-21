@@ -653,6 +653,22 @@ hand or a tool got in the way.
       *Done: a name no package has is left to the type check
       (`gocode.NoPackageError`); an ambiguous one still asks for
       `imports`.*
+    - **From the friction log's review (2026-10-20)**, by hits since the
+      tools covered most edits:
+      - **Move and delete files** (5 hits, `git mv` and `git rm` of
+        golden cases whose expected outcome changed). *Done (#203):
+        `move_file` and `delete_file`, for a file or a directory with
+        everything in it; a moved file is written byte for byte
+        (`edit.FileEdit.Verbatim`), and a directory a delete leaves
+        empty goes with it (undo puts it back).*
+      - **Replace or delete declarations by name, without restating
+        their text** (6 hits of a long `old` in replace_text: a 2.6K
+        literal, a 124-line range of methods), and **remove several
+        declarations at once** (3 hits: functions that only call each
+        other, a list and its last use).
+      - **`refactor batch` reads its JSON from a file or stdin** (14
+        hits of batches built in the shell, one broken by an unquoted
+        heredoc; cloud sessions use the CLI).
     - **Measure** by counting these refusals per run, by kind.
 
 Alongside: **edits**, steps that change behavior on purpose, so the

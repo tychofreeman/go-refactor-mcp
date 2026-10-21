@@ -100,7 +100,8 @@ until the MCP is reconnected.
    step can be undone with `undo`.
 
 Known gaps (do these by hand and log them): nothing removes a struct
-field or restores a file.
+field or restores a file. Files and directories move and go with
+move_file and delete_file.
 
 ## Measuring cost
 
