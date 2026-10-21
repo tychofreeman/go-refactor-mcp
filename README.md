@@ -458,10 +458,11 @@ hand or a tool got in the way.
       reading overlaps it. *Done: refactor-mcp calls `Preload` at
       start; calls wait for it as they waited for the first load.
       Measured: no shorter on Hugo (328 s), since the model calls
-      `inspect` at once. Next: why a fresh copy loads so slowly (4 s
-      warm in the clone). Each copy is at a new path, which may keep
-      Go's build cache from serving the module's own packages; try
-      `-trimpath` in the load's build flags.*
+      `inspect` at once. Then: a fresh copy of Hugo loaded in 288 s
+      however warm the cache, as Go's build cache keys a package by
+      its directory; with `-trimpath` in the load's build flags, the
+      second copy loads in 2.2 s (the first fills the cache, 302 s).
+      Done; a cross-package rename finds the same 24 occurrences.*
     - **Stubs for types.** A test written first that uses a type not
       declared yet (`stackEntry` in lazygit) is refused; stubs are
       declared only for functions and methods. *Done: a type made with
@@ -575,6 +576,27 @@ hand or a tool got in the way.
         a read needing the old type under an interface) is listed by
         position in the refusal. T to *T is not among them: every read
         could then dereference nil.*
+      - **A parameter's type changed through an alias**, the way the
+        user changes one by hand (2026-10-20): declare an alias of the
+        old type (`type renderArg = string`, add_declaration), write the
+        parameter with it, change what the alias is, then fix what no
+        longer fits. Hugo's `layout ...string` to `args ...any` goes so.
+        - **Write a parameter with an identical type.** *Done (#193):
+          change_parameter_type with an alias of the parameter's type
+          changes only the declarations, every member of an interface
+          family's, variadic parameters too.*
+        - **`change_type`, an edit:** retarget an alias (or change a
+          defined type's underlying type), and list where values come
+          in and where they go out needing the old type, spread calls
+          (`f(xs...)`) among them, for the model to fix in the same
+          batch. An edit, not a refactoring, so that a batch with check
+          "end" checks it with those fixes (the user's decision).
+          *Done (#194): change_type changes an alias's target or a
+          defined type's underlying type, with the imports that follow;
+          in a batch with check "end" its result lists the type errors
+          it left (`refactor.BreakageNoter`). The list is the compiler's
+          errors, not a classification of uses; that can come if the
+          errors prove hard to act on.*
       - **Later: one `change_signature`** taking the new signature, which
         works out the parameters added, removed, moved and retyped and
         the results, and needs a value at each call for a new one.

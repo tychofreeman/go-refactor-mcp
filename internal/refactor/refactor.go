@@ -69,6 +69,14 @@ type Fix interface {
 	Fixes()
 }
 
+// BreakageNoter is an edit that may leave code that does not type-check
+// for later steps of a batch to fix (change_type): in a batch checked at
+// its end, its result lists the errors it left.
+type BreakageNoter interface {
+	Edit
+	NotesBreakage()
+}
+
 // CompileChecked is a refactoring whose last precondition is that the
 // code compiles after it (for example, that a body still type-checks
 // with a parameter's new type): a compile error is a refusal, not a bug.
@@ -250,6 +258,12 @@ func Run(ws *workspace.Workspace, r Refactoring, args json.RawMessage, opts Opti
 	}
 	res.Applied = true
 	res.Diff, res.Files = edit.ElideSupplied(diffOf(ws, c, opts, plan), plan.Supplied), c.Files(ws.Root)
+	if _, notes := r.(BreakageNoter); notes && opts.Unchecked {
+		if left := newErrors(before, ws.Errors()); len(left) > 0 {
+			res.Notes = append(res.Notes, fmt.Sprintf("left %d type error%s for the next steps of this batch to fix (it is checked at its end):\n  %s",
+				len(left), textutil.Plural(len(left)), strings.Join(limit(left, 20), "\n  ")))
+		}
+	}
 	return res, nil
 }
 
@@ -333,6 +347,17 @@ func inTestsOnly(errs []string) bool {
 		}
 	}
 	return true
+}
+
+// newErrors are the errors of after that are not in before.
+func newErrors(before, after []string) []string {
+	var out []string
+	for _, e := range after {
+		if !slices.Contains(before, e) {
+			out = append(out, e)
+		}
+	}
+	return out
 }
 
 // signatureNote is, for edits that change the signature of a function or

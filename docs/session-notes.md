@@ -35,6 +35,14 @@ results are in `docs/cost-history.md`.
   model's own code: the project is to take type-safe code off the
   model, so it reasons at a higher level. Roadmap item 18 and
   `docs/type-errors.md` rank what to take over.
+- **A parameter's type changes through an alias** (2026-10-20): the
+  user's way by hand is to declare an alias of the old type, write the
+  parameter with it, then change the alias and fix what follows. So
+  change_parameter_type re-spells to an identical type (#193), and
+  `change_type` (#194), which retargets the alias, is an **edit**, so
+  that a batch with check "end" checks it together with the fixes its
+  result lists (the user's decision; a refactoring there would have to
+  compile on its own).
 
 - **Every step must type-check** (2026-10-17). The user rejected letting
   edits leave type errors. Test-first still works: stubs for what a new
@@ -151,7 +159,12 @@ results are in `docs/cost-history.md`.
   (`tp-mcp-type-errors`): type-check refusals 2.0 to 0.5 per run, 8/8,
   same cost; the new stubs, fix_imports and family changes rarely
   fired, so most of the drop is how the runs went. Preload did not
-  help Hugo's first call (the load itself is slow in a fresh copy). What making them taught:
+  help Hugo's first call (the load itself is slow in a fresh copy).
+  Fixed by loading with `-trimpath` (#193): Go's build cache keyed the
+  module's packages by directory, so every A/B copy compiled Hugo again
+  (288 s); with it, a second copy loads in 2.2 s. The first load after
+  the change still fills the cache, so time a run's second task, not
+  its first. What making them taught:
   - Read each hidden test before writing a prompt. "Black-box" only
     means it compiles against the old code: one compared a function's
     result with `reflect.DeepEqual` (pins a `[]string` return), one only
