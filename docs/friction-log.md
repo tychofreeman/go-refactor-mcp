@@ -1621,3 +1621,9 @@ All through gorefactor: fixtures with create_file; the struct and its
 helpers with add_declaration; try and first replaced whole with
 replace_declaration (#204), the rest with replace_text, in one batch
 checked at its end.
+
+## 2026-10-21: parameterize
+
+All through gorefactor: the package's stub, test and fixtures with
+create_file, the tool with replace_declaration and add_declaration in
+one batch checked at its end.
