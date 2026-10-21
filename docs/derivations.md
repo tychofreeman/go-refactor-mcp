@@ -112,7 +112,9 @@ one small edit; the reshaping falls in three families: naming and
 aliasing (A, B), folding and unfolding (D, I, J), and containers
 (C, K). Folding came up in four of the five; `fold` (stage 1: one-return
 bodies) now does problem 4's redirect and problem 3's reads through a
-getter, and (stage 2: struct parameters used by their fields) problem
-5's migration to the parameter object. Its engine is the
+getter, (stage 2: struct parameters used by their fields) problem
+5's migration to the parameter object, and (stage 3: statement bodies)
+problem 1's last step, the second body's statements becoming a call of
+the function extracted from the first. Its engine is the
 before/after templates with typed holes of `docs/user-transformations.md`
 (option 3): one well-made fold covers D, I and J.
