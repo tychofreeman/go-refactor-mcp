@@ -69,4 +69,58 @@ twice that, the three learner arms about $11; about $18 in all.
 
 ## Results
 
-Not run yet.
+**Explore on A** (`eval-runs/explore`, 30 runs, $5.55 against $3.65
+for the baseline `large6-base`; 30/30). Over the 30 runs, refactoring
+calls 56 (baseline 5, the user's moves 7), lines written by hand 486
+(513, 384), derived share 59% (46%, 66%). Exploring made the model use
+the operations it knew, but did not find the less obvious ones: no run
+used `fold`, `pointer`, or `remove_dead_code` of a field (two wrote
+that no tool removes one). Derivations several runs reached on their
+own: a helper to a method (fit, 6/6: `add_parameter` of the receiver,
+`function_to_method` with `new_name`, the constant into the body,
+`remove_parameter`, which the user's moves do not have), extract the
+inner loop and guard it (optout, 6/6), extract, `method_to_function`
+and `introduce_parameter` (shared-record, 5/6), expand, migrate,
+contract (batch, 4/6). Contacts went textually in all six. Two lessons
+were false ("the tools don't run tests", "no remove-field tool"), and
+many were tool mechanics.
+
+The user then dropped the Contacts lesson and asked for focused trials.
+
+**Shared record, told to try two operations before writing by hand,
+even ones expected to be refused** (`claude-md-explorer-2`,
+`eval-runs/explore-record`, 6 runs, $1.49, 6/6). All six called `fold`,
+three `extract_variable` with `pointer`; four derived the shared
+function from one method by operations. Three steps were written by
+hand in every run, and they say what the engine lacks:
+
+- the alias moved above the log call: `introduce_parameter` of
+  `&e.Sent` and both move_statement tools refuse it. The refusal says
+  `log.Printf` could change what `&e.Sent` reads, which is wrong; the
+  real difference is that `&e.Sent` panics on a nil receiver, now
+  before the log line. The target `record(&e.Sent, ...)` makes that
+  change itself, so no derivation that keeps behavior strictly
+  reaches it (a decision for the user, which gap O shares);
+- `"email to %s"` to `"%s to %s", "email"` (gap B);
+- the other three methods: `fold` said only "nothing in the module
+  matches the body of record"; they differ in the format literal (B)
+  and in `s.Sent` against `*sent` (O), and a refusal naming that
+  nearest miss is what each run needed there (item 21, lessons in
+  refusals).
+
+**Contacts, told to find two or three ways to make the change without
+writing Go by hand and carry out the best** (`claude-md-explorer-3`,
+`eval-runs/explore-contacts`, 6 runs, $1.26, 6/6). It did not work:
+every run named two or three ways (`change_field_type`, accessors, the
+textual route) and carried out the textual one, judging the others
+without a call ("more work for the same result"); one said it explored
+less than asked. No run called `fold`, `undo` or `remove_dead_code`;
+four wrote that no tool removes a field. What made the model explore
+was an instruction to make calls (shared record), not one to consider
+ways: it can satisfy the second by reasoning. And it did not count
+`replace_expression` and `replace_text` as writing code by hand,
+though the instructions name them.
+
+The learned lessons (`claude-md-learned`) are the explore run's, less
+Contacts, with lesson 3 from the shared-record trial. The learner runs
+on B have not been run.
