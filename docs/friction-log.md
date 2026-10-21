@@ -1426,6 +1426,12 @@ scripts, `tasks.json` and the docs are Python, JSON and Markdown, and no
 Go changed. As in the PR before, the gorefactor server of this cloud
 session ran on the linked computer, not on this checkout.
 
+## 2026-10-20: stubs for fields
+
+All through gorefactor: fixtures with create_file, the new functions
+with add_declaration, fields with add_field, editDistance with
+replace_statements, the rest with replace_text.
+
 ## 2026-10-20: stubs for types, values and aliased imports
 
 All through gorefactor: fixtures with a batch of create_file, the new
