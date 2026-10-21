@@ -1296,6 +1296,16 @@ func expected(info *types.Info, path []ast.Node) types.Type {
 		if p.Type != nil {
 			return info.TypeOf(p.Type)
 		}
+	case *ast.CaseClause:
+		// A case of a switch: compared with its tag, or else a condition.
+		if i+2 < len(path) && slices.Contains(p.List, e) {
+			if sw, ok := path[i+2].(*ast.SwitchStmt); ok {
+				if sw.Tag == nil {
+					return boolean
+				}
+				return typeOf(info, sw.Tag)
+			}
+		}
 	}
 	return nil
 }

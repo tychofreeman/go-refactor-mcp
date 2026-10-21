@@ -91,7 +91,8 @@ writing it. What was left:
   generic helper the model meant to write (`orderStacksByAncestry(refs,
   ...)` returning a slice of refs; the results only show in how the
   test ranges over them), and `case isClause(s):` in a switch without
-  a tag, whose context needs a bool but is not read as one yet.
+  a tag, whose context needs a bool (now read as one: a case of a
+  switch needs a bool, or its tag's type).
 - **The model's own** (3): a field made a pointer again (Gitea), a
   field added twice, a member of the module's own `json` package that
   does not exist.
