@@ -63,6 +63,21 @@ func setup(t *testing.T) (*mcp.ClientSession, string) {
 	return cs, dir
 }
 
+// Preload loads the workspace before the first call, without blocking.
+func TestPreload(t *testing.T) {
+	t.Setenv("GOWORK", "off")
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example.com/p\n\ngo 1.22\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, "p.go"), []byte("package p\n\nvar X = 1\n"), 0o644)
+	s := New(dir)
+	<-s.Preload()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.ws == nil {
+		t.Fatal("the workspace is not loaded after Preload")
+	}
+}
+
 func call(t *testing.T, cs *mcp.ClientSession, name string, args map[string]any) (string, bool) {
 	t.Helper()
 	res, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: name, Arguments: args})

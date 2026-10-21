@@ -1454,6 +1454,12 @@ refusal, which became a success case, was removed with `git rm`;
 nothing removes a file. PosMapOf began as a stub in a batch with its
 test, so the test could fail first.
 
+## 2026-10-20: the workspace loads when the server starts
+
+All through gorefactor. The test receives from what Preload returns
+(`<-s.Preload()`), from which create_from_usage cannot tell the
+result's type; it was given in `results` in the same batch.
+
 ## 2026-10-20: refactorings toward a test written first
 
 All through gorefactor: the test with add_declaration, the rule in Run
