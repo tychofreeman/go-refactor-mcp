@@ -1,0 +1,1 @@
+{"file": "m.go", "name": "weights", "content": "var weights = map[string]int{\"a\": 1, \"b\": 2, \"c\": 3}"}

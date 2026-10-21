@@ -1,0 +1,1 @@
+{"file": "m.go", "name": "area", "content": "// area multiplies w by h.\nfunc area(w, h int) int { return w * h }"}

@@ -13,6 +13,9 @@ A hand edit that changed behavior on purpose (new code, a changed
 statement) is logged too, with the edit that would have covered it; the
 candidates and their evidence are collected in `docs/edits.md`.
 
+Entries are in the order the work was done, oldest first (by the commit
+that added each); add a new one at the end.
+
 ## 2026-10-17: adding `refactor-eval`
 
 **Add a parameter at every call site.** `copyModule(src, dst)` needed a
@@ -714,17 +717,6 @@ every tool).
 branch in `locate.Ident` that calls it were a hand edit; `add_declaration`
 and `insert_statements` would have covered them, and should have been used.
 
-## 2026-10-18: not echoing code the model wrote
-
-**All through the MCP.** Stub, tests, helpers and implementation went in
-with `add_declaration`, `insert_statements`, `replace_statements`,
-`replace_expression` and `add_field` (addressed by name, without a line).
-
-**Adding a key to a composite literal.** Giving two `refactor.Plan`
-literals a `Supplied` field meant restating each whole statement with
-`replace_statements`. Cheap for a four-line literal. Gap: an edit that
-adds an element or key to a composite literal (like `add_field` for a
-type).
 ## 2026-10-18: a token baseline (`refactor-tokens`)
 
 **New files written with Write.** `internal/tokens` and its test were
@@ -736,6 +728,18 @@ Among the MCP tools, `create_file` and `add_declaration` return about as
 many tokens as they were sent: the diff echoes the new code back. Gap: an
 edit's result could summarize code the model just wrote instead of
 repeating it.
+
+## 2026-10-18: not echoing code the model wrote
+
+**All through the MCP.** Stub, tests, helpers and implementation went in
+with `add_declaration`, `insert_statements`, `replace_statements`,
+`replace_expression` and `add_field` (addressed by name, without a line).
+
+**Adding a key to a composite literal.** Giving two `refactor.Plan`
+literals a `Supplied` field meant restating each whole statement with
+`replace_statements`. Cheap for a four-line literal. Gap: an edit that
+adds an element or key to a composite literal (like `add_field` for a
+type).
 
 ## 2026-10-18: the A/B harness (`refactor-ab`)
 
@@ -928,6 +932,15 @@ Registering `add_case` and `add_element` was done by hand: the
 running server predated `check: "end"`, so the import and its use
 could not be separate steps.
 
+## 2026-10-19: quality measures in the A/B harness, all through the MCP
+
+Done entirely with gorefactor, no hand edits: extract_function plus
+move_declaration (ReadModule from eval to metrics), tests and stubs
+created together, then bodies filled by name, in batches with
+`check: "end"`. `check: "end"` removed the usual stub-first dance: a
+test file and the stubs it calls went in one call. One refusal:
+create_file has no `imports` argument (the imports went in content).
+
 ## 2026-10-19: create_from_usage, the first intention tool
 
 All through gorefactor. Notes:
@@ -941,14 +954,6 @@ All through gorefactor. Notes:
   rejected by the client as invalid JSON; escaping them as `\t` worked.
 - `extract_function` named a parameter `p` after the case variable it
   came from; a rename followed.
-## 2026-10-19: quality measures in the A/B harness, all through the MCP
-
-Done entirely with gorefactor, no hand edits: extract_function plus
-move_declaration (ReadModule from eval to metrics), tests and stubs
-created together, then bodies filled by name, in batches with
-`check: "end"`. `check: "end"` removed the usual stub-first dance: a
-test file and the stubs it calls went in one call. One refusal:
-create_file has no `imports` argument (the imports went in content).
 
 ## 2026-10-19: create_from_usage for methods and interfaces
 
@@ -963,13 +968,6 @@ All through gorefactor. Notes:
   the whole 8-step batch had to be resent. A way to resend with one
   step changed would save that.
 
-## 2026-10-19: create_from_usage for generic types and one-line interfaces
-
-All through gorefactor. Changing a parameter's type (qual
-types.Qualifier to write func(types.Type) string, in three functions
-and their calls) has no refactoring: it took 13 replace_text steps in
-one batch checked at its end. A change_parameter_type refactoring, or
-add_parameter followed by remove_parameter in one batch, would fit.
 ## 2026-10-19: locals by function and name
 
 Follow-up to "the inline could not share a batch with the introduce":
@@ -979,6 +977,14 @@ stays valid after earlier steps of a batch. Twice while building it I
 sent a batch whose steps only type-check together without
 `check: "end"`; a step refused for type errors in a batch now says to
 send it that way.
+
+## 2026-10-19: create_from_usage for generic types and one-line interfaces
+
+All through gorefactor. Changing a parameter's type (qual
+types.Qualifier to write func(types.Type) string, in three functions
+and their calls) has no refactoring: it took 13 replace_text steps in
+one batch checked at its end. A change_parameter_type refactoring, or
+add_parameter followed by remove_parameter in one batch, would fit.
 
 ## 2026-10-19: change_parameter_type
 
@@ -1026,17 +1032,6 @@ declaration now count as none. replace_text does not add imports, as it
 works on text, so a strings.HasPrefix it wrote needed a second step for
 the import. extract_function's doc comment was again not wrapped.
 
-## 2026-10-19: replace_text missed on indentation
-
-A batch was refused because a replace_text step's `old` had one tab of
-indentation where the file had two (the lines were inside a for loop in
-gocode.DocComment); the batch rolled back the steps before it. I had not
-read the file first. replace_statements with start_line/end_line would
-have fit better: it addresses lines, not text, and re-indents its
-content. Gap: when the exact match fails, replace_text could try a match
-that ignores leading whitespace (if only one place matches), or show the
-closest match in its refusal.
-
 ## 2026-10-19: finishing touches
 
 Fixed three frictions from today: extract_function wraps its doc
@@ -1050,6 +1045,17 @@ today; the hint is clear, but the step that needs it is usually the
 first, which refers to a function a later step declares. A batch whose
 first steps fail only on names its later steps declare could retry
 itself with check "end" and say so.
+
+## 2026-10-19: replace_text missed on indentation
+
+A batch was refused because a replace_text step's `old` had one tab of
+indentation where the file had two (the lines were inside a for loop in
+gocode.DocComment); the batch rolled back the steps before it. I had not
+read the file first. replace_statements with start_line/end_line would
+have fit better: it addresses lines, not text, and re-indents its
+content. Gap: when the exact match fails, replace_text could try a match
+that ignores leading whitespace (if only one place matches), or show the
+closest match in its refusal.
 
 ## 2026-10-19: move_declaration with_dependencies
 
@@ -1125,259 +1131,26 @@ All through gorefactor. replace_text still does not add imports
 (strings.TrimSpace in a replaced block); I dropped the call rather than
 add the import in another step.
 
-## 2026-10-20: refactor-tokens counts turns, refusals and reads; ab-analyze skill
+## 2026-10-20: a tip to batch single steps
 
-All through gorefactor: the test with add_declaration (refused alone
-until the fields existed, so in a batch with check "end" after
-add_field), the fields with add_field, the new functions with
-add_declaration, report, Merge and sortTools with replace_statements
-(`function`), the rest and the skill with replace_text and create_file.
+All through gorefactor: the test with add_declaration, the server change
+in one batch of 8 steps (add_field, add_declaration, replace_statements,
+insert_statements) with line numbers from one sed read, and these notes
+with replace_text.
 
-## 2026-10-20: replace_text across several files
+## 2026-10-20: the tip to batch single steps, removed
 
-All through gorefactor: the fixtures with a batch of create_file, the
-helper with add_declaration, Plan's new body with replace_statements
-(`function`), the schema, description and docs with replace_text.
+The code was reverted with git checkout of the two files from before
+#119, a hand edit: gorefactor has no tool to remove a struct field or
+to restore a file. The notes went through replace_text.
 
-## 2026-10-20: create_file for files that are not Go, in the instructions
+## 2026-10-20: inspect without bodies, and targets
 
-All through gorefactor: the test with insert_statements, the
-instructions and these notes with replace_text.
-
-## 2026-10-20: create_from_usage's names and generic results
-
-All through `refactor batch`; the golden fixtures and the one expected
-choice by hand.
-
-## 2026-10-20: the mcp arm's CLAUDE.md on Bash
-
-All through `refactor batch` (create_file for the three files,
-replace_text for CLAUDE.md); nothing by hand.
-
-## 2026-10-20: a worked batch in the instructions
-
-All through `refactor batch` and replace_text; nothing by hand.
-
-## 2026-10-20: replace_text adds imports
-
-All through `refactor batch`, and for the last time with the import
-block replaced by hand-written replace_text (`go/ast`, `go/parser`,
-`go/token`, `slices`, `gocode`, `imports`): that is the gap this fixes.
-
-## 2026-10-20: a smaller module overview
-
-All through `refactor batch`; `path` added as a replace_text of the
-import block (the known gap). Measuring the old overview's size took a
-throwaway command, built and deleted by hand.
-
-## 2026-10-20: one check for terminating statements
-
-All through `refactor batch`. remove_dead_code could not delete
-extract_function's four methods one at a time, since they call each
-other (a refusal per step: "terminatingList is used at ..."); they went
-as one replace_text of their range. A dead-code removal of a group that
-only uses itself would have done it in one step.
-
-## 2026-10-20: the review's item 25
-
-All through `refactor batch`: each of the three fixes with replace_text
-and add_declaration in one batch, imports (`unicode`, `unicode/utf8`,
-`go/version`) as replace_text of the import block (the known gap).
-By hand: the golden fixtures, and moving `builder_func_past_effect` to
-`refuse_builder_func_past_effect` with git mv, since nothing renames a
-fixture directory.
-
-## 2026-10-20: argument aliases in a batch
-
-All through `refactor batch`. The test's first try used `slices`, which
-the test file does not import, and replace_text does not add imports;
-`strings` instead.
-
-## 2026-10-20: lines gofmt realigned keep their place
-
-All through `refactor batch`: the test with replace_text, the fix with
-replace_text and add_declaration in one batch.
-
-## 2026-10-20: unfinished A/B runs
-
-All through `refactor batch`: the two fields with add_field ahead of the
-tests that use them, the test with add_declaration and replace_text,
-then the fix in one batch of replace_text.
-
-## 2026-10-20: replace_expression removes imports it leaves unused
-
-All through `refactor batch`, the CLI's new batch (#160): RemoveImports's
-signature and its three callers in one batch with check "end", then
-replace_expression's change. Its two new imports (`go/token`, `slices`)
-went in as a replace_text of the import block, since replace_text does
-not add imports (the known gap). Fixtures by hand, `out/` from `-update`.
-
-## 2026-10-20: create_file formats only Go files
-
-The fix through gorefactor's CLI (replace_text); the golden fixture by
-hand, since its `out/` is the unformatted file `-update` could not make.
-
-## 2026-10-20: introduce_parameter and a variadic parameter
-
-The check through gorefactor's CLI (replace_text). The two golden
-fixtures by hand, as usual, and `out/` from `-update`.
-
-## 2026-10-20: the CLI runs batches
-
-All through gorefactor's CLI: the test with create_file, `declarer` renamed
-and moved to the registry with rename and move_declaration, `RunStep`
-and `ParseBatch` added with add_declaration, the server's two bodies
-replaced with replace_statements, and the CLI's `run` with replace_text
-(one range, built as JSON with a script).
-
-## 2026-10-20: one list of functions that run a closure
-
-All through gorefactor's CLI with replace_text: the test, the merged
-table, and the old list deleted together with its one use in `SyncLit`
-(deleting the list alone was refused, since `SyncLit` still used it).
-Ranges this long were built as JSON with a script, since the CLI takes
-its arguments on the command line.
-
-## 2026-10-20: one walk over dependencies' interfaces
-
-All through gorefactor's CLI: the new file with create_file, changesig's
-call with replace_expression (replace_text was refused: it does not add
-the `analysis` import, the known gap), its old `dependencies` deleted
-with remove_dead_code, and the two other walks with replace_text.
-
-## 2026-10-20: extract_struct on the shared reflection helpers
-
-All through gorefactor's CLI except the golden cases: the check's body
-with replace_statements (`function`), its description and docs with
-replace_text.
-
-## 2026-10-20: introduce_parameter and a literal's own names
-
-All through gorefactor's CLI except the golden case: both checks and the
-docs with replace_text.
-
-## 2026-10-20: relative paths at the module root first, item 18 of the review
-
-All through gorefactor's CLI: the test with add_declaration, `Abs`'s body
-with replace_statements (`function`), the comments and docs with
-replace_text.
-
-## 2026-10-20: undo and a created directory that is not empty, item 17 of the review
-
-All through gorefactor's CLI: the test with add_declaration, `restore`'s
-body with replace_statements (`function`), the docs with replace_text.
-
-## 2026-10-20: statement content that closes its block, item 16 of the review
-
-All through gorefactor's CLI except the golden cases: both checks and
-the docs with replace_text.
-
-## 2026-10-20: rename and fields reached by reflection, item 15 of the review
-
-All through gorefactor's CLI except the golden cases: the helpers with
-create_file, `checkReflected` with add_declaration (before the call to it,
-which a CLI edit cannot stub), the call and docs with replace_text.
-
-## 2026-10-20: remove_dead_code and methods called dynamically, item 14 of the review
-
-All through gorefactor's CLI except the golden cases:
-`dependencyInterface` with add_declaration, the refusal and docs with
-replace_text. The dependency walk is now in rename and remove_dead_code
-(changesig has its own `visible`); a shared one in analysis would do.
-
-## 2026-10-20: extract_function and errors that can be nil, item 13 of the review
-
-All through gorefactor's CLI except the golden cases. The loop fix
-called `hasGoto` before it existed, which a CLI edit refuses (no stubs):
-declared it first with add_declaration.
-
-## 2026-10-20: changesig and synchronous closures, item 12 of the review
-
-All through gorefactor's CLI except the golden cases: the helpers with
-add_declaration, the three walks with replace_text. Two of the walks had
-to be one replace_text each from `ast.Inspect(` to its closing `})`,
-since wrapping the visitor changes both ends.
-
-## 2026-10-20: inline_function and conditional uses, item 11 of the review
-
-All through gorefactor's CLI except the golden cases: the two cases and
-the doc comment with replace_text.
-
-## 2026-10-20: inline_function and goto, item 10 of the review
-
-All through gorefactor's CLI except the golden case: `deadAfter` and its
-doc comment with replace_text.
-
-## 2026-10-20: inline_function and the left of an assignment, item 9 of the review
-
-All through gorefactor's CLI except the golden cases: `lhsEvaluatedFirst`
-with add_declaration, the shape decision and docs with replace_text.
-
-## 2026-10-20: rename and dependencies' interfaces, item 4 of the review
-
-All through gorefactor's CLI except the golden cases: the dependency walk
-and the doc comment with replace_text.
-
-## 2026-10-20: rename that starts implementing an interface, item 3 of the review
-
-All through gorefactor's CLI except the golden cases: `implementsRenamed`
-with add_declaration, `checkInterfaces` with replace_statements
-(`function`), and the docs with replace_text.
-
-## 2026-10-20: merge_duplicate_function and optional parts, item 5 of the review
-
-All through gorefactor's CLI except the golden cases: the key and its doc
-comment with replace_text.
-
-## 2026-10-20: remove_dead_code in a const group, item 1 of the review
-
-All through gorefactor's CLI except the golden cases. Moving
-move_declaration's `positional` closure into `analysis` took three
-steps, and the last had to be one replace_text over the function's
-middle: removing the closure and replacing its last use are refused
-each alone (one leaves it used, the other unused). A batch would have
-done both; the CLI has none. inline_function refuses a function value.
-
-## 2026-10-20: undo while the module does not load
-
-All through gorefactor's CLI: the test and `notLoading` with
-add_declaration, the handler with replace_statements (`function`), the
-tool description and docs with replace_text. An edit through the CLI
-gets no stubs for functions it calls (the server passes `Declare`; the
-CLI does not), so the handler that called `notLoading` was refused until
-`notLoading` was declared.
-
-## 2026-10-20: a step that breaks go.mod, items 6-7 of the review
-
-All through gorefactor's CLI: `Apply`'s body with replace_statements
-(`function`), the error, the tests and `Run`'s refusal with
-add_declaration and replace_text. The workspace test could not go first:
-it names a variable, `ErrBreaksLoading`, and only functions get stubs,
-so the variable was declared before it (an edit that does not
-type-check is refused).
-
-## 2026-10-20: introduce_parameter after a guard, item 2 of the review
-
-All through gorefactor's CLI: the two changes to `checkEvaluation` and
-`riskOf`, and these notes, with replace_text. By hand: the golden cases
-(`in/`, `args.json`, `refused.txt`; `out/` from `-update`).
-
-## 2026-10-20: expressions that can panic, item 8 of the review
-
-All through gorefactor's CLI: `analysis.MayPanic`, its helpers and its
-test with add_declaration, the four call sites and the docs with
-replace_text. By hand: the golden cases (`in/` and `args.json`; `out/`
-from `-update`).
-
-## 2026-10-20: schemas loaded alongside another call, shorter definitions
-
-All through gorefactor's CLI: the test with add_declaration, the
-add_declaration and replace_statements definitions with
-replace_statements (`function` addressing their Description and
-InputSchema methods), and the batch definition, the instructions and
-these notes with replace_text. The batch definition is a literal inside
-`New`, so only replace_text could reach it; its old text, about 2.6K
-characters, had to be sent whole as `old`.
+All through gorefactor except two size checks: a temporary test file
+written with a heredoc and removed, to print inspect's output on real
+files (the running server is the old binary). replace_text refused a
+field comment I gave as I wrote it, before gofmt aligned it; I grepped
+for the aligned text.
 
 ## 2026-10-20: ranges that start at the `func` line
 
@@ -1390,26 +1163,33 @@ hand: the golden cases. The CLI has no `batch`, so steps went one at a
 time; an insert sent before the function it calls was refused, and an
 import add_declaration added moved the next line number by one.
 
-## 2026-10-20: inspect without bodies, and targets
+## 2026-10-20: schemas loaded alongside another call, shorter definitions
 
-All through gorefactor except two size checks: a temporary test file
-written with a heredoc and removed, to print inspect's output on real
-files (the running server is the old binary). replace_text refused a
-field comment I gave as I wrote it, before gofmt aligned it; I grepped
-for the aligned text.
+All through gorefactor's CLI: the test with add_declaration, the
+add_declaration and replace_statements definitions with
+replace_statements (`function` addressing their Description and
+InputSchema methods), and the batch definition, the instructions and
+these notes with replace_text. The batch definition is a literal inside
+`New`, so only replace_text could reach it; its old text, about 2.6K
+characters, had to be sent whole as `old`.
 
-## 2026-10-20: the tip to batch single steps, removed
+## 2026-10-20: create_file for files that are not Go, in the instructions
 
-The code was reverted with git checkout of the two files from before
-#119, a hand edit: gorefactor has no tool to remove a struct field or
-to restore a file. The notes went through replace_text.
+All through gorefactor: the test with insert_statements, the
+instructions and these notes with replace_text.
 
-## 2026-10-20: a tip to batch single steps
+## 2026-10-20: replace_text across several files
 
-All through gorefactor: the test with add_declaration, the server change
-in one batch of 8 steps (add_field, add_declaration, replace_statements,
-insert_statements) with line numbers from one sed read, and these notes
-with replace_text.
+All through gorefactor: the fixtures with a batch of create_file, the
+helper with add_declaration, Plan's new body with replace_statements
+(`function`), the schema, description and docs with replace_text.
+
+## 2026-10-20: expressions that can panic, item 8 of the review
+
+All through gorefactor's CLI: `analysis.MayPanic`, its helpers and its
+test with add_declaration, the four call sites and the docs with
+replace_text. By hand: the golden cases (`in/` and `args.json`; `out/`
+from `-update`).
 
 ## 2026-10-20: third-party A/B candidates
 
@@ -1419,6 +1199,30 @@ on the linked computer, not on this checkout. The roadmap and these notes
 were edited with Edit for the same reason; replace_text would have done
 them in a session with the server on the checkout.
 
+## 2026-10-20: introduce_parameter after a guard, item 2 of the review
+
+All through gorefactor's CLI: the two changes to `checkEvaluation` and
+`riskOf`, and these notes, with replace_text. By hand: the golden cases
+(`in/`, `args.json`, `refused.txt`; `out/` from `-update`).
+
+## 2026-10-20: a step that breaks go.mod, items 6-7 of the review
+
+All through gorefactor's CLI: `Apply`'s body with replace_statements
+(`function`), the error, the tests and `Run`'s refusal with
+add_declaration and replace_text. The workspace test could not go first:
+it names a variable, `ErrBreaksLoading`, and only functions get stubs,
+so the variable was declared before it (an edit that does not
+type-check is refused).
+
+## 2026-10-20: undo while the module does not load
+
+All through gorefactor's CLI: the test and `notLoading` with
+add_declaration, the handler with replace_statements (`function`), the
+tool description and docs with replace_text. An edit through the CLI
+gets no stubs for functions it calls (the server passes `Declare`; the
+CLI does not), so the handler that called `notLoading` was refused until
+`notLoading` was declared.
+
 ## 2026-10-20: the first third-party A/B tasks
 
 By hand, and not a gorefactor gap: `tasks.py`, the fixes to the other
@@ -1426,26 +1230,214 @@ scripts, `tasks.json` and the docs are Python, JSON and Markdown, and no
 Go changed. As in the PR before, the gorefactor server of this cloud
 session ran on the linked computer, not on this checkout.
 
-## 2026-10-20: imports fixed after every edit
+## 2026-10-20: remove_dead_code in a const group, item 1 of the review
 
-All through gorefactor: the package and its fixtures with create_file,
-the Plan with replace_statements, the engine's wiring with add_field,
-add_declaration and replace_text. A fixture's expected import grouping
-was wrong (the module's import goes in its own group), fixed with
+All through gorefactor's CLI except the golden cases. Moving
+move_declaration's `positional` closure into `analysis` took three
+steps, and the last had to be one replace_text over the function's
+middle: removing the closure and replacing its last use are refused
+each alone (one leaves it used, the other unused). A batch would have
+done both; the CLI has none. inline_function refuses a function value.
+
+## 2026-10-20: merge_duplicate_function and optional parts, item 5 of the review
+
+All through gorefactor's CLI except the golden cases: the key and its doc
+comment with replace_text.
+
+## 2026-10-20: rename that starts implementing an interface, item 3 of the review
+
+All through gorefactor's CLI except the golden cases: `implementsRenamed`
+with add_declaration, `checkInterfaces` with replace_statements
+(`function`), and the docs with replace_text.
+
+## 2026-10-20: rename and dependencies' interfaces, item 4 of the review
+
+All through gorefactor's CLI except the golden cases: the dependency walk
+and the doc comment with replace_text.
+
+## 2026-10-20: inline_function and the left of an assignment, item 9 of the review
+
+All through gorefactor's CLI except the golden cases: `lhsEvaluatedFirst`
+with add_declaration, the shape decision and docs with replace_text.
+
+## 2026-10-20: inline_function and goto, item 10 of the review
+
+All through gorefactor's CLI except the golden case: `deadAfter` and its
+doc comment with replace_text.
+
+## 2026-10-20: inline_function and conditional uses, item 11 of the review
+
+All through gorefactor's CLI except the golden cases: the two cases and
+the doc comment with replace_text.
+
+## 2026-10-20: changesig and synchronous closures, item 12 of the review
+
+All through gorefactor's CLI except the golden cases: the helpers with
+add_declaration, the three walks with replace_text. Two of the walks had
+to be one replace_text each from `ast.Inspect(` to its closing `})`,
+since wrapping the visitor changes both ends.
+
+## 2026-10-20: extract_function and errors that can be nil, item 13 of the review
+
+All through gorefactor's CLI except the golden cases. The loop fix
+called `hasGoto` before it existed, which a CLI edit refuses (no stubs):
+declared it first with add_declaration.
+
+## 2026-10-20: remove_dead_code and methods called dynamically, item 14 of the review
+
+All through gorefactor's CLI except the golden cases:
+`dependencyInterface` with add_declaration, the refusal and docs with
+replace_text. The dependency walk is now in rename and remove_dead_code
+(changesig has its own `visible`); a shared one in analysis would do.
+
+## 2026-10-20: rename and fields reached by reflection, item 15 of the review
+
+All through gorefactor's CLI except the golden cases: the helpers with
+create_file, `checkReflected` with add_declaration (before the call to it,
+which a CLI edit cannot stub), the call and docs with replace_text.
+
+## 2026-10-20: statement content that closes its block, item 16 of the review
+
+All through gorefactor's CLI except the golden cases: both checks and
+the docs with replace_text.
+
+## 2026-10-20: undo and a created directory that is not empty, item 17 of the review
+
+All through gorefactor's CLI: the test with add_declaration, `restore`'s
+body with replace_statements (`function`), the docs with replace_text.
+
+## 2026-10-20: relative paths at the module root first, item 18 of the review
+
+All through gorefactor's CLI: the test with add_declaration, `Abs`'s body
+with replace_statements (`function`), the comments and docs with
 replace_text.
 
-## 2026-10-20: stubs for fields
+## 2026-10-20: introduce_parameter and a literal's own names
 
-All through gorefactor: fixtures with create_file, the new functions
-with add_declaration, fields with add_field, editDistance with
-replace_statements, the rest with replace_text.
+All through gorefactor's CLI except the golden case: both checks and the
+docs with replace_text.
 
-## 2026-10-20: stubs for types, values and aliased imports
+## 2026-10-20: extract_struct on the shared reflection helpers
 
-All through gorefactor: fixtures with a batch of create_file, the new
-functions with add_declaration, fields with add_field, declareIn with
-replace_statements, the rest with replace_text; `qualifier`, left
-unused, went with remove_dead_code.
+All through gorefactor's CLI except the golden cases: the check's body
+with replace_statements (`function`), its description and docs with
+replace_text.
+
+## 2026-10-20: one walk over dependencies' interfaces
+
+All through gorefactor's CLI: the new file with create_file, changesig's
+call with replace_expression (replace_text was refused: it does not add
+the `analysis` import, the known gap), its old `dependencies` deleted
+with remove_dead_code, and the two other walks with replace_text.
+
+## 2026-10-20: one list of functions that run a closure
+
+All through gorefactor's CLI with replace_text: the test, the merged
+table, and the old list deleted together with its one use in `SyncLit`
+(deleting the list alone was refused, since `SyncLit` still used it).
+Ranges this long were built as JSON with a script, since the CLI takes
+its arguments on the command line.
+
+## 2026-10-20: the CLI runs batches
+
+All through gorefactor's CLI: the test with create_file, `declarer` renamed
+and moved to the registry with rename and move_declaration, `RunStep`
+and `ParseBatch` added with add_declaration, the server's two bodies
+replaced with replace_statements, and the CLI's `run` with replace_text
+(one range, built as JSON with a script).
+
+## 2026-10-20: introduce_parameter and a variadic parameter
+
+The check through gorefactor's CLI (replace_text). The two golden
+fixtures by hand, as usual, and `out/` from `-update`.
+
+## 2026-10-20: create_file formats only Go files
+
+The fix through gorefactor's CLI (replace_text); the golden fixture by
+hand, since its `out/` is the unformatted file `-update` could not make.
+
+## 2026-10-20: replace_expression removes imports it leaves unused
+
+All through `refactor batch`, the CLI's new batch (#160): RemoveImports's
+signature and its three callers in one batch with check "end", then
+replace_expression's change. Its two new imports (`go/token`, `slices`)
+went in as a replace_text of the import block, since replace_text does
+not add imports (the known gap). Fixtures by hand, `out/` from `-update`.
+
+## 2026-10-20: unfinished A/B runs
+
+All through `refactor batch`: the two fields with add_field ahead of the
+tests that use them, the test with add_declaration and replace_text,
+then the fix in one batch of replace_text.
+
+## 2026-10-20: lines gofmt realigned keep their place
+
+All through `refactor batch`: the test with replace_text, the fix with
+replace_text and add_declaration in one batch.
+
+## 2026-10-20: argument aliases in a batch
+
+All through `refactor batch`. The test's first try used `slices`, which
+the test file does not import, and replace_text does not add imports;
+`strings` instead.
+
+## 2026-10-20: the review's item 25
+
+All through `refactor batch`: each of the three fixes with replace_text
+and add_declaration in one batch, imports (`unicode`, `unicode/utf8`,
+`go/version`) as replace_text of the import block (the known gap).
+By hand: the golden fixtures, and moving `builder_func_past_effect` to
+`refuse_builder_func_past_effect` with git mv, since nothing renames a
+fixture directory.
+
+## 2026-10-20: one check for terminating statements
+
+All through `refactor batch`. remove_dead_code could not delete
+extract_function's four methods one at a time, since they call each
+other (a refusal per step: "terminatingList is used at ..."); they went
+as one replace_text of their range. A dead-code removal of a group that
+only uses itself would have done it in one step.
+
+## 2026-10-20: a smaller module overview
+
+All through `refactor batch`; `path` added as a replace_text of the
+import block (the known gap). Measuring the old overview's size took a
+throwaway command, built and deleted by hand.
+
+## 2026-10-20: refactor-tokens counts turns, refusals and reads; ab-analyze skill
+
+All through gorefactor: the test with add_declaration (refused alone
+until the fields existed, so in a batch with check "end" after
+add_field), the fields with add_field, the new functions with
+add_declaration, report, Merge and sortTools with replace_statements
+(`function`), the rest and the skill with replace_text and create_file.
+
+## 2026-10-20: replace_text adds imports
+
+All through `refactor batch`, and for the last time with the import
+block replaced by hand-written replace_text (`go/ast`, `go/parser`,
+`go/token`, `slices`, `gocode`, `imports`): that is the gap this fixes.
+
+## 2026-10-20: a worked batch in the instructions
+
+All through `refactor batch` and replace_text; nothing by hand.
+
+## 2026-10-20: the mcp arm's CLAUDE.md on Bash
+
+All through `refactor batch` (create_file for the three files,
+replace_text for CLAUDE.md); nothing by hand.
+
+## 2026-10-20: create_from_usage's names and generic results
+
+All through `refactor batch`; the golden fixtures and the one expected
+choice by hand.
+
+## 2026-10-20: inline_function all_calls
+
+All through gorefactor: the fixtures with a batch of create_file, the
+engine's Expander, runExpanded and the inliner's Expand and callsOf
+with add_declaration, the arguments with add_field, the schema,
+description and docs with replace_text.
 
 ## 2026-10-20: batches follow columns
 
@@ -1454,49 +1446,26 @@ refusal, which became a success case, was removed with `git rm`;
 nothing removes a file. PosMapOf began as a stub in a batch with its
 test, so the test could fail first.
 
-## 2026-10-20: replace_text leaves a later step's name alone
+## 2026-10-20: stubs for types, values and aliased imports
 
-All through gorefactor: the test with add_declaration, the error type
-with add_declaration, the rest with replace_text.
+All through gorefactor: fixtures with a batch of create_file, the new
+functions with add_declaration, fields with add_field, declareIn with
+replace_statements, the rest with replace_text; `qualifier`, left
+unused, went with remove_dead_code.
 
-## 2026-10-20: stubs for a call used as a case
+## 2026-10-20: stubs for fields
 
-All through gorefactor: the fixture with create_file, the case in
-`expected` with replace_text.
-## 2026-10-20: loading with -trimpath
+All through gorefactor: fixtures with create_file, the new functions
+with add_declaration, fields with add_field, editDistance with
+replace_statements, the rest with replace_text.
 
-One line through replace_text. Timed by hand in the scratchpad: fresh
-copies of Hugo with and without GOFLAGS=-trimpath.
+## 2026-10-20: imports fixed after every edit
 
-## 2026-10-20: the workspace loads when the server starts
-
-All through gorefactor. The test receives from what Preload returns
-(`<-s.Preload()`), from which create_from_usage cannot tell the
-result's type; it was given in `results` in the same batch.
-
-## 2026-10-20: refactorings toward a test written first
-
-All through gorefactor: the test with add_declaration, the rule in Run
-with replace_text and add_declaration.
-
-## 2026-10-20: change_field_type
-
-All through gorefactor: fixtures and the tool with create_file (the
-test's call of NewChangeFieldType got a stub, removed in the batch that
-created the file), a fixture's column with replace_text.
-
-## 2026-10-20: a signature changed by text points to the tools
-
-All through gorefactor: the test with add_declaration, the note and its
-use in Run with add_declaration and replace_text.
-
-## 2026-10-20: add_result
-
-All through gorefactor: fixtures with create_file (the test's call of
-NewAddResult got a stub, replaced in the same batch that created the
-file), the tool with create_file, the rest with replace_text. Three
-tools' descriptions had a sentence inserted mid-list by the last PR,
-fixed with one replace_text over `files`.
+All through gorefactor: the package and its fixtures with create_file,
+the Plan with replace_statements, the engine's wiring with add_field,
+add_declaration and replace_text. A fixture's expected import grouping
+was wrong (the module's import goes in its own group), fixed with
+replace_text.
 
 ## 2026-10-20: signature tools change interface families
 
@@ -1507,20 +1476,71 @@ rm`; nothing renames or removes a file. Their expected output was
 written with create_file, the descriptions of three tools with one
 replace_text over `files`.
 
-## 2026-10-20: inline_function all_calls
+## 2026-10-20: add_result
 
-All through gorefactor: the fixtures with a batch of create_file, the
-engine's Expander, runExpanded and the inliner's Expand and callsOf
-with add_declaration, the arguments with add_field, the schema,
-description and docs with replace_text.
+All through gorefactor: fixtures with create_file (the test's call of
+NewAddResult got a stub, replaced in the same batch that created the
+file), the tool with create_file, the rest with replace_text. Three
+tools' descriptions had a sentence inserted mid-list by the last PR,
+fixed with one replace_text over `files`.
 
-## 2026-10-20: stubs past a name that cannot be typed
+## 2026-10-20: a signature changed by text points to the tools
 
-All through `refactor batch`; the golden fixture's `out/` by hand first.
-One refusal in the way: a replace_text whose new code used
-`untypeable.FindStringSubmatch`, a variable the batch's next step
-declared, was refused as an unknown package to import; the steps went
-in the other order. On the roadmap (item 18).
+All through gorefactor: the test with add_declaration, the note and its
+use in Run with add_declaration and replace_text.
+
+## 2026-10-20: change_field_type
+
+All through gorefactor: fixtures and the tool with create_file (the
+test's call of NewChangeFieldType got a stub, removed in the batch that
+created the file), a fixture's column with replace_text.
+
+## 2026-10-20: refactorings toward a test written first
+
+All through gorefactor: the test with add_declaration, the rule in Run
+with replace_text and add_declaration.
+
+## 2026-10-20: the workspace loads when the server starts
+
+All through gorefactor. The test receives from what Preload returns
+(`<-s.Preload()`), from which create_from_usage cannot tell the
+result's type; it was given in `results` in the same batch.
+
+## 2026-10-20: A/B quality numbers when a file does not parse
+
+All through `refactor batch`. The test used `Quality.Unmeasured` before
+it existed, and the new field stubs declared it (#183), which
+replace_text then gave its tag and comment.
+
+## 2026-10-20: change_parameter_type writes a parameter with an alias
+
+All through `refactor batch`; the golden fixtures by hand, their `out/`
+written by hand first and matched.
+
+## 2026-10-20: change_type
+
+All through `refactor batch`: the package and its test with create_file
+in one batch, the engine's note with replace_text and add_declaration,
+the workflow test with add_declaration and its imports. One refusal: a
+call of `plural`, which the refactor package names `textutil.Plural`;
+the stub could not be declared, since its result was unknown. The
+golden fixtures by hand, their `out/` written by hand first.
+
+## 2026-10-20: loading with -trimpath
+
+One line through replace_text. Timed by hand in the scratchpad: fresh
+copies of Hugo with and without GOFLAGS=-trimpath.
+
+## 2026-10-20: stubs for a call used as a case
+
+All through gorefactor: the fixture with create_file, the case in
+`expected` with replace_text.
+
+## 2026-10-20: stubs declared before a refactoring
+
+All through `refactor batch`: the tests with add_declaration, the
+engine's change with replace_text. One wrong test, mine: it addressed a
+line the first step had rewritten, which the batch rightly refused.
 
 ## 2026-10-20: checkpoints in a batch
 
@@ -1533,31 +1553,18 @@ batch. And Go string escapes (`\n`) in a batch built with an unquoted
 shell heredoc became newlines, so one replace_text did not match; the
 heredoc must be quoted.
 
-## 2026-10-20: stubs declared before a refactoring
+## 2026-10-20: stubs past a name that cannot be typed
 
-All through `refactor batch`: the tests with add_declaration, the
-engine's change with replace_text. One wrong test, mine: it addressed a
-line the first step had rewritten, which the batch rightly refused.
+All through `refactor batch`; the golden fixture's `out/` by hand first.
+One refusal in the way: a replace_text whose new code used
+`untypeable.FindStringSubmatch`, a variable the batch's next step
+declared, was refused as an unknown package to import; the steps went
+in the other order. On the roadmap (item 18).
 
-## 2026-10-20: change_type
+## 2026-10-20: replace_text leaves a later step's name alone
 
-All through `refactor batch`: the package and its test with create_file
-in one batch, the engine's note with replace_text and add_declaration,
-the workflow test with add_declaration and its imports. One refusal: a
-call of `plural`, which the refactor package names `textutil.Plural`;
-the stub could not be declared, since its result was unknown. The
-golden fixtures by hand, their `out/` written by hand first.
-
-## 2026-10-20: change_parameter_type writes a parameter with an alias
-
-All through `refactor batch`; the golden fixtures by hand, their `out/`
-written by hand first and matched.
-
-## 2026-10-20: A/B quality numbers when a file does not parse
-
-All through `refactor batch`. The test used `Quality.Unmeasured` before
-it existed, and the new field stubs declared it (#183), which
-replace_text then gave its tag and comment.
+All through gorefactor: the test with add_declaration, the error type
+with add_declaration, the rest with replace_text.
 
 ## 2026-10-20: fold
 
@@ -1572,6 +1579,33 @@ All through gorefactor: the seeded module, the hidden tests and the
 task file with create_file, the hidden tests' renames with replace_text.
 The reference solutions that validate the tasks are a scratch script,
 not committed.
+
+## 2026-10-20: move_file and delete_file
+
+All through `refactor batch`; the golden fixtures by hand, as files for
+these tools to move and delete. The tools' own fixtures are the first
+that could have been made, and later renamed, with them.
+
+## 2026-10-20: declarations replaced and removed by name
+
+All through `refactor batch`. remove_dead_code's `also`: the fields with
+add_field, the helpers with add_declaration, Plan's body with
+replace_statements (`function`), the checks with replace_text.
+replace_declaration with create_file. Golden fixtures by hand, `out/`
+written by hand first; one expected line number of mine was off by
+one, which the refusal showed.
+
+## 2026-10-20: the CLI reads JSON from a file or stdin
+
+All through `refactor batch`; this entry and the docs went in with
+`@path`, the new form, from a file written by a script.
+
+## 2026-10-20: the friction log in order
+
+By a script, a hand edit: each entry was dated by the commit that first
+added its heading (`git log -S`), and the entries were written back in
+that order, every line kept. No tool moves blocks of text within a
+file; replace_text would have had to restate the whole log.
 
 ## 2026-10-20: the algebraic measure
 

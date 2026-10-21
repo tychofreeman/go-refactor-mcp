@@ -24,6 +24,9 @@ type FileEdit struct {
 	Edits []TextEdit `json:"edits"`
 	// Delete deletes the file instead; Edits must then be empty.
 	Delete bool `json:"delete,omitempty"`
+	// Verbatim writes a file the edits create exactly as they give it,
+	// without gofmt (a fixture of unformatted code, a file moved).
+	Verbatim bool `json:"verbatim,omitempty"`
 }
 
 // Apply returns src with edits applied. Edits may be given in any order.
@@ -84,6 +87,7 @@ func Merge(fes []FileEdit) []FileEdit {
 		}
 		out[i].Edits = append(out[i].Edits, fe.Edits...)
 		out[i].Delete = out[i].Delete || fe.Delete
+		out[i].Verbatim = out[i].Verbatim || fe.Verbatim
 	}
 	for i := range out {
 		out[i].Edits = Normalize(out[i].Edits)
