@@ -1727,3 +1727,13 @@ and the lesson script with Python; the docs too. create_file would have
 done the fixtures, one call per file; I wrote them in the shell to check
 each hidden test against a reference solution in scratch copies as I
 went, which no tool does (roadmap item 21's `try` would).
+
+## 2026-10-21: exploration results and Contacts one field at a time
+
+The results docs of #228-#230 were written with Python in Bash, before
+the MCP was reconnected in this session; since then, all edits with
+replace_text, and the explorer copied with `cp` before its edits (no
+tool copies a file). The Contacts derivation was run with the
+`refactor` CLI on a scratch copy of the module: no hand edits but the
+two getter lines it counts, and the field deletions by replace_text
+after `remove_dead_code` refused falsely.
