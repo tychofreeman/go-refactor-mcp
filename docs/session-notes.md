@@ -39,7 +39,9 @@ results are in `docs/cost-history.md`.
 - **Every step must type-check** (2026-10-17). The user rejected letting
   edits leave type errors. Test-first still works: stubs for what a new
   test calls are declared automatically, and an edit may start from
-  broken code if it fixes some errors and adds none.
+  broken code if it fixes some errors and adds none. Since 2026-10-20 a
+  refactoring may too, when every error is in a test file (a test
+  written against what the refactoring makes); the user agreed.
 - **Claude via MCP is the product**, not the Ollama loop or standalone
   evaluation (2026-10-17): the user said those were not what they need.
 - **Choose the next tool by evidence:** the friction log for hand edits,

@@ -171,7 +171,11 @@ func Run(ws *workspace.Workspace, r Refactoring, args json.RawMessage, opts Opti
 	_, isFix := r.(Fix)
 	// An edit may start from code that does not type-check: then, like a
 	// fix, it must leave fewer errors (see afterRefusal).
-	if len(before) > 0 && !isFix && !isEdit {
+	// A refactoring may run on code whose only errors are in tests written
+	// first against what it makes (a test calling the name a rename
+	// gives): like a fix, it must then fix some of them and add none.
+	towardTests := len(before) > 0 && !isFix && !isEdit && inTestsOnly(before)
+	if len(before) > 0 && !isFix && !isEdit && !towardTests {
 		res.Refused = fmt.Sprintf("the code does not type-check, so refactorings cannot be verified. Fix these first (an edit, such as add_field for a field a test already uses, may run on code that does not type-check if it fixes some of the errors):\n  %s",
 			strings.Join(limit(before, 10), "\n  "))
 		if opts.Unchecked {
@@ -234,7 +238,7 @@ func Run(ws *workspace.Workspace, r Refactoring, args json.RawMessage, opts Opti
 	if err != nil {
 		return nil, err
 	}
-	if reason := afterRefusal(r, isEdit, isFix, opts.Unchecked, before, ws.Errors()); reason != "" {
+	if reason := afterRefusal(r, isEdit, isFix || towardTests, opts.Unchecked, before, ws.Errors()); reason != "" {
 		if _, uerr := ws.Undo(); uerr != nil {
 			return nil, fmt.Errorf("the step broke the build and undo failed: %v (%s)", uerr, reason)
 		}
@@ -318,6 +322,17 @@ func afterRefusal(r Refactoring, isEdit, isFix, unchecked bool, before, after []
 	}
 	return fmt.Sprintf("the change would not compile, so it was rolled back. This is a bug in the %q precondition checks; errors were:\n  %s",
 		r.Name(), strings.Join(limit(after, 10), "\n  "))
+}
+
+// inTestsOnly reports whether every error is in a test file.
+func inTestsOnly(errs []string) bool {
+	for _, e := range errs {
+		file, _, _ := strings.Cut(e, ":")
+		if !strings.HasSuffix(file, "_test.go") {
+			return false
+		}
+	}
+	return true
 }
 
 // signatureNote is, for edits that change the signature of a function or
