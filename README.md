@@ -455,7 +455,8 @@ hand or a tool got in the way.
     - **Load the module before the first call.** The first `inspect` of
       a run waited 296 s for Hugo to load (27-37 s elsewhere). The
       server could start loading when it starts, so the model's
-      reading overlaps it.
+      reading overlaps it. *Done: refactor-mcp calls `Preload` at
+      start; calls wait for it as they waited for the first load.*
     - **Stubs for types.** A test written first that uses a type not
       declared yet (`stackEntry` in lazygit) is refused; stubs are
       declared only for functions and methods. *Done: a type made with

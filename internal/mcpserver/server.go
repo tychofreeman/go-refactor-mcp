@@ -231,6 +231,23 @@ func (s *Server) workspace() (*workspace.Workspace, error) {
 	return s.ws, nil
 }
 
+// Preload starts loading the workspace in the background, so that the
+// first call does not wait for all of it (minutes on a large module, the
+// first time); the channel closes when it is done. Calls meanwhile wait
+// for it, and a load that fails is tried again by the next call.
+func (s *Server) Preload() <-chan struct{} {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if s.ws == nil {
+			s.workspace()
+		}
+	}()
+	return done
+}
+
 func (s *Server) refactor(r refactor.Refactoring, args json.RawMessage) *mcp.CallToolResult {
 	s.mu.Lock()
 	defer s.mu.Unlock()

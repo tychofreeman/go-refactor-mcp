@@ -52,6 +52,7 @@ func main() {
 
 	s := mcpserver.New(*dir, *pattern)
 	s.FullDiffs = *fullDiffs
+	s.Preload()
 	srv := s.MCP()
 	err := srv.Run(ctx, &mcp.StdioTransport{})
 	// The client closing stdin (EOF) is the normal way a session ends.
