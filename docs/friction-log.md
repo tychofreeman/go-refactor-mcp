@@ -1500,6 +1500,11 @@ engine's Expander, runExpanded and the inliner's Expand and callsOf
 with add_declaration, the arguments with add_field, the schema,
 description and docs with replace_text.
 
+## 2026-10-20: change_parameter_type writes a parameter with an alias
+
+All through `refactor batch`; the golden fixtures by hand, their `out/`
+written by hand first and matched.
+
 ## 2026-10-20: A/B quality numbers when a file does not parse
 
 All through `refactor batch`. The test used `Quality.Unmeasured` before

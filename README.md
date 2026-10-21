@@ -575,6 +575,21 @@ hand or a tool got in the way.
         a read needing the old type under an interface) is listed by
         position in the refusal. T to *T is not among them: every read
         could then dereference nil.*
+      - **A parameter's type changed through an alias**, the way the
+        user changes one by hand (2026-10-20): declare an alias of the
+        old type (`type renderArg = string`, add_declaration), write the
+        parameter with it, change what the alias is, then fix what no
+        longer fits. Hugo's `layout ...string` to `args ...any` goes so.
+        - **Write a parameter with an identical type.** *Done (#193):
+          change_parameter_type with an alias of the parameter's type
+          changes only the declarations, every member of an interface
+          family's, variadic parameters too.*
+        - **`change_type`, an edit:** retarget an alias (or change a
+          defined type's underlying type), and list where values come
+          in and where they go out needing the old type, spread calls
+          (`f(xs...)`) among them, for the model to fix in the same
+          batch. An edit, not a refactoring, so that a batch with check
+          "end" checks it with those fixes (the user's decision).
       - **Later: one `change_signature`** taking the new signature, which
         works out the parameters added, removed, moved and retyped and
         the results, and needs a value at each call for a new one.

@@ -35,6 +35,14 @@ results are in `docs/cost-history.md`.
   model's own code: the project is to take type-safe code off the
   model, so it reasons at a higher level. Roadmap item 18 and
   `docs/type-errors.md` rank what to take over.
+- **A parameter's type changes through an alias** (2026-10-20): the
+  user's way by hand is to declare an alias of the old type, write the
+  parameter with it, then change the alias and fix what follows. So
+  change_parameter_type re-spells to an identical type (#193), and
+  `change_type`, which retargets the alias, is to be an **edit**, so
+  that a batch with check "end" checks it together with the fixes its
+  result lists (the user's decision; a refactoring there would have to
+  compile on its own).
 
 - **Every step must type-check** (2026-10-17). The user rejected letting
   edits leave type errors. Test-first still works: stubs for what a new
