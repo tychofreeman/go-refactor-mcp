@@ -275,6 +275,36 @@ refusals show gaps: a test using a type not declared yet (stubs are
 declared for functions and methods only), and a call whose results
 could not be inferred, so no stub.
 
+## 7. Tasks that call for the type-error help (Oct 20)
+
+`eval-tasks/mechanisms.json`: six small features of a seeded module
+(`testdata/notify`, a Notifier interface with two implementations),
+each with hidden tests, each asking for a change whose natural path
+needs one piece of the type-error help: a field a test sets first, an
+error result and a parameter on an interface method, a field's type
+changed to a named type, a helper passed as a value, the last use of
+a package removed. The mcp arm, 3 runs each, with the current server
+and with the one from e0682c2 (just before #181):
+
+| Run | Server | mcp | turns | gorefactor refusals |
+|---|---|---|---|---|
+| mech-before | e0682c2 | $2.31 · 4.16M · 16/18 | 135 | 14 |
+| mech-now | main after #199 | $2.25 · 4.26M · 17/18 | 138 | 11 |
+
+The help fired where the tasks called for it (field stubs in 3 of 3
+quiet runs, add_result on the interface family in 3 of 3, add_parameter
+on the family, change_field_type in 3 of 3), and the type-check
+refusals it targets went: send-error had 4 (a call of the old Send
+used as a value, too many return values, an import left unused) and
+now none; priority 1 and now none. But totals did not move: cost and
+turns are the same within noise. A type-check refusal costs a turn,
+and these runs had a few each; most turns read code. What is left:
+`UserID("u1")` in a test written first got no stub in every userid
+run of both arms (a type used only in conversions), and line ranges
+that cut a loop (6, both arms). The three failures were the task's:
+the model wrote its own TestSendErrors, which the hidden test's name
+clashed with; the hidden tests are now named TestAccept....
+
 ## What made the difference
 
 - **Smaller results** (#75, rename locations): the largest single win when

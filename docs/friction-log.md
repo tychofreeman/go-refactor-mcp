@@ -1553,3 +1553,10 @@ written by hand first and matched.
 All through `refactor batch`. The test used `Quality.Unmeasured` before
 it existed, and the new field stubs declared it (#183), which
 replace_text then gave its tag and comment.
+
+## 2026-10-20: tasks that call for the type-error help
+
+All through gorefactor: the seeded module, the hidden tests and the
+task file with create_file, the hidden tests' renames with replace_text.
+The reference solutions that validate the tasks are a scratch script,
+not committed.

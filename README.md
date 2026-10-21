@@ -601,6 +601,14 @@ hand or a tool got in the way.
         works out the parameters added, removed, moved and retyped and
         the results, and needs a value at each call for a new one.
         More general than the separate tools; harder to keep safe.
+    - **Measured on tasks that call for it** (`eval-tasks/mechanisms.json`,
+      cost-history section 7): the help fires and removes the type-check
+      refusals it targets, but totals do not move; those refusals are a
+      few turns of many. Left from those runs:
+      - **A stub for a type used only in conversions:** `UserID("u1")` in
+        a test written first, or `map[UserID]bool`, gets none; the
+        conversion's argument gives the underlying type (`type UserID
+        string`).
     - **Mechanical repairs with a note:** `:=` to `=`, exporting a helper
       another package calls, "already declared at ..." with how to
       replace it. *Undecided (2026-10-20). The user's direction: rather
