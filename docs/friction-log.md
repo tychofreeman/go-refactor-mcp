@@ -1565,3 +1565,11 @@ All through gorefactor: the seeded module, the hidden tests and the
 task file with create_file, the hidden tests' renames with replace_text.
 The reference solutions that validate the tasks are a scratch script,
 not committed.
+
+## 2026-10-20: the algebraic measure
+
+All through the `refactor` CLI built from the branch (the session's MCP
+served the main checkout, and the work was in a worktree), with batches
+of add_declaration, add_field, replace_statements and replace_text sent
+as JSON files. A local type unmarshalled from JSON first had unexported
+fields, so its arguments were silently empty; the test caught it.

@@ -654,6 +654,19 @@ hand or a tool got in the way.
       (`gocode.NoPackageError`); an ambiguous one still asks for
       `imports`.*
     - **Measure** by counting these refusals per run, by kind.
+19. **Work algebraically** (the user's thesis, `docs/algebraic.md`): code
+    as a structure reached by type-safe operations, with small edits at
+    the leaves, so the model thinks above keywords and syntax. In order:
+    - **Measure it.** *Done:* `refactor-tokens` separates the code the
+      model wrote from what the tools derived (the derived share). A
+      fresh model's mcp runs derive about a tenth of what changes.
+    - **Collect derivations** from the user, by posing small problems,
+      as recipes: the shape before, the operations, the shape after.
+    - **Catalog the missing operations**: what the code the model writes
+      through edits does, which no operation does yet.
+    - **Teach and measure:** recipes and planning a change as a
+      derivation, against the current instructions, on tasks with a
+      derivation as the reference solution.
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the

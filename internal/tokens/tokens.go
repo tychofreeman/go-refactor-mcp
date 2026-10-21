@@ -21,7 +21,9 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"slices"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -34,20 +36,43 @@ type ToolStats struct {
 	ContextTokens int // input and result tokens, once per later request that sent them
 }
 
+// AlgebraStats is how much of the code that applied gorefactor calls
+// changed the model wrote itself, and how much the tools derived, for one
+// kind of call (Algebra...).
+type AlgebraStats struct {
+	Kind       string
+	Calls      int // applied calls; a batch is one
+	Written    int // lines of code the model supplied: content, new, field, value, type
+	Changed    int // lines the results report as changed (calls that report them)
+	Derived    int // changed lines beyond those written
+	Unmeasured int // applied calls whose result reports no changed lines (a batch with report "summary")
+}
+
+// The kinds of call in Report.Algebra: only refactorings, only edits, or a
+// batch of both.
+const (
+	AlgebraRefactoring = "refactorings"
+	AlgebraEdit        = "edits"
+	AlgebraMixed       = "batches of both"
+)
+
 // Report is the token cost of one or more sessions.
 type Report struct {
-	Requests        int
-	BaseContext     int // context of the first request: system prompt, tools, CLAUDE.md
-	InputTokens     int // summed over requests, cached or not
-	OutputTokens    int
-	CostUSD         float64        // from claude -p's result, when the input has one
-	Turns           int            // likewise
-	Finished        bool           // whether the input ends with claude -p's result; a session cut off by a timeout does not
-	ToolTurns       int            // requests that called tools
-	SchemaOnlyTurns int            // of those, the ones that only loaded schemas (ToolSearch)
-	Refused         map[string]int // turns with a refused call, by the kind of the first (Refused...)
-	Reads           []ToolStats    // calls that read, by kind (inspect: file, Read, Grep, ...), most ContextTokens first
-	Tools           []ToolStats    // most ContextTokens first
+	Requests         int
+	BaseContext      int // context of the first request: system prompt, tools, CLAUDE.md
+	InputTokens      int // summed over requests, cached or not
+	OutputTokens     int
+	CostUSD          float64        // from claude -p's result, when the input has one
+	Turns            int            // likewise
+	Finished         bool           // whether the input ends with claude -p's result; a session cut off by a timeout does not
+	ToolTurns        int            // requests that called tools
+	SchemaOnlyTurns  int            // of those, the ones that only loaded schemas (ToolSearch)
+	Refused          map[string]int // turns with a refused call, by the kind of the first (Refused...)
+	Reads            []ToolStats    // calls that read, by kind (inspect: file, Read, Grep, ...), most ContextTokens first
+	Algebra          []AlgebraStats // applied gorefactor calls: what the model wrote and what the tools derived, by kind
+	RefactoringSteps int            // applied steps that were refactorings (a batch's steps counted one by one)
+	EditSteps        int            // and that were edits
+	Tools            []ToolStats    // most ContextTokens first
 }
 
 // The kinds of refused call in Report.Refused.
@@ -94,7 +119,8 @@ type call struct {
 	resultTokens            float64
 	after                   int // index of the first request that sent it
 	input                   json.RawMessage
-	refused                 string // the kind of refusal it got (Refused...), or ""
+	refused                 string       // the kind of refusal it got (Refused...), or ""
+	alg                     *algebraCall // for an applied gorefactor call, what it wrote and changed
 }
 
 type request struct {
@@ -159,6 +185,9 @@ func Analyze(r io.Reader) (*Report, error) {
 					c := calls[b.ToolUseID]
 					c.resultChars = textLen(b.Content)
 					c.refused = refusal(c, b.IsError, resultText(b.Content))
+					if strings.HasPrefix(c.name, "mcp__gorefactor__") {
+						c.alg = measureAlgebra(c, resultText(b.Content))
+					}
 					cur.gapChars += c.resultChars
 					cur.results = append(cur.results, c)
 				case b.Type == "text":
@@ -328,6 +357,13 @@ func report(reqs []*request) *Report {
 	for _, s := range byRead {
 		r.Reads = append(r.Reads, *s)
 	}
+	for _, q := range reqs {
+		for _, c := range q.calls {
+			if c.alg != nil {
+				r.addAlgebra(c.alg)
+			}
+		}
+	}
 	r.sortTools()
 	return r
 }
@@ -355,6 +391,207 @@ func (r *Report) countTurn(q *request) {
 		}
 		r.Refused[refused]++
 	}
+}
+
+// algebraCall is what one applied gorefactor call changed: how many lines
+// the model wrote, how many changed, and the kinds of its steps.
+type algebraCall struct {
+	kind                string
+	written, changed    int
+	measured            bool // the result reported its changed lines
+	refactorings, edits int  // steps of each kind
+}
+
+// refactoringTools are the operations that restructure code, as opposed
+// to the edits through which the model writes it.
+var refactoringTools = map[string]bool{
+	"rename": true, "extract_function": true, "extract_variable": true, "extract_struct": true,
+	"inline_function": true, "inline_variable": true, "move_declaration": true, "move_parameter": true,
+	"move_statement_up": true, "move_statement_down": true, "add_parameter": true, "remove_parameter": true,
+	"introduce_parameter": true, "change_parameter_type": true, "add_result": true, "change_field_type": true,
+	"change_type": true, "merge_duplicate_function": true, "function_to_method": true,
+	"method_to_function": true, "remove_dead_code": true, "invert_if": true, "remove_else": true,
+}
+
+var (
+	stepLine = regexp.MustCompile(`(?m)^\d+\. (\w+):`)
+	hunk     = regexp.MustCompile(`(?m)^@@ -\d+(?:,(\d+))? \+\d+(?:,(\d+))? @@`)
+	location = regexp.MustCompile(`^\s+\S+: ([\d, -]+)$`)
+)
+
+// measureAlgebra measures the call c of a gorefactor tool, whose result
+// is text; nil for a call that changed nothing.
+func measureAlgebra(c *call, text string) *algebraCall {
+	tool := strings.TrimPrefix(c.name, "mcp__gorefactor__")
+	if !strings.HasPrefix(text, "APPLIED ") {
+		return nil
+	}
+	// The steps the call made, and of each the Go file it names (\"\" when
+	// unknown, as for stubs a batch adds).
+	type step struct {
+		Tool string          `json:"tool"`
+		Args json.RawMessage `json:"args"`
+	}
+	var steps []step
+	if tool == "batch" {
+		var in struct {
+			Steps []step `json:"steps"`
+		}
+		json.Unmarshal(c.input, &in)
+		for i, m := range stepLine.FindAllStringSubmatch(text, -1) {
+			s := step{Tool: m[1]}
+			if i < len(in.Steps) {
+				s.Args = in.Steps[i].Args
+			}
+			steps = append(steps, s)
+		}
+	} else {
+		steps = []step{{Tool: tool, Args: c.input}}
+		if strings.HasPrefix(text, "APPLIED batch:") { // an edit run again with stubs
+			for _, m := range stepLine.FindAllStringSubmatch(text, -1)[1:] {
+				steps = append(steps, step{Tool: m[1]})
+			}
+		}
+	}
+	a := &algebraCall{}
+	for _, s := range steps {
+		if f := argFile(s.Args); f != "" && !strings.HasSuffix(f, ".go") {
+			continue // text that is not code, such as a README
+		}
+		a.written += writtenLines(s.Args)
+		switch {
+		case refactoringTools[s.Tool]:
+			a.refactorings++
+		case s.Tool != "check":
+			a.edits++
+		}
+	}
+	if a.refactorings == 0 && a.edits == 0 {
+		return nil
+	}
+	switch {
+	case a.refactorings > 0 && a.edits > 0:
+		a.kind = AlgebraMixed
+	case a.refactorings > 0:
+		a.kind = AlgebraRefactoring
+	default:
+		a.kind = AlgebraEdit
+	}
+	a.changed, a.measured = changedLines(text)
+	return a
+}
+
+// writtenLines counts the lines of code in a call's arguments: what the
+// model wrote for the tool to put in.
+func writtenLines(args json.RawMessage) int {
+	var m map[string]json.RawMessage
+	json.Unmarshal(args, &m)
+	n := 0
+	for _, k := range []string{"content", "new", "field", "value", "type"} {
+		var s string
+		if json.Unmarshal(m[k], &s) == nil && strings.TrimSpace(s) != "" {
+			n += strings.Count(strings.TrimRight(s, "\n"), "\n") + 1
+		}
+	}
+	return n
+}
+
+// argFile is the file a call's arguments name: file, or the first of
+// files; "" if none.
+func argFile(args json.RawMessage) string {
+	var a struct {
+		File  string   `json:"file"`
+		Files []string `json:"files"`
+	}
+	json.Unmarshal(args, &a)
+	if a.File == "" && len(a.Files) > 0 {
+		return a.Files[0]
+	}
+	return a.File
+}
+
+// changedLines counts the lines a result reports as changed: for each
+// hunk of its diff, the larger of the lines it removed and added, or the
+// lines a list of locations names. ok is false if it reports neither.
+func changedLines(text string) (n int, ok bool) {
+	count := func(s string) int {
+		if s == "" {
+			return 1
+		}
+		v, _ := strconv.Atoi(s)
+		return v
+	}
+	goFile, inList := true, false
+	for _, l := range strings.Split(text, "\n") {
+		switch {
+		case strings.HasPrefix(l, "+++ b/"):
+			goFile = strings.HasSuffix(l, ".go")
+			continue
+		case l == "changed lines:":
+			inList = true
+			continue
+		}
+		if m := hunk.FindStringSubmatch(l); m != nil {
+			if goFile {
+				n += max(count(m[1]), count(m[2]))
+			}
+			ok = true
+			continue
+		}
+		m := location.FindStringSubmatch(l)
+		if !inList || m == nil {
+			inList = inList && m != nil
+			continue
+		}
+		ok = true
+		if !strings.HasSuffix(strings.TrimSpace(strings.SplitN(l, ":", 2)[0]), ".go") {
+			continue
+		}
+		for _, part := range strings.Split(m[1], ",") {
+			from, to, isRange := strings.Cut(strings.TrimSpace(part), "-")
+			a, _ := strconv.Atoi(from)
+			b := a
+			if isRange {
+				b, _ = strconv.Atoi(to)
+			}
+			n += b - a + 1
+		}
+	}
+	return n, ok
+}
+
+// addAlgebra adds a's stats to r.
+func (r *Report) addAlgebra(a *algebraCall) {
+	r.RefactoringSteps += a.refactorings
+	r.EditSteps += a.edits
+	s := AlgebraStats{Kind: a.kind, Calls: 1, Written: a.written}
+	if a.measured {
+		s.Changed, s.Derived = a.changed, max(a.changed-a.written, 0)
+	} else {
+		s.Unmeasured = 1
+	}
+	r.Algebra = mergeAlgebra(r.Algebra, []AlgebraStats{s})
+}
+
+// mergeAlgebra adds src's stats to dst's, by kind, keeping the kinds in
+// the order refactorings, edits, batches of both.
+func mergeAlgebra(dst, src []AlgebraStats) []AlgebraStats {
+	for _, s := range src {
+		i := slices.IndexFunc(dst, func(d AlgebraStats) bool { return d.Kind == s.Kind })
+		if i < 0 {
+			dst = append(dst, AlgebraStats{Kind: s.Kind})
+			i = len(dst) - 1
+		}
+		d := &dst[i]
+		d.Calls += s.Calls
+		d.Written += s.Written
+		d.Changed += s.Changed
+		d.Derived += s.Derived
+		d.Unmeasured += s.Unmeasured
+	}
+	order := []string{AlgebraRefactoring, AlgebraEdit, AlgebraMixed}
+	slices.SortFunc(dst, func(a, b AlgebraStats) int { return slices.Index(order, a.Kind) - slices.Index(order, b.Kind) })
+	return dst
 }
 
 // carriedBy counts the requests from index first on that sent what came
@@ -401,6 +638,9 @@ func (r *Report) Merge(o *Report) {
 	}
 	r.Tools = mergeStats(r.Tools, o.Tools)
 	r.Reads = mergeStats(r.Reads, o.Reads)
+	r.Algebra = mergeAlgebra(r.Algebra, o.Algebra)
+	r.RefactoringSteps += o.RefactoringSteps
+	r.EditSteps += o.EditSteps
 	r.sortTools()
 }
 
@@ -483,6 +723,22 @@ func (r *Report) Markdown() string {
 		for _, s := range r.Reads {
 			row(s)
 		}
+	}
+	if len(r.Algebra) > 0 {
+		fmt.Fprintf(&sb, "\nsteps: %d refactorings, %d edits\n\n| algebra | calls | written | changed | derived | derived share | unmeasured |\n|---|---|---|---|---|---|---|\n", r.RefactoringSteps, r.EditSteps)
+		all := AlgebraStats{Kind: "all"}
+		arow := func(s AlgebraStats) {
+			share := "-"
+			if s.Changed > 0 {
+				share = fmt.Sprintf("%d%%", round(100*float64(s.Derived)/float64(s.Changed)))
+			}
+			fmt.Fprintf(&sb, "| %s | %d | %d | %d | %d | %s | %d |\n", s.Kind, s.Calls, s.Written, s.Changed, s.Derived, share, s.Unmeasured)
+		}
+		for _, s := range r.Algebra {
+			arow(s)
+			all = mergeAlgebra([]AlgebraStats{all}, []AlgebraStats{{Kind: "all", Calls: s.Calls, Written: s.Written, Changed: s.Changed, Derived: s.Derived, Unmeasured: s.Unmeasured}})[0]
+		}
+		arow(all)
 	}
 	return sb.String()
 }

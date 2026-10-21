@@ -273,3 +273,49 @@ func TestAnalyzeWaste(t *testing.T) {
 		}
 	}
 }
+
+func TestAnalyzeAlgebra(t *testing.T) {
+	var tr transcript
+	tr.request("r1", 1000, 10, callOf("t1", "mcp__gorefactor__rename", map[string]any{"file": "a.go", "name": "X", "new_name": "Y"}))
+	tr.textResult("t1", "APPLIED rename: renamed \"X\" to \"Y\"\n\nchanged lines:\n  a.go: 3-4, 6\n  b.go: 10\n")
+	tr.request("r2", 1100, 10, callOf("t2", "mcp__gorefactor__replace_statements", map[string]any{"file": "a.go", "function": "F", "content": "x := 1\nreturn x"}))
+	tr.textResult("t2", "APPLIED replace_statements: replaced the body of F in a.go\n\n--- a/a.go\n+++ b/a.go\n@@ -5 +5,2 @@\n-\treturn 0\n[2 lines added as written: lines 5-6]\n")
+	tr.request("r3", 1200, 10, callOf("t3", "mcp__gorefactor__batch", map[string]any{"steps": []any{
+		map[string]any{"tool": "extract_function", "args": map[string]any{"file": "a.go", "start_line": 3, "end_line": 9, "name": "g"}},
+		map[string]any{"tool": "replace_text", "args": map[string]any{"file": "a.go", "old": "g()", "new": "g(1)"}},
+	}}))
+	tr.textResult("t3", "APPLIED batch: 2 steps\n1. extract_function: extracted g\n2. replace_text: replaced 1 occurrence\n\n--- a/a.go\n+++ b/a.go\n@@ -3,7 +3 @@\n@@ -12,0 +6,9 @@\n")
+	tr.request("r4", 1300, 10, callOf("t4", "mcp__gorefactor__batch", map[string]any{"report": "summary", "steps": []any{
+		map[string]any{"tool": "add_declaration", "args": map[string]any{"file": "a.go", "content": "func h() {}"}},
+	}}))
+	tr.textResult("t4", "APPLIED batch: 1 step\n1. add_declaration: added 1 declaration to a.go\n")
+	tr.request("r5", 1400, 10, callOf("t5", "mcp__gorefactor__replace_statements", map[string]any{"file": "a.go", "function": "F", "content": "a\nb\nc"}))
+	tr.textResult("t5", "REFUSED replace_statements: does not type-check")
+	tr.request("r5b", 1450, 10, callOf("t6", "mcp__gorefactor__replace_text", map[string]any{"file": "README.md", "old": "a", "new": "b\nc"}))
+	tr.textResult("t6", "APPLIED replace_text: replaced 1 occurrence of the text in README.md\n\n--- a/README.md\n+++ b/README.md\n@@ -3 +3,2 @@\n")
+	tr.request("r6", 1500, 10, map[string]any{"type": "text", "text": "done"})
+
+	r, err := Analyze(strings.NewReader(tr.String()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]AlgebraStats{
+		AlgebraRefactoring: {Kind: AlgebraRefactoring, Calls: 1, Changed: 4, Derived: 4},
+		AlgebraEdit:        {Kind: AlgebraEdit, Calls: 2, Written: 3, Changed: 2, Unmeasured: 1},
+		AlgebraMixed:       {Kind: AlgebraMixed, Calls: 1, Written: 1, Changed: 16, Derived: 15},
+	}
+	if len(r.Algebra) != len(want) {
+		t.Fatalf("Algebra = %+v, want %+v", r.Algebra, want)
+	}
+	for _, s := range r.Algebra {
+		if s != want[s.Kind] {
+			t.Errorf("%s: %+v, want %+v", s.Kind, s, want[s.Kind])
+		}
+	}
+	if r.RefactoringSteps != 2 || r.EditSteps != 3 {
+		t.Errorf("steps: %d refactoring, %d edit; want 2 and 3", r.RefactoringSteps, r.EditSteps)
+	}
+	if md := r.Markdown(); !strings.Contains(md, "| all | 4 | 4 | 22 | 19 | 86% | 1 |") {
+		t.Errorf("Markdown lacks the totals row:\n%s", md)
+	}
+}
