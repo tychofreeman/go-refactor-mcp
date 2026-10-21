@@ -33,8 +33,8 @@ func New() *CreateFromUsage { return &CreateFromUsage{} }
 func (*CreateFromUsage) Name() string { return "create_from_usage" }
 
 func (*CreateFromUsage) Description() string {
-	return `Declare the functions code calls before they exist, as stubs ("create from usage"). This is an edit, not a refactoring, and the one step that may start from code that does not type-check: it must leave fewer errors and no new one.
-Use it after writing a test or code that calls functions not written yet: give the file with the calls. Every function it calls that is not declared gets a stub, or only those in names; a call pkg.F declares F in that package of the module, and a call x.M, where x is (or points to) a type of the module without a field or method M, declares the method M on that type, with a receiver like its other methods'. On a generic type, the method is written with its type parameters: called on a Stack[string], a string argument becomes a T parameter. If that type is an interface, M is added to it, with a stub on each type of the module that implemented it, so that they still do. A type of the module used as an interface it lacks methods of (assigned, passed or returned as one, e.g. var _ io.Writer = (*T)(nil)) gets stubs of those methods, with the interface's signatures.
+	return `Declare the functions and types code uses before they exist, as stubs ("create from usage"). This is an edit, not a refactoring, and the one step that may start from code that does not type-check: it must leave fewer errors and no new one.
+Use it after writing a test or code that calls functions not written yet: give the file with the calls. Every function it calls that is not declared gets a stub, or only those in names; a call pkg.F declares F in that package of the module, and a call x.M, where x is (or points to) a type of the module without a field or method M, declares the method M on that type, with a receiver like its other methods'. On a generic type, the method is written with its type parameters: called on a Stack[string], a string argument becomes a T parameter. If that type is an interface, M is added to it, with a stub on each type of the module that implemented it, so that they still do. A type of the module used as an interface it lacks methods of (assigned, passed or returned as one, e.g. var _ io.Writer = (*T)(nil)) gets stubs of those methods, with the interface's signatures. A function or method passed as a value where a function is needed (sort.Slice(xs, less), f(x.m)) gets the signature that place needs. A type made with keyed literals (T{name: v}, or []T{{name: v}}) is declared as a struct with those fields, typed as their values.
 Each parameter has its argument's type and is named after it (a variable or field) or its type. The results come from how the value is used: a call as a statement has none, a returned call has the function's results, err is an error and ok a bool, and a variable has the type it is compared with, passed as, assigned to or returned as. When the use does not tell, give them in results. The body is panic("not implemented").
 A stub goes in to_file; else a method goes in the file of its type, and a function in the calling file, if it is of that package and not a test; else in the file the test is named after (m.go for m_test.go), or the package's first file. The result's "chose:" lines give each signature and file: check them.`
 }
@@ -75,7 +75,8 @@ func (*CreateFromUsage) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 	if file == nil {
 		return nil, refactor.Refusef("file %s is not part of the loaded packages", a.File)
 	}
-	stubs := append(undeclared(ws, pkg, file), unimplemented(ws, pkg, file)...)
+	stubs := append(undeclaredTypes(pkg, file), undeclared(ws, pkg, file)...)
+	stubs = append(stubs, unimplemented(ws, pkg, file)...)
 	if len(a.Names) > 0 {
 		var chosen []stub
 		for _, n := range a.Names {
@@ -107,7 +108,7 @@ func (*CreateFromUsage) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 			choices = append(choices, d.choice)
 		}
 	}
-	edits, err := writeStubs(ws, decls)
+	edits, err := writeStubs(ws, decls, st.imports)
 	if err != nil {
 		return nil, err
 	}
@@ -118,8 +119,9 @@ func (*CreateFromUsage) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 	}, nil
 }
 
-// writeStubs writes decls into their files, importing what they use.
-func writeStubs(ws *workspace.Workspace, decls []decl) ([]edit.FileEdit, error) {
+// writeStubs writes decls into their files, importing what they use:
+// by the paths in paths for each file, where a name could mean several.
+func writeStubs(ws *workspace.Workspace, decls []decl, paths map[string][]string) ([]edit.FileEdit, error) {
 	var order []string
 	byFile := map[string][]decl{}
 	for _, d := range decls {
@@ -154,7 +156,7 @@ func writeStubs(ws *workspace.Workspace, decls []decl) ([]edit.FileEdit, error) 
 			return nil, err
 		}
 		adder := imports.New(ws, dpkg, dfile, src)
-		if _, err := gocode.AddImports(ws, dpkg, dfile, adder, dfile.Name.Pos(), code, nil); err != nil {
+		if _, err := gocode.AddImports(ws, dpkg, dfile, adder, dfile.Name.Pos(), code, paths[dest]); err != nil {
 			return nil, err
 		}
 		edits = append(edits, edit.FileEdit{Path: dest, Edits: append(tes, adder.Edits()...)})
@@ -175,16 +177,52 @@ type decl struct {
 
 // stubber declares the stubs for the calls of one file.
 type stubber struct {
-	ws     *workspace.Workspace
-	pkg    *packages.Package // of the file with the calls
-	file   *ast.File
-	caller string // its path
-	args   args
+	ws      *workspace.Workspace
+	pkg     *packages.Package // of the file with the calls
+	file    *ast.File
+	caller  string // its path
+	args    args
+	imports map[string][]string // by destination file: the packages its stubs' types are from
+}
+
+// writer is writer for code in the file dest, of the package at path:
+// a package dest imports is written by the name it imports it as, and
+// each package written is noted, so that dest imports that one.
+func (st *stubber) writer(dest, path string, recv *types.Named) func(types.Type) string {
+	names := map[string]string{}
+	if pkg, f := st.ws.FileSyntax(dest); f != nil {
+		for _, spec := range f.Imports {
+			p, _ := strconv.Unquote(spec.Path.Value)
+			switch {
+			case spec.Name != nil && spec.Name.Name != "_" && spec.Name.Name != ".":
+				names[p] = spec.Name.Name
+			case spec.Name == nil && pkg.Imports[p] != nil:
+				names[p] = pkg.Imports[p].Name
+			}
+		}
+	}
+	if st.imports == nil {
+		st.imports = map[string][]string{}
+	}
+	return writer(func(p *types.Package) string {
+		if p.Path() == path {
+			return ""
+		}
+		if !slices.Contains(st.imports[dest], p.Path()) {
+			st.imports[dest] = append(st.imports[dest], p.Path())
+		}
+		if n, ok := names[p.Path()]; ok {
+			return n
+		}
+		return p.Name()
+	}, recv)
 }
 
 // declare returns the declarations s needs.
 func (st *stubber) declare(s stub) ([]decl, error) {
 	switch {
+	case s.typ:
+		return st.declareType(s)
 	case s.method != nil:
 		return st.implement(s)
 	case s.recv != nil && types.IsInterface(s.recv):
@@ -200,7 +238,7 @@ func (st *stubber) declare(s stub) ([]decl, error) {
 	if err != nil {
 		return nil, err
 	}
-	sig, err := st.signature(s, writer(s.target.PkgPath, s.recv), used)
+	sig, err := st.signature(s, st.writer(dest, s.target.PkgPath, s.recv), used)
 	if err != nil {
 		return nil, err
 	}
@@ -210,9 +248,52 @@ func (st *stubber) declare(s stub) ([]decl, error) {
 	return []decl{funcDecl(st.ws, dest, sig)}, nil
 }
 
+// declareType declares s, a type, as a struct with the fields its keyed
+// literals give, typed as their values are.
+func (st *stubber) declareType(s stub) ([]decl, error) {
+	dest, err := destination(st.ws, s.target, st.caller, st.args.ToFile, "")
+	if err != nil {
+		return nil, err
+	}
+	write := st.writer(dest, s.target.PkgPath, nil)
+	var names []string
+	fieldTypes := map[string]string{}
+	for _, lit := range s.lits {
+		for _, e := range lit.Elts {
+			kv, ok := e.(*ast.KeyValueExpr)
+			if !ok {
+				continue
+			}
+			key, ok := kv.Key.(*ast.Ident)
+			if _, seen := fieldTypes[key.Name]; !ok || seen {
+				continue
+			}
+			t := typeOf(st.pkg.TypesInfo, kv.Value)
+			if t == nil {
+				return nil, refactor.Refusef("cannot tell the type of field %s of %s from %s; declare %s with add_declaration", key.Name, s.name, types.ExprString(kv.Value), s.name)
+			}
+			names = append(names, key.Name)
+			fieldTypes[key.Name] = write(t)
+		}
+	}
+	if len(names) == 0 {
+		return nil, refactor.Refusef("cannot tell the fields of %s: no literal of it names them; write one with field names (%s{name: value}), or declare %s with add_declaration", s.name, s.name, s.name)
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "\ntype %s struct {\n", s.name)
+	for _, n := range names {
+		fmt.Fprintf(&b, "\t%s %s\n", n, fieldTypes[n])
+	}
+	b.WriteString("}\n")
+	return []decl{{file: dest, at: -1, text: b.String(), choice: fmt.Sprintf("type %s struct with %s, in %s", s.name, strings.Join(names, ", "), st.ws.Rel(dest))}}, nil
+}
+
 // signature is that of s's function, from its call: "Name(params)
 // results".
 func (st *stubber) signature(s stub, write func(types.Type) string, used map[string]bool) (string, error) {
+	if s.sig != nil {
+		return s.name + sigString(s.sig, write), nil
+	}
 	line := st.ws.Fset.Position(s.call.Pos()).Line
 	params, err := parameters(st.pkg.TypesInfo, s.call, write, used)
 	if err != nil {
@@ -235,7 +316,7 @@ func (st *stubber) implement(s stub) ([]decl, error) {
 	if err != nil {
 		return nil, err
 	}
-	sig := sigString(s.method.Type().(*types.Signature), writer(s.target.PkgPath, s.recv))
+	sig := sigString(s.method.Type().(*types.Signature), st.writer(dest, s.target.PkgPath, s.recv))
 	recv := receiver(st.pkg.TypesInfo, s.recv, s.x)
 	return []decl{funcDecl(st.ws, dest, "("+recv+") "+s.name+sig)}, nil
 }
@@ -256,7 +337,7 @@ func (st *stubber) extend(s stub) ([]decl, error) {
 	if err != nil {
 		return nil, err
 	}
-	sig, err := st.signature(s, writer(obj.Pkg().Path(), s.recv), map[string]bool{})
+	sig, err := st.signature(s, st.writer(pos.Filename, obj.Pkg().Path(), s.recv), map[string]bool{})
 	if err != nil {
 		return nil, err
 	}
@@ -274,7 +355,7 @@ func (st *stubber) extend(s stub) ([]decl, error) {
 	for _, t := range implementers(st.ws, s.recv) {
 		home := st.ws.Fset.Position(t.Obj().Pos()).Filename
 		recv := receiver(st.pkg.TypesInfo, t, nil)
-		tsig, err := st.signature(s, writer(t.Obj().Pkg().Path(), nil), map[string]bool{strings.Fields(recv)[0]: true})
+		tsig, err := st.signature(s, st.writer(home, t.Obj().Pkg().Path(), nil), map[string]bool{strings.Fields(recv)[0]: true})
 		if err != nil {
 			return nil, err
 		}
@@ -356,22 +437,10 @@ func funcDecl(ws *workspace.Workspace, file, sig string) decl {
 	return decl{file: file, at: -1, text: "\nfunc " + sig + " {\n\tpanic(\"not implemented\")\n}\n", choice: fmt.Sprintf("func %s, in %s", sig, ws.Rel(file))}
 }
 
-// qualifier writes the types of the package at path unqualified, and
-// those of others by package name.
-func qualifier(path string) types.Qualifier {
-	return func(p *types.Package) string {
-		if p.Path() == path {
-			return ""
-		}
-		return p.Name()
-	}
-}
-
-// writer writes types for code in the package at path. For a method of
-// an instance of a generic type, recv, it writes the instance's type
+// writer writes types, qualifying packages by qual. For a method of an
+// instance of a generic type, recv, it writes the instance's type
 // arguments as the type's parameters: string as T for Stack[string].
-func writer(path string, recv *types.Named) func(types.Type) string {
-	qual := qualifier(path)
+func writer(qual types.Qualifier, recv *types.Named) func(types.Type) string {
 	var args []types.Type
 	var names []string
 	if recv != nil && recv.TypeArgs().Len() > 0 {
@@ -478,9 +547,12 @@ type stub struct {
 	name   string
 	target *packages.Package
 	call   *ast.CallExpr
-	recv   *types.Named // for a method, the type it is a method of
-	x      ast.Expr     // for a method, what it is called on
-	method *types.Func  // for a method to implement an interface, the interface's
+	recv   *types.Named     // for a method, the type it is a method of
+	x      ast.Expr         // for a method, what it is called on
+	method *types.Func      // for a method to implement an interface, the interface's
+	sig    *types.Signature // for a function or method passed as a value, the type the call it is passed to needs
+	typ    bool             // a type, not a function: a struct with the fields its literals, lits, name
+	lits   []*ast.CompositeLit
 }
 
 // undeclared returns the functions of the module file calls that are not
@@ -499,6 +571,11 @@ func undeclared(ws *workspace.Workspace, pkg *packages.Package, file *ast.File) 
 		call, ok := n.(*ast.CallExpr)
 		if !ok {
 			return true
+		}
+		for _, arg := range call.Args {
+			if key, s, ok := valueStub(ws, pkg, call, arg); ok {
+				add(key, s)
+			}
 		}
 		target, id := pkg, (*ast.Ident)(nil)
 		switch f := call.Fun.(type) {
@@ -523,6 +600,106 @@ func undeclared(ws *workspace.Workspace, pkg *packages.Package, file *ast.File) 
 		return true
 	})
 	return out
+}
+
+// undeclaredTypes returns the types file makes values of with composite
+// literals, T{...} or the elements of []T{...}, that nothing declares.
+func undeclaredTypes(pkg *packages.Package, file *ast.File) []stub {
+	info := pkg.TypesInfo
+	undefined := func(e ast.Expr) *ast.Ident {
+		if s, ok := e.(*ast.StarExpr); ok {
+			e = s.X
+		}
+		id, ok := e.(*ast.Ident)
+		if !ok || info.Uses[id] != nil || pkg.Types.Scope().Lookup(id.Name) != nil || types.Universe.Lookup(id.Name) != nil {
+			return nil
+		}
+		return id
+	}
+	byName := map[string]int{}
+	var out []stub
+	note := func(id *ast.Ident, lit *ast.CompositeLit) {
+		i, ok := byName[id.Name]
+		if !ok {
+			i = len(out)
+			byName[id.Name] = i
+			out = append(out, stub{name: id.Name, target: pkg, typ: true})
+		}
+		if lit != nil {
+			out[i].lits = append(out[i].lits, lit)
+		}
+	}
+	ast.Inspect(file, func(n ast.Node) bool {
+		lit, ok := n.(*ast.CompositeLit)
+		if !ok {
+			return true
+		}
+		if id := undefined(lit.Type); id != nil {
+			note(id, lit)
+			return true
+		}
+		var elt ast.Expr
+		switch t := lit.Type.(type) {
+		case *ast.ArrayType:
+			elt = t.Elt
+		case *ast.MapType:
+			elt = t.Value
+		}
+		if id := undefined(elt); id != nil {
+			note(id, nil)
+			for _, e := range lit.Elts {
+				if kv, ok := e.(*ast.KeyValueExpr); ok {
+					e = kv.Value
+				}
+				if el, ok := e.(*ast.CompositeLit); ok && el.Type == nil {
+					note(id, el)
+				}
+			}
+		}
+		return true
+	})
+	return out
+}
+
+// valueStub is the stub for arg, an argument of call, if it names a
+// function or method of the module that is not declared, passed as a
+// value where call needs a function: its key (as undeclared keys them)
+// and the stub, with the signature call needs.
+func valueStub(ws *workspace.Workspace, pkg *packages.Package, call *ast.CallExpr, arg ast.Expr) (string, stub, bool) {
+	info := pkg.TypesInfo
+	t := argumentType(info, call, arg)
+	if t == nil {
+		return "", stub{}, false
+	}
+	sig, ok := t.Underlying().(*types.Signature)
+	if !ok {
+		return "", stub{}, false
+	}
+	target, id := pkg, (*ast.Ident)(nil)
+	switch a := arg.(type) {
+	case *ast.Ident:
+		id = a
+	case *ast.SelectorExpr:
+		x, _ := a.X.(*ast.Ident)
+		if pn, ok := info.Uses[x].(*types.PkgName); ok {
+			target, id = pkg.Imports[pn.Imported().Path()], a.Sel
+			break
+		}
+		named := receiverType(ws, info, a)
+		if named == nil {
+			return "", stub{}, false
+		}
+		home, _ := ws.FileSyntax(ws.Fset.Position(named.Obj().Pos()).Filename)
+		if home == nil {
+			return "", stub{}, false
+		}
+		return types.TypeString(named.Origin(), nil) + "." + a.Sel.Name, stub{name: a.Sel.Name, target: home, call: call, recv: named, x: a.X, sig: sig}, true
+	}
+	if id == nil || target == nil || len(target.GoFiles) == 0 || !ws.Contains(target.GoFiles[0]) ||
+		info.Uses[id] != nil || target.Types.Scope().Lookup(id.Name) != nil || types.Universe.Lookup(id.Name) != nil {
+		return "", stub{}, false
+	}
+	return target.PkgPath + "." + id.Name, stub{name: id.Name, target: target, call: call, sig: sig}, true
 }
 
 // unimplemented returns the methods types of the module lack where file

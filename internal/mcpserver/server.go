@@ -51,7 +51,7 @@ Which tool, by what you want to do:
 - Split or join code (refactorings): extract_function, inline_function, extract_variable, inline_variable, extract_struct, merge_duplicate_function, function_to_method, method_to_function.
 - Change a signature and every call (refactorings): add_parameter, remove_parameter, move_parameter, introduce_parameter, change_parameter_type.
 - Simplify control flow (refactorings): invert_if, remove_else, move_statement_up, move_statement_down, remove_dead_code.
-- Add code (edits): create_file for any new file, Go or not (test fixtures, JSON, go.mod; several at once in one batch), add_declaration, add_field, add_case, add_element, insert_statements; create_from_usage declares the functions and methods code calls before they exist, and the methods a type lacks to implement an interface it is used as.
+- Add code (edits): create_file for any new file, Go or not (test fixtures, JSON, go.mod; several at once in one batch), add_declaration, add_field, add_case, add_element, insert_statements; create_from_usage declares the functions, methods and types code uses before they exist, and the methods a type lacks to implement an interface it is used as.
 - Change code (edits): replace_statements, replace_expression; replace_text for string literals, comments and files that are not Go.
 - Several steps in one call: batch. Then: check, and undo to revert a step.
 

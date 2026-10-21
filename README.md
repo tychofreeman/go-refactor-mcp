@@ -458,7 +458,12 @@ hand or a tool got in the way.
       reading overlaps it.
     - **Stubs for types.** A test written first that uses a type not
       declared yet (`stackEntry` in lazygit) is refused; stubs are
-      declared only for functions and methods.
+      declared only for functions and methods. *Done: a type made with
+      keyed literals gets a struct with those fields; and, from the same
+      run, a function or method passed as a value gets the signature its
+      place needs, a stub's types use the names the file imports their
+      packages as (Gitea's `packages_model`), and a name with no stub
+      because it is not called is now said so.*
 17. **Follow-ups from the code review** (`docs/code-review-2026-10-20.md`).
     Its high and medium items are fixed (#136-#154); these were found on
     the way, or are its low items:
