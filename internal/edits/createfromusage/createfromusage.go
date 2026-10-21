@@ -1296,6 +1296,12 @@ func expected(info *types.Info, path []ast.Node) types.Type {
 		if p.Type != nil {
 			return info.TypeOf(p.Type)
 		}
+	case *ast.KeyValueExpr:
+		if lit, ok := path[min(i+1, len(path)-1)].(*ast.CompositeLit); ok && p.Value == e {
+			return elementType(info, lit, p.Key)
+		}
+	case *ast.CompositeLit:
+		return elementType(info, p, nil)
 	case *ast.CaseClause:
 		// A case of a switch: compared with its tag, or else a condition.
 		if i+2 < len(path) && slices.Contains(p.List, e) {
@@ -1308,6 +1314,40 @@ func expected(info *types.Info, path []ast.Node) types.Type {
 		}
 	}
 	return nil
+}
+
+// elementType is the type an element of the composite literal lit must
+// have: given key, that of the struct field it names or a map's value;
+// else a slice's or array's element. It is nil where that says nothing:
+// an unkeyed struct element, or any.
+func elementType(info *types.Info, lit *ast.CompositeLit, key ast.Expr) types.Type {
+	t := info.TypeOf(lit)
+	if t == nil {
+		return nil
+	}
+	var elem types.Type
+	switch u := t.Underlying().(type) {
+	case *types.Struct:
+		if id, ok := key.(*ast.Ident); ok {
+			for f := range u.Fields() {
+				if f.Name() == id.Name {
+					elem = f.Type()
+				}
+			}
+		}
+	case *types.Slice:
+		elem = u.Elem()
+	case *types.Array:
+		elem = u.Elem()
+	case *types.Map:
+		if key != nil {
+			elem = u.Elem()
+		}
+	}
+	if elem != nil && types.IsInterface(elem) && elem.Underlying().(*types.Interface).Empty() {
+		return nil // any says nothing
+	}
+	return elem
 }
 
 // argumentType is the type of the parameter of call that e is the

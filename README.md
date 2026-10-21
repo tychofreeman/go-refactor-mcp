@@ -629,6 +629,19 @@ hand or a tool got in the way.
       steps through the last checkpoint that passed stay applied as one
       change (one undo), and the result says so; a batch with a kept
       part is not run again with check "end".*
+    - **One name that cannot be typed blocked every stub of its file.**
+      Found writing #198's test: `NewCheckpoint()`'s results could not
+      be told, so the fields the test also used got no stubs. *Done
+      (#199): the engine drops such a name, as it did a name not called,
+      declares the rest, and says why the dropped one has none; and a
+      call used as an element of a composite literal (a keyed struct
+      field, a map value, a slice or array element) takes that
+      element's type as its result.*
+    - **replace_text refuses a selector on a name a later step
+      declares** (`untypeable.FindStringSubmatch` before the step adding
+      `var untypeable`): it takes the name for a package to import, and
+      refuses when there is none, though the batch is checked at its
+      end. Leave such a name alone instead, for the type check to judge.
     - **Measure** by counting these refusals per run, by kind.
 
 Alongside: **edits**, steps that change behavior on purpose, so the

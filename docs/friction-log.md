@@ -1509,6 +1509,14 @@ engine's Expander, runExpanded and the inliner's Expand and callsOf
 with add_declaration, the arguments with add_field, the schema,
 description and docs with replace_text.
 
+## 2026-10-20: stubs past a name that cannot be typed
+
+All through `refactor batch`; the golden fixture's `out/` by hand first.
+One refusal in the way: a replace_text whose new code used
+`untypeable.FindStringSubmatch`, a variable the batch's next step
+declared, was refused as an unknown package to import; the steps went
+in the other order. On the roadmap (item 18).
+
 ## 2026-10-20: checkpoints in a batch
 
 All through `refactor batch`, the code and its tests in one batch of
