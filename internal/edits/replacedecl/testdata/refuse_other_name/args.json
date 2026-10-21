@@ -1,0 +1,1 @@
+{"file": "m.go", "name": "area", "content": "func size(w, h int) int { return w * h }"}

@@ -23,6 +23,9 @@ type target struct {
 	path string
 	decl ast.Decl
 	spec ast.Spec
+	// group is what goes with it, itself included: a use inside one of
+	// them does not count.
+	group []*target
 }
 
 // node is what goes: the spec, or the whole declaration.
@@ -108,9 +111,13 @@ func (t *target) check(ws *workspace.Workspace) error {
 		if n, ok := tn.Type().(*types.Named); ok && n.NumMethods() > 0 {
 			var ms []string
 			for i := 0; i < n.NumMethods(); i++ {
-				ms = append(ms, n.Method(i).Name())
+				if !t.grouped(n.Method(i)) {
+					ms = append(ms, n.Method(i).Name())
+				}
 			}
-			return refactor.Refusef("%s has methods (%s); remove them first", name, strings.Join(ms, ", "))
+			if len(ms) > 0 {
+				return refactor.Refusef("%s has methods (%s); remove them first, or with it in also", name, strings.Join(ms, ", "))
+			}
 		}
 	}
 	if vs, ok := t.valueSpec(); ok {
@@ -200,10 +207,26 @@ func (t *target) checkUnused(ws *workspace.Workspace) error {
 			if ws.Fset.Position(id.Pos()).Filename == t.path && from <= id.Pos() && id.Pos() < to {
 				continue // inside itself (a recursive call)
 			}
+			if t.inGroup(ws, id.Pos()) {
+				continue // inside what goes with it
+			}
 			return refactor.Refusef("%s is used at %s", t.obj.Name(), ws.Position(id.Pos()))
 		}
 	}
 	return nil
+}
+
+// inGroup reports whether pos is inside a declaration of t's group.
+func (t *target) inGroup(ws *workspace.Workspace, pos token.Pos) bool {
+	file := ws.Fset.Position(pos).Filename
+	return slices.ContainsFunc(t.group, func(g *target) bool {
+		return g.path == file && g.node().Pos() <= pos && pos < g.node().End()
+	})
+}
+
+// grouped reports whether obj goes with t, in its group.
+func (t *target) grouped(obj types.Object) bool {
+	return slices.ContainsFunc(t.group, func(g *target) bool { return g.obj.Pos() == obj.Pos() })
 }
 
 func origin(o types.Object) types.Object {

@@ -1,0 +1,1 @@
+{"file": "m.go", "name": "label", "content": "func label(n int) string { return strconv.Itoa(n) }"}
