@@ -575,9 +575,15 @@ hand or a tool got in the way.
         More general than the separate tools; harder to keep safe.
     - **Mechanical repairs with a note:** `:=` to `=`, exporting a helper
       another package calls, "already declared at ..." with how to
-      replace it.
+      replace it. *Undecided (2026-10-20). The user's direction: rather
+      than repairing an assignment the model wrote, let it ask for one
+      (assign these values to these names) and have the engine write the
+      right form: `:=`, `=`, `var`, `_` for results it does not want.*
     - **Refactorings toward a test written first:** run while the only
-      errors are in tests it fixes.
+      errors are in tests it fixes. *Done: a refactoring runs on code
+      whose only errors are in `_test.go` files, and like a fix must
+      fix some and add none. Stubs, declared for what a test calls, can
+      get there first; then the refactoring meets the stub.*
     - **Measure** by counting these refusals per run, by kind.
 
 Alongside: **edits**, steps that change behavior on purpose, so the

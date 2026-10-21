@@ -585,6 +585,21 @@ func TestSignatureEditPointsToTools(t *testing.T) {
 		"this edit changes the signature of Apply", "add_parameter")
 }
 
+// A refactoring may run while the only errors are in tests written first,
+// if it fixes some of them and adds none.
+func TestRefactoringTowardATest(t *testing.T) {
+	cs, dir := setup(t)
+	call(t, cs, "inspect", nil) // load the workspace
+	test := "package calc\n\nimport \"testing\"\n\nfunc TestTwice(t *testing.T) {\n\tif Twice(2) != 6 {\n\t\tt.Fail()\n\t}\n}\n"
+	if err := os.WriteFile(filepath.Join(dir, "calc", "twice_test.go"), []byte(test), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, _ := call(t, cs, "rename", map[string]any{"file": "calc/calc.go", "name": "Rate", "new_name": "Factor"})
+	mustContain(t, "rename Rate", out, "REFUSED", "undefined: Twice")
+	out, _ = call(t, cs, "rename", map[string]any{"file": "calc/calc.go", "name": "Apply", "new_name": "Twice"})
+	mustContain(t, "rename Apply", out, "APPLIED rename")
+}
+
 // TestRefactoringLoop walks the loop the model is meant to follow.
 func TestRefactoringLoop(t *testing.T) {
 	cs, dir := setup(t)
