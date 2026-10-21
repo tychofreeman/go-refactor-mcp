@@ -34,7 +34,8 @@ func (*Fold) Description() string {
 	return `Replace code that does what an existing function does with calls to it: every expression in the module that matches the function's body, with its parameters standing for any expressions of their types, becomes a call. The function stays. Not extract_function, which makes a new function from lines at one place: fold reuses a function that exists, written or extracted, at every other place.
 Use it after writing a small function to name what code does (a getter, a helper, a method that calls an old function), so the code uses it: u.Email becomes u.email() for func (u User) email() string { return u.Email }; truncate(subject, 20) inside a method of SMS becomes s.fit(subject) for func (s *SMS) fit(text string) string { return truncate(text, 20) }.
 A struct parameter the body uses only by its fields makes each field a hole, and the call passes a literal: Send(p, us, m) becomes Send2(p, Batch{Users: us, Message: m}) for func Send2(p string, b Batch) string { return Send(p, b.Users, b.Message) }, to move callers to a parameter object.
-Identify the function by file and name (Name or Type.Method). Its body must be one return of one value, using every parameter. Every other name in the body must mean the same at a match. A method's receiver is what matched it, or, when the body does not use it, the receiver of the method of the same type the match is in. With line, only matches starting on that line of file (or of in) are folded, to move callers over one at a time.
+A function without results whose body is statements folds runs of statements: the same statements in any block, its locals named anything there, become one call statement; so extract_function on lines in one place, then fold, replaces the same lines elsewhere. Not when the body returns, defers, jumps to a label or assigns a parameter, nor where the run declares a variable used after it, or an argument with effects or that could panic would move before the statements.
+Identify the function by file and name (Name or Type.Method). Its body must be one return of one value or statements without results, using every parameter. Every other name in the body must mean the same at a match. A method's receiver is what matched it, or, when the body does not use it, the receiver of the method of the same type the match is in. With line, only matches starting on that line of file (or of in) are folded, to move callers over one at a time.
 Leaves, and says why: a match that is assigned or has its address taken, one where an argument with effects or that could panic would be evaluated a different number of times or in another order, one in another package when the function is not exported, and one in no method of the receiver's type when the call needs the receiver from there.`
 }
 
@@ -65,8 +66,14 @@ type folder struct {
 	pkg   *packages.Package // fn's
 	fn    *types.Func
 	decl  *ast.FuncDecl
-	body  ast.Expr             // what fn returns: the pattern
-	holes map[types.Object]int // fn's parameters (and receiver), and how often the body uses each
+	body  ast.Expr   // what fn returns: the pattern; or nil, and
+	stmts []ast.Stmt // fn's statements: the pattern, for a function without results
+	root  ast.Node   // body or fn's block: where the pattern's names are
+	// locals are, while matching statements, the occurrence's variables
+	// standing for fn's locals; bodyLocals are fn's locals.
+	locals, bodyLocals map[types.Object]types.Object
+	done               [][2]token.Pos       // statements folded, which a later match must not overlap
+	holes              map[types.Object]int // fn's parameters (and receiver), and how often the body uses each
 	// fields are the struct parameters the body uses only by their fields:
 	// the fields, in the order the body first uses them. Each field is a
 	// hole of its own, and the call passes a literal of the struct.
@@ -117,14 +124,16 @@ func (f *folder) pattern(id *ast.Ident) error {
 	if sig.Variadic() {
 		return refactor.Refusef("%s is variadic; folding into variadic functions is not supported yet", name)
 	}
-	if len(f.decl.Body.List) != 1 {
-		return refactor.Refusef("fold takes a function whose body is one return statement of one value; %s's body has %d statements", name, len(f.decl.Body.List))
+	list := f.decl.Body.List
+	if ret, ok := list[0].(*ast.ReturnStmt); len(list) == 1 && ok && len(ret.Results) == 1 {
+		f.body, f.root = ret.Results[0], ret.Results[0]
+	} else if sig.Results().Len() > 0 {
+		return refactor.Refusef("fold takes a function whose body is one return statement of one value, or one without results; %s is neither", name)
+	} else if why := statementsOnly(f.decl.Body); why != "" {
+		return refactor.Refusef("%s %s, which a call of it would not do in place of its statements", name, why)
+	} else {
+		f.stmts, f.root = list, f.decl.Body
 	}
-	ret, ok := f.decl.Body.List[0].(*ast.ReturnStmt)
-	if !ok || len(ret.Results) != 1 {
-		return refactor.Refusef("fold takes a function whose body is one return statement of one value; %s's is not", name)
-	}
-	f.body = ret.Results[0]
 	info := f.pkg.TypesInfo
 	for _, fl := range f.decl.Type.Params.List {
 		if len(fl.Names) == 0 {
@@ -138,8 +147,12 @@ func (f *folder) pattern(id *ast.Ident) error {
 		f.recv = info.Defs[r.List[0].Names[0]]
 		f.holes[f.recv] = 0
 	}
-	ast.Inspect(f.body, func(n ast.Node) bool {
+	f.bodyLocals = map[types.Object]types.Object{}
+	ast.Inspect(f.root, func(n ast.Node) bool {
 		if id, ok := n.(*ast.Ident); ok {
+			if d := info.Defs[id]; d != nil {
+				f.bodyLocals[d] = d
+			}
 			if c, hole := f.holes[info.Uses[id]]; hole {
 				f.holes[info.Uses[id]] = c + 1
 			}
@@ -156,7 +169,7 @@ func (f *folder) pattern(id *ast.Ident) error {
 		}
 		var order []string
 		byField := 0
-		ast.Inspect(f.body, func(n ast.Node) bool {
+		ast.Inspect(f.root, func(n ast.Node) bool {
 			sel, ok := n.(*ast.SelectorExpr)
 			if id := identOf(selX(sel)); !ok || id == nil || info.Uses[id] != o {
 				return true
@@ -180,7 +193,64 @@ func (f *folder) pattern(id *ast.Ident) error {
 			return refactor.Refusef("%s's body does not use its parameter %s, so a call could not be built from what matches", name, o.Name())
 		}
 	}
+	if p := f.assignedHole(); f.stmts != nil && p != "" {
+		return refactor.Refusef("%s assigns its parameter %s, which in place of the call would assign what the caller passed", name, p)
+	}
 	return nil
+}
+
+// statementsOnly is why a body of statements does not do in place what a
+// call of it does: it returns, defers or jumps; or "".
+func statementsOnly(body *ast.BlockStmt) string {
+	why := ""
+	ast.Inspect(body, func(n ast.Node) bool {
+		switch n := n.(type) {
+		case *ast.FuncLit:
+			return false
+		case *ast.ReturnStmt:
+			why = "returns from inside its body"
+		case *ast.DeferStmt:
+			why = "defers a call"
+		case *ast.LabeledStmt:
+			why = "has a label"
+		case *ast.BranchStmt:
+			if n.Tok == token.GOTO || n.Label != nil {
+				why = "jumps to a label"
+			}
+		}
+		return why == ""
+	})
+	return why
+}
+
+// assignedHole is the name of a parameter (or the receiver) the body
+// assigns, increments or takes the address of, or "".
+func (f *folder) assignedHole() string {
+	info := f.pkg.TypesInfo
+	name := ""
+	hole := func(e ast.Expr) {
+		if id := identOf(e); id != nil && name == "" {
+			if _, ok := f.holes[info.Uses[id]]; ok {
+				name = id.Name
+			}
+		}
+	}
+	ast.Inspect(f.root, func(n ast.Node) bool {
+		switch n := n.(type) {
+		case *ast.AssignStmt:
+			for _, l := range n.Lhs {
+				hole(l)
+			}
+		case *ast.IncDecStmt:
+			hole(n.X)
+		case *ast.UnaryExpr:
+			if n.Op == token.AND {
+				hole(n.X)
+			}
+		}
+		return true
+	})
+	return name
 }
 
 // find folds every match of the pattern in the workspace, or with line
@@ -211,9 +281,14 @@ func (f *folder) find(in string, line int) error {
 				if fd, ok := n.(*ast.FuncDecl); ok && path == declFile && fd.Pos() == f.decl.Pos() {
 					return false // fn itself
 				}
+				if list := stmtList(n); f.stmts != nil && list != nil {
+					if err = f.foldStmts(p, file, list, append(stack, n), line); err != nil {
+						return false
+					}
+				}
 				x, isExpr := n.(ast.Expr)
 				pos := f.ws.Fset.Position(n.Pos())
-				if isExpr && !seen[pos] && (line == 0 || pos.Line == line) {
+				if isExpr && f.stmts == nil && !seen[pos] && (line == 0 || pos.Line == line) {
 					var folded bool
 					if folded, err = f.try(p, file, x, stack); folded {
 						seen[pos] = true
@@ -271,10 +346,29 @@ func (f *folder) try(p *packages.Package, file *ast.File, x ast.Expr, stack []as
 	if impure > 1 {
 		return skip("more than one argument has effects or could panic")
 	}
+	call, why, err := f.call(p, file, b, stack)
+	if err != nil {
+		return false, err
+	}
+	if why != "" {
+		return skip(why)
+	}
+	path := f.ws.Fset.Position(file.Pos()).Filename
+	if f.by[path] == nil {
+		f.order = append(f.order, path)
+	}
+	f.by[path] = append(f.by[path], edit.TextEdit{Start: f.ws.Fset.Position(x.Pos()).Offset, End: f.ws.Fset.Position(x.End()).Offset, NewText: call})
+	f.n++
+	return true, nil
+}
+
+// call is the call of fn that a match with holes b in file of package p,
+// inside stack, becomes; or why there is none.
+func (f *folder) call(p *packages.Package, file *ast.File, b map[holeKey]ast.Expr, stack []ast.Node) (string, string, error) {
 	path := f.ws.Fset.Position(file.Pos()).Filename
 	src, err := os.ReadFile(path)
 	if err != nil {
-		return false, err
+		return "", "", err
 	}
 	text := func(e ast.Expr) string {
 		return string(src[f.ws.Fset.Position(e.Pos()).Offset:f.ws.Fset.Position(e.End()).Offset])
@@ -301,7 +395,7 @@ func (f *folder) try(p *packages.Package, file *ast.File, x ast.Expr, stack []as
 			}
 			t, err := qualify(o.Type().(*types.Named).Obj().Name())
 			if err != nil {
-				return skip(err.Error())
+				return "", err.Error(), nil
 			}
 			var elts []string
 			for _, fld := range fs {
@@ -312,20 +406,16 @@ func (f *folder) try(p *packages.Package, file *ast.File, x ast.Expr, stack []as
 	}
 	call := f.fn.Name() + "(" + strings.Join(args, ", ") + ")"
 	if f.fn.Signature().Recv() != nil {
-		recv, why := f.receiver(info, b, stack, text)
+		recv, why := f.receiver(p.TypesInfo, b, stack, text)
 		if why != "" {
-			return skip(why)
+			return "", why, nil
 		}
-		call = recv + "." + call
-	} else if call, err = qualify(call); err != nil {
-		return skip(err.Error())
+		return recv + "." + call, "", nil
 	}
-	if f.by[path] == nil {
-		f.order = append(f.order, path)
+	if call, err = qualify(call); err != nil {
+		return "", err.Error(), nil
 	}
-	f.by[path] = append(f.by[path], edit.TextEdit{Start: f.ws.Fset.Position(x.Pos()).Offset, End: f.ws.Fset.Position(x.End()).Offset, NewText: call})
-	f.n++
-	return true, nil
+	return call, "", nil
 }
 
 // first reports whether the hole k is the first thing the body evaluates
@@ -428,6 +518,26 @@ func (f *folder) match(p, x ast.Expr, info *types.Info, b map[holeKey]ast.Expr) 
 	}
 	switch pp := p.(type) {
 	case *ast.Ident:
+		if pd := pinfo.Defs[pp]; pd != nil || pp.Name == "_" {
+			// A local fn declares: the occurrence's own name for it.
+			xi, ok := x.(*ast.Ident)
+			if !ok || pp.Name == "_" {
+				return ok && xi.Name == "_"
+			}
+			xd := info.Defs[xi]
+			if xd == nil || f.locals == nil {
+				return false
+			}
+			f.locals[pd] = xd
+			return true
+		}
+		if xo, local := f.locals[pinfo.Uses[pp]]; local {
+			xi, ok := x.(*ast.Ident)
+			return ok && info.Uses[xi] == xo
+		}
+		if _, local := f.bodyLocals[pinfo.Uses[pp]]; local {
+			return false
+		}
 		po := pinfo.Uses[pp]
 		if _, hole := f.holes[po]; hole && po != nil {
 			if prev, ok := b[holeKey{po, ""}]; ok {
@@ -526,6 +636,219 @@ func (f *folder) match(p, x ast.Expr, info *types.Info, b map[holeKey]ast.Expr) 
 		return ok && sub(pp.Key, xk.Key) && sub(pp.Value, xk.Value)
 	}
 	return false
+}
+
+// matchStmt reports whether x is the pattern's statement p.
+func (f *folder) matchStmt(p, x ast.Stmt, info *types.Info, b map[holeKey]ast.Expr) bool {
+	if p == nil || x == nil {
+		return p == nil && x == nil
+	}
+	expr := func(p, x ast.Expr) bool {
+		if p == nil || x == nil {
+			return p == nil && x == nil
+		}
+		return f.match(p, x, info, b)
+	}
+	exprs := func(p, x []ast.Expr) bool {
+		if len(p) != len(x) {
+			return false
+		}
+		for i := range p {
+			if !expr(p[i], x[i]) {
+				return false
+			}
+		}
+		return true
+	}
+	block := func(p, x *ast.BlockStmt) bool {
+		if p == nil || x == nil {
+			return p == nil && x == nil
+		}
+		if len(p.List) != len(x.List) {
+			return false
+		}
+		for i := range p.List {
+			if !f.matchStmt(p.List[i], x.List[i], info, b) {
+				return false
+			}
+		}
+		return true
+	}
+	switch pp := p.(type) {
+	case *ast.ExprStmt:
+		xs, ok := x.(*ast.ExprStmt)
+		return ok && expr(pp.X, xs.X)
+	case *ast.AssignStmt:
+		xs, ok := x.(*ast.AssignStmt)
+		return ok && xs.Tok == pp.Tok && exprs(pp.Rhs, xs.Rhs) && exprs(pp.Lhs, xs.Lhs)
+	case *ast.IncDecStmt:
+		xs, ok := x.(*ast.IncDecStmt)
+		return ok && xs.Tok == pp.Tok && expr(pp.X, xs.X)
+	case *ast.BlockStmt:
+		xs, ok := x.(*ast.BlockStmt)
+		return ok && block(pp, xs)
+	case *ast.IfStmt:
+		xs, ok := x.(*ast.IfStmt)
+		return ok && f.matchStmt(pp.Init, xs.Init, info, b) && expr(pp.Cond, xs.Cond) && block(pp.Body, xs.Body) && f.matchStmt(pp.Else, xs.Else, info, b)
+	case *ast.ForStmt:
+		xs, ok := x.(*ast.ForStmt)
+		return ok && f.matchStmt(pp.Init, xs.Init, info, b) && expr(pp.Cond, xs.Cond) && f.matchStmt(pp.Post, xs.Post, info, b) && block(pp.Body, xs.Body)
+	case *ast.RangeStmt:
+		xs, ok := x.(*ast.RangeStmt)
+		return ok && xs.Tok == pp.Tok && expr(pp.X, xs.X) && expr(pp.Key, xs.Key) && expr(pp.Value, xs.Value) && block(pp.Body, xs.Body)
+	case *ast.DeclStmt:
+		xs, ok := x.(*ast.DeclStmt)
+		pg, _ := pp.Decl.(*ast.GenDecl)
+		xg, _ := xs.Decl.(*ast.GenDecl)
+		if !ok || pg == nil || xg == nil || pg.Tok != xg.Tok || len(pg.Specs) != len(xg.Specs) {
+			return false
+		}
+		for i := range pg.Specs {
+			ps, _ := pg.Specs[i].(*ast.ValueSpec)
+			vs, _ := xg.Specs[i].(*ast.ValueSpec)
+			if ps == nil || vs == nil || len(ps.Names) != len(vs.Names) || (ps.Type == nil) != (vs.Type == nil) || !exprs(ps.Values, vs.Values) {
+				return false
+			}
+			if ps.Type != nil && !types.Identical(f.pkg.TypesInfo.TypeOf(ps.Type), info.TypeOf(vs.Type)) {
+				return false
+			}
+			for j := range ps.Names {
+				if !expr(ps.Names[j], vs.Names[j]) {
+					return false
+				}
+			}
+		}
+		return true
+	case *ast.EmptyStmt:
+		_, ok := x.(*ast.EmptyStmt)
+		return ok
+	}
+	return false
+}
+
+// foldStmts folds the runs of list, statements of a block inside stack,
+// that match the pattern's statements; with line, only one starting on
+// that line.
+func (f *folder) foldStmts(p *packages.Package, file *ast.File, list []ast.Stmt, stack []ast.Node, line int) error {
+	info := p.TypesInfo
+	n := len(f.stmts)
+	for i := 0; i+n <= len(list); i++ {
+		pos := f.ws.Fset.Position(list[i].Pos())
+		if f.inDone(list[i].Pos()) || line != 0 && pos.Line != line {
+			continue
+		}
+		b := map[holeKey]ast.Expr{}
+		f.locals = map[types.Object]types.Object{}
+		matched := true
+		for k := range f.stmts {
+			if !f.matchStmt(f.stmts[k], list[i+k], info, b) {
+				matched = false
+				break
+			}
+		}
+		f.locals = nil
+		if !matched {
+			continue
+		}
+		seq := list[i : i+n]
+		where := f.ws.Position(seq[0].Pos())
+		skip := ""
+		for _, e := range b {
+			if analysis.HasEffect(info, e) || analysis.MayPanic(info, e) != nil {
+				skip = types.ExprString(e) + " would be evaluated before the statements, not where it is"
+			}
+		}
+		if skip == "" {
+			if v := usedAfter(info, seq, stack); v != "" {
+				skip = "they declare " + v + ", which is used after them"
+			}
+		}
+		call := ""
+		if skip == "" {
+			var err error
+			if call, skip, err = f.call(p, file, b, stack); err != nil {
+				return err
+			}
+		}
+		if skip != "" {
+			f.skipped = append(f.skipped, where+": "+skip)
+			continue
+		}
+		path := f.ws.Fset.Position(file.Pos()).Filename
+		if f.by[path] == nil {
+			f.order = append(f.order, path)
+		}
+		f.by[path] = append(f.by[path], edit.TextEdit{Start: f.ws.Fset.Position(seq[0].Pos()).Offset, End: f.ws.Fset.Position(seq[n-1].End()).Offset, NewText: call})
+		f.done = append(f.done, [2]token.Pos{seq[0].Pos(), seq[n-1].End()})
+		f.n++
+		i += n - 1
+	}
+	return nil
+}
+
+// inDone reports whether pos is in statements already folded.
+func (f *folder) inDone(pos token.Pos) bool {
+	for _, d := range f.done {
+		if d[0] <= pos && pos < d[1] {
+			return true
+		}
+	}
+	return false
+}
+
+// usedAfter is the name of a variable seq declares at its top level that
+// the function it is in uses after it, or "".
+func usedAfter(info *types.Info, seq []ast.Stmt, stack []ast.Node) string {
+	declared := map[types.Object]bool{}
+	for _, s := range seq {
+		switch s := s.(type) {
+		case *ast.AssignStmt:
+			for _, l := range s.Lhs {
+				if id := identOf(l); id != nil && info.Defs[id] != nil {
+					declared[info.Defs[id]] = true
+				}
+			}
+		case *ast.DeclStmt:
+			ast.Inspect(s, func(n ast.Node) bool {
+				if id, ok := n.(*ast.Ident); ok && info.Defs[id] != nil {
+					declared[info.Defs[id]] = true
+				}
+				return true
+			})
+		}
+	}
+	end := seq[len(seq)-1].End()
+	var fn ast.Node
+	for i := len(stack) - 1; i >= 0 && fn == nil; i-- {
+		switch stack[i].(type) {
+		case *ast.FuncDecl, *ast.FuncLit:
+			fn = stack[i]
+		}
+	}
+	name := ""
+	if fn != nil {
+		ast.Inspect(fn, func(n ast.Node) bool {
+			if id, ok := n.(*ast.Ident); ok && id.Pos() >= end && declared[info.Uses[id]] && name == "" {
+				name = id.Name
+			}
+			return name == ""
+		})
+	}
+	return name
+}
+
+// stmtList is the statements a block, case or select clause holds, or
+// nil.
+func stmtList(n ast.Node) []ast.Stmt {
+	switch n := n.(type) {
+	case *ast.BlockStmt:
+		return n.List
+	case *ast.CaseClause:
+		return n.Body
+	case *ast.CommClause:
+		return n.Body
+	}
+	return nil
 }
 
 // sameObj reports whether a and b, from any variants of their packages,

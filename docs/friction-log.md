@@ -1621,3 +1621,11 @@ All through gorefactor: fixtures with create_file; the struct and its
 helpers with add_declaration; try and first replaced whole with
 replace_declaration (#204), the rest with replace_text, in one batch
 checked at its end.
+
+## 2026-10-21: fold, stage 3: statement bodies
+
+All through gorefactor: fixtures with create_file, the statement
+matching and the shared call builder with add_declaration, the rest
+with replace_text in one batch checked at its end. A fixture was wrong:
+`a+": "+b+"!"` is not the tree of `a+": "+text`, which the fixture now
+reaches the way the derivation does, through a variable.
