@@ -1835,6 +1835,12 @@ conflict in this log (two entries at the same place) resolved with
 replace_text. A second conflict there, merging main, resolved
 the same way.
 
+## 2026-10-21: fold and arguments that read shared memory
+
+All through gorefactor: the golden cases with create_file, the code
+with insert_statements and add_declaration in one batch, the docs with
+replace_text.
+
 ## 2026-10-21: freight-xl
 
 The module, its hidden tests and the task file were written by a
