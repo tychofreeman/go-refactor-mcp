@@ -1050,7 +1050,9 @@ hand or a tool got in the way.
         (*Done*: refused only where a value of the type may become an
         interface value, `analysis.BecomesInterface`; the first proof in
         the engine of item 25), the recipe in
-        `docs/derivations.md` run on lending-xl with the CLI, and a
+        `docs/derivations.md` run on lending-xl with the CLI (*Done*
+        for one kind: section 6, 27 derived steps, by hand one type,
+        a 6-line function, 3 expressions and 5 deletions), and a
         tool only if a fresh model fails the recipe.
     - **`inspect` by name** (the user, 2026-10-22): `names` reads
       several declarations in one call, each found in the module by

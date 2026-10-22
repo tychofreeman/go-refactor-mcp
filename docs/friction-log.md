@@ -2040,3 +2040,10 @@ the golden cases, add_declaration and replace_text for rename. By
 hand: one `sed` adding `Instances` to the test's `types.Info`, a
 field of a composite literal on a long line (add_element would have
 done it).
+
+## 2026-10-22: the recipe for a kind into types
+
+Docs only, through replace_text. In the lending-xl run itself (a
+copy, through the CLI), by hand: `type Book struct{}`, `kindOf`, three
+expressions (`"book"` to `Book{}`), and five case deletions by
+replace_text, for which there is no tool.

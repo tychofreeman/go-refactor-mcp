@@ -88,6 +88,64 @@ temporaries), but kept `Broadcast`, being exported, and
 `remove_dead_code` refuses exported code, so the rename met a clash: N.
 The migration at each call site is I.
 
+## 6. A kind into types, one at a time
+
+On `lending-xl` (2026-10-22): `Item.Kind` is a string (`"book"`, `"dvd"`,
+`"atlas"`) switched on in five functions; each kind should be a type.
+
+**Derivation (the user's; expand, migrate, contract):** widen the field
+to an interface type; give each switch an interface method that a
+value implementing it runs first; then for one kind at a time make its
+type, move its cases into the type's methods, send the kind's values
+through the type, and delete the cases, now dead; at the end narrow
+the field. Every step keeps behavior; only sending the values through
+the type changes code that runs, and the argument for it comes from
+reading the field's uses.
+
+**Recipe, for one kind (`"book"` into `Book`):**
+
+1. `change_field_type` of `Item.Kind` to `any`, then
+   `prepare_switch_for_types` on each switch, with one interface
+   (`Kind`) and the function's name as the method. A case of several
+   values is split into one each. `add_declaration` of
+   `type Book struct{}`. One batch.
+2. For each switch, the case's body into a method of `Book`, all
+   refactorings: `extract_function` of the body (`bookLoanDays`),
+   `add_parameter` `b Book` with value `Book{}` (before the others),
+   `function_to_method`, `rename` to the interface's method. The case
+   now reads `return (Book{}).LoanDays()`. The last rename makes `Book`
+   implement `Kind`, allowed since no `Book` value becomes an interface
+   value yet. One batch of 20 steps.
+3. `inspect` with `uses: ["Item.Kind"]`: what is done with the field
+   everywhere. Sending `Book{}` where `"book"` went is safe when no use
+   tells them apart: every switch now runs the same code for both, and
+   no `==` compares with `"book"`. Then the edits: where the field is
+   written from a kind's name read at run time (`Import`), a function
+   `kindOf` that returns `Book{}` for `"book"`; `Book{}` for `"book"` in
+   the tests.
+4. Delete each `case "book":`, now dead (`replace_text`).
+
+**Run:** with the CLI on a copy, four batches, the module's tests
+passing after each: 27 derived steps (1 widening, 5 preparations,
+20 refactorings, 1 check by `uses`); by hand, `type Book struct{}`,
+`kindOf` (6 lines), 3 expressions and 5 deletions. `uses` showed what
+grep would not: `Import` rejects unknown kinds by `LoanDays(it) == 0`,
+which `Book{}` passes.
+
+**What the run met:**
+- rename refused the last method, since `Book` would implement `Kind`
+  (fixed: refused only where a value may become an interface value).
+- `function_to_method` refuses a name an interface has, so the method
+  is made under a temporary name and renamed.
+- The methods land after each function; `move_declaration` can group
+  them with `Book`.
+- Deleting a dead case has no tool; `replace_text` does it.
+- Not reached yet: narrowing the field from `any` to `Kind` (no tool),
+  and the task's `Label(title string)` where the switch gave
+  `Label(it Item)` (introduce_parameter and remove_parameter on the
+  interface method).
+- `uses` of a type lists receivers and literals as reads: noise.
+
 ## The user's principle
 
 Not every operation will exist. Use the operations there are; where
