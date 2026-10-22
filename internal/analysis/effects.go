@@ -450,11 +450,14 @@ func (b *body) visit(n ast.Node) bool {
 		b.set(&s.Effect, "starts a goroutine")
 	case *ast.SendStmt:
 		b.set(&s.Effect, "sends on a channel")
+		b.set(&s.Unsafe, "sends on a channel, which might block")
 	case *ast.SelectStmt:
 		b.set(&s.Effect, "selects on channels")
+		b.set(&s.Unsafe, "selects on channels, which might block")
 	case *ast.UnaryExpr:
 		if n.Op == token.ARROW {
 			b.set(&s.Effect, "receives from a channel")
+			b.set(&s.Unsafe, "receives from a channel, which might block")
 		}
 	case *ast.ForStmt:
 		b.set(&s.Unsafe, "has a loop that might not finish")
@@ -462,8 +465,10 @@ func (b *body) visit(n ast.Node) bool {
 		switch info.TypeOf(n.X).Underlying().(type) {
 		case *types.Chan:
 			b.set(&s.Effect, "receives from a channel")
+			b.set(&s.Unsafe, "receives from a channel, which might block")
 		case *types.Signature:
 			b.set(&s.Effect, "ranges over a function")
+			b.set(&s.Unsafe, "ranges over a function, which could be any function")
 		case *types.Slice, *types.Map, *types.Pointer:
 			if !b.pointsPrivate(n.X) {
 				b.set(&s.Reads, "reads the elements of "+types.ExprString(n.X))

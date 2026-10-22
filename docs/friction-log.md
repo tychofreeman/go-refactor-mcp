@@ -1820,6 +1820,12 @@ with replace_text and add_declaration (one step refused: `range b` is
 not an expression for replace_expression), the docs with
 replace_text.
 
+## 2026-10-21: channel operations might not finish
+
+All through gorefactor: the code with replace_statements (one body
+refused: the content lacked its closing lines), the golden cases
+with create_file, the docs with replace_text.
+
 ## 2026-10-21: sort.Slice is not reflection on fields
 
 All through gorefactor: the golden cases with create_file, the fix
