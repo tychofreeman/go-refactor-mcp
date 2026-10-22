@@ -1800,6 +1800,12 @@ insert_statements and add_declaration in one batch (refused once:
 `analysis.MayPanic` returns a node, not an expression), the docs with
 replace_text.
 
+## 2026-10-21: fold matches text of a format
+
+All through gorefactor: the golden cases with create_file, the code
+with add_field, replace_statements, insert_statements and
+add_declaration in one batch, the docs with replace_text.
+
 ## 2026-10-21: sort.Slice is not reflection on fields
 
 All through gorefactor: the golden cases with create_file, the fix
