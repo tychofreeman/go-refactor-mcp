@@ -153,7 +153,11 @@ results are in `docs/cost-history.md`.
   without data yet, that thinking algebraically lets the model read
   much less, perhaps planning from a call tree's names, and that this
   goes hand in hand with deriving. The plan, to run in a later session:
-  `docs/reading-and-deriving.md`, roadmap item 24.
+  `docs/reading-and-deriving.md`, roadmap item 24. Step 2 (the
+  call-tree probe): from names and signatures alone the model found
+  where the change goes and planned the reference derivations; what
+  failed was the tools' interface (rename's `function`, argument
+  names) and a fold bug, not the lack of bodies.
 
 - **Loops and containers** (2026-10-20): the user asked for
   refactorings that convert between kinds of loop, and edits that make

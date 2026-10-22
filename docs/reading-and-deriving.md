@@ -113,6 +113,59 @@ as well as the call tree, the calls add nothing over `inspect`. If only
 the whole module plans well, bodies carry what the plan needs, and the
 hypothesis holds at most for the shapes the tools already find.
 
+**Done** (2026-10-22; `eval-tasks/learning/probe.py`, the views by
+`cmd/calltree` and `eval-tasks/learning/views`, the references in
+`eval-tasks/learning/refs/`, each made by the tools and passing its
+hidden test; 48 answers, $2.73, `eval-runs/calltree-probe`). The views
+of freight-xl: call tree 13.4K characters, skeleton 27.7K (larger than
+the code: its functions are so short that inspect's metrics outweigh
+the bodies it leaves out), whole module 22.4K.
+
+| task | view | A precision | A recall | B passed | B lines by hand |
+|---|---|---|---|---|---|
+| dispatch | call tree / skeleton / whole | 1.00 / 1.00 / 1.00 | 1.00 / 1.00 / 1.00 | 3 / 4 / 4 of 4 | 6 / 5 / 10 |
+| routes | call tree / skeleton / whole | 0.98 / 1.00 / 1.00 | 0.95 / 0.94 / 1.00 | 0 / 0 / 0 of 4 | 10 / 6 / 25 |
+| tail | call tree / skeleton / whole | 1.00 / 1.00 / 1.00 | 0.94 / 0.90 / 0.98 | 3 / 2 / 4 of 4 | 6 / 9 / 16 |
+| run | call tree / skeleton / whole | 1.00 / 1.00 / 1.00 | 1.00 / 1.00 / 1.00 | 1 / 0 / 2 of 4 | 8 / 8 / 8 |
+| all | call tree / skeleton / whole | 1.00 / 1.00 / 1.00 | 0.97 / 0.96 / 0.99 | 7 / 6 / 10 of 16 | |
+
+What it showed:
+
+- **Where: names are enough.** From the call tree alone the answers
+  named the functions to change with precision 1.0 and recall 0.97,
+  as well as from the whole module (0.99).
+- **The derivation: the plans were right; the steps failed on the
+  tools' interface.** Every answer for run planned wrapper, `fold`,
+  `inline_function`, `rename`, the reference's chain, from every view;
+  dispatch planned `fold` of a declared `dispatch`; tail `fold` and
+  `inline_function`. The refusals:
+  - `rename` with `function` set to the function's own name (8
+    answers, all on run): `function` names the function a local is
+    in, so `rename` of `Dispatch2` refused ("Dispatch2 declares no
+    Dispatch2"). A trap in the tool's interface. One more run answer
+    left code that did not type-check.
+  - The tools' argument names (8 answers: `expr` or `old` for
+    replace_expression's `expression`, `struct` for add_field's
+    `name`, replace_statements without `file`): the probe gave the
+    descriptions without the input schemas a session loads, so this
+    part is the probe's, not the model's.
+  - Removing `Road` while test files still set it in literals (7
+    answers, routes): no view shows the tests.
+  - `fold` itself (1 answer, dispatch): with the new `dispatch` in a
+    file of its own, folding all ten carriers left `log` unused in
+    freight.go, and fold does not remove an import its folds leave
+    unused. A bug.
+- The whole module passed more (10 against 7 of 16), mostly by chance
+  in which answers fell into the `rename` trap; bodies did not change
+  the plans.
+
+So names and signatures are enough to plan both where the change goes
+and the derivation that makes it, on these shapes; the calls add little
+over the skeleton for that (they agree), and the failures to apply are
+fixable in the tools: rename by name where `function` repeats it, fold
+removing the imports it leaves unused, and the test files' uses shown
+or reported. Step 3, on shapes no move names, is the open test.
+
 ## Step 3: shapes no move names, on a large module
 
 **Set C.** A new module the size of freight-xl, with many uses of
