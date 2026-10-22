@@ -70,6 +70,15 @@ results are in `docs/cost-history.md`.
   for main and internal packages. Checks that guard behavior inside
   the module (reflection, interfaces) stay. Roadmap item 22.
 
+- **A nil dereference may move past calls that return** (2026-10-21,
+  the user): folding near-duplicates into `book(&w.Charged, ...)`
+  takes the address before a log line, so a nil `w` panics without
+  logging. The user chose to allow it: it panics either way, only
+  what is printed before differs. Still refused past calls that
+  might not return (os.Exit, log.Fatal, a function value or
+  interface method) and past other panics. Roadmap item 23, whose
+  other parts let `fold` do the near-duplicates task in one call.
+
 - **Options over new tools** (2026-10-21): the pointer alias (gap A)
   is `pointer` on `extract_variable`, not a tool of its own: the model
   already reaches for extract_variable, and its refusal for a field

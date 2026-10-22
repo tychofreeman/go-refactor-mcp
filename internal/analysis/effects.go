@@ -82,6 +82,9 @@ func (e *Effects) call(info *types.Info, call *ast.CallExpr, private func(target
 		return builtinCall(info, call, b.Name())
 	}
 	if fn, ok := info.Uses[IdentOf(call.Fun)].(*types.Func); ok {
+		if stopsFuncs[fn.FullName()] {
+			return Summary{Effect: "calls " + name, Unsafe: "calls " + name + ", which does not return"}
+		}
 		if s, ok := stdCall(info, fn, call, private); ok {
 			return s
 		}
@@ -91,7 +94,7 @@ func (e *Effects) call(info *types.Info, call *ast.CallExpr, private func(target
 	}
 	fn := staticCallee(info, call)
 	if fn == nil {
-		return Summary{Effect: "calls " + name}
+		return Summary{Effect: "calls " + name, Unsafe: "calls " + name + ", which could be any function"}
 	}
 	var s Summary
 	if call.Ellipsis.IsValid() {
@@ -132,6 +135,18 @@ var effectFreeFuncs = map[string]PanicKind{
 	"strconv.Atoi":     NoPanic,
 	"strconv.ParseInt": NoPanic, "strconv.ParseUint": NoPanic,
 	"strconv.ParseFloat": NoPanic, "strconv.ParseBool": NoPanic,
+}
+
+// stopsFuncs are functions that end the program or the goroutine rather
+// than return.
+var stopsFuncs = map[string]bool{
+	"os.Exit": true, "runtime.Goexit": true,
+	"log.Fatal": true, "log.Fatalf": true, "log.Fatalln": true,
+	"log.Panic": true, "log.Panicf": true, "log.Panicln": true,
+	"(*log.Logger).Fatal": true, "(*log.Logger).Fatalf": true, "(*log.Logger).Fatalln": true,
+	"(*log.Logger).Panic": true, "(*log.Logger).Panicf": true, "(*log.Logger).Panicln": true,
+	"(*testing.common).FailNow": true, "(*testing.common).Fatal": true, "(*testing.common).Fatalf": true,
+	"(*testing.common).Skip": true, "(*testing.common).Skipf": true, "(*testing.common).SkipNow": true,
 }
 
 // syncCall is how a function that calls its function arguments only

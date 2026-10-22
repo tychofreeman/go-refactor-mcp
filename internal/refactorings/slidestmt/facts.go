@@ -31,8 +31,18 @@ type facts struct {
 	effect    string // a side effect
 	shared    string // a read of what other code can change
 	unsafe    string // something that could panic or not finish
+	nilDeref  string // something that could panic only by dereferencing a nil pointer
 	jump      string // how it leaves the block's flow ("returns")
 	crossable bool   // a statement may move past its jump
+}
+
+// panics is the first thing the statement does that could panic or not
+// finish, a nil dereference last, or "".
+func (ft *facts) panics() string {
+	if ft.unsafe != "" {
+		return ft.unsafe
+	}
+	return ft.nilDeref
 }
 
 // access is a part of a local variable.
@@ -271,6 +281,7 @@ func (ft *facts) addEffects(f *analysis.Func, s ast.Stmt, effects *analysis.Effe
 			set(&ft.effect, "assigns to "+types.ExprString(e))
 		}
 	}
+	addressed := analysis.Addressed(info, s)
 	walk := map[*ast.FuncLit]bool{} // literals that run during s
 	ast.Inspect(s, func(n ast.Node) bool {
 		switch n := n.(type) {
@@ -329,7 +340,11 @@ func (ft *facts) addEffects(f *analysis.Func, s ast.Stmt, effects *analysis.Effe
 				set(&ft.unsafe, "dereferences "+types.ExprString(n.X))
 			}
 		case *ast.SelectorExpr:
-			if sel := info.Selections[n]; sel != nil && sel.Kind() == types.FieldVal && !isFieldOfValue(info, n) {
+			if p, ok := addressed[n]; ok {
+				if p != nil {
+					set(&ft.nilDeref, "dereferences "+types.ExprString(p))
+				}
+			} else if sel := info.Selections[n]; sel != nil && sel.Kind() == types.FieldVal && !isFieldOfValue(info, n) {
 				set(&ft.shared, "reads "+types.ExprString(n)+" through a pointer")
 				set(&ft.unsafe, "reads "+types.ExprString(n)+" through a pointer")
 			}
@@ -422,8 +437,8 @@ func checkJumps(a, b *facts) error {
 			return refactor.Refusef("the statement on line %d %s, so moving it would change which code runs", j.line, j.jump)
 		case o.effect != "":
 			why = "has side effects (it " + o.effect + ")"
-		case o.unsafe != "":
-			why = "could panic or not finish (it " + o.unsafe + ")"
+		case o.panics() != "":
+			why = "could panic or not finish (it " + o.panics() + ")"
 		case len(o.writes) > 0:
 			why = "assigns " + o.writes[0].String()
 		default:
@@ -470,10 +485,14 @@ func checkIndependent(a, b *facts) error {
 			return refactor.Refusef("line %d has side effects (it %s) that could change what line %d reads (it %s)", e.line, e.effect, o.line, o.shared)
 		case o.unsafe != "":
 			return refactor.Refusef("line %d has side effects (it %s), and line %d could panic or not finish (it %s), so the side effects would happen in a case they did not, or the reverse", e.line, e.effect, o.line, o.unsafe)
+		case o.nilDeref != "" && e.unsafe != "":
+			// A nil dereference may move past side effects that finish: it
+			// panics either way, only with what they print before it or not.
+			return refactor.Refusef("line %d could panic (it %s), and line %d has side effects and could panic or not finish (it %s), so which happens first would change", o.line, o.nilDeref, e.line, e.unsafe)
 		}
 	}
-	if a.unsafe != "" && b.unsafe != "" {
-		return refactor.Refusef("both could panic or not finish (line %d %s; line %d %s), and which one does first would change", a.line, a.unsafe, b.line, b.unsafe)
+	if pa, pb := a.panics(), b.panics(); pa != "" && pb != "" && (a.unsafe != "" || b.unsafe != "") {
+		return refactor.Refusef("both could panic or not finish (line %d %s; line %d %s), and which one does first would change", a.line, pa, b.line, pb)
 	}
 	return nil
 }

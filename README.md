@@ -867,6 +867,31 @@ hand or a tool got in the way.
       whose other methods the type has); `function_to_method` takes
       calls in other packages when the name is exported.
 
+23. **Near-duplicates by `fold`** (the user, 2026-10-21): in every
+    learner run on billing (24 of 24), the near-duplicate task was
+    written by hand: the explorers' route (extract the append,
+    `method_to_function`, `introduce_parameter`,
+    `merge_duplicate_function`) took 26 to 60 calls. The short route,
+    the user's "delegate" move, is to declare the shared function once
+    and `fold` it into the copies; on billing it is refused for four
+    reasons. One PR each:
+    - **A nil dereference may move past calls that return** (the
+      user's decision). `book(&w.Charged, ...)` takes the address
+      before the log line it replaces runs, so a nil `w` panics
+      without logging. *Done:* `&p.f` counts as reading only `p`
+      (`analysis.Addressed`), and `introduce_parameter`,
+      `add_parameter` and the statement moves let a panic that is
+      only a nil dereference move past side effects, unless they
+      might not return: `os.Exit`, `log.Fatal` and the like, or a
+      call of a function value or interface method (`Summary.Unsafe`
+      now says so).
+    - `fold`: a pattern's `*p`, for a pointer parameter `p`, matches
+      any addressable expression `e`, passing `&e`.
+    - `fold`: string `+` is associative, so a hole matches a run of
+      a concatenation (`a.Bank+": "+inv.Ref+fmt.Sprintf(...)`).
+    - `fold`: in a printf-style call, a `%s` hole matches constant
+      text of the format that holds no `%` (`"wallet charge to %s"`).
+
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
 candidates and the evidence for each, gathered from the friction log.
