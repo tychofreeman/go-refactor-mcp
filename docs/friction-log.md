@@ -1784,6 +1784,14 @@ and create_file, the code with create_file, add_declaration,
 replace_declaration and replace_text in batches, the docs with
 replace_text.
 
+## 2026-10-21: a nil dereference past calls that return
+
+The code, the golden cases and the docs through gorefactor (one batch
+refused: insert_statements cannot add a case clause, so the switch was
+replaced whole; a case header is changed with replace_expression).
+By hand: three one-line `refused.txt` files written with printf, since
+what the refusal would say was settled only once the code ran.
+
 ## 2026-10-21: sort.Slice is not reflection on fields
 
 All through gorefactor: the golden cases with create_file, the fix

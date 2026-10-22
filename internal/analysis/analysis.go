@@ -450,6 +450,42 @@ func MayPanic(info *types.Info, e ast.Expr) ast.Node {
 	return found
 }
 
+// Addressed returns the field selections in n whose address an & takes
+// rather than reading them: the x.f of &x.f, and x.g of &x.g.f when g is
+// a struct value. Each maps to the pointer it goes through (x, when x is
+// a pointer), or nil: taking the address reads only that pointer, and
+// can panic only when it is nil.
+func Addressed(info *types.Info, n ast.Node) map[*ast.SelectorExpr]ast.Expr {
+	out := map[*ast.SelectorExpr]ast.Expr{}
+	ast.Inspect(n, func(n ast.Node) bool {
+		u, ok := n.(*ast.UnaryExpr)
+		if !ok || u.Op != token.AND {
+			return true
+		}
+		e := ast.Unparen(u.X)
+		for {
+			sel, ok := e.(*ast.SelectorExpr)
+			if !ok {
+				break
+			}
+			s := info.Selections[sel]
+			if s == nil || s.Kind() != types.FieldVal {
+				break
+			}
+			if s.Indirect() {
+				if len(s.Index()) == 1 && IsPointer(info.TypeOf(sel.X)) {
+					out[sel] = sel.X
+				}
+				break
+			}
+			out[sel] = nil
+			e = ast.Unparen(sel.X)
+		}
+		return true
+	})
+	return out
+}
+
 // DependsOnPosition reports whether the value of vs, a spec of a const
 // group, depends on where it stands in the group: it uses iota, the
 // spec's index, or it has no values and repeats an earlier spec's

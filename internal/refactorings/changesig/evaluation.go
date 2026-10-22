@@ -17,6 +17,9 @@ type risk struct {
 	why  string
 	// effect: a call or channel operation.
 	effect bool
+	// stops: for an effect, how it might not return ("calls os.Exit,
+	// which does not return"), or "".
+	stops string
 	// shared: it reads memory that other code can change (through a
 	// pointer, a slice or map element, a package variable).
 	shared bool
@@ -84,7 +87,7 @@ func riskOf(info *types.Info, n ast.Node, eff *analysis.Effects) (r risk, ok boo
 		if eff != nil {
 			switch s := eff.Call(info, n); {
 			case s.Effect != "":
-				r.why, r.effect = "has side effects", true
+				r.why, r.effect, r.stops = "has side effects", true, s.Unsafe
 			case s.Unsafe != "":
 				r.why, r.panics = "could panic: it "+s.Unsafe, true
 			case s.Reads != "":
@@ -93,11 +96,11 @@ func riskOf(info *types.Info, n ast.Node, eff *analysis.Effects) (r risk, ok boo
 			break
 		}
 		if analysis.HasEffect(info, n) {
-			r.why, r.effect = "has side effects", true
+			r.why, r.effect, r.stops = "has side effects", true, "calls "+types.ExprString(n.Fun)+", which might not return"
 		}
 	case *ast.UnaryExpr:
 		if analysis.HasEffect(info, n) {
-			r.why, r.effect = "has side effects", true
+			r.why, r.effect, r.stops = "has side effects", true, "receives from a channel, which might not finish"
 		}
 	case *ast.Ident:
 		if v, isVar := info.Uses[n].(*types.Var); isVar && v.Pkg() != nil && v.Parent() == v.Pkg().Scope() {
@@ -112,6 +115,7 @@ func riskOf(info *types.Info, n ast.Node, eff *analysis.Effects) (r risk, ok boo
 // those a call in e runs before it returns; nor are constant expressions.
 func risks(info *types.Info, e ast.Node, eff *analysis.Effects) []risk {
 	var out []risk
+	addressed := analysis.Addressed(info, e)
 	ast.Inspect(e, syncWalk(info, func(n ast.Node) bool {
 		if ex, ok := n.(ast.Expr); ok && info.Types[ex].Value != nil {
 			return false
@@ -119,12 +123,25 @@ func risks(info *types.Info, e ast.Node, eff *analysis.Effects) []risk {
 		if l := assignsOutside(info, n, e); l != nil {
 			out = append(out, risk{node: n, why: "has side effects: it assigns " + types.ExprString(l), effect: true})
 		}
-		if r, ok := riskOf(info, n, eff); ok {
+		sel, _ := n.(*ast.SelectorExpr)
+		if p, ok := addressed[sel]; ok {
+			if p != nil {
+				out = append(out, risk{node: n, why: "could panic: it dereferences " + types.ExprString(p), nilDeref: true})
+			}
+		} else if r, ok := riskOf(info, n, eff); ok {
 			out = append(out, r)
 		}
 		return true
 	}))
 	return out
+}
+
+// stopsNote is how a side effect might not finish, for a refusal, or "".
+func stopsNote(stops string) string {
+	if stops == "" {
+		return ""
+	}
+	return " that might not finish (it " + stops + ")"
 }
 
 // firstRisk returns the first risk of e that matches, or nil.
@@ -195,7 +212,9 @@ func (t *target) checkEvaluation(info *types.Info, file *ast.File, expr ast.Expr
 		case (r.effect || write) && shared != nil:
 			err = refactor.Refusef("%s reads memory that %s (at %s) could change before it", q, t.brief(n), t.ws.Position(n.Pos()))
 		case r.effect && canPanic != nil:
-			err = refactor.Refusef("%s %s, and %s (at %s) has side effects before it", q, canPanic.why, t.brief(n), t.ws.Position(n.Pos()))
+			if !canPanic.nilDeref || r.stops != "" {
+				err = refactor.Refusef("%s %s, and %s (at %s) has side effects before it%s", q, canPanic.why, t.brief(n), t.ws.Position(n.Pos()), stopsNote(r.stops))
+			}
 		case risky && canPanic != nil && (r.panics || r.nilDeref && canPanic.panics):
 			err = refactor.Refusef("%s %s, and %s (at %s) could panic before it", q, canPanic.why, t.brief(n), t.ws.Position(n.Pos()))
 		}

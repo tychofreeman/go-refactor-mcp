@@ -169,7 +169,7 @@ func TestEffectsFunc(t *testing.T) {
 		"callsBump":  {true, true, false},
 		"loop":       {false, false, true},
 		"recursive":  {true, false, false},
-		"iface":      {true, false, false},
+		"iface":      {true, false, true},
 		"printIt":    {true, false, false},
 		"aliasWrite": {true, true, true},
 		"visit":      {false, true, false},
