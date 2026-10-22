@@ -2007,3 +2007,8 @@ lending-xl with the CLI.
 All through gorefactor: rename for the types and the test, move_file
 for the file and its golden cases, replace_text for the strings and
 docs.
+
+## 2026-10-22: the tool budget
+
+All through gorefactor: add_declaration for `TestToolBudget`,
+replace_text for its limits and the docs.
