@@ -1025,8 +1025,10 @@ hand or a tool got in the way.
         converts an untyped constant compared with or written to it
         when its default type is not the old one (`kind("dvd")`).
         *Done* (lending-xl's `Item.Kind`: 17 uses).
-      - The guard: `add_interface_guard` declares the interface
-        (or adds the method to it) and puts before the switch
+      - Preparing the switch: `prepare_switch_for_types` makes a
+        value that implements the interface run its method, and the
+        switch the rest: it declares the interface (or adds the
+        method to it) and puts before the switch
         `if k, ok := it.Kind.(Kind); ok { return k.Days() }`.
         *Done* (lending-xl: widening and the five guards in one
         batch, its tests pass).
@@ -2253,8 +2255,10 @@ A `default` that only nil could reach now is kept for nil, or dropped
 when there is a `case nil`; a note says so. Adding a method to an
 exported interface notes that the module's API changed.
 
-`add_interface_guard`, for a switch on a value, is the first step of
-moving its cases into types one at a time: it puts before the switch
+`prepare_switch_for_types`, for a switch on a value, is the first step
+of moving its cases into types one at a time: a value that implements
+the interface runs its method, the switch the rest. It puts before the
+switch
 `if k, ok := tag.(Kind); ok { return k.m(args) }` (with no case
 returning, `k.m(args)` and the switch in the else), and declares
 `Kind` with the method `m`, or adds `m` to it. The tag must be an

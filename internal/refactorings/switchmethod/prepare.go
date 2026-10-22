@@ -17,26 +17,26 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
 
-// Guard is the "add_interface_guard" refactoring.
-type Guard struct{}
+// PrepareForTypes is the "prepare_switch_for_types" refactoring.
+type PrepareForTypes struct{}
 
-// NewGuard returns the add_interface_guard refactoring.
-func NewGuard() *Guard { return &Guard{} }
+// NewPrepareForTypes returns the prepare_switch_for_types refactoring.
+func NewPrepareForTypes() *PrepareForTypes { return &PrepareForTypes{} }
 
-func (*Guard) Name() string { return "add_interface_guard" }
+func (*PrepareForTypes) Name() string { return "prepare_switch_for_types" }
 
-func (*Guard) Description() string {
-	return `Put before a switch on a value a call of an interface's method, for a value that implements the interface: the first step of turning the cases into types one at a time. Nothing implements the method yet, so the switch still does everything. With interface Kind and method Days,
+func (*PrepareForTypes) Description() string {
+	return `Prepare a switch on a value for its cases to move into types one at a time, each case becoming the method of a type that implements an interface: a value that implements the interface runs its method, and the switch handles the rest. No type implements it yet, so nothing changes until a case moves. With interface Kind and method Days,
   func Days(it Item) int { switch it.Kind { case "book": return 21; case "dvd": return 7 }; return 0 }
 becomes
   type Kind interface { Days() int }
   func Days(it Item) int { if k, ok := it.Kind.(Kind); ok { return k.Days() }; switch it.Kind { ... }; return 0 }
 The switch's tag must be an interface (change_field_type to any first). The interface is declared before the function, or gets the method when it exists. The variables the cases use become the method's parameters. Every case must return, or none (then the switch goes in the else).
 Identify the switch by file and line, or by function when it is that function's only switch.
-Refuses, saying why: a type that already implements the interface with the method, a case that leaves other than by return or assigns a variable it uses, a tag the guard would evaluate again with another value.`
+Refuses, saying why: a type that already implements the interface with the method, a case that leaves other than by return or assigns a variable it uses (it could not become a method), a tag that would be evaluated again with another value.`
 }
 
-func (*Guard) InputSchema() json.RawMessage {
+func (*PrepareForTypes) InputSchema() json.RawMessage {
 	return json.RawMessage(`{
   "type": "object",
   "properties": {
@@ -51,21 +51,21 @@ func (*Guard) InputSchema() json.RawMessage {
 }`)
 }
 
-type guardArgs struct {
+type prepareArgs struct {
 	args
 	Interface string `json:"interface"`
 }
 
-// A guard is a switch on a value that gets an interface's method called
-// before it.
-type guard struct {
+// A preparer readies a switch on a value for its cases to move into
+// types: a value that implements the interface runs its method first.
+type preparer struct {
 	*switcher
 	name string // the interface's
 }
 
 // Plan checks preconditions and computes the edits.
-func (*Guard) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
-	var a guardArgs
+func (*PrepareForTypes) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
+	var a prepareArgs
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
@@ -78,7 +78,7 @@ func (*Guard) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan
 	if err != nil {
 		return nil, err
 	}
-	g := &guard{switcher: s, name: a.Interface}
+	g := &preparer{switcher: s, name: a.Interface}
 	for _, check := range []func() error{g.checkTag, g.collectCases, g.checkInterface, g.checkBodies, g.checkUnimplemented} {
 		if err := check(); err != nil {
 			return nil, err
@@ -88,14 +88,14 @@ func (*Guard) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan
 }
 
 // checkTag checks the switch: it has a tag of an interface type, which
-// the guard can evaluate again.
-func (g *guard) checkTag() error {
+// the new code can evaluate again.
+func (g *preparer) checkTag() error {
 	sw := g.stmt.(*ast.SwitchStmt)
 	if err := g.checkPlace(sw.Init); err != nil {
 		return err
 	}
 	if sw.Tag == nil {
-		return refactor.Refusef("the switch at %s has no tag; the guard needs a value to test", g.at(sw))
+		return refactor.Refusef("the switch at %s has no tag, so there is no value whose cases could move into types", g.at(sw))
 	}
 	g.subject = sw.Tag
 	if t := g.info.TypeOf(sw.Tag); !types.IsInterface(t) {
@@ -106,7 +106,7 @@ func (g *guard) checkTag() error {
 
 // collectCases takes every case but default: their code is the method's
 // to come.
-func (g *guard) collectCases() error {
+func (g *preparer) collectCases() error {
 	for _, st := range g.block.List {
 		if cc := st.(*ast.CaseClause); cc.List != nil {
 			g.cases = append(g.cases, kase{clause: cc})
@@ -119,7 +119,7 @@ func (g *guard) collectCases() error {
 }
 
 // checkInterface finds the interface, or checks that its name is free.
-func (g *guard) checkInterface() error {
+func (g *preparer) checkInterface() error {
 	o := g.pkg.Types.Scope().Lookup(g.name)
 	if o == nil {
 		if types.Universe.Lookup(g.name) != nil {
@@ -135,7 +135,7 @@ func (g *guard) checkInterface() error {
 	tn, _ := o.(*types.TypeName)
 	named, _ := o.Type().(*types.Named)
 	if tn == nil || tn.IsAlias() || named == nil || !types.IsInterface(named) || named.TypeParams().Len() > 0 {
-		return refactor.Refusef("%s is declared at %s, and is not an interface the guard can use; choose another name", g.name, g.ws.Position(o.Pos()))
+		return refactor.Refusef("%s is declared at %s, and is not an interface the types could implement; choose another name", g.name, g.ws.Position(o.Pos()))
 	}
 	it := named.Underlying().(*types.Interface)
 	for i := range it.NumMethods() {
@@ -150,7 +150,7 @@ func (g *guard) checkInterface() error {
 // checkUnimplemented refuses when a type already implements the
 // interface with the method: a value of it in the tag would call the
 // method instead of running the switch.
-func (g *guard) checkUnimplemented() error {
+func (g *preparer) checkUnimplemented() error {
 	var params []*types.Var
 	for _, v := range g.params {
 		params = append(params, types.NewParam(token.NoPos, g.pkg.Types, v.Name(), v.Type()))
@@ -185,7 +185,7 @@ func (g *guard) checkUnimplemented() error {
 
 // fresh returns base, or base with a number, a name that neither the
 // switch nor the call uses.
-func (g *guard) fresh(base string) string {
+func (g *preparer) fresh(base string) string {
 	used := map[string]bool{}
 	ast.Inspect(g.stmt, func(n ast.Node) bool {
 		if id, ok := n.(*ast.Ident); ok {
@@ -203,9 +203,10 @@ func (g *guard) fresh(base string) string {
 	return name
 }
 
-// plan puts the guard before the switch, or the switch in its else, and
+// plan puts the call of the method before the switch, or the switch in
+// its else, and
 // declares the interface or adds the method to it.
-func (g *guard) plan() (*refactor.Plan, error) {
+func (g *preparer) plan() (*refactor.Plan, error) {
 	path := g.ws.Fset.Position(g.fd.Pos()).Filename
 	adder := imports.New(g.ws, g.pkg, g.file, g.src)
 	q := func(p *types.Package) string {
@@ -226,7 +227,7 @@ func (g *guard) plan() (*refactor.Plan, error) {
 	}
 	edits := []edit.TextEdit{e}
 	var fes []edit.FileEdit
-	summary := fmt.Sprintf("added method %s to interface %s", g.method, g.name)
+	summary := fmt.Sprintf("method %s added to %s", g.method, g.name)
 	var notes []string
 	if g.iface == nil {
 		start := g.fd.Pos()
@@ -234,7 +235,7 @@ func (g *guard) plan() (*refactor.Plan, error) {
 			start = g.fd.Doc.Pos()
 		}
 		edits = append(edits, edit.TextEdit{Start: g.off(start), End: g.off(start), NewText: "type " + g.name + " interface {\n\t" + g.signature(q) + "\n}\n\n"})
-		summary = fmt.Sprintf("declared interface %s with method %s", g.name, g.method)
+		summary = fmt.Sprintf("%s declared, with method %s", g.name, g.method)
 	} else {
 		ifaceEdits, ifacePath, err := g.interfaceEdit(path, adder)
 		if err != nil {
@@ -251,8 +252,9 @@ func (g *guard) plan() (*refactor.Plan, error) {
 	}
 	fes = append(fes, edit.FileEdit{Path: path, Edits: append(edits, adder.Edits()...)})
 	return &refactor.Plan{
-		Summary: fmt.Sprintf("%s, and before the switch of %s a guard that calls it for a value of %s that implements %s (nothing does yet)", summary, locate.FuncName(g.fd), g.text(g.subject), g.name),
-		Edits:   edit.Merge(fes),
-		Notes:   notes,
+		Summary: fmt.Sprintf("prepared the switch of %s for its cases to move into types: a value of %s that implements %s runs its %s method, the switch the rest (%s); no type implements it yet",
+			locate.FuncName(g.fd), g.text(g.subject), g.name, g.method, summary),
+		Edits: edit.Merge(fes),
+		Notes: notes,
 	}, nil
 }

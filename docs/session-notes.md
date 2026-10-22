@@ -110,6 +110,13 @@ results are in `docs/cost-history.md`.
   ("Refuses, saying why: ..."). Measured on freight-xl (cost-history
   9): about the same cost, half the refused calls, no tool lost.
 
+- **Names and results say the intent** (2026-10-22, the user, on
+  `add_interface_guard`, renamed `prepare_switch_for_types`): a
+  tool's name, description and result say what the step is for, not
+  how it does it (the guard is the mechanism; preparing a switch for
+  its cases to move into types is the intent). The mechanism comes
+  after, in the example.
+
 - **Options over new tools** (2026-10-21): the pointer alias (gap A)
   is `pointer` on `extract_variable`, not a tool of its own: the model
   already reaches for extract_variable, and its refusal for a field

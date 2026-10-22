@@ -2001,3 +2001,9 @@ batch of 39 steps written by a Python script (too long to send
 inline). One mistake there: move_file's argument is `file`, not
 `from`, fixed in the JSON before sending. Tried on a copy of
 lending-xl with the CLI.
+
+## 2026-10-22: prepare_switch_for_types, the name
+
+All through gorefactor: rename for the types and the test, move_file
+for the file and its golden cases, replace_text for the strings and
+docs.
