@@ -171,6 +171,7 @@ results are in `docs/cost-history.md`.
   and reading was alike in every arm. The method transfers only
   through operations that exist; the runs name the missing ones
   (rename of an embedded field, a switch on a kind into methods).
+  The first is done: rename makes an embedded field a named one.
 
 - **Loops and containers** (2026-10-20): the user asked for
   refactorings that convert between kinds of loop, and edits that make

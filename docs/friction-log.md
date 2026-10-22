@@ -1962,3 +1962,12 @@ checked at its end, then the command with add_declaration (its import
 added by the tool) and replace_text; the new code read back with
 `refactor inspect` itself. Until now cloud sessions read code with
 sed, grep and Read, since the CLI had no inspect.
+
+## 2026-10-22: rename of an embedded field
+
+All through gorefactor: the golden cases with create_file, the code
+with replace_text and add_declaration in batches, the docs with
+replace_text. One refusal cost a call: add_declaration's `after`
+needs `renamer.checkReflected` for a method, not the bare name. Tried
+on lending-xl and the extract_struct example with the CLI, in scratch
+copies made with cp and printf.
