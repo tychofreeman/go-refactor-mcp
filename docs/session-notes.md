@@ -125,6 +125,12 @@ results are in `docs/cost-history.md`.
   for `book`, even the baseline; the learned arm's long recipe for it
   then cost turns. A lesson that names a workaround goes stale when
   the tools improve: prefer moves that name general operations.
+  On a larger module (`freight-xl`, cost-history 9) the user's moves
+  cost 25% less than the baseline and wrote 43% fewer lines by hand
+  (13% on billing): the first sign that the saving grows with the
+  number of uses a change has. The A/B harness copies the module
+  from the working tree for each run: stay on the branch that has
+  it until the run ends (a checkout of main mid-run broke 8 runs).
 
 - **Loops and containers** (2026-10-20): the user asked for
   refactorings that convert between kinds of loop, and edits that make

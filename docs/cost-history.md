@@ -459,6 +459,13 @@ hand on `book` under the user's moves halved (74 to 37), cost did not
 change (the task was already two or three calls). Totals per arm
 moved within the noise: $0.152, $0.154, $0.134, $0.128 a run.
 
+On a larger module of the same shapes (`freight-xl`, 959 lines, 5-10
+times the uses; 4 tasks, 4 runs, $5.73): the user's moves $0.148 a run
+against $0.198 for the baseline (25% less), 9.5 turns against 12.8,
+251 lines by hand against 439. The parameter object went through
+wrapper, `fold`, `inline_function` and `rename` in one batch in every
+run of the moves arm, the baseline through a `replace_text` per call.
+
 ## What made the difference
 
 - **Smaller results** (#75, rename locations): the largest single win when
