@@ -1792,6 +1792,14 @@ replaced whole; a case header is changed with replace_expression).
 By hand: three one-line `refused.txt` files written with printf, since
 what the refusal would say was settled only once the code ran.
 
+## 2026-10-21: fold through a pointer parameter
+
+All through gorefactor: the golden cases with create_file, the code
+with add_field, replace_statements, replace_expression,
+insert_statements and add_declaration in one batch (refused once:
+`analysis.MayPanic` returns a node, not an expression), the docs with
+replace_text.
+
 ## 2026-10-21: sort.Slice is not reflection on fields
 
 All through gorefactor: the golden cases with create_file, the fix
