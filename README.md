@@ -886,7 +886,11 @@ hand or a tool got in the way.
       call of a function value or interface method (`Summary.Unsafe`
       now says so).
     - `fold`: a pattern's `*p`, for a pointer parameter `p`, matches
-      any addressable expression `e`, passing `&e`.
+      any addressable expression `e`, passing `&e`. *Done:* a
+      variable or field; left when `e` goes through a package
+      variable, or through a pointer that could be nil while code
+      before `e` might not return (`log.Fatal`) or could panic
+      otherwise.
     - `fold`: string `+` is associative, so a hole matches a run of
       a concatenation (`a.Bank+": "+inv.Ref+fmt.Sprintf(...)`).
     - `fold`: in a printf-style call, a `%s` hole matches constant

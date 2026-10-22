@@ -35,7 +35,7 @@ func (*Fold) Description() string {
 Use it after writing a small function to name what code does (a getter, a helper, a method that calls an old function), so the code uses it: u.Email becomes u.email() for func (u User) email() string { return u.Email }; truncate(subject, 20) inside a method of SMS becomes s.fit(subject) for func (s *SMS) fit(text string) string { return truncate(text, 20) }.
 A struct parameter the body uses only by its fields makes each field a hole, and the call passes a literal: Send(p, us, m) becomes Send2(p, Batch{Users: us, Message: m}) for func Send2(p string, b Batch) string { return Send(p, b.Users, b.Message) }, to move callers to a parameter object.
 A function that sets fields of a struct parameter (or value receiver) and returns it, a setter, folds literals of the struct that give those fields as it sets them: User{ID: id, Email: v} becomes withEmail(User{ID: id}, v) for func withEmail(u User, v string) User { u.Email = v; return u }, so that a change to how the field is kept is made in the setter. Not a literal whose & is elided ([]*User{{...}}), nor one whose fields with effects would be evaluated in another order.
-A function without results whose body is statements folds runs of statements: the same statements in any block, its locals named anything there, become one call statement; so extract_function on lines in one place, then fold, replaces the same lines elsewhere. Not when the body returns, defers, jumps to a label or assigns a parameter, nor where the run declares a variable used after it, or an argument with effects or that could panic would move before the statements.
+A function without results whose body is statements folds runs of statements: the same statements in any block, its locals named anything there, become one call statement; so extract_function on lines in one place, then fold, replaces the same lines elsewhere. Not when the body returns, defers, jumps to a label or assigns a parameter, nor where the run declares a variable used after it, or an argument with effects or that could panic would move before the statements. A *p of the body, for a pointer parameter p, matches a variable or field x, and the call passes &x: w.Sent = append(w.Sent, s) folds into record(&w.Sent, s) for func record(sent *[]string, s string) { *sent = append(*sent, s) }; not when x goes through a package variable, or through a pointer that could be nil and code before x might not return or could panic otherwise.
 Identify the function by file and name (Name or Type.Method). Its body must be one return of one value, a setter, or statements without results, using every parameter. Every other name in the body must mean the same at a match. A method's receiver is what matched it, or, when the body does not use it, the receiver of the method of the same type the match is in. With line, only matches starting on that line of file (or of in) are folded, to move callers over one at a time.
 Leaves, and says why: a match that is assigned or has its address taken, one where an argument with effects or that could panic would be evaluated a different number of times or in another order, one in another package when the function is not exported, and one in no method of the receiver's type when the call needs the receiver from there.`
 }
@@ -83,9 +83,11 @@ type folder struct {
 	recv   types.Object    // fn's receiver, or nil
 	// self and sets are a setter's: the struct parameter it sets fields
 	// of and returns, and the fields with what it sets them to, in order.
-	self types.Object
-	sets []set
-	rest map[ast.Expr]rest // literals folded through the setter, by what to write for them
+	self      types.Object
+	sets      []set
+	rest      map[ast.Expr]rest // literals folded through the setter, by what to write for them
+	addressOf map[ast.Expr]bool // arguments &x made for a *p of the body that x matched
+	effs      *analysis.Effects // what calls do, built when needed
 
 	n       int      // occurrences folded
 	skipped []string // why matches were left, "file:line: reason"
@@ -357,7 +359,7 @@ func (f *folder) setter(list []ast.Stmt) bool {
 // find folds every match of the pattern in the workspace, or with line
 // only those that start on that line of the file in.
 func (f *folder) find(in string, line int) error {
-	f.by, f.adders, f.rest = map[string][]edit.TextEdit{}, map[string]*imports.Adder{}, map[ast.Expr]rest{}
+	f.by, f.adders, f.rest, f.addressOf = map[string][]edit.TextEdit{}, map[string]*imports.Adder{}, map[ast.Expr]rest{}, map[ast.Expr]bool{}
 	seen := map[token.Position]bool{}
 	declFile := f.ws.Fset.Position(f.decl.Pos()).Filename
 	for _, p := range f.ws.Pkgs {
@@ -437,7 +439,7 @@ func (f *folder) try(p *packages.Package, file *ast.File, x ast.Expr, stack []as
 	// first.
 	impure := 0
 	for k, e := range b {
-		if analysis.HasEffect(info, e) || analysis.MayPanic(info, e) != nil {
+		if analysis.HasEffect(info, e) || analysis.MayPanic(info, e) != nil || f.nilAddress(info, e) {
 			impure++
 			if n := f.count(k); n > 1 {
 				return skip(fmt.Sprintf("%s, used %d times in the body, would be evaluated once", types.ExprString(e), n))
@@ -622,7 +624,11 @@ func (f *folder) call(p *packages.Package, file *ast.File, b map[holeKey]ast.Exp
 	if err != nil {
 		return "", "", err
 	}
-	text := func(e ast.Expr) string {
+	var text func(e ast.Expr) string
+	text = func(e ast.Expr) string {
+		if u, ok := e.(*ast.UnaryExpr); ok && f.addressOf[e] {
+			return "&" + text(u.X)
+		}
 		if r, ok := f.rest[e]; ok {
 			return r.literal(e.(*ast.CompositeLit), src, func(p token.Pos) int { return f.ws.Fset.Position(p).Offset })
 		}
@@ -871,8 +877,10 @@ func (f *folder) match(p, x ast.Expr, info *types.Info, b map[holeKey]ast.Expr) 
 		xu, ok := x.(*ast.UnaryExpr)
 		return ok && xu.Op == pp.Op && sub(pp.X, xu.X)
 	case *ast.StarExpr:
-		xs, ok := x.(*ast.StarExpr)
-		return ok && sub(pp.X, xs.X)
+		if xs, ok := x.(*ast.StarExpr); ok {
+			return sub(pp.X, xs.X)
+		}
+		return f.matchAddress(pp, x, info, b)
 	case *ast.IndexExpr:
 		xi, ok := x.(*ast.IndexExpr)
 		return ok && sub(pp.X, xi.X) && sub(pp.Index, xi.Index)
@@ -898,6 +906,154 @@ func (f *folder) match(p, x ast.Expr, info *types.Info, b map[holeKey]ast.Expr) 
 		return ok && sub(pp.Key, xk.Key) && sub(pp.Value, xk.Value)
 	}
 	return false
+}
+
+// matchAddress reports whether x, which is not a dereference, is the
+// pattern's *p for a pointer parameter p: an addressable expression of
+// p's element type, so that the call passes &x.
+func (f *folder) matchAddress(pp *ast.StarExpr, x ast.Expr, info *types.Info, b map[holeKey]ast.Expr) bool {
+	id, ok := ast.Unparen(pp.X).(*ast.Ident)
+	if !ok {
+		return false
+	}
+	po := f.pkg.TypesInfo.Uses[id]
+	if _, hole := f.holes[po]; !hole || po == nil || po == f.recv {
+		return false
+	}
+	ptr, ok := po.Type().Underlying().(*types.Pointer)
+	xt := info.TypeOf(x)
+	if !ok || xt == nil || !addressable(info, x) || !types.Identical(xt, ptr.Elem()) && types.TypeString(xt, nil) != types.TypeString(ptr.Elem(), nil) {
+		return false
+	}
+	u := &ast.UnaryExpr{OpPos: x.Pos(), Op: token.AND, X: x}
+	k := holeKey{po, ""}
+	if prev, ok := b[k]; ok {
+		return types.ExprString(prev) == types.ExprString(u)
+	}
+	b[k] = u
+	f.addressOf[u] = true
+	return true
+}
+
+// addressable reports whether x can have its address taken in place: a
+// variable, or a field of one or through a pointer.
+func addressable(info *types.Info, x ast.Expr) bool {
+	switch x := ast.Unparen(x).(type) {
+	case *ast.Ident:
+		_, ok := info.Uses[x].(*types.Var)
+		return ok
+	case *ast.SelectorExpr:
+		s := info.Selections[x]
+		if s == nil || s.Kind() != types.FieldVal {
+			return false
+		}
+		return s.Indirect() || addressable(info, x.X)
+	}
+	return false
+}
+
+// nilAddress reports whether e is an argument &x made for a *p of the
+// body that can panic: x goes through a pointer that could be nil.
+func (f *folder) nilAddress(info *types.Info, e ast.Expr) bool {
+	if !f.addressOf[e] {
+		return false
+	}
+	for _, p := range analysis.Addressed(info, e) {
+		if p != nil {
+			return true
+		}
+	}
+	return false
+}
+
+// movedAddress is why an argument &x for a *p of the body, evaluated
+// before the statements seq, would not do what they did, or "". Taking
+// x's address can panic only when a pointer it goes through is nil. That
+// panic may come before the code that ran before x's first use when that
+// code returns and panics no other way, and the pointer is a local
+// variable that nothing else changes.
+func (f *folder) movedAddress(info *types.Info, seq []ast.Stmt, b map[holeKey]ast.Expr, stack []ast.Node) string {
+	for _, e := range b {
+		u, ok := e.(*ast.UnaryExpr)
+		if !ok || !f.addressOf[e] {
+			continue
+		}
+		for _, p := range analysis.Addressed(info, u) {
+			if p == nil {
+				continue
+			}
+			if why := pointerStays(info, p, seq, stack); why != "" {
+				return types.ExprString(u) + " " + why
+			}
+			for _, s := range seq {
+				if s.Pos() > u.X.Pos() {
+					break
+				}
+				if why := f.mayStop(info, s, u.X.Pos()); why != "" {
+					return fmt.Sprintf("%s could panic on a nil %s, and would be evaluated before the statement at %s, which %s", types.ExprString(u), types.ExprString(p), f.ws.Position(s.Pos()), why)
+				}
+			}
+		}
+	}
+	return ""
+}
+
+// pointerStays is why the pointer p, read before the statements seq of
+// the function at the top of stack, might not be what they read, or "".
+func pointerStays(info *types.Info, p ast.Expr, seq []ast.Stmt, stack []ast.Node) string {
+	id, ok := ast.Unparen(p).(*ast.Ident)
+	if !ok {
+		return "reads " + types.ExprString(p) + " before the statements, which could change it"
+	}
+	v, ok := info.Uses[id].(*types.Var)
+	if !ok || v.Pkg() == nil || v.Parent() == v.Pkg().Scope() {
+		return "reads the package variable " + id.Name + " before the statements, which could change it"
+	}
+	for i := len(stack) - 1; i >= 0; i-- {
+		switch fn := stack[i].(type) {
+		case *ast.FuncDecl, *ast.FuncLit:
+			fa := analysis.AnalyzeFunc(info, fn)
+			if fa.Addressed[v] || fa.Captured[v] {
+				return "reads " + v.Name() + ", which a closure or pointer can change"
+			}
+			for _, n := range fa.Modified[v] {
+				if seq[0].Pos() <= n.Pos() && n.Pos() < seq[len(seq)-1].End() {
+					return "reads " + v.Name() + " before the statements, which assign it"
+				}
+			}
+			return ""
+		}
+	}
+	return ""
+}
+
+// mayStop is how the code of the statement s before pos might not return
+// or could panic other than by a nil dereference, or "".
+func (f *folder) mayStop(info *types.Info, s ast.Stmt, pos token.Pos) string {
+	if f.effs == nil {
+		f.effs = analysis.NewEffects()
+		for _, p := range f.ws.Pkgs {
+			f.effs.AddPackage(p.Syntax, p.TypesInfo)
+		}
+	}
+	why := ""
+	ast.Inspect(s, func(n ast.Node) bool {
+		if _, lit := n.(*ast.FuncLit); lit || n == nil || why != "" || n.Pos() >= pos {
+			return false
+		}
+		e, ok := n.(ast.Expr)
+		if !ok || e.End() > pos {
+			return true
+		}
+		if c, ok := e.(*ast.CallExpr); ok {
+			why = f.effs.Call(info, c).Unsafe
+		}
+		if p := analysis.MayPanic(info, e); why == "" && p != nil {
+			why = "could panic (at " + f.ws.Position(p.Pos()) + ")"
+		}
+		return why == ""
+	})
+	return why
 }
 
 // matchStmt reports whether x is the pattern's statement p.
@@ -1024,6 +1180,9 @@ func (f *folder) foldStmts(p *packages.Package, file *ast.File, list []ast.Stmt,
 			if v := usedAfter(info, seq, stack); v != "" {
 				skip = "they declare " + v + ", which is used after them"
 			}
+		}
+		if skip == "" {
+			skip = f.movedAddress(info, seq, b, stack)
 		}
 		call := ""
 		if skip == "" {
