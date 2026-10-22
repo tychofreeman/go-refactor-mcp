@@ -31,7 +31,7 @@ func New() *ReplaceStatements { return &ReplaceStatements{} }
 func (*ReplaceStatements) Name() string { return "replace_statements" }
 
 func (*ReplaceStatements) Description() string {
-	return `Replace whole statements of one block with new Go statements: an edit, so it may change behavior. Use it to write a function's body (a stub becomes the implementation) or to change what statements do.
+	return `Replace whole statements of one block with new Go statements: an edit, to write a function's body (a stub becomes the implementation) or change what statements do. With function "Cart.Total" and content return len(c.Items), Total's whole body becomes that statement.
 Give start_line and end_line (inclusive, as inspect numbers them) covering whole statements of one block, comments and blank lines included; or function ("Name" or "Type.Method") to replace the whole body, which also works for a body on the signature's line and stays valid after earlier steps of a batch. content is re-indented to the block.
 Packages content names are imported (imports picks one when several fit, such as rand); imports only the replaced statements used are removed.`
 }

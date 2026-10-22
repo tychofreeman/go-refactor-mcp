@@ -31,10 +31,8 @@ func New() *ReplaceText { return &ReplaceText{} }
 func (*ReplaceText) Name() string { return "replace_text" }
 
 func (*ReplaceText) Description() string {
-	return `Replace exact text in a file with new text. This is an edit, not a refactoring: it may change behavior.
-Use it for what the other tools do not cover: text inside string literals and comments, files that are not Go (go.mod, JSON, test fixtures), or a change the other edits make awkward. To restructure code, use the refactorings; to change Go code, replace_statements, replace_expression and insert_statements usually fit better.
-Give file, old (exactly as in the file, whitespace and indentation included) and new. old must occur once, or set all_occurrences to replace every occurrence. For the same change in several files, give files in place of file: old must be in each. It addresses text, not lines, so it stays valid after earlier steps of a batch. In a Go file, packages new uses (strings.Join) are imported.
-Like every step, the result must type-check, or it is refused with the errors and nothing changes.`
+	return `Replace exact text in a file: an edit, for what the other tools do not cover: text in string literals and comments, and files that are not Go (go.mod, JSON, test fixtures, docs). old "version 1.2" and new "version 1.3" change that text in README.md. To change Go code, replace_statements, replace_expression and insert_statements usually fit better.
+old must be exactly as in the file, whitespace and indentation included, and occur once, or set all_occurrences. files in place of file makes the same replacement in several files (old must be in each). It addresses text, not lines, so it stays valid after earlier steps of a batch. In a Go file, packages new uses (strings.Join) are imported.`
 }
 
 func (*ReplaceText) InputSchema() json.RawMessage {

@@ -24,10 +24,8 @@ func New() *InsertStatements { return &InsertStatements{} }
 func (*InsertStatements) Name() string { return "insert_statements" }
 
 func (*InsertStatements) Description() string {
-	return `Insert new Go statements before or after a whole statement, or at the start of a block (also an empty function body). This is an edit, not a refactoring: it may change behavior.
-Use it to add a step to a function, or to write the body of an empty function; use replace_statements to change statements that are there.
-Identify the place by file and line, and where: "before" the statement that starts on that line, "after" the statement that ends on it (the outermost one, so after a closing brace means after the whole if or loop), or "into" the block whose opening brace is on that line (or the case clause whose colon is). content is the new statements, re-indented to the block.
-Packages the new code names are imported, as replace_statements does (imports chooses when a name is ambiguous). Like every step, the result must type-check, or it is refused with the errors and nothing changes.`
+	return `Insert new Go statements before or after a whole statement, or at the start of a block: an edit, to add a step to a function or write an empty body. With where "into" and the line of func (c *Cart) Reset() {}, content c.Items = nil writes Reset's body.
+where is "before" the statement that starts on line, "after" the statement that ends on it (the outermost, so after a closing brace means after the whole if or loop), or "into" the block whose opening brace is on line (or the case clause whose colon is). content is re-indented to the block; packages it names are imported. To change statements that are there, use replace_statements.`
 }
 
 func (*InsertStatements) InputSchema() json.RawMessage {

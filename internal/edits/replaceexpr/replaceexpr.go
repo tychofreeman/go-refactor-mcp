@@ -33,10 +33,8 @@ func New() *ReplaceExpression { return &ReplaceExpression{} }
 func (*ReplaceExpression) Name() string { return "replace_expression" }
 
 func (*ReplaceExpression) Description() string {
-	return `Replace an expression with a new Go expression, or, with all_occurrences, every expression in the file that means the same: the same tokens, with package-level names, imports, fields and methods referring to the same things and local variables of the same types (so c.Body in another method of the same type matches, d.Body of another type does not). This is an edit, not a refactoring: it may change behavior.
-Use it to change part of a statement, like a field read that becomes a method call, without restating the whole statement.
-Identify the expression by file, the line where it starts and its source text (whitespace may differ); add column if that text occurs more than once on the line. new is parenthesized where its context needs it (b becomes (b + 1) in a * b), and packages it names are imported, as replace_statements does (imports chooses when a name is ambiguous). A change in the expression's type is noted.
-Like every step, the result must type-check, or it is refused with the errors and nothing changes.`
+	return `Replace an expression with a new one: an edit, to change part of a statement without restating it. Replacing u.Email with u.Contact("email") on its line changes that read alone. With all_occurrences, every expression in the file that means the same is replaced: the same tokens, the same names referring to the same things, so c.Body in another method of the same type matches and d.Body of another type does not.
+Identify the expression by file, the line it starts on and its source text (whitespace may differ; column if the text is on the line twice). new is parenthesized where its context needs it (b becomes (b + 1) in a * b), and packages it names are imported. A change in the expression's type is noted.`
 }
 
 func (*ReplaceExpression) InputSchema() json.RawMessage {

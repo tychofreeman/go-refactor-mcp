@@ -26,10 +26,7 @@ func New() *AddCase { return &AddCase{} }
 func (*AddCase) Name() string { return "add_case" }
 
 func (*AddCase) Description() string {
-	return `Add case clauses to a switch or type switch. This is an edit, not a refactoring: it may change behavior.
-Use it to handle a new value or type; use insert_statements or replace_statements for the statements inside a clause.
-Identify the place by file and line: the line of the switch, to add the clauses at its end, or of one of its case clauses, with where "before" or "after" it (default after). content is one or more clauses, each "case x:" or "default:" followed by its statements; it is re-indented to the switch.
-Packages the new code names are imported, as replace_statements does (imports chooses when a name is ambiguous). Like every step, the result must type-check (a duplicate case is refused with the compiler's error), or nothing changes.`
+	return `Add case clauses to a switch or type switch: an edit, to handle a new value or type. At the line of switch kind {, content case "sms": return sendSMS(to) adds that clause at the end of the switch; at the line of one of its case clauses, where "before" or "after" (the default) puts them next to it. content is one or more clauses, each "case x:" or "default:" with its statements, re-indented; packages it names are imported. A duplicate case is refused with the compiler's error. For the statements inside a clause, use insert_statements or replace_statements.`
 }
 
 func (*AddCase) InputSchema() json.RawMessage {
