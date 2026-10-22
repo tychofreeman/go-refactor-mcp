@@ -1032,9 +1032,8 @@ hand or a tool got in the way.
         `if k, ok := it.Kind.(Kind); ok { return k.Days() }`.
         *Done* (lending-xl: widening and the five guards in one
         batch, its tests pass).
-      - One kind's migration: next, as `move_case_to_type`; within
-        the tool budget (item 25), so it merges two tools or is an
-        option.
+      - One kind's migration: next, as `move_case_to_type`, within
+        the tool budget (item 25).
     - **`inspect` by name** (the user, 2026-10-22): `names` reads
       several declarations in one call, each found in the module by
       its name, without file (`Name`, `Type.Method`, `pkg.Name` where
@@ -1049,7 +1048,8 @@ hand or a tool got in the way.
     names; a run's eight loaded schemas, about 12.5K characters, from
     when they load), a new tool 30-40 tokens a request; what grows
     faster is choosing among them. `TestToolBudget` holds the count
-    at 44 tools and the instructions at 6,000 characters. *Done.* A new
+    at 50 tools (44 today; the user raised it from 44 for now) and the
+    instructions at 6,000 characters. *Done.* A new
     operation is, in this order:
     - a proof in the engine, not a tool: an edit to code the engine
       proves cannot run (behind `x.(Kind)` that no type implements)
@@ -1061,7 +1061,7 @@ hand or a tool got in the way.
     - a composite named by its intent, built inside the engine from
       primitives that are not tools (`prepare_switch_for_types` is a
       declaration, an empty guard, and a fill of the dead branch);
-    - a new tool, which merges or replaces one to stay in budget.
+    - a new tool; at the budget, it merges or replaces one.
       Candidates to merge: `move_statement_up`/`move_statement_down`,
       `function_to_method`/`method_to_function`, the parameter tools
       into one; measure each, since cutting `fold`'s examples lost

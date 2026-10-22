@@ -281,7 +281,7 @@ func TestToolBudget(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const maxTools, maxInstructions = 44, 6000
+	const maxTools, maxInstructions = 50, 6000
 	if n := len(res.Tools); n > maxTools {
 		t.Errorf("%d tools, more than %d: merge or replace one", n, maxTools)
 	}

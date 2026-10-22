@@ -124,9 +124,9 @@ results are in `docs/cost-history.md`.
   a new operation: a proof in the engine (an edit to code that cannot
   run is a refactoring), an option of an existing tool, a composite
   named by intent built from primitives that are not tools, and only
-  then a new tool that merges or replaces one. `TestToolBudget` holds
-  the count (44) and the instructions' size; raise it only with the
-  user. README roadmap item 25.
+  then a new tool, which at the budget merges or replaces one. `TestToolBudget` holds
+  the count (50: 44 tools today, raised from 44 by the user "for now")
+  and the instructions' size; raise it only with the user. README roadmap item 25.
 
 - **Options over new tools** (2026-10-21): the pointer alias (gap A)
   is `pointer` on `extract_variable`, not a tool of its own: the model
