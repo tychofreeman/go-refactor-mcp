@@ -1,0 +1,37 @@
+[
+  {
+    "name": "freight-dispatch",
+    "dir": "testdata/freight-xl",
+    "tests": "testdata/freight-dispatch",
+    "check": "go vet ./... && go test ./...",
+    "prompt": "The Ship methods of the ten carriers in package freight (Truck, Train, Plane, Vessel, Van, Freighter, Drone, Barge, Courier and Post) do nearly the same thing. Make all ten call one package-level function dispatch(shipped *[]string, mode, to, text string), which logs \"<mode> ship to <to>\" with the standard logger and appends \"<to>: <text>\" to *shipped. What they ship and log must not change."
+  },
+  {
+    "name": "freight-blocked",
+    "dir": "testdata/freight-xl",
+    "tests": "testdata/freight-blocked",
+    "check": "go vet ./... && go test ./...",
+    "prompt": "Shipments can block carriers. Add a field Blocked map[string]bool to freight.Shipment, keyed by a carrier's name (what Carrier.Name returns). Dispatch does not ship through a carrier the shipment blocked, and that shipment's summary line lists only the carriers it shipped through."
+  },
+  {
+    "name": "freight-routes",
+    "dir": "testdata/freight-xl",
+    "tests": "testdata/freight-routes",
+    "check": "go vet ./... && go test ./...",
+    "prompt": "Replace the fields Road and Rail of freight.Shipment with one field Routes map[string]string, keyed by route: \"road\" for the road depot code and \"rail\" for the rail yard code. Everything that used them, in every package, must work as before."
+  },
+  {
+    "name": "freight-tail",
+    "dir": "testdata/freight-xl",
+    "tests": "testdata/freight-tail",
+    "check": "go vet ./... && go test ./...",
+    "prompt": "last is used only by Truck. Replace it with a method func (c *Truck) tail(code string) string that keeps the last 4 bytes of code, the part a driver sees, and remove last. What Truck's methods return and ship must not change."
+  },
+  {
+    "name": "freight-run",
+    "dir": "testdata/freight-xl",
+    "tests": "testdata/freight-run",
+    "check": "go vet ./... && go test ./...",
+    "prompt": "Dispatch should take its shipments and order as one value. Add a type freight.Run struct { Shipments []Shipment; Order Order } and change Dispatch to func Dispatch(c Config, r Run) []string, updating every caller in every package. What it ships and returns must not change."
+  }
+]

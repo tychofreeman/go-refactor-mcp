@@ -1841,6 +1841,14 @@ All through gorefactor: the golden cases with create_file, the code
 with insert_statements and add_declaration in one batch, the docs with
 replace_text.
 
+## 2026-10-21: freight-xl
+
+The module, its hidden tests and the task file were written by a
+generator script (`eval-tasks/learning/gen_freight.py`), not through
+gorefactor: about 1,100 lines of fixtures, which create_file would
+have taken as one large content argument each. The docs with
+replace_text.
+
 ## 2026-10-21: sort.Slice is not reflection on fields
 
 All through gorefactor: the golden cases with create_file, the fix

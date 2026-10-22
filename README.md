@@ -941,6 +941,12 @@ hand or a tool got in the way.
       `bump(c); fmt.Println(c.count)` folded into `rec(c, c.count)`.
       *Fixed:* such an argument is left when code before its last use
       has side effects or assigns.
+    - *Measured on a larger module* (`freight-xl`, 5-10 times the
+      uses): the user's moves 25% cheaper than the baseline, 43% fewer
+      lines by hand (`docs/learning-transfer.md`).
+    - Found on the way, in `cmd/refactor-ab`: a run whose hidden tests
+      could not be copied in ("copying the tests in" error) was
+      counted as passed; it should count as failed or unfinished.
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
