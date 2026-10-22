@@ -41,12 +41,20 @@ type Query struct {
 	// Targets reads several of the views above in one call, in place of
 	// the fields above.
 	Targets []Query `json:"targets,omitempty"`
+	// Names reads declarations by name, found anywhere in the module,
+	// in place of the fields above: "Name", "Type.Method", or
+	// "pkg.Name" where the name is declared in several packages.
+	Names []string `json:"names,omitempty"`
 }
 
 // Run renders the view selected by q: the module overview when File is
 // empty, otherwise the file without its function bodies, or the function
-// or lines asked for; or each of its targets.
+// or lines asked for; or each of its targets, or each declaration it
+// names.
 func Run(ws *workspace.Workspace, q Query) (string, error) {
+	if len(q.Names) > 0 {
+		return names(ws, q)
+	}
 	if len(q.Targets) > 0 {
 		return targets(ws, q)
 	}
@@ -120,7 +128,7 @@ func Module(ws *workspace.Workspace) string {
 		fmt.Fprintf(&sb, "\nthe module does not type-check (%d errors); refactorings are disabled until it does:\n  %s\n",
 			len(errs), strings.Join(errs, "\n  "))
 	}
-	sb.WriteString("\nUse inspect with file (and optionally function or start_line/end_line), or targets for several, to read code.\n")
+	sb.WriteString("\nUse inspect with file (and optionally function or start_line/end_line), targets for several, or names for declarations by name, to read code.\n")
 	return sb.String()
 }
 
@@ -290,6 +298,65 @@ func targets(ws *workspace.Workspace, q Query) (string, error) {
 		parts = append(parts, out)
 	}
 	return strings.Join(parts, "\n"), nil
+}
+
+// names renders each declaration q.Names names, found in the module by
+// its name; one not found, or found in several places, says so in its
+// place.
+func names(ws *workspace.Workspace, q Query) (string, error) {
+	if q.File != "" || q.Function != "" || q.StartLine != 0 || q.EndLine != 0 || len(q.Targets) > 0 {
+		return "", refactor.Refusef("give names alone: each is found in the module by its name, without file")
+	}
+	var parts []string
+	for _, n := range q.Names {
+		out, err := declaration(ws, n)
+		switch {
+		case refactor.IsRefusal(err):
+			out = fmt.Sprintf("%s: %v\n", n, err)
+		case err != nil:
+			return "", err
+		}
+		parts = append(parts, out)
+	}
+	return strings.Join(parts, "\n"), nil
+}
+
+// declaration renders the source of the one declaration in the module
+// named name: Name or Type.Method, or either after its package's name
+// (pkg.Name).
+func declaration(ws *workspace.Workspace, name string) (string, error) {
+	type match struct{ file, pkg, local string }
+	var found []match
+	seen := map[string]bool{}
+	for _, p := range ws.Pkgs {
+		for _, f := range p.Syntax {
+			tf := ws.Fset.File(f.Pos())
+			if tf == nil || seen[tf.Name()] || !ws.Contains(tf.Name()) {
+				continue
+			}
+			seen[tf.Name()] = true
+			decls := Outline(ws.Fset, f)
+			local := name
+			if pkg, rest, ok := strings.Cut(name, "."); ok && pkg == f.Name.Name && find(decls, rest) != nil {
+				local = rest
+			}
+			if find(decls, local) != nil {
+				found = append(found, match{ws.Rel(tf.Name()), f.Name.Name, local})
+			}
+		}
+	}
+	sort.Slice(found, func(i, j int) bool { return found[i].file < found[j].file })
+	switch len(found) {
+	case 0:
+		return "", refactor.Refusef("no declaration of that name in the module")
+	case 1:
+		return File(ws, Query{File: found[0].file, Function: found[0].local})
+	}
+	places := make([]string, len(found))
+	for i, m := range found {
+		places[i] = fmt.Sprintf("%s (package %s)", m.file, m.pkg)
+	}
+	return "", refactor.Refusef("declared in %s; name it more fully (pkg.Name, Type.Method)", strings.Join(places, ", "))
 }
 
 func find(decls []Decl, name string) *Decl {

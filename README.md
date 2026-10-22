@@ -1001,6 +1001,13 @@ hand or a tool got in the way.
       name: `rename` of an embedded field (10 of 12 address runs tried
       it), and an operation that turns a switch on a kind into
       methods.
+    - **`inspect` by name** (the user, 2026-10-22): `names` reads
+      several declarations in one call, each found in the module by
+      its name, without file (`Name`, `Type.Method`, `pkg.Name` where
+      a name is in several packages), to cut round trips. *Done.* Not
+      yet measured; a step toward reads that need a name (a read mode
+      without file or line reads, and a question on each read, are
+      the next ideas).
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
 candidates and the evidence for each, gathered from the friction log.

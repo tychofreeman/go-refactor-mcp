@@ -196,6 +196,38 @@ func TestTargets(t *testing.T) {
 	}
 }
 
+func TestNames(t *testing.T) {
+	t.Setenv("GOWORK", "off")
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example.com/s\n\ngo 1.22\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, "shapes.go"), []byte(shapes), 0o644)
+	os.Mkdir(filepath.Join(dir, "sub"), 0o755)
+	os.WriteFile(filepath.Join(dir, "sub", "sub.go"), []byte("package sub\n\n// Classify is another.\nfunc Classify(n int) int { return n }\n"), 0o644)
+	ws, err := workspace.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := Run(ws, Query{Names: []string{"Circle.Area", "Shape", "shapes.Classify", "sub.Classify", "Classify", "Nope"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"35  func (c Circle) Area() float64",
+		"6  type Shape interface",
+		"source (lines 18-33):",
+		"sub/sub.go  (package sub",
+		"Classify: declared in shapes.go (package shapes), sub/sub.go (package sub)",
+		"Nope: no declaration of that name in the module",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output lacks %q:\n%s", want, out)
+		}
+	}
+	if _, err := Run(ws, Query{File: "shapes.go", Names: []string{"Shape"}}); !refactor.IsRefusal(err) {
+		t.Errorf("names with file: want refusal, got %v", err)
+	}
+}
+
 func TestFileEffects(t *testing.T) {
 	t.Setenv("GOWORK", "off")
 	dir := t.TempDir()
