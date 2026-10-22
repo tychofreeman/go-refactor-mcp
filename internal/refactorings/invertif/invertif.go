@@ -40,14 +40,10 @@ func New() *InvertIf { return &InvertIf{} }
 func (*InvertIf) Name() string { return "invert_if" }
 
 func (*InvertIf) Description() string {
-	return `Invert an if statement: negate its condition and swap its branches, turning nested code into guard clauses where possible.
-Use it to reduce nesting and put the short or exceptional case first.
-- if/else: the branches swap. If the new first branch cannot fall through (it ends in return, continue, break, goto or panic), the else is removed and the other branch follows the if, un-nested: "if c { A } else { return }" becomes "if !c { return }" then A. Pass keep_else to only swap.
-- if without else: becomes a guard clause followed by the body, un-nested, when it is the last statement of a function without results ("if !c { return }"), of a loop body (continue) or of a switch/select case (break), or when only the function's final return follows it (the guard repeats that return). An if whose body already exits is left alone.
-If the un-nested statements use variables of the if's init statement, the init statement moves before the if.
-Identify the if by file and the line of its "if" keyword (as shown by inspect); add column only if that line has more than one if.
-The negated condition is simplified where that is exact: == and != swap, <, <=, >, >= flip for integers and strings (not floats, where NaN makes !(a < b) differ from a >= b), !x becomes x, and && and || use De Morgan's laws (evaluation order is unchanged).
-Refuses an else-if chain in the else branch, and an if without else in any other position. Un-nesting is refused (or, for if/else, the else is kept, with a note) when the moved statements (or a moved init statement) declare names that the enclosing block or the code after the if also uses.`
+	return `Negate an if's condition and swap its branches, turning nesting into guard clauses: if c { A } else { return } becomes if !c { return } followed by A; in a loop body, a last if x > 0 { n += x } becomes if x <= 0 { continue } followed by n += x. keep_else only swaps the branches.
+An if without else is un-nested this way when it ends a function without results (return), a loop body (continue) or a case (break), or when only the function's final return follows it. The negation is simplified where that is exact (== and != swap, < and >= swap for integers and strings, De Morgan for && and ||).
+Identify the if by file and the line of its if keyword (column if the line has two).
+Refuses, saying why: an else-if chain in the else branch, an if without else anywhere else, un-nesting that would make names clash.`
 }
 
 func (*InvertIf) InputSchema() json.RawMessage {

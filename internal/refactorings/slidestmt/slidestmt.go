@@ -36,13 +36,13 @@ func (m *MoveStatement) Name() string {
 }
 
 func (m *MoveStatement) Description() string {
-	which := "before"
+	which, example := "before", `with log.Print("start") then n := len(xs), moving n := len(xs) up puts it first`
 	if m.down {
-		which = "after"
+		which, example = "after", `with log.Print("start") then n := len(xs), moving log.Print("start") down puts it second`
 	}
-	return "Swap a statement with the one " + which + " it in the same block (\"slide statements\"), each with the comments directly above it.\n" + `Use it to bring statements that belong together next to each other, e.g. before extract_function.
-Identify the statement by file and the line it starts on (the outermost statement starting there, so a whole if or loop moves as one).
-Behavior does not change, so it refuses when the order matters: one uses something the other declares, or declares a name the other refers to; one assigns a local variable the other uses; one has side effects (a call not known to be free of them: the module's own functions are judged by their bodies; a channel operation, go or defer, an assignment to a package variable, through a pointer or to a variable a closure captures) and the other could see them, panic or not finish (a nil dereference, as in &p.f, may move past calls that return: not os.Exit, log.Fatal, or a call of a function value or interface method); or both could panic or not finish (indexing, dereferencing, dividing, type assertions, loops). It also refuses a statement that returns or jumps out (return, goto, fallthrough, break or continue to a loop around it), a labeled statement, and a line with more than the statement on it.`
+	return "Swap a statement with the one " + which + " it in the same block, each with the comments directly above it: " + example + `. Use it to bring statements that belong together next to each other, e.g. before extract_function.
+Identify the statement by file and the line it starts on (the outermost statement there, so a whole if or loop moves as one).
+Behavior does not change, so it refuses, saying why, when the order matters: one uses what the other declares or assigns; one has side effects the other could see, or that would then happen or not when the other panics or does not finish; both could panic; a statement that returns or jumps out; a line with more than the statement on it.`
 }
 
 func (*MoveStatement) InputSchema() json.RawMessage {
