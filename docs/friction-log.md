@@ -1929,3 +1929,12 @@ batches run with the CLI, written by a Python script into
 order). The algebraic arm copied from the baseline with cp, its section
 added with replace_text; the docs with replace_text. Entries are
 appended at the end of this file from now on.
+
+## 2026-10-22: set C's runs
+
+No code: the results in the docs with replace_text. From the runs, what
+the models did by hand for want of an operation: on address, 10 of 12
+runs called `rename` on the embedded field `Address` (refused, "not
+supported yet") and then replaced `.Street`, `.City` and `.Zip` by
+text; on kinds, every run wrote the types and methods and rewrote the
+five switches by hand.

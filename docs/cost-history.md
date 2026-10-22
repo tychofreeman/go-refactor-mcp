@@ -514,6 +514,14 @@ their batches passed the hidden tests in 7, 6 and 10 of 16, failing on
 the tools' interface (`rename`'s `function`, argument names the probe
 did not give), test files no view showed, and a `fold` bug.
 
+Set C, shapes no move names (`lending-xl`, `docs/reading-and-deriving.md`
+step 3; 5 tasks, 4 runs, $10.68, all passed): the baseline $0.176 a
+run, 10.7 turns, 1,285 lines by hand, 31% derived; the user's moves
+$0.186, 13.1, 1,215, 33%; the algebraic arm $0.173, 12.6, 1,141, 37%.
+The difference is policy (77 lines by hand against 182), a shape the
+signature tools fit; the shapes no operation fits were written by hand
+in every arm, and reading was alike.
+
 All 38 descriptions shortened, each with an example (#255-#259, 8,700
 words to about 5,200); the user's moves on freight-xl, 4 tasks, 4 runs,
 $2.34 (`eval-runs/freight-human-alldesc`, against `freight-human`):
