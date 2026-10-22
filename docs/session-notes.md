@@ -153,7 +153,11 @@ results are in `docs/cost-history.md`.
   without data yet, that thinking algebraically lets the model read
   much less, perhaps planning from a call tree's names, and that this
   goes hand in hand with deriving. The plan, to run in a later session:
-  `docs/reading-and-deriving.md`, roadmap item 24.
+  `docs/reading-and-deriving.md`, roadmap item 24. Step 1 (freight-xl
+  transcripts): both arms read alike and little, and about a quarter
+  of input is the output of "where is X used" searches, which a
+  derivation does not need; the model searches by habit before it
+  plans.
 
 - **Loops and containers** (2026-10-20): the user asked for
   refactorings that convert between kinds of loop, and edits that make

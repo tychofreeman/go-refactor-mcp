@@ -1871,6 +1871,12 @@ with the CLI.
 All through gorefactor: thirteen descriptions with replace_statements
 and `function` in one batch; the stub example checked with the CLI.
 
+## 2026-10-22: reading in the freight runs
+
+The two scripts (`eval-tasks/learning/reads.py` and
+`eval-tasks/learning/funcs/main.go`) were written in the scratchpad
+while measuring and copied in with cp; the docs with replace_text.
+
 ## 2026-10-21: sort.Slice is not reflection on fields
 
 All through gorefactor: the golden cases with create_file, the fix
