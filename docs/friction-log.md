@@ -1876,3 +1876,8 @@ and `function` in one batch; the stub example checked with the CLI.
 All through gorefactor: the golden cases with create_file, the fix
 with replace_text and add_declaration in one batch, the docs with
 replace_text.
+
+## 2026-10-22: a plan for deriving and reading less
+
+All through gorefactor: the plan with create_file, the roadmap, the
+session notes and this entry with replace_text, in one batch.

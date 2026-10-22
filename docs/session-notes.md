@@ -147,6 +147,14 @@ results are in `docs/cost-history.md`.
   from the working tree for each run: stay on the branch that has
   it until the run ends (a checkout of main mid-run broke 8 runs).
 
+- **Teaching to derive, and reading less** (2026-10-22, the user):
+  "teach the model to refactor better" means mostly deriving on shapes
+  it was not taught, not applying given moves. The user believes,
+  without data yet, that thinking algebraically lets the model read
+  much less, perhaps planning from a call tree's names, and that this
+  goes hand in hand with deriving. The plan, to run in a later session:
+  `docs/reading-and-deriving.md`, roadmap item 24.
+
 - **Loops and containers** (2026-10-20): the user asked for
   refactorings that convert between kinds of loop, and edits that make
   a block the body of a loop, an `if` and the like. Roadmap item 20.

@@ -947,6 +947,16 @@ hand or a tool got in the way.
     - Found on the way, in `cmd/refactor-ab`: a run whose hidden tests
       could not be copied in ("copying the tests in" error) was
       counted as passed; it should count as failed or unfinished.
+24. **Does deriving let the model read less?** (the user, 2026-10-22):
+    the user's hypothesis that a model thinking algebraically needs to
+    read much less, perhaps only a call tree's names, and that this goes
+    with deriving on shapes no move names. Every learner run so far was
+    on the five shapes the moves were written for. A plan in three
+    steps, `docs/reading-and-deriving.md`: reads in the freight runs (no
+    new runs); a one-turn probe, planning from a call tree, the skeleton
+    or the whole module, scored by running the derivation; a set C of
+    new shapes on a large module, with an arm that teaches the method
+    and names no shapes.
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
