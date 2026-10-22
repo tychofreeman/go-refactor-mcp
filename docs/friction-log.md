@@ -1866,6 +1866,11 @@ All through gorefactor: seven descriptions (six functions) with
 replace_statements and `function` in one batch; each example checked
 with the CLI.
 
+## 2026-10-21: shorter descriptions, edits
+
+All through gorefactor: thirteen descriptions with replace_statements
+and `function` in one batch; the stub example checked with the CLI.
+
 ## 2026-10-21: sort.Slice is not reflection on fields
 
 All through gorefactor: the golden cases with create_file, the fix

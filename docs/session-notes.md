@@ -91,6 +91,15 @@ results are in `docs/cost-history.md`.
   needs; never before code that might not finish or return
   (`Summary.Stops`).
 
+- **How tool descriptions are written** (2026-10-21, after `fold`'s
+  description lost its use when its example went, #255): the user
+  asked for every description to be shortened and given an example
+  or two (#256-#259; 8,700 words to about 5,200 over 38 tools, each
+  example run with the CLI). Write new ones the same way: what it
+  does with a before/after, the addressing hints the schema does not
+  carry, and one line of what it refuses ("Refuses, saying why:
+  ..."); the rules live in the refusals.
+
 - **Options over new tools** (2026-10-21): the pointer alias (gap A)
   is `pointer` on `extract_variable`, not a tool of its own: the model
   already reaches for extract_variable, and its refusal for a field
