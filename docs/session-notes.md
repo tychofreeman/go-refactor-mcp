@@ -92,7 +92,14 @@ results are in `docs/cost-history.md`.
   experiment first (whether a model told to try several approaches can
   teach later ones): `docs/learning-transfer.md`. Its later tasks are
   on a second module of the same shapes, so lessons carry technique,
-  not answers; keep set A and set B apart.
+  not answers; keep set A and set B apart. What made explorers explore
+  (2026-10-21): an instruction to make calls ("only a call counts as
+  trying"), the user's limit of one distinct line by hand per change
+  (a line repeated at many sites counts once; a change is one fact,
+  not one edit call), and "try all five even when one passes"; asking
+  them to consider ways did not, they reasoned the ways away. The
+  learner runs: the model-taught lessons halved the lines by hand but
+  not the cost; the user's moves were cheapest (cost-history 9).
 
 - **Loops and containers** (2026-10-20): the user asked for
   refactorings that convert between kinds of loop, and edits that make

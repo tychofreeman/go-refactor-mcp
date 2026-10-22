@@ -432,6 +432,23 @@ the derived runs restate whole declarations with replace_declaration
 (58-66 lines for a change of a few), and a textual replacement over
 every file counts as one line.
 
+## 9. Lessons taught by models (Oct 21)
+
+`docs/learning-transfer.md`. Explorers on notify-large, told to try
+five sequences and to write at most one distinct line by hand per
+change, wrote lessons; distilled, they went to fresh models on
+billing-large, the same five shapes under other names. 6 runs a task:
+
+| arm | passed | cost a run | turns | written by hand | derived share |
+|---|---|---|---|---|---|
+| baseline | 30/30 | $0.146 | 11.0 | 711 | 40% |
+| learned | 30/30 | $0.142 | 10.1 | 386 | 60% |
+| user's moves | 30/30 | $0.127 | 8.4 | 529 | 48% |
+
+The learned lessons changed how the model worked (fold and inline where
+the baseline rewrote; 46% fewer lines by hand) but not what it cost;
+the user's shorter moves were cheapest.
+
 ## What made the difference
 
 - **Smaller results** (#75, rename locations): the largest single win when
