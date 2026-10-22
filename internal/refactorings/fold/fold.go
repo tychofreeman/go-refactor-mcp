@@ -18,6 +18,7 @@ import (
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
+	"github.com/tychofreeman/go-refactor-mcp/internal/edits/gocode"
 	"github.com/tychofreeman/go-refactor-mcp/internal/imports"
 	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
@@ -101,6 +102,7 @@ type folder struct {
 	by      map[string][]edit.TextEdit
 	adders  map[string]*imports.Adder
 	order   []string
+	removed []string // imports removed because only folded code used them
 }
 
 // holeKey is a hole: a parameter, or with field one field of a struct
@@ -788,12 +790,41 @@ func (f *folder) edits() []edit.FileEdit {
 	var out []edit.FileEdit
 	for _, path := range f.order {
 		es := f.by[path]
+		f.removeImports(path, es)
 		if a := f.adders[path]; a != nil {
 			es = append(es, a.Edits()...)
 		}
 		out = append(out, edit.FileEdit{Path: path, Edits: es})
 	}
 	return out
+}
+
+// removeImports removes the imports of the file at path that only the
+// code its folds (es) replace used, and that the calls do not name.
+func (f *folder) removeImports(path string, es []edit.TextEdit) {
+	p, file := f.ws.FileSyntax(path)
+	if file == nil {
+		return
+	}
+	var calls []string
+	for _, e := range es {
+		calls = append(calls, e.NewText)
+	}
+	code, err := gocode.ParseStatements(strings.Join(calls, "\n"))
+	if err != nil {
+		return
+	}
+	if f.adders[path] == nil {
+		src, err := os.ReadFile(path)
+		if err != nil {
+			return
+		}
+		f.adders[path] = imports.New(f.ws, p, file, src)
+	}
+	f.removed = append(f.removed, gocode.RemoveImports(p, file, f.adders[path], func(pos token.Pos) bool {
+		off := f.ws.Fset.Position(pos).Offset
+		return slices.ContainsFunc(es, func(e edit.TextEdit) bool { return e.Start <= off && off < e.End })
+	}, code)...)
 }
 
 // match reports whether x, of the package whose info is info, is the
@@ -1860,6 +1891,9 @@ func (*Fold) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan,
 	}
 	if len(f.skipped) > 0 {
 		plan.Notes = append(plan.Notes, "left as they are: "+strings.Join(limit(f.skipped, 5), "; "))
+	}
+	if len(f.removed) > 0 {
+		plan.Notes = append(plan.Notes, gocode.ImportNote("removed", f.removed)+", which only the folded code used")
 	}
 	return plan, nil
 }

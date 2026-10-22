@@ -974,6 +974,9 @@ hand or a tool got in the way.
       renames is refused (8 answers); `fold` leaves imports its folds
       make unused (a bug); field removal blocked by test files no view
       shows.
+    - `fold` removes the imports its folds leave unused (found by the
+      probe: a `dispatch` in a file of its own, ten carriers folded,
+      left `log` unused). *Fixed*; that answer now applies and passes.
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the

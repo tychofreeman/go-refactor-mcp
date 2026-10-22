@@ -1896,6 +1896,12 @@ one batch refused for using the parameter before the rename; one
 replace_text refused because gofmt had realigned the map's keys, fixed
 with the text as it was, and two assertions changed with sed).
 
+## 2026-10-22: fold removes the imports it leaves unused
+
+All through gorefactor: the golden case with create_file, the code with
+replace_statements, add_declaration, add_field and insert_statements
+in one batch, the docs with replace_text.
+
 ## 2026-10-21: sort.Slice is not reflection on fields
 
 All through gorefactor: the golden cases with create_file, the fix
