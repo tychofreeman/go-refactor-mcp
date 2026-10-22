@@ -935,6 +935,18 @@ hand or a tool got in the way.
       folded `book` in 6/6 runs under the user's moves and the
       combined set, 4/6 baseline, 3/6 learned (whose old recipe now
       costs turns); lines by hand on the task halved, cost unchanged.
+    - Found on the way: an argument that reads memory other code can
+      change (`c.count` through a pointer) was evaluated before the
+      code it replaced, past calls that could change it:
+      `bump(c); fmt.Println(c.count)` folded into `rec(c, c.count)`.
+      *Fixed:* such an argument is left when code before its last use
+      has side effects or assigns.
+    - *Measured on a larger module* (`freight-xl`, 5-10 times the
+      uses): the user's moves 25% cheaper than the baseline, 43% fewer
+      lines by hand (`docs/learning-transfer.md`).
+    - Found on the way, in `cmd/refactor-ab`: a run whose hidden tests
+      could not be copied in ("copying the tests in" error) was
+      counted as passed; it should count as failed or unfinished.
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the

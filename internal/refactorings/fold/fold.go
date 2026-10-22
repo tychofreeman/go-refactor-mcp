@@ -460,6 +460,11 @@ func (f *folder) try(p *packages.Package, file *ast.File, x ast.Expr, stack []as
 	if impure > 1 {
 		return skip("more than one argument has effects or could panic")
 	}
+	for _, e := range b {
+		if why := f.staleRead(info, []ast.Node{x}, e); why != "" {
+			return skip(why)
+		}
+	}
 	call, why, err := f.call(p, file, b, stack)
 	if err != nil {
 		return false, err
@@ -1296,6 +1301,67 @@ func (f *folder) matters(info *types.Info, s ast.Stmt, pos token.Pos) bool {
 	return found
 }
 
+// staleRead is why e, an argument that reads memory other code can
+// change (a field through a pointer, an element, a package variable),
+// would not read what the code roots, which it replaces, read where it
+// read it: code there that ends before e's last use could write that
+// memory; or "". An argument with effects or that could panic is judged
+// by impure and evaluatedFirst instead.
+func (f *folder) staleRead(info *types.Info, roots []ast.Node, e ast.Expr) string {
+	if f.addressOf[e] || f.made[e] || f.impure(info, e) || !f.effectful(info, e, true) {
+		return ""
+	}
+	text := types.ExprString(e)
+	last := roots[len(roots)-1].End()
+	if _, run := f.runs[e]; !run {
+		last = token.NoPos
+		for _, r := range roots {
+			ast.Inspect(r, func(n ast.Node) bool {
+				if x, ok := n.(ast.Expr); ok && x.End() > last && types.ExprString(x) == text {
+					last = x.End()
+				}
+				return true
+			})
+		}
+	}
+	for _, r := range roots {
+		why, at := "", token.NoPos
+		ast.Inspect(r, func(n ast.Node) bool {
+			if _, lit := n.(*ast.FuncLit); lit || n == nil || why != "" || n.Pos() >= last {
+				return false
+			}
+			if n.End() > last {
+				return true // it encloses the last use, which it reads first
+			}
+			switch n := n.(type) {
+			case *ast.AssignStmt:
+				if n.Tok != token.DEFINE {
+					why = "assigns " + types.ExprString(n.Lhs[0])
+				}
+			case *ast.IncDecStmt:
+				why = "changes " + types.ExprString(n.X)
+			case *ast.CallExpr:
+				why = f.effects().Call(info, n).Effect
+			}
+			at = n.Pos()
+			return why == ""
+		})
+		if why != "" {
+			return fmt.Sprintf("%s would be read before the code it is in, and code before its last use could change it before then (it %s, at %s)", text, why, f.ws.Position(at))
+		}
+	}
+	return ""
+}
+
+// stmtNodes is list as nodes.
+func stmtNodes(list []ast.Stmt) []ast.Node {
+	var out []ast.Node
+	for _, s := range list {
+		out = append(out, s)
+	}
+	return out
+}
+
 // formatIndex is the index of the format argument of call, a call of a
 // printf-style function (its name ends in f, and its last parameters
 // are a format string and ...any), or -1.
@@ -1586,6 +1652,11 @@ func (f *folder) foldStmts(p *packages.Package, file *ast.File, list []ast.Stmt,
 		}
 		if skip == "" {
 			skip = f.movedAddress(info, seq, b, stack)
+		}
+		for _, e := range b {
+			if skip == "" {
+				skip = f.staleRead(info, stmtNodes(seq), e)
+			}
 		}
 		call := ""
 		if skip == "" {

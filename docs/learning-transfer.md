@@ -284,3 +284,45 @@ hand over its 6 runs:
   becomes a cost when the tools improve and it does not. The lesson is
   left as it was measured; a new explorer pass would replace it.
 - Totals moved within the noise, except where `book` moved them.
+
+## A larger module: freight-xl
+
+Billing is too small for a derivation to save turns. `freight-xl`
+(`eval-tasks/learning/gen_freight.py`, 959 lines) has billing's shapes
+with many more uses: ten near-duplicate carriers (`freight-dispatch`),
+about 85 lines reading the two fields that become a map in three
+packages (`freight-routes`), 13 uses of the helper that becomes a
+method (`freight-tail`), 30 callers of the function that takes a
+parameter object (`freight-run`). The additive task (`freight-blocked`)
+was not run. Two arms, 4 runs a task, $5.73 in all
+(`eval-runs/freight-human`, `freight-base`, and `freight-base2` for the
+baseline's tail and run, rerun after the module was missing from the
+working tree for them):
+
+| task | baseline cost | the user's moves | baseline turns | moves | by hand, baseline | moves |
+|---|---|---|---|---|---|---|
+| dispatch | $0.19 | $0.15 | 13.0 | 11.2 | 152 | 61 |
+| routes | $0.26 | $0.20 | 16.0 | 12.2 | 111 | 122 |
+| tail | $0.17 | $0.11 | 13.2 | 8.0 | 66 | 30 |
+| run | $0.17 | $0.13 | 8.8 | 6.5 | 110 | 38 |
+| mean / total | $0.198 | $0.148 | 12.8 | 9.5 | 439 | 251 |
+
+All 32 runs passed. Under the user's moves runs cost 25% less, took a
+quarter fewer turns and wrote 43% fewer lines by hand; on billing the
+gap was 13% in cost. How:
+
+- `run`: every run of the user's moves did the migration in one batch,
+  `add_declaration` of the wrapper, `fold` (all 30 calls),
+  `inline_function`, `rename`; the baseline rewrote the calls with
+  `replace_text`, a step each.
+- `tail`: the moves arm used wrapper, `fold`, `inline_function` or
+  `function_to_method`; the baseline mostly `replace_expression` at
+  each use.
+- `dispatch`: both arms declared `dispatch`; `fold` in two runs of
+  each, the rest replaced the ten bodies in one batch.
+- `routes`: about even in lines; both went largely textual.
+
+At 4 runs a task the noise is large (10-25% at 2-3 runs), but the gap
+is in the direction the user's thesis predicts and wider than on the
+smaller module: the more uses a change has, the more a derivation
+saves.
