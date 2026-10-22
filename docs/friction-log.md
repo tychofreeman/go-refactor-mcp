@@ -1813,6 +1813,13 @@ one batch (refused once: a range given by line that the batch placed
 on bindText's signature; addressed by `function` instead), the docs
 with replace_text.
 
+## 2026-10-21: fold evaluates a pure argument once
+
+All through gorefactor: the golden cases with create_file, the code
+with replace_text and add_declaration (one step refused: `range b` is
+not an expression for replace_expression), the docs with
+replace_text.
+
 ## 2026-10-21: sort.Slice is not reflection on fields
 
 All through gorefactor: the golden cases with create_file, the fix

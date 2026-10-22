@@ -78,6 +78,14 @@ results are in `docs/cost-history.md`.
   might not return (os.Exit, log.Fatal, a function value or
   interface method) and past other panics. Roadmap item 23, whose
   other parts let `fold` do the near-duplicates task in one call.
+  The user is still undecided whether relaxing it is right on
+  technical grounds (a crash that printed less, or a different
+  panic, is still a different behavior), but it is plainly the
+  better fit for the tooling: without it, the most common
+  near-duplicates (methods on pointer receivers that log, then
+  write a field) cannot be folded at all. Keep the relaxation
+  narrow and easy to revert, and say where a refactoring relies on
+  it.
 
 - **Options over new tools** (2026-10-21): the pointer alias (gap A)
   is `pointer` on `extract_variable`, not a tool of its own: the model
