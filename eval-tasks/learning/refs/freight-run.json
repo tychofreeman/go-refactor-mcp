@@ -1,0 +1,4 @@
+{"steps":[{"tool":"add_declaration","args":{"file":"freight/freight.go","after":"Dispatch","content":"// Run is a dispatch: what to ship to, and what.\ntype Run struct {\n\tShipments []Shipment\n\tOrder     Order\n}\n\n// DispatchRun ships r.\nfunc DispatchRun(c Config, r Run) []string { return Dispatch(c, r.Shipments, r.Order) }"}},
+{"tool":"fold","args":{"file":"freight/freight.go","name":"DispatchRun"}},
+{"tool":"inline_function","args":{"file":"freight/freight.go","name":"Dispatch","all_calls":true}},
+{"tool":"rename","args":{"file":"freight/freight.go","name":"DispatchRun","new_name":"Dispatch"}}]}

@@ -1885,6 +1885,17 @@ The two scripts (`eval-tasks/learning/reads.py` and
 `eval-tasks/learning/funcs/main.go`) were written in the scratchpad
 while measuring and copied in with cp; the docs with replace_text.
 
+## 2026-10-22: the call-tree probe
+
+`eval-tasks/learning/probe.py` written by hand (a Python driver; one
+edit to it with a Python string replace), the references' batches
+copied from the scratchpad. `eval-tasks/learning/views` through
+gorefactor (create_file, the stub of `view` declared by the batch,
+rename of the stub's parameter, replace_statements, add_declaration;
+one batch refused for using the parameter before the rename; one
+replace_text refused because gofmt had realigned the map's keys, fixed
+with the text as it was, and two assertions changed with sed).
+
 ## 2026-10-22: function naming the function itself
 
 All through gorefactor: the test cases with replace_text, the fix with
