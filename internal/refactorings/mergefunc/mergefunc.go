@@ -37,11 +37,9 @@ func New() *MergeDuplicate { return &MergeDuplicate{} }
 func (*MergeDuplicate) Name() string { return "merge_duplicate_function" }
 
 func (*MergeDuplicate) Description() string {
-	return `Replace every use of a function with an identical one (calls and function values, qualified and imported where needed), and delete it.
-Use it to remove copies of a helper: move one copy where the others can reach it (move_declaration), then merge each of the others into it.
-Identify the function to delete by file, line and name, at its declaration or any use, and the one to keep by keep_file (any file of its package) and keep_name.
-Identical means: the same signature, and bodies that match node for node, ignoring comments and layout; parameters and locals may be named differently (consistently), and every other name (functions, variables, types, fields, methods, imported packages) must mean the same thing in both. The refusal shows the first difference.
-An exported function goes too, with a note that the module's API changed. Refuses methods and generic functions, a function to keep that a user cannot see (unexported, in another package) or could only import by making an import cycle, and a use where the new name (or its package's name) would mean something else.`
+	return `Replace every use of a function with an identical one, and delete it: with func trim(s string) string { return strings.TrimSpace(s) } and func clean(t string) string { return strings.TrimSpace(t) }, merging trim into clean turns trim(x) into clean(x) everywhere and deletes trim. Identical means the same signature and bodies that match node for node; parameters and locals may be named differently, every other name must mean the same. The refusal shows the first difference.
+Identify the function to delete by file and name, or by line at its declaration or any use, and the one to keep by keep_file (any file of its package) and keep_name.
+Refuses, saying why: methods, generic functions, a function to keep that a use cannot reach or could import only through an import cycle.`
 }
 
 func (*MergeDuplicate) InputSchema() json.RawMessage {

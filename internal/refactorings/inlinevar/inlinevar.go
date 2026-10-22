@@ -49,11 +49,9 @@ func New() *InlineVariable { return &InlineVariable{} }
 func (*InlineVariable) Name() string { return "inline_variable" }
 
 func (*InlineVariable) Description() string {
-	return `Replace every use of a local variable (or local constant) with the expression it is initialized with, and delete its declaration. The inverse of extract_variable.
-Use it to remove a variable whose name adds nothing, such as one that is set and then used once immediately, or to undo an unhelpful extraction.
-Identify the variable by file, line and name, at its declaration or at any use; or by file, function ("Name" or "Type.Method") and name, which stays valid after edits, e.g. later in a batch.
-Works for "x := expr", "var x [T] = expr" and "const x [T] = expr", also in an if or switch header. A pointer alias (p := &e.f, as extract_variable with pointer makes) is inlined as e.f where it is dereferenced (*p, p.x) and &e.f elsewhere. If the variable's type differs from the expression's own type (an explicit type, an untyped constant, an interface), the expression is converted so the type is kept.
-Refuses if the variable is ever assigned or its address is taken; if inlining would evaluate the expression a different number of times or in a different order (an initializer with function calls, or that reads data other code can change, needs exactly one use, evaluated exactly once in the same block with no calls in between); if a variable the expression reads is modified before a use; or if a name in the expression would mean something else at a use.`
+	return `Replace every use of a local variable or constant with its initializer, and delete the declaration: the inverse of extract_variable. name := u.First; return greet(name) becomes return greet(u.First). A pointer alias (p := &e.f) is inlined as e.f where it is dereferenced. Where the variable's type differs from its initializer's (an untyped constant, an interface), a conversion keeps it.
+Identify the variable by file, line and name at its declaration or any use, or by file, function ("Name" or "Type.Method") and name, which stays valid later in a batch.
+Refuses, saying why: a variable assigned after its declaration or whose address is taken; an initializer that would be evaluated a different number of times or in another order (one with calls needs a single use, with no calls in between); something it reads changed before a use; a name that would mean something else at a use.`
 }
 
 func (*InlineVariable) InputSchema() json.RawMessage {
