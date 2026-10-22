@@ -1,0 +1,37 @@
+[
+  {
+    "name": "lending-phases",
+    "dir": "testdata/lending-xl",
+    "tests": "testdata/lending-phases",
+    "check": "go vet ./... && go test ./...",
+    "prompt": "Import in package lending parses, checks and adds in one function. Split it into three, in package lending: type Record struct { Line int; ID, Title, Kind string; Copies int } (Line is the 1-based line of text it came from); func ParseRecords(text string) ([]Record, error), which reads the lines as Import's first loop does and fails as it does on a line without 4 fields or with copies that are not a number; func ValidateRecords(c *Catalog, recs []Record) error, which checks them as Import's second loop does, failing, in this order for each record, on no id, an unknown kind, no copies, or an id already in c or earlier in recs, with Import's messages (\"line N: no id\", \"line N: unknown kind \\\"K\\\"\", \"line N: no copies\", \"line N: ID is already there\"); and func ApplyRecords(c *Catalog, recs []Record), which adds them to c. Import calls the three in turn. What Import does and returns must not change."
+  },
+  {
+    "name": "lending-kinds",
+    "dir": "testdata/lending-xl",
+    "tests": "testdata/lending-kinds",
+    "check": "go vet ./... && go test ./...",
+    "prompt": "Each kind of item in package lending should be a type, not a string. Add an interface Kind { LoanDays() int; DailyFee() int; Label(title string) string; Shelf() string; Renewable() bool } and three types that implement it, Book, DVD and Atlas (each an empty struct), with what the switches in LoanDays, DailyFee, Label, Shelf and Renewable do for \"book\", \"dvd\" and \"atlas\". Item.Kind becomes a Kind (Item{Kind: DVD{}}). LoanDays(it), DailyFee(it), Label(it), Shelf(it) and Renewable(it) keep their signatures and results; Import turns \"book\", \"dvd\" and \"atlas\" into Book{}, DVD{} and Atlas{} and still fails with line N: unknown kind \"K\" on any other. Everything that compared a Kind with a string, in every package, must work as before."
+  },
+  {
+    "name": "lending-policy",
+    "dir": "testdata/lending-xl",
+    "tests": "testdata/lending-policy",
+    "check": "go vet ./... && go test ./...",
+    "prompt": "Remove the package variable policy of package lending. Add func DefaultPolicy() Policy, which returns Policy{GraceDays: 2, MaxFee: 500, Rounding: 5}. Settle and Warn take a Policy as their first parameter, func Settle(p Policy, loans []Loan, today int) []Charge and func Warn(p Policy, l Loan, today int) bool, and pass it to the functions that used the variable. Every caller in every package passes DefaultPolicy(). What they charge and report must not change."
+  },
+  {
+    "name": "lending-address",
+    "dir": "testdata/lending-xl",
+    "tests": "testdata/lending-address",
+    "check": "go vet ./... && go test ./...",
+    "prompt": "Move the fields Street, City and Zip of lending.Member into a new type lending.Address struct { Street, City, Zip string }, and give Member a field Home Address in their place, so that a member is written Member{Home: Address{City: \"Oslo\"}} and its city read m.Home.City. Everything that used them, in every package, must work as before."
+  },
+  {
+    "name": "lending-dryrun",
+    "dir": "testdata/lending-xl",
+    "tests": "testdata/lending-dryrun",
+    "check": "go vet ./... && go test ./...",
+    "prompt": "Add func DryRun(c *Catalog, text string) ([]string, error) to package lending. It checks text exactly as Import does, failing with the error Import would return, but adds nothing to c; on success it returns the titles of the items Import would add, in the order of the text."
+  }
+]

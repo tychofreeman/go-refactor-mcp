@@ -16,6 +16,10 @@ results are in `docs/cost-history.md`.
   change to the tools.
 - Ask before starting an A/B run unless the user asked for one: each costs
   a few dollars.
+- Append friction log entries at the end of `docs/friction-log.md`.
+  Inserting them before an older entry put every PR's entry at the
+  same place, so parallel PRs conflicted there one after another
+  (2026-10-22, #263-#267).
 - When the user says "do X, then Y", do them in order, each in its own PR.
 - Report results plainly, including when a change did not help (#119 was
   reverted in #120 after its rerun showed nothing).
@@ -161,7 +165,8 @@ results are in `docs/cost-history.md`.
   alone the model found where the change goes and planned the
   reference derivations; what failed was the tools' interface
   (rename's `function`, argument names) and a fold bug, not the lack
-  of bodies.
+  of bodies. Step 3's set C (`lending-xl`, five tasks, references and
+  the algebraic arm) is built; its runs need the user's go-ahead.
 
 - **Loops and containers** (2026-10-20): the user asked for
   refactorings that convert between kinds of loop, and edits that make

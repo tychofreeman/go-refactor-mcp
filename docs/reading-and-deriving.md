@@ -287,6 +287,37 @@ What it tells:
 - Neither arm derives: the shapes need operations that are missing;
   each run's hand-written steps name them (the friction log's way).
 
+**Built** (2026-10-22). `lending-xl`, a library's lending
+(`eval-tasks/learning/gen_lending.py`, 748 lines in five packages),
+`eval-tasks/derivations-lending.json`, hidden tests in
+`testdata/lending-*`, and a reference for each task made by the tools
+and passing its hidden test (`eval-tasks/learning/refs/lending-*.json`):
+
+| task | the shape | uses | the reference |
+|---|---|---|---|
+| phases | `Import` parses, checks and adds in three loops; split into `ParseRecords`, `ValidateRecords`, `ApplyRecords` over a new `Record` | one function | edits: the three functions and `Import` calling them |
+| kinds | a `switch it.Kind` in five functions; an interface `Kind` with a type per kind | 5 switches, 3 comparisons in two other packages | edits: the types, five bodies, `Import`, the comparisons and test literals |
+| policy | a package variable read four calls deep; passed down from `Settle` and `Warn` | 17 calls of `Settle`, 2 of `Warn` | derivation: `add_parameter` up the chain (19 calls of Settle updated), the reads pointed at the parameter, `remove_dead_code` |
+| address | `Street`, `City`, `Zip` of `Member` into `Address`, held as a named field `Home` | about 55 reads in three packages | `extract_struct` (embedded), then 73 replacements by hand to name the field |
+| dryrun | an additive feature: check without adding | | derivation: `extract_function` of the two checking loops, then a 10-line `DryRun` |
+
+`Import` was written as three loops, parse, check and add, so that
+splitting it does not change which error a text with two bad lines
+reports. Checked before using the shapes: `docs/derivations.md`, the
+instruction sets and the tool descriptions name none of them ("phase"
+there is the two-phase rule; add_case's example adds a clause).
+
+The algebraic arm, `eval-tasks/claude-md-algebraic`: the baseline
+(`claude-md-refactor-first-inspect`) and the method of the draft above
+under "Work as a derivation", with "or search for" added, since step 1
+found the searches are most of what reading costs.
+
+Found while making the references: no operation turns a switch on a
+kind into methods, or makes an embedded field a named one;
+`remove_dead_code` refused `var policy = DefaultPolicy()` as an
+initializer with side effects, though `DefaultPolicy` only returns a
+literal.
+
 ## Recording
 
 Each step in its own PR: the results in `docs/cost-history.md`
