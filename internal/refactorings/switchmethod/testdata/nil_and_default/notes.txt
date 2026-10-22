@@ -1,0 +1,1 @@
+the default case was dropped: every type of the module that implements Kind has a case

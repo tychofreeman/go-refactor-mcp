@@ -1,0 +1,1 @@
+the case at m.go:22:2 lists several types

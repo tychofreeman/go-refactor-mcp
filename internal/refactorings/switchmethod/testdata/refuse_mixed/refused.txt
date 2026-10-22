@@ -1,0 +1,1 @@
+every case must return, or none: the case Book at m.go:22:2 returns and the case DVD at m.go:24:2 does not
