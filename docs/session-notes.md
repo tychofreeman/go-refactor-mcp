@@ -85,7 +85,11 @@ results are in `docs/cost-history.md`.
   near-duplicates (methods on pointer receivers that log, then
   write a field) cannot be folded at all. Keep the relaxation
   narrow and easy to revert, and say where a refactoring relies on
-  it.
+  it. `fold` extends it (its own PR, to be dropped if the user
+  decides against it): `&x` may also come before code or an
+  argument that could panic another way, which billing's card copy
+  needs; never before code that might not finish or return
+  (`Summary.Stops`).
 
 - **Options over new tools** (2026-10-21): the pointer alias (gap A)
   is `pointer` on `extract_variable`, not a tool of its own: the model
