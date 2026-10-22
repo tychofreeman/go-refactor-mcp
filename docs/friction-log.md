@@ -1813,6 +1813,11 @@ one batch (refused once: a range given by line that the batch placed
 on bindText's signature; addressed by `function` instead), the docs
 with replace_text.
 
+## 2026-10-21: channel operations might not finish
+
+All through gorefactor: the code with replace_statements (one body
+refused: the content lacked its closing lines), the golden cases
+with create_file, the docs with replace_text.
 ## 2026-10-21: fold evaluates a pure argument once
 
 All through gorefactor: the golden cases with create_file, the code

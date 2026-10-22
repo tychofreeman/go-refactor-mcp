@@ -293,16 +293,20 @@ func (ft *facts) addEffects(f *analysis.Func, s ast.Stmt, effects *analysis.Effe
 			set(&ft.effect, "defers a call")
 		case *ast.SendStmt:
 			set(&ft.effect, "sends on a channel")
+			set(&ft.unsafe, "sends on a channel, which might block")
 		case *ast.SelectStmt:
 			set(&ft.effect, "selects on channels")
+			set(&ft.unsafe, "selects on channels, which might block")
 		case *ast.ForStmt:
 			set(&ft.unsafe, "is a loop that might not finish")
 		case *ast.RangeStmt:
 			switch info.TypeOf(n.X).Underlying().(type) {
 			case *types.Chan:
 				set(&ft.effect, "receives from a channel")
+				set(&ft.unsafe, "receives from a channel, which might block")
 			case *types.Signature:
 				set(&ft.effect, "calls an iterator")
+				set(&ft.unsafe, "calls an iterator, which could be any function")
 			case *types.Slice, *types.Map, *types.Pointer:
 				set(&ft.shared, "reads the elements of "+types.ExprString(n.X))
 			}
@@ -333,6 +337,7 @@ func (ft *facts) addEffects(f *analysis.Func, s ast.Stmt, effects *analysis.Effe
 		case *ast.UnaryExpr:
 			if n.Op == token.ARROW {
 				set(&ft.effect, "receives from a channel")
+				set(&ft.unsafe, "receives from a channel, which might block")
 			}
 		case *ast.StarExpr:
 			if !info.Types[n].IsType() {
