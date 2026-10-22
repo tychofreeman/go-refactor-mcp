@@ -487,6 +487,26 @@ with the tighter one without the example).
 | tighter | 260 | 0/4 | $0.15 | 10.0 | 88 |
 | tighter, one example per kind | 300 | 4/4 | $0.14 | 10.2 | 53 |
 
+All 38 descriptions shortened, each with an example (#255-#259, 8,700
+words to about 5,200); the user's moves on freight-xl, 4 tasks, 4 runs,
+$2.34 (`eval-runs/freight-human-alldesc`, against `freight-human`):
+
+| | old descriptions | new |
+|---|---|---|
+| cost (16 runs) | $2.42 | $2.34 |
+| turns with tool calls | 99 | 98 |
+| ToolSearch-only turns | 9 | 6 |
+| gorefactor calls refused | 11 | 5 |
+| Bash writes refused | 1 | 7 |
+| `fold` used: dispatch, routes, tail, run | 2, 2, 3, 4 of 4 | 4, 2, 2, 4 of 4 |
+| lines by hand | 251 | 230 |
+
+About the same cost, half the refusals, no tool used less but `fold`
+on tail (one run, within noise). The Bash writes were `sed -i` and
+`perl -pi` regex replacements across files on the routes task, four in
+one run; replace_text takes exact text only, so a model that wants a
+pattern across files still reaches for sed.
+
 ## What made the difference
 
 - **Smaller results** (#75, rename locations): the largest single win when

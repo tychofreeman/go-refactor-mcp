@@ -103,7 +103,8 @@ results are in `docs/cost-history.md`.
   about 5,200 over 38 tools, each example run with the CLI). Write new
   ones the same way: what it does with a before/after, the addressing
   hints the schema does not carry, and one line of what it refuses
-  ("Refuses, saying why: ...").
+  ("Refuses, saying why: ..."). Measured on freight-xl (cost-history
+  9): about the same cost, half the refused calls, no tool lost.
 
 - **Options over new tools** (2026-10-21): the pointer alias (gap A)
   is `pointer` on `extract_variable`, not a tool of its own: the model
