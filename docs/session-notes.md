@@ -91,6 +91,15 @@ results are in `docs/cost-history.md`.
   needs; never before code that might not finish or return
   (`Summary.Stops`).
 
+- **Tool descriptions: an example per use, the rules in refusals**
+  (2026-10-21): cutting `fold`'s description from 668 to about 260
+  words lost its use on near-duplicates (2/4 runs to 0/4) when the
+  worked example of that shape went; with one example per kind of
+  match (about 300 words) it was used in 4/4. A fresh model decides
+  whether a tool fits from its before/after examples; conditions and
+  evaluation-order rules can live in the refusals, which say why a
+  match was left.
+
 - **Options over new tools** (2026-10-21): the pointer alias (gap A)
   is `pointer` on `extract_variable`, not a tool of its own: the model
   already reaches for extract_variable, and its refusal for a field
