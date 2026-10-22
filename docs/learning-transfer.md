@@ -199,6 +199,36 @@ The user accepted that reading (the same line at many call sites is one edit: wh
 
 The type came from a test literal (`create_from_usage`) in two runs.
 
-The learned lessons (`claude-md-learned`) are the explore run's, less
-Contacts, with lesson 3 from the shared-record trial. The learner runs
-on B have not been run.
+The learned lessons (`claude-md-learned`) were first the explore run's,
+less Contacts, with lesson 3 from the shared-record trial, then the
+five-sequence runs'. For the learner runs they are rebuilt from the
+explorer 7 runs (`explore-seven`, `explore-seven-all`,
+`explore-seven-batch`): six derivations, each found by two or more runs
+within one distinct line per change, and three dead ends; about 740
+words on the base, against about 350 for the user's moves. One step is
+mine, not the runs': the Contacts lesson ends with `remove_dead_code` of
+the old field, which the runs did with `replace_text` while
+`remove_dead_code` refused falsely (fixed in #233).
+
+## The learner runs on B
+
+`derivations-billing.json`, 6 runs a task, three arms in parallel
+(`eval-runs/learn-base`, `learn-learned`, `learn-human`), $12.47 in all:
+
+| arm | passed | cost a run | turns | written by hand | derived share |
+|---|---|---|---|---|---|
+| baseline | 30/30 | $0.146 | 11.0 | 711 | 40% |
+| learned (model-taught) | 30/30 | $0.142 | 10.1 | 386 | 60% |
+| the user's moves | 30/30 | $0.127 | 8.4 | 529 | 48% |
+
+Lines written and derived share are over the 30 runs of each arm.
+
+What the lessons carried across, by task:
+
+- `billing-tail` (the helper becomes a method): learned 6/6 by wrapper, `fold`, `inline_function`; the user's moves half by that, half by `function_to_method`; the baseline wrote it by hand but for one run.
+- `billing-run` (parameter object): learned and the user's moves both 6/6 by wrapper, `fold`, `inline_function`; the baseline by `replace_expression` at each call.
+- `billing-methods` (two fields to a map): learned folded getters and removed the fields with `remove_dead_code` in most runs; the user's moves folded getters too; the baseline went textual (123 replacements).
+- `billing-blocked`: small either way; extract then guard in about half the runs of every arm.
+- `billing-book` (near-duplicates into `book`): every arm wrote it by hand (`replace_statements` per method). The near-duplicates lesson, the longest and most fragile, did not transfer.
+
+So a model can teach later models: the learned arm derived where the baseline rewrote, and wrote 46% fewer lines by hand than the baseline and 27% fewer than the user's moves, the highest derived share of the three. It did not make them cheaper: $0.142 against $0.146 is within the noise (10-25% at this many runs), while the user's shorter moves cost 13% less with a quarter fewer turns. The explorers' own cost ($5.55 + $7.62 + $8.12 + $2.20 and the trials) is a one-time cost these runs did not repay on a module this small. Not yet tried: a shorter learned section (the same derivations at the user's length), and a larger module, where rewriting by hand costs more.
