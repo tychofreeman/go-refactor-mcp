@@ -39,7 +39,7 @@ func (*Fold) Description() string {
 Use it after writing a small function to name what code does (a getter, a helper, a method that calls an old function), so the code uses it: u.Email becomes u.email() for func (u User) email() string { return u.Email }; truncate(subject, 20) inside a method of SMS becomes s.fit(subject) for func (s *SMS) fit(text string) string { return truncate(text, 20) }.
 A struct parameter the body uses only by its fields makes each field a hole, and the call passes a literal: Send(p, us, m) becomes Send2(p, Batch{Users: us, Message: m}) for func Send2(p string, b Batch) string { return Send(p, b.Users, b.Message) }, to move callers to a parameter object.
 A function that sets fields of a struct parameter (or value receiver) and returns it, a setter, folds literals of the struct that give those fields as it sets them: User{ID: id, Email: v} becomes withEmail(User{ID: id}, v) for func withEmail(u User, v string) User { u.Email = v; return u }, so that a change to how the field is kept is made in the setter. Not a literal whose & is elided ([]*User{{...}}), nor one whose fields with effects would be evaluated in another order.
-A function without results whose body is statements folds runs of statements: the same statements in any block, its locals named anything there, become one call statement; so extract_function on lines in one place, then fold, replaces the same lines elsewhere. Not when the body returns, defers, jumps to a label or assigns a parameter, nor where the run declares a variable used after it, or an argument with effects or that could panic would move before the statements. A *p of the body, for a pointer parameter p, matches a variable or field x, and the call passes &x: w.Sent = append(w.Sent, s) folds into record(&w.Sent, s) for func record(sent *[]string, s string) { *sent = append(*sent, s) }; not when x goes through a package variable, or through a pointer that could be nil and code before x might not return or could panic otherwise. In a printf-style call, a %s or %v of the body whose argument is a string parameter matches constant text of the format without a %: log.Printf("email to %s", to) is log.Printf("%s to %s", channel, to) with channel "email".
+A function without results whose body is statements folds runs of statements: the same statements in any block, its locals named anything there, become one call statement; so extract_function on lines in one place, then fold, replaces the same lines elsewhere. Not when the body returns, defers, jumps to a label or assigns a parameter, nor where the run declares a variable used after it, or an argument with effects or that could panic would move before the statements. A *p of the body, for a pointer parameter p, matches a variable or field x, and the call passes &x: w.Sent = append(w.Sent, s) folds into record(&w.Sent, s) for func record(sent *[]string, s string) { *sent = append(*sent, s) }; not when x goes through a package variable, or through a pointer that could be nil and code before x might not return or could panic otherwise. In a printf-style call, a %s or %v of the body whose argument is a string parameter matches constant text of the format without a %: log.Printf("email to %s", to) is log.Printf("%s to %s", channel, to) with channel "email". String + is associative: a string parameter of the body may match a run of a concatenation's operands, so to+": "+text matches first+" "+last+": "+ref with to first+" "+last.
 Identify the function by file and name (Name or Type.Method). Its body must be one return of one value, a setter, or statements without results, using every parameter. Every other name in the body must mean the same at a match. A method's receiver is what matched it, or, when the body does not use it, the receiver of the method of the same type the match is in. With line, only matches starting on that line of file (or of in) are folded, to move callers over one at a time.
 Leaves, and says why: a match that is assigned or has its address taken, one where an argument with effects or that could panic would be evaluated a different number of times or in another order, one in another package when the function is not exported, and one in no method of the receiver's type when the call needs the receiver from there.`
 }
@@ -89,10 +89,11 @@ type folder struct {
 	// of and returns, and the fields with what it sets them to, in order.
 	self      types.Object
 	sets      []set
-	rest      map[ast.Expr]rest // literals folded through the setter, by what to write for them
-	addressOf map[ast.Expr]bool // arguments &x made for a *p of the body that x matched
-	made      map[ast.Expr]bool // string literals made from a format's text, for a %s of the body
-	effs      *analysis.Effects // what calls do, built when needed
+	rest      map[ast.Expr]rest       // literals folded through the setter, by what to write for them
+	addressOf map[ast.Expr]bool       // arguments &x made for a *p of the body that x matched
+	made      map[ast.Expr]bool       // string literals made from a format's text, for a %s of the body
+	runs      map[ast.Expr][]ast.Expr // concatenations made of a run of operands, for a string parameter of the body
+	effs      *analysis.Effects       // what calls do, built when needed
 
 	n       int      // occurrences folded
 	skipped []string // why matches were left, "file:line: reason"
@@ -365,7 +366,7 @@ func (f *folder) setter(list []ast.Stmt) bool {
 // only those that start on that line of the file in.
 func (f *folder) find(in string, line int) error {
 	f.by, f.adders, f.rest = map[string][]edit.TextEdit{}, map[string]*imports.Adder{}, map[ast.Expr]rest{}
-	f.addressOf, f.made = map[ast.Expr]bool{}, map[ast.Expr]bool{}
+	f.addressOf, f.made, f.runs = map[ast.Expr]bool{}, map[ast.Expr]bool{}, map[ast.Expr][]ast.Expr{}
 	seen := map[token.Position]bool{}
 	declFile := f.ws.Fset.Position(f.decl.Pos()).Filename
 	for _, p := range f.ws.Pkgs {
@@ -445,7 +446,7 @@ func (f *folder) try(p *packages.Package, file *ast.File, x ast.Expr, stack []as
 	// first.
 	impure := 0
 	for k, e := range b {
-		if analysis.HasEffect(info, e) || analysis.MayPanic(info, e) != nil || f.nilAddress(info, e) {
+		if f.impure(info, e) || f.nilAddress(info, e) {
 			impure++
 			if n := f.count(k); n > 1 {
 				return skip(fmt.Sprintf("%s, used %d times in the body, would be evaluated once", types.ExprString(e), n))
@@ -632,6 +633,13 @@ func (f *folder) call(p *packages.Package, file *ast.File, b map[holeKey]ast.Exp
 	}
 	var text func(e ast.Expr) string
 	text = func(e ast.Expr) string {
+		if run, ok := f.runs[e]; ok {
+			var parts []string
+			for _, y := range run {
+				parts = append(parts, text(y))
+			}
+			return strings.Join(parts, "+")
+		}
 		if l, ok := e.(*ast.BasicLit); ok && f.made[e] {
 			return l.Value
 		}
@@ -883,6 +891,10 @@ func (f *folder) match(p, x ast.Expr, info *types.Info, b map[holeKey]ast.Expr) 
 		}
 		return true
 	case *ast.BinaryExpr:
+		if pp.Op == token.ADD && analysis.IsString(pinfo.TypeOf(pp)) {
+			xb, ok := x.(*ast.BinaryExpr)
+			return ok && xb.Op == token.ADD && f.matchConcat(pp, xb, info, b)
+		}
 		xb, ok := x.(*ast.BinaryExpr)
 		return ok && xb.Op == pp.Op && sub(pp.X, xb.X) && sub(pp.Y, xb.Y)
 	case *ast.UnaryExpr:
@@ -1039,12 +1051,8 @@ func (f *folder) matchFormat(pp, xc *ast.CallExpr, info *types.Info, b map[holeK
 // bindText binds the pattern's arg, if it is a parameter of type string,
 // to a literal of text in b; it reports whether it could.
 func (f *folder) bindText(arg ast.Expr, text string, pos token.Pos, b map[holeKey]ast.Expr) bool {
-	id, ok := ast.Unparen(arg).(*ast.Ident)
-	if !ok {
-		return false
-	}
-	po := f.pkg.TypesInfo.Uses[id]
-	if _, hole := f.holes[po]; !hole || po == nil || po == f.recv || !types.Identical(po.Type(), types.Typ[types.String]) {
+	po := f.stringParam(arg)
+	if po == nil {
 		return false
 	}
 	k := holeKey{po, ""}
@@ -1060,6 +1068,119 @@ func (f *folder) bindText(arg ast.Expr, text string, pos token.Pos, b map[holeKe
 	b[k] = lit
 	f.made[lit] = true
 	return true
+}
+
+// stringParam is the parameter of type string that arg, of the pattern,
+// is, or nil.
+func (f *folder) stringParam(arg ast.Expr) types.Object {
+	id, ok := ast.Unparen(arg).(*ast.Ident)
+	if !ok {
+		return nil
+	}
+	po := f.pkg.TypesInfo.Uses[id]
+	if _, hole := f.holes[po]; !hole || po == nil || po == f.recv || !types.Identical(po.Type(), types.Typ[types.String]) {
+		return nil
+	}
+	return po
+}
+
+// matchConcat reports whether x, a string concatenation, is the
+// pattern's concatenation pp, + being associative: each operand of pp
+// matches one of x's in order, but a string parameter may match a run of
+// them, so to+": "+text is first+" "+last+": "+ref with to first+" "+last.
+func (f *folder) matchConcat(pp, x *ast.BinaryExpr, info *types.Info, b map[holeKey]ast.Expr) bool {
+	ps, xs := concatOperands(f.pkg.TypesInfo, pp), concatOperands(info, x)
+	// try matches ps[i:] to xs[j:]; it returns the holes, or nil.
+	var try func(i, j int, b map[holeKey]ast.Expr) map[holeKey]ast.Expr
+	try = func(i, j int, b map[holeKey]ast.Expr) map[holeKey]ast.Expr {
+		if i == len(ps) || j == len(xs) {
+			if i == len(ps) && j == len(xs) {
+				return b
+			}
+			return nil
+		}
+		c := maps.Clone(b)
+		if f.match(ps[i], xs[j], info, c) {
+			if r := try(i+1, j+1, c); r != nil {
+				return r
+			}
+		}
+		po := f.stringParam(ps[i])
+		for k := j + 2; po != nil && k <= len(xs)-(len(ps)-i-1); k++ {
+			c := maps.Clone(b)
+			if f.bindRun(po, xs[j:k], c) {
+				if r := try(i+1, k, c); r != nil {
+					return r
+				}
+			}
+		}
+		return nil
+	}
+	r := try(0, 0, b)
+	if r == nil {
+		return false
+	}
+	maps.Copy(b, r)
+	return true
+}
+
+// bindRun binds the string parameter po to the concatenation of run in
+// b; it reports whether it could.
+func (f *folder) bindRun(po types.Object, run []ast.Expr, b map[holeKey]ast.Expr) bool {
+	e := run[0]
+	for _, y := range run[1:] {
+		e = &ast.BinaryExpr{X: e, OpPos: y.Pos(), Op: token.ADD, Y: y}
+	}
+	k := holeKey{po, ""}
+	if prev, ok := b[k]; ok {
+		return types.ExprString(prev) == types.ExprString(e)
+	}
+	b[k] = e
+	f.runs[e] = run
+	return true
+}
+
+// concatOperands lists the operands of e as a string concatenation,
+// however it is grouped: a+(b+c) is a, b, c.
+func concatOperands(info *types.Info, e ast.Expr) []ast.Expr {
+	if bin, ok := ast.Unparen(e).(*ast.BinaryExpr); ok && bin.Op == token.ADD && analysis.IsString(info.TypeOf(bin)) {
+		return append(concatOperands(info, bin.X), concatOperands(info, bin.Y)...)
+	}
+	return []ast.Expr{e}
+}
+
+// effects is what calls in the workspace do.
+func (f *folder) effects() *analysis.Effects {
+	if f.effs == nil {
+		f.effs = analysis.NewEffects()
+		for _, p := range f.ws.Pkgs {
+			f.effs.AddPackage(p.Syntax, p.TypesInfo)
+		}
+	}
+	return f.effs
+}
+
+// impure reports whether evaluating e could do more than compute a
+// value: a call in it has side effects, reads what other code can
+// change, or could panic or not finish; or e could panic itself.
+func (f *folder) impure(info *types.Info, e ast.Expr) bool {
+	if analysis.MayPanic(info, e) != nil {
+		return true
+	}
+	found := false
+	ast.Inspect(e, func(n ast.Node) bool {
+		switch n := n.(type) {
+		case *ast.FuncLit:
+			return false
+		case *ast.CallExpr:
+			s := f.effects().Call(info, n)
+			found = s.Effect != "" || s.Reads != "" || s.Unsafe != ""
+		case *ast.UnaryExpr:
+			found = n.Op == token.ARROW
+		}
+		return !found
+	})
+	return found
 }
 
 // formatIndex is the index of the format argument of call, a call of a
@@ -1193,12 +1314,6 @@ func pointerStays(info *types.Info, p ast.Expr, seq []ast.Stmt, stack []ast.Node
 // mayStop is how the code of the statement s before pos might not return
 // or could panic other than by a nil dereference, or "".
 func (f *folder) mayStop(info *types.Info, s ast.Stmt, pos token.Pos) string {
-	if f.effs == nil {
-		f.effs = analysis.NewEffects()
-		for _, p := range f.ws.Pkgs {
-			f.effs.AddPackage(p.Syntax, p.TypesInfo)
-		}
-	}
 	why := ""
 	ast.Inspect(s, func(n ast.Node) bool {
 		if _, lit := n.(*ast.FuncLit); lit || n == nil || why != "" || n.Pos() >= pos {
@@ -1209,7 +1324,7 @@ func (f *folder) mayStop(info *types.Info, s ast.Stmt, pos token.Pos) string {
 			return true
 		}
 		if c, ok := e.(*ast.CallExpr); ok {
-			why = f.effs.Call(info, c).Unsafe
+			why = f.effects().Call(info, c).Unsafe
 		}
 		if p := analysis.MayPanic(info, e); why == "" && p != nil {
 			why = "could panic (at " + f.ws.Position(p.Pos()) + ")"
@@ -1335,7 +1450,7 @@ func (f *folder) foldStmts(p *packages.Package, file *ast.File, list []ast.Stmt,
 		where := f.ws.Position(seq[0].Pos())
 		skip := ""
 		for _, e := range b {
-			if analysis.HasEffect(info, e) || analysis.MayPanic(info, e) != nil {
+			if f.impure(info, e) {
 				skip = types.ExprString(e) + " would be evaluated before the statements, not where it is"
 			}
 		}

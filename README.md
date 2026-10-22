@@ -893,6 +893,13 @@ hand or a tool got in the way.
       otherwise.
     - `fold`: string `+` is associative, so a hole matches a run of
       a concatenation (`a.Bank+": "+inv.Ref+fmt.Sprintf(...)`).
+      *Done:* a `string` parameter matches a run of operands however
+      they are grouped. Whether an argument may be evaluated before the
+      statements is now judged by what the calls in it do
+      (`analysis.Effects`), all of them, not only the outermost: so
+      `fmt.Sprintf` in a run is fine, and `x+g()`, with `g` having
+      effects, is no longer folded. Billing's bank copy folds too:
+      three of four in one call.
     - `fold`: in a printf-style call, a `%s` hole matches constant
       text of the format that holds no `%` (`"wallet charge to %s"`).
       *Done:* `%s` or `%v` with a `string` parameter, in a call of a

@@ -1806,6 +1806,13 @@ All through gorefactor: the golden cases with create_file, the code
 with add_field, replace_statements, insert_statements and
 add_declaration in one batch, the docs with replace_text.
 
+## 2026-10-21: fold through string concatenation
+
+All through gorefactor: the golden case with create_file, the code in
+one batch (refused once: a range given by line that the batch placed
+on bindText's signature; addressed by `function` instead), the docs
+with replace_text.
+
 ## 2026-10-21: sort.Slice is not reflection on fields
 
 All through gorefactor: the golden cases with create_file, the fix
