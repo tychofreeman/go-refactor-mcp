@@ -895,6 +895,15 @@ hand or a tool got in the way.
       a concatenation (`a.Bank+": "+inv.Ref+fmt.Sprintf(...)`).
     - `fold`: in a printf-style call, a `%s` hole matches constant
       text of the format that holds no `%` (`"wallet charge to %s"`).
+      *Done:* `%s` or `%v` with a `string` parameter, in a call of a
+      function named `...f` whose last parameters are a format string
+      and `...any`. With this and the pointer hole, billing's wallet
+      and voucher copies fold into `book`.
+    - Found on the way: the card copy uses `last(a.Card, 4)` twice;
+      `fold` leaves an argument that could panic (`last` slices) when
+      the body uses it twice, though it is pure and the first thing
+      the statements evaluate, so evaluating it once first is the
+      same.
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
