@@ -957,6 +957,11 @@ hand or a tool got in the way.
     or the whole module, scored by running the derivation; a set C of
     new shapes on a large module, with an arm that teaches the method
     and names no shapes.
+    - Step 2, the call tree: `cmd/calltree` prints each package's types
+      and each function's signature, doc line and the module functions
+      it calls (through an interface as the interface's method), with
+      no bodies. *Done* (13.4K characters for freight-xl, against
+      22.3K for its code); the probe is next.
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the

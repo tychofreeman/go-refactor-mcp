@@ -1871,6 +1871,14 @@ with the CLI.
 All through gorefactor: thirteen descriptions with replace_statements
 and `function` in one batch; the stub example checked with the CLI.
 
+## 2026-10-22: cmd/calltree
+
+All through gorefactor: the test and main with create_file (the stub of
+`tree` declared by the batch), the code with replace_statements,
+add_declaration and replace_text (two batches refused: a helper named
+`types` clashed with the go/types import; a variable used by steps
+before the one declaring it), the docs with replace_text.
+
 ## 2026-10-21: sort.Slice is not reflection on fields
 
 All through gorefactor: the golden cases with create_file, the fix
