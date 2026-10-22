@@ -1045,7 +1045,11 @@ hand or a tool got in the way.
         how each use treats the field (*Done*), splitting a shared
         clause (`case "book", "dvd":`; *Done*, by
         `prepare_switch_for_types`, whose intent it is: each value's
-        case can then move alone; no new tool or option), the recipe in
+        case can then move alone; no new tool or option), rename to
+        the interface's method when that makes the type implement it
+        (*Done*: refused only where a value of the type may become an
+        interface value, `analysis.BecomesInterface`; the first proof in
+        the engine of item 25), the recipe in
         `docs/derivations.md` run on lending-xl with the CLI, and a
         tool only if a fresh model fails the recipe.
     - **`inspect` by name** (the user, 2026-10-22): `names` reads
