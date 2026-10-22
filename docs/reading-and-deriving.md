@@ -366,7 +366,9 @@ transfers only where an operation already fits (and there it saves
 lines, not turns or cost), and it does not reduce reading. The gaps the
 runs name are the next work: `rename` of an embedded field to make it
 a named one, and an operation for a switch on a kind (methods per kind
-from the cases).
+from the cases). The first is done: the address task is now
+`extract_struct`, then `rename` of `Member.Address` to `Home`, which
+names the field in every selector that reached through it.
 
 ## Recording
 

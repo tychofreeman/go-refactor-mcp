@@ -1,0 +1,1 @@
+Member has the method String through the embedded field Address; renaming it would remove that method, and fmt.Stringer is looked for at run time

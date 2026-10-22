@@ -39,9 +39,9 @@ func New() *Rename { return &Rename{} }
 func (*Rename) Name() string { return "rename" }
 
 func (*Rename) Description() string {
-	return `Rename a variable, constant, function, type, type parameter, struct field or method, and every reference to it in the workspace: renaming the field nm of User to Name changes the declaration, every u.nm and User{nm: x}, and a doc comment that starts with the old name; other comments that mention it are listed in a note.
+	return `Rename a variable, constant, function, type, type parameter, struct field or method, and every reference to it in the workspace: renaming the field nm of User to Name changes the declaration, every u.nm and User{nm: x}, and a doc comment that starts with the old name; other comments that mention it are listed in a note. Renaming an embedded field (Member.Address to Home) makes it the named field Home Address, and what reached through it names it: m.City becomes m.Home.City.
 Identify the symbol by file, line and its current name (column if the name is on the line twice with different meanings); for a local, function ("Name" or "Type.Method") can take the place of line and stays valid after edits.
-Refuses, saying why: a new name that would clash with or shadow another, an exported name used in another package that would become unexported, a method whose new name would change which interfaces its type implements, a symbol declared outside the workspace.`
+Refuses, saying why: a new name that would clash with or shadow another, an exported name used in another package that would become unexported, a method whose new name would change which interfaces its type implements, an embedded field whose methods give a type an interface or are reached by a method expression, a symbol declared outside the workspace.`
 }
 
 func (*Rename) InputSchema() json.RawMessage {
@@ -100,6 +100,7 @@ func (*Rename) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Pla
 		r.checkExport,
 		r.checkLexical,
 		r.checkFieldOrMethod,
+		r.checkEmbedded,
 		r.checkEmbeddedType,
 	} {
 		if err := check(); err != nil {
@@ -136,6 +137,7 @@ type renamer struct {
 	first    types.Object // the object found at the requested position
 	targets  []types.Object
 	refs     []ref
+	promoted []promotion // for an embedded field, the selectors that reach through it
 }
 
 // keyOf identifies an object by its declaration position. The same
@@ -162,10 +164,6 @@ func (r *renamer) checkObject() error {
 		return refactor.Refusef("renaming labels is not supported yet")
 	case *types.Builtin, *types.Nil:
 		return refactor.Refusef("%q is a predeclared Go identifier and cannot be renamed", obj.Name())
-	case *types.Var:
-		if o.Embedded() {
-			return refactor.Refusef("%q is an embedded field, whose name comes from its type; renaming embedded fields is not supported yet", obj.Name())
-		}
 	case *types.Func:
 		if recv := o.Signature().Recv(); recv != nil && types.IsInterface(recv.Type()) {
 			return refactor.Refusef("%q is an interface method; renaming interface methods (and all their implementations) is not supported yet", obj.Name())
@@ -206,10 +204,12 @@ func (r *renamer) collect() {
 		if info == nil {
 			continue
 		}
-		for _, m := range []map[*ast.Ident]types.Object{info.Defs, info.Uses} {
+		for i, m := range []map[*ast.Ident]types.Object{info.Defs, info.Uses} {
 			for id, o := range m {
 				if o != nil && keyOf(r.ws.Fset, o) == r.key {
-					r.refs = append(r.refs, ref{p, id})
+					if i > 0 || !isEmbedded(o) { // an embedded field is declared by its type's name
+						r.refs = append(r.refs, ref{p, id})
+					}
 					addObj(origin(o))
 				}
 			}
@@ -220,13 +220,75 @@ func (r *renamer) collect() {
 			}
 		}
 	}
-	sort.Slice(r.refs, func(i, j int) bool {
-		pi, pj := r.ws.Fset.Position(r.refs[i].id.Pos()), r.ws.Fset.Position(r.refs[j].id.Pos())
-		if pi.Filename != pj.Filename {
-			return pi.Filename < pj.Filename
+	sort.Slice(r.refs, func(i, j int) bool { return r.before(r.refs[i].id.Pos(), r.refs[j].id.Pos()) })
+	if isEmbedded(r.first) {
+		r.collectPromoted()
+	}
+}
+
+// before orders positions by file, then offset.
+func (r *renamer) before(a, b token.Pos) bool {
+	pa, pb := r.ws.Fset.Position(a), r.ws.Fset.Position(b)
+	if pa.Filename != pb.Filename {
+		return pa.Filename < pb.Filename
+	}
+	return pa.Offset < pb.Offset
+}
+
+// isEmbedded reports whether obj is an embedded field.
+func isEmbedded(obj types.Object) bool {
+	v, ok := obj.(*types.Var)
+	return ok && v.Embedded()
+}
+
+// A promotion is a selector that reaches a field or method through the
+// embedded field being renamed without naming it: m.City for
+// m.Address.City. Renaming the field makes it a named one, so the
+// selector must then name it.
+type promotion struct {
+	ref   // the selected name
+	expr  *ast.SelectorExpr
+	sel   *types.Selection
+	depth int // how many fields into sel's path the renamed field is
+}
+
+// collectPromoted finds every promotion through the embedded field being
+// renamed.
+func (r *renamer) collectPromoted() {
+	seen := map[token.Position]bool{} // a package and its test variant have the same selectors
+	for _, p := range r.ws.Pkgs {
+		if p.TypesInfo == nil {
+			continue
 		}
-		return pi.Offset < pj.Offset
-	})
+		for se, sel := range p.TypesInfo.Selections {
+			if d := r.through(sel); d > 0 && !seen[r.ws.Fset.Position(se.Sel.Pos())] {
+				seen[r.ws.Fset.Position(se.Sel.Pos())] = true
+				r.promoted = append(r.promoted, promotion{ref{p, se.Sel}, se, sel, d})
+			}
+		}
+	}
+	sort.Slice(r.promoted, func(i, j int) bool { return r.before(r.promoted[i].id.Pos(), r.promoted[j].id.Pos()) })
+}
+
+// through returns how many fields into sel's path the field being renamed
+// is, when sel passes through it without selecting it, or 0.
+func (r *renamer) through(sel *types.Selection) int {
+	t, idx := sel.Recv(), sel.Index()
+	for i, n := range idx[:len(idx)-1] {
+		if p, ok := t.Underlying().(*types.Pointer); ok {
+			t = p.Elem()
+		}
+		st, ok := t.Underlying().(*types.Struct)
+		if !ok {
+			return 0
+		}
+		f := st.Field(n)
+		if keyOf(r.ws.Fset, f) == r.key {
+			return i + 1
+		}
+		t = f.Type()
+	}
+	return 0
 }
 
 func origin(o types.Object) types.Object {
@@ -290,7 +352,11 @@ func (r *renamer) checkExport() error {
 		return nil
 	}
 	home := r.first.Pkg().Path()
-	for _, rf := range r.refs {
+	refs := append([]ref(nil), r.refs...)
+	for _, pr := range r.promoted {
+		refs = append(refs, pr.ref)
+	}
+	for _, rf := range refs {
 		if rf.pkg.Types.Path() != home {
 			return refactor.Refusef("%q is used from package %s (at %s); renaming it to the unexported name %q would break that",
 				r.old, rf.pkg.Types.Path(), r.ws.Position(rf.id.Pos()), r.new)
@@ -462,6 +528,71 @@ func (r *renamer) checkReflected(st *types.Struct, named *types.Named) error {
 		if arg := analysis.PassedAsInterface(p.TypesInfo, p.Syntax, match); arg != nil {
 			return refactor.Refusef("a value holding %s is passed as an interface at %s; reflection there (encoding/json, text/template, fmt's %%+v) sees field names, so renaming the field %s to %s could change what it encodes or finds",
 				what, r.ws.Position(arg.Pos()), r.old, r.new)
+		}
+	}
+	return nil
+}
+
+// checkEmbedded checks renaming an embedded field, which makes it a named
+// field: every selector that reaches through it must be able to name it,
+// and no type may lose a method through it that it could need.
+func (r *renamer) checkEmbedded() error {
+	if !isEmbedded(r.first) {
+		return nil
+	}
+	for _, pr := range r.promoted {
+		if pr.sel.Kind() == types.MethodExpr {
+			return refactor.Refusef("%s at %s reaches the method through the embedded field %s; a method expression cannot name the field",
+				types.ExprString(pr.expr), r.ws.Position(pr.expr.Pos()), r.old)
+		}
+		if o, idx, _ := types.LookupFieldOrMethod(pr.sel.Recv(), true, r.first.Pkg(), r.new); o != nil && len(idx) <= pr.depth {
+			return refactor.Refusef("%s already has a %s named %q (declared at %s), so %s at %s could not name the renamed field",
+				typeString(pr.sel.Recv()), kind(o), r.new, declaredAt(r.ws, o), types.ExprString(pr.expr), r.ws.Position(pr.expr.Pos()))
+		}
+	}
+	return r.checkPromotedMethods()
+}
+
+// checkPromotedMethods refuses when a type of the workspace has a method
+// through the embedded field that renaming it would remove and that could
+// be needed: one looked for at run time, or one through which the type
+// implements an interface.
+func (r *renamer) checkPromotedMethods() error {
+	var named []*types.Named
+	seen := map[string]bool{}
+	for _, p := range r.ws.Pkgs {
+		if p.TypesInfo == nil {
+			continue
+		}
+		for _, o := range p.TypesInfo.Defs {
+			tn, ok := o.(*types.TypeName)
+			if !ok || tn.IsAlias() || seen[keyOf(r.ws.Fset, tn)] {
+				continue
+			}
+			if n, ok := tn.Type().(*types.Named); ok {
+				seen[keyOf(r.ws.Fset, tn)] = true
+				named = append(named, n)
+			}
+		}
+	}
+	sort.Slice(named, func(i, j int) bool { return keyOf(r.ws.Fset, named[i].Obj()) < keyOf(r.ws.Fset, named[j].Obj()) })
+	for _, n := range named {
+		ms := types.NewMethodSet(types.NewPointer(n))
+		for i := 0; i < ms.Len(); i++ {
+			if r.through(ms.At(i)) == 0 {
+				continue
+			}
+			name := ms.At(i).Obj().Name()
+			if iface, ok := analysis.DynamicMethods[name]; ok {
+				return refactor.Refusef("%s has the method %s through the embedded field %s; renaming it would remove that method, and %s is looked for at run time",
+					n.Obj().Name(), name, r.old, iface)
+			}
+			for _, it := range r.interfacesWithMethod(name) {
+				if types.Implements(n, it.iface) || types.Implements(types.NewPointer(n), it.iface) {
+					return refactor.Refusef("type %s implements interface %s through the method %s of the embedded field %s; renaming the field would break that",
+						n.Obj().Name(), it.name, name, r.old)
+				}
+			}
 		}
 	}
 	return nil
@@ -705,6 +836,21 @@ func (r *renamer) enclosingStruct() (*types.Struct, *types.Named) {
 	return nil, nil
 }
 
+// fieldType returns where the type of the field r.first is written.
+func (r *renamer) fieldType() (token.Position, error) {
+	pos := r.first.Pos()
+	_, file := r.ws.FileSyntax(r.ws.Fset.Position(pos).Filename)
+	if file != nil {
+		nodes, _ := astutil.PathEnclosingInterval(file, pos, pos)
+		for _, n := range nodes {
+			if f, ok := n.(*ast.Field); ok {
+				return r.ws.Fset.Position(f.Type.Pos()), nil
+			}
+		}
+	}
+	return token.Position{}, refactor.Refusef("the declaration of the embedded field %s was not found", r.old)
+}
+
 func receiverNamed(f *types.Func) *types.Named {
 	recv := f.Signature().Recv()
 	if recv == nil {
@@ -859,11 +1005,31 @@ func (r *renamer) plan() (*refactor.Plan, error) {
 	// Type-switch variables are declared by an identifier that has no
 	// object of its own; cover it via the implicit objects' position.
 	for _, t := range r.targets {
-		if t.Pos().IsValid() && ws.Contains(ws.Fset.Position(t.Pos()).Filename) {
+		if !isEmbedded(t) && t.Pos().IsValid() && ws.Contains(ws.Fset.Position(t.Pos()).Filename) {
 			if err := add(t.Pos()); err != nil {
 				return nil, err
 			}
 		}
+	}
+	// An embedded field becomes a named one, and what reached through it
+	// names it: Address becomes Home Address, m.City m.Home.City.
+	insert := func(p token.Position, text string) {
+		files[p.Filename] = true
+		fes = append(fes, edit.FileEdit{Path: p.Filename, Edits: []edit.TextEdit{{Start: p.Offset, End: p.Offset, NewText: text}}})
+	}
+	if isEmbedded(r.first) {
+		at, err := r.fieldType()
+		if err != nil {
+			return nil, err
+		}
+		insert(at, r.new+" ")
+	}
+	for _, pr := range r.promoted {
+		p := ws.Fset.Position(pr.id.Pos())
+		if !ws.Contains(p.Filename) {
+			return nil, refactor.Refusef("%s at %s reaches through the embedded field %q, outside the workspace", types.ExprString(pr.expr), p, r.old)
+		}
+		insert(p, r.new+".")
 	}
 	docFes, renamedDocs := r.docEdits()
 	fes = edit.Merge(fes)
@@ -885,7 +1051,14 @@ func (r *renamer) plan() (*refactor.Plan, error) {
 	if len(docFes) > 0 {
 		plan.Notes = append(plan.Notes, fmt.Sprintf("renamed %q in the doc comment that starts with it", r.old))
 	}
-	if mentions := r.commentMentions(files, renamedDocs); len(mentions) > 0 {
+	if isEmbedded(r.first) {
+		verb := "name"
+		if len(r.promoted) == 1 {
+			verb = "names"
+		}
+		plan.Notes = append(plan.Notes, fmt.Sprintf("the embedded field %s is now the named field %s; %d selector%s that reached through it now %s it",
+			r.old, r.new, len(r.promoted), textutil.Plural(len(r.promoted)), verb))
+	} else if mentions := r.commentMentions(files, renamedDocs); len(mentions) > 0 {
 		plan.Notes = append(plan.Notes, fmt.Sprintf("comments still mention %q at %s; update them if they refer to this symbol",
 			r.old, strings.Join(mentions, ", ")))
 	}

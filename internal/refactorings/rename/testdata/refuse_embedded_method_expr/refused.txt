@@ -1,0 +1,1 @@
+Member.line at m.go:12:9 reaches the method through the embedded field Address; a method expression cannot name the field
