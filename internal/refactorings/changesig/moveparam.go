@@ -24,12 +24,9 @@ func NewMoveParameter() *MoveParameter { return &MoveParameter{} }
 func (*MoveParameter) Name() string { return "move_parameter" }
 
 func (*MoveParameter) Description() string {
-	return `Move a parameter of a function or method to another position, and move its argument to match at every call in the workspace.
-Use it to prepare a feature change, for example to put parameters in the order a new caller or an interface wants.
-Identify the function by file, line and name, at its declaration or any call. Give the parameter to move and optionally before: the parameter it should go just before (default: the end, or just before a variadic parameter).
-Moving an argument changes the order in which a call evaluates its arguments, so this is refused at any call where that order could matter: the moved argument and one it passes over where one has side effects and the other reads a variable, or both could have side effects or panic.
-Refuses if the function is used other than by calling it (as a function value or method expression), if a method would stop or start implementing an interface declared outside the module (which could silently change a type assertion), if the parameter is variadic, or if a moved argument contains another call of the function.
-An interface method of the module changes with every method of the module's types that implements it, and such a method with the interface: name any of them.`
+	return `Move a parameter to another position, and its argument at every call in the workspace: with parameter to and before from, func copy(from, to string) becomes func copy(to, from string), and copy(a, b) becomes copy(b, a).
+Identify the function by file and name, or by line at its declaration or any call; before is the parameter it goes ahead of (default: last).
+Refuses, saying why: a call where the new order of evaluation could matter (arguments with side effects, or that could panic), a variadic parameter, a function used as a value, a method that would start or stop implementing an interface from outside the module.`
 }
 
 func (*MoveParameter) InputSchema() json.RawMessage {

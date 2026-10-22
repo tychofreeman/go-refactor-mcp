@@ -26,11 +26,9 @@ func NewAddResult() *AddResult { return &AddResult{} }
 func (*AddResult) Name() string { return "add_result" }
 
 func (*AddResult) Description() string {
-	return `Add a result to a function or method, last, given the same value at every return of its body, and update every call: v := f() becomes v, _ := f(); a call as a statement, or in go or defer, stays as it is.
-Use it to give a function an error result before making it fail, or to return something more, then change the body.
-Identify the function by file, line and name, at its declaration or any call, or by file and name without line (Name or Type.Method). type is the new result's type; value is the expression every return gives it, e.g. nil for an error. Callers ignore the new result, so behavior is unchanged; the value must therefore have no side effects and must not be able to panic. A function that had no results gets a return at its end.
-Refuses named results, a call whose result is used inside an expression (assign it to a variable first) or is returned by the caller, a var declaration with a type, a return of another call's results, a function used other than by calling it, and a method that would stop or start implementing an interface declared outside the module.
-An interface method of the module changes with every method of the module's types that implements it, and such a method with the interface: name any of them.`
+	return `Add a result to a function or method, last, with the same value at every return, and update every call: with type error and value nil, func load() string becomes func load() (string, error), each return x becomes return x, nil, and v := load() becomes v, _ := load(); a call as a statement stays. Then make the body return real errors.
+Identify the function by file and name, or by line at its declaration or any call. value must have no side effects and not be able to panic.
+Refuses, saying why: named results, a call whose result is used inside an expression or returned by the caller (assign it to a variable first), a function used as a value.`
 }
 
 func (*AddResult) InputSchema() json.RawMessage {

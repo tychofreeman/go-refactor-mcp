@@ -28,12 +28,9 @@ func NewAddParameter() *AddParameter { return &AddParameter{} }
 func (*AddParameter) Name() string { return "add_parameter" }
 
 func (*AddParameter) Description() string {
-	return `Add a parameter to a function or method, and pass the given value for it at every call in the workspace.
-Use it to prepare a feature change: add the parameter first, then change the body to use it.
-Identify the function by file, line and name, at its declaration or any call. Give the new parameter's name and type, the value every call passes (written as Go source, e.g. "", nil, 0, or a name in scope at each call such as cfg.OutDir; a name of the function's package is qualified at calls in other packages, Batch{} becoming notify.Batch{}), and optionally before: the existing parameter to insert it ahead of (default: at the end, or just before a variadic parameter).
-The body does not use the new parameter yet, so behavior is unchanged; the value must therefore have no side effects and must not be able to panic (no calls other than to known functions without side effects such as strings.ToUpper, no pointer dereferences, indexing or non-constant division).
-Refuses if the function is used other than by calling it (as a function value or method expression), if a method would stop or start implementing an interface declared outside the module (which could silently change a type assertion), if the new name clashes with a parameter, result or top-level local or would hide a name the body uses, or if the value does not type-check at some call.
-An interface method of the module changes with every method of the module's types that implements it, and such a method with the interface: name any of them.`
+	return `Add a parameter to a function or method, and pass the same value for it at every call in the workspace: with name retries, type int and value 3, func send(to string) becomes func send(to string, retries int), and send(addr) becomes send(addr, 3). The body does not use it yet, so behavior is unchanged; add it, then change the body.
+Identify the function by file and name, or by line at its declaration or any call. value is Go source that every call can see (a name of the function's package is qualified at calls in other packages: Batch{} becomes notify.Batch{}); it must have no side effects and not be able to panic. before puts the parameter ahead of that one (default: last).
+Refuses, saying why: a function used as a value, a method that would start or stop implementing an interface from outside the module, a name that clashes, a value that does not type-check at some call.`
 }
 
 func (*AddParameter) InputSchema() json.RawMessage {
