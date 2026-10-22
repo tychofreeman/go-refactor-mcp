@@ -884,7 +884,10 @@ hand or a tool got in the way.
       only a nil dereference move past side effects, unless they
       might not return: `os.Exit`, `log.Fatal` and the like, or a
       call of a function value or interface method (`Summary.Unsafe`
-      now says so).
+      now says so). *Fixed after:* channel operations (send,
+      receive, select, range over a channel or a function) count as
+      might not finish too; they had let a nil dereference move ahead
+      of a receive that could block forever.
     - `fold`: a pattern's `*p`, for a pointer parameter `p`, matches
       any addressable expression `e`, passing `&e`. *Done:* a
       variable or field; left when `e` goes through a package

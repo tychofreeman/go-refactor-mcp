@@ -1319,9 +1319,22 @@ func (f *folder) mayStop(info *types.Info, s ast.Stmt, pos token.Pos) string {
 		if _, lit := n.(*ast.FuncLit); lit || n == nil || why != "" || n.Pos() >= pos {
 			return false
 		}
+		switch n := n.(type) {
+		case *ast.SendStmt, *ast.SelectStmt:
+			why = "uses a channel, which might block"
+		case *ast.UnaryExpr:
+			if n.Op == token.ARROW {
+				why = "receives from a channel, which might block"
+			}
+		case *ast.RangeStmt:
+			switch info.TypeOf(n.X).Underlying().(type) {
+			case *types.Chan, *types.Signature:
+				why = "ranges over a channel or function, which might not finish"
+			}
+		}
 		e, ok := n.(ast.Expr)
-		if !ok || e.End() > pos {
-			return true
+		if why != "" || !ok || e.End() > pos {
+			return why == ""
 		}
 		if c, ok := e.(*ast.CallExpr); ok {
 			why = f.effects().Call(info, c).Unsafe
