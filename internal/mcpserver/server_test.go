@@ -271,6 +271,25 @@ func TestLoadedToolsStaySmall(t *testing.T) {
 	mustContain(t, "instructions", cs.InitializeResult().Instructions, "in the same response as another call")
 }
 
+// The tools' cost in every request stays fixed: a new operation is an
+// option of a tool, a proof in the engine, or a composite built from
+// primitives, and a new tool replaces or merges one (session notes, "A
+// budget of tools").
+func TestToolBudget(t *testing.T) {
+	cs, _ := setup(t)
+	res, err := cs.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const maxTools, maxInstructions = 44, 6000
+	if n := len(res.Tools); n > maxTools {
+		t.Errorf("%d tools, more than %d: merge or replace one", n, maxTools)
+	}
+	if n := len(cs.InitializeResult().Instructions); n > maxInstructions {
+		t.Errorf("instructions are %d characters, more than %d", n, maxInstructions)
+	}
+}
+
 func TestRenameBySymbol(t *testing.T) {
 	cs, dir := setup(t)
 	out, _ := call(t, cs, "rename", map[string]any{"file": "calc/calc.go", "name": "Rate", "new_name": "Factor"})

@@ -117,6 +117,17 @@ results are in `docs/cost-history.md`.
   its cases to move into types is the intent). The mechanism comes
   after, in the example.
 
+- **A budget of tools** (2026-10-22, the user): the concern is that
+  tools multiply until their context outweighs the gain over editing
+  by hand. Measured: about 5% of a request today, 30-40 tokens a
+  request per new tool; the risk that grows is choosing. The order for
+  a new operation: a proof in the engine (an edit to code that cannot
+  run is a refactoring), an option of an existing tool, a composite
+  named by intent built from primitives that are not tools, and only
+  then a new tool that merges or replaces one. `TestToolBudget` holds
+  the count (44) and the instructions' size; raise it only with the
+  user. README roadmap item 25.
+
 - **Options over new tools** (2026-10-21): the pointer alias (gap A)
   is `pointer` on `extract_variable`, not a tool of its own: the model
   already reaches for extract_variable, and its refusal for a field

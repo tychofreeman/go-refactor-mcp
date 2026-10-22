@@ -1032,7 +1032,9 @@ hand or a tool got in the way.
         `if k, ok := it.Kind.(Kind); ok { return k.Days() }`.
         *Done* (lending-xl: widening and the five guards in one
         batch, its tests pass).
-      - One kind's migration: next.
+      - One kind's migration: next, as `move_case_to_type`; within
+        the tool budget (item 25), so it merges two tools or is an
+        option.
     - **`inspect` by name** (the user, 2026-10-22): `names` reads
       several declarations in one call, each found in the module by
       its name, without file (`Name`, `Type.Method`, `pkg.Name` where
@@ -1041,6 +1043,32 @@ hand or a tool got in the way.
       yet measured; a step toward reads that need a name (a read mode
       without file or line reads, and a question on each read, are
       the next ideas).
+25. **A budget of tools** (the user, 2026-10-22): more tools must not
+    eat the gain over editing by hand. Today the tools cost about 5%
+    of a request (the instructions, 5.8K characters, and the deferred
+    names; a run's eight loaded schemas, about 12.5K characters, from
+    when they load), a new tool 30-40 tokens a request; what grows
+    faster is choosing among them. `TestToolBudget` holds the count
+    at 44 tools and the instructions at 6,000 characters. *Done.* A new
+    operation is, in this order:
+    - a proof in the engine, not a tool: an edit to code the engine
+      proves cannot run (behind `x.(Kind)` that no type implements)
+      counts as preserving behavior, so `replace_statements` there is
+      a refactoring;
+    - an option of a tool the model already uses (`pointer` on
+      extract_variable; wrapping statements in an `if` as an option
+      of `insert_statements`);
+    - a composite named by its intent, built inside the engine from
+      primitives that are not tools (`prepare_switch_for_types` is a
+      declaration, an empty guard, and a fill of the dead branch);
+    - a new tool, which merges or replaces one to stay in budget.
+      Candidates to merge: `move_statement_up`/`move_statement_down`,
+      `function_to_method`/`method_to_function`, the parameter tools
+      into one; measure each, since cutting `fold`'s examples lost
+      its use.
+    Next: `refactor-tokens` reports the tools' overhead per run
+    (schema characters loaded, ToolSearch turns), so a run shows when
+    it starts to eat the gain.
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
 candidates and the evidence for each, gathered from the friction log.
