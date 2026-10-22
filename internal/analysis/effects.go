@@ -13,6 +13,7 @@ type Summary struct {
 	Effect string // a side effect: an assignment others can see, I/O, a channel operation
 	Reads  string // a read of what other code can change: a package variable, memory through a pointer
 	Unsafe string // something that could panic or not finish
+	Stops  string // of Unsafe, something that might not finish or return: a loop, a channel operation, os.Exit, unknown code
 }
 
 // Effects summarizes calls: of functions known to have no side effects,
@@ -83,7 +84,7 @@ func (e *Effects) call(info *types.Info, call *ast.CallExpr, private func(target
 	}
 	if fn, ok := info.Uses[IdentOf(call.Fun)].(*types.Func); ok {
 		if stopsFuncs[fn.FullName()] {
-			return Summary{Effect: "calls " + name, Unsafe: "calls " + name + ", which does not return"}
+			return Summary{Effect: "calls " + name, Unsafe: "calls " + name + ", which does not return", Stops: "calls " + name + ", which does not return"}
 		}
 		if s, ok := stdCall(info, fn, call, private); ok {
 			return s
@@ -94,7 +95,7 @@ func (e *Effects) call(info *types.Info, call *ast.CallExpr, private func(target
 	}
 	fn := staticCallee(info, call)
 	if fn == nil {
-		return Summary{Effect: "calls " + name, Unsafe: "calls " + name + ", which could be any function"}
+		return Summary{Effect: "calls " + name, Unsafe: "calls " + name + ", which could be any function", Stops: "calls " + name + ", which could be any function"}
 	}
 	var s Summary
 	if call.Ellipsis.IsValid() {
@@ -110,7 +111,7 @@ func (e *Effects) call(info *types.Info, call *ast.CallExpr, private func(target
 		}
 		return "calls " + name + ", which " + what
 	}
-	s.add(Summary{Effect: which(fs.Effect), Reads: which(fs.Reads), Unsafe: which(fs.Unsafe)})
+	s.add(Summary{Effect: which(fs.Effect), Reads: which(fs.Reads), Unsafe: which(fs.Unsafe), Stops: which(fs.Stops)})
 	return s
 }
 
@@ -124,6 +125,9 @@ func (s *Summary) add(o Summary) {
 	}
 	if s.Unsafe == "" {
 		s.Unsafe = o.Unsafe
+	}
+	if s.Stops == "" {
+		s.Stops = o.Stops
 	}
 }
 
@@ -226,6 +230,7 @@ func syncCallSummary(info *types.Info, fn *types.Func, call *ast.CallExpr, priva
 		case isLit:
 		case isFunc:
 			s.Effect = "passes " + types.ExprString(a) + " to " + types.ExprString(call.Fun)
+			s.Stops = s.Effect + ", which could be any function"
 		case (i == 0 || sc.readsAll) && (private == nil || !private(a, false)):
 			if sc.writes && s.Effect == "" {
 				s.Effect = "changes " + types.ExprString(a)
@@ -451,24 +456,30 @@ func (b *body) visit(n ast.Node) bool {
 	case *ast.SendStmt:
 		b.set(&s.Effect, "sends on a channel")
 		b.set(&s.Unsafe, "sends on a channel, which might block")
+		b.set(&s.Stops, "sends on a channel, which might block")
 	case *ast.SelectStmt:
 		b.set(&s.Effect, "selects on channels")
 		b.set(&s.Unsafe, "selects on channels, which might block")
+		b.set(&s.Stops, "selects on channels, which might block")
 	case *ast.UnaryExpr:
 		if n.Op == token.ARROW {
 			b.set(&s.Effect, "receives from a channel")
 			b.set(&s.Unsafe, "receives from a channel, which might block")
+			b.set(&s.Stops, "receives from a channel, which might block")
 		}
 	case *ast.ForStmt:
 		b.set(&s.Unsafe, "has a loop that might not finish")
+		b.set(&s.Stops, "has a loop that might not finish")
 	case *ast.RangeStmt:
 		switch info.TypeOf(n.X).Underlying().(type) {
 		case *types.Chan:
 			b.set(&s.Effect, "receives from a channel")
 			b.set(&s.Unsafe, "receives from a channel, which might block")
+			b.set(&s.Stops, "receives from a channel, which might block")
 		case *types.Signature:
 			b.set(&s.Effect, "ranges over a function")
 			b.set(&s.Unsafe, "ranges over a function, which could be any function")
+			b.set(&s.Stops, "ranges over a function, which could be any function")
 		case *types.Slice, *types.Map, *types.Pointer:
 			if !b.pointsPrivate(n.X) {
 				b.set(&s.Reads, "reads the elements of "+types.ExprString(n.X))

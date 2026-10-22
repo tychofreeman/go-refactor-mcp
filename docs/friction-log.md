@@ -1826,6 +1826,14 @@ All through gorefactor: the code with replace_statements (one body
 refused: the content lacked its closing lines), the golden cases
 with create_file, the docs with replace_text.
 
+## 2026-10-21: a nil dereference before another panic
+
+All through gorefactor: the code with add_field, replace_statements,
+insert_statements, replace_text and replace_expression in batches, the
+golden case with create_file, the docs with replace_text. A merge
+conflict in this log (two entries at the same place) resolved with
+replace_text.
+
 ## 2026-10-21: sort.Slice is not reflection on fields
 
 All through gorefactor: the golden cases with create_file, the fix

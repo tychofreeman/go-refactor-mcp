@@ -1222,7 +1222,7 @@ func (f *folder) evaluatedFirst(info *types.Info, seq []ast.Stmt, b map[holeKey]
 				}
 			}
 			for _, ok := range keys {
-				if a := b[ok]; a == nil || f.impure(info, a) || f.nilAddress(info, a) {
+				if a := b[ok]; a == nil || f.impure(info, a) {
 					return false
 				}
 			}
@@ -1423,8 +1423,10 @@ func pointerStays(info *types.Info, p ast.Expr, seq []ast.Stmt, stack []ast.Node
 	return ""
 }
 
-// mayStop is how the code of the statement s before pos might not return
-// or could panic other than by a nil dereference, or "".
+// mayStop is how the code of the statement s before pos might not finish
+// or return, or "". Code that could panic is not counted: a nil
+// dereference moved ahead of it panics either way, only with another
+// message.
 func (f *folder) mayStop(info *types.Info, s ast.Stmt, pos token.Pos) string {
 	why := ""
 	ast.Inspect(s, func(n ast.Node) bool {
@@ -1449,10 +1451,7 @@ func (f *folder) mayStop(info *types.Info, s ast.Stmt, pos token.Pos) string {
 			return why == ""
 		}
 		if c, ok := e.(*ast.CallExpr); ok {
-			why = f.effects().Call(info, c).Unsafe
-		}
-		if p := analysis.MayPanic(info, e); why == "" && p != nil {
-			why = "could panic (at " + f.ws.Position(p.Pos()) + ")"
+			why = f.effects().Call(info, c).Stops
 		}
 		return why == ""
 	})

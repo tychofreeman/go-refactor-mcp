@@ -921,6 +921,16 @@ hand or a tool got in the way.
       still left: `&c.Charged` comes before it in the call, so a nil
       `c` would panic before `last` could; allowing that is the next
       part, an extension of the nil-dereference decision.
+    - **A nil dereference may also come before another possible
+      panic** (an extension of the first part, in its own PR so it
+      can be dropped). In `fold`, `&x` may be evaluated ahead of code
+      that could panic another way, and ahead of an argument that
+      could: a crash either way, only with another message. Still
+      not ahead of code that might not finish or return
+      (`Summary.Stops`: loops, channel operations, `os.Exit`, unknown
+      code). *Done:* billing's near-duplicate task is now
+      `add_declaration` of `book` and one `fold`, all four copies,
+      and passes its hidden test.
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
