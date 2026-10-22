@@ -1,0 +1,1 @@
+type Member implements interface example.com/m.Liner through the method Line of the embedded field Address; renaming the field would break that

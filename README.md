@@ -91,8 +91,9 @@ hand or a tool got in the way.
    statements with no effect for `remove_dead_code` (unused declarations
    are done). Deleting a statement for its
    effect is the edit `delete_statement`.
-6. **`rename` gaps:** imports, labels, embedded fields and interface methods
-   (see "Rename: what it checks").
+6. **`rename` gaps:** imports, labels, types that are embedded, and
+   interface methods (see "Rename: what it checks"). Embedded fields:
+   *Done* (renamed into named fields).
 7. **Packaging:** tagged releases, so `go install ...@latest` gets a stable
    version, and possibly a Claude Code plugin for a one-step install.
 8. **Test run time.** CI's test step grew from about 13 s to 75 s per Go
@@ -1001,6 +1002,11 @@ hand or a tool got in the way.
       name: `rename` of an embedded field (10 of 12 address runs tried
       it), and an operation that turns a switch on a kind into
       methods.
+    - **`rename` of an embedded field.** *Done*: it becomes a named
+      field, and every selector that reached through it names it.
+      The address task is now `extract_struct`, then `rename` of
+      `Member.Address` to `Home` (73 selectors, the hidden tests
+      pass), where the reference needed five text replacements.
     - **`inspect` by name** (the user, 2026-10-22): `names` reads
       several declarations in one call, each found in the module by
       its name, without file (`Name`, `Type.Method`, `pkg.Name` where
@@ -1362,8 +1368,19 @@ Refused (with an explanation):
   template stops working
 - symbols declared outside the workspace (stdlib, dependencies)
 
-Not supported yet: imports, labels, embedded fields (and types that are
-embedded), interface methods.
+An embedded field is renamed into a named one: renaming `Member.Address`
+to `Home` declares `Home Address`, writes `Member{Home: ...}` for
+`Member{Address: ...}`, and names the field in every selector that
+reached through it, found by the type checker (`m.City` becomes
+`m.Home.City`, `m.Line()` `m.Home.Line()`). Refused besides: a type that
+has a method through the field that is looked for at run time (`String`,
+`Error`, ...) or through which it implements an interface; a method
+expression through it (`Member.Line`); a selector that could not name
+the field because its type has another member of the new name as close
+or closer.
+
+Not supported yet: imports, labels, types that are embedded, interface
+methods.
 
 Comments: the doc comment of a renamed declaration (function, method,
 type, variable, constant or field) is renamed too when it starts with the

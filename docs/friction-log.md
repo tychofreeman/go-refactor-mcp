@@ -1954,3 +1954,12 @@ All through gorefactor: the test with add_declaration, then one batch:
 `add_declaration` for the grouping, replace_text to make `File` call
 the shared `declarations`. Trying it on lending-xl took a throwaway
 test file again (the CLI has no inspect).
+
+## 2026-10-22: rename of an embedded field
+
+All through gorefactor: the golden cases with create_file, the code
+with replace_text and add_declaration in batches, the docs with
+replace_text. One refusal cost a call: add_declaration's `after`
+needs `renamer.checkReflected` for a method, not the bare name. Tried
+on lending-xl and the extract_struct example with the CLI, in scratch
+copies made with cp and printf.

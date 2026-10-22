@@ -38,7 +38,7 @@ func New() *ExtractStruct { return &ExtractStruct{} }
 func (*ExtractStruct) Name() string { return "extract_struct" }
 
 func (*ExtractStruct) Description() string {
-	return `Move some fields of a struct into a new struct type, embedded in their place, so that every use (m.path) keeps working: moving path and mode of type mover struct { path string; mode int; n int } into source declares type source struct { path string; mode int } and makes mover struct { source; n int }, and mover{path: p} becomes mover{source: source{path: p}}. Use it to split a struct that holds two things, before giving the new type methods or a file of its own.
+	return `Move some fields of a struct into a new struct type, embedded in their place, so that every use (m.path) keeps working: moving path and mode of type mover struct { path string; mode int; n int } into source declares type source struct { path string; mode int } and makes mover struct { source; n int }, and mover{path: p} becomes mover{source: source{path: p}}. To hold it as a named field instead, then rename mover.source (to src: m.path becomes m.src.path). Use it to split a struct that holds two things, before giving the new type methods or a file of its own.
 Identify the struct by file and name, or by line at its declaration or a use; fields are the names to move, new_type the new type's name.
 Refuses, saying why: a struct whose values are passed to an interface (reflection, fmt's %+v and encoding/json would see the new field), a generic struct, an embedded field or part of a field group to move, a name already taken, an unkeyed literal whose moved fields are not next to each other. For an exported struct the result notes that the module's API changed.`
 }
