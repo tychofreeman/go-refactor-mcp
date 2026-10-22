@@ -966,6 +966,9 @@ hand or a tool got in the way.
       it calls (through an interface as the interface's method), with
       no bodies. *Done* (13.4K characters for freight-xl, against
       22.3K for its code); the probe is next.
+    - `fold` removes the imports its folds leave unused (found by the
+      probe: a `dispatch` in a file of its own, ten carriers folded,
+      left `log` unused). *Fixed*; that answer now applies and passes.
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
