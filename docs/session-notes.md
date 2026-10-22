@@ -198,6 +198,11 @@ results are in `docs/cost-history.md`.
   a guard that calls it, then per kind make the type from the case,
   replace the constant where it flows into the field, and delete the
   dead case; narrow the field at the end (README, roadmap item 24).
+  Asked for alternatives to a tool for one kind's migration, the
+  existing refactorings turned out to do the case bodies; what is left
+  (sending the values through the type, deleting the case) is an
+  argued edit either way, so it becomes a recipe with `inspect`
+  `uses` for the argument, and a tool only if a fresh model fails it.
 
 - **Loops and containers** (2026-10-20): the user asked for
   refactorings that convert between kinds of loop, and edits that make

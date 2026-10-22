@@ -45,6 +45,10 @@ type Query struct {
 	// in place of the fields above: "Name", "Type.Method", or
 	// "pkg.Name" where the name is declared in several packages.
 	Names []string `json:"names,omitempty"`
+	// Uses lists every use of what each name names (Name, Type.Field,
+	// Type.Method, pkg.Name), found by the type checker, under what is
+	// done with it, in place of the fields above.
+	Uses []string `json:"uses,omitempty"`
 }
 
 // Run renders the view selected by q: the module overview when File is
@@ -52,6 +56,9 @@ type Query struct {
 // or lines asked for; or each of its targets, or each declaration it
 // names.
 func Run(ws *workspace.Workspace, q Query) (string, error) {
+	if len(q.Uses) > 0 {
+		return uses(ws, q)
+	}
 	if len(q.Names) > 0 {
 		return names(ws, q)
 	}
