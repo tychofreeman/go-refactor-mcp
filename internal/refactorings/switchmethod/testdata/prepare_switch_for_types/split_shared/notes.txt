@@ -1,0 +1,1 @@
+split into a case for each value, to move into its type alone: "book", "dvd"; "atlas", "map"

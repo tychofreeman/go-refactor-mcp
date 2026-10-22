@@ -1043,7 +1043,9 @@ hand or a tool got in the way.
         `Import`), by a tool or not. So the plan is a recipe of general
         operations, not `move_case_to_type`: `inspect` `uses` to see
         how each use treats the field (*Done*), splitting a shared
-        clause (`case "book", "dvd":`, next), the recipe in
+        clause (`case "book", "dvd":`; *Done*, by
+        `prepare_switch_for_types`, whose intent it is: each value's
+        case can then move alone; no new tool or option), the recipe in
         `docs/derivations.md` run on lending-xl with the CLI, and a
         tool only if a fresh model fails the recipe.
     - **`inspect` by name** (the user, 2026-10-22): `names` reads

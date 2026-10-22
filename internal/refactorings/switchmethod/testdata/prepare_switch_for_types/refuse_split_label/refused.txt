@@ -1,0 +1,1 @@
+the case "book", "dvd" at m.go:5:2 declares label retry, which a function cannot declare twice; splitting it into a case for each value copies its body (extract_function the body first)
