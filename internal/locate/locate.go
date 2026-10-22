@@ -124,7 +124,9 @@ func symbol(pkg *packages.Package, name string) (*packages.Package, *ast.Ident, 
 }
 
 // local finds the declaration of q.Name, a local of the function
-// q.Function of file: a variable, constant, parameter or result.
+// q.Function of file: a variable, constant, parameter or result; or,
+// when it declares none of that name, the function itself, if q.Name
+// names it (Total in Total, Run or T.Run in T.Run).
 func local(ws *workspace.Workspace, pkg *packages.Package, file *ast.File, q IdentQuery) (*packages.Package, *ast.Ident, error) {
 	fd := Func(file, q.Function)
 	if fd == nil {
@@ -146,6 +148,9 @@ func local(ws *workspace.Workspace, pkg *packages.Package, file *ast.File, q Ide
 	})
 	switch len(found) {
 	case 0:
+		if q.Name == q.Function || q.Name == fd.Name.Name {
+			return pkg, fd.Name, nil // the function itself, which declares no local of its name
+		}
 		return nil, nil, refactor.Refusef("%s declares no %s", q.Function, q.Name)
 	case 1:
 		return pkg, found[0], nil

@@ -961,7 +961,11 @@ hand or a tool got in the way.
       and little; about a quarter of input is "where is X used"
       searches, which a derivation does not need
       (`eval-tasks/learning/reads.py`).
-    - Step 2, the call tree: `cmd/calltree` prints each package's types
+    - Found by the step 2 probe: `rename` (and every tool that finds
+      a local by `function`) refused `function` set to the name of the
+      function itself (8 answers: "Dispatch2 declares no Dispatch2").
+      *Fixed:* when the function declares no local of that name, it is
+      the function (or method: Run or T.Run in T.Run).    - Step 2, the call tree: `cmd/calltree` prints each package's types
       and each function's signature, doc line and the module functions
       it calls (through an interface as the interface's method), with
       no bodies. *Done* (13.4K characters for freight-xl, against

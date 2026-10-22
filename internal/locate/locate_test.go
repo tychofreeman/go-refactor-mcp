@@ -132,6 +132,10 @@ func Twice(n int) int {
 	v := 0
 	return v
 }
+
+type T struct{}
+
+func (T) Run() {}
 `,
 	})
 	for _, c := range []struct {
@@ -144,6 +148,10 @@ func Twice(n int) int {
 		{"Total", "x", 5, ""},
 		{"Twice", "v", 0, "v is declared 2 times in Twice (lines 13, 16); give the line"},
 		{"Total", "missing", 0, "Total declares no missing"},
+		// The function itself, when it declares no local of its name.
+		{"Total", "Total", 3, ""},
+		{"T.Run", "Run", 22, ""},
+		{"T.Run", "T.Run", 22, ""},
 		{"Nope", "x", 0, "no function Nope in a.go"},
 	} {
 		_, id, err := locate.Ident(ws, locate.IdentQuery{File: "a.go", Function: c.function, Name: c.name})
@@ -157,7 +165,7 @@ func Twice(n int) int {
 			t.Errorf("%s.%s: %v", c.function, c.name, err)
 			continue
 		}
-		if got := ws.Fset.Position(id.Pos()).Line; id.Name != c.name || got != c.line {
+		if got := ws.Fset.Position(id.Pos()).Line; id.Name != c.name[strings.LastIndex(c.name, ".")+1:] || got != c.line {
 			t.Errorf("%s.%s: found %s on line %d, want line %d", c.function, c.name, id.Name, got, c.line)
 		}
 	}
