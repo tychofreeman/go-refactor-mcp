@@ -318,6 +318,56 @@ kind into methods, or makes an embedded field a named one;
 initializer with side effects, though `DefaultPolicy` only returns a
 literal.
 
+**Run** (2026-10-22; `eval-runs/lending-base`, `lending-moves`,
+`lending-algebraic`; 5 tasks, 4 runs each, $10.68). All 60 runs passed.
+
+| arm | cost a run | turns | lines by hand | derived share |
+|---|---|---|---|---|
+| baseline | $0.176 | 10.7 | 1,285 | 31% |
+| the user's moves | $0.186 | 13.1 | 1,215 | 33% |
+| algebraic | $0.173 | 12.6 | 1,141 | 37% |
+
+By task, lines written by hand (derived share), over 4 runs:
+
+| task | baseline | moves | algebraic | operations used |
+|---|---|---|---|---|
+| phases | 500 (6%) | 469 (12%) | 474 (11%) | none, but one `extract_function` |
+| kinds | 396 (7%) | 394 (4%) | 375 (19%) | none in any run |
+| policy | 182 (43%) | 141 (52%) | 77 (69%) | `introduce_parameter` and `add_parameter` up the chain, every run |
+| address | 51 (86%) | 58 (86%) | 48 (91%) | `extract_struct`, then `rename` of the embedded field (10 of 12 runs), refused: "renaming embedded fields is not supported yet"; then `replace_text` |
+| dryrun | 156 (43%) | 153 (45%) | 167 (42%) | `extract_function`, every run |
+
+Reading (`eval-tasks/learning/reads.py`): alike in every arm, 1 to 4
+read calls a run with 1 to 2 searches, and about the same bodies read;
+the algebraic arm's instruction not to search or read bodies did not
+change it.
+
+What it showed, by the plan's outcomes:
+
+- **Where an operation fits, the arms derive, and the method helps a
+  little:** on policy every run of every arm passed the parameter
+  down with `introduce_parameter` and `add_parameter`, and the
+  algebraic arm wrote the fewest lines by hand (77 against 182 for
+  the baseline, 69% derived against 43%); on dryrun every run
+  extracted the checking loops. These are the shapes the tools
+  already name, not new derivations.
+- **Where none fits, no arm derives:** kinds (a switch becomes
+  methods) and phases (a function split around a new type) were
+  written by hand in every run, without an attempt at an operation.
+  The method did not lead to a derivation from smaller operations;
+  it needs an operation that is there.
+- **The runs name the missing operation:** on address, 10 of 12 runs
+  called `rename` on the embedded field `Address`, which is refused.
+- **Reading:** deriving or not, every arm read the same way; the
+  instruction did not make the model read or search less.
+
+So the hypothesis's two parts did not show on new shapes: the method
+transfers only where an operation already fits (and there it saves
+lines, not turns or cost), and it does not reduce reading. The gaps the
+runs name are the next work: `rename` of an embedded field to make it
+a named one, and an operation for a switch on a kind (methods per kind
+from the cases).
+
 ## Recording
 
 Each step in its own PR: the results in `docs/cost-history.md`

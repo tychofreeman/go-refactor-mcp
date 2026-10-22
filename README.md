@@ -993,7 +993,14 @@ hand or a tool got in the way.
       one (73 replacements by hand); `remove_dead_code` takes
       `var policy = DefaultPolicy()`'s initializer as having side
       effects though `DefaultPolicy` only returns a literal.
-
+    - Step 3, the runs. *Done* (60 runs, $10.68, all passed): the
+      algebraic arm derived a little more where an operation fits
+      (policy: 77 lines by hand against 182, 69% derived against 43%)
+      at the same cost; where none fits (kinds, phases) no arm
+      derived; reading was alike in every arm. Next, the gaps the runs
+      name: `rename` of an embedded field (10 of 12 address runs tried
+      it), and an operation that turns a switch on a kind into
+      methods.
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
 candidates and the evidence for each, gathered from the friction log.

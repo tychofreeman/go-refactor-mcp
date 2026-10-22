@@ -165,8 +165,12 @@ results are in `docs/cost-history.md`.
   alone the model found where the change goes and planned the
   reference derivations; what failed was the tools' interface
   (rename's `function`, argument names) and a fold bug, not the lack
-  of bodies. Step 3's set C (`lending-xl`, five tasks, references and
-  the algebraic arm) is built; its runs need the user's go-ahead.
+  of bodies. Step 3 (`lending-xl`, shapes no move names; three arms,
+  60 runs): the algebraic arm derived a little more where an
+  operation fits, at the same cost; where none fits no arm derived,
+  and reading was alike in every arm. The method transfers only
+  through operations that exist; the runs name the missing ones
+  (rename of an embedded field, a switch on a kind into methods).
 
 - **Loops and containers** (2026-10-20): the user asked for
   refactorings that convert between kinds of loop, and edits that make
