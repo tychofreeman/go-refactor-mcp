@@ -965,7 +965,8 @@ hand or a tool got in the way.
       a local by `function`) refused `function` set to the name of the
       function itself (8 answers: "Dispatch2 declares no Dispatch2").
       *Fixed:* when the function declares no local of that name, it is
-      the function (or method: Run or T.Run in T.Run).    - Step 2, the call tree: `cmd/calltree` prints each package's types
+      the function (or method: Run or T.Run in T.Run).
+    - Step 2, the call tree: `cmd/calltree` prints each package's types
       and each function's signature, doc line and the module functions
       it calls (through an interface as the interface's method), with
       no bodies. *Done* (13.4K characters for freight-xl, against
@@ -981,6 +982,17 @@ hand or a tool got in the way.
     - `fold` removes the imports its folds leave unused (found by the
       probe: a `dispatch` in a file of its own, ten carriers folded,
       left `log` unused). *Fixed*; that answer now applies and passes.
+    - Step 3, set C: `lending-xl` (`eval-tasks/learning/gen_lending.py`,
+      748 lines; `eval-tasks/derivations-lending.json`), five tasks of
+      shapes no move, lesson or tool example names (phases, kinds,
+      policy, address, dryrun), hidden tests, a reference for each made
+      by the tools (`eval-tasks/learning/refs/lending-*.json`), and the
+      algebraic arm (`eval-tasks/claude-md-algebraic`). *Built*; the runs
+      are next. Found while making the references: no operation turns a
+      switch on a kind into methods, or makes an embedded field a named
+      one (73 replacements by hand); `remove_dead_code` takes
+      `var policy = DefaultPolicy()`'s initializer as having side
+      effects though `DefaultPolicy` only returns a literal.
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the

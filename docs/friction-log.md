@@ -1917,3 +1917,15 @@ replace_text.
 
 All through gorefactor: the plan with create_file, the roadmap, the
 session notes and this entry with replace_text, in one batch.
+
+## 2026-10-22: set C, lending-xl
+
+The module, its hidden tests and the task file were written by a
+generator script (`eval-tasks/learning/gen_lending.py`), edited with
+Python string replaces twice (feeds one line too long for gofmt, a
+count in a test, then `Import` as three loops). The references are
+batches run with the CLI, written by a Python script into
+`eval-tasks/learning/refs/` (one fixed with sed: `check`'s argument
+order). The algebraic arm copied from the baseline with cp, its section
+added with replace_text; the docs with replace_text. Entries are
+appended at the end of this file from now on.

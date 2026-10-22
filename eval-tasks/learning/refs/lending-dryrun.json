@@ -1,0 +1,3 @@
+{"steps":[
+{"tool":"extract_function","args":{"file":"lending/lending.go","start_line":189,"end_line":222,"name":"check","doc":"check parses and checks the items of text as Import does, adding nothing."}},
+{"tool":"add_declaration","args":{"file":"lending/lending.go","after":"Import","content":"// DryRun checks text as Import does, adding nothing to c, and returns the\n// titles of the items Import would add, in order.\nfunc DryRun(c *Catalog, text string) ([]string, error) {\n\titems, err := check(text, c)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\tvar titles []string\n\tfor _, it := range items {\n\t\ttitles = append(titles, it.Title)\n\t}\n\treturn titles, nil\n}"}}]}
