@@ -1954,3 +1954,11 @@ All through gorefactor: the test with add_declaration, then one batch:
 `add_declaration` for the grouping, replace_text to make `File` call
 the shared `declarations`. Trying it on lending-xl took a throwaway
 test file again (the CLI has no inspect).
+
+## 2026-10-22: inspect in the CLI
+
+All through gorefactor: the test and the `stdout` variable in one batch
+checked at its end, then the command with add_declaration (its import
+added by the tool) and replace_text; the new code read back with
+`refactor inspect` itself. Until now cloud sessions read code with
+sed, grep and Read, since the CLI had no inspect.
