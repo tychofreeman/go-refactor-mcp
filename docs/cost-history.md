@@ -74,6 +74,17 @@ refactorings, through gorefactor.
 | ab-features-read-questions | the same, and a "Q:" line before each read saying what it is to answer | $2.38 · 5.12M · 7/8 | | |
 | ab-features-toolsearch | #128: load schemas alongside another call; shorter definitions | $2.46 · 5.54M · 8/8 | | |
 | ab-features-denied | #133–#134: create_file for any file in the instructions; replace_text `files` | $2.34 · 5.21M · 7/8 | | |
+| ab-features-type-errors | #181–#190: type-error help (`claude-md-refactor-first-bash`) | $2.22 · 4.93M · 6/8 | | |
+| ab-features-descriptions | #255–#259: every description shorter (8,700 words to 5,200), with examples | $2.09 · 4.51M · 7/8 | | |
+
+The shorter descriptions, against `ab-features-type-errors` (same
+CLAUDE.md): cost 6% lower, input 9% lower, 111 turns with tool calls
+against 118; refused Bash writes 11 to 0, refused Bash reads 7 to 4,
+refused gorefactor calls 5 to 6, ToolSearch-only turns 4 and 4. The
+failed run is `feat-symbol-addressing` on an interface method
+(`Shape.Area`), which failed in both runs of the baseline too. Within
+the noise of 2 runs a task, but in the direction of the freight-xl
+measurement: no tool lost, fewer wasted turns.
 
 Without a CLAUDE.md no arm used gorefactor at all: all three edited with
 Bash. Doing everything through gorefactor cost about 1.8× by hand at first,
