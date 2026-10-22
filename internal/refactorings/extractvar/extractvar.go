@@ -49,12 +49,9 @@ func New() *ExtractVariable { return &ExtractVariable{} }
 func (*ExtractVariable) Name() string { return "extract_variable" }
 
 func (*ExtractVariable) Description() string {
-	return `Introduce a named variable for an expression: inserts "name := <expression>" just before the statement containing it and uses the name in its place. Constant expressions become a const.
-Use it to give a meaningful name to a complex sub-expression, to split up a long line, or (with all_occurrences) to replace a repeated expression.
-Identify the expression by file, the line where it starts, and its exact source text (whitespace may differ); add column only if that text occurs more than once on the line.
-all_occurrences also replaces identical occurrences later in the same block; it is only allowed for expressions without function calls (other than known ones without side effects, like strings.ToLower) whose variables are not modified afterwards.
-pointer declares a pointer to the expression instead (sent := &e.Sent) and writes *sent in its place, for a field or element that is assigned to or whose address is taken: then all_occurrences replaces writes too, and only what the address depends on (e) must not change.
-Refuses if moving the expression before its statement could change behavior: when it is only evaluated conditionally or repeatedly (right side of && or ||, loop condition or post statement, else-if, case expression), when it would run before other calls in the same statement, when it is assigned to or its address is taken, or when it uses variables declared inside the statement.`
+	return `Name an expression: a declaration is inserted just before its statement and the name used in its place. Extracting price*qty as total, return price*qty + tax becomes total := price * qty; return total + tax. A constant expression becomes a const.
+Identify the expression by file, the line it starts on and its source text (column if the text is on the line twice). all_occurrences replaces the same expression later in the block too, when it has no calls with side effects and nothing it reads changes in between. pointer declares an alias instead, sent := &e.Sent, and writes *sent in its place: for a field that is assigned to or whose address is taken.
+Refuses, saying why: an expression evaluated only sometimes or more than once (after && or ||, in a loop condition, an else-if or a case), one that would then run before other calls of its statement, one assigned to, one using variables its statement declares.`
 }
 
 func (*ExtractVariable) InputSchema() json.RawMessage {

@@ -38,11 +38,9 @@ func New() *ExtractStruct { return &ExtractStruct{} }
 func (*ExtractStruct) Name() string { return "extract_struct" }
 
 func (*ExtractStruct) Description() string {
-	return `Move some fields of a struct type into a new struct type, declared just before it and embedded in their place, so every use (m.path) keeps working through the embedded struct. Composite literals are rewritten: mover{path: p} becomes mover{source: source{path: p}}, point3{1, 2, 3} becomes point3{xy{1, 2}, 3}.
-Use it to split a struct that holds two things, before giving the new type its own methods (function_to_method) or its own file or package (move_declaration).
-Identify the struct by file, line and name, at its declaration or any use; give fields, the names to move (in any order; they keep the struct's order), and new_type.
-An exported struct type too, with a note that the module's API changed; its literals in other packages name the new type qualified (pkg.T), so new_type must then be exported. Only when no value holding the type (itself, a pointer to it, or a slice, map or struct holding it) is passed to an interface parameter or converted to an interface: reflection (fmt's %+v, encoding/json) would see the new embedded field. Assigning one to an interface variable is not checked.
-Refuses a generic struct, an embedded field among those to move, part of a field group (x, y int), a new_type the package already declares or that is a field or method of the struct, a name another embedded field also has (it would become ambiguous), an unkeyed literal when the fields to move are not next to each other, and a multi-line literal with comments between its elements.`
+	return `Move some fields of a struct into a new struct type, embedded in their place, so that every use (m.path) keeps working: moving path and mode of type mover struct { path string; mode int; n int } into source declares type source struct { path string; mode int } and makes mover struct { source; n int }, and mover{path: p} becomes mover{source: source{path: p}}. Use it to split a struct that holds two things, before giving the new type methods or a file of its own.
+Identify the struct by file and name, or by line at its declaration or a use; fields are the names to move, new_type the new type's name.
+Refuses, saying why: a struct whose values are passed to an interface (reflection, fmt's %+v and encoding/json would see the new field), a generic struct, an embedded field or part of a field group to move, a name already taken, an unkeyed literal whose moved fields are not next to each other. For an exported struct the result notes that the module's API changed.`
 }
 
 func (*ExtractStruct) InputSchema() json.RawMessage {

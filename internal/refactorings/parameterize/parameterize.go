@@ -31,9 +31,9 @@ func New() *Parameterize { return &Parameterize{} }
 func (*Parameterize) Name() string { return "parameterize" }
 
 func (*Parameterize) Description() string {
-	return `Make functions that are the same but for constants into calls of one new function that takes those constants as parameters. Each function keeps its signature and callers; its body becomes a call of the new one with its own constants: logEmail(to) { log.Printf("email to %s", to) } and logSMS(addr) { log.Printf("sms to %s", addr) } become logTo(to, "email to %s") and logTo(addr, "sms to %s") with func logTo(to string, format string) { log.Printf(format, to) }. To retire the old functions, inline_function each with all_calls.
-Give file, functions (two or more, Name or Type.Method, of one package and the same signature; methods of one type), name for the new function, and parameters: a name for each constant that differs, in the order they appear. The functions may name their parameters and locals differently. A new parameter has the type its constant has in place.
-Refuses functions that differ in anything but constants (say in a field or a call), or that do not differ at all (merge_duplicate_function is for that), and a name taken in the package or by the body.`
+	return `Make functions that are the same but for constants into calls of one new function that takes those constants as parameters: logEmail(to) { log.Printf("email to %s", to) } and logSMS(addr) { log.Printf("sms to %s", addr) } become calls logTo(to, "email to %s") and logTo(addr, "sms to %s") of func logTo(to string, format string) { log.Printf(format, to) }. Each keeps its signature and callers; inline_function with all_calls retires them.
+Give file, functions (two or more of one package with the same signature; methods of one type), name for the new function, and parameters: a name for each constant that differs, in the order they appear.
+Refuses, saying why: functions that differ in more than constants, or not at all (merge_duplicate_function is for that), a name already taken.`
 }
 
 func (*Parameterize) InputSchema() json.RawMessage {

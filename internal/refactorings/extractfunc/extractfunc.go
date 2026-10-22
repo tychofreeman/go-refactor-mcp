@@ -60,16 +60,10 @@ func New() *ExtractFunction { return &ExtractFunction{} }
 func (*ExtractFunction) Name() string { return "extract_function" }
 
 func (*ExtractFunction) Description() string {
-	return `Move a run of complete statements into a new function, declared after the enclosing function, and call it in their place.
-Use it to split a long function into named steps. doc, if given, becomes the new function's doc comment.
-Identify the statements by file, start_line and end_line (inclusive, as shown by inspect). The lines must cover whole statements of one block; comments and blank lines in the range are allowed and comments move with the code.
-Local variables the statements use become parameters; variables they change or declare that are used afterwards become results, assigned at the call site. The result notes the parameters and results chosen, and warns when there are many (more than five parameters or three results), which usually means a different range of lines would give a simpler function.
-Return statements are supported in two shapes: if every path through the statements returns, the call site becomes "return f(...)"; if the enclosing function returns an error and every return in the statements is an early exit with a non-nil error (like "if err != nil { return nil, err }"), the new function also returns an error and the call site checks it ("if err := f(...); err != nil" when there are no other results; or, when the lines are followed by "return nil" or "return <the same values>, nil", the call site is "return f(...)" in its place).
-Variables whose address is taken or that a function literal changes are passed as pointers, so both functions share them (unless only the selected lines' own literals change them, and nothing after the lines uses them).
-If the statements use the receiver of the method they are in, the new function is a method of the same type; its name must then not clash with a field or method, and an exported name must not make the type implement an interface code checks for at run time (String, Error, MarshalJSON and the like, or one of the module or its dependencies whose other methods the type has).
-If the statements use the enclosing function's type parameters, the new function declares them too and the call passes them explicitly.
-Refuses other returns (for example an early return of a success value), defer, recover() or fallthrough, or a break, continue or goto that leaves the selected lines; if a variable they declare has its address taken or is used by a function literal that can run later (not one only called during its statement, like an ast.Inspect visitor, or only called by the selected lines through a variable they declare, like a recursive visit function), and is used after them.
-Local constants and types the statements need move to package level, so both functions share them; this is refused if one is part of a grouped declaration, uses local variables or type parameters, or its name is taken at package level.`
+	return `Move a run of whole statements into a new function, declared after the one they are in, and call it in their place: in func report(items []Item) string, extracting total := 0 and the loop that adds each it.Price to it, as sum, gives total := sum(items) there and func sum(items []Item) int { total := 0; for ...; return total }. Locals the statements use become parameters, and those they set that are used afterwards become results; the result lists both. Statements that use the receiver become a method of its type.
+Identify the statements by file, start_line and end_line: whole statements of one block, as inspect numbers them. doc becomes the new function's doc comment.
+Returns: when every path returns, the call becomes return sum(...); early error returns (if err != nil { return err }) make the new function return an error, which the call checks.
+Refuses, saying why: other returns, defer, recover, fallthrough, a break, continue or goto out of the lines, a variable they declare that a pointer or closure keeps and that is used after them.`
 }
 
 func (*ExtractFunction) InputSchema() json.RawMessage {

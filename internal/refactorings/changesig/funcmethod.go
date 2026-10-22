@@ -24,10 +24,9 @@ func NewFunctionToMethod() *FunctionToMethod { return &FunctionToMethod{} }
 func (*FunctionToMethod) Name() string { return "function_to_method" }
 
 func (*FunctionToMethod) Description() string {
-	return `Turn a function into a method of its first parameter's type, and change every call m(x, a) into x.m(a) (v.m(a) for m(&v, a), p.m(a) for m(*p, a), (*T)(nil).m(a) for m(nil, a)). The reverse of method_to_function.
-Use it to put a function that works on one type with that type, e.g. a helper that a refactoring left taking the receiver it came from.
-Identify the function by file, line and name, at its declaration or any call. The method keeps the function's name unless new_name is given. The receiver is the first parameter (to choose another, move it first with move_parameter); its type must be T or *T for a non-generic type T declared in the function's package.
-An exported name is refused if the type could then implement an interface code checks for at run time, with no compile error: String, Error, MarshalJSON and the like, or one of the module or its dependencies whose other methods the type has; the result notes that the module's API changed. It refuses if any interface in the workspace has a method of that name, if T or a type embedding T already has a field or method of that name (the new method could change what x.name means), if a call is in another package and the name is unexported, if the function is used other than by calling it, is generic, or for a call whose receiver argument contains another call of it.`
+	return `Turn a function into a method of its first parameter's type, and change every call: func total(c *Cart) int becomes func (c *Cart) total() int, total(cart) becomes cart.total(), and total(&v) becomes v.total(). The reverse of method_to_function. The first parameter becomes the receiver (move_parameter first to choose another); its type must be T or *T for a type T of the function's package.
+Identify the function by file and name, or by line at its declaration or any call; new_name gives the method another name.
+Refuses, saying why: a name that some interface in the workspace has, or that T or a type embedding it already has as a field or method; a function used as a value, or generic; an exported name that could make T implement an interface checked at run time (String, Error, MarshalJSON).`
 }
 
 func (*FunctionToMethod) InputSchema() json.RawMessage {
