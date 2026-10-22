@@ -1,0 +1,1 @@
+the case "book" assigns n at m.go:6:3; in a method it would change a copy

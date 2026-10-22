@@ -1990,3 +1990,14 @@ with replace_declaration, add_declaration and replace_text in one
 batch, the docs with replace_text. Tried on a copy of lending-xl (cp)
 with the CLI. The branch is stacked on #274 (merged into it with
 git), whose docs it extends.
+
+## 2026-10-22: add_interface_guard
+
+Through gorefactor: first a refactoring of switchmethod (a switch of
+either kind, the method's signature as one helper) in one batch, then
+the golden cases, the moves of the type switch cases into their own
+directory (move_file), the new file and the shared checks in one CLI
+batch of 39 steps written by a Python script (too long to send
+inline). One mistake there: move_file's argument is `file`, not
+`from`, fixed in the JSON before sending. Tried on a copy of
+lending-xl with the CLI.

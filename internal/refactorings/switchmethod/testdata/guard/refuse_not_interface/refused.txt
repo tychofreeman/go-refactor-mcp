@@ -1,0 +1,1 @@
+it.Kind is a string, not an interface, so no value of it can implement Kind; widen it first (change_field_type to any)

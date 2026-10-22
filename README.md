@@ -1025,7 +1025,12 @@ hand or a tool got in the way.
         converts an untyped constant compared with or written to it
         when its default type is not the old one (`kind("dvd")`).
         *Done* (lending-xl's `Item.Kind`: 17 uses).
-      - The guard, and one kind's migration: next.
+      - The guard: `add_interface_guard` declares the interface
+        (or adds the method to it) and puts before the switch
+        `if k, ok := it.Kind.(Kind); ok { return k.Days() }`.
+        *Done* (lending-xl: widening and the five guards in one
+        batch, its tests pass).
+      - One kind's migration: next.
     - **`inspect` by name** (the user, 2026-10-22): `names` reads
       several declarations in one call, each found in the module by
       its name, without file (`Name`, `Type.Method`, `pkg.Name` where
@@ -2247,6 +2252,17 @@ Refused, with the reason:
 A `default` that only nil could reach now is kept for nil, or dropped
 when there is a `case nil`; a note says so. Adding a method to an
 exported interface notes that the module's API changed.
+
+`add_interface_guard`, for a switch on a value, is the first step of
+moving its cases into types one at a time: it puts before the switch
+`if k, ok := tag.(Kind); ok { return k.m(args) }` (with no case
+returning, `k.m(args)` and the switch in the else), and declares
+`Kind` with the method `m`, or adds `m` to it. The tag must be an
+interface (`change_field_type` to `any` first). The method's
+parameters and the checks on the cases are those above. It also
+refuses when a type of the module, or of a dependency for an exported
+method, already implements the interface with `m`: a value of it in
+the tag would call `m` instead of running the switch.
 
 ## Changing a method: interfaces
 

@@ -1,0 +1,1 @@
+type Book already implements Kind with a method Label; a Book in it.Kind would call it instead of running the switch

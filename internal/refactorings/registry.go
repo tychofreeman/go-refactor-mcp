@@ -65,6 +65,7 @@ func All() []refactor.Refactoring {
 		slidestmt.NewUp(),
 		slidestmt.NewDown(),
 		switchmethod.New(),
+		switchmethod.NewGuard(),
 		createfile.New(),
 		replacestmts.New(),
 		insertstmts.New(),
