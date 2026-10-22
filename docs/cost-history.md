@@ -447,7 +447,9 @@ billing-large, the same five shapes under other names. 6 runs a task:
 
 The learned lessons changed how the model worked (fold and inline where
 the baseline rewrote; 46% fewer lines by hand) but not what it cost;
-the user's shorter moves were cheapest.
+the user's shorter moves were cheapest. A short set combining the two
+(`claude-md-combined`, about 310 words): $0.132, 8.7 turns, 493 lines by
+hand, 51% derived, like the user's moves within the noise.
 
 ## What made the difference
 

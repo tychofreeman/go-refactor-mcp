@@ -231,4 +231,15 @@ What the lessons carried across, by task:
 - `billing-blocked`: small either way; extract then guard in about half the runs of every arm.
 - `billing-book` (near-duplicates into `book`): every arm wrote it by hand (`replace_statements` per method). The near-duplicates lesson, the longest and most fragile, did not transfer.
 
-So a model can teach later models: the learned arm derived where the baseline rewrote, and wrote 46% fewer lines by hand than the baseline and 27% fewer than the user's moves, the highest derived share of the three. It did not make them cheaper: $0.142 against $0.146 is within the noise (10-25% at this many runs), while the user's shorter moves cost 13% less with a quarter fewer turns. The explorers' own cost ($5.55 + $7.62 + $8.12 + $2.20 and the trials) is a one-time cost these runs did not repay on a module this small. Not yet tried: a shorter learned section (the same derivations at the user's length), and a larger module, where rewriting by hand costs more.
+So a model can teach later models: the learned arm derived where the baseline rewrote, and wrote 46% fewer lines by hand than the baseline and 27% fewer than the user's moves, the highest derived share of the three. It did not make them cheaper: $0.142 against $0.146 is within the noise (10-25% at this many runs), while the user's shorter moves cost 13% less with a quarter fewer turns. The explorers' own cost ($5.55 + $7.62 + $8.12 + $2.20 and the trials) is a one-time cost these runs did not repay on a module this small. Not yet tried: a larger module, where rewriting by hand costs more.
+
+**A short combined set** (`claude-md-combined`, about 310 words on the base: the user's framing and phrasing, one proven operation chain per move, nothing for near-duplicates; `eval-runs/learn-combined`, $3.97):
+
+| arm | passed | cost a run | turns | written by hand | derived share |
+|---|---|---|---|---|---|
+| baseline | 30/30 | $0.146 | 11.0 | 711 | 40% |
+| learned (about 740 words) | 30/30 | $0.142 | 10.1 | 386 | 60% |
+| the user's moves (about 350) | 30/30 | $0.127 | 8.4 | 529 | 48% |
+| combined (about 310) | 30/30 | $0.132 | 8.7 | 493 | 51% |
+
+Shortening gave back the turns (8.7 against 10.1) and some of the derived share (51% against 60%): the combined set performs like the user's moves, within the noise of each other. On Contacts it folded getters and removed the fields with `remove_dead_code` in most runs, more than either; on tail most runs used `function_to_method` rather than the wrapper. Concrete chains added to the user's moves did not measurably improve on them; the learned section's detail bought derived code with turns. Near-duplicates (`book`) stayed by hand in every arm.
