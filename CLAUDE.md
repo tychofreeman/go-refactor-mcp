@@ -64,9 +64,10 @@ until the MCP is reconnected.
 2. **Read through inspect.** `inspect` of a file shows it without function
    bodies, with line numbers, for a third to a half of the whole file;
    then read the functions or line ranges you will change, several in one
-   call with `targets`. Avoid reading whole files with Read or `cat`: each
-   result is sent again on every later turn, and whole files were over
-   half of what reading cost in the A/B runs.
+   call with `targets`, or by name alone with `names`
+   (`["Settle", "Ledger.Post"]`, no file). Avoid reading whole files
+   with Read or `cat`: each result is sent again on every later turn,
+   and whole files were over half of what reading cost in the A/B runs.
 3. **Don't search before a refactoring.** rename, add_parameter,
    move_declaration and the others find every reference with the type
    checker.

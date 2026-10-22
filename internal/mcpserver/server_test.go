@@ -304,7 +304,7 @@ func TestRenameListsLocations(t *testing.T) {
 }
 
 // inspect shows a file without its function bodies, and reads several
-// targets in one call.
+// targets, or declarations by name, in one call.
 func TestInspectSkeletonAndTargets(t *testing.T) {
 	cs, _ := setup(t)
 	out, _ := call(t, cs, "inspect", map[string]any{"file": "calc/calc.go"})
@@ -314,6 +314,8 @@ func TestInspectSkeletonAndTargets(t *testing.T) {
 		map[string]any{"file": "app/app.go", "start_line": 5, "end_line": 5},
 	}})
 	mustContain(t, "targets", out, "6  func Apply", "5  func Run() int")
+	out, _ = call(t, cs, "inspect", map[string]any{"names": []any{"Apply", "Run"}})
+	mustContain(t, "names", out, "6  func Apply", "5  func Run() int")
 
 	tools, err := cs.ListTools(context.Background(), nil)
 	if err != nil {
@@ -325,10 +327,10 @@ func TestInspectSkeletonAndTargets(t *testing.T) {
 		}
 		schema, _ := tool.InputSchema.(map[string]any)
 		props, _ := schema["properties"].(map[string]any)
-		if props["targets"] == nil {
-			t.Errorf("inspect's schema has no targets: %v", schema)
+		if props["targets"] == nil || props["names"] == nil {
+			t.Errorf("inspect's schema lacks targets or names: %v", schema)
 		}
-		mustContain(t, "inspect description", tool.Description, "targets", "without their bodies")
+		mustContain(t, "inspect description", tool.Description, "targets", "names", "without their bodies")
 	}
 }
 
