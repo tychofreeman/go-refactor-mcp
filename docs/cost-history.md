@@ -498,6 +498,14 @@ with the tighter one without the example).
 | tighter | 260 | 0/4 | $0.15 | 10.0 | 88 |
 | tighter, one example per kind | 300 | 4/4 | $0.14 | 10.2 | 53 |
 
+Reading in the freight-xl runs (`docs/reading-and-deriving.md`, step
+1; no new runs): both arms made two to four read calls a run and read
+almost none of the bodies they changed. Reading was about a quarter
+of input in both (14% for the moves arm on tail, 27% for the baseline),
+mostly the output of "where is X used" searches resent on later turns:
+on `run` 20% of the moves arm's input, for a `fold` that found all 30
+calls itself.
+
 All 38 descriptions shortened, each with an example (#255-#259, 8,700
 words to about 5,200); the user's moves on freight-xl, 4 tasks, 4 runs,
 $2.34 (`eval-runs/freight-human-alldesc`, against `freight-human`):
