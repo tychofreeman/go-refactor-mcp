@@ -147,6 +147,9 @@ type Decl struct {
 // File renders q.File without its function bodies, or the function or
 // lines q asks for.
 func File(ws *workspace.Workspace, q Query) (string, error) {
+	if q.Function != "" {
+		return declarations(ws, q.File, []string{q.Function})
+	}
 	path := ws.Abs(q.File)
 	pkg, file := ws.FileSyntax(path)
 	if file == nil {
@@ -168,13 +171,6 @@ func File(ws *workspace.Workspace, q Query) (string, error) {
 
 	start, end := 1, len(lines)
 	switch {
-	case q.Function != "":
-		d := find(decls, q.Function)
-		if d == nil {
-			return "", refactor.Refusef("no function %q in %s; inspect the file to see what is there", q.Function, q.File)
-		}
-		sb.WriteString(outlineLine(*d))
-		start, end = d.Start, d.End
 	case q.StartLine != 0 || q.EndLine != 0:
 		if q.StartLine > 0 {
 			start = q.StartLine
@@ -300,32 +296,58 @@ func targets(ws *workspace.Workspace, q Query) (string, error) {
 	return strings.Join(parts, "\n"), nil
 }
 
-// names renders each declaration q.Names names, found in the module by
-// its name; one not found, or found in several places, says so in its
-// place.
+// names renders the declarations q.Names names, each found in the module
+// by its name, grouped by file in the order first asked for; one not
+// found, or found in several places, says so in its place.
 func names(ws *workspace.Workspace, q Query) (string, error) {
 	if q.File != "" || q.Function != "" || q.StartLine != 0 || q.EndLine != 0 || len(q.Targets) > 0 {
 		return "", refactor.Refusef("give names alone: each is found in the module by its name, without file")
 	}
-	var parts []string
+	type part struct {
+		file   string // "" for a refusal, in text
+		locals []string
+		text   string
+	}
+	var parts []*part
+	byFile := map[string]*part{}
 	for _, n := range q.Names {
-		out, err := declaration(ws, n)
+		m, err := resolve(ws, n)
 		switch {
 		case refactor.IsRefusal(err):
-			out = fmt.Sprintf("%s: %v\n", n, err)
+			parts = append(parts, &part{text: fmt.Sprintf("%s: %v\n", n, err)})
+			continue
 		case err != nil:
 			return "", err
 		}
-		parts = append(parts, out)
+		if p := byFile[m.file]; p != nil {
+			p.locals = append(p.locals, m.local)
+			continue
+		}
+		byFile[m.file] = &part{file: m.file, locals: []string{m.local}}
+		parts = append(parts, byFile[m.file])
 	}
-	return strings.Join(parts, "\n"), nil
+	out := make([]string, len(parts))
+	for i, p := range parts {
+		if p.file == "" {
+			out[i] = p.text
+			continue
+		}
+		text, err := declarations(ws, p.file, p.locals)
+		if err != nil {
+			return "", err
+		}
+		out[i] = text
+	}
+	return strings.Join(out, "\n"), nil
 }
 
-// declaration renders the source of the one declaration in the module
-// named name: Name or Type.Method, or either after its package's name
-// (pkg.Name).
-func declaration(ws *workspace.Workspace, name string) (string, error) {
-	type match struct{ file, pkg, local string }
+// match is a declaration found by its name: the file, its package's
+// name, and the name within the file (Name or Type.Method).
+type match struct{ file, pkg, local string }
+
+// resolve finds the one declaration in the module named name: Name or
+// Type.Method, or either after its package's name (pkg.Name).
+func resolve(ws *workspace.Workspace, name string) (match, error) {
 	var found []match
 	seen := map[string]bool{}
 	for _, p := range ws.Pkgs {
@@ -348,15 +370,54 @@ func declaration(ws *workspace.Workspace, name string) (string, error) {
 	sort.Slice(found, func(i, j int) bool { return found[i].file < found[j].file })
 	switch len(found) {
 	case 0:
-		return "", refactor.Refusef("no declaration of that name in the module")
+		return match{}, refactor.Refusef("no declaration of that name in the module")
 	case 1:
-		return File(ws, Query{File: found[0].file, Function: found[0].local})
+		return found[0], nil
 	}
 	places := make([]string, len(found))
 	for i, m := range found {
 		places[i] = fmt.Sprintf("%s (package %s)", m.file, m.pkg)
 	}
-	return "", refactor.Refusef("declared in %s; name it more fully (pkg.Name, Type.Method)", strings.Join(places, ", "))
+	return match{}, refactor.Refusef("declared in %s; name it more fully (pkg.Name, Type.Method)", strings.Join(places, ", "))
+}
+
+// declarations renders file's header line, then the source of each
+// declaration locals names (Name or Type.Method), in that order.
+func declarations(ws *workspace.Workspace, file string, locals []string) (string, error) {
+	path := ws.Abs(file)
+	pkg, f := ws.FileSyntax(path)
+	if f == nil {
+		return "", refactor.Refusef("file %s is not part of the module's packages (call inspect without arguments to list files)", file)
+	}
+	src, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	decls := Outline(ws.Fset, f)
+	addEffects(ws, pkg, f, decls)
+	lines := strings.SplitAfter(string(src), "\n")
+	if len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "%s  (package %s, %d lines)\n", ws.Rel(path), f.Name.Name, len(lines))
+	for i, name := range locals {
+		d := find(decls, name)
+		if d == nil {
+			return "", refactor.Refusef("no function %q in %s; inspect the file to see what is there", name, file)
+		}
+		if i > 0 {
+			sb.WriteByte('\n')
+		}
+		sb.WriteString(outlineLine(*d))
+		fmt.Fprintf(&sb, "\nsource (lines %d-%d):\n", d.Start, d.End)
+		width := len(fmt.Sprint(d.End))
+		for l := d.Start; l <= d.End; l++ {
+			sb.WriteString(numbered(width, l, lines[l-1]))
+		}
+	}
+	return sb.String(), nil
 }
 
 func find(decls []Decl, name string) *Decl {

@@ -228,6 +228,26 @@ func TestNames(t *testing.T) {
 	}
 }
 
+// TestNamesGrouped: declarations of one file are shown under one header,
+// in the order asked.
+func TestNamesGrouped(t *testing.T) {
+	ws := load(t)
+	out, err := Run(ws, Query{Names: []string{"Classify", "Nope", "Shape"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := strings.Count(out, "shapes.go  (package shapes"); n != 1 {
+		t.Errorf("want one header for shapes.go, got %d:\n%s", n, out)
+	}
+	classify, shape := strings.Index(out, "source (lines 18-33):"), strings.Index(out, "6  type Shape interface")
+	if classify < 0 || shape < classify {
+		t.Errorf("want Classify, then Shape:\n%s", out)
+	}
+	if !strings.Contains(out, "Nope: no declaration of that name in the module") {
+		t.Errorf("output lacks the refusal for Nope:\n%s", out)
+	}
+}
+
 func TestFileEffects(t *testing.T) {
 	t.Setenv("GOWORK", "off")
 	dir := t.TempDir()
