@@ -205,7 +205,7 @@ the old field, which the runs did with `replace_text` while
 ## The learner runs on B
 
 `derivations-billing.json`, 6 runs a task, three arms in parallel
-(`eval-runs/learn-base`, `learn-learned`, `learn-human`), $12.46 in all:
+(`eval-runs/learn-base`, `learn-learned`, `learn-human`), $12.47 in all:
 
 | arm | passed | cost a run | turns | written by hand | derived share |
 |---|---|---|---|---|---|
