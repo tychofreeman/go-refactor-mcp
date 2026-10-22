@@ -31,9 +31,9 @@ func (*PrepareForTypes) Description() string {
 becomes
   type Kind interface { Days() int }
   func Days(it Item) int { if k, ok := it.Kind.(Kind); ok { return k.Days() }; switch it.Kind { ... }; return 0 }
-The switch's tag must be an interface (change_field_type to any first). The interface is declared before the function, or gets the method when it exists. The variables the cases use become the method's parameters. Every case must return, or none (then the switch goes in the else).
+The switch's tag must be an interface (change_field_type to any first). The interface is declared before the function, or gets the method when it exists. The variables the cases use become the method's parameters. Every case must return, or none (then the switch goes in the else). A case of several values (case "book", "dvd":) is split into a case for each, with a copy of the body, so that each moves alone.
 Identify the switch by file and line, or by function when it is that function's only switch.
-Refuses, saying why: a type that already implements the interface with the method, a case that leaves other than by return or assigns a variable it uses (it could not become a method), a tag that would be evaluated again with another value.`
+Refuses, saying why: a type that already implements the interface with the method, a case that leaves other than by return or assigns a variable it uses (it could not become a method), a case of several values that declares a label or a type (its body is copied), a tag that would be evaluated again with another value.`
 }
 
 func (*PrepareForTypes) InputSchema() json.RawMessage {
@@ -79,7 +79,7 @@ func (*PrepareForTypes) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 		return nil, err
 	}
 	g := &preparer{switcher: s, name: a.Interface}
-	for _, check := range []func() error{g.checkTag, g.collectCases, g.checkInterface, g.checkBodies, g.checkUnimplemented} {
+	for _, check := range []func() error{g.checkTag, g.collectCases, g.checkInterface, g.checkBodies, g.checkSplit, g.checkUnimplemented} {
 		if err := check(); err != nil {
 			return nil, err
 		}
@@ -116,6 +116,69 @@ func (g *preparer) collectCases() error {
 		return refactor.Refusef("the switch at %s has no case", g.at(g.stmt))
 	}
 	return nil
+}
+
+// checkSplit refuses to split a case of several values whose body
+// declares a label or a type: each value gets its own case, with a copy
+// of the body.
+func (g *preparer) checkSplit() error {
+	for _, c := range g.cases {
+		if len(c.clause.List) < 2 {
+			continue
+		}
+		var what string
+		for _, st := range c.clause.Body {
+			ast.Inspect(st, func(n ast.Node) bool {
+				switch n := n.(type) {
+				case *ast.LabeledStmt:
+					what = "label " + n.Label.Name + ", which a function cannot declare twice"
+				case *ast.TypeSpec:
+					what = "type " + n.Name.Name + ", which would be a different type in each copy"
+				}
+				return what == ""
+			})
+		}
+		if what != "" {
+			return refactor.Refusef("the case %s at %s declares %s; splitting it into a case for each value copies its body (extract_function the body first)",
+				g.values(c.clause), g.at(c.clause), what)
+		}
+	}
+	return nil
+}
+
+// values is the source of a case's values.
+func (g *preparer) values(cc *ast.CaseClause) string {
+	return string(g.src[g.off(cc.List[0].Pos()):g.off(cc.List[len(cc.List)-1].End())])
+}
+
+// split returns the switch's source with each case of several values
+// split into a case for each, with a copy of the body, so that each
+// value's code can move into its type alone; and the cases it split.
+func (g *preparer) split() (string, []string) {
+	at := g.off(g.stmt.Pos())
+	ind := g.indent()
+	var edits []edit.TextEdit
+	var split []string
+	for _, c := range g.cases {
+		cc := c.clause
+		if len(cc.List) < 2 {
+			continue
+		}
+		body := g.body(cc, ind+"\t")
+		var b strings.Builder
+		for _, v := range cc.List[:len(cc.List)-1] {
+			b.WriteString("case " + g.text(v) + ":\n" + body + ind)
+		}
+		b.WriteString("case " + g.text(cc.List[len(cc.List)-1]) + ":")
+		edits = append(edits, edit.TextEdit{Start: g.off(cc.Case) - at, End: g.off(cc.Colon) + 1 - at, NewText: b.String()})
+		split = append(split, g.values(cc))
+	}
+	src := g.src[at:g.off(g.stmt.End())]
+	out, err := edit.Apply(src, edits)
+	if err != nil {
+		return string(src), nil
+	}
+	return string(out), split
 }
 
 // checkInterface finds the interface, or checks that its name is free.
@@ -218,17 +281,21 @@ func (g *preparer) plan() (*refactor.Plan, error) {
 	call := v + "." + g.method + "(" + g.args() + ")"
 	head := fmt.Sprintf("if %s, %s := %s.(%s); %s {\n", v, ok, g.text(g.subject), g.name, ok)
 	at, end := g.off(g.stmt.Pos()), g.off(g.stmt.End())
+	sw, split := g.split()
 	var e edit.TextEdit
 	if returning, _ := g.returns(g.cases[0].clause); returning {
-		e = edit.TextEdit{Start: at, End: at, NewText: head + ind + "\treturn " + call + "\n" + ind + "}\n" + ind}
+		e = edit.TextEdit{Start: at, End: end, NewText: head + ind + "\treturn " + call + "\n" + ind + "}\n" + ind + sw}
 	} else {
-		sw := textutil.Reindent(ind+g.text(g.stmt), ind, ind+"\t")
+		sw := textutil.Reindent(ind+sw, ind, ind+"\t")
 		e = edit.TextEdit{Start: at, End: end, NewText: head + ind + "\t" + call + "\n" + ind + "} else {\n" + sw + "\n" + ind + "}"}
 	}
 	edits := []edit.TextEdit{e}
 	var fes []edit.FileEdit
 	summary := fmt.Sprintf("method %s added to %s", g.method, g.name)
 	var notes []string
+	if len(split) > 0 {
+		notes = append(notes, "split into a case for each value, to move into its type alone: "+strings.Join(split, "; "))
+	}
 	if g.iface == nil {
 		start := g.fd.Pos()
 		if g.fd.Doc != nil {

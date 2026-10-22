@@ -2022,3 +2022,13 @@ comment, the tool's description and the docs. Two refusals on the
 way: insert_statements takes `line`/`where`, not `function`, and
 `into` needs the line the block opens on, which the stub field had
 moved by one.
+
+## 2026-10-22: prepare_switch_for_types splits shared cases
+
+All through the CLI: create_file for the golden cases (written
+first), add_declaration for `checkSplit`, `values` and `split`,
+replace_text for the edits in `Plan` and `plan`, the description and
+the docs. Hosting: an option of `add_case` was the first idea, but
+`add_case` is an edit and the split is a refactoring; preparing the
+switch for each value to move alone is the intent it serves, so it
+needs no option at all.
