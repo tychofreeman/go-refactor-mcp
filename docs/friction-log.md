@@ -1879,6 +1879,12 @@ add_declaration and replace_text (two batches refused: a helper named
 `types` clashed with the go/types import; a variable used by steps
 before the one declaring it), the docs with replace_text.
 
+## 2026-10-22: reading in the freight runs
+
+The two scripts (`eval-tasks/learning/reads.py` and
+`eval-tasks/learning/funcs/main.go`) were written in the scratchpad
+while measuring and copied in with cp; the docs with replace_text.
+
 ## 2026-10-22: the call-tree probe
 
 `eval-tasks/learning/probe.py` written by hand (a Python driver; one

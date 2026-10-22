@@ -498,6 +498,14 @@ with the tighter one without the example).
 | tighter | 260 | 0/4 | $0.15 | 10.0 | 88 |
 | tighter, one example per kind | 300 | 4/4 | $0.14 | 10.2 | 53 |
 
+Reading in the freight-xl runs (`docs/reading-and-deriving.md`, step
+1; no new runs): both arms made two to four read calls a run and read
+almost none of the bodies they changed. Reading was about a quarter
+of input in both (14% for the moves arm on tail, 27% for the baseline),
+mostly the output of "where is X used" searches resent on later turns:
+on `run` 20% of the moves arm's input, for a `fold` that found all 30
+calls itself.
+
 The call-tree probe (`docs/reading-and-deriving.md`, step 2; 48
 one-turn answers, $2.73): from the call tree, the skeleton or the whole
 module, the answers named the functions to change alike (precision

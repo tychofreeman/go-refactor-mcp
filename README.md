@@ -957,6 +957,10 @@ hand or a tool got in the way.
     or the whole module, scored by running the derivation; a set C of
     new shapes on a large module, with an arm that teaches the method
     and names no shapes.
+    - Step 1, reads in the freight runs. *Done:* both arms read alike
+      and little; about a quarter of input is "where is X used"
+      searches, which a derivation does not need
+      (`eval-tasks/learning/reads.py`).
     - Step 2, the call tree: `cmd/calltree` prints each package's types
       and each function's signature, doc line and the module functions
       it calls (through an interface as the interface's method), with
