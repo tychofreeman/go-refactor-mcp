@@ -90,3 +90,24 @@ func TestRunFromStdin(t *testing.T) {
 		t.Errorf("step from stdin not applied:\n%s", got)
 	}
 }
+
+// inspect reads code as the server's inspect does, and a refused read
+// exits with status 2.
+func TestRunInspect(t *testing.T) {
+	dir := module(t, "package p\n\n// F does nothing.\nfunc F() {}\n")
+	var out strings.Builder
+	stdout = &out
+	defer func() { stdout = os.Stdout }()
+	if code := run([]string{"-C", dir, "inspect", `{"names":["F"]}`}); code != 0 {
+		t.Fatalf("exit status %d, want 0", code)
+	}
+	if !strings.Contains(out.String(), "4  func F() {}") {
+		t.Errorf("inspect did not show F:\n%s", out.String())
+	}
+	if code := run([]string{"-C", dir, "inspect", "file=p.go"}); code != 0 || !strings.Contains(out.String(), "function bodies elided") {
+		t.Errorf("inspect file=p.go: exit status %d:\n%s", code, out.String())
+	}
+	if code := run([]string{"-C", dir, "inspect", `{"names":["F"],"file":"p.go"}`}); code != 2 {
+		t.Errorf("exit status %d, want 2", code)
+	}
+}

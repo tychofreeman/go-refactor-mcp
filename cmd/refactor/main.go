@@ -1,5 +1,5 @@
 // Command refactor runs a refactoring step, or a batch of them, from the
-// command line. It runs them as the MCP server does, with the same
+// command line, and reads code as inspect does. It runs them as the MCP server does, with the same
 // arguments, and declares what an edit calls as the server does, so it is
 // the easiest way to try and debug a refactoring by hand.
 //
@@ -8,6 +8,7 @@
 //	refactor rename '{"file":"main.go","line":7,"name":"t","new_name":"total"}'
 //	refactor batch '{"steps":[{"tool":"rename","args":{...}}, ...]}'
 //	refactor batch @steps.json      (the JSON from a file; - reads stdin)
+//	refactor inspect '{"names":["Settle","Ledger.Post"]}'   (or file=a.go, ...)
 //
 // Exit status: 0 applied (or previewed), 2 refused, 1 error.
 package main
@@ -21,6 +22,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/tychofreeman/go-refactor-mcp/internal/inspect"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
@@ -37,7 +39,7 @@ func run(argv []string) int {
 	dryRun := fs.Bool("n", false, "dry run: print the diff without writing")
 	asJSON := fs.Bool("json", false, "print the result as JSON (without declaring what an edit calls)")
 	fs.Usage = func() {
-		fmt.Fprintf(fs.Output(), "usage: refactor [flags] list\n       refactor [flags] <refactoring> key=value... | '<json>' | @file | -\n       refactor [flags] batch '<json>' | @file | -\n\n@file reads the JSON from a file, - from stdin.\n\nflags:\n")
+		fmt.Fprintf(fs.Output(), "usage: refactor [flags] list\n       refactor [flags] <refactoring> key=value... | '<json>' | @file | -\n       refactor [flags] batch '<json>' | @file | -\n       refactor [flags] inspect key=value... | '<json>' | @file | -\n\n@file reads the JSON from a file, - from stdin.\n\nflags:\n")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(argv); err != nil {
@@ -62,6 +64,9 @@ func run(argv []string) int {
 	}
 	if name == "batch" {
 		return runBatch(rest, *dir, *pattern, *dryRun)
+	}
+	if name == "inspect" {
+		return runInspect(rest, *dir, *pattern)
 	}
 	r, ok := refactorings.Lookup(name)
 	if !ok {
@@ -142,6 +147,37 @@ func runBatch(argv []string, dir, pattern string, dryRun bool) int {
 	return 0
 }
 
+// runInspect reads code as the inspect tool does: argv is its arguments,
+// one JSON object or key=value pairs. A refused read exits with status 2.
+func runInspect(argv []string, dir, pattern string) int {
+	args, err := parseArgs(argv)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	var q inspect.Query
+	if err := refactor.DecodeArgs(args, &q); err != nil {
+		fmt.Fprintln(stdout, err)
+		return 2
+	}
+	ws, err := workspace.Load(dir, pattern)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	out, err := inspect.Run(ws, q)
+	switch {
+	case refactor.IsRefusal(err):
+		fmt.Fprintln(stdout, err)
+		return 2
+	case err != nil:
+		fmt.Fprintln(os.Stderr, "error:", err)
+		return 1
+	}
+	fmt.Fprint(stdout, out)
+	return 0
+}
+
 // parseArgs accepts either a single JSON object or key=value pairs; values
 // that look like integers or booleans become JSON numbers/booleans.
 func parseArgs(kv []string) (json.RawMessage, error) {
@@ -170,6 +206,9 @@ func parseArgs(kv []string) (json.RawMessage, error) {
 
 // stdin is what an argument "-" reads.
 var stdin io.Reader = os.Stdin
+
+// stdout is where inspect writes what it shows.
+var stdout io.Writer = os.Stdout
 
 // jsonFrom replaces an only argument "@path" with the file's contents,
 // and "-" with stdin's, so that long JSON needs no shell quoting.

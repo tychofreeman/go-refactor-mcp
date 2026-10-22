@@ -351,7 +351,11 @@ results are in `docs/cost-history.md`.
 - Sessions in a cloud clone have no MCP on that clone (the user's MCP
   runs on their own checkout); build `cmd/refactor` from the branch and
   use it for every step: `refactor batch '<json>'` runs a batch, and
-  edits get stubs as through the server (#160). Write long JSON to a
+  edits get stubs as through the server (#160). Read with
+  `refactor inspect` (`'{"names":["F","T.M"]}'`, `file=a.go`), not
+  sed, grep or Read: it is what the server's inspect shows, so a
+  session reads as the tools intend and tries new read features as it
+  builds them (2026-10-22, the user). Write long JSON to a
   file in the scratchpad and pass `@path` (or `-` for stdin, #205):
   Go escapes such as `\n` then survive, which an unquoted heredoc
   turned into newlines.
