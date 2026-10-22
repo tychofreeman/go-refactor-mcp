@@ -64,6 +64,49 @@ What it tells:
 Record the table in `docs/cost-history.md` (section 9) and the finding
 here.
 
+**Done** (2026-10-22; `eval-tasks/learning/reads.py`, with the
+functions' line ranges from `go run ./eval-tasks/learning/funcs
+eval-tasks/testdata/freight-xl`). Means per run, 4 runs each:
+
+| task | arm | read calls | turns with a read / turns | searches | bodies read | bodies changed | reading's share of input |
+|---|---|---|---|---|---|---|---|
+| dispatch | baseline | 4.0 | 3.5 / 9.0 | 1.5 | 3.8 | 11 | 25% |
+| dispatch | moves | 4.0 | 3.0 / 7.0 | 1.2 | 1.0 | 11 | 30% |
+| routes | baseline | 3.2 | 3.0 / 9.2 | 2.2 | 0 | 63 | 24% |
+| routes | moves | 2.5 | 2.5 / 7.8 | 1.5 | 0 | 65 | 25% |
+| tail | baseline | 4.0 | 3.8 / 8.5 | 2.0 | 15.8 | 12 | 27% |
+| tail | moves | 2.0 | 2.0 / 5.5 | 1.0 | 3.0 | 12 | 14% |
+| run | baseline | 2.8 | 2.8 / 6.0 | 1.2 | 4.0 | 31 | 24% |
+| run | moves | 2.5 | 2.5 / 4.5 | 1.0 | 2.2 | 31 | 23% |
+
+Reading's share is the context of the reads (each result times the
+turns it stays) over the run's input. Bodies read are those an
+`inspect` of a function or range, a Read or a `cat`/`sed -n` covered,
+by the module's line numbers as given (approximate once edits move
+them); bodies changed are the harness's changed functions.
+
+What it showed:
+
+- **Both arms read the same way, and little:** two to four read calls
+  a run, one to two of them searches, and almost no bodies of the
+  code they change (routes changed about 63 bodies having read none;
+  run 31, having read two to four). Neither arm reads bodies to find
+  sites; both find them with a search.
+- **The searches are most of reading's cost,** about a quarter of each
+  run's input in both arms: a grep's output, sent once, is resent on
+  every later turn. On run the moves arm spent 20% of its input on
+  grep output (140K of 688K), for a derivation (wrapper, `fold`) that
+  found all 30 calls itself.
+- Only tail differs: the moves arm read fewer bodies (3 against 16)
+  and half as much (14% against 27%), in fewer turns.
+
+So, the plan's second outcome: the model reads by habit, before it
+plans, and deriving does not save reading by itself; the moves arm
+saves turns, not reads. The reading that a derivation makes needless is
+the "where is X used" search, which CLAUDE.md's "don't search before a
+refactoring" asks it to skip and it does not. Step 2 tests whether a
+plan can be made without it.
+
 ## Step 2: plan from a call tree (a probe, one turn a question)
 
 Whether names and signatures are enough to plan, without bodies or a

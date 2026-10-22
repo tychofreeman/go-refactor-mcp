@@ -957,6 +957,10 @@ hand or a tool got in the way.
     or the whole module, scored by running the derivation; a set C of
     new shapes on a large module, with an arm that teaches the method
     and names no shapes.
+    - Step 1, reads in the freight runs. *Done:* both arms read alike
+      and little; about a quarter of input is "where is X used"
+      searches, which a derivation does not need
+      (`eval-tasks/learning/reads.py`).
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
