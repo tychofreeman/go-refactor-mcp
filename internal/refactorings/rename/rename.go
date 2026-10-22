@@ -39,10 +39,9 @@ func New() *Rename { return &Rename{} }
 func (*Rename) Name() string { return "rename" }
 
 func (*Rename) Description() string {
-	return `Rename a variable, constant, function, type, type parameter, struct field or method, updating every reference in the workspace.
-Use it to give a symbol a clearer name. Identify the symbol by file, line and its current name (add column only if the name occurs more than once on that line with different meanings). For a local, function ("Name" or "Type.Method") can take the place of line, and stays valid after edits.
-Refuses if the new name would clash with or shadow another symbol, if an exported name used by another package would become unexported, if the method implements an interface, or if the symbol is declared outside the workspace.
-A doc comment that starts with the old name (the Go convention) is renamed too; other comments that mention it are listed in a note (for a local, only those in its scope).`
+	return `Rename a variable, constant, function, type, type parameter, struct field or method, and every reference to it in the workspace: renaming the field nm of User to Name changes the declaration, every u.nm and User{nm: x}, and a doc comment that starts with the old name; other comments that mention it are listed in a note.
+Identify the symbol by file, line and its current name (column if the name is on the line twice with different meanings); for a local, function ("Name" or "Type.Method") can take the place of line and stays valid after edits.
+Refuses, saying why: a new name that would clash with or shadow another, an exported name used in another package that would become unexported, a method whose new name would change which interfaces its type implements, a symbol declared outside the workspace.`
 }
 
 func (*Rename) InputSchema() json.RawMessage {

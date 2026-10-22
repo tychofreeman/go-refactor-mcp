@@ -22,11 +22,9 @@ func NewRemoveElse() *RemoveElse { return &RemoveElse{} }
 func (*RemoveElse) Name() string { return "remove_else" }
 
 func (*RemoveElse) Description() string {
-	return `Remove a redundant else: when the if branch cannot fall through (it ends in return, continue, break, goto or panic), "if c { X; return } else { B }" becomes "if c { X; return }" followed by B, un-nested. An else-if becomes a separate if statement.
-Use it to flatten code after an early exit. (If it is the else branch that exits, use invert_if instead.)
-Identify the if by file and the line of its "if" keyword (as shown by inspect); add column only if that line has more than one if.
-If the moved statements use variables of the if's init statement, the init statement moves before the if.
-Refuses if the if branch can fall through, or if the moved statements (or a moved init statement) declare names that the enclosing block or the code after the if also uses.`
+	return `Remove an else after an if branch that cannot fall through, un-nesting it: if err != nil { return 0, err } else { return use(v), nil } becomes if err != nil { return 0, err } followed by return use(v), nil. An else-if becomes a separate if. When it is the else branch that exits, use invert_if instead.
+Identify the if by file and the line of its if keyword (column if the line has two).
+Refuses, saying why: an if branch that can fall through, un-nested names that would clash.`
 }
 
 func (*RemoveElse) InputSchema() json.RawMessage {

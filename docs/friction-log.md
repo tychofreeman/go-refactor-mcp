@@ -1860,6 +1860,12 @@ All through gorefactor: nine descriptions with replace_statements and
 `function` in one batch, a phrase TestDescriptionsAreCurrent requires
 put back with replace_text; each example checked with the CLI.
 
+## 2026-10-21: shorter descriptions, moving and control flow
+
+All through gorefactor: seven descriptions (six functions) with
+replace_statements and `function` in one batch; each example checked
+with the CLI.
+
 ## 2026-10-21: sort.Slice is not reflection on fields
 
 All through gorefactor: the golden cases with create_file, the fix
