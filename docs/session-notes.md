@@ -91,14 +91,19 @@ results are in `docs/cost-history.md`.
   needs; never before code that might not finish or return
   (`Summary.Stops`).
 
-- **How tool descriptions are written** (2026-10-21, after `fold`'s
-  description lost its use when its example went, #255): the user
-  asked for every description to be shortened and given an example
-  or two (#256-#259; 8,700 words to about 5,200 over 38 tools, each
-  example run with the CLI). Write new ones the same way: what it
-  does with a before/after, the addressing hints the schema does not
-  carry, and one line of what it refuses ("Refuses, saying why:
-  ..."); the rules live in the refusals.
+- **Tool descriptions: an example per use, the rules in refusals**
+  (2026-10-21): cutting `fold`'s description from 668 to about 260
+  words lost its use on near-duplicates (2/4 runs to 0/4) when the
+  worked example of that shape went; with one example per kind of
+  match (about 300 words) it was used in 4/4. A fresh model decides
+  whether a tool fits from its before/after examples; conditions and
+  evaluation-order rules can live in the refusals, which say why a
+  match was left. The user then asked for every description to be
+  shortened and given an example or two (#256-#259; 8,700 words to
+  about 5,200 over 38 tools, each example run with the CLI). Write new
+  ones the same way: what it does with a before/after, the addressing
+  hints the schema does not carry, and one line of what it refuses
+  ("Refuses, saying why: ...").
 
 - **Options over new tools** (2026-10-21): the pointer alias (gap A)
   is `pointer` on `extract_variable`, not a tool of its own: the model
