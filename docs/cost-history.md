@@ -451,6 +451,14 @@ the user's shorter moves were cheapest. A short set combining the two
 (`claude-md-combined`, about 310 words): $0.132, 8.7 turns, 493 lines by
 hand, 51% derived, like the user's moves within the noise.
 
+After `fold` learned near-duplicates (#245-#251; `eval-runs/learn2-*`,
+$17.09, 120/120): on `book` the user's moves and the combined set
+folded all four copies in 6/6 runs, the baseline 4/6, learned 3/6
+(its long recipe now costs turns: 18.8 against 10.2). Lines written by
+hand on `book` under the user's moves halved (74 to 37), cost did not
+change (the task was already two or three calls). Totals per arm
+moved within the noise: $0.152, $0.154, $0.134, $0.128 a run.
+
 ## What made the difference
 
 - **Smaller results** (#75, rename locations): the largest single win when
