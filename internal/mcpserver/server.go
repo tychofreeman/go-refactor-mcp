@@ -48,7 +48,7 @@ Some tools choose for you (create_from_usage chooses a stub's signature and file
 Which tool, by what you want to do:
 - Read the code: inspect.
 - Rename or move: rename, move_declaration.
-- Split or join code (refactorings): extract_function, inline_function, extract_variable, inline_variable, extract_struct, merge_duplicate_function, function_to_method, method_to_function; fold replaces code that does what an existing function does with calls to it; parameterize makes functions that differ only in constants calls of one that takes them.
+- Split or join code (refactorings): extract_function, inline_function, extract_variable, inline_variable, extract_struct, merge_duplicate_function, function_to_method, method_to_function; fold replaces code that does what an existing function does with calls to it; parameterize makes functions that differ only in constants calls of one that takes them; type_switch_to_method makes each case of a type switch a method of its type.
 - Change a signature and every call (refactorings): add_parameter, remove_parameter, move_parameter, introduce_parameter, change_parameter_type, add_result, change_field_type; an interface method changes with its implementations.
 - Simplify control flow (refactorings): invert_if, remove_else, move_statement_up, move_statement_down, remove_dead_code.
 - Add code (edits): create_file for any new file, Go or not (test fixtures, JSON, go.mod; several at once in one batch), add_declaration, add_field, add_case, add_element, insert_statements; create_from_usage declares the functions, methods, types and fields code uses before they exist, and the methods a type lacks to implement an interface it is used as.

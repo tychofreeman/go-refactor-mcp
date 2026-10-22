@@ -1,0 +1,1 @@
+a *Book is made at m.go:30:14; with a method on Book, a *Book in k would run the case Book, which it does not reach now

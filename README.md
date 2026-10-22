@@ -39,7 +39,8 @@ model reads before choosing the next refactoring. That loop is the iteration.
   uses. `move_statement_up` and `move_statement_down` swap a statement
   with its neighbor when the two are independent. `move_declaration` moves a
   declaration (with the helpers it uses, if asked) to another file, of its
-  package or another one.
+  package or another one. `type_switch_to_method` makes each case of a
+  type switch a method of its type.
 - **Step 5 (in progress):** edits, steps that change behavior on purpose
   (see "Edits"). `create_file`, `replace_statements`, `insert_statements`,
   `add_declaration`, `replace_expression` and `add_field` are done; the
@@ -1007,6 +1008,12 @@ hand or a tool got in the way.
       The address task is now `extract_struct`, then `rename` of
       `Member.Address` to `Home` (73 selectors, the hidden tests
       pass), where the reference needed five text replacements.
+    - **A switch on a kind into methods** (the user chose two
+      general operations, 2026-10-22): `type_switch_to_method` turns
+      a type switch into a method of each type it switches on.
+      *Done.* Next, the other half: turn a type code (a string field
+      with constant values) into types, so that its switches become
+      type switches.
     - **`inspect` by name** (the user, 2026-10-22): `names` reads
       several declarations in one call, each found in the module by
       its name, without file (`Name`, `Type.Method`, `pkg.Name` where
@@ -2192,6 +2199,42 @@ The two must be independent, which it checks conservatively:
 
 Defining a function literal runs nothing, so what its body does does not
 count, until something calls it.
+
+## Type switch to method: what it checks
+
+`type_switch_to_method` turns `switch k := v.(type)` into a method of
+each type it switches on: each case's body becomes that type's method,
+the interface (`v`'s type) gets the method, and the switch becomes
+`v.m(args)` behind a nil check, with `case nil` (or else `default`) in
+the nil branch. The variables of the function a case uses become the
+method's parameters, in order of declaration, the switch's variable its
+receiver. Every case must return (the call is `return v.m(args)`) or
+none (a statement). The methods go after the function.
+
+Refused, with the reason:
+
+- an interface or a case type of another package, generic, or a
+  pointer type; a case of several types; cases for both `T` and `*T`;
+- a type of the module that implements the interface without a case
+  (it would lose the interface, or reach a case it does not now), and
+  a `*T` made anywhere (`&T{}`, `new(T)`) when `T` has the case: with a
+  method on `T`, a `*T` would run that case instead of the default;
+- a case that leaves other than by return (`break`, `continue`, `goto`,
+  `fallthrough` out of it, `defer`, `recover`, a bare return), that
+  returns on some paths only, or that assigns, takes the address of or
+  calls a pointer method on a variable it uses: in the method it would
+  change a copy;
+- a local constant or type a case uses, two variables of one name, a
+  `case nil` that uses the switch's variable;
+- a method name the interface or a case type already has (or a type
+  embedding one), or one checked at run time (`String`, ...);
+- a subject the call would evaluate again with another value
+  (`next()`), an init statement, a label, a switch in a function
+  literal.
+
+A `default` that only nil could reach now is kept for nil, or dropped
+when there is a `case nil`; a note says so. Adding a method to an
+exported interface notes that the module's API changed.
 
 ## Changing a method: interfaces
 

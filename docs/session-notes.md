@@ -172,6 +172,9 @@ results are in `docs/cost-history.md`.
   through operations that exist; the runs name the missing ones
   (rename of an embedded field, a switch on a kind into methods).
   The first is done: rename makes an embedded field a named one.
+  For the second the user chose two general operations over one
+  shaped to the task: a type code into types, then a type switch into
+  methods (`type_switch_to_method`, built first).
 
 - **Loops and containers** (2026-10-20): the user asked for
   refactorings that convert between kinds of loop, and edits that make

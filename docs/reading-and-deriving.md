@@ -368,7 +368,9 @@ runs name are the next work: `rename` of an embedded field to make it
 a named one, and an operation for a switch on a kind (methods per kind
 from the cases). The first is done: the address task is now
 `extract_struct`, then `rename` of `Member.Address` to `Home`, which
-names the field in every selector that reached through it.
+names the field in every selector that reached through it. For the
+second the user chose two general operations: `type_switch_to_method`
+(done), and a type code into types (next).
 
 ## Recording
 

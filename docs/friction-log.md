@@ -1971,3 +1971,14 @@ replace_text. One refusal cost a call: add_declaration's `after`
 needs `renamer.checkReflected` for a method, not the bare name. Tried
 on lending-xl and the extract_struct example with the CLI, in scratch
 copies made with cp and printf.
+
+## 2026-10-22: type_switch_to_method
+
+Through gorefactor: the golden cases and the first version of the
+package with create_file in CLI batches (written by a Python script
+from files in the scratchpad: 46 steps, too long to send inline), a
+stub file first replaced with delete_file and create_file; the fixes
+with replace_declaration, add_declaration and replace_text. One
+refusal: replace_declaration takes one declaration, so a new helper
+went in a second step with add_declaration. Tried with the CLI on
+scratch modules written with heredocs.
