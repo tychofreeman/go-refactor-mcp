@@ -1902,6 +1902,11 @@ All through gorefactor: the golden case with create_file, the code with
 replace_statements, add_declaration, add_field and insert_statements
 in one batch, the docs with replace_text.
 
+## 2026-10-22: function naming the function itself
+
+All through gorefactor: the test cases with replace_text, the fix with
+replace_statements and replace_text, the docs with replace_text.
+
 ## 2026-10-21: sort.Slice is not reflection on fields
 
 All through gorefactor: the golden cases with create_file, the fix
