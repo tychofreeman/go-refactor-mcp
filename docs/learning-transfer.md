@@ -243,3 +243,44 @@ So a model can teach later models: the learned arm derived where the baseline re
 | combined (about 310) | 30/30 | $0.132 | 8.7 | 493 | 51% |
 
 Shortening gave back the turns (8.7 against 10.1) and some of the derived share (51% against 60%): the combined set performs like the user's moves, within the noise of each other. On Contacts it folded getters and removed the fields with `remove_dead_code` in most runs, more than either; on tail most runs used `function_to_method` rather than the wrapper. Concrete chains added to the user's moves did not measurably improve on them; the learned section's detail bought derived code with turns. Near-duplicates (`book`) stayed by hand in every arm.
+
+## After `fold` learned near-duplicates (#245-#251)
+
+The four arms again on B, 6 runs a task, after `fold` could fold
+billing's four `Charge` methods into a `book` the model declares (roadmap
+item 23): `eval-runs/learn2-*`, $17.09 in all. All 120 runs passed.
+
+| arm | cost a run | turns | written by hand | derived share |
+|---|---|---|---|---|
+| baseline | $0.146 → $0.152 | 11.0 → 11.1 | 711 → 627 | 40% → 38% |
+| learned | $0.142 → $0.154 | 10.1 → 11.4 | 386 → 375 | 60% → 64% |
+| the user's moves | $0.127 → $0.134 | 8.4 → 9.4 | 529 → 546 | 48% → 49% |
+| combined | $0.132 → $0.128 | 8.7 → 9.0 | 493 → 446 | 51% → 53% |
+
+The near-duplicates task alone (`book`), runs that folded all four
+copies with `add_declaration` and one `fold`, and lines written by
+hand over its 6 runs:
+
+| arm | folded | written by hand | derived share | cost a run | turns |
+|---|---|---|---|---|---|
+| baseline | 4/6 (0 before) | 159 → 118 | 27% → 36% | $0.14 → $0.13 | 11.2 → 9.3 |
+| learned | 3/6 (0) | 72 → 69 | 38% → 63% | $0.16 → $0.20 | 10.2 → 18.8 |
+| the user's moves | 6/6 (0) | 74 → 37 | 37% → 62% | $0.12 → $0.12 | 7.8 → 8.7 |
+| combined | 6/6 (0) | 85 → 60 | 32% → 52% | $0.13 → $0.12 | 8.7 → 8.7 |
+
+- With a general operation for the move, every arm used it, the
+  baseline too (from the tool's description): "delegate" became
+  declare the function once, then `fold`. Under the user's moves
+  and the combined set it was the route in every run, and halved the
+  lines written by hand on the task.
+- It did not change cost: writing `book` and the four bodies by hand
+  was already two or three calls; `fold` replaces the bodies, not a
+  turn. On a module this small the gain is in what is written, as
+  before.
+- The learned arm got worse on this task (18.8 turns): its lesson is
+  the explorers' long chain (extract variables, extract, add
+  parameters, `merge_duplicate_function`), which three runs followed
+  with many refusals, while the other three found `fold`. A recipe
+  becomes a cost when the tools improve and it does not. The lesson is
+  left as it was measured; a new explorer pass would replace it.
+- Totals moved within the noise, except where `book` moved them.

@@ -121,6 +121,10 @@ results are in `docs/cost-history.md`.
   them to consider ways did not, they reasoned the ways away. The
   learner runs: the model-taught lessons halved the lines by hand but
   not the cost; the user's moves were cheapest (cost-history 9).
+  Once `fold` could do near-duplicates (#245-#251), every arm used it
+  for `book`, even the baseline; the learned arm's long recipe for it
+  then cost turns. A lesson that names a workaround goes stale when
+  the tools improve: prefer moves that name general operations.
 
 - **Loops and containers** (2026-10-20): the user asked for
   refactorings that convert between kinds of loop, and edits that make
