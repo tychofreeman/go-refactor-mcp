@@ -475,7 +475,17 @@ $0.148, mostly the Contacts-shaped routes task, which used no `fold`
 in either. The shorter text dropped the worked example of the
 near-duplicates shape (`w.Sent = append(w.Sent, s)` into
 `record(&w.Sent, s)`); the model reads the examples, not the rules, to
-decide whether a tool fits.
+decide whether a tool fits. With one worked near-duplicates example
+added back (about 300 words; `eval-runs/freight-human-desc2`, the
+near-duplicates task only, 4 runs, $0.57): `fold` in 4 of 4 runs, $0.14
+a run, 10.2 turns, 53 lines by hand (61 with the long description, 88
+with the tighter one without the example).
+
+| description | words | near-duplicates runs with `fold` | cost | turns | by hand |
+|---|---|---|---|---|---|
+| long | 668 | 2/4 | $0.15 | 11.2 | 61 |
+| tighter | 260 | 0/4 | $0.15 | 10.0 | 88 |
+| tighter, one example per kind | 300 | 4/4 | $0.14 | 10.2 | 53 |
 
 ## What made the difference
 
