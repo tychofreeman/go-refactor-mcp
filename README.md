@@ -913,7 +913,14 @@ hand or a tool got in the way.
       `fold` leaves an argument that could panic (`last` slices) when
       the body uses it twice, though it is pure and the first thing
       the statements evaluate, so evaluating it once first is the
-      same.
+      same. *Done:* an argument that could panic is evaluated once
+      before the statements when it has no side effects, reads
+      nothing other code can change if used more than once, nothing
+      that matters comes before its first use, and no argument
+      evaluated before it in the call could panic. The card copy is
+      still left: `&c.Charged` comes before it in the call, so a nil
+      `c` would panic before `last` could; allowing that is the next
+      part, an extension of the nil-dereference decision.
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the

@@ -39,7 +39,7 @@ func (*Fold) Description() string {
 Use it after writing a small function to name what code does (a getter, a helper, a method that calls an old function), so the code uses it: u.Email becomes u.email() for func (u User) email() string { return u.Email }; truncate(subject, 20) inside a method of SMS becomes s.fit(subject) for func (s *SMS) fit(text string) string { return truncate(text, 20) }.
 A struct parameter the body uses only by its fields makes each field a hole, and the call passes a literal: Send(p, us, m) becomes Send2(p, Batch{Users: us, Message: m}) for func Send2(p string, b Batch) string { return Send(p, b.Users, b.Message) }, to move callers to a parameter object.
 A function that sets fields of a struct parameter (or value receiver) and returns it, a setter, folds literals of the struct that give those fields as it sets them: User{ID: id, Email: v} becomes withEmail(User{ID: id}, v) for func withEmail(u User, v string) User { u.Email = v; return u }, so that a change to how the field is kept is made in the setter. Not a literal whose & is elided ([]*User{{...}}), nor one whose fields with effects would be evaluated in another order.
-A function without results whose body is statements folds runs of statements: the same statements in any block, its locals named anything there, become one call statement; so extract_function on lines in one place, then fold, replaces the same lines elsewhere. Not when the body returns, defers, jumps to a label or assigns a parameter, nor where the run declares a variable used after it, or an argument with effects or that could panic would move before the statements. A *p of the body, for a pointer parameter p, matches a variable or field x, and the call passes &x: w.Sent = append(w.Sent, s) folds into record(&w.Sent, s) for func record(sent *[]string, s string) { *sent = append(*sent, s) }; not when x goes through a package variable, or through a pointer that could be nil and code before x might not return or could panic otherwise. In a printf-style call, a %s or %v of the body whose argument is a string parameter matches constant text of the format without a %: log.Printf("email to %s", to) is log.Printf("%s to %s", channel, to) with channel "email". String + is associative: a string parameter of the body may match a run of a concatenation's operands, so to+": "+text matches first+" "+last+": "+ref with to first+" "+last.
+A function without results whose body is statements folds runs of statements: the same statements in any block, its locals named anything there, become one call statement; so extract_function on lines in one place, then fold, replaces the same lines elsewhere. Not when the body returns, defers, jumps to a label or assigns a parameter, nor where the run declares a variable used after it, or an argument with effects or that could panic would move before the statements (one that could panic may, when it has no effects, reads nothing others can change if used twice, and is the first thing that matters the statements evaluate). A *p of the body, for a pointer parameter p, matches a variable or field x, and the call passes &x: w.Sent = append(w.Sent, s) folds into record(&w.Sent, s) for func record(sent *[]string, s string) { *sent = append(*sent, s) }; not when x goes through a package variable, or through a pointer that could be nil and code before x might not return or could panic otherwise. In a printf-style call, a %s or %v of the body whose argument is a string parameter matches constant text of the format without a %: log.Printf("email to %s", to) is log.Printf("%s to %s", channel, to) with channel "email". String + is associative: a string parameter of the body may match a run of a concatenation's operands, so to+": "+text matches first+" "+last+": "+ref with to first+" "+last.
 Identify the function by file and name (Name or Type.Method). Its body must be one return of one value, a setter, or statements without results, using every parameter. Every other name in the body must mean the same at a match. A method's receiver is what matched it, or, when the body does not use it, the receiver of the method of the same type the match is in. With line, only matches starting on that line of file (or of in) are folded, to move callers over one at a time.
 Leaves, and says why: a match that is assigned or has its address taken, one where an argument with effects or that could panic would be evaluated a different number of times or in another order, one in another package when the function is not exported, and one in no method of the receiver's type when the call needs the receiver from there.`
 }
@@ -1183,6 +1183,118 @@ func (f *folder) impure(info *types.Info, e ast.Expr) bool {
 	return found
 }
 
+// evaluatedFirst reports whether the argument for the hole k, which
+// could panic, may still be evaluated once before the statements seq:
+// it has no side effects, and if the body uses it more than once it
+// reads nothing other code can change, so each use has its value; in seq
+// nothing that matters (a side effect, an assignment, a possible panic)
+// comes before its first use; and no argument the call evaluates before
+// it could panic.
+func (f *folder) evaluatedFirst(info *types.Info, seq []ast.Stmt, b map[holeKey]ast.Expr, k holeKey) bool {
+	e := b[k]
+	if k.field != "" || f.addressOf[e] || f.effectful(info, e, f.count(k) > 1) {
+		return false
+	}
+	for _, s := range seq {
+		if s.Pos() >= e.Pos() {
+			break
+		}
+		if f.matters(info, s, e.Pos()) {
+			return false
+		}
+	}
+	if f.recv != nil && k.obj != f.recv {
+		if a := b[holeKey{f.recv, ""}]; a != nil && f.impure(info, a) {
+			return false
+		}
+	}
+	for _, fl := range f.decl.Type.Params.List {
+		for _, n := range fl.Names {
+			o := f.pkg.TypesInfo.Defs[n]
+			if o == k.obj {
+				return true
+			}
+			keys := []holeKey{{o, ""}}
+			if fs, byField := f.fields[o]; byField {
+				keys = nil
+				for _, fld := range fs {
+					keys = append(keys, holeKey{o, fld})
+				}
+			}
+			for _, ok := range keys {
+				if a := b[ok]; a == nil || f.impure(info, a) || f.nilAddress(info, a) {
+					return false
+				}
+			}
+		}
+	}
+	return true
+}
+
+// effectful reports whether evaluating e has side effects or, with
+// shared, reads memory other code can change: a package variable, or
+// through a pointer, a slice or a map.
+func (f *folder) effectful(info *types.Info, e ast.Expr, shared bool) bool {
+	found := false
+	ast.Inspect(e, func(n ast.Node) bool {
+		switch n := n.(type) {
+		case *ast.FuncLit:
+			return false
+		case *ast.CallExpr:
+			s := f.effects().Call(info, n)
+			found = s.Effect != "" || shared && s.Reads != ""
+		case *ast.UnaryExpr:
+			found = n.Op == token.ARROW
+		case *ast.StarExpr:
+			found = shared && !info.Types[n].IsType()
+		case *ast.SelectorExpr:
+			s := info.Selections[n]
+			found = shared && s != nil && s.Kind() == types.FieldVal && s.Indirect()
+		case *ast.IndexExpr:
+			if tv := info.Types[n.X]; shared && !tv.IsType() {
+				switch tv.Type.Underlying().(type) {
+				case *types.Slice, *types.Map, *types.Pointer:
+					found = true
+				}
+			}
+		case *ast.Ident:
+			v, ok := info.Uses[n].(*types.Var)
+			found = shared && ok && !v.IsField() && v.Pkg() != nil && v.Parent() == v.Pkg().Scope()
+		}
+		return !found
+	})
+	return found
+}
+
+// matters reports whether code of the statement s that is evaluated
+// before pos does something an argument evaluated ahead of it could
+// change or see: a side effect, an assignment, or a possible panic.
+func (f *folder) matters(info *types.Info, s ast.Stmt, pos token.Pos) bool {
+	found := false
+	ast.Inspect(s, func(n ast.Node) bool {
+		if _, lit := n.(*ast.FuncLit); lit || n == nil || found || n.Pos() >= pos {
+			return false
+		}
+		if n.End() > pos {
+			return true
+		}
+		switch n := n.(type) {
+		case *ast.AssignStmt, *ast.IncDecStmt, *ast.SendStmt, *ast.GoStmt, *ast.DeferStmt:
+			found = true
+		case *ast.CallExpr:
+			s := f.effects().Call(info, n)
+			found = s.Effect != "" || s.Unsafe != ""
+		case *ast.UnaryExpr:
+			found = n.Op == token.ARROW
+		}
+		if e, ok := n.(ast.Expr); ok && !found {
+			found = analysis.MayPanic(info, e) != nil
+		}
+		return !found
+	})
+	return found
+}
+
 // formatIndex is the index of the format argument of call, a call of a
 // printf-style function (its name ends in f, and its last parameters
 // are a format string and ...any), or -1.
@@ -1462,8 +1574,8 @@ func (f *folder) foldStmts(p *packages.Package, file *ast.File, list []ast.Stmt,
 		seq := list[i : i+n]
 		where := f.ws.Position(seq[0].Pos())
 		skip := ""
-		for _, e := range b {
-			if f.impure(info, e) {
+		for k, e := range b {
+			if f.impure(info, e) && !f.evaluatedFirst(info, seq, b, k) {
 				skip = types.ExprString(e) + " would be evaluated before the statements, not where it is"
 			}
 		}
