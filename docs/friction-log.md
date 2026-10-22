@@ -2012,3 +2012,13 @@ docs.
 
 All through gorefactor: add_declaration for `TestToolBudget`,
 replace_text for its limits and the docs.
+
+## 2026-10-22: inspect uses
+
+All through the CLI: add_declaration for the test first (its
+`Query.Uses` stub declared by the batch), create_file for `uses.go`,
+insert_statements into `Run`, replace_text for the field's tag and
+comment, the tool's description and the docs. Two refusals on the
+way: insert_statements takes `line`/`where`, not `function`, and
+`into` needs the line the block opens on, which the stub field had
+moved by one.

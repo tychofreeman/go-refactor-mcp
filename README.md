@@ -1032,8 +1032,20 @@ hand or a tool got in the way.
         `if k, ok := it.Kind.(Kind); ok { return k.Days() }`.
         *Done* (lending-xl: widening and the five guards in one
         batch, its tests pass).
-      - One kind's migration: next, as `move_case_to_type`, within
-        the tool budget (item 25).
+      - One kind's migration (the user, 2026-10-22: alternatives to a
+        tool first). With existing refactorings each case body becomes
+        a method of the kind's type: `extract_function` of the body,
+        `add_parameter` of `b Book` with `Book{}`, `function_to_method`,
+        `rename` to the interface method (tried on lending-xl's
+        `LoanDays`). What is not a refactoring is sending the kind's
+        values through the type and deleting the dead case; neither can
+        be proved where kinds are read at run time (lending-xl's
+        `Import`), by a tool or not. So the plan is a recipe of general
+        operations, not `move_case_to_type`: `inspect` `uses` to see
+        how each use treats the field (*Done*), splitting a shared
+        clause (`case "book", "dvd":`, next), the recipe in
+        `docs/derivations.md` run on lending-xl with the CLI, and a
+        tool only if a fresh model fails the recipe.
     - **`inspect` by name** (the user, 2026-10-22): `names` reads
       several declarations in one call, each found in the module by
       its name, without file (`Name`, `Type.Method`, `pkg.Name` where

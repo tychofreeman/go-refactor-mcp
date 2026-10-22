@@ -248,6 +248,76 @@ func TestNamesGrouped(t *testing.T) {
 	}
 }
 
+const items = `package items
+
+import "fmt"
+
+type Item struct {
+	Title string
+	Kind  any
+}
+
+func Days(it Item) int {
+	switch it.Kind {
+	case "book":
+		return 21
+	case "dvd":
+		return 7
+	}
+	return 0
+}
+
+func Fragile(it Item) bool { return it.Kind == "atlas" }
+
+func Parse(title, kind string) Item {
+	it := Item{Title: title, Kind: kind}
+	if it.Kind == nil {
+		it.Kind = "book"
+	}
+	fmt.Println(it.Kind)
+	return it
+}
+
+func Same(a, b Item) bool {
+	k := a.Kind
+	return k == b.Kind
+}
+`
+
+// TestUses: each use of a field, found by the type checker, under what
+// is done with it; a use in a file two packages share is listed once.
+func TestUses(t *testing.T) {
+	t.Setenv("GOWORK", "off")
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example.com/items\n\ngo 1.22\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, "items.go"), []byte(items), 0o644)
+	os.WriteFile(filepath.Join(dir, "items_test.go"), []byte("package items\n\nvar dvd = Item{Kind: \"dvd\"}\n"), 0o644)
+	ws, err := workspace.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := Run(ws, Query{Uses: []string{"Item.Kind", "Nope"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"Item.Kind (field of items.Item, any): 9 uses",
+		"switch on it (1):\n  items.go:11  switch it.Kind: \"book\", \"dvd\"\n",
+		"compared (3):\n  items.go:20  it.Kind == \"atlas\"\n  items.go:24  it.Kind == nil\n  items.go:33  k == b.Kind\n",
+		"written (3):\n  items.go:23  Kind: kind\n  items.go:25  it.Kind = \"book\"\n  items_test.go:3  Kind: \"dvd\"\n",
+		"passed as an interface (1):\n  items.go:27  fmt.Println(it.Kind)\n",
+		"read (1):\n  items.go:32  k := a.Kind\n",
+		"Nope: no declaration of that name in the module",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output lacks %q:\n%s", want, out)
+		}
+	}
+	if _, err := Run(ws, Query{File: "items.go", Uses: []string{"Item.Kind"}}); !refactor.IsRefusal(err) {
+		t.Errorf("uses with file: want refusal, got %v", err)
+	}
+}
+
 func TestFileEffects(t *testing.T) {
 	t.Setenv("GOWORK", "off")
 	dir := t.TempDir()
