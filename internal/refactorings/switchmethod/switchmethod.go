@@ -80,7 +80,9 @@ type switcher struct {
 	file    *ast.File
 	src     []byte
 	fd      *ast.FuncDecl
-	ts      *ast.TypeSwitchStmt
+	stmt    ast.Stmt            // the switch
+	block   *ast.BlockStmt      // its body
+	ts      *ast.TypeSwitchStmt // the switch, when it is a type switch
 	subject ast.Expr
 	iface   *types.Named
 	method  string
@@ -99,7 +101,7 @@ func (*SwitchToMethod) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refa
 	if !token.IsIdentifier(a.Method) {
 		return nil, refactor.Refusef("method %q is not a valid Go identifier", a.Method)
 	}
-	s, err := find(ws, a)
+	s, err := find(ws, a, true)
 	if err != nil {
 		return nil, err
 	}
@@ -111,10 +113,15 @@ func (*SwitchToMethod) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refa
 	return s.plan()
 }
 
-// find locates the type switch a addresses.
-func find(ws *workspace.Workspace, a args) (*switcher, error) {
+// find locates the switch a addresses: a type switch, or with values, a
+// switch with a tag.
+func find(ws *workspace.Workspace, a args, typeSwitch bool) (*switcher, error) {
+	what := "switch"
+	if typeSwitch {
+		what = "type switch"
+	}
 	if a.Line == 0 && a.Function == "" {
-		return nil, refactor.Refusef("give line (where the switch starts) or function (whose only type switch it is)")
+		return nil, refactor.Refusef("give line (where the switch starts) or function (whose only %s it is)", what)
 	}
 	path := ws.Abs(a.File)
 	pkg, file := ws.FileSyntax(path)
@@ -122,7 +129,7 @@ func find(ws *workspace.Workspace, a args) (*switcher, error) {
 		return nil, refactor.Refusef("file %s is not part of the loaded packages %v", ws.Rel(path), ws.Patterns)
 	}
 	tf := ws.Fset.File(file.Pos())
-	var found []*ast.TypeSwitchStmt
+	var found []ast.Stmt
 	var fds []*ast.FuncDecl
 	for _, d := range file.Decls {
 		fd, ok := d.(*ast.FuncDecl)
@@ -130,8 +137,19 @@ func find(ws *workspace.Workspace, a args) (*switcher, error) {
 			continue
 		}
 		ast.Inspect(fd.Body, func(n ast.Node) bool {
-			if ts, ok := n.(*ast.TypeSwitchStmt); ok && (a.Line == 0 || tf.Line(ts.Pos()) == a.Line) {
-				found = append(found, ts)
+			var st ast.Stmt
+			switch n := n.(type) {
+			case *ast.TypeSwitchStmt:
+				if typeSwitch {
+					st = n
+				}
+			case *ast.SwitchStmt:
+				if !typeSwitch {
+					st = n
+				}
+			}
+			if st != nil && (a.Line == 0 || tf.Line(st.Pos()) == a.Line) {
+				found = append(found, st)
 				fds = append(fds, fd)
 			}
 			return true
@@ -139,21 +157,28 @@ func find(ws *workspace.Workspace, a args) (*switcher, error) {
 	}
 	switch {
 	case len(found) == 0 && a.Line > 0:
-		return nil, refactor.Refusef("no type switch starts on line %d of %s", a.Line, ws.Rel(path))
+		return nil, refactor.Refusef("no %s starts on line %d of %s", what, a.Line, ws.Rel(path))
 	case len(found) == 0:
-		return nil, refactor.Refusef("%s has no function %s with a type switch", ws.Rel(path), a.Function)
+		return nil, refactor.Refusef("%s has no function %s with a %s", ws.Rel(path), a.Function, what)
 	case len(found) > 1:
 		var lines []string
-		for _, ts := range found {
-			lines = append(lines, fmt.Sprint(tf.Line(ts.Pos())))
+		for _, st := range found {
+			lines = append(lines, fmt.Sprint(tf.Line(st.Pos())))
 		}
-		return nil, refactor.Refusef("%s has %d type switches, on lines %s; give line", a.Function, len(found), strings.Join(lines, ", "))
+		return nil, refactor.Refusef("%s has %d %ses, on lines %s; give line", a.Function, len(found), what, strings.Join(lines, ", "))
 	}
 	src, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	return &switcher{ws: ws, pkg: pkg, info: pkg.TypesInfo, file: file, src: src, fd: fds[0], ts: found[0], method: a.Method}, nil
+	s := &switcher{ws: ws, pkg: pkg, info: pkg.TypesInfo, file: file, src: src, fd: fds[0], stmt: found[0], method: a.Method}
+	switch st := found[0].(type) {
+	case *ast.TypeSwitchStmt:
+		s.ts, s.block = st, st.Body
+	case *ast.SwitchStmt:
+		s.block = st.Body
+	}
+	return s, nil
 }
 
 func (s *switcher) at(n ast.Node) string { return s.ws.Position(n.Pos()) }
@@ -172,21 +197,8 @@ func (s *switcher) typeName(t types.Type) string {
 // the package, and where it is.
 func (s *switcher) checkSwitch() error {
 	ts := s.ts
-	switch {
-	case ts.Init != nil:
-		return refactor.Refusef("the switch at %s has an init statement; move it before the switch first", s.at(ts))
-	case s.fd.Type.TypeParams != nil:
-		return refactor.Refusef("%s has type parameters, which a method cannot use", locate.FuncName(s.fd))
-	}
-	for _, n := range analysis.PathTo(s.fd.Body, ts) {
-		switch n := n.(type) {
-		case *ast.FuncLit:
-			return refactor.Refusef("the switch at %s is in a function literal; not supported yet", s.at(ts))
-		case *ast.LabeledStmt:
-			if n.Stmt == ts {
-				return refactor.Refusef("the switch at %s has a label; remove it first", s.at(ts))
-			}
-		}
+	if err := s.checkPlace(ts.Init); err != nil {
+		return err
 	}
 	switch as := ts.Assign.(type) {
 	case *ast.AssignStmt:
@@ -203,6 +215,34 @@ func (s *switcher) checkSwitch() error {
 		return refactor.Refusef("the interface %s has type parameters; not supported yet", named.Obj().Name())
 	}
 	s.iface = named
+	return s.checkStable()
+}
+
+// checkPlace refuses a switch with an init statement (init), with a
+// label, or in a function literal or a generic function.
+func (s *switcher) checkPlace(init ast.Stmt) error {
+	switch {
+	case init != nil:
+		return refactor.Refusef("the switch at %s has an init statement; move it before the switch first", s.at(s.stmt))
+	case s.fd.Type.TypeParams != nil:
+		return refactor.Refusef("%s has type parameters, which a method cannot use", locate.FuncName(s.fd))
+	}
+	for _, n := range analysis.PathTo(s.fd.Body, s.stmt) {
+		switch n := n.(type) {
+		case *ast.FuncLit:
+			return refactor.Refusef("the switch at %s is in a function literal; not supported yet", s.at(s.stmt))
+		case *ast.LabeledStmt:
+			if n.Stmt == s.stmt {
+				return refactor.Refusef("the switch at %s has a label; remove it first", s.at(s.stmt))
+			}
+		}
+	}
+	return nil
+}
+
+// checkStable refuses a subject that the new code evaluates again, when
+// it could have another value then.
+func (s *switcher) checkStable() error {
 	if culprit, ok := analysis.AnalyzeFunc(s.info, s.fd).Stable(s.subject, false); !ok {
 		return refactor.Refusef("%s is evaluated again by the call, and %s could change it; assign it to a variable first (extract_variable)", s.text(s.subject), s.text(culprit))
 	}
@@ -730,27 +770,7 @@ func (s *switcher) plan() (*refactor.Plan, error) {
 			return n
 		}
 	}
-	var params, argNames []string
-	for _, v := range s.params {
-		params = append(params, v.Name()+" "+types.TypeString(v.Type(), qual(adder)))
-		argNames = append(argNames, v.Name())
-	}
-	fn := s.info.Defs[s.fd.Name].(*types.Func)
-	results := func(q types.Qualifier) string {
-		rs := fn.Signature().Results()
-		var out []string
-		for i := 0; i < rs.Len(); i++ {
-			out = append(out, types.TypeString(rs.At(i).Type(), q))
-		}
-		switch len(out) {
-		case 0:
-			return ""
-		case 1:
-			return " " + out[0]
-		}
-		return " (" + strings.Join(out, ", ") + ")"
-	}
-	sig := s.method + "(" + strings.Join(params, ", ") + ")" + results(qual(adder))
+	sig := s.signature(qual(adder))
 
 	returning, _ := s.returns(s.cases[0].clause)
 	var methods []string
@@ -770,7 +790,7 @@ func (s *switcher) plan() (*refactor.Plan, error) {
 	default:
 		subject = "(" + subject + ")"
 	}
-	call := subject + "." + s.method + "(" + strings.Join(argNames, ", ") + ")"
+	call := subject + "." + s.method + "(" + s.args() + ")"
 	if returning {
 		call = "return " + call
 	}
@@ -784,8 +804,7 @@ func (s *switcher) plan() (*refactor.Plan, error) {
 	} else if s.deflt != nil {
 		notes = append(notes, fmt.Sprintf("the default case was dropped: every type of the module that implements %s has a case", s.iface.Obj().Name()))
 	}
-	tf := s.ws.Fset.File(s.ts.Pos())
-	ind := leading(string(s.src[s.off(tf.LineStart(tf.Line(s.ts.Pos()))):s.off(s.ts.Pos())]) + "x")
+	ind := s.indent()
 	var repl string
 	switch {
 	case stays == nil:
@@ -800,7 +819,7 @@ func (s *switcher) plan() (*refactor.Plan, error) {
 		{Start: s.off(s.ts.Pos()), End: s.off(s.ts.End()), NewText: repl},
 		{Start: s.off(s.fd.End()), End: s.off(s.fd.End()), NewText: "\n\n" + strings.Join(methods, "\n\n")},
 	}
-	ifaceEdits, ifacePath, err := s.interfaceEdit(path, adder, results)
+	ifaceEdits, ifacePath, err := s.interfaceEdit(path, adder)
 	if err != nil {
 		return nil, err
 	}
@@ -822,6 +841,42 @@ func (s *switcher) plan() (*refactor.Plan, error) {
 	return plan, nil
 }
 
+// signature is the new method's: its name, the variables the cases use
+// as parameters, and the function's results.
+func (s *switcher) signature(q types.Qualifier) string {
+	var ps, rs []string
+	for _, v := range s.params {
+		ps = append(ps, v.Name()+" "+types.TypeString(v.Type(), q))
+	}
+	results := s.info.Defs[s.fd.Name].(*types.Func).Signature().Results()
+	for i := range results.Len() {
+		rs = append(rs, types.TypeString(results.At(i).Type(), q))
+	}
+	sig := s.method + "(" + strings.Join(ps, ", ") + ")"
+	switch len(rs) {
+	case 0:
+		return sig
+	case 1:
+		return sig + " " + rs[0]
+	}
+	return sig + " (" + strings.Join(rs, ", ") + ")"
+}
+
+// args are the arguments of a call of the new method.
+func (s *switcher) args() string {
+	var names []string
+	for _, v := range s.params {
+		names = append(names, v.Name())
+	}
+	return strings.Join(names, ", ")
+}
+
+// indent is the white space before the switch on its line.
+func (s *switcher) indent() string {
+	tf := s.ws.Fset.File(s.stmt.Pos())
+	return leading(string(s.src[s.off(tf.LineStart(tf.Line(s.stmt.Pos()))):s.off(s.stmt.Pos())]) + "x")
+}
+
 // body returns the source of a case's body, as whole lines indented by
 // indent: from the line after the colon (or the first statement, when it
 // is on the colon's line) to the line before the next case or the closing
@@ -831,10 +886,10 @@ func (s *switcher) body(cc *ast.CaseClause, indent string) string {
 		return ""
 	}
 	tf := s.ws.Fset.File(cc.Pos())
-	end := s.ts.Body.Rbrace
-	for i, st := range s.ts.Body.List {
-		if st == cc && i+1 < len(s.ts.Body.List) {
-			end = s.ts.Body.List[i+1].Pos()
+	end := s.block.Rbrace
+	for i, st := range s.block.List {
+		if st == cc && i+1 < len(s.block.List) {
+			end = s.block.List[i+1].Pos()
 		}
 	}
 	to := max(s.off(tf.LineStart(tf.Line(end))), s.off(cc.Body[len(cc.Body)-1].End()))
@@ -860,7 +915,7 @@ func leading(text string) string {
 
 // interfaceEdit adds the method to the interface's declaration, in its
 // file: the edits, and the file's path.
-func (s *switcher) interfaceEdit(path string, adder *imports.Adder, results func(types.Qualifier) string) ([]edit.TextEdit, string, error) {
+func (s *switcher) interfaceEdit(path string, adder *imports.Adder) ([]edit.TextEdit, string, error) {
 	ipath := s.ws.Fset.Position(s.iface.Obj().Pos()).Filename
 	ipkg, ifile := s.ws.FileSyntax(ipath)
 	if ifile == nil {
@@ -888,11 +943,7 @@ func (s *switcher) interfaceEdit(path string, adder *imports.Adder, results func
 		n, _ := a.Name(p)
 		return n
 	}
-	var ps []string
-	for _, v := range s.params {
-		ps = append(ps, v.Name()+" "+types.TypeString(v.Type(), q))
-	}
-	sig := s.method + "(" + strings.Join(ps, ", ") + ")" + results(q)
+	sig := s.signature(q)
 	tf := s.ws.Fset.File(it.Pos())
 	off := func(p token.Pos) int { return s.ws.Fset.Position(p).Offset }
 	var e edit.TextEdit
