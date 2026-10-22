@@ -1,0 +1,1 @@
+type Square now implements interface example.com/m.Shape; no value of it becomes an interface value, so no type assertion or reflection sees the difference

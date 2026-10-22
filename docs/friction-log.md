@@ -2032,3 +2032,11 @@ the docs. Hosting: an option of `add_case` was the first idea, but
 `add_case` is an edit and the split is a refactoring; preparing the
 switch for each value to move alone is the intent it serves, so it
 needs no option at all.
+
+## 2026-10-22: rename to a method that implements an interface
+
+Through the CLI: create_file for `convert.go`, its test (first) and
+the golden cases, add_declaration and replace_text for rename. By
+hand: one `sed` adding `Instances` to the test's `types.Info`, a
+field of a composite literal on a long line (add_element would have
+done it).

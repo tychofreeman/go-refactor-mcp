@@ -138,6 +138,8 @@ type renamer struct {
 	targets  []types.Object
 	refs     []ref
 	promoted []promotion // for an embedded field, the selectors that reach through it
+
+	implements []string // notes: types that implement an interface after the rename
 }
 
 // keyOf identifies an object by its declaration position. The same
@@ -651,6 +653,7 @@ func (r *renamer) checkInterfaces(recv *types.Named) error {
 				r.old, named.Obj().Name(), r.old, r.new, ifaces[0].name)
 		}
 		for _, it := range ifaces {
+			noted := false // *T implements what T does: one note for both
 			for _, T := range []types.Type{named, types.NewPointer(named)} {
 				now, then := types.Implements(T, it.iface), r.implementsRenamed(T, it.iface)
 				switch {
@@ -658,13 +661,37 @@ func (r *renamer) checkInterfaces(recv *types.Named) error {
 					return refactor.Refusef("type %s implements interface %s through method %s; renaming the method would break that (rename the interface method instead, which is not supported yet)",
 						named.Obj().Name(), it.name, r.old)
 				case then && !now:
-					return refactor.Refusef("with the new name, type %s would implement interface %s, which it does not now; that could silently change what a type assertion or interface conversion does",
-						types.TypeString(T, noQualifier), it.name)
+					if at := r.becomesInterface(named); at != "" {
+						return refactor.Refusef("with the new name, type %s would implement interface %s, which it does not now; that could silently change what a type assertion or interface conversion does: %s becomes an interface value",
+							types.TypeString(T, noQualifier), it.name, at)
+					}
+					if noted {
+						continue
+					}
+					noted = true
+					r.implements = append(r.implements, fmt.Sprintf("type %s now implements interface %s; no value of it becomes an interface value, so no type assertion or reflection sees the difference",
+						types.TypeString(T, noQualifier), it.name))
 				}
 			}
 		}
 	}
 	return nil
+}
+
+// becomesInterface returns where a value that holds named (or a
+// pointer to it) may become an interface value in the workspace, or "":
+// only there can an interface it starts to implement change what runs.
+func (r *renamer) becomesInterface(named *types.Named) string {
+	match := func(t types.Type) bool { return types.Identical(t, named) }
+	for _, p := range r.ws.Pkgs {
+		if p.TypesInfo == nil {
+			continue
+		}
+		if e := analysis.BecomesInterface(p.TypesInfo, p.Syntax, match); e != nil {
+			return fmt.Sprintf("%s at %s", types.ExprString(e), r.ws.Position(e.Pos()))
+		}
+	}
+	return ""
 }
 
 // implementsRenamed reports whether T would implement I once the method
@@ -1048,6 +1075,7 @@ func (r *renamer) plan() (*refactor.Plan, error) {
 	if analysis.PublicAPI(r.first, r.ws.Pkgs) && (isPackageLevel(r.first) || r.first.Parent() == nil) {
 		plan.Notes = append(plan.Notes, refactor.APINote(r.old, "renaming it"))
 	}
+	plan.Notes = append(plan.Notes, r.implements...)
 	if len(docFes) > 0 {
 		plan.Notes = append(plan.Notes, fmt.Sprintf("renamed %q in the doc comment that starts with it", r.old))
 	}
