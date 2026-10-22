@@ -965,7 +965,15 @@ hand or a tool got in the way.
       and each function's signature, doc line and the module functions
       it calls (through an interface as the interface's method), with
       no bodies. *Done* (13.4K characters for freight-xl, against
-      22.3K for its code); the probe is next.
+      22.3K for its code).
+    - Step 2, the probe. *Done* (`eval-tasks/learning/probe.py`, 48
+      answers, $2.73): from the call tree alone the answers named the
+      functions to change (precision 1.0, recall 0.97) and planned the
+      reference's derivations; the batches failed on the tools'
+      interface. Found: `rename` with `function` equal to the name it
+      renames is refused (8 answers); `fold` leaves imports its folds
+      make unused (a bug); field removal blocked by test files no view
+      shows.
     - `fold` removes the imports its folds leave unused (found by the
       probe: a `dispatch` in a file of its own, ten carriers folded,
       left `log` unused). *Fixed*; that answer now applies and passes.
