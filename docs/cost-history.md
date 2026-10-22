@@ -506,6 +506,14 @@ mostly the output of "where is X used" searches resent on later turns:
 on `run` 20% of the moves arm's input, for a `fold` that found all 30
 calls itself.
 
+The call-tree probe (`docs/reading-and-deriving.md`, step 2; 48
+one-turn answers, $2.73): from the call tree, the skeleton or the whole
+module, the answers named the functions to change alike (precision
+1.0, recall 0.97, 0.96, 0.99) and planned the reference derivations;
+their batches passed the hidden tests in 7, 6 and 10 of 16, failing on
+the tools' interface (`rename`'s `function`, argument names the probe
+did not give), test files no view showed, and a `fold` bug.
+
 All 38 descriptions shortened, each with an example (#255-#259, 8,700
 words to about 5,200); the user's moves on freight-xl, 4 tasks, 4 runs,
 $2.34 (`eval-runs/freight-human-alldesc`, against `freight-human`):

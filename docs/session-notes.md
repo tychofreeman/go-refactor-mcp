@@ -157,7 +157,11 @@ results are in `docs/cost-history.md`.
   transcripts): both arms read alike and little, and about a quarter
   of input is the output of "where is X used" searches, which a
   derivation does not need; the model searches by habit before it
-  plans.
+  plans. Step 2 (the call-tree probe): from names and signatures
+  alone the model found where the change goes and planned the
+  reference derivations; what failed was the tools' interface
+  (rename's `function`, argument names) and a fold bug, not the lack
+  of bodies.
 
 - **Loops and containers** (2026-10-20): the user asked for
   refactorings that convert between kinds of loop, and edits that make

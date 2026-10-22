@@ -1,0 +1,3 @@
+{"steps":[{"tool":"add_declaration","args":{"file":"freight/freight.go","after":"Truck.Codes","content":"// tail is the last 4 bytes of code, the part a driver sees.\nfunc (c *Truck) tail(code string) string { return last(code, 4) }"}},
+{"tool":"fold","args":{"file":"freight/freight.go","name":"Truck.tail"}},
+{"tool":"inline_function","args":{"file":"freight/freight.go","name":"last","all_calls":true}}]}
