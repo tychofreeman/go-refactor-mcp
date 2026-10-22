@@ -1982,3 +1982,11 @@ with replace_declaration, add_declaration and replace_text. One
 refusal: replace_declaration takes one declaration, so a new helper
 went in a second step with add_declaration. Tried with the CLI on
 scratch modules written with heredocs.
+
+## 2026-10-22: change_field_type widened to any
+
+All through gorefactor: the golden cases with create_file, the code
+with replace_declaration, add_declaration and replace_text in one
+batch, the docs with replace_text. Tried on a copy of lending-xl (cp)
+with the CLI. The branch is stacked on #274 (merged into it with
+git), whose docs it extends.

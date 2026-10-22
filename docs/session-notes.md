@@ -174,7 +174,12 @@ results are in `docs/cost-history.md`.
   The first is done: rename makes an embedded field a named one.
   For the second the user chose two general operations over one
   shaped to the task: a type code into types, then a type switch into
-  methods (`type_switch_to_method`, built first).
+  methods (`type_switch_to_method`, built first). Then the user
+  proposed a better derivation, one kind at a time with every step
+  preserving behavior: widen the field to `any`, add the interface and
+  a guard that calls it, then per kind make the type from the case,
+  replace the constant where it flows into the field, and delete the
+  dead case; narrow the field at the end (README, roadmap item 24).
 
 - **Loops and containers** (2026-10-20): the user asked for
   refactorings that convert between kinds of loop, and edits that make

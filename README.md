@@ -1011,9 +1011,21 @@ hand or a tool got in the way.
     - **A switch on a kind into methods** (the user chose two
       general operations, 2026-10-22): `type_switch_to_method` turns
       a type switch into a method of each type it switches on.
-      *Done.* Next, the other half: turn a type code (a string field
-      with constant values) into types, so that its switches become
-      type switches.
+      *Done.* Then the user proposed a derivation by kinds, one at a
+      time (expand, migrate, contract), which replaced "a type code
+      into types" as the next work: widen the field to `any`; add the
+      interface and a guard before the switch that calls it for a
+      value that implements it (nothing does yet); for each kind,
+      make its type with the case's body as the method, replace its
+      constant where it flows into the field, and delete the case,
+      now dead; at the end narrow the field to the interface.
+      Not for a switch with fallthrough.
+      - Widening: `change_field_type` to `any` keeps a switch on
+        the field, `==` with it and passing it as an interface, and
+        converts an untyped constant compared with or written to it
+        when its default type is not the old one (`kind("dvd")`).
+        *Done* (lending-xl's `Item.Kind`: 17 uses).
+      - The guard, and one kind's migration: next.
     - **`inspect` by name** (the user, 2026-10-22): `names` reads
       several declarations in one call, each found in the module by
       its name, without file (`Name`, `Type.Method`, `pkg.Name` where

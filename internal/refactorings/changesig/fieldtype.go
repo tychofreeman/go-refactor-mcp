@@ -27,7 +27,7 @@ func NewChangeFieldType() *ChangeFieldType { return &ChangeFieldType{} }
 func (*ChangeFieldType) Name() string { return "change_field_type" }
 
 func (*ChangeFieldType) Description() string {
-	return `Change a struct field's type so that every value keeps its meaning, converting where the field is written and, where its type matters, where it is read: ID string to ID UserID turns User{ID: s} into User{ID: UserID(s)} and strings.ToUpper(u.ID) into strings.ToUpper(string(u.ID)). The new type must hold every old value: the same underlying type, a number type that holds every old value, or an interface the old type implements.
+	return `Change a struct field's type so that every value keeps its meaning, converting where the field is written and, where its type matters, where it is read: ID string to ID UserID turns User{ID: s} into User{ID: UserID(s)} and strings.ToUpper(u.ID) into strings.ToUpper(string(u.ID)). The new type must hold every old value: the same underlying type, a number type that holds every old value, or an interface the old type implements. Widened to an interface (Kind string to any), a switch on it, == with it and passing it as an interface stay; an untyped constant compared with or written to it becomes the old type where that is not its default (kind("dvd")).
 Identify the field by file and Type.Field.
 A use that cannot follow (its address taken, ++ on an interface) is listed in the refusal, and nothing changes; an embedded field and a field of a generic type are refused.`
 }
@@ -293,14 +293,22 @@ func (c *fieldChange) use(p *packages.Package, f *ast.File, id *ast.Ident) error
 		}
 	}
 	// A read.
-	if typeIrrelevant(info, path, types.Identical(c.old.Underlying(), c.new.Underlying())) {
-		return nil
-	}
 	if c.widen {
+		if ok, constants := c.keeps(info, path); ok {
+			for _, k := range constants {
+				if err := c.write(p, k); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
 		if callsMethodOf(info, path, c.new) {
 			return nil
 		}
 		c.cannot = append(c.cannot, where+": uses its value as "+types.TypeString(c.old, nil))
+		return nil
+	}
+	if typeIrrelevant(info, path, types.Identical(c.old.Underlying(), c.new.Underlying())) {
 		return nil
 	}
 	fe, err := c.files.of(p, e.Pos())
@@ -312,16 +320,122 @@ func (c *fieldChange) use(p *packages.Package, f *ast.File, id *ast.Ident) error
 }
 
 // write converts v, a value written to the field, to its new type,
-// unless it is an untyped constant or the new type is an interface.
+// unless it is an untyped constant or the new type is an interface. An
+// untyped constant written to an interface takes its default type, so
+// one whose default is not the old type is converted to the old type.
 func (c *fieldChange) write(p *packages.Package, v ast.Expr) error {
-	if c.widen || untypedConstant(p.TypesInfo, v) {
+	switch {
+	case c.widen && untypedConstant(p.TypesInfo, v):
+		if dt := defaultType(p.TypesInfo, v); dt == nil || !types.Identical(dt, c.old) {
+			return c.convert(p, v, c.old)
+		}
+		return nil
+	case c.widen || untypedConstant(p.TypesInfo, v):
 		return nil
 	}
+	return c.convert(p, v, c.new)
+}
+
+// convert writes v converted to t.
+func (c *fieldChange) convert(p *packages.Package, v ast.Expr, t types.Type) error {
 	fe, err := c.files.of(p, v.Pos())
 	if err != nil {
 		return err
 	}
-	fe.edits = append(fe.edits, (&target{ws: c.ws}).conversion(v, fe.write(c.new))...)
+	fe.edits = append(fe.edits, (&target{ws: c.ws}).conversion(v, fe.write(t))...)
+	return nil
+}
+
+// keeps reports whether the read path[0] of the field means the same once
+// the field is an interface: it is a switch's tag, compared with ==, or
+// passed as an interface. It returns the values compared with it that
+// write must convert: untyped constants, which compared with an interface
+// take their default type.
+func (c *fieldChange) keeps(info *types.Info, path []ast.Node) (bool, []ast.Expr) {
+	e := path[0].(ast.Expr)
+	var others []ast.Expr
+	switch p := path[1].(type) {
+	case *ast.SwitchStmt:
+		if p.Tag != e {
+			return false, nil
+		}
+		for _, s := range p.Body.List {
+			others = append(others, s.(*ast.CaseClause).List...)
+		}
+	case *ast.BinaryExpr:
+		if p.Op != token.EQL && p.Op != token.NEQ {
+			return false, nil
+		}
+		other := p.X
+		if other == e {
+			other = p.Y
+		}
+		others = []ast.Expr{other}
+	case *ast.CallExpr:
+		return passedAsInterface(info, p, e), nil
+	default:
+		return false, nil
+	}
+	var constants []ast.Expr
+	for _, o := range others {
+		switch t := info.TypeOf(o); {
+		case untypedConstant(info, o):
+			constants = append(constants, o)
+		case types.IsInterface(t), types.Identical(t, c.old):
+		default:
+			return false, nil
+		}
+	}
+	return true, constants
+}
+
+// passedAsInterface reports whether e is an argument of call that it
+// converts to an interface: a parameter of interface type, or a
+// conversion to one.
+func passedAsInterface(info *types.Info, call *ast.CallExpr, e ast.Expr) bool {
+	if tv := info.Types[call.Fun]; tv.IsType() {
+		return types.IsInterface(tv.Type)
+	}
+	sig, ok := info.TypeOf(call.Fun).(*types.Signature)
+	if !ok {
+		return false
+	}
+	for i, a := range call.Args {
+		if a != e {
+			continue
+		}
+		n := sig.Params().Len()
+		var pt types.Type
+		switch {
+		case sig.Variadic() && i >= n-1:
+			if call.Ellipsis.IsValid() {
+				return false
+			}
+			pt = sig.Params().At(n - 1).Type().(*types.Slice).Elem()
+		case i < n:
+			pt = sig.Params().At(i).Type()
+		default:
+			return false
+		}
+		_, param := pt.(*types.TypeParam)
+		return types.IsInterface(pt) && !param
+	}
+	return false
+}
+
+// defaultType is the type an untyped constant e takes in an interface,
+// or nil when that is not plain from e.
+func defaultType(info *types.Info, e ast.Expr) types.Type {
+	switch e := e.(type) {
+	case *ast.ParenExpr:
+		return defaultType(info, e.X)
+	case *ast.BasicLit:
+		return map[token.Token]types.Type{token.INT: types.Typ[types.Int], token.FLOAT: types.Typ[types.Float64], token.IMAG: types.Typ[types.Complex128], token.CHAR: types.Universe.Lookup("rune").Type(), token.STRING: types.Typ[types.String]}[e.Kind]
+	case *ast.Ident:
+		if k, ok := info.Uses[e].(*types.Const); ok {
+			return types.Default(k.Type())
+		}
+	}
 	return nil
 }
 
