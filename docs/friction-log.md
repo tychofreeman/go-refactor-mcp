@@ -1946,3 +1946,11 @@ All through gorefactor: the tests with add_declaration (the field
 code with add_declaration and replace_text in one batch, the docs with
 replace_text. Trying it on lending-xl took a throwaway test file,
 written with a heredoc and deleted: the CLI has no inspect.
+
+## 2026-10-22: inspect's names grouped by file
+
+All through gorefactor: the test with add_declaration, then one batch:
+`rename` of `declaration` to `resolve`, `replace_declaration` and
+`add_declaration` for the grouping, replace_text to make `File` call
+the shared `declarations`. Trying it on lending-xl took a throwaway
+test file again (the CLI has no inspect).
