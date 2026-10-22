@@ -25,12 +25,9 @@ func NewRemoveParameter() *RemoveParameter { return &RemoveParameter{} }
 func (*RemoveParameter) Name() string { return "remove_parameter" }
 
 func (*RemoveParameter) Description() string {
-	return `Remove a parameter the body does not use from a function or method, and drop its argument from every call in the workspace.
-Use it to finish removing a feature: first change the body so it no longer uses the parameter, then remove it.
-Identify the function by file, line and name, at its declaration or any call, and give the parameter's name. Removing a variadic parameter drops all of its arguments.
-Each dropped argument must have no side effects and must not be able to panic (no calls other than to known functions without side effects such as strings.ToUpper, no pointer dereferences, indexing or non-constant division), so that not evaluating it changes nothing.
-Refuses if the body uses the parameter (unless it never reads the value it is called with: the first statement that mentions it assigns it a value of its type, as in "n, err := f()" or "err = f()", which then declares it), if the function is used other than by calling it, if a method would stop or start implementing an interface declared outside the module (which could silently change a type assertion), if a dropped argument would leave a local variable or an import unused, or if the parameter's type is all that lets calls infer a type parameter.
-An interface method of the module changes with every method of the module's types that implements it, and such a method with the interface: name any of them.`
+	return `Remove a parameter the body does not use, and its argument at every call in the workspace: removing retries, func send(to string, retries int) becomes func send(to string), and send(addr, 3) becomes send(addr). Use it last when taking a feature out: first change the body so it no longer uses the parameter. A body whose first mention of it assigns it (n, err := f()) does not use it.
+Identify the function by file and name, or by line at its declaration or any call, and give the parameter. A dropped argument must have no side effects and not be able to panic.
+Refuses, saying why: a body that reads the parameter, a function used as a value, a method that would start or stop implementing an interface from outside the module, an argument whose removal leaves a variable or import unused.`
 }
 
 func (*RemoveParameter) InputSchema() json.RawMessage {

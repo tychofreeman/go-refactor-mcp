@@ -27,11 +27,9 @@ func NewChangeFieldType() *ChangeFieldType { return &ChangeFieldType{} }
 func (*ChangeFieldType) Name() string { return "change_field_type" }
 
 func (*ChangeFieldType) Description() string {
-	return `Change the type of a struct field, and every use of it in the workspace with it, keeping what every value means.
-Use it to give a field a more precise type (a named type such as UserID instead of string), a wider number type, or an interface its type implements.
-Identify the field by file and name, Type.Field, without line (or by file, line and the field's name at its declaration or a use), and give the new type as Go source.
-The new type must hold every value of the old one: the same underlying type, a number type that holds every value of the old one, or an interface the old type implements. Values written to the field (assigned, in a literal, keyed or not) are converted; reads where the type matters are converted back, as change_parameter_type does for a parameter. A use that cannot follow is listed in the refusal, one per line, and nothing changes: its address taken, a read of an interface-typed field that needs the old type, or ++, -- or += with an interface.
-Refuses an embedded field and a field of a generic type.`
+	return `Change a struct field's type so that every value keeps its meaning, converting where the field is written and, where its type matters, where it is read: ID string to ID UserID turns User{ID: s} into User{ID: UserID(s)} and strings.ToUpper(u.ID) into strings.ToUpper(string(u.ID)). The new type must hold every old value: the same underlying type, a number type that holds every old value, or an interface the old type implements.
+Identify the field by file and Type.Field.
+A use that cannot follow (its address taken, ++ on an interface) is listed in the refusal, and nothing changes; an embedded field and a field of a generic type are refused.`
 }
 
 func (*ChangeFieldType) InputSchema() json.RawMessage {

@@ -1849,6 +1849,11 @@ gorefactor: about 1,100 lines of fixtures, which create_file would
 have taken as one large content argument each. The docs with
 replace_text.
 
+## 2026-10-21: shorter descriptions, signature tools
+
+All through gorefactor: each description with replace_statements and
+`function`, eight in one batch; each example checked with the CLI.
+
 ## 2026-10-21: sort.Slice is not reflection on fields
 
 All through gorefactor: the golden cases with create_file, the fix

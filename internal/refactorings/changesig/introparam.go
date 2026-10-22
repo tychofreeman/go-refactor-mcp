@@ -28,12 +28,9 @@ func NewIntroduceParameter() *IntroduceParameter { return &IntroduceParameter{} 
 func (*IntroduceParameter) Name() string { return "introduce_parameter" }
 
 func (*IntroduceParameter) Description() string {
-	return `Replace an expression in a function's body with a new parameter, and pass that expression at every call, written in terms of the call's arguments.
-Use it to make a function depend on a value instead of on where the value comes from: introduce p.x as x, then remove_parameter p once the body no longer uses it.
-Identify the expression by file, the line where it starts, and its exact source text (whitespace may differ); add column only if that text occurs more than once on the line. Give the new parameter's name; it goes at the end (or just before a variadic parameter), with the expression's type.
-It may use the receiver: m.decl in a method of m becomes mv.decl at the call mv.check().
-The expression is then evaluated once, at the call, instead of where the body evaluated it, so it must have the same value there and do the same: it may only read parameters (and the receiver) the body never changes or takes the address of, and names every call can see with the same meaning, and it must have no side effects. If it could panic (a read through a pointer, indexing, division) or reads memory other code can change (through a pointer, a slice or map, a package variable), it must be evaluated at entry: on every call (not inside an if, case or loop), with nothing before it that has side effects (if it could only panic by a nil dereference, as &p.f does, calls that return may come before it: not os.Exit, log.Fatal, or a call of a function value or interface method), writes anything but a local, or could panic otherwise than by a nil dereference.
-Refuses if the expression uses a variable declared in the body, is assigned to or has its address taken, if an argument or receiver of some call has side effects (assign it to a variable first), for a method called through an embedded field, or for the same reasons as add_parameter (function values, interface methods, interfaces a method would stop or start implementing, a name that clashes).`
+	return `Replace an expression in a function's body with a new parameter, and pass the expression at every call, written in the call's own terms: introducing u.Name as name, func greet(u User) string { return "hi " + u.Name } becomes func greet(u User, name string) string { return "hi " + name }, and greet(a) becomes greet(a, a.Name). Then remove_parameter u once the body no longer uses it. The receiver works too: m.decl in a method of m becomes mv.decl at the call mv.check().
+Identify the expression by file, the line it starts on and its source text (column if the text is on the line twice). The parameter goes last.
+The expression is then evaluated once, at the call, so it must give the same value and do the same there: one that could panic or reads memory other code can change must be what the body evaluates first, on every call. Refusals say which rule a case breaks.`
 }
 
 func (*IntroduceParameter) InputSchema() json.RawMessage {

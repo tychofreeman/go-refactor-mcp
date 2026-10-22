@@ -29,9 +29,9 @@ func New() *ChangeType { return &ChangeType{} }
 func (*ChangeType) Name() string { return "change_type" }
 
 func (*ChangeType) Description() string {
-	return `Change what a type of the module is: an alias's target (type renderArg = string to = any) or a defined type's underlying type (type ID int32 to int64). This is an edit, not a refactoring: every use of the type takes the new one, and what that changes is yours to check.
-Use it for the last step of changing a parameter's type: declare an alias of the old type, write the parameter with it (change_parameter_type), then change the alias here. Only what is written with the alias changes.
-Give file, name (the type) and type (its new definition, as Go source; packages it names are imported, and those only the old one used are removed). On its own, the result must type-check. In a batch with check "end", it may leave code that does not, and its result lists those errors (a body reading the old type, a call passing a []string as ...any), for the next steps of the batch to fix.`
+	return `Change what a type of the module is: an alias's target (type renderArg = string to = any) or a defined type's underlying type (type ID int32 to int64). An edit, not a refactoring: every use takes the new type.
+It is the last step of changing a parameter's type: change_parameter_type to an alias of the old type, then change the alias here, in a batch with check "end" together with the fixes its result lists (a body that still reads the old type).
+Give file, name (the type) and type (its new definition as Go source).`
 }
 
 func (*ChangeType) InputSchema() json.RawMessage {

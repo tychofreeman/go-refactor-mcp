@@ -30,13 +30,12 @@ func NewChangeParameterType() *ChangeParameterType { return &ChangeParameterType
 func (*ChangeParameterType) Name() string { return "change_parameter_type" }
 
 func (*ChangeParameterType) Description() string {
-	return `Change the type of a function's or method's parameter, where every value keeps its meaning, and update the body and every call in the workspace to match.
-Use it to make a function accept more (an interface instead of a concrete type, so tests can pass a fake) or a more precise type (a named type such as UserID instead of string), before changing what it does.
-Identify the function by file, line and name, at its declaration or any call, and give the parameter's name and its new type (as Go source; packages it names are imported).
-Two kinds of change keep behavior:
-- To an interface the old type implements (*bytes.Buffer to io.Writer): calls are unchanged, and the body must compile with the new type. Refused if the body compares the parameter with nil and the old type is not an interface (a nil pointer in an interface is not nil).
-- Between types with the same underlying type (string and UserID), or to a number type that holds every value of the old one (int32 to int64): typed arguments are converted at calls (UserID(name)), and the body converts the parameter back (string(id)) wherever its type could matter: everywhere but indexing, len, cap, range, and comparisons with a constant. Refused if the body assigns the parameter or takes its address.
-To write a parameter's type another way that is the same type (an alias declared for it, type renderArg = string), give that: only the declarations change, a variadic parameter's too (give renderArg or ...renderArg). A variadic parameter's type cannot otherwise change. Also refuses generic types, a call that passes another call's results, and a method that would stop or start implementing an interface declared outside the module. An interface method of the module changes with every method of the module's types that implements it, and such a method with the interface: name any of them.`
+	return `Change a parameter's type where every value keeps its meaning, and update the body and every call in the workspace:
+- To an interface the old type implements: func save(b *bytes.Buffer) becomes func save(b io.Writer); calls are unchanged.
+- To a type with the same underlying type, or a number type that holds every old value: func find(name string) becomes func find(name UserID); typed arguments are converted at calls (find(UserID(n))) and the body converts back (string(name)) where the type matters.
+- To an alias of the old type (type renderArg = string): only the declaration changes; change_type then changes the alias.
+Identify the function by file and name, or by line at its declaration or any call; give the parameter and its new type as Go source.
+Refuses, saying why: a body that compares a parameter of a non-interface type with nil, assigns it or takes its address; generic types; a call that passes another call's results.`
 }
 
 func (*ChangeParameterType) InputSchema() json.RawMessage {
