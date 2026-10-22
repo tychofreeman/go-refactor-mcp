@@ -25,8 +25,7 @@ func NewMove() *MoveFile { return &MoveFile{} }
 func (*MoveFile) Name() string { return "move_file" }
 
 func (*MoveFile) Description() string {
-	return `Move or rename a file or a directory of the module, with everything in it, byte for byte. This is an edit: it does not change what refers to the file, so a Go file moved to another package must compile there (to move Go declarations, use move_declaration).
-Use it for test fixtures (a golden case's directory renamed), docs and data. Give file (a file or directory) and to (the new path, which must not exist). Like every step, the result must type-check; one undo moves it back.`
+	return `Move or rename a file or directory of the module, with everything in it, byte for byte: an edit that does not change what refers to it, for fixtures, docs and data (testdata/old_case to testdata/new_case renames a golden case). A Go file moved to another package must compile there; to move Go declarations, use move_declaration. Give file and to, which must not exist; one undo moves it back.`
 }
 
 func (*MoveFile) InputSchema() json.RawMessage {
@@ -93,8 +92,7 @@ func NewDelete() *DeleteFile { return &DeleteFile{} }
 func (*DeleteFile) Name() string { return "delete_file" }
 
 func (*DeleteFile) Description() string {
-	return `Delete a file or a directory of the module, with everything in it. This is an edit; to delete Go declarations nothing uses, remove_dead_code checks that they are unused.
-Use it for test fixtures (a refused.txt a case no longer needs, a case's directory), docs and data. Give file (a file or directory). Like every step, the result must type-check, so a Go file whose declarations are used is refused; one undo puts it all back.`
+	return `Delete a file or directory of the module, with everything in it: an edit, for fixtures, docs and data (testdata/old_case/refused.txt, a case's directory). A Go file whose declarations are still used is refused; to delete Go declarations, remove_dead_code checks that nothing uses them. Give file; one undo puts it all back.`
 }
 
 func (*DeleteFile) InputSchema() json.RawMessage {

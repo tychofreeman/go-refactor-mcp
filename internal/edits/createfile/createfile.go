@@ -26,11 +26,8 @@ func New() *CreateFile { return &CreateFile{} }
 func (*CreateFile) Name() string { return "create_file" }
 
 func (*CreateFile) Description() string {
-	return `Create a new file with the given content. This is an edit, not a refactoring: it may change behavior.
-Use it to add code that does not exist yet, such as a new type, a test, or a new package's first file; use the refactorings to change existing code.
-Any kind of file can be created (go.mod, JSON, test fixtures, ...). A Go file must parse, and its package clause must match the other Go files in its directory (a test file may use the _test package); it is gofmt-ed. Missing directories are created (undo removes them); the file must not exist.
-To create several files, such as a test fixture directory, send the create_file steps together in one batch.
-Like every step, the result must type-check: if the new file refers to something that does not exist yet, it is refused with the errors; but functions and methods it calls that nothing declares get stubs (create_from_usage), so a failing test first compiles and fails. Undo removes the file.`
+	return `Create a new file, Go or not (go.mod, JSON, a test fixture), with any missing directories: an edit. A Go file must parse and match its directory's package (a test may use the _test package), and is gofmt-ed. What it calls that nothing declares gets a stub, so a test written first compiles and fails: cart_test.go with if got := (&Cart{}).Total(); got != 0 { ... } also declares func (c *Cart) Total() int.
+For several files, such as a fixture directory, send the create_file steps together in one batch. The file must not exist; undo removes it.`
 }
 
 func (*CreateFile) InputSchema() json.RawMessage {

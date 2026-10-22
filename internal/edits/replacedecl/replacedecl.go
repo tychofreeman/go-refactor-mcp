@@ -28,9 +28,8 @@ func New() *ReplaceDeclaration { return &ReplaceDeclaration{} }
 func (*ReplaceDeclaration) Name() string { return "replace_declaration" }
 
 func (*ReplaceDeclaration) Description() string {
-	return `Replace a whole top-level declaration, found by name, with new source: a function or method with its signature, a type, a variable (a table, say) or a constant; in a parenthesized group, just its spec. This is an edit, not a refactoring: it may change behavior.
-Use it when the signature and body change together, or for a declaration too long to restate as replace_text's old; for a body alone, replace_statements with function.
-Give file, name (Name or Type.Method) and content: the one new declaration, which must declare the same name (to rename, use rename). The old doc comment stays, unless content has one of its own. Packages content names are imported, and those only the old declaration used are removed (imports chooses when a name is ambiguous). Like every step, the result must type-check: callers a new signature breaks are refused, or fixed in the same batch with check "end".`
+	return `Replace a whole top-level declaration, found by name, with new source: an edit, for a signature and body that change together, or a declaration too long to restate as replace_text's old (a table, a type); for a body alone, use replace_statements with function. With name "Cart.Total" and content func (c *Cart) Total() (int, error) { ... }, Total's signature and body are replaced together.
+content is the one new declaration, declaring the same name (to rename, use rename); in a parenthesized group, just its spec. The old doc comment stays unless content has its own. Packages content names are imported, and those only the old declaration used are removed. Callers a new signature breaks are refused, or fixed in the same batch with check "end".`
 }
 
 func (*ReplaceDeclaration) InputSchema() json.RawMessage {

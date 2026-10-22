@@ -27,10 +27,8 @@ func New() *AddElement { return &AddElement{} }
 func (*AddElement) Name() string { return "add_element" }
 
 func (*AddElement) Description() string {
-	return `Add an element to a composite literal: a field to a struct literal, an entry to a map literal, a value to a slice or array literal. This is an edit, not a refactoring: it may change behavior.
-Identify the literal by file and line: the line it starts on (its type, or "{" for an elided type). When more than one literal starts on the line, give type, as written ("[]pair", "&Plan" is written "Plan").
-element is "Key: value" or a value. It goes at the end, or before or after the element with the given key (a field name, or a map key as written).
-Packages the element names are imported, as replace_statements does (imports chooses when a name is ambiguous). Like every step, the result must type-check, or nothing changes.`
+	return `Add an element to a composite literal: a field to a struct literal, an entry to a map literal, a value to a slice or array literal; an edit. At the line of var codes = map[string]int{, element "sms": 3 adds that entry at the end; after or before puts it next to the element with that key (a field name, or a map key as written).
+Identify the literal by file and the line it starts on (its type, or { for an elided type); when more than one starts there, give type as written ("[]pair"; &Plan is written "Plan"). element is "Key: value" or a value; packages it names are imported.`
 }
 
 func (*AddElement) InputSchema() json.RawMessage {

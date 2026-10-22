@@ -98,7 +98,12 @@ results are in `docs/cost-history.md`.
   match (about 300 words) it was used in 4/4. A fresh model decides
   whether a tool fits from its before/after examples; conditions and
   evaluation-order rules can live in the refusals, which say why a
-  match was left.
+  match was left. The user then asked for every description to be
+  shortened and given an example or two (#256-#259; 8,700 words to
+  about 5,200 over 38 tools, each example run with the CLI). Write new
+  ones the same way: what it does with a before/after, the addressing
+  hints the schema does not carry, and one line of what it refuses
+  ("Refuses, saying why: ...").
 
 - **Options over new tools** (2026-10-21): the pointer alias (gap A)
   is `pointer` on `extract_variable`, not a tool of its own: the model
