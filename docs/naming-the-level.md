@@ -252,3 +252,58 @@ each, Sonnet, 90 sessions, all passed, $11.40.
   preparing session is on top, so a task costs 1.5-2.6 times as
   much. It can only pay back over later changes to the same code,
   which roadmap item 26 measures next.
+
+## Does it pay back? (Oct 23)
+
+Written before the run. The preparing session costs 1.5-2.6 times a
+task; the question is whether a second change to the same code is
+cheaper, or better made, after it. `eval-tasks/level-payback.json`,
+8 runs per chain, Sonnet, the hybrid arm with
+`claude-md-refactor-when-needed`:
+
+- `payback-control`: `chain-tangled` as before (partner, then
+  student, each a session).
+- `payback-step`: the preparing session of `design-tangled`, then
+  partner, then student. Student is given plainly, with no second
+  preparing session: what is measured is whether the first one
+  carries over.
+
+What counts: the student session's cost and input tokens in each
+chain, whether it passes, and where it changes the code (one entry,
+or a branch in each place). The chain's total says whether the
+preparation is paid back by its second change; at 8 runs, a
+difference under about 15% is noise.
+
+Results: `eval-runs/level-payback-8`, 40 sessions, $4.08. Step run 1
+is left out: its preparing and partner sessions failed in the harness
+(`exec: "claude": executable file not found`, the CLI was being
+updated), so its student session ran on the original code without
+partner and failed. Every other session passed.
+
+| session | control (8 runs) | step (7 runs) |
+|---|---|---|
+| preparing | - | $0.148 · 253K |
+| partner | $0.097 · 141K | $0.096 · 161K |
+| student | $0.106 · 202K, 6-18 turns | $0.094 · 158K, 9-11 turns |
+| chain | $0.203 | $0.338 |
+
+- **The second change is better made, a little cheaper, and steadier.**
+  Every step run added student as one entry in the per-kind table
+  (with a `studentPrice` helper over the retail price in some). The
+  control runs added an `if` inside the retail branch and put student
+  into the staff tax condition (`"staff" || "student"`), 7 of 8 with
+  no refactoring; one extracted `retailPrice` first. The step's
+  student session cost 11% less and read 22% fewer input tokens, and
+  its spread was a third of the control's (sd $0.007 against $0.020).
+- **It does not pay back over one more change on this module.** The
+  preparing session costs $0.148; the student session saved $0.012.
+  At that rate it would take about a dozen later changes to the same
+  code. The module is small: the control's if-chain is cheap to
+  extend, so what the step buys here is the design (each kind in one
+  place, no kind sharing another's tax branch), not tokens.
+- So the case for the step rests on code where extending the tangle
+  costs more per change (more places, more uses), as `notify-large`
+  and `freight-xl` showed for derivations, or on the design itself.
+  Not measured: a second change on `lending-magazine` (five switches)
+  or `freight-air` (eight helpers), where the control's copy-and-edit
+  grows with each new instance.

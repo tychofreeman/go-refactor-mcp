@@ -2152,3 +2152,10 @@ The hidden tests through create_file; the two task files through the
 CLI's create_file with arguments written by Python; the docs through
 replace_text. Nothing by hand. The reference solutions that validated
 the tasks were made in a scratch copy, not the repo.
+
+## 2026-10-23: does the design step pay back?
+
+The task file (`eval-tasks/level-payback.json`, two existing tasks
+joined) written by Python, and the question appended to
+`docs/naming-the-level.md` with a heredoc before the run, by hand;
+the results through replace_text. No Go changed.
