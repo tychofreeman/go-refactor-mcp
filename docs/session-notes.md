@@ -330,7 +330,14 @@ results are in `docs/cost-history.md`.
   refactoring; lazygit was again judged "one rule, already easy".
   So make-the-change-easy works for a fresh model when it is the
   whole task of a session, not a clause of the instructions.
-  What comes next, with the commands: README roadmap item 26.
+  At 5 runs, and on two shapes chosen after (a lending kind in five
+  switches, a freight route with eight helpers per route): the
+  preparing session made the reference design in 15 of 15 runs, the
+  control in 0 of 15, none refactored where nothing was needed, and
+  the feature session then changed one place. The designs were made
+  with edits and the tests, not refactorings: the tools lack "switches
+  on a kind into a table" and "functions differing in a field into one
+  taking a selector". What comes next: README roadmap item 26.
 
 - **Loops and containers** (2026-10-20): the user asked for
   refactorings that convert between kinds of loop, and edits that make

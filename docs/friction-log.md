@@ -2145,3 +2145,10 @@ replace_declaration and the tests.
 ## 2026-10-23: the next steps for the design step
 
 README and session notes through replace_text. Nothing by hand.
+
+## 2026-10-23: the design step at 5 runs and on two more shapes
+
+The hidden tests through create_file; the two task files through the
+CLI's create_file with arguments written by Python; the docs through
+replace_text. Nothing by hand. The reference solutions that validated
+the tasks were made in a scratch copy, not the repo.
