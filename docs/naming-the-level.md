@@ -187,3 +187,27 @@ is not answered at the level of the cheapest edit. The next thing to
 learn is whether it holds over more runs and other shapes (the
 lending kinds, the freight carriers), and whether a step like it
 belongs in the tools' instructions or in how a task is given.
+
+## More runs, and two more shapes (Oct 23)
+
+`level-step` and the control again at 5 runs per task, and two new
+tasks in `eval-tasks/level-question-2.json` (control) and
+`eval-tasks/level-step-2.json` (step), each validated: the hidden
+tests fail at the start and pass with a plain solution (a case in
+each switch; the rail helpers copied for air). The reference designs,
+written before the runs:
+
+- `lending-magazine` (lending-xl): adds a kind. The kind is told apart
+  by switches in five functions of `lending` (`LoanDays`, `DailyFee`,
+  `Label`, `Shelf`, `Renewable`), and `Import` accepts a kind through
+  `LoanDays`; `notices` and `desk` compare with `"atlas"` and `"dvd"`.
+  Its home: one place per kind holding all five (a table of kind
+  rules, or a type per kind behind an interface), the five functions
+  looking it up. Below that: a case in each switch.
+- `freight-air` (freight-xl): adds a route to `audit`, which has
+  eight helpers written once for Road and again for Rail
+  (`LackingRoad`/`LackingRail`, `RoadZone`/`RailZone`, ...). The new
+  instance is the route. Its home: one helper per operation that
+  takes the route (its code, or a function that reads it), the Road,
+  Rail and Air helpers one-line calls of it. Below that: eight
+  functions copied for Air.

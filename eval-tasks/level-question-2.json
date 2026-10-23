@@ -1,0 +1,16 @@
+[
+ {
+  "name": "lending-magazine",
+  "dir": "testdata/lending-xl",
+  "tests": "testdata/lending-magazine",
+  "check": "go vet ./... && go test ./...",
+  "prompt": "The library now lends magazines: items of Kind \"magazine\". A magazine may be kept 14 days, each late day costs 20 cents, a receipt shows it as \"Magazine: \" followed by its title, it is kept on the \"periodicals\" shelf, and its loans cannot be renewed. Import accepts magazines. Nothing changes for the other kinds.\n\nTests you cannot see will check this. They use the existing functions, types and fields by their current names and signatures, so keep those as they are; refactor around them as you need."
+ },
+ {
+  "name": "freight-air",
+  "dir": "testdata/freight-xl",
+  "tests": "testdata/freight-air",
+  "check": "go vet ./... && go test ./...",
+  "prompt": "Package audit checks shipments' road and rail codes but not their air codes. Add the same checks for the Air code: LackingAir, AirZone, SameAir, ByAir, AirCounts, UpperAir, AirLength and AirLine, each doing for Air what its Road and Rail counterparts do (AirLine says \"no air\" where RoadLine says \"no road\").\n\nTests you cannot see will check this. They use the existing functions, types and fields by their current names and signatures, so keep those as they are; refactor around them as you need."
+ }
+]
