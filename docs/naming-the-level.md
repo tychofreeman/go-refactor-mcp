@@ -295,6 +295,8 @@ partner and failed. Every other session passed.
   no refactoring; one extracted `retailPrice` first. The step's
   student session cost 11% less and read 22% fewer input tokens, and
   its spread was a third of the control's (sd $0.007 against $0.020).
+  The cost difference is under the 15% set above as noise; the
+  tokens and the spread are over it.
 - **It does not pay back over one more change on this module.** The
   preparing session costs $0.148; the student session saved $0.012.
   At that rate it would take about a dozen later changes to the same
