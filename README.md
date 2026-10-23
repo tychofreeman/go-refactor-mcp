@@ -1063,6 +1063,12 @@ hand or a tool got in the way.
         fallthrough or a generic call is refused, each listed, so on
         lending-xl after `"book"` the refusal lists what is left for
         `"dvd"` and `"atlas"` (9 uses). *Done.*
+      - Deleting one kind's dead case before the end:
+        `replace_statements` with empty content over whole case
+        clauses deletes them, refused when the case before falls
+        through into them. An edit (whether the case is dead is the
+        argument from `uses`), an option of an existing tool, no new
+        tool. *Done.*
     - **`inspect` by name** (the user, 2026-10-22): `names` reads
       several declarations in one call, each found in the module by
       its name, without file (`Name`, `Type.Method`, `pkg.Name` where

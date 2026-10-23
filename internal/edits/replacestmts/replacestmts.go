@@ -9,6 +9,7 @@ import (
 	"go/scanner"
 	"go/token"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
@@ -32,7 +33,7 @@ func (*ReplaceStatements) Name() string { return "replace_statements" }
 
 func (*ReplaceStatements) Description() string {
 	return `Replace whole statements of one block with new Go statements: an edit, to write a function's body (a stub becomes the implementation) or change what statements do. With function "Cart.Total" and content return len(c.Items), Total's whole body becomes that statement.
-Give start_line and end_line (inclusive, as inspect numbers them) covering whole statements of one block, comments and blank lines included; or function ("Name" or "Type.Method") to replace the whole body, which also works for a body on the signature's line and stays valid after earlier steps of a batch. content is re-indented to the block.
+Give start_line and end_line (inclusive, as inspect numbers them) covering whole statements of one block, comments and blank lines included; or function ("Name" or "Type.Method") to replace the whole body, which also works for a body on the signature's line and stays valid after earlier steps of a batch. content is re-indented to the block. Empty content over whole case clauses deletes them.
 Packages content names are imported (imports picks one when several fit, such as rand); imports only the replaced statements used are removed.`
 }
 
@@ -88,6 +89,11 @@ func (*ReplaceStatements) Plan(ws *workspace.Workspace, raw json.RawMessage) (*r
 	tf := ws.Fset.File(file.Pos())
 	if a.StartLine < 1 || a.EndLine < a.StartLine || a.EndLine > tf.LineCount() {
 		return nil, refactor.Refusef("lines %d-%d are not a range of lines of %s, which has %d", a.StartLine, a.EndLine, a.File, tf.LineCount())
+	}
+	if strings.TrimSpace(a.Content) == "" {
+		if clauses, list := caseClauses(tf, file, src, a.StartLine, a.EndLine); clauses != nil {
+			return deleteClauses(ws, pkg, file, src, a, clauses, list)
+		}
 	}
 	stmts, err := selectStatements(tf, file, src, a.StartLine, a.EndLine)
 	if err != nil {
@@ -165,6 +171,87 @@ func replaceBody(ws *workspace.Workspace, pkg *packages.Package, file *ast.File,
 	}
 	if len(removed) > 0 {
 		plan.Notes = append(plan.Notes, gocode.ImportNote("removed", removed)+", which only the replaced body used")
+	}
+	return plan, nil
+}
+
+// caseClauses returns the clauses of one switch or select that lines
+// first-last hold whole, with nothing else on them but comments, and the
+// list of clauses they are in; nil if the lines hold anything else.
+func caseClauses(tf *token.File, file *ast.File, src []byte, first, last int) (clauses, list []ast.Stmt) {
+	line := func(p token.Pos) int { return tf.Line(p) }
+	ast.Inspect(file, func(n ast.Node) bool {
+		var body *ast.BlockStmt
+		switch n := n.(type) {
+		case *ast.SwitchStmt:
+			body = n.Body
+		case *ast.TypeSwitchStmt:
+			body = n.Body
+		case *ast.SelectStmt:
+			body = n.Body
+		}
+		if body == nil || clauses != nil {
+			return clauses == nil
+		}
+		for _, s := range body.List {
+			if line(s.Pos()) >= first && line(s.End()) <= last {
+				clauses = append(clauses, s)
+			}
+		}
+		if clauses != nil {
+			list = body.List
+		}
+		return clauses == nil
+	})
+	if clauses == nil {
+		return nil, nil
+	}
+	end := len(src)
+	if last < tf.LineCount() {
+		end = tf.Offset(tf.LineStart(last + 1))
+	}
+	pos := tf.Offset(tf.LineStart(first))
+	for _, s := range clauses {
+		if onlyComments(src[pos:tf.Offset(s.Pos())], first) != nil {
+			return nil, nil
+		}
+		pos = tf.Offset(s.End())
+	}
+	if onlyComments(src[pos:end], first) != nil {
+		return nil, nil
+	}
+	return clauses, list
+}
+
+// deleteClauses deletes lines a.StartLine-a.EndLine, which hold clauses,
+// whole clauses of list, unless the clause before them falls through
+// into them.
+func deleteClauses(ws *workspace.Workspace, pkg *packages.Package, file *ast.File, src []byte, a args, clauses, list []ast.Stmt) (*refactor.Plan, error) {
+	tf := ws.Fset.File(file.Pos())
+	if i := slices.Index(list, clauses[0]); i > 0 {
+		if cc, ok := list[i-1].(*ast.CaseClause); ok && len(cc.Body) > 0 {
+			if b, ok := cc.Body[len(cc.Body)-1].(*ast.BranchStmt); ok && b.Tok == token.FALLTHROUGH {
+				return nil, refactor.Refusef("the case on line %d falls through into the case on line %d, so deleting it would change what the first one runs", tf.Line(cc.Pos()), tf.Line(clauses[0].Pos()))
+			}
+		}
+	}
+	end := len(src)
+	if a.EndLine < tf.LineCount() {
+		end = tf.Offset(tf.LineStart(a.EndLine + 1))
+	}
+	none, err := gocode.ParseStatements("")
+	if err != nil {
+		return nil, err
+	}
+	adder := imports.New(ws, pkg, file, src)
+	removed := gocode.RemoveImports(pkg, file, adder, gocode.Between(clauses[0].Pos(), clauses[len(clauses)-1].End()), none)
+	path := ws.Abs(a.File)
+	plan := &refactor.Plan{
+		Summary: fmt.Sprintf("deleted lines %d-%d (%d case clause%s) of %s", a.StartLine, a.EndLine, len(clauses), textutil.Plural(len(clauses)), a.File),
+		Edits:   []edit.FileEdit{{Path: path, Edits: append([]edit.TextEdit{{Start: tf.Offset(tf.LineStart(a.StartLine)), End: end}}, adder.Edits()...)}},
+	}
+	if len(removed) > 0 {
+		plan.Notes = append(plan.Notes, gocode.ImportNote("removed", removed)+", which only the deleted clauses used")
 	}
 	return plan, nil
 }
@@ -251,7 +338,7 @@ func wholeRange(file *ast.File, line func(token.Pos) int, first, last int) strin
 			if a != first || b != last || len(body) == 0 {
 				return ""
 			}
-			return fmt.Sprintf(", e.g. start_line %d, end_line %d (the clause's statements; its case header cannot be replaced)", line(body[0].Pos()), line(body[len(body)-1].End()))
+			return fmt.Sprintf(", e.g. start_line %d, end_line %d (the clause's statements; its case header cannot be replaced, but empty content deletes the whole clause)", line(body[0].Pos()), line(body[len(body)-1].End()))
 		}
 		first, last = min(first, a), max(last, b)
 	}
