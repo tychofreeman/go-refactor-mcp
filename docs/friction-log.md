@@ -2081,3 +2081,7 @@ an `if` condition, which does not parse.
 Through the MCP: create_file for the golden case (written first),
 replace_text for the fix (a call of `analysis.InControlHeader`, which
 `inline_variable` already used) and the docs. Nothing by hand.
+
+## 2026-10-22: the kind A/B results
+
+Docs only, through replace_text. Nothing by hand.
