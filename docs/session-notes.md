@@ -322,6 +322,14 @@ results are in `docs/cost-history.md`.
   additive task; on lazygit the instruction was skipped. Next to
   try: name the axis (the new instance should be one new place), and
   make the concept a step of its own.
+  Both tried (same day, $3.06): naming the axis in CLAUDE.md did
+  less (an `else if` passed as "one new case"). The same words as a
+  session of its own (told the next change and not to make it)
+  reached the design: both runs made a table of rules per kind, and
+  the next session added the partner as one entry. No false
+  refactoring; lazygit was again judged "one rule, already easy".
+  So make-the-change-easy works for a fresh model when it is the
+  whole task of a session, not a clause of the instructions.
 
 - **Loops and containers** (2026-10-20): the user asked for
   refactorings that convert between kinds of loop, and edits that make
