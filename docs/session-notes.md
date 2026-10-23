@@ -341,7 +341,11 @@ results are in `docs/cost-history.md`.
   Over a second change (student, 8 runs): after the step it was one
   table entry, 11% cheaper; without it, a branch and a shared tax
   condition. The preparing session costs twelve times that saving, so
-  on a small module the step buys design, not tokens.
+  on a small module the step buys design, not tokens. The same on
+  lending (map) and freight (Sea): after the step one row or accessor,
+  without it a case per switch or eight copies, at the same cost; a
+  fresh model copies the nearest instance as cheaply as it adds a
+  row. The user then asked for longer chains per project.
 
 - **Loops and containers** (2026-10-20): the user asked for
   refactorings that convert between kinds of loop, and edits that make

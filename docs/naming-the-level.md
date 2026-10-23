@@ -309,3 +309,59 @@ partner and failed. Every other session passed.
   Not measured: a second change on `lending-magazine` (five switches)
   or `freight-air` (eight helpers), where the control's copy-and-edit
   grows with each new instance.
+
+## The second change on lending and freight (Oct 23)
+
+Written before the run. On design-tangled the control's if-chain was
+cheap to extend, so the step bought the design but not tokens. Here
+the control's way grows with each instance: a case in each of five
+switches (lending), eight copied functions (freight).
+`eval-tasks/level-payback-2.json`, 8 runs per chain:
+
+- `lending-magazine`, then a "map" kind (7 days, 25 cents, "Map: "
+  label, the "reference" shelf, renewable; hidden test
+  `testdata/lending-map`).
+- `freight-air`, then the same eight checks for the Sea code (hidden
+  test `testdata/freight-sea`).
+
+Each shape as a control chain (magazine or air, then the second
+change) and a step chain (the preparing session, then the two). Both
+hidden tests were checked first in a scratch copy: they fail after a
+plain first change and pass after a plain second one.
+
+What counts, as before: the second session's cost, input tokens and
+turns in each chain, and where it changes the code (one entry or
+selector, or a case or copy at each place). For the step to pay back
+in tokens, the second change's saving must exceed the preparing
+session's cost; noise is about 15%.
+
+Results: `eval-runs/level-payback2-8`, 80 sessions, all passed, $8.83.
+Means per session, cost · input tokens · lines changed:
+
+| session | lending control | lending step | freight control | freight step |
+|---|---|---|---|---|
+| preparing | - | $0.134 · 191K · 69 | - | $0.169 · 205K · 124 |
+| first (magazine / Air) | $0.106 · 139K · 21 | $0.100 · 178K · 18 | $0.108 · 118K · 89 | $0.102 · 112K · 57 |
+| second (map / Sea) | $0.087 · 116K · 31 | $0.097 · 158K · 23 | $0.100 · 130K · 96 | $0.103 · 146K · 64 |
+| chain | $0.193 | $0.331 | $0.208 | $0.374 |
+
+- **The design carries over.** After the step, every second session
+  added one row to the kind table (lending, 8/8) or one accessor and
+  eight one-line calls to the shared helpers (freight, 8/8), and said
+  the code already made it one place. Without it, every second
+  session added a case to each switch or copied the eight Air
+  functions with `Sea` for `Air`, with no refactoring (16/16).
+- **It costs no less.** The second change cost 11% more after the
+  step on lending and the same on freight, with 15-36% more input
+  tokens: the sessions after the step read the table or helpers
+  before adding to them, where a session in the copies' code copied
+  the nearest instance. It wrote a quarter to a third fewer lines.
+- **So it does not pay back in tokens over two changes, on any of the
+  three shapes.** Writing the fifth case of a switch or the third
+  copy of eight functions is cheap for the model, as cheap as adding
+  a row; what grows with each instance is the code, not the cost of
+  extending it. What the step buys is the design: one place per
+  instance, and fewer lines. Whether that turns into cost needs
+  changes that cut across the instances (a new rule for every kind,
+  a bug in every copy), where the copies must each be changed and the
+  table or helper once.

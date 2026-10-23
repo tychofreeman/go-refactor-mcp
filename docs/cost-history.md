@@ -627,6 +627,7 @@ references written before the run, and the transcripts graded.
 | level-step2-5 | the step on lending-magazine and freight-air | $2.49 · 3.48M · 20/20 sessions |
 | level-control2-5 | the control on them | $1.05 · 1.23M · 10/10 |
 | level-payback-8 | a second change (student) after the step, against the chain without it (8 runs; one step run lost to the harness) | $4.08 · 6.87M · 37/40 (the 3 lost sessions of step run 1) |
+| level-payback2-8 | the same on lending (map after magazine) and freight (Sea after Air) | $8.83 · 11.93M · 80/80 |
 
 Only the level arm refactored before adding a customer kind, but it
 gave each pricing rule a home, not each kind; where the right home was
@@ -646,7 +647,10 @@ partner) the step's session added one table entry in 7 of 7 runs and
 cost 11% less than the control's (22% fewer input tokens), whose runs
 added a branch and shared staff's tax condition; the preparing
 session ($0.148) is not paid back by that ($0.012) on this small
-module.
+module. On lending (map) and freight (Sea) the second change was one
+row or one accessor after the step and a case per switch or eight
+copies without it, at the same cost or 11% more (more input read
+before adding to a table): no shape paid back over two changes.
 
 ## What made the difference
 
