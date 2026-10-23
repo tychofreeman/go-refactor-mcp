@@ -207,7 +207,13 @@ results are in `docs/cost-history.md`.
   #284), and the whole task ran end to end through the tools (74
   derived steps, about 30 lines by hand). The recipe arm for a fresh
   model is `eval-tasks/claude-md-kind-recipe`; its example is shapes,
-  not lending, so the task stays out of the instructions.
+  not lending, so the task stays out of the instructions. Run
+  (cost-history 10): the control arm without the recipe found the
+  same tools (widen, prepare, narrow) in 3 of 4 runs, and no run took
+  the recipe's extraction step (one-line bodies are cheaper to
+  write). So no move_case_to_type: the tools' descriptions carry
+  the path. Derived share doubled and lines by hand fell a third
+  against set C, but cost rose a quarter with the turns.
 
 - **Loops and containers** (2026-10-20): the user asked for
   refactorings that convert between kinds of loop, and edits that make

@@ -542,6 +542,43 @@ on tail (one run, within noise). The Bash writes were `sed -i` and
 one run; replace_text takes exact text only, so a model that wants a
 pattern across files still reaches for sed.
 
+## 10. A kind into types, with and without the recipe (Oct 22)
+
+`lending-kinds`, 4 runs an arm, $2.00 in all, after narrowing (#283),
+case deletion (#284) and the header parentheses (#286):
+`eval-runs/lending-kinds-recipe` (the algebraic arm and the recipe,
+`eval-tasks/claude-md-kind-recipe`) and `lending-kinds-algebraic2`
+(the algebraic arm alone), against the algebraic arm's kinds runs of
+section 9's set C (`lending-algebraic`, before these tools).
+
+| arm | passed | cost a run | turns | written by hand (4 runs) | derived share | gorefactor refused |
+|---|---|---|---|---|---|---|
+| algebraic, set C | 4/4 | $0.20 | 9.8 | 375 | 19% | 4 |
+| algebraic, today's tools | 4/4 | $0.25 | 19.0 | 250 | 39% | 8 |
+| recipe | 4/4 | $0.25 | 16.8 | 281 | 48% | 10 |
+
+The tools were found without the recipe: 3 of 4 control runs widened
+the field, ran `prepare_switch_for_types` on the five switches, wrote
+the types, and narrowed (the fourth rewrote by hand). Every recipe
+run took that path too, and none took step 3: they wrote the fifteen
+one-line methods with `add_declaration` instead of extracting each
+case, which is cheaper when the bodies are one line. Narrowing
+deleted the dead cases in all 7 runs that used it. Against set C,
+about a third less written by hand and twice the derived share, at a
+quarter more cost and nearly twice the turns: the derivation's steps
+cost turns that one rewrite did not, on a module this small.
+
+The waste, per arm (refused turns): a comparison replaced whole
+(`l.Item.Kind == lending.Atlas{}` in an `if`) did not parse, 6
+refusals in 8 runs, since #286 parenthesizes only a new expression
+that is itself a composite literal, and `replace_text` none;
+`Label(it Item)` to `Label(title string)` by `replace_text` of the
+interface, refused until the implementation and call changed with
+it (2 runs an arm), where `add_parameter` on the interface method
+does all three; `replace_text` old found twice (4 runs); empty
+switches deleted with Bash `perl`/`python` (refused or not counted)
+or `replace_statements`.
+
 ## What made the difference
 
 - **Smaller results** (#75, rename locations): the largest single win when
