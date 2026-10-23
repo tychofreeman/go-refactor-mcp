@@ -1069,6 +1069,17 @@ hand or a tool got in the way.
         through into them. An edit (whether the case is dead is the
         argument from `uses`), an option of an existing tool, no new
         tool. *Done.*
+      - The whole task end to end with the CLI: 74 derived steps,
+        about 30 lines by hand, hidden test passing
+        (`docs/derivations.md` section 6). Gaps it met: parentheses
+        for a composite literal in an `if` (`replace_expression`),
+        `introduce_parameter` through an interface method, narrowing
+        leaving empty switches, a case equal to the default.
+      - A fresh model on the recipe: `eval-tasks/claude-md-kind-recipe`
+        (the algebraic arm and the recipe, with shapes for its
+        example), `lending-kinds`, 4 runs, against the algebraic arm
+        of step 3 (375 lines by hand over 4 runs, 19% derived). Set
+        up; not run yet.
     - **`inspect` by name** (the user, 2026-10-22): `names` reads
       several declarations in one call, each found in the module by
       its name, without file (`Name`, `Type.Method`, `pkg.Name` where

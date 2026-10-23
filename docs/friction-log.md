@@ -2065,3 +2065,13 @@ Through the MCP: create_file for the golden cases (written first),
 add_declaration for `caseClauses` and `deleteClauses`, replace_text
 for the rest. Nothing by hand. `TestLoadedToolsStaySmall` refused the
 first description by 24 characters; it lost its parenthesis.
+
+## 2026-10-22: lending-kinds end to end, and the recipe arm
+
+In this repo: create_file for the arm, replace_text for the docs;
+nothing by hand. In the lending-xl copy (through the CLI), by hand:
+the `DVD` and `Atlas` types, `kindOf`, 12 expressions (`Book.Label`'s
+body, 3 comparisons, 8 test literals), `case "atlas": return false`,
+3 lines of `Import`, and 5 empty switches deleted. One refusal from a
+bug: `replace_expression` left `lending.Atlas{}` unparenthesized in
+an `if` condition, which does not parse.
