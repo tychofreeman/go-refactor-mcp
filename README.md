@@ -1054,6 +1054,15 @@ hand or a tool got in the way.
         for one kind: section 6, 27 derived steps, by hand one type,
         a 6-line function, 3 expressions and 5 deletions), and a
         tool only if a fresh model fails the recipe.
+      - Narrowing: `change_field_type` from `any` to the interface
+        when every value written to the field is one already; a
+        switch on it then loses the cases no such value matches,
+        a proof that deletes them all at the end. A write that need
+        not be one (`kindOf(...)` returning `any`), a constant
+        written, an `==` with a constant, a case reached by
+        fallthrough or a generic call is refused, each listed, so on
+        lending-xl after `"book"` the refusal lists what is left for
+        `"dvd"` and `"atlas"` (9 uses). *Done.*
     - **`inspect` by name** (the user, 2026-10-22): `names` reads
       several declarations in one call, each found in the module by
       its name, without file (`Name`, `Type.Method`, `pkg.Name` where

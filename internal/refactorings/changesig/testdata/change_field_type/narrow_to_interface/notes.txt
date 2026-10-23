@@ -1,0 +1,1 @@
+removed the cases no Kind matches: m.go:21:7 "book", m.go:23:7 "dvd"

@@ -6,6 +6,7 @@ import (
 	"go/ast"
 	"go/token"
 	"go/types"
+	"slices"
 	"strings"
 
 	"golang.org/x/tools/go/ast/astutil"
@@ -27,7 +28,7 @@ func NewChangeFieldType() *ChangeFieldType { return &ChangeFieldType{} }
 func (*ChangeFieldType) Name() string { return "change_field_type" }
 
 func (*ChangeFieldType) Description() string {
-	return `Change a struct field's type so that every value keeps its meaning, converting where the field is written and, where its type matters, where it is read: ID string to ID UserID turns User{ID: s} into User{ID: UserID(s)} and strings.ToUpper(u.ID) into strings.ToUpper(string(u.ID)). The new type must hold every old value: the same underlying type, a number type that holds every old value, or an interface the old type implements. Widened to an interface (Kind string to any), a switch on it, == with it and passing it as an interface stay; an untyped constant compared with or written to it becomes the old type where that is not its default (kind("dvd")).
+	return `Change a struct field's type so that every value keeps its meaning, converting where the field is written and, where its type matters, where it is read: ID string to ID UserID turns User{ID: s} into User{ID: UserID(s)} and strings.ToUpper(u.ID) into strings.ToUpper(string(u.ID)). The new type must hold every old value: the same underlying type, a number type that holds every old value, or an interface the old type implements. Widened to an interface (Kind string to any), a switch on it, == with it and passing it as an interface stay; an untyped constant compared with or written to it becomes the old type where that is not its default (kind("dvd")). Narrowed to an interface (Kind any to Kind), every value written to it must already be one, and a switch on it loses the cases no such value matches (case "book" once every book is a Book{}).
 Identify the field by file and Type.Field.
 A use that cannot follow (its address taken, ++ on an interface) is listed in the refusal, and nothing changes; an embedded field and a field of a generic type are refused.`
 }
@@ -61,7 +62,10 @@ type fieldChange struct {
 	field    *types.Var
 	key      string
 	old, new types.Type
-	widen    bool // new is an interface old implements: nothing is converted
+	widen    bool     // new is an interface old implements: nothing is converted
+	narrow   bool     // old is an interface new implements: every write must be a new
+	name     string   // new, as the declaring file writes it
+	dropped  []string // the case values a switch on the field lost, "file:line:col value"
 	files    *fileSet
 	cannot   []string // uses that cannot follow, "file:line:col: why"
 }
@@ -104,10 +108,11 @@ func (*ChangeFieldType) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 		return nil, refactor.Refusef("%s is already of type %s", field.Name(), t.typeName(newT))
 	}
 	widen, err := t.checkConversion(field.Type(), newT)
-	if err != nil {
+	narrow := err != nil && types.IsInterface(field.Type()) && types.IsInterface(newT) && types.AssignableTo(newT, field.Type())
+	if err != nil && !narrow {
 		return nil, refactor.Refusef("%s", strings.Replace(err.Error(), "change_parameter_type", "change_field_type", 1))
 	}
-	c := &fieldChange{ws: ws, field: field, key: keyOf(ws.Fset, field), old: field.Type(), new: newT, widen: widen, files: newFileEdits(ws)}
+	c := &fieldChange{ws: ws, field: field, key: keyOf(ws.Fset, field), old: field.Type(), new: newT, widen: widen, narrow: narrow, name: t.typeName(newT), files: newFileEdits(ws)}
 	if err := c.declEdit(declPkg, decl); err != nil {
 		return nil, err
 	}
@@ -121,6 +126,9 @@ func (*ChangeFieldType) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 	plan := &refactor.Plan{
 		Summary: fmt.Sprintf("changed field %s from %s to %s (%d use%s)", field.Name(), t.typeName(field.Type()), t.typeName(newT), uses, map[bool]string{true: "", false: "s"}[uses == 1]),
 		Edits:   edit.Merge(c.files.all()),
+	}
+	if len(c.dropped) > 0 {
+		plan.Notes = append(plan.Notes, fmt.Sprintf("removed the cases no %s matches: %s", c.name, strings.Join(c.dropped, ", ")))
 	}
 	if analysis.PublicAPI(field, ws.Pkgs) {
 		plan.Notes = append(plan.Notes, refactor.APINote(field.Name(), "changing its type"))
@@ -293,6 +301,9 @@ func (c *fieldChange) use(p *packages.Package, f *ast.File, id *ast.Ident) error
 		}
 	}
 	// A read.
+	if c.narrow {
+		return c.narrowRead(p, path)
+	}
 	if c.widen {
 		if ok, constants := c.keeps(info, path); ok {
 			for _, k := range constants {
@@ -323,8 +334,12 @@ func (c *fieldChange) use(p *packages.Package, f *ast.File, id *ast.Ident) error
 // unless it is an untyped constant or the new type is an interface. An
 // untyped constant written to an interface takes its default type, so
 // one whose default is not the old type is converted to the old type.
+// Narrowed, v must already be of the new type.
 func (c *fieldChange) write(p *packages.Package, v ast.Expr) error {
 	switch {
+	case c.narrow:
+		c.hold(p, v)
+		return nil
 	case c.widen && untypedConstant(p.TypesInfo, v):
 		if dt := defaultType(p.TypesInfo, v); dt == nil || !types.Identical(dt, c.old) {
 			return c.convert(p, v, c.old)
@@ -344,6 +359,146 @@ func (c *fieldChange) convert(p *packages.Package, v ast.Expr, t types.Type) err
 	}
 	fe.edits = append(fe.edits, (&target{ws: c.ws}).conversion(v, fe.write(t))...)
 	return nil
+}
+
+// hold notes v, a value written to the narrowed field, unless it is
+// already of the new type, or nil.
+func (c *fieldChange) hold(p *packages.Package, v ast.Expr) {
+	t := p.TypesInfo.TypeOf(v)
+	switch {
+	case types.AssignableTo(t, c.newIn(p)):
+	case types.IsInterface(t):
+		c.cannot = append(c.cannot, fmt.Sprintf("%s: writes %s, of type %s, which need not be a %s", c.ws.Position(v.Pos()), types.ExprString(v), types.TypeString(t, types.RelativeTo(c.field.Pkg())), c.name))
+	default:
+		c.cannot = append(c.cannot, fmt.Sprintf("%s: writes %s, which is not a %s", c.ws.Position(v.Pos()), types.ExprString(v), c.name))
+	}
+}
+
+// narrowRead checks path[0], a read of the field, once the field holds
+// only values of the new type: a switch on it loses the cases none of
+// them matches, and a comparison with such a value, or passing it to a
+// generic function (which would be instantiated with the new type), is
+// noted.
+func (c *fieldChange) narrowRead(p *packages.Package, path []ast.Node) error {
+	e := path[0].(ast.Expr)
+	info := p.TypesInfo
+	switch u := path[1].(type) {
+	case *ast.SwitchStmt:
+		if u.Tag == e {
+			return c.dropCases(p, u)
+		}
+	case *ast.BinaryExpr:
+		other := u.X
+		if other == e {
+			other = u.Y
+		}
+		if (u.Op == token.EQL || u.Op == token.NEQ) && !c.canMatch(p, other) {
+			c.cannot = append(c.cannot, fmt.Sprintf("%s: compared with %s, which no %s equals", c.ws.Position(other.Pos()), types.ExprString(other), c.name))
+		}
+	case *ast.CallExpr:
+		if analysis.Generic(info, u.Fun) && slices.Contains(u.Args, e) {
+			c.cannot = append(c.cannot, fmt.Sprintf("%s: passed to %s, which would be instantiated with %s", c.ws.Position(e.Pos()), types.ExprString(u.Fun), c.name))
+		}
+	}
+	return nil
+}
+
+// dropCases removes from sw, a switch on the narrowed field, the values
+// no value of the new type can match, and a clause left with none. A
+// value that is not a constant is noted instead (evaluating it might do
+// something), as is a clause reached by fallthrough.
+func (c *fieldChange) dropCases(p *packages.Package, sw *ast.SwitchStmt) error {
+	info := p.TypesInfo
+	fe, err := c.files.of(p, sw.Pos())
+	if err != nil {
+		return err
+	}
+	tf := c.ws.Fset.File(sw.Pos())
+	lineStart := func(pos token.Pos) int { return tf.Offset(tf.LineStart(tf.Line(pos))) }
+	clauses := sw.Body.List
+	for i, s := range clauses {
+		cc := s.(*ast.CaseClause)
+		var kept, dead []string
+		for _, v := range cc.List {
+			where := c.ws.Position(v.Pos())
+			switch {
+			case c.canMatch(p, v):
+				kept = append(kept, types.ExprString(v))
+			case info.Types[v].Value == nil:
+				c.cannot = append(c.cannot, fmt.Sprintf("%s: compared with %s, which no %s equals", where, types.ExprString(v), c.name))
+			default:
+				dead = append(dead, types.ExprString(v))
+				c.dropped = append(c.dropped, where+" "+types.ExprString(v))
+			}
+		}
+		switch {
+		case len(dead) == 0:
+		case len(kept) > 0:
+			fe.edits = append(fe.edits, edit.TextEdit{Start: tf.Offset(cc.List[0].Pos()), End: tf.Offset(cc.List[len(cc.List)-1].End()), NewText: strings.Join(kept, ", ")})
+		case i > 0 && fallsThrough(clauses[i-1].(*ast.CaseClause)):
+			c.cannot = append(c.cannot, fmt.Sprintf("%s: case %s is reached by fallthrough from the case before", c.ws.Position(cc.List[0].Pos()), strings.Join(dead, ", ")))
+		default:
+			end := sw.Body.Rbrace
+			if i+1 < len(clauses) {
+				end = clauses[i+1].Pos()
+			}
+			fe.edits = append(fe.edits, edit.TextEdit{Start: lineStart(cc.Pos()), End: lineStart(end)})
+		}
+	}
+	return nil
+}
+
+// canMatch reports whether v can equal a value of the new type: v is nil,
+// of an interface type, or of a type that implements the new one.
+func (c *fieldChange) canMatch(p *packages.Package, v ast.Expr) bool {
+	t := p.TypesInfo.TypeOf(v)
+	if b, ok := t.(*types.Basic); ok && b.Kind() == types.UntypedNil {
+		return true
+	}
+	t = types.Default(t)
+	return types.IsInterface(t) || types.AssignableTo(t, c.newIn(p))
+}
+
+// newIn is the new type as package p sees it: a test variant of a
+// package type-checks its own copy of the package's types.
+func (c *fieldChange) newIn(p *packages.Package) types.Type {
+	n, ok := c.new.(*types.Named)
+	if !ok || n.Obj().Pkg() == nil {
+		return c.new
+	}
+	seen := map[*types.Package]bool{}
+	var find func(*types.Package) types.Type
+	find = func(tp *types.Package) types.Type {
+		if seen[tp] {
+			return nil
+		}
+		seen[tp] = true
+		if tp.Path() == n.Obj().Pkg().Path() {
+			if o, ok := tp.Scope().Lookup(n.Obj().Name()).(*types.TypeName); ok {
+				return o.Type()
+			}
+			return nil
+		}
+		for _, imp := range tp.Imports() {
+			if t := find(imp); t != nil {
+				return t
+			}
+		}
+		return nil
+	}
+	if t := find(p.Types); t != nil {
+		return t
+	}
+	return c.new
+}
+
+// fallsThrough reports whether cc ends in a fallthrough statement.
+func fallsThrough(cc *ast.CaseClause) bool {
+	if len(cc.Body) == 0 {
+		return false
+	}
+	b, ok := cc.Body[len(cc.Body)-1].(*ast.BranchStmt)
+	return ok && b.Tok == token.FALLTHROUGH
 }
 
 // keeps reports whether the read path[0] of the field means the same once

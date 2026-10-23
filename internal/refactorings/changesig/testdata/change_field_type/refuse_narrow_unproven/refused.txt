@@ -1,0 +1,1 @@
+m.go:16:70: writes k, of type any, which need not be a Kind
