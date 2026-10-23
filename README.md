@@ -1174,9 +1174,11 @@ hand or a tool got in the way.
       (student) was one table entry in 7 of 7 step runs and cost 11%
       less than without the step, but the preparing session cost
       twelve times that saving. Not in tokens on a module this
-      small. Next for it: a second change on `lending-magazine` or
-      `freight-air`, where the control's copies grow with each
-      instance.
+      small. On `lending-magazine` and `freight-air` too
+      (`level-payback-2.json`): one row or accessor after the step,
+      a case per switch or eight copies without, at the same cost.
+      Next: a longer chain per project, with changes that cut across
+      the instances (a rule for every kind, a fix in every copy).
     - *How the rule is computed*: on lazygit the step judged the
       change "one rule, already easy", while the PR first reshaped how
       the loaders query refs. Try a step wording that also asks where
