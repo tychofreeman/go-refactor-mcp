@@ -2114,3 +2114,7 @@ switch of conditions), the interface and types, the dispatch, the
 `remove_parameter` as a pointer read), and the doc comments. One
 stale line number of mine after a batch that added declarations
 above it.
+
+## 2026-10-22: reasoning from the highest abstraction
+
+Docs only, through replace_text. Nothing by hand.

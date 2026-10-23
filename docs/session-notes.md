@@ -21,6 +21,15 @@ results are in `docs/cost-history.md`.
   same place, so parallel PRs conflicted there one after another
   (2026-10-22, #263-#267).
 - When the user says "do X, then Y", do them in order, each in its own PR.
+- **Reason from the highest abstraction that captures the problem**
+  (2026-10-22, the user). Before planning code, name the change at
+  that level: "this field holds one of three modes, switched on in
+  two places", "this parameter is always the same expression of
+  another", not "add a `narrow` flag" or "replace `info` on line
+  314". Choose the design and the operation there (a type per mode,
+  the inverse of introduce_parameter), and only then descend to tools,
+  names and lines. Asked after #283, where reasoning at the level of
+  lines added a second flag to what was already a type code.
 - Report results plainly, including when a change did not help (#119 was
   reverted in #120 after its rerun showed nothing).
 - Stacked PRs: if one fails CI, fix the lowest branch and merge upward;
