@@ -1099,6 +1099,12 @@ hand or a tool got in the way.
         did not change what the control runs did (two still edited
         the interface, then its call, before a batch with check
         "end"); cost within noise.
+      - The derivation on this project's own code: `change_field_type`'s
+        flags into mode types (`docs/derivations.md` section 6), 39
+        refactorings. Gaps: an inverse of `introduce_parameter`
+        (replace a parameter with the argument every call passes),
+        and `p.TypesInfo` treated as able to panic or change by
+        `inline_variable` and `remove_parameter`.
     - **`inspect` by name** (the user, 2026-10-22): `names` reads
       several declarations in one call, each found in the module by
       its name, without file (`Name`, `Type.Method`, `pkg.Name` where

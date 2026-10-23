@@ -180,6 +180,26 @@ What it met:
   equal to the default before its method can be extracted: `add_case`,
   an edit that a proof could make.
 
+**On this project's own code** (2026-10-22): `change_field_type` had
+its modes as two flags, `widen` and `narrow` (#283 added the second),
+switched on in `write` and in `use`'s reads. The same derivation,
+adapted: `write` regrouped by mode (by hand: no tool regroups a switch
+of conditions, and `prepare_switch_for_types` takes a switch on a
+value); each mode's branch extracted; the reads given one signature;
+an interface `fieldMode` and types `converting`, `widening`,
+`narrowing`; each method moved onto its type (method_to_function,
+add_parameter of the mode value, function_to_method, rename: 24 steps
+in one batch, rename allowed by the check of #281); a `mode` field
+set where the flags were, dispatch through it, and the flags removed
+with remove_dead_code. 39 refactorings; by hand the regrouping, the
+declarations, the dispatch and five one-word edits. What it met: no
+refactoring replaces a parameter by the argument every call passes
+(the inverse of `introduce_parameter`), so `info` became
+`p.TypesInfo` by edits, then `remove_parameter`; and `inline_variable`
+and `remove_parameter` refused `p.TypesInfo` (a field read through a
+pointer may panic, or change past a call), so one call passed `nil`
+for the unused parameter before it was removed.
+
 ## The user's principle
 
 Not every operation will exist. Use the operations there are; where
