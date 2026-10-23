@@ -211,3 +211,44 @@ written before the runs:
   takes the route (its code, or a function that reads it), the Road,
   Rail and Air helpers one-line calls of it. Below that: eight
   functions copied for Air.
+
+Results: `eval-runs/level-{step,control}-5` (the first four tasks)
+and `eval-runs/level-{step2,control2}-5` (the two new ones), 5 runs
+each, Sonnet, 90 sessions, all passed, $11.40.
+
+| task | control: refactored first | step: preparing session | step: feature session |
+|---|---|---|---|
+| design-tangled | 0/5 (an `else if`) | **5/5 a table of rules per kind** | 5/5 one entry, "no refactoring needed" |
+| lending-magazine | 0/5 (a case in each switch) | **5/5 a table of kind rules** the five functions look up | 5/5 one row, "Import accepts it because it checks against the table" |
+| freight-air | 0/5 (eight copied functions; one: "there are now three near-identical copies of each check") | **5/5 shared helpers that take a function reading the route's code** | 5/5 one `airCode` selector and eight one-line calls |
+| design-duplication | 5/5 the shared function | 5/5 the shared function | 5/5 changed it |
+| notify-optout | 0/5 | 0/5 changed nothing | 5/5 one `if` |
+| tp-lazygit-stack-order | 0/5 | 0/5 changed nothing, "already easy" | 5/5 one new file both loaders call |
+
+- **It holds, and on shapes it was not tuned to.** On every task
+  whose design was in the way at more than one function, the
+  preparing session made the reference design in 15 of 15 runs and
+  the control in 0 of 15. The feature session then found one place
+  to change in all 15, and said so.
+- **No false refactoring:** 0 of 10 preparing sessions changed code
+  on notify-optout and lazygit.
+- **Lazygit stays "already easy"** (10 of 10 preparing sessions).
+  Either the question does not reach how a rule is computed, or the
+  PR's preparation was a choice, not a need; the hidden tests pass
+  either way.
+- **The design was made by edits, not refactorings.** Of the 15
+  preparing sessions that changed the design, the kind tables were
+  written with `replace_declaration`, Edit or Bash (four of the five
+  on design-tangled first extracted the two chains with
+  `extract_function`), and freight's helpers likewise; only the
+  exports were done mostly by refactorings (`extract_function`,
+  `fold`, `merge_duplicate_function`, with `replace_statements` where
+  `fold` did not reach). The tests were the proof that nothing
+  changed. The tools have no operation for "switches on a
+  kind into a table" or "functions that differ in a field into one
+  that takes a selector" (`parameterize` takes constants).
+- **Cost:** the feature session alone costs what the control does
+  ($0.09-0.11 against $0.10-0.11 on the three design tasks); the
+  preparing session is on top, so a task costs 1.5-2.6 times as
+  much. It can only pay back over later changes to the same code,
+  which roadmap item 26 measures next.

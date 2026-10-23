@@ -622,6 +622,10 @@ references written before the run, and the transcripts graded.
 | level-level | + name the concept and where it is known | $1.21 · 1.99M · 8/8 |
 | level-axis | + name the axis: the new instance one new place | $1.17 · 1.91M · 8/8 |
 | level-step | the same words as a session of its own before the feature | $1.89 · 2.85M · 16/16 sessions |
+| level-step-5 | level-step, 5 runs | $5.04 · 7.87M · 40/40 sessions |
+| level-control-5 | level-control, 5 runs | $2.82 · 4.42M · 20/20 |
+| level-step2-5 | the step on lending-magazine and freight-air | $2.49 · 3.48M · 20/20 sessions |
+| level-control2-5 | the control on them | $1.05 · 1.23M · 10/10 |
 
 Only the level arm refactored before adding a customer kind, but it
 gave each pricing rule a home, not each kind; where the right home was
@@ -631,7 +635,12 @@ Naming the axis in CLAUDE.md did less (no refactoring on the kind:
 a new `else if` passed as "one new case"). The same words as a
 session of their own, before a new session makes the feature, made
 both runs build a table of rules per kind, the reference's design;
-the feature session then added one entry.
+the feature session then added one entry. At 5 runs and on two new
+shapes (a lending kind, a freight route) it held: the preparing
+session made the reference design in 15 of 15 runs where it was in
+the way, the control in 0 of 15, with no false refactoring. The
+feature session costs what the control does; the preparing session
+is on top (1.5-2.6 times a task).
 
 ## What made the difference
 
