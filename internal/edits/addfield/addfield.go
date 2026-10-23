@@ -26,7 +26,7 @@ func New() *AddField { return &AddField{} }
 func (*AddField) Name() string { return "add_field" }
 
 func (*AddField) Description() string {
-	return `Add fields to a struct type: an edit, to give a type the state a feature needs. field "Phone string" with after "Email" adds Phone just after Email in type User struct. field is Go source, one or more fields with their comments and tags, or embedded types; without after or before they go at the end. A struct on one line is opened up into lines. Packages the fields' types name are imported. To move fields that are there, use extract_struct.
+	return `Add fields to a struct type: an edit, to give a type the state a feature needs. field "Colour string" with after "Height" adds Colour just after Height in type Plant struct. field is Go source, one or more fields with their comments and tags, or embedded types; without after or before they go at the end. A struct on one line is opened up into lines. Packages the fields' types name are imported. To move fields that are there, use extract_struct.
 Identify the struct by file and name, or by line at its declaration or a use.
 Refused with the compiler's errors: a duplicate name, an unkeyed literal of the struct that would no longer list every field.`
 }

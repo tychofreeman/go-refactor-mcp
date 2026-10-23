@@ -33,7 +33,7 @@ func New() *ReplaceExpression { return &ReplaceExpression{} }
 func (*ReplaceExpression) Name() string { return "replace_expression" }
 
 func (*ReplaceExpression) Description() string {
-	return `Replace an expression with a new one: an edit, to change part of a statement without restating it. Replacing u.Email with u.Contact("email") on its line changes that read alone. With all_occurrences, every expression in the file that means the same is replaced: the same tokens, the same names referring to the same things, so c.Body in another method of the same type matches and d.Body of another type does not.
+	return `Replace an expression with a new one: an edit, to change part of a statement without restating it. Replacing s.Unit with s.Attr("unit") on its line changes that read alone. With all_occurrences, every expression in the file that means the same is replaced: the same tokens, the same names referring to the same things, so c.Body in another method of the same type matches and d.Body of another type does not.
 Identify the expression by file, the line it starts on and its source text (whitespace may differ; column if the text is on the line twice). new is parenthesized where its context needs it (b becomes (b + 1) in a * b), and packages it names are imported. A change in the expression's type is noted.`
 }
 

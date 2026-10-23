@@ -3,6 +3,7 @@ package mcpserver
 import (
 	"context"
 	"encoding/json"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -287,6 +288,73 @@ func TestToolBudget(t *testing.T) {
 	}
 	if n := len(cs.InitializeResult().Instructions); n > maxInstructions {
 		t.Errorf("instructions are %d characters, more than %d", n, maxInstructions)
+	}
+}
+
+// What the server publishes (instructions, descriptions, schemas) uses
+// none of the eval tasks' own names or strings: a fresh model in an A/B
+// run would otherwise find a task's answer in a tool's example.
+func TestExamplesAvoidEvalTasks(t *testing.T) {
+	cs, _ := setup(t)
+	res, err := cs.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	published := cs.InitializeResult().Instructions
+	for _, tool := range res.Tools {
+		schema, _ := json.Marshal(tool.InputSchema)
+		published += "\n" + tool.Description + "\n" + string(schema)
+	}
+	// Names of the standard library, and of this server's own fixtures that
+	// the feature tasks copy, which are not a task's shape.
+	generic := map[string]bool{}
+	for _, w := range strings.Fields(`Apply Name Scale Other Builder Fprintf HasPrefix Load Package Query Reset Stderr Stdout ToUpper Unmarshal Workspace WriteString IsRefusal Body Returns
+		Buffer Config Error Fatal Field File Helper Join Line Method Printf Print Split String Total TrimSpace Type Without User Items Address
+		content file line name rename start type parameter value`) {
+		generic[w] = true
+	}
+	ident := regexp.MustCompile(`\b[A-Z][a-z]+(?:[A-Z][a-z]+)*\b`)
+	literal := regexp.MustCompile(`"([a-z]{4,})"`)
+	from := map[string]string{} // a name or "string" of an eval task, and a file using it
+	// The seeded modules, whose tasks are shapes; the third-party clones are
+	// real repositories, whose tasks a name does not give away.
+	walk := func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") {
+			return err
+		}
+		src, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		for _, w := range ident.FindAllString(string(src), -1) {
+			if len(w) >= 4 {
+				from[w] = path
+			}
+		}
+		for _, m := range literal.FindAllStringSubmatch(string(src), -1) {
+			from[`"`+m[1]+`"`] = path
+		}
+		return nil
+	}
+	for _, dir := range []string{"../../eval-tasks/testdata", "../../eval-tasks/learning"} {
+		if err := filepath.WalkDir(dir, walk); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for w, path := range from {
+		if generic[strings.Trim(w, `"`)] {
+			continue
+		}
+		var found bool
+		if strings.HasPrefix(w, `"`) {
+			inner := strings.Trim(w, `"`)
+			found = strings.Contains(published, w) || strings.Contains(published, `\"`+inner+`\"`)
+		} else {
+			found = regexp.MustCompile(`\b` + w + `\b`).MatchString(published)
+		}
+		if found {
+			t.Errorf("%s, from %s, is in what the server publishes", w, path)
+		}
 	}
 }
 

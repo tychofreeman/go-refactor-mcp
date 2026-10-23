@@ -50,7 +50,7 @@ func (*ExtractVariable) Name() string { return "extract_variable" }
 
 func (*ExtractVariable) Description() string {
 	return `Name an expression: a declaration is inserted just before its statement and the name used in its place. Extracting price*qty as total, return price*qty + tax becomes total := price * qty; return total + tax. A constant expression becomes a const.
-Identify the expression by file, the line it starts on and its source text (column if the text is on the line twice). all_occurrences replaces the same expression later in the block too, when it has no calls with side effects and nothing it reads changes in between. pointer declares an alias instead, sent := &e.Sent, and writes *sent in its place: for a field that is assigned to or whose address is taken.
+Identify the expression by file, the line it starts on and its source text (column if the text is on the line twice). all_occurrences replaces the same expression later in the block too, when it has no calls with side effects and nothing it reads changes in between. pointer declares an alias instead, entries := &s.Log, and writes *entries in its place: for a field that is assigned to or whose address is taken.
 Refuses, saying why: an expression evaluated only sometimes or more than once (after && or ||, in a loop condition, an else-if or a case), one that would then run before other calls of its statement, one assigned to, one using variables its statement declares.`
 }
 
