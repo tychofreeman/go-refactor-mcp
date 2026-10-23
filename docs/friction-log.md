@@ -2098,3 +2098,7 @@ Nothing by hand.
 Through the MCP: replace_declaration of the server test (first) and
 of `signatureNote`, add_declaration of `signature`, `signatures` and
 `paramSteps`, replace_text for the docs. Nothing by hand.
+
+## 2026-10-22: the kind A/B rerun
+
+Docs only, through replace_text. Nothing by hand.

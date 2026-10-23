@@ -213,7 +213,11 @@ results are in `docs/cost-history.md`.
   the recipe's extraction step (one-line bodies are cheaper to
   write). So no move_case_to_type: the tools' descriptions carry
   the path. Derived share doubled and lines by hand fell a third
-  against set C, but cost rose a quarter with the turns.
+  against set C, but cost rose a quarter with the turns. After the
+  two fixes the runs showed (#288, #289), a rerun: the parse refusals
+  went, but a refusal that names the right steps did not change what
+  the model did next; it fixed the text it had broken, then batched.
+  A note helps less than a tool that makes the wrong move work.
 
 - **Loops and containers** (2026-10-20): the user asked for
   refactorings that convert between kinds of loop, and edits that make

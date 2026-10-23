@@ -579,6 +579,33 @@ does all three; `replace_text` old found twice (4 runs); empty
 switches deleted with Bash `perl`/`python` (refused or not counted)
 or `replace_statements`.
 
+Rerun after #288 (composite literals bracketed inside an expression
+in a header, by replace_text too) and #289 (the refusal of a
+signature changed as text gives the steps), 4 runs an arm, $2.00
+(`lending-kinds-recipe2`, `lending-kinds-algebraic3`):
+
+| | recipe | rerun | control | rerun |
+|---|---|---|---|---|
+| cost a run | $0.25 | $0.27 | $0.25 | $0.23 |
+| turns with tool calls | 49 | 49 | 51 | 46 |
+| gorefactor refused | 10 | 6 | 8 | 7 |
+| composite literal in a header | 3 | 0 | 3 | 0 |
+| `Label`'s signature by text | 2 | 0 | 2 | 4 |
+| derived share | 48% | 47% | 39% | 22% |
+
+The parse refusals are gone. The signature note did not change what
+the control runs did: two still edited the interface and then the
+call as text, each refused, before sending both with check "end";
+one had the new note with the steps, the other changed `Label` and
+`Shelf` in one edit and got the general note. One recipe run used
+`add_parameter` and `remove_parameter` on `Kind.Label` (its step 2);
+the others edited both places in one batch, unrefused. The control's
+derived share fell with one run that wrote the types in a new file and
+replaced the switches whole, without the field tools. Cost moved
+within noise. What is left is mostly `replace_text` old found twice
+(`Kind: "dvd"` on two test lines, 5 refusals in 8 runs) and
+malformed batch JSON (5), neither the tools' doing.
+
 ## What made the difference
 
 - **Smaller results** (#75, rename locations): the largest single win when
