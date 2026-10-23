@@ -1086,7 +1086,10 @@ hand or a tool got in the way.
         250-281 lines by hand, 39-48% derived, $0.25 a run against
         $0.20. No tool is needed for a kind's migration. Next, the
         waste it showed: parentheses for a composite literal inside
-        a comparison in an `if` (6 refusals in 8 runs), and a
+        a comparison in an `if` (6 refusals in 8 runs, 5 of them
+        `replace_text`; *Done*: both tools bracket each literal an
+        `if`, `for` or `switch` header would take for its block,
+        `analysis.BareComposites`), and a
         refusal of `replace_text` on an interface method's signature
         that points to `add_parameter` on the interface method.
     - **`inspect` by name** (the user, 2026-10-22): `names` reads

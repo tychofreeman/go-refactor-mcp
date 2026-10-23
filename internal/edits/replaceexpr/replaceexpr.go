@@ -113,8 +113,10 @@ func (*ReplaceExpression) Plan(ws *workspace.Workspace, raw json.RawMessage) (*r
 	var es []edit.TextEdit
 	for _, t := range targets {
 		text := strings.TrimSpace(a.New)
-		if path := analysis.PathTo(file, t); len(path) > 1 && (analysis.NeedsParens(newExpr, path[1], t) || analysis.InControlHeader(newExpr, path)) {
+		if path := analysis.PathTo(file, t); len(path) > 1 && analysis.NeedsParens(newExpr, path[1], t) {
 			text = "(" + text + ")"
+		} else if analysis.InControlHeader(newExpr, path) {
+			text = gocode.BracketComposites(text)
 		}
 		off := ws.Fset.Position(t.Pos()).Offset
 		es = append(es, edit.TextEdit{Start: off, End: ws.Fset.Position(t.End()).Offset, NewText: text})

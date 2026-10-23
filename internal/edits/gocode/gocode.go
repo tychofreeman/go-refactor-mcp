@@ -19,6 +19,7 @@ import (
 
 	"golang.org/x/tools/go/packages"
 
+	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/imports"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
@@ -409,4 +410,21 @@ func isVersion(elem string) bool {
 		}
 	}
 	return true
+}
+
+// BracketComposites returns text, a Go expression, with each composite
+// literal analysis.BareComposites finds in it put in parentheses, as an
+// if, for or switch header needs; text unchanged if it is not an
+// expression.
+func BracketComposites(text string) string {
+	e, err := parser.ParseExpr(text)
+	if err != nil {
+		return text
+	}
+	lits := analysis.BareComposites(e)
+	for i := len(lits) - 1; i >= 0; i-- {
+		start, end := int(lits[i].Pos())-1, int(lits[i].End())-1
+		text = text[:start] + "(" + text[start:end] + ")" + text[end:]
+	}
+	return text
 }

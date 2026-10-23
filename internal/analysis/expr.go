@@ -67,11 +67,46 @@ func NeedsParens(e ast.Expr, parent ast.Node, use ast.Expr) bool {
 	return false
 }
 
-// InControlHeader reports whether e, a composite literal written at the
-// node path[0] (path innermost first), would land unbracketed in an if, for
-// or switch header, where Go requires parentheses around it.
+// BareComposites returns the composite literals of e that nothing in e
+// brackets (parentheses, a call's arguments, an index, braces): those an
+// if, for or switch header would take for the start of its block.
+func BareComposites(e ast.Expr) []*ast.CompositeLit {
+	var out []*ast.CompositeLit
+	var walk func(ast.Expr)
+	walk = func(e ast.Expr) {
+		switch e := e.(type) {
+		case *ast.CompositeLit:
+			out = append(out, e)
+		case *ast.BinaryExpr:
+			walk(e.X)
+			walk(e.Y)
+		case *ast.UnaryExpr:
+			walk(e.X)
+		case *ast.StarExpr:
+			walk(e.X)
+		case *ast.SelectorExpr:
+			walk(e.X)
+		case *ast.CallExpr:
+			walk(e.Fun)
+		case *ast.IndexExpr:
+			walk(e.X)
+		case *ast.IndexListExpr:
+			walk(e.X)
+		case *ast.SliceExpr:
+			walk(e.X)
+		case *ast.TypeAssertExpr:
+			walk(e.X)
+		}
+	}
+	walk(e)
+	return out
+}
+
+// InControlHeader reports whether e, written at the node path[0] (path
+// innermost first), would put a composite literal unbracketed in an if,
+// for or switch header, where Go requires parentheses around it.
 func InControlHeader(e ast.Expr, path []ast.Node) bool {
-	if _, ok := ast.Unparen(e).(*ast.CompositeLit); !ok {
+	if len(BareComposites(ast.Unparen(e))) == 0 {
 		return false
 	}
 	for i := 1; i < len(path); i++ {

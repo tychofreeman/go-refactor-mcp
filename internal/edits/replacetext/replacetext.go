@@ -14,12 +14,14 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/gocode"
 	"github.com/tychofreeman/go-refactor-mcp/internal/imports"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
+	"golang.org/x/tools/go/ast/astutil"
 )
 
 // ReplaceText is the "replace_text" edit.
@@ -139,9 +141,26 @@ func fileEdit(ws *workspace.Workspace, file, old, new string, all bool) (edit.Fi
 	}
 	fe := edit.FileEdit{Path: path}
 	for _, off := range at {
-		fe.Edits = append(fe.Edits, edit.TextEdit{Start: off, End: off + len(old), NewText: new})
+		fe.Edits = append(fe.Edits, edit.TextEdit{Start: off, End: off + len(old), NewText: bracketed(ws, path, off, old, new)})
 	}
 	return fe, len(at), nil
+}
+
+// bracketed returns new, to replace old at offset off of the Go file
+// path, with each composite literal it would leave bare in an if, for or
+// switch header put in parentheses, which Go requires there.
+func bracketed(ws *workspace.Workspace, path string, off int, old, new string) string {
+	_, file := ws.FileSyntax(path)
+	e, err := parser.ParseExpr(new)
+	if file == nil || err != nil {
+		return new
+	}
+	tf := ws.Fset.File(file.Pos())
+	nodes, _ := astutil.PathEnclosingInterval(file, tf.Pos(off), tf.Pos(off+len(old)))
+	if !analysis.InControlHeader(e, append([]ast.Node{nil}, nodes...)) {
+		return new
+	}
+	return gocode.BracketComposites(new)
 }
 
 // addImports adds to fe, an edit of a Go file, the imports of the
