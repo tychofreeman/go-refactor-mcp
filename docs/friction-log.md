@@ -2124,3 +2124,12 @@ Docs only, through replace_text. Nothing by hand.
 Through the MCP: add_declaration for the test (first), replace_text
 for the descriptions and the docs. Nothing by hand. The new examples
 were run with the CLI on a scratch garden module.
+
+## 2026-10-23: naming the level
+
+The arms' instructions, the task file and the doc through create_file,
+the results through replace_text. By hand: two one-line corrections
+of a run count with sed. Seen in the runs:
+`fold` did not reach a copy whose filter is written the other way
+round (`!= Pending` around the append against `== Pending` with
+`continue`), so all six runs replaced the copies with replace_statements.

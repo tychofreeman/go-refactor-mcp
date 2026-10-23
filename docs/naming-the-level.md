@@ -75,6 +75,54 @@ Per run: the concept the run names (from its text before the first
 edit), whether it refactored first and at which level (design,
 function, none), a refactoring on the control, passed, cost.
 
-## Results
+## Results (Oct 23)
 
-Pending.
+`eval-runs/level-{control,design,level}`, Sonnet, 2 runs per task and
+arm, $3.41 in all (about $0.14 a run). 23 of 24 passed; the one that
+did not (design, notify-optout run 2) never started: the `claude`
+binary failed to exec ("exec format error"), a harness failure.
+
+| task | control | design | level |
+|---|---|---|---|
+| design-tangled | 0/2 refactored: one `else if` | 0/2: "the existing structure already makes this easy" | 2/2 refactored: `Total`'s two chains extracted into `linePrice` and `tax`/`taxFor`, then the branch |
+| design-duplication | 2/2 extracted the shared filter and sort | 2/2 the same | 2/2 the same, the concept named first in writing ("which orders get exported, and in what order") |
+| notify-optout | 0/2 refactored | 0/1 | 0/2; one said first "Broadcast is the only place that decides which channels a user gets, so the change goes there directly" |
+| tp-lazygit-stack-order | 2/2 one new `stack_order.go` used by both loaders, nothing refactored | 2/2 the same | 2/2 the same; neither wrote a concept before editing |
+
+- **The level question moved the one task the others left alone.** On
+  design-tangled it was the only arm to refactor, and one run wrote
+  the concept as asked: "a customer kind drives two rules, unit price
+  and tax, each in its own if-chain in `Total`". It gave each **rule**
+  a home, not each **kind**: two functions that still tell every kind
+  apart, and the partner went in as one more branch of one of them.
+  Function level by the reference. The concept was named right; the
+  axis chosen was the one the code is already cut along, as in the
+  `fieldtype.go` probe (#297), where runs extracted `narrows` and
+  kept the flags.
+- **Where function level is design level, every arm got there.**
+  design-duplication's rule had no home and all six runs gave it one;
+  the question only made the concept explicit.
+- **No false positives.** No arm refactored on the control.
+- **On code no run had seen, the question was skipped.** Both level
+  runs on lazygit wrote no concept and refactored nothing first; one
+  also skipped writing a test first. All six runs found one home for
+  the new rule on their own (a file both loaders call), which is
+  the PR's end state without its preparatory moves. The instruction
+  competes with the size of the task: on 300 lines the model followed
+  it, on lazygit it went straight to the change.
+- **Cost:** the same in every arm ($1.01-1.21 an arm), within noise
+  at this size.
+
+So naming the level makes the model state the concept and refactor
+where the generic question did not, but not choose the axis the
+change runs along: "a new kind" was in the question, and the runs
+still homed the rules. What could be tried next: name the axis ("the
+change adds an instance of something: give *that* a home, so that the
+new instance is one new place"), and make the concept a step of its
+own, so that a large task cannot skip it.
+
+A tool gap the runs showed: in design-duplication `fold` would not
+fold JSON's copy onto the extracted function (it writes the filter as
+`!= order.Pending` around the append, CSV as `== ... continue`), so
+all six runs replaced the copies with `replace_statements`, an
+edit, where a refactoring should reach.
