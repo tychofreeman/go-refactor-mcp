@@ -287,6 +287,23 @@ results are in `docs/cost-history.md`.
   the move: the model, like this project's sessions, extends what is
   there. A prompt or step that asks the design question before a
   feature is the candidate to test.
+  Tested (3 runs, $0.33-0.49, each passing): the same feature prompt
+  ending "Before you plan this change, ask what about the current
+  design would make it hard. If something would, first refactor so
+  that the change becomes easy, keeping the tests passing, and only
+  then make the change." All three refactored first, with tests green
+  between, where none had without the question, but what they saw was
+  the narrowing condition inline in `Plan`: each extracted predicates
+  (`narrows(old, new)`, and `fits` or `mayEqual` for the read check)
+  and kept both flags. None saw the flags as a mode; the third mode
+  went in as `!types.IsInterface(c.new)` checks in 2-4 places. So the
+  question makes the model refactor first, at the scale of a function
+  (extract what the change touches), not of the design: asked "what
+  would make the next change hard?" about the file alone it names the
+  type code; asked it on the way to a feature, it names the line the
+  feature goes through. Not tried: naming the level ("which concept
+  does this code represent with flags or conditions?"), or asking the
+  design question in a step of its own before the feature is given.
   Isolating a probe: start `claude -p` inside the copy, at a path
   that does not name the checkout. Two design runs started from the
   copy's parent globbed for the file, and the scratchpad's path
