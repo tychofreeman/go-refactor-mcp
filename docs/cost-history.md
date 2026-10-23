@@ -628,6 +628,7 @@ references written before the run, and the transcripts graded.
 | level-control2-5 | the control on them | $1.05 · 1.23M · 10/10 |
 | level-payback-8 | a second change (student) after the step, against the chain without it (8 runs; one step run lost to the harness) | $4.08 · 6.87M · 37/40 (the 3 lost sessions of step run 1) |
 | level-payback2-8 | the same on lending (map after magazine) and freight (Sea after Air) | $8.83 · 11.93M · 80/80 |
+| level-long-5 | five changes per chain on pricing, lending and freight, with and without the step (5 runs; two pricing-control runs lost to the harness) | $16.23 · 24.07M · 154/165 |
 
 Only the level arm refactored before adding a customer kind, but it
 gave each pricing rule a home, not each kind; where the right home was
@@ -651,6 +652,11 @@ module. On lending (map) and freight (Sea) the second change was one
 row or one accessor after the step and a case per switch or eight
 copies without it, at the same cost or 11% more (more input read
 before adding to a table): no shape paid back over two changes.
+Over five changes (`level-long-5`) neither: after the step changes
+1-5 cost what the control's did; lending's table held for every
+later change, pricing's was bypassed at a new rule in 4 of 5 runs,
+and freight's control extracted the shared helper itself once a
+change cut across the copies.
 
 ## What made the difference
 

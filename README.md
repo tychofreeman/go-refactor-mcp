@@ -1177,8 +1177,12 @@ hand or a tool got in the way.
       small. On `lending-magazine` and `freight-air` too
       (`level-payback-2.json`): one row or accessor after the step,
       a case per switch or eight copies without, at the same cost.
-      Next: a longer chain per project, with changes that cut across
-      the instances (a rule for every kind, a fix in every copy).
+      Five changes per project (`level-long.json`): *Done*, no pay
+      back in tokens; lending's table held, pricing's was bypassed
+      at a new rule, freight's control refactored on its own when a
+      change cut across the copies (`docs/naming-the-level.md`).
+      Open: whether larger code changes this, and measures other
+      than tokens (missed copies, how far kind knowledge spreads).
     - *How the rule is computed*: on lazygit the step judged the
       change "one rule, already easy", while the PR first reshaped how
       the loaders query refs. Try a step wording that also asks where

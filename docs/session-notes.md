@@ -346,6 +346,13 @@ results are in `docs/cost-history.md`.
   without it a case per switch or eight copies, at the same cost; a
   fresh model copies the nearest instance as cheaply as it adds a
   row. The user then asked for longer chains per project.
+  Five changes per project (`level-long-5`): no pay back either; the
+  feature sessions cost the same with or without the step. Lending's
+  table held for every later change; pricing's was bypassed by a new
+  rule in 4 of 5 runs; freight's control extracted a helper on its
+  own once a change cut across the copies. The harness twice lost
+  sessions to `claude` missing from PATH (the CLI updating mid-run):
+  leave such chains out, since later stages fail the lost one's tests.
 
 - **Loops and containers** (2026-10-20): the user asked for
   refactorings that convert between kinds of loop, and edits that make

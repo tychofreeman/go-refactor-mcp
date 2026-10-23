@@ -365,3 +365,88 @@ Means per session, cost · input tokens · lines changed:
   changes that cut across the instances (a new rule for every kind,
   a bug in every copy), where the copies must each be changed and the
   table or helper once.
+
+## Longer chains (Oct 23)
+
+Written before the run. Two changes did not pay back on any shape,
+and the cost of extending the copies did not grow with the
+instances. The user asked for longer chains per project. Each chain
+now has five changes, mixing new instances with changes that cut
+across them (a new rule for every kind, a fix in every copy), where
+the copies must each be changed and a table or helper once.
+`eval-tasks/level-long.json`, 5 runs per chain:
+
+| project | 1 | 2 | 3 | 4 | 5 |
+|---|---|---|---|---|---|
+| pricing (`shop`) | partner kind | student kind | `Shipping`, a rule per kind that needs the subtotal | reseller kind | `Invoiced`, a rule per kind |
+| lending | magazine kind | map kind | `MaxRenewals` per kind, `Renewable` follows it | ebook kind | `Deposit` per kind |
+| freight | Air checks | Sea checks | zones trim the code, in every copy | a `Valid` check per code | lines trim the code, in every copy |
+
+The control chain makes the five changes, each in its own session;
+the step chain has the preparing session for change 1 first, and no
+other. Each new hidden test (`testdata/shop-*`, `lending-renewals`,
+`-ebook`, `-deposit`, `freight-zone-trim`, `-valid`, `-line-trim`)
+was checked in a scratch copy: it fails before its change and passes
+after a plain one, with every earlier stage's tests still passing.
+
+What counts: each change's cost in both chains, the chain's total,
+and whether the step chain's later sessions still find one place to
+change (and whether a cross-cutting change is one place there and
+several in the control).
+
+Results: `eval-runs/level-long-5`, 165 sessions, $16.23. Two
+tangled-control runs are left out: the harness lost sessions to
+`exec: "claude": executable file not found` (as in
+`level-payback-8`), and the later sessions of a chain that lost one
+fail the earlier stage's tests. One real failure: freight's `Valid`
+prompt did not name package `audit`, and one control session put the
+four functions in `manifests`, which has its own per-code copies
+(the prompt's fault).
+
+Mean cost per change (pricing control: 3 runs; the rest 5):
+
+| change | pricing control | pricing step | lending control | lending step | freight control | freight step |
+|---|---|---|---|---|---|---|
+| preparing | - | $0.136 | - | $0.124 | - | $0.181 |
+| 1 | $0.094 | $0.095 | $0.098 | $0.088 | $0.111 | $0.105 |
+| 2 | $0.112 | $0.089 | $0.098 | $0.091 | $0.100 | $0.095 |
+| 3 | $0.108 | $0.114 | $0.082 | $0.097 | $0.099 | $0.087 |
+| 4 | $0.073 | $0.099 | $0.090 | $0.084 | $0.105 | $0.112 |
+| 5 | $0.069 | $0.087 | $0.084 | $0.092 | $0.120 | $0.114 |
+| changes 1-5 | $0.455 | $0.484 | $0.451 | $0.452 | $0.535 | $0.513 |
+| chain | $0.455 | $0.620 | $0.451 | $0.577 | $0.535 | $0.694 |
+
+Where changes 3-5 went (a subagent graded every session from its
+edit calls; two spot-checked):
+
+- **Lending: the table held, 15 of 15.** A new rule per kind
+  (`MaxRenewals`, `Deposit`) was a table field after the step, and a
+  new switch in the control (10 of 10: the kind knowledge spreads);
+  the ebook kind was one row against a case in each of five switches.
+- **Pricing: the table did not hold.** At `Shipping`, 4 of 5 step
+  sessions coded the kinds outside the table (a switch, or table
+  membership `&& kind != "student"`); two of them then changed two
+  places for reseller, and at `Invoiced` one more bypassed it and
+  said a new kind would miss it. One run kept the design through all
+  five. The control added new functions with their own kind tests,
+  and reseller as a branch in both if-chains.
+- **Freight: the control refactored on its own.** At both trims, 10
+  of 10 control sessions first extracted a shared helper over the
+  four copies and then changed it once; after the step, one change
+  in the existing helper. For `Valid` both arms wrote a helper and
+  four wrappers. Neither design reached `manifests`' own
+  `RoadLine`/`RailLine`, which 3 of 10 line-trim sessions changed one
+  by one.
+- **Cost over five changes: no pay back.** After the step, changes
+  1-5 cost what the control's did (-4% to +6%); the preparing session
+  is never recovered (chains 26-36% dearer). Lines changed are fewer
+  after the step on lending and freight.
+
+So the step buys a design a fresh model then mostly keeps (lending),
+or partly erodes (pricing), and where copies line up the model
+refactors without being asked once a change cuts across them
+(freight). In tokens, a fresh model extends copies or switches as
+cheaply as a table, at these sizes. What it would take to pay: code
+where reading and changing each copy costs much more than here, or
+a measure other than one session's tokens (defects such as the
+`manifests` copies, how far kind knowledge spreads).
