@@ -2092,3 +2092,9 @@ Through the MCP: create_file for the golden cases of both tools
 (written first), add_declaration for `BareComposites`,
 `BracketComposites` and `bracketed`, replace_text for the rest.
 Nothing by hand.
+
+## 2026-10-22: the steps for a signature changed as text
+
+Through the MCP: replace_declaration of the server test (first) and
+of `signatureNote`, add_declaration of `signature`, `signatures` and
+`paramSteps`, replace_text for the docs. Nothing by hand.
