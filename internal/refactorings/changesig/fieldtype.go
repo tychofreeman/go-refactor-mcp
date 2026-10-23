@@ -62,13 +62,31 @@ type fieldChange struct {
 	field    *types.Var
 	key      string
 	old, new types.Type
-	widen    bool     // new is an interface old implements: nothing is converted
-	narrow   bool     // old is an interface new implements: every write must be a new
-	name     string   // new, as the declaring file writes it
-	dropped  []string // the case values a switch on the field lost, "file:line:col value"
+	mode     fieldMode // how its uses follow the new type
+	name     string    // new, as the declaring file writes it
+	dropped  []string  // the case values a switch on the field lost, "file:line:col value"
 	files    *fileSet
 	cannot   []string // uses that cannot follow, "file:line:col: why"
 }
+
+// fieldMode is how the uses of a field follow its new type.
+type fieldMode interface {
+	// write handles v, a value written to the field.
+	write(c *fieldChange, p *packages.Package, v ast.Expr) error
+	// read handles e, a read of the field at path[0], whose position is where.
+	read(c *fieldChange, p *packages.Package, path []ast.Node, e ast.Expr, where string) error
+}
+
+// converting is a new type that holds every old value: uses are converted.
+type converting struct{}
+
+// widening is a new type that is an interface the old one implements:
+// nothing is converted.
+type widening struct{}
+
+// narrowing is a new type that is an interface implementing the old one:
+// every value written must already be one.
+type narrowing struct{}
 
 // Plan checks preconditions and computes the edits.
 func (*ChangeFieldType) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
@@ -112,7 +130,14 @@ func (*ChangeFieldType) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 	if err != nil && !narrow {
 		return nil, refactor.Refusef("%s", strings.Replace(err.Error(), "change_parameter_type", "change_field_type", 1))
 	}
-	c := &fieldChange{ws: ws, field: field, key: keyOf(ws.Fset, field), old: field.Type(), new: newT, widen: widen, narrow: narrow, name: t.typeName(newT), files: newFileEdits(ws)}
+	var mode fieldMode = converting{}
+	switch {
+	case narrow:
+		mode = narrowing{}
+	case widen:
+		mode = widening{}
+	}
+	c := &fieldChange{ws: ws, field: field, key: keyOf(ws.Fset, field), old: field.Type(), new: newT, mode: mode, name: t.typeName(newT), files: newFileEdits(ws)}
 	if err := c.declEdit(declPkg, decl); err != nil {
 		return nil, err
 	}
@@ -269,7 +294,6 @@ func (c *fieldChange) use(p *packages.Package, f *ast.File, id *ast.Ident) error
 		}
 		e, path = path[1].(ast.Expr), path[1:]
 	}
-	info := p.TypesInfo
 	where := c.ws.Position(sel.Sel.Pos())
 	switch u := path[1].(type) {
 	case *ast.AssignStmt:
@@ -282,7 +306,7 @@ func (c *fieldChange) use(p *packages.Package, f *ast.File, id *ast.Ident) error
 				c.cannot = append(c.cannot, where+": is assigned another call's result")
 			case u.Tok == token.ASSIGN:
 				return c.write(p, u.Rhs[i])
-			case c.widen:
+			case types.IsInterface(c.new):
 				c.cannot = append(c.cannot, where+": "+u.Tok.String()+" on an interface")
 			default:
 				return c.write(p, u.Rhs[i])
@@ -290,7 +314,7 @@ func (c *fieldChange) use(p *packages.Package, f *ast.File, id *ast.Ident) error
 			return nil
 		}
 	case *ast.IncDecStmt:
-		if c.widen {
+		if types.IsInterface(c.new) {
 			c.cannot = append(c.cannot, where+": "+u.Tok.String()+" on an interface")
 		}
 		return nil
@@ -301,25 +325,31 @@ func (c *fieldChange) use(p *packages.Package, f *ast.File, id *ast.Ident) error
 		}
 	}
 	// A read.
-	if c.narrow {
-		return c.narrowRead(p, path)
-	}
-	if c.widen {
-		if ok, constants := c.keeps(info, path); ok {
-			for _, k := range constants {
-				if err := c.write(p, k); err != nil {
-					return err
-				}
+	return c.mode.read(c, p, path, e, where)
+}
+
+// read keeps a use that means the same once the field is an interface
+// (a switch, ==, passing it as one, a method of the interface), with the
+// constants compared with it written as write would, and notes the rest.
+func (m widening) read(c *fieldChange, p *packages.Package, path []ast.Node, e ast.Expr, where string) error {
+	if ok, constants := c.keeps(p.TypesInfo, path); ok {
+		for _, k := range constants {
+			if err := c.write(p, k); err != nil {
+				return err
 			}
-			return nil
 		}
-		if callsMethodOf(info, path, c.new) {
-			return nil
-		}
-		c.cannot = append(c.cannot, where+": uses its value as "+types.TypeString(c.old, nil))
 		return nil
 	}
-	if typeIrrelevant(info, path, types.Identical(c.old.Underlying(), c.new.Underlying())) {
+	if callsMethodOf(p.TypesInfo, path, c.new) {
+		return nil
+	}
+	c.cannot = append(c.cannot, where+": uses its value as "+types.TypeString(c.old, nil))
+	return nil
+}
+
+// read converts e back to the old type where its type matters.
+func (m converting) read(c *fieldChange, p *packages.Package, path []ast.Node, e ast.Expr, where string) error {
+	if typeIrrelevant(p.TypesInfo, path, types.Identical(c.old.Underlying(), c.new.Underlying())) {
 		return nil
 	}
 	fe, err := c.files.of(p, e.Pos())
@@ -330,22 +360,32 @@ func (c *fieldChange) use(p *packages.Package, f *ast.File, id *ast.Ident) error
 	return nil
 }
 
-// write converts v, a value written to the field, to its new type,
-// unless it is an untyped constant or the new type is an interface. An
-// untyped constant written to an interface takes its default type, so
-// one whose default is not the old type is converted to the old type.
-// Narrowed, v must already be of the new type.
+// write handles v, a value written to the field, as its mode does.
 func (c *fieldChange) write(p *packages.Package, v ast.Expr) error {
-	switch {
-	case c.narrow:
-		c.hold(p, v)
-		return nil
-	case c.widen && untypedConstant(p.TypesInfo, v):
+	return c.mode.write(c, p, v)
+}
+
+// write notes v unless it is already of the new type, or nil.
+func (m narrowing) write(c *fieldChange, p *packages.Package, v ast.Expr) error {
+	c.hold(p, v)
+	return nil
+}
+
+// write leaves v as it is, unless it is an untyped constant: written to
+// an interface it takes its default type, so one whose default is not the
+// old type is converted to the old type.
+func (m widening) write(c *fieldChange, p *packages.Package, v ast.Expr) error {
+	if untypedConstant(p.TypesInfo, v) {
 		if dt := defaultType(p.TypesInfo, v); dt == nil || !types.Identical(dt, c.old) {
 			return c.convert(p, v, c.old)
 		}
-		return nil
-	case c.widen || untypedConstant(p.TypesInfo, v):
+	}
+	return nil
+}
+
+// write converts v to the new type, unless it is an untyped constant.
+func (m converting) write(c *fieldChange, p *packages.Package, v ast.Expr) error {
+	if untypedConstant(p.TypesInfo, v) {
 		return nil
 	}
 	return c.convert(p, v, c.new)
@@ -374,12 +414,12 @@ func (c *fieldChange) hold(p *packages.Package, v ast.Expr) {
 	}
 }
 
-// narrowRead checks path[0], a read of the field, once the field holds
+// read checks path[0], a read of the field, once the field holds
 // only values of the new type: a switch on it loses the cases none of
 // them matches, and a comparison with such a value, or passing it to a
 // generic function (which would be instantiated with the new type), is
 // noted.
-func (c *fieldChange) narrowRead(p *packages.Package, path []ast.Node) error {
+func (m narrowing) read(c *fieldChange, p *packages.Package, path []ast.Node, _ ast.Expr, where string) error {
 	e := path[0].(ast.Expr)
 	info := p.TypesInfo
 	switch u := path[1].(type) {

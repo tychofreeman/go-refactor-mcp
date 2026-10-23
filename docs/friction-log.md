@@ -2102,3 +2102,15 @@ of `signatureNote`, add_declaration of `signature`, `signatures` and
 ## 2026-10-22: the kind A/B rerun
 
 Docs only, through replace_text. Nothing by hand.
+
+## 2026-10-22: change_field_type's modes into types
+
+Through the MCP, read with inspect only: 39 refactorings in five
+batches. As edits: `write` regrouped by mode (no tool regroups a
+switch of conditions), the interface and types, the dispatch, the
+`mode` field and its setup, two `IsInterface` checks, `info` to
+`p.TypesInfo` in three places and a `nil` argument (no inverse of
+`introduce_parameter`; `p.TypesInfo` refused by `inline_variable` and
+`remove_parameter` as a pointer read), and the doc comments. One
+stale line number of mine after a batch that added declarations
+above it.
