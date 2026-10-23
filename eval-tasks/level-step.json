@@ -1,0 +1,55 @@
+[
+ {
+  "dir": "testdata/shop",
+  "check": "go vet ./... && go test ./...",
+  "name": "design-tangled",
+  "prompt": "The next change to this code will be:\n\n> Add a customer kind \"partner\" (Order.CustomerKind == \"partner\") to pricing.Total: partners pay wholesale's unit price (20% off) but get none of the quantity discounts, and they pay tax as retail customers do (20%, or 18% when the subtotal is over 100000 cents). Other customers' prices do not change.\n\nDo not make that change in this session; prepare the code for it. First write down, in your reply, what the change adds a new instance of (a new kind, case, channel, ...) or which rule it changes, and every place in the code that already knows about the existing instances or the rule (inspect's `names` and `uses` find them). The change is easy when the new instance is one new place (one new type, function, case or entry that holds everything about it), or the rule is in one place. If it would not be, refactor, without changing what the code does and keeping the tests passing, until it would. If it already would be, change nothing.",
+  "then": [
+   {
+    "prompt": "Add a customer kind \"partner\" (Order.CustomerKind == \"partner\") to pricing.Total: partners pay wholesale's unit price (20% off) but get none of the quantity discounts, and they pay tax as retail customers do (20%, or 18% when the subtotal is over 100000 cents). Other customers' prices do not change.",
+    "tests": "testdata/design-tangled",
+    "check": "go vet ./... && go test ./..."
+   }
+  ]
+ },
+ {
+  "dir": "testdata/shop",
+  "check": "go vet ./... && go test ./...",
+  "name": "design-duplication",
+  "prompt": "The next change to this code will be:\n\n> The exports in package export (CSV, JSON and Markdown) leave out pending orders. They must also leave out cancelled orders, and list the orders by customer name, then by ID, instead of by ID alone.\n\nDo not make that change in this session; prepare the code for it. First write down, in your reply, what the change adds a new instance of (a new kind, case, channel, ...) or which rule it changes, and every place in the code that already knows about the existing instances or the rule (inspect's `names` and `uses` find them). The change is easy when the new instance is one new place (one new type, function, case or entry that holds everything about it), or the rule is in one place. If it would not be, refactor, without changing what the code does and keeping the tests passing, until it would. If it already would be, change nothing.",
+  "then": [
+   {
+    "prompt": "The exports in package export (CSV, JSON and Markdown) leave out pending orders. They must also leave out cancelled orders, and list the orders by customer name, then by ID, instead of by ID alone.",
+    "tests": "testdata/design-duplication",
+    "check": "go vet ./... && go test ./..."
+   }
+  ]
+ },
+ {
+  "name": "notify-optout",
+  "dir": "testdata/notify",
+  "check": "go vet ./... && go test ./...",
+  "prompt": "The next change to this code will be:\n\n> Users can opt out of channels. Add a field OptOut map[string]bool to notify.User, keyed by a channel's name (what Notifier.Name returns). Broadcast does not send on a channel the user opted out of, and that user's summary line lists only the channels it sent on.\n\nDo not make that change in this session; prepare the code for it. First write down, in your reply, what the change adds a new instance of (a new kind, case, channel, ...) or which rule it changes, and every place in the code that already knows about the existing instances or the rule (inspect's `names` and `uses` find them). The change is easy when the new instance is one new place (one new type, function, case or entry that holds everything about it), or the rule is in one place. If it would not be, refactor, without changing what the code does and keeping the tests passing, until it would. If it already would be, change nothing.",
+  "then": [
+   {
+    "prompt": "Users can opt out of channels. Add a field OptOut map[string]bool to notify.User, keyed by a channel's name (what Notifier.Name returns). Broadcast does not send on a channel the user opted out of, and that user's summary line lists only the channels it sent on.",
+    "tests": "testdata/notify-optout",
+    "check": "go vet ./... && go test ./..."
+   }
+  ]
+ },
+ {
+  "name": "tp-lazygit-stack-order",
+  "dir": "third-party/testdata/clones/jesseduffield_lazygit",
+  "rev": "a1f11020545a",
+  "check": "go build ./... && go test -count=1 ./pkg/commands/git_commands/",
+  "prompt": "The next change to this code will be:\n\n> With the branch sort order `date`, branches are sorted by committer date. Rebasing a stack of branches gives all their tip commits the same committer date, and git then falls back to alphabetical order, so the stack shows up scrambled. Within each group of branches that share a committer date, order them so that a branch comes before the branches it is based on (its ancestors), and otherwise keep their current order. Do this for local branches (`git.localBranchSortOrder`) and for remote branches (`git.remoteBranchSortOrder`). The checked-out branch stays first, and groups with different dates stay in date order.\n\nDo not make that change in this session; prepare the code for it. First write down, in your reply, what the change adds a new instance of (a new kind, case, channel, ...) or which rule it changes, and every place in the code that already knows about the existing instances or the rule (inspect's `names` and `uses` find them). The change is easy when the new instance is one new place (one new type, function, case or entry that holds everything about it), or the rule is in one place. If it would not be, refactor, without changing what the code does and keeping the tests passing, until it would. If it already would be, change nothing. Keep the existing functions, types and fields by their current names and signatures: tests you cannot see use them.",
+  "then": [
+   {
+    "prompt": "With the branch sort order `date`, branches are sorted by committer date. Rebasing a stack of branches gives all their tip commits the same committer date, and git then falls back to alphabetical order, so the stack shows up scrambled. Within each group of branches that share a committer date, order them so that a branch comes before the branches it is based on (its ancestors), and otherwise keep their current order. Do this for local branches (`git.localBranchSortOrder`) and for remote branches (`git.remoteBranchSortOrder`). The checked-out branch stays first, and groups with different dates stay in date order.\n\nTests you cannot see will check this. They use the existing functions, types and fields by their current names and signatures, so keep those as they are; refactor around them as you need.",
+    "tests": "third-party/testdata/tests/tp-lazygit-stack-order",
+    "check": "go build ./... && go test -count=1 -run '^TestIntegration$/^branch$/^sort_local_branches_in_stack_order$' ./pkg/integration/clients/ && go test -count=1 -run '^TestIntegration$/^branch$/^sort_remote_branches_in_stack_order$' ./pkg/integration/clients/"
+   }
+  ]
+ }
+]
