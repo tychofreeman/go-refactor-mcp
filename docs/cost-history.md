@@ -620,11 +620,18 @@ references written before the run, and the transcripts graded.
 | level-control | refactor when needed | $1.19 · 2.12M · 8/8 |
 | level-design | + "what would make it hard?" | $1.01 · 1.63M · 7/8 (1 harness failure) |
 | level-level | + name the concept and where it is known | $1.21 · 1.99M · 8/8 |
+| level-axis | + name the axis: the new instance one new place | $1.17 · 1.91M · 8/8 |
+| level-step | the same words as a session of its own before the feature | $1.89 · 2.85M · 16/16 sessions |
 
 Only the level arm refactored before adding a customer kind, but it
 gave each pricing rule a home, not each kind; where the right home was
 a function (the exports' shared filter) every arm found it; no arm
 refactored on the control; on lazygit the question was skipped.
+Naming the axis in CLAUDE.md did less (no refactoring on the kind:
+a new `else if` passed as "one new case"). The same words as a
+session of their own, before a new session makes the feature, made
+both runs build a table of rules per kind, the reference's design;
+the feature session then added one entry.
 
 ## What made the difference
 

@@ -2133,3 +2133,11 @@ of a run count with sed. Seen in the runs:
 `fold` did not reach a copy whose filter is written the other way
 round (`!= Pending` around the append against `== Pending` with
 `continue`), so all six runs replaced the copies with replace_statements.
+
+## 2026-10-23: the axis, and the concept as a step
+
+The arm's instructions and the two-session task file through
+create_file, the results through replace_text. Nothing by hand. Seen
+in the runs: no refactoring turns if-chains on a kind into a table of
+rules per kind; both preparing sessions did it with
+replace_declaration and the tests.

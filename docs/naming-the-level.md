@@ -126,3 +126,64 @@ fold JSON's copy onto the extracted function (it writes the filter as
 `!= order.Pending` around the append, CSV as `== ... continue`), so
 all six runs replaced the copies with `replace_statements`, an
 edit, where a refactoring should reach.
+
+## The axis, and the concept as a step of its own (Oct 23)
+
+The question again, naming the axis: what the change adds a new
+instance of (a kind, case, channel) or which rule it changes, and
+"the change is easy when the new instance is one new place (one new
+type, function, case or entry that holds everything about it), or the
+rule is in one place". The same words two ways:
+
+- `axis`: in CLAUDE.md (`eval-tasks/claude-md-axis-question`), on
+  `level-question.json`, as the level arm was.
+- `step`: the control's CLAUDE.md, and each task in two sessions
+  (`eval-tasks/level-step.json`). The first is told the next change
+  and not to make it, but to write down the concept and its places
+  and refactor until the change would be one new place; its check is
+  the existing tests. The second, a new session in the code the first
+  left, gets the feature prompt alone and the hidden tests.
+
+`eval-runs/level-axis` ($1.17, 8/8) and `eval-runs/level-step` ($1.89
+for 16 sessions, 16/16), 2 runs each.
+
+| task | axis | step: preparing session | step: feature session |
+|---|---|---|---|
+| design-tangled | 0/2 refactored: "one new branch in the price chain" | **2/2 a table of rules per kind** ("a kind is defined by two things, a unit price after discounts and a tax rule"), `Total` looks up the kind's rule | 2/2 "already easy": one price function and one map entry |
+| design-duplication | 2/2 the shared function | 2/2 the shared function, "it changes one rule" | 2/2 changed the function |
+| notify-optout | 0/2 refactored | 0/2 changed: "Broadcast is the only place" | 2/2 one `if` |
+| tp-lazygit-stack-order | 0/2, a new file both loaders call | 0/2 changed: "it changes one rule", "already easy" | 2/2 a new file both loaders call |
+
+- **As its own step, the question reached the design.** Both
+  preparing sessions on design-tangled made what the reference names:
+  one home per kind, holding its price and its tax. Nothing else
+  run in this experiment did; the feature session that followed found
+  the change "already easy" and added one entry. This is "make the
+  change easy, then make the easy change" with the two halves in
+  separate sessions, and it is the first time a fresh model made the
+  change easy at the design level here.
+- **In CLAUDE.md, naming the axis did less than naming the level.**
+  The axis arm did not refactor on design-tangled: a new `else if` is
+  "one new case" by the question's own words, and the tax rule already
+  sent partners to retail. The wording let the cheapest reading pass.
+  The level arm had at least extracted the two rules.
+- **No false positives, and lazygit is still read as one rule.** The
+  step's preparing sessions changed nothing where nothing was needed,
+  and said so with the places they had looked at. On lazygit they
+  judged the change one new rule and the code already easy; the PR's
+  preparatory moves (the ahead-behind helpers, loading remote
+  branches as one list) serve how the rule is computed, which the
+  question does not ask about.
+- **Cost:** the step arm's two sessions cost $0.11-0.30 a task
+  together, about one and a half single sessions; the lazygit
+  preparing session cost $0.10 and changed nothing.
+- The preparing sessions on design-tangled rewrote `Total` with
+  `replace_declaration`, an edit, with the tests as the proof: no
+  refactoring makes if-chains on a kind into a table of rules.
+
+What the step does that an instruction does not: the session has
+nothing to do but the design question, so it cannot be skipped and
+is not answered at the level of the cheapest edit. The next thing to
+learn is whether it holds over more runs and other shapes (the
+lending kinds, the freight carriers), and whether a step like it
+belongs in the tools' instructions or in how a task is given.
