@@ -1,0 +1,34 @@
+[
+  {
+    "dir": "testdata/shop",
+    "check": "go vet ./... && go test ./...",
+    "name": "payback-control",
+    "tests": "testdata/design-tangled",
+    "prompt": "Add a customer kind \"partner\" (Order.CustomerKind == \"partner\") to pricing.Total: partners pay wholesale's unit price (20% off) but get none of the quantity discounts, and they pay tax as retail customers do (20%, or 18% when the subtotal is over 100000 cents). Other customers' prices do not change.",
+    "then": [
+      {
+        "prompt": "Add a customer kind \"student\" to pricing.Total: students pay the retail price, with the retail quantity discounts, and then 15% off that price (price * 85 / 100, in whole cents); their tax is 10%. Other customers' prices do not change.",
+        "tests": "testdata/design-tangled-2",
+        "check": "go vet ./... && go test ./..."
+      }
+    ]
+  },
+  {
+    "dir": "testdata/shop",
+    "check": "go vet ./... && go test ./...",
+    "name": "payback-step",
+    "prompt": "The next change to this code will be:\n\n> Add a customer kind \"partner\" (Order.CustomerKind == \"partner\") to pricing.Total: partners pay wholesale's unit price (20% off) but get none of the quantity discounts, and they pay tax as retail customers do (20%, or 18% when the subtotal is over 100000 cents). Other customers' prices do not change.\n\nDo not make that change in this session; prepare the code for it. First write down, in your reply, what the change adds a new instance of (a new kind, case, channel, ...) or which rule it changes, and every place in the code that already knows about the existing instances or the rule (inspect's `names` and `uses` find them). The change is easy when the new instance is one new place (one new type, function, case or entry that holds everything about it), or the rule is in one place. If it would not be, refactor, without changing what the code does and keeping the tests passing, until it would. If it already would be, change nothing.",
+    "then": [
+      {
+        "prompt": "Add a customer kind \"partner\" (Order.CustomerKind == \"partner\") to pricing.Total: partners pay wholesale's unit price (20% off) but get none of the quantity discounts, and they pay tax as retail customers do (20%, or 18% when the subtotal is over 100000 cents). Other customers' prices do not change.",
+        "tests": "testdata/design-tangled",
+        "check": "go vet ./... && go test ./..."
+      },
+      {
+        "prompt": "Add a customer kind \"student\" to pricing.Total: students pay the retail price, with the retail quantity discounts, and then 15% off that price (price * 85 / 100, in whole cents); their tax is 10%. Other customers' prices do not change.",
+        "tests": "testdata/design-tangled-2",
+        "check": "go vet ./... && go test ./..."
+      }
+    ]
+  }
+]

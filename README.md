@@ -1169,10 +1169,14 @@ hand or a tool got in the way.
       About $0.25 a task for the step's two sessions (Oct 23).
     - *Other shapes*: *Done*: `lending-magazine` and `freight-air`
       (`eval-tasks/level-question-2.json`, `level-step-2.json`).
-    - *Does it pay back?* Give the step arm a chain's second change
-      (design-tangled's "student" kind, `chain-tangled` in
-      `eval-tasks/ab.json`) and compare the second change's cost
-      with and without the preparing session.
+    - *Does it pay back?* *Done* on design-tangled
+      (`eval-tasks/level-payback.json`, 8 runs): the second change
+      (student) was one table entry in 7 of 7 step runs and cost 11%
+      less than without the step, but the preparing session cost
+      twelve times that saving. Not in tokens on a module this
+      small. Next for it: a second change on `lending-magazine` or
+      `freight-air`, where the control's copies grow with each
+      instance.
     - *How the rule is computed*: on lazygit the step judged the
       change "one rule, already easy", while the PR first reshaped how
       the loaders query refs. Try a step wording that also asks where

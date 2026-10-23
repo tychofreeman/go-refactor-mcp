@@ -338,6 +338,10 @@ results are in `docs/cost-history.md`.
   with edits and the tests, not refactorings: the tools lack "switches
   on a kind into a table" and "functions differing in a field into one
   taking a selector". What comes next: README roadmap item 26.
+  Over a second change (student, 8 runs): after the step it was one
+  table entry, 11% cheaper; without it, a branch and a shared tax
+  condition. The preparing session costs twelve times that saving, so
+  on a small module the step buys design, not tokens.
 
 - **Loops and containers** (2026-10-20): the user asked for
   refactorings that convert between kinds of loop, and edits that make

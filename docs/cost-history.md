@@ -626,6 +626,7 @@ references written before the run, and the transcripts graded.
 | level-control-5 | level-control, 5 runs | $2.82 · 4.42M · 20/20 |
 | level-step2-5 | the step on lending-magazine and freight-air | $2.49 · 3.48M · 20/20 sessions |
 | level-control2-5 | the control on them | $1.05 · 1.23M · 10/10 |
+| level-payback-8 | a second change (student) after the step, against the chain without it (8 runs; one step run lost to the harness) | $4.08 · 6.87M · 37/40 (the 3 lost sessions of step run 1) |
 
 Only the level arm refactored before adding a customer kind, but it
 gave each pricing rule a home, not each kind; where the right home was
@@ -640,7 +641,12 @@ shapes (a lending kind, a freight route) it held: the preparing
 session made the reference design in 15 of 15 runs where it was in
 the way, the control in 0 of 15, with no false refactoring. The
 feature session costs what the control does; the preparing session
-is on top (1.5-2.6 times a task).
+is on top (1.5-2.6 times a task). On a second change (student, after
+partner) the step's session added one table entry in 7 of 7 runs and
+cost 11% less than the control's (22% fewer input tokens), whose runs
+added a branch and shared staff's tax condition; the preparing
+session ($0.148) is not paid back by that ($0.012) on this small
+module.
 
 ## What made the difference
 
