@@ -203,6 +203,11 @@ results are in `docs/cost-history.md`.
   (sending the values through the type, deleting the case) is an
   argued edit either way, so it becomes a recipe with `inspect`
   `uses` for the argument, and a tool only if a fresh model fails it.
+  Narrowing the field and deleting a case were then built (#283,
+  #284), and the whole task ran end to end through the tools (74
+  derived steps, about 30 lines by hand). The recipe arm for a fresh
+  model is `eval-tasks/claude-md-kind-recipe`; its example is shapes,
+  not lending, so the task stays out of the instructions.
 
 - **Loops and containers** (2026-10-20): the user asked for
   refactorings that convert between kinds of loop, and edits that make

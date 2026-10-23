@@ -151,6 +151,35 @@ which `Book{}` passes.
   interface method).
 - `uses` of a type lists receivers and literals as reads: noise.
 
+**The whole task** (`lending-kinds`, on the same copy, after
+`change_field_type` narrowing and case deletion were built): `Label`
+reshaped first, while only `Book` implemented `Kind` (`add_parameter`
+of `title` on `Kind.Label`, `Book.Label` made to use it, then
+`remove_parameter` of `it`); `DVD` and `Atlas` declared, atlas's
+`Renewable` given the default's body as a case (`add_case`), then the
+other two kinds' cases into methods (44 refactorings, two batches);
+`kindOf`, the comparisons in `desk` and `notices` and the tests sent
+through the types; `Import` keeps the kind names for its message, and
+`kindOf` returns `Kind` (nil for an unknown name); narrowing the field
+deleted the ten dead cases in one step; the five switches left empty
+deleted with `replace_statements`. The hidden test passes. In all, 74
+derived steps; by hand about 30 distinct lines (three type
+declarations, `kindOf`, 12 expressions, an added case, 3 lines of
+`Import`, 5 empty switches deleted), against 375 lines over 4 runs
+(about 94 a run) in the algebraic arm of reading-and-deriving step 3.
+What it met:
+- `replace_expression` of `"atlas"` with `lending.Atlas{}` in an `if`
+  condition wrote a composite literal the parser takes for the `if`'s
+  block; it must be parenthesized (a bug).
+- `introduce_parameter` refuses a method that implements an interface;
+  through the interface method it would be a proof (every call passes
+  the expression), so `Book.Label`'s body was an edit.
+- Narrowing leaves a switch with no cases; it could delete one whose
+  tag cannot panic. The guard `it.Kind.(Kind)` stays.
+- A kind with no case of its own (atlas in `Renewable`) needs one
+  equal to the default before its method can be extracted: `add_case`,
+  an edit that a proof could make.
+
 ## The user's principle
 
 Not every operation will exist. Use the operations there are; where
