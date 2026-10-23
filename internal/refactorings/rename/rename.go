@@ -39,7 +39,7 @@ func New() *Rename { return &Rename{} }
 func (*Rename) Name() string { return "rename" }
 
 func (*Rename) Description() string {
-	return `Rename a variable, constant, function, type, type parameter, struct field or method, and every reference to it in the workspace: renaming the field nm of User to Name changes the declaration, every u.nm and User{nm: x}, and a doc comment that starts with the old name; other comments that mention it are listed in a note. Renaming an embedded field (Member.Address to Home) makes it the named field Home Address, and what reached through it names it: m.City becomes m.Home.City.
+	return `Rename a variable, constant, function, type, type parameter, struct field or method, and every reference to it in the workspace: renaming the field nm of Plant to Name changes the declaration, every p.nm and Plant{nm: x}, and a doc comment that starts with the old name; other comments that mention it are listed in a note. Renaming an embedded field (Bed.Soil to Ground) makes it the named field Ground Soil, and what reached through it names it: b.PH becomes b.Ground.PH.
 Identify the symbol by file, line and its current name (column if the name is on the line twice with different meanings); for a local, function ("Name" or "Type.Method") can take the place of line and stays valid after edits.
 Refuses, saying why: a new name that would clash with or shadow another, an exported name used in another package that would become unexported, a method whose new name would change which interfaces its type implements, an embedded field whose methods give a type an interface or are reached by a method expression, a symbol declared outside the workspace.`
 }

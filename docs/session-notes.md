@@ -119,6 +119,20 @@ results are in `docs/cost-history.md`.
   ("Refuses, saying why: ..."). Measured on freight-xl (cost-history
   9): about the same cost, half the refused calls, no tool lost.
 
+- **Examples come from no eval task** (2026-10-22): the tool
+  descriptions and `inspect`'s examples had grown out of the eval
+  tasks' code (lending's `"book"`/`Book{}` and `Member.Address` to
+  `Home`, notify's `e.Sent` and `Batch{Users, Message}`, `UserID`), so
+  an A/B run's model could find a task's answer in a tool's example
+  (cost-history 10: the control arm took the kind derivation the
+  descriptions named). They now use one garden domain (`Plant`,
+  `Species`, `Bed`, `Sprinkler`), each checked with the CLI, and
+  `TestExamplesAvoidEvalTasks` fails when a name or string of a seeded
+  eval module appears in what the server publishes. Runs before this
+  saw the old examples. The arms' own instruction files are
+  deliberate (`claude-md-learned` and `-derivations` cite notify's
+  `Batch`).
+
 - **Names and results say the intent** (2026-10-22, the user, on
   `add_interface_guard`, renamed `prepare_switch_for_types`): a
   tool's name, description and result say what the step is for, not

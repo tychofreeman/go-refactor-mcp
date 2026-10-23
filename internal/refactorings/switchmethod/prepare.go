@@ -26,12 +26,12 @@ func NewPrepareForTypes() *PrepareForTypes { return &PrepareForTypes{} }
 func (*PrepareForTypes) Name() string { return "prepare_switch_for_types" }
 
 func (*PrepareForTypes) Description() string {
-	return `Prepare a switch on a value for its cases to move into types one at a time, each case becoming the method of a type that implements an interface: a value that implements the interface runs its method, and the switch handles the rest. No type implements it yet, so nothing changes until a case moves. With interface Kind and method Days,
-  func Days(it Item) int { switch it.Kind { case "book": return 21; case "dvd": return 7 }; return 0 }
+	return `Prepare a switch on a value for its cases to move into types one at a time, each case becoming the method of a type that implements an interface: a value that implements the interface runs its method, and the switch handles the rest. No type implements it yet, so nothing changes until a case moves. With interface Species and method Water,
+  func Water(p Plant) int { switch p.Species { case "fern": return 3; case "cactus": return 1 }; return 0 }
 becomes
-  type Kind interface { Days() int }
-  func Days(it Item) int { if k, ok := it.Kind.(Kind); ok { return k.Days() }; switch it.Kind { ... }; return 0 }
-The switch's tag must be an interface (change_field_type to any first). The interface is declared before the function, or gets the method when it exists. The variables the cases use become the method's parameters. Every case must return, or none (then the switch goes in the else). A case of several values (case "book", "dvd":) is split into a case for each, with a copy of the body, so that each moves alone.
+  type Species interface { Water() int }
+  func Water(p Plant) int { if s, ok := p.Species.(Species); ok { return s.Water() }; switch p.Species { ... }; return 0 }
+The switch's tag must be an interface (change_field_type to any first). The interface is declared before the function, or gets the method when it exists. The variables the cases use become the method's parameters. Every case must return, or none (then the switch goes in the else). A case of several values (case "fern", "cactus":) is split into a case for each, with a copy of the body, so that each moves alone.
 Identify the switch by file and line, or by function when it is that function's only switch.
 Refuses, saying why: a type that already implements the interface with the method, a case that leaves other than by return or assigns a variable it uses (it could not become a method), a case of several values that declares a label or a type (its body is copied), a tag that would be evaluated again with another value.`
 }

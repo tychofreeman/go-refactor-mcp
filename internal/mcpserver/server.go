@@ -116,8 +116,8 @@ func (s *Server) MCP() *mcp.Server {
 - file + function ("Name" or "Type.Method"): that function's source.
 - file + start_line/end_line: those lines.
 - targets: several of these in one call, e.g. [{"file": "a.go", "function": "F"}, {"file": "b.go", "start_line": 10, "end_line": 30}].
-- names: declarations by name, wherever in the module they are, without file: functions, methods, types, variables and constants, e.g. ["Settle", "Ledger.Post", "Policy"]. A name declared in several packages is refused with where each is: qualify it as "pkg.Name".
-- uses: how each use treats something, before changing what it holds or means: every use of a field, function, method, variable or constant in the module, found by the type checker, under what is done with it (switch on it, compared, asserted, written, passed as an interface, called, read), each with its line, e.g. ["Item.Kind"] lists "compared (2):  desk/desk.go:85  l.Item.Kind == \"atlas\"" and the switches with their cases.`,
+- names: declarations by name, wherever in the module they are, without file: functions, methods, types, variables and constants, e.g. ["Water", "Bed.Plant", "Schedule"]. A name declared in several packages is refused with where each is: qualify it as "pkg.Name".
+- uses: how each use treats something, before changing what it holds or means: every use of a field, function, method, variable or constant in the module, found by the type checker, under what is done with it (switch on it, compared, asserted, written, passed as an interface, called, read), each with its line, e.g. ["Plant.Species"] lists "compared (2):  garden/bed.go:85  p.Species == \"cactus\"" and the switches with their cases.`,
 		InputSchema: json.RawMessage(`{
   "type": "object",
   "properties": {

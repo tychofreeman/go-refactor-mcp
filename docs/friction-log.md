@@ -2118,3 +2118,9 @@ above it.
 ## 2026-10-22: reasoning from the highest abstraction
 
 Docs only, through replace_text. Nothing by hand.
+
+## 2026-10-22: examples from no eval task
+
+Through the MCP: add_declaration for the test (first), replace_text
+for the descriptions and the docs. Nothing by hand. The new examples
+were run with the CLI on a scratch garden module.

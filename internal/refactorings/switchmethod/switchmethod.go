@@ -32,13 +32,13 @@ func New() *SwitchToMethod { return &SwitchToMethod{} }
 func (*SwitchToMethod) Name() string { return "type_switch_to_method" }
 
 func (*SwitchToMethod) Description() string {
-	return `Turn a type switch into a method of each type it switches on: each case's body becomes that type's method, the interface gets the method, and the switch becomes one call. With method label,
-  func Label(it Item) string { switch k := it.Kind.(type) { case Book: return it.Title; case DVD: return "DVD " + k.Name(it.Title) }; return it.Title }
+	return `Turn a type switch into a method of each type it switches on: each case's body becomes that type's method, the interface gets the method, and the switch becomes one call. With method care,
+  func Care(p Plant) string { switch k := p.Species.(type) { case Fern: return p.Name; case Cactus: return k.Note(p.Name) }; return p.Name }
 becomes
-  func Label(it Item) string { if it.Kind != nil { return it.Kind.label(it) }; return it.Title }
-  func (Book) label(it Item) string { return it.Title }
-  func (k DVD) label(it Item) string { return "DVD " + k.Name(it.Title) }
-and Kind gets label(it Item) string. The variables a case uses become parameters, the switch's variable (k) the receiver; case nil (or default) stays behind the nil check. Every case must return, or none.
+  func Care(p Plant) string { if p.Species != nil { return p.Species.care(p) }; return p.Name }
+  func (Fern) care(p Plant) string { return p.Name }
+  func (k Cactus) care(p Plant) string { return k.Note(p.Name) }
+and Species gets care(p Plant) string. The variables a case uses become parameters, the switch's variable (k) the receiver; case nil (or default) stays behind the nil check. Every case must return, or none.
 Identify the switch by file and line, or by function when it is that function's only type switch; method is the new method's name.
 Refuses, saying why: a type of the module that implements the interface without a case, a case of several types or of a type of another package, a case that assigns a variable it uses or leaves the case (break, continue, goto, defer), a method name a type or the interface already has.`
 }
