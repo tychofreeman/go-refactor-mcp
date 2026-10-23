@@ -330,6 +330,7 @@ results are in `docs/cost-history.md`.
   refactoring; lazygit was again judged "one rule, already easy".
   So make-the-change-easy works for a fresh model when it is the
   whole task of a session, not a clause of the instructions.
+  What comes next, with the commands: README roadmap item 26.
 
 - **Loops and containers** (2026-10-20): the user asked for
   refactorings that convert between kinds of loop, and edits that make

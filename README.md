@@ -1145,6 +1145,51 @@ hand or a tool got in the way.
     Next: `refactor-tokens` reports the tools' overhead per run
     (schema characters loaded, ToolSearch turns), so a run shows when
     it starts to eat the gain.
+26. **The design question as a step of its own** (the user, 2026-10-23):
+    a fresh model extends what is there while making a change, though
+    asked about the design alone it sees what is in the way (session
+    notes, "Would a fresh model recognize it?"). Of the ways tried,
+    only a session whose whole task is the question (told the next
+    change, not to make it, and to refactor until the change would be
+    one new place) refactored at the design level: on `design-tangled`
+    both runs built a table of rules per kind, and the feature session
+    then added one entry (`docs/naming-the-level.md`, cost-history
+    11, PRs #297-#299). Two runs per task, so next, in order:
+    - *Repeat it with more runs*: `level-step` and the `level-control`
+      baseline at 4-6 runs per task, to see whether 2/2 holds:
+
+          GOTOOLCHAIN=go1.27.3 go run ./cmd/refactor-ab -model sonnet \
+            -arms hybrid -runs 5 -tasks eval-tasks/level-step.json \
+            -claude-md eval-tasks/claude-md-refactor-when-needed \
+            -out eval-runs/level-step-5
+          (the same with -tasks eval-tasks/level-question.json for
+          the control)
+
+      About $0.25 a task for the step's two sessions (Oct 23).
+    - *Other shapes*: add tasks to both files whose prompts ask for a
+      feature and do not name the design: a new kind on `lending-xl`
+      (kinds are strings switched on in several functions), a new
+      carrier on `freight-xl`. Write the reference design for each in
+      `docs/naming-the-level.md` before running. Validate that the
+      hidden tests fail at the start and pass with a reference
+      solution.
+    - *Does it pay back?* Give the step arm a chain's second change
+      (design-tangled's "student" kind, `chain-tangled` in
+      `eval-tasks/ab.json`) and compare the second change's cost
+      with and without the preparing session.
+    - *How the rule is computed*: on lazygit the step judged the
+      change "one rule, already easy", while the PR first reshaped how
+      the loaders query refs. Try a step wording that also asks where
+      the new rule's inputs come from, and keep a task where the
+      honest answer is "already easy" (`notify-optout`) to catch
+      false refactoring.
+    - *Where the step lives*, once it holds: in how a task is given
+      (two prompts), in the instructions as "prepare in a subagent
+      first", or in the server's instructions. Decide with the user.
+    - Gaps the runs showed: no refactoring makes if-chains on a kind
+      into a table of rules per kind (both preparing sessions used
+      `replace_declaration` and the tests); `fold` does not reach a
+      copy whose condition is inverted (item 23).
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
 candidates and the evidence for each, gathered from the friction log.
