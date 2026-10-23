@@ -170,7 +170,7 @@ declarations, `kindOf`, 12 expressions, an added case, 3 lines of
 What it met:
 - `replace_expression` of `"atlas"` with `lending.Atlas{}` in an `if`
   condition wrote a composite literal the parser takes for the `if`'s
-  block; it must be parenthesized (a bug).
+  block; it must be parenthesized (a bug, fixed: it now is).
 - `introduce_parameter` refuses a method that implements an interface;
   through the interface method it would be a proof (every call passes
   the expression), so `Book.Label`'s body was an edit.

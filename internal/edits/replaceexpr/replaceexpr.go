@@ -113,7 +113,7 @@ func (*ReplaceExpression) Plan(ws *workspace.Workspace, raw json.RawMessage) (*r
 	var es []edit.TextEdit
 	for _, t := range targets {
 		text := strings.TrimSpace(a.New)
-		if path := analysis.PathTo(file, t); len(path) > 1 && analysis.NeedsParens(newExpr, path[1], t) {
+		if path := analysis.PathTo(file, t); len(path) > 1 && (analysis.NeedsParens(newExpr, path[1], t) || analysis.InControlHeader(newExpr, path)) {
 			text = "(" + text + ")"
 		}
 		off := ws.Fset.Position(t.Pos()).Offset

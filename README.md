@@ -1072,7 +1072,9 @@ hand or a tool got in the way.
       - The whole task end to end with the CLI: 74 derived steps,
         about 30 lines by hand, hidden test passing
         (`docs/derivations.md` section 6). Gaps it met: parentheses
-        for a composite literal in an `if` (`replace_expression`),
+        for a composite literal in an `if` (`replace_expression`;
+        *Done*: it uses `analysis.InControlHeader`, as
+        `inline_variable` did),
         `introduce_parameter` through an interface method, narrowing
         leaving empty switches, a case equal to the default.
       - A fresh model on the recipe: `eval-tasks/claude-md-kind-recipe`

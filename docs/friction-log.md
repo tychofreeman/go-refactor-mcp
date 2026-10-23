@@ -2075,3 +2075,9 @@ body, 3 comparisons, 8 test literals), `case "atlas": return false`,
 3 lines of `Import`, and 5 empty switches deleted. One refusal from a
 bug: `replace_expression` left `lending.Atlas{}` unparenthesized in
 an `if` condition, which does not parse.
+
+## 2026-10-22: replace_expression parenthesizes a composite literal in a header
+
+Through the MCP: create_file for the golden case (written first),
+replace_text for the fix (a call of `analysis.InControlHeader`, which
+`inline_variable` already used) and the docs. Nothing by hand.
