@@ -606,6 +606,26 @@ within noise. What is left is mostly `replace_text` old found twice
 (`Kind: "dvd"` on two test lines, 5 refusals in 8 runs) and
 malformed batch JSON (5), neither the tools' doing.
 
+## 11. Naming the level (Oct 23)
+
+Whether an instruction that names the level of the design (a concept
+and every place that knows it) makes a fresh model refactor at that
+level before a feature. Hybrid arm, three CLAUDE.md variants on
+`claude-md-refactor-when-needed`, four tasks (`level-question.json`),
+2 runs each; `docs/naming-the-level.md` has the question, the
+references written before the run, and the transcripts graded.
+
+| Run | Instruction | cost · input · passed |
+|---|---|---|
+| level-control | refactor when needed | $1.19 · 2.12M · 8/8 |
+| level-design | + "what would make it hard?" | $1.01 · 1.63M · 7/8 (1 harness failure) |
+| level-level | + name the concept and where it is known | $1.21 · 1.99M · 8/8 |
+
+Only the level arm refactored before adding a customer kind, but it
+gave each pricing rule a home, not each kind; where the right home was
+a function (the exports' shared filter) every arm found it; no arm
+refactored on the control; on lazygit the question was skipped.
+
 ## What made the difference
 
 - **Smaller results** (#75, rename locations): the largest single win when

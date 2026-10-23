@@ -949,6 +949,11 @@ hand or a tool got in the way.
     - Found on the way, in `cmd/refactor-ab`: a run whose hidden tests
       could not be copied in ("copying the tests in" error) was
       counted as passed; it should count as failed or unfinished.
+    - Open (2026-10-23, `docs/naming-the-level.md`): `fold` does not
+      fold a copy whose condition is written the other way round
+      (`if o.Status != P { list = append(list, o) }` onto
+      `if o.Status == P { continue }; list = append(list, o)`), so
+      every run replaced such copies by an edit.
 24. **Does deriving let the model read less?** (the user, 2026-10-22):
     the user's hypothesis that a model thinking algebraically needs to
     read much less, perhaps only a call tree's names, and that this goes

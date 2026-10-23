@@ -313,6 +313,15 @@ results are in `docs/cost-history.md`.
   still asks `types.IsInterface(c.new)` itself, each mode re-parses a
   use's parent node, and the mode is chosen from
   `checkConversion`'s error.
+  Naming the level (2026-10-23, A/B, `docs/naming-the-level.md`,
+  cost-history 11): an instruction to name the concept a change
+  touches and every place that knows it made the model state the
+  concept and refactor where the generic question did not (a new
+  customer kind), but it gave each rule a home, not each kind: the
+  axis the code is already cut along. No false refactoring on an
+  additive task; on lazygit the instruction was skipped. Next to
+  try: name the axis (the new instance should be one new place), and
+  make the concept a step of its own.
 
 - **Loops and containers** (2026-10-20): the user asked for
   refactorings that convert between kinds of loop, and edits that make
