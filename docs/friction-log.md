@@ -2141,3 +2141,7 @@ create_file, the results through replace_text. Nothing by hand. Seen
 in the runs: no refactoring turns if-chains on a kind into a table of
 rules per kind; both preparing sessions did it with
 replace_declaration and the tests.
+
+## 2026-10-23: the next steps for the design step
+
+README and session notes through replace_text. Nothing by hand.
