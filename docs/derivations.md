@@ -123,7 +123,9 @@ reading the field's uses.
    written from a kind's name read at run time (`Import`), a function
    `kindOf` that returns `Book{}` for `"book"`; `Book{}` for `"book"` in
    the tests.
-4. Delete each `case "book":`, now dead (`replace_text`).
+4. Delete each `case "book":`, now dead: `replace_statements` with
+   the clause's lines and empty content. Or leave them: narrowing the
+   field after the last kind deletes every dead case.
 
 **Run:** with the CLI on a copy, four batches, the module's tests
 passing after each: 27 derived steps (1 widening, 5 preparations,
@@ -139,7 +141,8 @@ which `Book{}` passes.
   is made under a temporary name and renamed.
 - The methods land after each function; `move_declaration` can group
   them with `Book`.
-- Deleting a dead case has no tool; `replace_text` does it.
+- Deleting a dead case had no tool; `replace_text` did it (now
+  `replace_statements` with empty content over the clause).
 - Narrowing the field from `any` to `Kind` is now `change_field_type`,
   which deletes the cases no `Kind` matches; before the last kind it
   refuses, listing the writes and comparisons still of other kinds:

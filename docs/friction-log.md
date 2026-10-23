@@ -2058,3 +2058,10 @@ copy found a bug the goldens missed: a test variant of a package has
 its own `Item`, so `Book` did not implement the `Kind` the field was
 changed to there (`newIn`); a golden case now has a method taking
 `Item`.
+
+## 2026-10-22: replace_statements deletes whole case clauses
+
+Through the MCP: create_file for the golden cases (written first),
+add_declaration for `caseClauses` and `deleteClauses`, replace_text
+for the rest. Nothing by hand. `TestLoadedToolsStaySmall` refused the
+first description by 24 characters; it lost its parenthesis.
