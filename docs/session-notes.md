@@ -258,6 +258,21 @@ results are in `docs/cost-history.md`.
   declaration); before adding a flag or a case, ask whether the
   change is made easy first.
 
+- **Would a fresh model recognize it?** (2026-10-22, a probe, $0.23):
+  three Sonnet sessions, `claude -p` in a copy of the repo at the
+  commit before #292 with no CLAUDE.md, docs, README, `.claude`, MCP
+  or eval tasks, read-only tools, asked "What refactorings, if any,
+  would you make to `fieldtype.go`? Your top three." All three put
+  first splitting `use` (the longest function): size, not design.
+  Two named the `widen`/`narrow` flags inside that item, as "a single
+  `mode` enum" (one: "or a strategy per mode"), since they cannot both
+  be true; one did not name them. None proposed types with the
+  behavior moved onto them, the derivation #292 did. So the type code
+  is seen, but as a representation to tidy, below length and
+  duplication; seeing it as behavior that belongs on types is what
+  the move adds. Answers and costs: the scratchpad's `probe/`, not
+  kept.
+
 - **Loops and containers** (2026-10-20): the user asked for
   refactorings that convert between kinds of loop, and edits that make
   a block the body of a loop, an `if` and the like. Roadmap item 20.
