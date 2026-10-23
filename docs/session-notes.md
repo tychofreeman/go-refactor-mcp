@@ -219,6 +219,22 @@ results are in `docs/cost-history.md`.
   the model did next; it fixed the text it had broken, then batched.
   A note helps less than a tool that makes the wrong move work.
 
+- **How this project's own sessions work** (2026-10-22, the user
+  asked; `refactor-tokens` on one multi-day session, 2,796 requests):
+  it read by `sed`/`cat`/`head` 702 times and `grep` 568, against 69
+  `inspect` calls, though CLAUDE.md and the user ask for `inspect`:
+  the habit of the fresh models (search, then a range, then edit).
+  55 of 1,576 steps were refactorings; it derived only where the
+  derivation was the task (lending-xl, 74 steps), not on the way to
+  its own changes. It wrote a type code while building the tool that
+  removes one: `fieldChange` got a second flag, `narrow` next to
+  `widen` (#283), and did not see it until asked to look. Batches
+  sent through the CLI with JSON written by Python count as Bash in
+  `refactor-tokens`. So: read with `inspect` (`names`, `targets`,
+  `uses`), not `grep -n` for anchors (a name addresses a
+  declaration); before adding a flag or a case, ask whether the
+  change is made easy first.
+
 - **Loops and containers** (2026-10-20): the user asked for
   refactorings that convert between kinds of loop, and edits that make
   a block the body of a loop, an `if` and the like. Roadmap item 20.
