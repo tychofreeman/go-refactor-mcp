@@ -2085,3 +2085,10 @@ replace_text for the fix (a call of `analysis.InControlHeader`, which
 ## 2026-10-22: the kind A/B results
 
 Docs only, through replace_text. Nothing by hand.
+
+## 2026-10-22: composite literals in a header, inside an expression
+
+Through the MCP: create_file for the golden cases of both tools
+(written first), add_declaration for `BareComposites`,
+`BracketComposites` and `bracketed`, replace_text for the rest.
+Nothing by hand.
