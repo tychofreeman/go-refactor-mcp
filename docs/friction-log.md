@@ -2167,3 +2167,11 @@ task file joined from the two existing ones by Python, the question
 appended to `docs/naming-the-level.md` with a heredoc, and the plain
 magazine/map and Air/Sea code that validated the tests, in a scratch
 copy only.
+
+## 2026-10-23: longer chains
+
+The nine hidden tests through create_file. By hand: the task file
+built by Python from the two pay-back files, the question appended to
+`docs/naming-the-level.md` with a heredoc, and the plain
+implementations that validated the tests, in scratch copies only.
+The results through replace_text.

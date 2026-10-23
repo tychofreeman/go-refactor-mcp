@@ -1,0 +1,188 @@
+[
+ {
+  "dir": "testdata/shop",
+  "check": "go vet ./... && go test ./...",
+  "name": "long-tangled-control",
+  "tests": "testdata/design-tangled",
+  "prompt": "Add a customer kind \"partner\" (Order.CustomerKind == \"partner\") to pricing.Total: partners pay wholesale's unit price (20% off) but get none of the quantity discounts, and they pay tax as retail customers do (20%, or 18% when the subtotal is over 100000 cents). Other customers' prices do not change.",
+  "then": [
+   {
+    "prompt": "Add a customer kind \"student\" to pricing.Total: students pay the retail price, with the retail quantity discounts, and then 15% off that price (price * 85 / 100, in whole cents); their tax is 10%. Other customers' prices do not change.",
+    "tests": "testdata/design-tangled-2",
+    "check": "go vet ./... && go test ./..."
+   },
+   {
+    "prompt": "Add pricing.Shipping(o order.Order) int, the shipping charge for an order in cents: retail and student orders whose subtotal (the lines' prices after discounts, before tax) is under 5000 cents pay 500; every other order pays 0. Total does not change.\n\nTests you cannot see will check this. They use the existing functions, types and fields by their current names and signatures, so keep those as they are; refactor around them as you need.",
+    "tests": "testdata/shop-shipping",
+    "check": "go vet ./... && go test ./..."
+   },
+   {
+    "prompt": "Add a customer kind \"reseller\" to pricing.Total: resellers pay wholesale's unit price (20% off) with wholesale's quantity discounts, and 5% tax. They pay no shipping. Other customers' prices do not change.\n\nTests you cannot see will check this. They use the existing functions, types and fields by their current names and signatures, so keep those as they are; refactor around them as you need.",
+    "tests": "testdata/shop-reseller",
+    "check": "go vet ./... && go test ./..."
+   },
+   {
+    "prompt": "Add pricing.Invoiced(o order.Order) bool, whether the customer is invoiced rather than paying at checkout: wholesale, partner and reseller orders are invoiced; retail, staff and student orders are not.\n\nTests you cannot see will check this. They use the existing functions, types and fields by their current names and signatures, so keep those as they are; refactor around them as you need.",
+    "tests": "testdata/shop-invoiced",
+    "check": "go vet ./... && go test ./..."
+   }
+  ]
+ },
+ {
+  "dir": "testdata/shop",
+  "check": "go vet ./... && go test ./...",
+  "name": "long-tangled-step",
+  "prompt": "The next change to this code will be:\n\n> Add a customer kind \"partner\" (Order.CustomerKind == \"partner\") to pricing.Total: partners pay wholesale's unit price (20% off) but get none of the quantity discounts, and they pay tax as retail customers do (20%, or 18% when the subtotal is over 100000 cents). Other customers' prices do not change.\n\nDo not make that change in this session; prepare the code for it. First write down, in your reply, what the change adds a new instance of (a new kind, case, channel, ...) or which rule it changes, and every place in the code that already knows about the existing instances or the rule (inspect's `names` and `uses` find them). The change is easy when the new instance is one new place (one new type, function, case or entry that holds everything about it), or the rule is in one place. If it would not be, refactor, without changing what the code does and keeping the tests passing, until it would. If it already would be, change nothing.",
+  "then": [
+   {
+    "prompt": "Add a customer kind \"partner\" (Order.CustomerKind == \"partner\") to pricing.Total: partners pay wholesale's unit price (20% off) but get none of the quantity discounts, and they pay tax as retail customers do (20%, or 18% when the subtotal is over 100000 cents). Other customers' prices do not change.",
+    "tests": "testdata/design-tangled",
+    "check": "go vet ./... && go test ./..."
+   },
+   {
+    "prompt": "Add a customer kind \"student\" to pricing.Total: students pay the retail price, with the retail quantity discounts, and then 15% off that price (price * 85 / 100, in whole cents); their tax is 10%. Other customers' prices do not change.",
+    "tests": "testdata/design-tangled-2",
+    "check": "go vet ./... && go test ./..."
+   },
+   {
+    "prompt": "Add pricing.Shipping(o order.Order) int, the shipping charge for an order in cents: retail and student orders whose subtotal (the lines' prices after discounts, before tax) is under 5000 cents pay 500; every other order pays 0. Total does not change.\n\nTests you cannot see will check this. They use the existing functions, types and fields by their current names and signatures, so keep those as they are; refactor around them as you need.",
+    "tests": "testdata/shop-shipping",
+    "check": "go vet ./... && go test ./..."
+   },
+   {
+    "prompt": "Add a customer kind \"reseller\" to pricing.Total: resellers pay wholesale's unit price (20% off) with wholesale's quantity discounts, and 5% tax. They pay no shipping. Other customers' prices do not change.\n\nTests you cannot see will check this. They use the existing functions, types and fields by their current names and signatures, so keep those as they are; refactor around them as you need.",
+    "tests": "testdata/shop-reseller",
+    "check": "go vet ./... && go test ./..."
+   },
+   {
+    "prompt": "Add pricing.Invoiced(o order.Order) bool, whether the customer is invoiced rather than paying at checkout: wholesale, partner and reseller orders are invoiced; retail, staff and student orders are not.\n\nTests you cannot see will check this. They use the existing functions, types and fields by their current names and signatures, so keep those as they are; refactor around them as you need.",
+    "tests": "testdata/shop-invoiced",
+    "check": "go vet ./... && go test ./..."
+   }
+  ]
+ },
+ {
+  "name": "long-lending-control",
+  "dir": "testdata/lending-xl",
+  "tests": "testdata/lending-magazine",
+  "check": "go vet ./... && go test ./...",
+  "prompt": "The library now lends magazines: items of Kind \"magazine\". A magazine may be kept 14 days, each late day costs 20 cents, a receipt shows it as \"Magazine: \" followed by its title, it is kept on the \"periodicals\" shelf, and its loans cannot be renewed. Import accepts magazines. Nothing changes for the other kinds.\n\nTests you cannot see will check this. They use the existing functions, types and fields by their current names and signatures, so keep those as they are; refactor around them as you need.",
+  "then": [
+   {
+    "prompt": "The library now lends maps: items of Kind \"map\". A map may be kept 7 days, each late day costs 25 cents, a receipt shows it as \"Map: \" followed by its title, it is kept on the \"reference\" shelf, and its loans can be renewed. Import accepts maps. Nothing changes for the other kinds.\n\nTests you cannot see will check this. They use the existing functions, types and fields by their current names and signatures, so keep those as they are; refactor around them as you need.",
+    "tests": "testdata/lending-map",
+    "check": "go vet ./... && go test ./..."
+   },
+   {
+    "prompt": "Add MaxRenewals(it Item) int, how many times a loan of the item may be renewed: 3 for books, 1 for DVDs, 2 for maps, and 0 for every other kind. Renewable stays true exactly for the kinds whose MaxRenewals is above 0.\n\nTests you cannot see will check this. They use the existing functions, types and fields by their current names and signatures, so keep those as they are; refactor around them as you need.",
+    "tests": "testdata/lending-renewals",
+    "check": "go vet ./... && go test ./..."
+   },
+   {
+    "prompt": "The library now lends e-books: items of Kind \"ebook\". An e-book may be kept 21 days, each late day costs 5 cents, a receipt shows it as \"eBook: \" followed by its title, it is kept on the \"online\" shelf, and its loans may be renewed 5 times. Import accepts e-books. Nothing changes for the other kinds.\n\nTests you cannot see will check this. They use the existing functions, types and fields by their current names and signatures, so keep those as they are; refactor around them as you need.",
+    "tests": "testdata/lending-ebook",
+    "check": "go vet ./... && go test ./..."
+   },
+   {
+    "prompt": "Add Deposit(it Item) int, what a member pays when borrowing the item, in cents: 200 for DVDs, 500 for atlases, 300 for maps, and 0 for every other kind.\n\nTests you cannot see will check this. They use the existing functions, types and fields by their current names and signatures, so keep those as they are; refactor around them as you need.",
+    "tests": "testdata/lending-deposit",
+    "check": "go vet ./... && go test ./..."
+   }
+  ]
+ },
+ {
+  "name": "long-lending-step",
+  "dir": "testdata/lending-xl",
+  "check": "go vet ./... && go test ./...",
+  "prompt": "The next change to this code will be:\n\n> The library now lends magazines: items of Kind \"magazine\". A magazine may be kept 14 days, each late day costs 20 cents, a receipt shows it as \"Magazine: \" followed by its title, it is kept on the \"periodicals\" shelf, and its loans cannot be renewed. Import accepts magazines. Nothing changes for the other kinds.\n\nDo not make that change in this session; prepare the code for it. First write down, in your reply, what the change adds a new instance of (a new kind, case, channel, ...) or which rule it changes, and every place in the code that already knows about the existing instances or the rule (inspect's `names` and `uses` find them). The change is easy when the new instance is one new place (one new type, function, case or entry that holds everything about it), or the rule is in one place. If it would not be, refactor, without changing what the code does and keeping the tests passing, until it would. If it already would be, change nothing. Keep the existing functions, types and fields by their current names and signatures: tests you cannot see use them.",
+  "then": [
+   {
+    "prompt": "The library now lends magazines: items of Kind \"magazine\". A magazine may be kept 14 days, each late day costs 20 cents, a receipt shows it as \"Magazine: \" followed by its title, it is kept on the \"periodicals\" shelf, and its loans cannot be renewed. Import accepts magazines. Nothing changes for the other kinds.\n\nTests you cannot see will check this. They use the existing functions, types and fields by their current names and signatures, so keep those as they are; refactor around them as you need.",
+    "tests": "testdata/lending-magazine",
+    "check": "go vet ./... && go test ./..."
+   },
+   {
+    "prompt": "The library now lends maps: items of Kind \"map\". A map may be kept 7 days, each late day costs 25 cents, a receipt shows it as \"Map: \" followed by its title, it is kept on the \"reference\" shelf, and its loans can be renewed. Import accepts maps. Nothing changes for the other kinds.\n\nTests you cannot see will check this. They use the existing functions, types and fields by their current names and signatures, so keep those as they are; refactor around them as you need.",
+    "tests": "testdata/lending-map",
+    "check": "go vet ./... && go test ./..."
+   },
+   {
+    "prompt": "Add MaxRenewals(it Item) int, how many times a loan of the item may be renewed: 3 for books, 1 for DVDs, 2 for maps, and 0 for every other kind. Renewable stays true exactly for the kinds whose MaxRenewals is above 0.\n\nTests you cannot see will check this. They use the existing functions, types and fields by their current names and signatures, so keep those as they are; refactor around them as you need.",
+    "tests": "testdata/lending-renewals",
+    "check": "go vet ./... && go test ./..."
+   },
+   {
+    "prompt": "The library now lends e-books: items of Kind \"ebook\". An e-book may be kept 21 days, each late day costs 5 cents, a receipt shows it as \"eBook: \" followed by its title, it is kept on the \"online\" shelf, and its loans may be renewed 5 times. Import accepts e-books. Nothing changes for the other kinds.\n\nTests you cannot see will check this. They use the existing functions, types and fields by their current names and signatures, so keep those as they are; refactor around them as you need.",
+    "tests": "testdata/lending-ebook",
+    "check": "go vet ./... && go test ./..."
+   },
+   {
+    "prompt": "Add Deposit(it Item) int, what a member pays when borrowing the item, in cents: 200 for DVDs, 500 for atlases, 300 for maps, and 0 for every other kind.\n\nTests you cannot see will check this. They use the existing functions, types and fields by their current names and signatures, so keep those as they are; refactor around them as you need.",
+    "tests": "testdata/lending-deposit",
+    "check": "go vet ./... && go test ./..."
+   }
+  ]
+ },
+ {
+  "name": "long-freight-control",
+  "dir": "testdata/freight-xl",
+  "tests": "testdata/freight-air",
+  "check": "go vet ./... && go test ./...",
+  "prompt": "Package audit checks shipments' road and rail codes but not their air codes. Add the same checks for the Air code: LackingAir, AirZone, SameAir, ByAir, AirCounts, UpperAir, AirLength and AirLine, each doing for Air what its Road and Rail counterparts do (AirLine says \"no air\" where RoadLine says \"no road\").\n\nTests you cannot see will check this. They use the existing functions, types and fields by their current names and signatures, so keep those as they are; refactor around them as you need.",
+  "then": [
+   {
+    "prompt": "Package audit checks shipments' road, rail and air codes but not their sea codes. Add the same checks for the Sea code: LackingSea, SeaZone, SameSea, BySea, SeaCounts, UpperSea, SeaLength and SeaLine, each doing for Sea what its Road, Rail and Air counterparts do (SeaLine says \"no sea\" where RoadLine says \"no road\").\n\nTests you cannot see will check this. They use the existing functions, types and fields by their current names and signatures, so keep those as they are; refactor around them as you need.",
+    "tests": "testdata/freight-sea",
+    "check": "go vet ./... && go test ./..."
+   },
+   {
+    "prompt": "Every zone check ignores spaces around the code: RoadZone of a shipment whose Road is \" nw-1\" is \"NW\", and a code shorter than two characters after trimming has no zone (\"\"). The same for RailZone, AirZone and SeaZone. The other checks do not change.\n\nTests you cannot see will check this. They use the existing functions, types and fields by their current names and signatures, so keep those as they are; refactor around them as you need.",
+    "tests": "testdata/freight-zone-trim",
+    "check": "go vet ./... && go test ./..."
+   },
+   {
+    "prompt": "Add RoadValid, RailValid, AirValid and SeaValid: each reports whether the shipment's code of that kind is not empty and is made only of lowercase letters, digits and '-'.\n\nTests you cannot see will check this. They use the existing functions, types and fields by their current names and signatures, so keep those as they are; refactor around them as you need.",
+    "tests": "testdata/freight-valid",
+    "check": "go vet ./... && go test ./..."
+   },
+   {
+    "prompt": "Every line check trims spaces around the code, and a code of only spaces counts as none: RoadLine of a shipment from \"Cy\" whose Road is \" nw-1 \" is \"Cy: nw-1\", and with Road \"  \" it is \"Cy: no road\". The same for RailLine, AirLine and SeaLine. The other checks do not change.\n\nTests you cannot see will check this. They use the existing functions, types and fields by their current names and signatures, so keep those as they are; refactor around them as you need.",
+    "tests": "testdata/freight-line-trim",
+    "check": "go vet ./... && go test ./..."
+   }
+  ]
+ },
+ {
+  "name": "long-freight-step",
+  "dir": "testdata/freight-xl",
+  "check": "go vet ./... && go test ./...",
+  "prompt": "The next change to this code will be:\n\n> Package audit checks shipments' road and rail codes but not their air codes. Add the same checks for the Air code: LackingAir, AirZone, SameAir, ByAir, AirCounts, UpperAir, AirLength and AirLine, each doing for Air what its Road and Rail counterparts do (AirLine says \"no air\" where RoadLine says \"no road\").\n\nDo not make that change in this session; prepare the code for it. First write down, in your reply, what the change adds a new instance of (a new kind, case, channel, ...) or which rule it changes, and every place in the code that already knows about the existing instances or the rule (inspect's `names` and `uses` find them). The change is easy when the new instance is one new place (one new type, function, case or entry that holds everything about it), or the rule is in one place. If it would not be, refactor, without changing what the code does and keeping the tests passing, until it would. If it already would be, change nothing. Keep the existing functions, types and fields by their current names and signatures: tests you cannot see use them.",
+  "then": [
+   {
+    "prompt": "Package audit checks shipments' road and rail codes but not their air codes. Add the same checks for the Air code: LackingAir, AirZone, SameAir, ByAir, AirCounts, UpperAir, AirLength and AirLine, each doing for Air what its Road and Rail counterparts do (AirLine says \"no air\" where RoadLine says \"no road\").\n\nTests you cannot see will check this. They use the existing functions, types and fields by their current names and signatures, so keep those as they are; refactor around them as you need.",
+    "tests": "testdata/freight-air",
+    "check": "go vet ./... && go test ./..."
+   },
+   {
+    "prompt": "Package audit checks shipments' road, rail and air codes but not their sea codes. Add the same checks for the Sea code: LackingSea, SeaZone, SameSea, BySea, SeaCounts, UpperSea, SeaLength and SeaLine, each doing for Sea what its Road, Rail and Air counterparts do (SeaLine says \"no sea\" where RoadLine says \"no road\").\n\nTests you cannot see will check this. They use the existing functions, types and fields by their current names and signatures, so keep those as they are; refactor around them as you need.",
+    "tests": "testdata/freight-sea",
+    "check": "go vet ./... && go test ./..."
+   },
+   {
+    "prompt": "Every zone check ignores spaces around the code: RoadZone of a shipment whose Road is \" nw-1\" is \"NW\", and a code shorter than two characters after trimming has no zone (\"\"). The same for RailZone, AirZone and SeaZone. The other checks do not change.\n\nTests you cannot see will check this. They use the existing functions, types and fields by their current names and signatures, so keep those as they are; refactor around them as you need.",
+    "tests": "testdata/freight-zone-trim",
+    "check": "go vet ./... && go test ./..."
+   },
+   {
+    "prompt": "Add RoadValid, RailValid, AirValid and SeaValid: each reports whether the shipment's code of that kind is not empty and is made only of lowercase letters, digits and '-'.\n\nTests you cannot see will check this. They use the existing functions, types and fields by their current names and signatures, so keep those as they are; refactor around them as you need.",
+    "tests": "testdata/freight-valid",
+    "check": "go vet ./... && go test ./..."
+   },
+   {
+    "prompt": "Every line check trims spaces around the code, and a code of only spaces counts as none: RoadLine of a shipment from \"Cy\" whose Road is \" nw-1 \" is \"Cy: nw-1\", and with Road \"  \" it is \"Cy: no road\". The same for RailLine, AirLine and SeaLine. The other checks do not change.\n\nTests you cannot see will check this. They use the existing functions, types and fields by their current names and signatures, so keep those as they are; refactor around them as you need.",
+    "tests": "testdata/freight-line-trim",
+    "check": "go vet ./... && go test ./..."
+   }
+  ]
+ }
+]
