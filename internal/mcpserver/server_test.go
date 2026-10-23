@@ -624,12 +624,19 @@ func TestReplaceTextLeavesLaterNames(t *testing.T) {
 }
 
 // An edit that changes a signature as text, and breaks its calls, is
-// refused with the tools that change a signature with every call.
+// refused with the steps that change it with every call (and an
+// interface method with its implementations).
 func TestSignatureEditPointsToTools(t *testing.T) {
 	cs, _ := setup(t)
 	out, _ := call(t, cs, "replace_text", map[string]any{"file": "calc/calc.go", "old": "func Apply(n int) int", "new": "func Apply(n, m int) int"})
 	mustContain(t, "replace_text", out, "REFUSED", "not enough arguments in call to calc.Apply",
-		"this edit changes the signature of Apply", "add_parameter")
+		"this edit changes the signature of Apply", "add_parameter of m int on Apply")
+
+	out, _ = call(t, cs, "add_declaration", map[string]any{"file": "calc/calc.go", "content": "type Shape interface{ Area(scale int) int }\n\ntype Sq struct{}\n\nfunc (Sq) Area(scale int) int { return scale }\n\nfunc Total(s Shape) int { return s.Area(2) + Sq{}.Area(1) }"})
+	mustContain(t, "add_declaration", out, "APPLIED")
+	out, _ = call(t, cs, "replace_text", map[string]any{"file": "calc/calc.go", "old": "Shape interface{ Area(scale int) int }", "new": "Shape interface{ Area(by string) int }"})
+	mustContain(t, "replace_text", out, "REFUSED", "this edit changes the signature of Shape.Area",
+		"add_parameter of by string on Shape.Area", "remove_parameter scale")
 }
 
 // A refactoring may run while the only errors are in tests written first,

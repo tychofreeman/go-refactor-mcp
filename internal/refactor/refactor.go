@@ -17,7 +17,10 @@ import (
 	"errors"
 	"fmt"
 	"go/ast"
+	"go/parser"
 	"go/token"
+	"go/types"
+	"os"
 	"regexp"
 	"slices"
 	"strings"
@@ -369,9 +372,10 @@ func newErrors(before, after []string) []string {
 
 // signatureNote is, for edits that change the signature of a function or
 // interface method (its name, parameters or results), a note naming the
-// tools that change one with every call; "" for other edits.
+// tools that change one with every call: for one signature whose
+// parameters alone change, the steps; "" for other edits.
 func signatureNote(ws *workspace.Workspace, fes []edit.FileEdit) string {
-	var names []string
+	var names, steps []string
 	for _, fe := range fes {
 		_, f := ws.FileSyntax(fe.Path)
 		if f == nil {
@@ -386,26 +390,130 @@ func signatureNote(ws *workspace.Workspace, fes []edit.FileEdit) string {
 			}
 			return false
 		}
-		ast.Inspect(f, func(n ast.Node) bool {
-			switch n := n.(type) {
-			case *ast.FuncDecl:
-				if touched(n.Name.Pos(), n.Type.End()) && !slices.Contains(names, n.Name.Name) {
-					names = append(names, n.Name.Name)
+		var after []signature
+		if src, err := os.ReadFile(fe.Path); err == nil {
+			if out, err := edit.Apply(src, fe.Edits); err == nil {
+				if nf, err := parser.ParseFile(token.NewFileSet(), "", out, 0); err == nil {
+					after = signatures(nf)
 				}
-			case *ast.InterfaceType:
-				for _, m := range n.Methods.List {
-					if _, ok := m.Type.(*ast.FuncType); ok && len(m.Names) == 1 && touched(m.Pos(), m.End()) && !slices.Contains(names, m.Names[0].Name) {
-						names = append(names, m.Names[0].Name)
+			}
+		}
+		for _, s := range signatures(f) {
+			if !touched(s.from, s.to) || slices.Contains(names, s.name) {
+				continue
+			}
+			names = append(names, s.name)
+			for _, a := range after {
+				if a.name == s.name {
+					steps = paramSteps(s.name, s.typ, a.typ)
+				}
+			}
+		}
+	}
+	switch {
+	case len(names) == 0:
+		return ""
+	case len(names) == 1 && len(steps) > 0:
+		return fmt.Sprintf("this edit changes the signature of %s, which its calls (and an interface method's implementations) do not follow as text; send instead, in one batch: %s", names[0], strings.Join(steps, "; then "))
+	}
+	return fmt.Sprintf("this edit changes the signature of %s; add_parameter, remove_parameter, move_parameter, change_parameter_type and add_result change a signature with every call (and an interface method with its implementations), and rename a name", orList(names, "and"))
+}
+
+// signature is a function's, method's or interface method's type, by name.
+type signature struct {
+	name     string // Name, Type.Method or Interface.Method
+	typ      *ast.FuncType
+	from, to token.Pos // what an edit of the signature touches
+}
+
+// signatures lists the functions, methods and interface methods of f.
+func signatures(f *ast.File) []signature {
+	var out []signature
+	ast.Inspect(f, func(n ast.Node) bool {
+		switch n := n.(type) {
+		case *ast.FuncDecl:
+			name := n.Name.Name
+			if n.Recv != nil && len(n.Recv.List) == 1 {
+				t := n.Recv.List[0].Type
+				if s, ok := t.(*ast.StarExpr); ok {
+					t = s.X
+				}
+				switch x := t.(type) {
+				case *ast.IndexExpr:
+					t = x.X
+				case *ast.IndexListExpr:
+					t = x.X
+				}
+				if id, ok := t.(*ast.Ident); ok {
+					name = id.Name + "." + name
+				}
+			}
+			out = append(out, signature{name, n.Type, n.Name.Pos(), n.Type.End()})
+		case *ast.TypeSpec:
+			if it, ok := n.Type.(*ast.InterfaceType); ok {
+				for _, m := range it.Methods.List {
+					if ft, ok := m.Type.(*ast.FuncType); ok && len(m.Names) == 1 {
+						out = append(out, signature{n.Name.Name + "." + m.Names[0].Name, ft, m.Pos(), m.End()})
 					}
 				}
 			}
-			return true
-		})
+		}
+		return true
+	})
+	return out
+}
+
+// paramSteps lists the steps that change the signature of name from old
+// to new with every call, when only its parameters' names and types
+// differ: parameters added, then the edits that use them, then those
+// removed. It is nil when they cannot say (unnamed parameters, results
+// or order that differ).
+func paramSteps(name string, old, new *ast.FuncType) []string {
+	type param struct{ name, typ string }
+	params := func(fl *ast.FieldList) ([]param, bool) {
+		var out []param
+		if fl == nil {
+			return nil, true
+		}
+		for _, f := range fl.List {
+			if len(f.Names) == 0 {
+				return nil, false
+			}
+			for _, n := range f.Names {
+				out = append(out, param{n.Name, types.ExprString(f.Type)})
+			}
+		}
+		return out, true
 	}
-	if len(names) == 0 {
-		return ""
+	results := func(ft *ast.FuncType) string {
+		return types.ExprString(&ast.FuncType{Func: token.NoPos, Params: &ast.FieldList{}, Results: ft.Results})
 	}
-	return fmt.Sprintf("this edit changes the signature of %s; add_parameter, remove_parameter, move_parameter, change_parameter_type and add_result change a signature with every call (and an interface method with its implementations), and rename a name", orList(names, "and"))
+	op, ok1 := params(old.Params)
+	np, ok2 := params(new.Params)
+	if !ok1 || !ok2 || results(old) != results(new) {
+		return nil
+	}
+	index := func(ps []param, n string) int {
+		return slices.IndexFunc(ps, func(p param) bool { return p.name == n })
+	}
+	var add, retype, remove []string
+	for _, p := range np {
+		switch i := index(op, p.name); {
+		case i < 0:
+			add = append(add, fmt.Sprintf("add_parameter of %s %s on %s (value: what each call passes)", p.name, p.typ, name))
+		case op[i].typ != p.typ:
+			retype = append(retype, fmt.Sprintf("change_parameter_type of %s to %s on %s", p.name, p.typ, name))
+		}
+	}
+	for _, p := range op {
+		if index(np, p.name) < 0 {
+			remove = append(remove, fmt.Sprintf("remove_parameter %s on %s", p.name, name))
+		}
+	}
+	if len(add) > 0 && len(remove) > 0 {
+		add = append(add, "the edits that make the body (each implementation, for an interface method) use the new parameters in place of the old")
+	}
+	return slices.Concat(add, retype, remove)
 }
 
 // fixRefusal says why a fix that left the errors after, from before, is
