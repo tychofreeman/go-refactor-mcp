@@ -272,6 +272,30 @@ results are in `docs/cost-history.md`.
   duplication; seeing it as behavior that belongs on types is what
   the move adds. Answers and costs: the scratchpad's `probe/`, not
   kept.
+  Two more framings, the same isolation ($1.87 in all):
+  - "What about this design would make the next change hard?" (3
+    valid runs): all three put the two flags first and proposed a
+    strategy interface with one implementation per mode, the design
+    of #292. Asked about design, the model sees the types.
+  - A feature, narrowing an interface field to a concrete type (3
+    runs, each passing its tests, $0.38-0.53): none made the change
+    easy first. Two added a third flag, both named `concrete bool //
+    narrow, and new is not an interface`, checked in 4-5 places; one
+    hid the mode in inline `!types.IsInterface(c.new)` checks. The
+    same move as #283.
+  So the gap is recognition while making a change, not knowledge of
+  the move: the model, like this project's sessions, extends what is
+  there. A prompt or step that asks the design question before a
+  feature is the candidate to test.
+  Isolating a probe: start `claude -p` inside the copy, at a path
+  that does not name the checkout. Two design runs started from the
+  copy's parent globbed for the file, and the scratchpad's path
+  (`-home-...-go-refactor-mcp`) led them to the real checkout, so
+  they reviewed #292's code instead; they were rerun from
+  `/tmp/probe-*`. Read as reviews of #292, they found its leaks: `use`
+  still asks `types.IsInterface(c.new)` itself, each mode re-parses a
+  use's parent node, and the mode is chosen from
+  `checkConversion`'s error.
 
 - **Loops and containers** (2026-10-20): the user asked for
   refactorings that convert between kinds of loop, and edits that make
