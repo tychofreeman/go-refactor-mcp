@@ -159,7 +159,7 @@ func keptByCall(info *types.Info, call *ast.CallExpr, arg ast.Expr) bool {
 		}
 		return false
 	}
-	if generic(info, call.Fun) {
+	if Generic(info, call.Fun) {
 		return false // its parameter may be a type parameter
 	}
 	sig, ok := under(tv.Type).(*types.Signature)
@@ -181,8 +181,8 @@ func keptByCall(info *types.Info, call *ast.CallExpr, arg ast.Expr) bool {
 	return false
 }
 
-// generic reports whether fun names an instance of a generic function.
-func generic(info *types.Info, fun ast.Expr) bool {
+// Generic reports whether fun names an instance of a generic function.
+func Generic(info *types.Info, fun ast.Expr) bool {
 	switch f := ast.Unparen(fun).(type) {
 	case *ast.Ident:
 		_, ok := info.Instances[f]

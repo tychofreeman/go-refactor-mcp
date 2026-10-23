@@ -140,8 +140,10 @@ which `Book{}` passes.
 - The methods land after each function; `move_declaration` can group
   them with `Book`.
 - Deleting a dead case has no tool; `replace_text` does it.
-- Not reached yet: narrowing the field from `any` to `Kind` (no tool),
-  and the task's `Label(title string)` where the switch gave
+- Narrowing the field from `any` to `Kind` is now `change_field_type`,
+  which deletes the cases no `Kind` matches; before the last kind it
+  refuses, listing the writes and comparisons still of other kinds:
+  the recipe can leave step 4 to it. Not reached yet: the task's `Label(title string)` where the switch gave
   `Label(it Item)` (introduce_parameter and remove_parameter on the
   interface method).
 - `uses` of a type lists receivers and literals as reads: noise.

@@ -2047,3 +2047,14 @@ Docs only, through replace_text. In the lending-xl run itself (a
 copy, through the CLI), by hand: `type Book struct{}`, `kindOf`, three
 expressions (`"book"` to `Book{}`), and five case deletions by
 replace_text, for which there is no tool.
+
+## 2026-10-22: change_field_type narrows to an interface
+
+Through the MCP: create_file for the golden cases (written first),
+rename of `analysis.generic` to `Generic`, add_field, add_declaration
+for the new methods, replace_statements, insert_statements and
+replace_text for the rest. Nothing by hand. Trying it on the lending-xl
+copy found a bug the goldens missed: a test variant of a package has
+its own `Item`, so `Book` did not implement the `Kind` the field was
+changed to there (`newIn`); a golden case now has a method taking
+`Item`.
