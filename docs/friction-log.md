@@ -2217,3 +2217,22 @@ replace_text.
 The script with create_file and the docs with replace_text, through
 gorefactor. Written and tried in the scratchpad first, with heredocs
 and Python, on transcripts staged from the user's computer.
+
+## 2026-10-24: folder.match's cases into matchers
+
+Nothing by hand. `folder.match` (complexity 89) is a type switch on
+go/ast node types, which belong to another package, so
+type_switch_to_method does not apply; extract_function made its five
+largest cases methods in one batch (match: 89 to 34; the largest new
+one, matchIdent, 25), and move_parameter put their parameters in the
+order of matchAddress and the others. inline_variable refused to inline
+`pinfo := f.pkg.TypesInfo` first, rightly (methods called in between
+could change `f.pkg`), so the matchers take `pinfo`, and the `sub`
+closure, as parameters.
+
+The user asked whether the change could be planned without reading
+`match` first. From its signature, metrics and `uses` alone it could
+not: extract_function needs whole statements, and probing with ranges
+only gets refusals that quote the statements near the range, which is
+reading the source a few lines at a time. Reading the one function
+being refactored, and nothing else, was enough.

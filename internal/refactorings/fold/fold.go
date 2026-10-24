@@ -840,100 +840,16 @@ func (f *folder) match(p, x ast.Expr, info *types.Info, b map[holeKey]ast.Expr) 
 	}
 	switch pp := p.(type) {
 	case *ast.Ident:
-		if pd := pinfo.Defs[pp]; pd != nil || pp.Name == "_" {
-			// A local fn declares: the occurrence's own name for it.
-			xi, ok := x.(*ast.Ident)
-			if !ok || pp.Name == "_" {
-				return ok && xi.Name == "_"
-			}
-			xd := info.Defs[xi]
-			if xd == nil || f.locals == nil {
-				return false
-			}
-			f.locals[pd] = xd
-			return true
-		}
-		if xo, local := f.locals[pinfo.Uses[pp]]; local {
-			xi, ok := x.(*ast.Ident)
-			return ok && info.Uses[xi] == xo
-		}
-		if _, local := f.bodyLocals[pinfo.Uses[pp]]; local {
-			return false
-		}
-		po := pinfo.Uses[pp]
-		if _, hole := f.holes[po]; hole && po != nil {
-			if prev, ok := b[holeKey{po, ""}]; ok {
-				return types.ExprString(prev) == types.ExprString(x)
-			}
-			xt := info.TypeOf(x)
-			if xt == nil || !info.Types[x].IsValue() {
-				return false
-			}
-			if po == f.recv {
-				if !sameObj(baseName(xt), baseName(po.Type())) {
-					return false
-				}
-			} else if !types.AssignableTo(xt, po.Type()) && types.TypeString(xt, nil) != types.TypeString(po.Type(), nil) {
-				return false
-			}
-			b[holeKey{po, ""}] = x
-			return true
-		}
-		switch x := x.(type) {
-		case *ast.Ident:
-			return x.Name == pp.Name && sameObj(po, info.Uses[x])
-		case *ast.SelectorExpr: // pkg.Name in another package
-			_, pkgName := info.Uses[identOf(x.X)].(*types.PkgName)
-			return pkgName && x.Sel.Name == pp.Name && sameObj(po, info.Uses[x.Sel])
-		}
-		return false
+		return f.matchIdent(pp, x, info, b, pinfo)
 	case *ast.BasicLit:
 		xb, ok := x.(*ast.BasicLit)
 		return ok && xb.Kind == pp.Kind && xb.Value == pp.Value
 	case *ast.SelectorExpr:
-		if id := identOf(pp.X); id != nil {
-			po := pinfo.Uses[id]
-			if _, byField := f.fields[po]; byField {
-				k := holeKey{po, pp.Sel.Name}
-				if prev, ok := b[k]; ok {
-					return types.ExprString(prev) == types.ExprString(x)
-				}
-				xt := info.TypeOf(x)
-				if xt == nil || !info.Types[x].IsValue() || !types.AssignableTo(xt, pinfo.TypeOf(pp)) && types.TypeString(xt, nil) != types.TypeString(pinfo.TypeOf(pp), nil) {
-					return false
-				}
-				b[k] = x
-				return true
-			}
-			if _, pkgName := po.(*types.PkgName); pkgName {
-				if xi, ok := x.(*ast.Ident); ok { // Name in the package itself
-					return xi.Name == pp.Sel.Name && sameObj(pinfo.Uses[pp.Sel], info.Uses[xi])
-				}
-			}
-		}
-		xs, ok := x.(*ast.SelectorExpr)
-		return ok && xs.Sel.Name == pp.Sel.Name && sub(pp.X, xs.X) && sameObj(pinfo.Uses[pp.Sel], info.Uses[xs.Sel])
+		return f.matchSelector(pp, x, info, b, pinfo, sub)
 	case *ast.CallExpr:
-		xc, ok := x.(*ast.CallExpr)
-		if !ok || xc.Ellipsis.IsValid() != pp.Ellipsis.IsValid() || !sub(pp.Fun, xc.Fun) {
-			return false
-		}
-		if len(xc.Args) != len(pp.Args) {
-			return f.matchFormat(pp, xc, info, b)
-		}
-		for i := range pp.Args {
-			if !sub(pp.Args[i], xc.Args[i]) {
-				return false
-			}
-		}
-		return true
+		return f.matchCall(pp, x, info, b, sub)
 	case *ast.BinaryExpr:
-		if pp.Op == token.ADD && analysis.IsString(pinfo.TypeOf(pp)) {
-			xb, ok := x.(*ast.BinaryExpr)
-			return ok && xb.Op == token.ADD && f.matchConcat(pp, xb, info, b)
-		}
-		xb, ok := x.(*ast.BinaryExpr)
-		return ok && xb.Op == pp.Op && sub(pp.X, xb.X) && sub(pp.Y, xb.Y)
+		return f.matchBinary(pp, x, info, b, pinfo, sub)
 	case *ast.UnaryExpr:
 		xu, ok := x.(*ast.UnaryExpr)
 		return ok && xu.Op == pp.Op && sub(pp.X, xu.X)
@@ -952,19 +868,134 @@ func (f *folder) match(p, x ast.Expr, info *types.Info, b map[holeKey]ast.Expr) 
 		xt, ok := x.(*ast.TypeAssertExpr)
 		return ok && pp.Type != nil && xt.Type != nil && sub(pp.X, xt.X) && types.Identical(pinfo.TypeOf(pp.Type), info.TypeOf(xt.Type))
 	case *ast.CompositeLit:
-		xc, ok := x.(*ast.CompositeLit)
-		if !ok || len(xc.Elts) != len(pp.Elts) || types.TypeString(pinfo.TypeOf(pp), nil) != types.TypeString(info.TypeOf(xc), nil) {
-			return false
-		}
-		for i := range pp.Elts {
-			if !sub(pp.Elts[i], xc.Elts[i]) {
-				return false
-			}
-		}
-		return true
+		return matchComposite(pp, x, info, pinfo, sub)
 	case *ast.KeyValueExpr:
 		xk, ok := x.(*ast.KeyValueExpr)
 		return ok && sub(pp.Key, xk.Key) && sub(pp.Value, xk.Value)
+	}
+	return false
+}
+
+// matchComposite reports whether x matches the composite literal pp of the
+// pattern, element by element.
+func matchComposite(pp *ast.CompositeLit, x ast.Expr, info *types.Info, pinfo *types.Info, sub func(p ast.Expr, x ast.Expr) bool) bool {
+	xc, ok := x.(*ast.CompositeLit)
+	if !ok || len(xc.Elts) != len(pp.Elts) || types.TypeString(pinfo.TypeOf(pp), nil) != types.TypeString(info.TypeOf(xc), nil) {
+		return false
+	}
+	for i := range pp.Elts {
+		if !sub(pp.Elts[i], xc.Elts[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// matchBinary reports whether x matches the binary expression pp of the
+// pattern; string concatenations match by their operands.
+func (f *folder) matchBinary(pp *ast.BinaryExpr, x ast.Expr, info *types.Info, b map[holeKey]ast.Expr, pinfo *types.Info, sub func(p ast.Expr, x ast.Expr) bool) bool {
+	if pp.Op == token.ADD && analysis.IsString(pinfo.TypeOf(pp)) {
+		xb, ok := x.(*ast.BinaryExpr)
+		return ok && xb.Op == token.ADD && f.matchConcat(pp, xb, info, b)
+	}
+	xb, ok := x.(*ast.BinaryExpr)
+	return ok && xb.Op == pp.Op && sub(pp.X, xb.X) && sub(pp.Y, xb.Y)
+}
+
+// matchCall reports whether x matches the call pp of the pattern, argument
+// by argument or as a format string.
+func (f *folder) matchCall(pp *ast.CallExpr, x ast.Expr, info *types.Info, b map[holeKey]ast.Expr, sub func(p ast.Expr, x ast.Expr) bool) bool {
+	xc, ok := x.(*ast.CallExpr)
+	if !ok || xc.Ellipsis.IsValid() != pp.Ellipsis.IsValid() || !sub(pp.Fun, xc.Fun) {
+		return false
+	}
+	if len(xc.Args) != len(pp.Args) {
+		return f.matchFormat(pp, xc, info, b)
+	}
+	for i := range pp.Args {
+		if !sub(pp.Args[i], xc.Args[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// matchSelector reports whether x matches the selector pp of the pattern: a
+// field of a struct parameter, a qualified name, or the same field or
+// method of matching operands.
+func (f *folder) matchSelector(pp *ast.SelectorExpr, x ast.Expr, info *types.Info, b map[holeKey]ast.Expr, pinfo *types.Info, sub func(p ast.Expr, x ast.Expr) bool) bool {
+	if id := identOf(pp.X); id != nil {
+		po := pinfo.Uses[id]
+		if _, byField := f.fields[po]; byField {
+			k := holeKey{po, pp.Sel.Name}
+			if prev, ok := b[k]; ok {
+				return types.ExprString(prev) == types.ExprString(x)
+			}
+			xt := info.TypeOf(x)
+			if xt == nil || !info.Types[x].IsValue() || !types.AssignableTo(xt, pinfo.TypeOf(pp)) && types.TypeString(xt, nil) != types.TypeString(pinfo.TypeOf(pp), nil) {
+				return false
+			}
+			b[k] = x
+			return true
+		}
+		if _, pkgName := po.(*types.PkgName); pkgName {
+			if xi, ok := x.(*ast.Ident); ok { // Name in the package itself
+				return xi.Name == pp.Sel.Name && sameObj(pinfo.Uses[pp.Sel], info.Uses[xi])
+			}
+		}
+	}
+	xs, ok := x.(*ast.SelectorExpr)
+	return ok && xs.Sel.Name == pp.Sel.Name && sub(pp.X, xs.X) && sameObj(pinfo.Uses[pp.Sel], info.Uses[xs.Sel])
+}
+
+// matchIdent reports whether x matches the identifier pp of the pattern: a
+// name a local of fn declares, a hole, or the same object.
+func (f *folder) matchIdent(pp *ast.Ident, x ast.Expr, info *types.Info, b map[holeKey]ast.Expr, pinfo *types.Info) bool {
+	if pd := pinfo.Defs[pp]; pd != nil || pp.Name == "_" {
+		// A local fn declares: the occurrence's own name for it.
+		xi, ok := x.(*ast.Ident)
+		if !ok || pp.Name == "_" {
+			return ok && xi.Name == "_"
+		}
+		xd := info.Defs[xi]
+		if xd == nil || f.locals == nil {
+			return false
+		}
+		f.locals[pd] = xd
+		return true
+	}
+	if xo, local := f.locals[pinfo.Uses[pp]]; local {
+		xi, ok := x.(*ast.Ident)
+		return ok && info.Uses[xi] == xo
+	}
+	if _, local := f.bodyLocals[pinfo.Uses[pp]]; local {
+		return false
+	}
+	po := pinfo.Uses[pp]
+	if _, hole := f.holes[po]; hole && po != nil {
+		if prev, ok := b[holeKey{po, ""}]; ok {
+			return types.ExprString(prev) == types.ExprString(x)
+		}
+		xt := info.TypeOf(x)
+		if xt == nil || !info.Types[x].IsValue() {
+			return false
+		}
+		if po == f.recv {
+			if !sameObj(baseName(xt), baseName(po.Type())) {
+				return false
+			}
+		} else if !types.AssignableTo(xt, po.Type()) && types.TypeString(xt, nil) != types.TypeString(po.Type(), nil) {
+			return false
+		}
+		b[holeKey{po, ""}] = x
+		return true
+	}
+	switch x := x.(type) {
+	case *ast.Ident:
+		return x.Name == pp.Name && sameObj(po, info.Uses[x])
+	case *ast.SelectorExpr: // pkg.Name in another package
+		_, pkgName := info.Uses[identOf(x.X)].(*types.PkgName)
+		return pkgName && x.Sel.Name == pp.Name && sameObj(po, info.Uses[x.Sel])
 	}
 	return false
 }
