@@ -372,6 +372,46 @@ names the field in every selector that reached through it. For the
 second the user chose two general operations: `type_switch_to_method`
 (done), and a type code into types (next).
 
+## Bodies read and not used (Oct 23, no new runs)
+
+The user's question after the long chains: how many reads were
+unnecessary, bodies read where names and signatures would do? Measured
+over the 160 sessions of `eval-runs/level-long-5` (hybrid arm) with
+`eval-tasks/learning/bodies.py`: each function body a read showed
+(a skeleton's elided bodies and one-line functions do not count), by
+what the session did with it, matched against the text of every edit
+it made (Edit, Write, Python and shell scripts, gorefactor edits and
+batches). A heuristic; a strict and a loose rule (`MINLEN=15`, `6`)
+bracket it, and four sessions checked by hand agreed.
+
+| sessions | bodies read | edited | copied from | unused, asked for | unused, came with a file | unused share of body text |
+|---|---|---|---|---|---|---|
+| all 160 | 9.1 | 0.6 | 1.2-1.6 | 1.8-1.9 | 5.1-5.5 | 71-75% |
+| control features, lending and freight | 17 | 0.3-0.5 | 3-5 | 2-4 | 8-12 | 66-72% |
+| features after the step | 6-10 | 0-0.4 | 0.2 | 0.1-3.4 | 2-7 | 87-92% |
+| preparing, freight | 15 | 10 | 2 | 0.4-0.6 | 3 | 22-26% |
+
+- About three quarters of the body text read reached no edit, and most
+  of it came with a whole file (`lending.go` read to change one switch
+  or add one row). Those are the reads where names and signatures
+  would have done; at most the model checked that nothing else needed
+  the change, which `inspect`'s skeleton and `uses` answer without
+  bodies.
+- A body copied from (the nearest case, copied for a new kind) was
+  needed, unless an operation did the copying.
+- After the step the change was a table row, yet the feature sessions
+  still read 6-10 bodies and used almost none: the habit of reading a
+  file before planning.
+- In tokens it is small here: all Go reads, each counted once per
+  request it stays in context, were 3.7% of a session's input (about
+  150K), the unused bodies 0.7-0.8%. Most of a request is the fixed
+  context (instructions, tool schemas, the conversation). On code where
+  a file is thousands of lines the same habit would cost much more.
+
+Next: a server option that lets `inspect` read source only by name
+(roadmap item 24), so a run can test planning from names and
+signatures with the bodies a name asks for.
+
 ## Recording
 
 Each step in its own PR: the results in `docs/cost-history.md`

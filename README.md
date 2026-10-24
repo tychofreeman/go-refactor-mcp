@@ -1118,6 +1118,12 @@ hand or a tool got in the way.
       yet measured; a step toward reads that need a name (a read mode
       without file or line reads, and a question on each read, are
       the next ideas).
+    - **Bodies read and not used** (`level-long-5`, no new runs;
+      `docs/reading-and-deriving.md`): about three quarters of the
+      body text read reached no edit, most of it with whole files,
+      though reads were under 4% of input. Next: a server option under
+      which `inspect` shows source only for what a request names (the
+      user, 2026-10-23), off by default, to run with it on.
 25. **A budget of tools** (the user, 2026-10-22): more tools must not
     eat the gain over editing by hand. Today the tools cost about 5%
     of a request (the instructions, 5.8K characters, and the deferred

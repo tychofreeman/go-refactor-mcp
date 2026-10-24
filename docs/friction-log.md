@@ -2175,3 +2175,10 @@ built by Python from the two pay-back files, the question appended to
 `docs/naming-the-level.md` with a heredoc, and the plain
 implementations that validated the tests, in scratch copies only.
 The results through replace_text.
+
+## 2026-10-23: bodies read and not used
+
+The script and the docs through gorefactor (create_file, replace_text).
+The transcripts were staged from the user's computer, and the script
+written and tried in the scratchpad with heredocs and Python before
+create_file put it in the repo.
