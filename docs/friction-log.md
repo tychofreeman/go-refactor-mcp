@@ -2199,3 +2199,15 @@ line in the selection, though nothing assigns `cs` again, so the copy
 is the same value. A false refusal. `fold` then could not take
 `connect` (it has a result and statements before it), so `connect` was
 declared and the one call written.
+
+## 2026-10-23: the names arm
+
+Through gorefactor: the test first (add_declaration), then the arms as
+a table (`armTools`, add_declaration) with `claudeArgs` reading its
+arm's row (replace_statements over the switch, checked by the existing
+tests: no refactoring makes a switch on a kind into a table, the gap
+the design-step runs met), then the names row and its Bash
+(add_declaration, replace_text). The instruction files with
+create_file, the docs with replace_text. The session note that #305
+put inside an earlier note was moved to that note's end with
+replace_text.

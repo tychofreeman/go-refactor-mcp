@@ -280,6 +280,35 @@ func TestHybridArm(t *testing.T) {
 	}
 }
 
+// The names arm is the mcp arm reading only by name: its server shows
+// source only for what a request names, and it has no other way to read
+// Go code (no Read, Grep or Glob, and no Bash that shows a file's lines).
+func TestNamesArm(t *testing.T) {
+	args := claudeArgs(Config{MCPServer: "/bin/refactor-mcp"}, "names", "/work", "do it")
+	i := slices.Index(args, "--mcp-config")
+	if i < 0 || !strings.Contains(args[i+1], `"-read-by-name"`) || !strings.Contains(args[i+1], `"/work"`) {
+		t.Errorf("names arm: no server reading by name for /work in %q", args)
+	}
+	tools := allowedTools(args)
+	for _, reads := range []string{"Read", "Grep", "Glob", "Bash(cat:*)", "Bash(grep:*)", "Bash(head:*)", "Bash(tail:*)"} {
+		if slices.Contains(tools, reads) {
+			t.Errorf("names arm allows %s: %q", reads, tools)
+		}
+	}
+	if !slices.Contains(tools, "mcp__gorefactor") || !slices.Contains(tools, "Bash(go test:*)") {
+		t.Errorf("names arm lacks gorefactor or go test: %q", tools)
+	}
+	j := slices.Index(args, "--disallowedTools")
+	for _, no := range []string{"Edit", "Write", "Read", "Grep", "Glob"} {
+		if j < 0 || !slices.Contains(strings.Split(args[j+1], ","), no) {
+			t.Errorf("names arm: %s not disallowed in %q", no, args)
+		}
+	}
+	if _, err := RunAll(context.Background(), Config{Arms: []string{"names"}, OutDir: t.TempDir()}, nil); err != nil {
+		t.Errorf("names should be a known arm: %v", err)
+	}
+}
+
 // An arm can start from its own CLAUDE.md, part of the starting state and
 // so not of the run's diff.
 func TestClaudeMDPerArm(t *testing.T) {

@@ -212,16 +212,6 @@ results are in `docs/cost-history.md`.
   and reading was alike in every arm. The method transfers only
   through operations that exist; the runs name the missing ones
   (rename of an embedded field, a switch on a kind into methods).
-  Bodies read and not used (2026-10-23, `level-long-5`,
-  `eval-tasks/learning/bodies.py`): about three quarters of the body
-  text read reached no edit, most of it with whole files, but all Go
-  reads were 3.7% of input and the unused bodies under 1%: at these
-  sizes reading is not where the tokens go.
-  The user then asked for a server option that refuses reads of
-  lines without a name, default off, for experiments: `-read-by-name`
-  (roadmap item 24). A range is the only view that shows source
-  without naming it (a file alone is its skeleton), so that is what
-  it refuses.
   The first is done: rename makes an embedded field a named one.
   For the second the user chose two general operations over one
   shaped to the task: a type code into types, then a type switch into
@@ -251,6 +241,21 @@ results are in `docs/cost-history.md`.
   went, but a refusal that names the right steps did not change what
   the model did next; it fixed the text it had broken, then batched.
   A note helps less than a tool that makes the wrong move work.
+  Bodies read and not used (2026-10-23, `level-long-5`,
+  `eval-tasks/learning/bodies.py`): about three quarters of the body
+  text read reached no edit, most of it with whole files, but all Go
+  reads were 3.7% of input and the unused bodies under 1%: at these
+  sizes reading is not where the tokens go.
+  The user then asked for a server option that refuses reads of
+  lines without a name, default off, for experiments: `-read-by-name`
+  (roadmap item 24). A range is the only view that shows source
+  without naming it (a file alone is its skeleton), so that is what
+  it refuses.
+  The `names` arm of `cmd/refactor-ab` runs it: the mcp arm with the
+  server started with `-read-by-name` and no other way to read Go (no
+  Read, Grep, Glob, cat, head, tail or grep);
+  `eval-tasks/claude-md-names` has `mcp.md` and `names.md`, the same
+  but for how to read.
 
 - **How this project's own sessions work** (2026-10-22, the user
   asked; `refactor-tokens` on one multi-day session, 2,796 requests):

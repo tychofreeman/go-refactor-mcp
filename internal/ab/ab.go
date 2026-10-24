@@ -51,8 +51,9 @@ func (t Task) first() Stage { return Stage{Prompt: t.Prompt, Tests: t.Tests, Che
 var Arms = []string{"mcp", "manual"}
 
 // ExtraArms are run only when asked for: hybrid has the refactoring tools
-// and Claude's own editing tools too.
-var ExtraArms = []string{"hybrid"}
+// and Claude's own editing tools too; names is the mcp arm reading Go
+// code only by name (refactor-mcp -read-by-name, and no other reads).
+var ExtraArms = []string{"hybrid", "names"}
 
 // lookingBash is the Bash the mcp arm may run: building, testing and
 // looking, but nothing that edits a file, so its edits go through the MCP.
@@ -60,6 +61,44 @@ var lookingBash = []string{
 	"Bash(go build:*)", "Bash(go test:*)", "Bash(go vet:*)", "Bash(gofmt -l:*)",
 	"Bash(git diff:*)", "Bash(git status:*)", "Bash(ls:*)", "Bash(grep:*)",
 	"Bash(cd:*)", "Bash(cat:*)", "Bash(head:*)", "Bash(tail:*)", "Bash(wc:*)",
+}
+
+// namesBash is the Bash the names arm may run: the mcp arm's, without
+// what shows a file's lines (cat, head, tail, grep), so that it reads Go
+// code only through inspect, by name.
+var namesBash = []string{
+	"Bash(go build:*)", "Bash(go test:*)", "Bash(go vet:*)", "Bash(gofmt -l:*)",
+	"Bash(git diff:*)", "Bash(git status:*)", "Bash(ls:*)", "Bash(cd:*)", "Bash(wc:*)",
+}
+
+// toolSet is what an arm gives the model.
+type toolSet struct {
+	mcp        bool     // the gorefactor server
+	server     []string // the server's flags beyond -C
+	allowed    []string
+	disallowed []string // beyond what no arm may use
+}
+
+// armTools are the tools of each arm.
+var armTools = map[string]toolSet{
+	"mcp": {
+		mcp:        true,
+		allowed:    append([]string{"mcp__gorefactor", "Read", "Grep", "Glob"}, lookingBash...),
+		disallowed: []string{"Edit", "Write", "MultiEdit", "NotebookEdit"},
+	},
+	"hybrid": {
+		mcp:     true,
+		allowed: []string{"mcp__gorefactor", "Read", "Edit", "Write", "MultiEdit", "Bash", "Grep", "Glob"},
+	},
+	"manual": {
+		allowed: []string{"Read", "Edit", "Write", "MultiEdit", "Bash", "Grep", "Glob"},
+	},
+	"names": {
+		mcp:        true,
+		server:     []string{"-read-by-name"},
+		allowed:    append([]string{"mcp__gorefactor"}, namesBash...),
+		disallowed: []string{"Edit", "Write", "MultiEdit", "NotebookEdit", "Read", "Grep", "Glob"},
+	},
 }
 
 // Config controls a set of runs.
@@ -149,24 +188,17 @@ func (q Quality) values() []int {
 // claudeArgs are the flags for one run in arm, working in dir.
 func claudeArgs(cfg Config, arm, dir, prompt string) []string {
 	args := []string{"-p", prompt, "--output-format", "stream-json", "--verbose", "--strict-mcp-config"}
-	// Neither arm may hand the work to a subagent or the web.
+	// No arm may hand the work to a subagent or the web.
 	disallowed := []string{"Agent", "Task", "WebFetch", "WebSearch"}
-	switch arm {
-	case "mcp", "hybrid":
+	tools := armTools[arm]
+	if tools.mcp {
 		server, _ := json.Marshal(map[string]any{"mcpServers": map[string]any{
-			"gorefactor": map[string]any{"command": cfg.MCPServer, "args": []string{"-C", dir}},
+			"gorefactor": map[string]any{"command": cfg.MCPServer, "args": append([]string{"-C", dir}, tools.server...)},
 		}})
 		args = append(args, "--mcp-config", string(server))
-		if arm == "mcp" {
-			args = append(args, "--allowedTools", "mcp__gorefactor", "Read", "Grep", "Glob")
-			args = append(args, lookingBash...)
-			disallowed = append(disallowed, "Edit", "Write", "MultiEdit", "NotebookEdit")
-		} else {
-			args = append(args, "--allowedTools", "mcp__gorefactor", "Read", "Edit", "Write", "MultiEdit", "Bash", "Grep", "Glob")
-		}
-	case "manual":
-		args = append(args, "--allowedTools", "Read", "Edit", "Write", "MultiEdit", "Bash", "Grep", "Glob")
 	}
+	args = append(append(args, "--allowedTools"), tools.allowed...)
+	disallowed = append(disallowed, tools.disallowed...)
 	args = append(args, "--disallowedTools", strings.Join(disallowed, ","))
 	if cfg.BudgetUSD > 0 {
 		args = append(args, "--max-budget-usd", fmt.Sprintf("%.2f", cfg.BudgetUSD))

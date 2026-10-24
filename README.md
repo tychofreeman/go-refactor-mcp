@@ -1126,10 +1126,20 @@ hand or a tool got in the way.
       -read-by-name` makes `inspect` show source only for what a
       request names (`function`, `names`, `uses`); a line range is
       refused, and the tool's description, schema and the server's
-      instructions stop offering ranges. Off by default. *Done.* Next:
-      an A/B arm that starts the server with it and leaves the model no
-      other way to read Go (no Read, Grep or reading Bash), on the long
-      chains and freight-xl.
+      instructions stop offering ranges. Off by default. *Done.* The
+      A/B arm `names` runs it: the mcp arm with the server started so
+      and no other way to read Go (no Read, Grep, Glob, cat, head, tail
+      or grep). *Done.* Next, the run: the mcp arm against `names`, the
+      same instructions but for how to read
+      (`eval-tasks/claude-md-names`), on freight-xl:
+
+          go run ./cmd/refactor-ab -tasks eval-tasks/derivations-freight.json \
+            -model sonnet -arms mcp,names -runs 4 \
+            -only freight-dispatch,freight-routes,freight-tail,freight-run \
+            -claude-md eval-tasks/claude-md-names -out eval-runs/names-freight
+
+      About $5 (freight-xl was $0.15-0.20 a run). Measure passes, cost,
+      turns, refused reads and bodies read (`eval-tasks/learning/bodies.py`).
 25. **A budget of tools** (the user, 2026-10-22): more tools must not
     eat the gain over editing by hand. Today the tools cost about 5%
     of a request (the instructions, 5.8K characters, and the deferred
