@@ -212,6 +212,11 @@ results are in `docs/cost-history.md`.
   and reading was alike in every arm. The method transfers only
   through operations that exist; the runs name the missing ones
   (rename of an embedded field, a switch on a kind into methods).
+  Bodies read and not used (2026-10-23, `level-long-5`,
+  `eval-tasks/learning/bodies.py`): about three quarters of the body
+  text read reached no edit, most of it with whole files, but all Go
+  reads were 3.7% of input and the unused bodies under 1%: at these
+  sizes reading is not where the tokens go.
   The first is done: rename makes an embedded field a named one.
   For the second the user chose two general operations over one
   shaped to the task: a type code into types, then a type switch into
