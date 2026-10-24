@@ -2211,3 +2211,9 @@ the design-step runs met), then the names row and its Bash
 create_file, the docs with replace_text. The session note that #305
 put inside an earlier note was moved to that note's end with
 replace_text.
+
+## 2026-10-23: where a session's tokens and cost go
+
+The script with create_file and the docs with replace_text, through
+gorefactor. Written and tried in the scratchpad first, with heredocs
+and Python, on transcripts staged from the user's computer.

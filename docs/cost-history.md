@@ -658,6 +658,41 @@ later change, pricing's was bypassed at a new rule in 4 of 5 runs,
 and freight's control extracted the shared helper itself once a
 change cut across the copies.
 
+## 12. Where a session's tokens and cost go (Oct 23, no new runs)
+
+The user's question after reads came to under 4% of input: where do
+the rest go? `eval-tasks/learning/cost.py` on `level-long-5` (160
+sessions, 5.6 requests and 150K input tokens a session):
+
+| input tokens | share |
+|---|---|
+| the first request's context (system prompt, tool definitions, CLAUDE.md, the task), about 22K tokens, sent again on every request | 82% |
+| reads of code | 3% |
+| searches | 1% |
+| the model's own calls and text | 1% |
+| edits and other command output | 1% |
+| not in the transcripts' text: mostly tool schemas loaded by ToolSearch (about 2.8K tokens each), and chars/4 undercounting code | 12% |
+
+Tokens are not cost. A least-squares fit to the reported costs gives
+$0.10 per million cache-read tokens, $4 per million written to the
+cache and $10 per million of output, and reproduces the run's $16.23
+exactly. Cache writes are 69% of cost (17.4K tokens a session), output
+18% (1.9K), cache reads 13% (133K). Of the writes, the first request's
+are 38% of cost: it reads about 12.8K tokens from the cache and writes
+about 9.4K fresh, and so does a chain's later stage, in the same
+directory a minute after the one before, so the directory is not why
+(it accounts for about 1.7K). What follows the cached part, the
+session's first message with Claude Code's context and the task at its
+end, is written anew each session. The later requests' writes, the
+conversation's growth, are the other 30%.
+
+So about $0.04 of a $0.10 session is the price of starting one, the
+same in every arm: a difference between arms is a third larger against
+what the arms control than against the total. An interactive session
+pays it once over many requests, so the harness weighs it far more
+than real use does. Reading less can cut at most part of the 30%;
+fewer requests save mostly cache reads, the cheapest part.
+
 ## What made the difference
 
 - **Smaller results** (#75, rename locations): the largest single win when
