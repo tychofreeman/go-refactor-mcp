@@ -428,6 +428,12 @@ results are in `docs/cost-history.md`.
   gorefactor well").
 - Input tokens are about requests × 39K in the feature runs, whatever
   the reads; count requests and what each turn was for.
+- Where a session's cost goes (cost-history 12,
+  `eval-tasks/learning/cost.py`): cache writes 69%, output 18%, cache
+  reads 13%, though cache reads are 88% of input tokens. About 38% of
+  cost is the first request writing ~9.4K tokens of context fresh in
+  every session, so arms differ only in the rest; count savings
+  against that, not the total.
 - How the analyses were done: group a transcript's tool calls by
   assistant message id to count turns; weight each result's size by the
   number of turns after it to estimate what it cost in context.
