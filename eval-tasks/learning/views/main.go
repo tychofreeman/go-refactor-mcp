@@ -51,7 +51,7 @@ func view(kind string, dir string) (string, error) {
 			return "", err
 		}
 		for _, f := range files {
-			s, err := inspect.File(ws, inspect.Query{File: f})
+			s, err := inspect.File(ws, inspect.Query{File: f}, inspect.Options{})
 			if err != nil {
 				return "", err
 			}

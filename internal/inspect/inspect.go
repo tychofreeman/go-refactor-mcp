@@ -51,31 +51,28 @@ type Query struct {
 	Uses []string `json:"uses,omitempty"`
 }
 
-// Run renders the view selected by q: the module overview when File is
-// empty, otherwise the file without its function bodies, or the function
-// or lines asked for; or each of its targets, or each declaration it
-// names.
+// Options set what a read may show.
+type Options struct {
+	// ByName shows source only for what a query names (function, names,
+	// uses): a line range is refused.
+	ByName bool
+}
+
+// part says how a view tells the model to read part of a file.
+func (o Options) part() string {
+	if o.ByName {
+		return "function"
+	}
+	return "function or start_line/end_line"
+}
+
+// Run renders the view selected by q, with every view allowed.
 func Run(ws *workspace.Workspace, q Query) (string, error) {
-	if len(q.Uses) > 0 {
-		return uses(ws, q)
-	}
-	if len(q.Names) > 0 {
-		return names(ws, q)
-	}
-	if len(q.Targets) > 0 {
-		return targets(ws, q)
-	}
-	if q.File == "" {
-		if q.Function != "" || q.StartLine != 0 || q.EndLine != 0 {
-			return "", refactor.Refusef("file is required when function or a line range is given")
-		}
-		return Module(ws), nil
-	}
-	return File(ws, q)
+	return RunWith(ws, q, Options{})
 }
 
 // Module lists the module's packages and files with line counts.
-func Module(ws *workspace.Workspace) string {
+func Module(ws *workspace.Workspace, o Options) string {
 	type fileInfo struct {
 		rel   string
 		lines int
@@ -135,7 +132,7 @@ func Module(ws *workspace.Workspace) string {
 		fmt.Fprintf(&sb, "\nthe module does not type-check (%d errors); refactorings are disabled until it does:\n  %s\n",
 			len(errs), strings.Join(errs, "\n  "))
 	}
-	sb.WriteString("\nUse inspect with file (and optionally function or start_line/end_line), targets for several, or names for declarations by name, to read code.\n")
+	fmt.Fprintf(&sb, "\nUse inspect with file (and optionally %s), targets for several, or names for declarations by name, to read code.\n", o.part())
 	return sb.String()
 }
 
@@ -153,7 +150,7 @@ type Decl struct {
 
 // File renders q.File without its function bodies, or the function or
 // lines q asks for.
-func File(ws *workspace.Workspace, q Query) (string, error) {
+func File(ws *workspace.Workspace, q Query, o Options) (string, error) {
 	if q.Function != "" {
 		return declarations(ws, q.File, []string{q.Function})
 	}
@@ -179,6 +176,9 @@ func File(ws *workspace.Workspace, q Query) (string, error) {
 	start, end := 1, len(lines)
 	switch {
 	case q.StartLine != 0 || q.EndLine != 0:
+		if o.ByName {
+			return "", refactor.Refusef("lines by number are not shown here: read by name (function, names, or uses for where something is used)")
+		}
 		if q.StartLine > 0 {
 			start = q.StartLine
 		}
@@ -194,10 +194,10 @@ func File(ws *workspace.Workspace, q Query) (string, error) {
 		if len(sk) > MaxLines {
 			sb.WriteByte('\n')
 			writeOutline(&sb, decls)
-			fmt.Fprintf(&sb, "\nWithout its function bodies the file still has %d lines; pass function or start_line/end_line to see source.\n", len(sk))
+			fmt.Fprintf(&sb, "\nWithout its function bodies the file still has %d lines; pass %s to see source.\n", len(sk), o.part())
 			return sb.String(), nil
 		}
-		sb.WriteString("\nsource, function bodies elided (inspect with function, or start_line/end_line, to read one):\n")
+		fmt.Fprintf(&sb, "\nsource, function bodies elided (inspect with %s, to read one):\n", o.part())
 		sb.WriteString(strings.Join(sk, ""))
 		return sb.String(), nil
 	}
@@ -282,7 +282,7 @@ func numbered(width, l int, line string) string {
 
 // targets renders each of q's targets in turn; one that is refused says
 // so in its place.
-func targets(ws *workspace.Workspace, q Query) (string, error) {
+func targets(ws *workspace.Workspace, q Query, o Options) (string, error) {
 	if q.File != "" || q.Function != "" || q.StartLine != 0 || q.EndLine != 0 {
 		return "", refactor.Refusef("give either targets or file (with function or start_line/end_line), not both")
 	}
@@ -291,7 +291,7 @@ func targets(ws *workspace.Workspace, q Query) (string, error) {
 		if len(t.Targets) > 0 {
 			return "", refactor.Refusef("target %d has targets of its own; give one flat list", i+1)
 		}
-		out, err := Run(ws, t)
+		out, err := RunWith(ws, t, o)
 		switch {
 		case refactor.IsRefusal(err):
 			out = fmt.Sprintf("target %d: %v\n", i+1, err)
@@ -643,4 +643,27 @@ func typeKind(fset *token.FileSet, e ast.Expr) string {
 		s = s[:57] + "..."
 	}
 	return s
+}
+
+// RunWith renders the view selected by q, as o allows: the module
+// overview when File is empty, otherwise the file without its function
+// bodies, or the function or lines asked for; or each of its targets, or
+// each declaration it names.
+func RunWith(ws *workspace.Workspace, q Query, o Options) (string, error) {
+	if len(q.Uses) > 0 {
+		return uses(ws, q)
+	}
+	if len(q.Names) > 0 {
+		return names(ws, q)
+	}
+	if len(q.Targets) > 0 {
+		return targets(ws, q, o)
+	}
+	if q.File == "" {
+		if q.Function != "" || q.StartLine != 0 || q.EndLine != 0 {
+			return "", refactor.Refusef("file is required when function or a line range is given")
+		}
+		return Module(ws, o), nil
+	}
+	return File(ws, q, o)
 }

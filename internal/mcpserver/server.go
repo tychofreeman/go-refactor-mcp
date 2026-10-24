@@ -77,11 +77,38 @@ type Server struct {
 	// FullDiffs shows results with three lines of context around each
 	// change, as diff -u does; by default they have none.
 	FullDiffs bool
-	dir       string
-	patterns  []string
+	// ReadByName makes inspect show source only for what a request
+	// names (function, names, uses): lines by number are refused, and
+	// the tool's description, schema and the instructions do not offer
+	// them.
+	ReadByName bool
+	dir        string
+	patterns   []string
 
 	mu sync.Mutex
 	ws *workspace.Workspace // loaded lazily, refreshed before each call
+}
+
+// byName removes what offers lines by number from the texts that
+// describe inspect, for a server that reads source only by name.
+var byName = strings.NewReplacer(
+	"Read Go code with line numbers.", "Read Go code with line numbers; source is shown only for what a request names (function, names, uses), not lines by number.",
+	"- file + start_line/end_line: those lines.\n", "",
+	`{"file": "b.go", "start_line": 10, "end_line": 30}`, `{"file": "b.go", "function": "G"}`,
+	`    "start_line": {"type": "integer", "description": "First line to show (1-based)."},`+"\n", "",
+	`    "end_line":   {"type": "integer", "description": "Last line to show (inclusive)."},`+"\n", "",
+	"with function or start_line/end_line to read part of it", "with function to read part of it",
+	`, "start_line": {"type": "integer"}, "end_line": {"type": "integer"}`, "",
+	"inspect with function, or start_line/end_line, or several at once with targets", "inspect with function, or several at once with targets",
+)
+
+// reads returns text, which describes inspect, as this server's reads
+// allow.
+func (s *Server) reads(text string) string {
+	if !s.ReadByName {
+		return text
+	}
+	return byName.Replace(text)
 }
 
 // New returns a server for the module containing dir.
@@ -92,7 +119,7 @@ func New(dir string, patterns ...string) *Server {
 // MCP builds the MCP server with all tools registered.
 func (s *Server) MCP() *mcp.Server {
 	srv := mcp.NewServer(&mcp.Implementation{Name: "gorefactor", Version: Version}, &mcp.ServerOptions{
-		Instructions: Instructions,
+		Instructions: s.reads(Instructions),
 	})
 
 	notDestructive := false
@@ -110,15 +137,15 @@ func (s *Server) MCP() *mcp.Server {
 
 	srv.AddTool(&mcp.Tool{
 		Name: "inspect",
-		Description: `Read Go code with line numbers. Use it before every refactoring to get exact line numbers, and again after each change.
+		Description: s.reads(`Read Go code with line numbers. Use it before every refactoring to get exact line numbers, and again after each change.
 - No arguments: overview of the module's packages and files.
 - file: the file with its functions without their bodies, a third to a half of reading it whole: declarations, doc comments and types in full, and in place of each body the lines it takes, with the function's length, cyclomatic complexity, nesting depth, and whether calling it has side effects (with the first reason).
 - file + function ("Name" or "Type.Method"): that function's source.
 - file + start_line/end_line: those lines.
 - targets: several of these in one call, e.g. [{"file": "a.go", "function": "F"}, {"file": "b.go", "start_line": 10, "end_line": 30}].
 - names: declarations by name, wherever in the module they are, without file: functions, methods, types, variables and constants, e.g. ["Water", "Bed.Plant", "Schedule"]. A name declared in several packages is refused with where each is: qualify it as "pkg.Name".
-- uses: how each use treats something, before changing what it holds or means: every use of a field, function, method, variable or constant in the module, found by the type checker, under what is done with it (switch on it, compared, asserted, written, passed as an interface, called, read), each with its line, e.g. ["Plant.Species"] lists "compared (2):  garden/bed.go:85  p.Species == \"cactus\"" and the switches with their cases.`,
-		InputSchema: json.RawMessage(`{
+- uses: how each use treats something, before changing what it holds or means: every use of a field, function, method, variable or constant in the module, found by the type checker, under what is done with it (switch on it, compared, asserted, written, passed as an interface, called, read), each with its line, e.g. ["Plant.Species"] lists "compared (2):  garden/bed.go:85  p.Species == \"cactus\"" and the switches with their cases.`),
+		InputSchema: json.RawMessage(s.reads(`{
   "type": "object",
   "properties": {
     "file":       {"type": "string",  "description": "File path relative to the module root."},
@@ -130,7 +157,7 @@ func (s *Server) MCP() *mcp.Server {
     "uses":       {"type": "array", "description": "Names whose every use to list by what it does with them, in place of the arguments above: Name, Type.Field, Type.Method, or pkg.Name.", "items": {"type": "string"}}
   },
   "additionalProperties": false
-}`),
+}`)),
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		return s.inspect(req.Params.Arguments), nil
@@ -281,7 +308,7 @@ func (s *Server) inspect(args json.RawMessage) *mcp.CallToolResult {
 	if err != nil {
 		return toolError(err)
 	}
-	out, err := inspect.Run(ws, q)
+	out, err := inspect.RunWith(ws, q, inspect.Options{ByName: s.ReadByName})
 	if err != nil {
 		if refactor.IsRefusal(err) {
 			return textResult(err.Error())

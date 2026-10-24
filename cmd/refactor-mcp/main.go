@@ -26,6 +26,8 @@ import (
 
 var fullDiffs = flag.Bool("full-diffs", false, "show results with three lines of context around each change (default: none)")
 
+var readByName = flag.Bool("read-by-name", false, "inspect shows source only for what a request names (function, names, uses), not lines by number")
+
 func main() {
 	dir := flag.String("C", "", "module directory (default: $CLAUDE_PROJECT_DIR, else the current directory)")
 	pattern := flag.String("p", "./...", "package pattern to load, relative to the module root")
@@ -52,6 +54,7 @@ func main() {
 
 	s := mcpserver.New(*dir, *pattern)
 	s.FullDiffs = *fullDiffs
+	s.ReadByName = *readByName
 	s.Preload()
 	srv := s.MCP()
 	err := srv.Run(ctx, &mcp.StdioTransport{})

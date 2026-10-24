@@ -196,6 +196,35 @@ func TestTargets(t *testing.T) {
 	}
 }
 
+// With ByName, source is shown only for what a query names: a range is
+// refused, in its place among targets, and no view offers one.
+func TestByName(t *testing.T) {
+	ws := load(t)
+	by := Options{ByName: true}
+	if _, err := RunWith(ws, Query{File: "shapes.go", StartLine: 6, EndLine: 6}, by); !refactor.IsRefusal(err) || !strings.Contains(err.Error(), "by name") {
+		t.Errorf("range: want a refusal that says to read by name, got %v", err)
+	}
+	out, err := RunWith(ws, Query{Targets: []Query{{File: "shapes.go", Function: "Classify"}, {File: "shapes.go", StartLine: 6, EndLine: 6}}}, by)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "source (lines 18-33):") || !strings.Contains(out, "target 2: ") || strings.Contains(out, "6  type Shape interface") {
+		t.Errorf("targets:\n%s", out)
+	}
+	for _, q := range []Query{{File: "shapes.go"}, {}} {
+		out, err := RunWith(ws, q, by)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(out, "start_line") {
+			t.Errorf("%+v offers a range:\n%s", q, out)
+		}
+	}
+	if out, err := RunWith(ws, Query{Names: []string{"Shape"}}, by); err != nil || !strings.Contains(out, "6  type Shape interface") {
+		t.Errorf("names: %v\n%s", err, out)
+	}
+}
+
 func TestNames(t *testing.T) {
 	t.Setenv("GOWORK", "off")
 	dir := t.TempDir()
@@ -377,7 +406,7 @@ func TestFileErrors(t *testing.T) {
 }
 
 func TestModule(t *testing.T) {
-	out := Module(load(t))
+	out := Module(load(t), Options{})
 	// One line per package: its files with their line counts.
 	for _, want := range []string{"\n. (package shapes, ", " lines): shapes.go 35, shapes_test.go ", "1 packages, 2 files"} {
 		if !strings.Contains(out, want) {

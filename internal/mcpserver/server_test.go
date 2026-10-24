@@ -51,9 +51,17 @@ func setup(t *testing.T) (*mcp.ClientSession, string) {
 		os.WriteFile(p, []byte(src), 0o644)
 	}
 
+	s := New(dir)
+	cs := connect(t, s)
+	return cs, dir
+}
+
+// connect connects an MCP client to s over in-memory transports, as
+// Claude Code would over stdio, and closes it when the test ends.
+func connect(t *testing.T, s *Server) *mcp.ClientSession {
 	ctx := context.Background()
 	st, ct := mcp.NewInMemoryTransports()
-	if _, err := New(dir).MCP().Connect(ctx, st, nil); err != nil {
+	if _, err := s.MCP().Connect(ctx, st, nil); err != nil {
 		t.Fatal(err)
 	}
 	cs, err := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "1"}, nil).Connect(ctx, ct, nil)
@@ -61,7 +69,7 @@ func setup(t *testing.T) (*mcp.ClientSession, string) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { cs.Close() })
-	return cs, dir
+	return cs
 }
 
 // Preload loads the workspace before the first call, without blocking.
@@ -418,6 +426,37 @@ func TestInspectSkeletonAndTargets(t *testing.T) {
 			t.Errorf("inspect's schema lacks targets or names: %v", schema)
 		}
 		mustContain(t, "inspect description", tool.Description, "targets", "names", "without their bodies")
+	}
+}
+
+// With ReadByName, inspect shows source only for what a request names,
+// and neither its description, its schema nor the server's instructions
+// offer lines by number.
+func TestInspectReadByName(t *testing.T) {
+	_, dir := setup(t)
+	s := New(dir)
+	s.ReadByName = true
+	cs := connect(t, s)
+	out, _ := call(t, cs, "inspect", map[string]any{"file": "calc/calc.go", "start_line": 6, "end_line": 6})
+	mustContain(t, "range", out, "read by name")
+	out, _ = call(t, cs, "inspect", map[string]any{"names": []any{"Apply"}})
+	mustContain(t, "names", out, "6  func Apply")
+
+	tools, err := cs.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tool := range tools.Tools {
+		if tool.Name != "inspect" {
+			continue
+		}
+		schema, _ := json.Marshal(tool.InputSchema)
+		if strings.Contains(tool.Description, "start_line") || strings.Contains(string(schema), "start_line") {
+			t.Errorf("inspect offers a range:\n%s\n%s", tool.Description, schema)
+		}
+	}
+	if strings.Contains(cs.InitializeResult().Instructions, "start_line") {
+		t.Errorf("the instructions offer a range:\n%s", cs.InitializeResult().Instructions)
 	}
 }
 
