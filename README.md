@@ -1121,9 +1121,15 @@ hand or a tool got in the way.
     - **Bodies read and not used** (`level-long-5`, no new runs;
       `docs/reading-and-deriving.md`): about three quarters of the
       body text read reached no edit, most of it with whole files,
-      though reads were under 4% of input. Next: a server option under
-      which `inspect` shows source only for what a request names (the
-      user, 2026-10-23), off by default, to run with it on.
+      though reads were under 4% of input.
+    - **Reads by name only** (the user, 2026-10-23): `refactor-mcp
+      -read-by-name` makes `inspect` show source only for what a
+      request names (`function`, `names`, `uses`); a line range is
+      refused, and the tool's description, schema and the server's
+      instructions stop offering ranges. Off by default. *Done.* Next:
+      an A/B arm that starts the server with it and leaves the model no
+      other way to read Go (no Read, Grep or reading Bash), on the long
+      chains and freight-xl.
 25. **A budget of tools** (the user, 2026-10-22): more tools must not
     eat the gain over editing by hand. Today the tools cost about 5%
     of a request (the instructions, 5.8K characters, and the deferred

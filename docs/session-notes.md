@@ -217,6 +217,11 @@ results are in `docs/cost-history.md`.
   text read reached no edit, most of it with whole files, but all Go
   reads were 3.7% of input and the unused bodies under 1%: at these
   sizes reading is not where the tokens go.
+  The user then asked for a server option that refuses reads of
+  lines without a name, default off, for experiments: `-read-by-name`
+  (roadmap item 24). A range is the only view that shows source
+  without naming it (a file alone is its skeleton), so that is what
+  it refuses.
   The first is done: rename makes an embedded field a named one.
   For the second the user chose two general operations over one
   shaped to the task: a type code into types, then a type switch into

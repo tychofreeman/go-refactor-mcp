@@ -410,7 +410,8 @@ bracket it, and four sessions checked by hand agreed.
 
 Next: a server option that lets `inspect` read source only by name
 (roadmap item 24), so a run can test planning from names and
-signatures with the bodies a name asks for.
+signatures with the bodies a name asks for. Built: `refactor-mcp
+-read-by-name`; the run is still to do.
 
 ## Recording
 

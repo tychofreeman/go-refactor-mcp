@@ -2182,3 +2182,20 @@ The script and the docs through gorefactor (create_file, replace_text).
 The transcripts were staged from the user's computer, and the script
 written and tried in the scratchpad with heredocs and Python before
 create_file put it in the repo.
+
+## 2026-10-23: reads by name only
+
+Through gorefactor: both tests first (`Options` declared with the
+test, `RunWith`'s stub from create_from_usage with `results`, the
+server's field stubbed from its test), the option threaded through
+`Module`, `File` and `targets` with add_parameter, `RunWith` and `Run`
+with replace_declaration, the hints and the server's texts with
+replace_text. One line by hand: `cs := connect(t, s)` in the tests'
+`setup` (replace_statements). `extract_function` refused the lines
+that connect a client, twice: "cs ... is used by a function literal
+that can run later, and after the selected lines; returning it would
+return a copy", with and without the `t.Cleanup(func() { cs.Close() })`
+line in the selection, though nothing assigns `cs` again, so the copy
+is the same value. A false refusal. `fold` then could not take
+`connect` (it has a result and statements before it), so `connect` was
+declared and the one call written.
