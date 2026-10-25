@@ -2413,3 +2413,10 @@ Golden cases with create_file (one args.json corrected with replace_text);
 the option with replace_text, replace_declaration (checkNewName onto
 `hides`) and add_declaration in one batch; docs with replace_text. This
 entry appended with a heredoc. Nothing else by hand.
+
+## 2026-10-25: the plan-and-execute loop (roadmap item 29, step 1)
+
+loop.py with create_file (written in the scratchpad first), then its
+fixes with replace_text (one refused for a docstring quoted wrongly, and
+resent); the plan doc with replace_text. This entry appended with a
+heredoc. Nothing else by hand.

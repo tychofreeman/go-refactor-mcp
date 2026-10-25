@@ -122,6 +122,24 @@ show, add_parameter refusing a parameter that hides the package
 variable, and tests using a removed field. Step 1's repairs should send
 the bodies a refusal or failing test names.
 
+## Step 1, built (2026-10-25)
+
+`eval-tasks/learning/loop.py`, as above, with what section 16 showed:
+the first answer may instead ask to read the declarations it must write
+code for (once); a refusal's places are sourced from a copy with the
+steps before the refused one applied, since the batch rolled them back;
+an answer that does not parse gets a repair turn; `-models ref` answers
+with the reference batches and passes all nine tasks, for free. Each
+request runs `claude -p --tools "" --strict-mcp-config`: with Claude
+Code's tools in the request, Haiku's plan cost $0.0114, without them
+$0.0081 (replacing the system prompt too, $0.0070). Of the ~31K tokens
+written, most is the prompt's input schemas (75K characters). Two
+smoke runs of Haiku on freight-tail asked to read 11-12 bodies and then
+rewrote them with replace_text, rather than fold, as section 16 found
+for bodies in view; one passed ($0.021, 2 requests, against $0.0099
+for Haiku by hand), one answered JSON that did not parse, which now
+gets a repair.
+
 ## Recording
 
 Each step in its own PR: the results in `docs/cost-history.md`, the
