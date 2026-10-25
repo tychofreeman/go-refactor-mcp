@@ -2464,3 +2464,11 @@ by the next. This entry appended with a heredoc. Nothing else by hand.
 
 Docs with replace_text. This entry appended with a heredoc. Nothing
 else by hand.
+
+## 2026-10-25: prepare_switch_for_types uses a method the interface has
+
+Golden cases with create_file in one batch; `methodSig` by
+extract_function (which made it a method on its own: a function_to_method
+step after it was refused as redundant); the field, the check and the
+plan's branch with add_field, replace_statements, add_declaration and
+replace_text. This entry appended with a heredoc. Nothing else by hand.

@@ -31,7 +31,7 @@ func (*PrepareForTypes) Description() string {
 becomes
   type Species interface { Water() int }
   func Water(p Plant) int { if s, ok := p.Species.(Species); ok { return s.Water() }; switch p.Species { ... }; return 0 }
-The switch's tag must be an interface (change_field_type to any first). The interface is declared before the function, or gets the method when it exists. The variables the cases use become the method's parameters. Every case must return, or none (then the switch goes in the else). A case of several values (case "fern", "cactus":) is split into a case for each, with a copy of the body, so that each moves alone.
+The switch's tag must be an interface (change_field_type to any first). The interface is declared before the function, or gets the method when it exists; a method it already has is used if its signature is the one the cases need. The variables the cases use become the method's parameters. Every case must return, or none (then the switch goes in the else). A case of several values (case "fern", "cactus":) is split into a case for each, with a copy of the body, so that each moves alone.
 Identify the switch by file and line, or by function when it is that function's only switch.
 Refuses, saying why: a type that already implements the interface with the method, a case that leaves other than by return or assigns a variable it uses (it could not become a method), a case of several values that declares a label or a type (its body is copied), a tag that would be evaluated again with another value.`
 }
@@ -60,7 +60,8 @@ type prepareArgs struct {
 // types: a value that implements the interface runs its method first.
 type preparer struct {
 	*switcher
-	name string // the interface's
+	name     string      // the interface's
+	declared *types.Func // the interface's method of that name, when it has one
 }
 
 // Plan checks preconditions and computes the edits.
@@ -79,7 +80,7 @@ func (*PrepareForTypes) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 		return nil, err
 	}
 	g := &preparer{switcher: s, name: a.Interface}
-	for _, check := range []func() error{g.checkTag, g.collectCases, g.checkInterface, g.checkBodies, g.checkSplit, g.checkUnimplemented} {
+	for _, check := range []func() error{g.checkTag, g.collectCases, g.checkInterface, g.checkBodies, g.checkSplit, g.checkDeclared, g.checkUnimplemented} {
 		if err := check(); err != nil {
 			return nil, err
 		}
@@ -203,28 +204,38 @@ func (g *preparer) checkInterface() error {
 	it := named.Underlying().(*types.Interface)
 	for i := range it.NumMethods() {
 		if it.Method(i).Name() == g.method {
-			return refactor.Refusef("interface %s already has a method %s", g.name, g.method)
+			g.declared = it.Method(i) // checkDeclared compares its signature
 		}
 	}
 	g.iface = named
 	return nil
 }
 
+// checkDeclared accepts a method the interface already has when its
+// signature is the one the cases become, as when a plan declared the
+// interface first.
+func (g *preparer) checkDeclared() error {
+	if g.declared == nil || types.Identical(g.declared.Signature(), g.methodSig()) {
+		return nil
+	}
+	q := types.RelativeTo(g.pkg.Types)
+	return refactor.Refusef("interface %s has a method %s%s, but the switch needs %s; give the method another name, or change its signature first",
+		g.name, g.method, strings.TrimPrefix(types.TypeString(g.declared.Type(), q), "func"), g.signature(q))
+}
+
 // checkUnimplemented refuses when a type already implements the
 // interface with the method: a value of it in the tag would call the
 // method instead of running the switch.
 func (g *preparer) checkUnimplemented() error {
-	var params []*types.Var
-	for _, v := range g.params {
-		params = append(params, types.NewParam(token.NoPos, g.pkg.Types, v.Name(), v.Type()))
-	}
-	results := g.info.Defs[g.fd.Name].(*types.Func).Signature().Results()
-	sig := types.NewSignatureType(nil, nil, nil, types.NewTuple(params...), results, false)
+	sig := g.methodSig()
 	var embeds []types.Type
 	if g.iface != nil {
 		embeds = append(embeds, g.iface)
 	}
 	it := types.NewInterfaceType([]*types.Func{types.NewFunc(token.NoPos, g.pkg.Types, g.method, sig)}, embeds).Complete()
+	if g.declared != nil {
+		it = g.iface.Underlying().(*types.Interface)
+	}
 	named := g.namedTypes()
 	if token.IsExported(g.method) {
 		for _, d := range analysis.Dependencies(g.ws.Pkgs...) {
@@ -244,6 +255,18 @@ func (g *preparer) checkUnimplemented() error {
 		}
 	}
 	return nil
+}
+
+// methodSig is the signature of the method the cases become: the
+// variables they use as parameters, the function's results.
+func (g *preparer) methodSig() *types.Signature {
+	var params []*types.Var
+	for _, v := range g.params {
+		params = append(params, types.NewParam(token.NoPos, g.pkg.Types, v.Name(), v.Type()))
+	}
+	results := g.info.Defs[g.fd.Name].(*types.Func).Signature().Results()
+	sig := types.NewSignatureType(nil, nil, nil, types.NewTuple(params...), results, false)
+	return sig
 }
 
 // fresh returns base, or base with a number, a name that neither the
@@ -303,6 +326,8 @@ func (g *preparer) plan() (*refactor.Plan, error) {
 		}
 		edits = append(edits, edit.TextEdit{Start: g.off(start), End: g.off(start), NewText: "type " + g.name + " interface {\n\t" + g.signature(q) + "\n}\n\n"})
 		summary = fmt.Sprintf("%s declared, with method %s", g.name, g.method)
+	} else if g.declared != nil {
+		summary = fmt.Sprintf("%s already has method %s", g.name, g.method)
 	} else {
 		ifaceEdits, ifacePath, err := g.interfaceEdit(path, adder)
 		if err != nil {
