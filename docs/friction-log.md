@@ -2357,3 +2357,9 @@ the one-line condition in remove_dead_code's check.
 ## 2026-10-24: roadmap item 28
 
 Docs only: replace_text for the roadmap entry. Nothing by hand.
+
+## 2026-10-24: what the tools add to a session (cost-history 13)
+
+Docs only: replace_text for cost-history and the session notes, and
+this entry appended with a heredoc. The measuring scripts were one-offs
+in the scratchpad (transcript usage by arm; the server's tools/list).

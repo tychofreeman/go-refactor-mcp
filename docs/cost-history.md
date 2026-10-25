@@ -693,6 +693,44 @@ pays it once over many requests, so the harness weighs it far more
 than real use does. Reading less can cut at most part of the 30%;
 fewer requests save mostly cache reads, the cheapest part.
 
+## 13. What the tools add to a session (Oct 24, no new runs)
+
+The user asked whether the context the tools add to every request is
+where the arms' gap is. From the transcripts of the last runs with a
+manual arm (Oct 18-20) and the newest, means per session, prices as in
+section 12 ($0.10 per million read from the cache, $4 written, $10
+output):
+
+| run | arm | first request | of it written | requests | ToolSearch | cost |
+|---|---|---|---|---|---|---|
+| ab-chain-fixes | manual | 17.7K | 7.8K | 5.6 | 0 | $0.089 |
+| ab-chain-fixes | hybrid | 19.5K | 9.6K | 6.7 | 1.0 | $0.118 |
+| ab-features-refactor-first | manual | 17.8K | 8.8K | 10.0 | 0 | $0.177 |
+| ab-features-refactor-first | mcp | 18.5K | 10.0K | 20.6 | 1.9 | $0.313 |
+| level-long-5 | hybrid | 22.2K | 9.7K | 5.6 | 0.8 | $0.101 |
+
+Today's server (44 tools) puts about 1.8K tokens in every request: its
+instructions (5,831 characters, about 1,460 tokens) and the deferred
+tools' names (about 370). That is the first request's gap between the
+arms. A schema loaded by ToolSearch adds 500-800 tokens (move_declaration
+803, inspect 699, fold 679, batch 637; all 44 together about 20K).
+
+Where the gap goes:
+- hybrid against manual (chains, +$0.029 a session): the always-on 1.8K
+  is about $0.009 of it (written once, then read on each request), the
+  rest the schema loaded and the extra request with what it adds. On
+  level-long-5 the always-on part is about 8% of a session.
+- mcp against manual (features, +$0.136): twice the requests (20.6
+  against 10.0), each larger (41.9K against 33.9K); the always-on part
+  is about 4% of the gap.
+
+So the context the tools add to every request is not the gap. Halving
+the instructions would save about 4% of a hybrid session; where the
+mcp arm loses is the number of turns a change takes through the tools.
+What is left to measure is whether the tools change what a session
+costs in another way: a cheaper model doing with them what a larger
+one does by hand (section 14).
+
 ## What made the difference
 
 - **Smaller results** (#75, rename locations): the largest single win when

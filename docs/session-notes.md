@@ -428,6 +428,10 @@ results are in `docs/cost-history.md`.
   gorefactor well").
 - Input tokens are about requests × 39K in the feature runs, whatever
   the reads; count requests and what each turn was for.
+- What the tools add to every request (cost-history 13): about 1.8K
+  tokens (instructions 1.46K, tool names 0.37K), about 8% of a hybrid
+  session; a loaded schema 500-800 more. The mcp arm's gap over manual
+  is turns (twice the requests), not that context.
 - Where a session's cost goes (cost-history 12,
   `eval-tasks/learning/cost.py`): cache writes 69%, output 18%, cache
   reads 13%, though cache reads are 88% of input tokens. About 38% of
