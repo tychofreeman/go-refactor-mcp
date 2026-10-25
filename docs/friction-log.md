@@ -2433,3 +2433,10 @@ add_declaration, replace_declaration and replace_text in two batches
 (the first keyed fields by the using file's package, which missed fields
 of another package's type); the plan doc with replace_text. This entry
 appended with a heredoc. Nothing else by hand.
+
+## 2026-10-25: the loop's "done?" turn
+
+loop.py's attempt rewritten with one replace_text (Python; the new
+function generated in the scratchpad), the prompts and flags with
+replace_text; the plan doc with replace_text. This entry appended with a
+heredoc. Nothing else by hand.
