@@ -1256,6 +1256,35 @@ hand or a tool got in the way.
       takes a selector (`parameterize` takes constants); the
       preparing sessions wrote both with edits and the tests. `fold`
       does not reach a copy whose condition is inverted (item 23).
+27. **One matcher for code with holes** (the user, 2026-10-24): three
+    refactorings decide, each its own way, whether two pieces of Go are
+    the same and what a name in them is (a hole, a local, a plain name):
+    fold's `folder.match` and `matchStmt` (a pattern with fn's
+    parameters as holes), parameterize's `comparer` (two bodies the same
+    but for constants, with `mismatch` saying where they first differ),
+    and merge_duplicate_function's `canon` (a token stream per function,
+    no holes). A package for Go code with holes, compiled once and
+    matched by type, would answer "what is this name?" in one place,
+    give fold the nearest miss for free (in the exploration runs,
+    "nothing matches the body" was where models gave up), and be the
+    search the back-burner query tool and item 21's last step need.
+    fold's relaxations (a `%s` matching constant text, `+` matching a
+    run of operands, `*p` matching an addressable expression, setters)
+    stay fold's, as options: parameterize must not treat `"a"+"b"` as
+    `"ab"`. Built inside fold first, moved out when parameterize is the
+    second user; merge's `canon` compares tokens, not trees, so it would
+    be a rewrite and is no test of the abstraction. One PR each:
+    - The match state (`locals`, `bodyLocals`, `holes`, `fields`,
+      `recv`) into a type of its own, with the `match*` methods on it
+      (`extract_struct`). #309 made `match`'s cases methods first.
+    - A miss result from `match` and `matchStmt` (`add_result`), used in
+      fold's "nothing matches" refusal: the nearest copy and where it
+      differs.
+    - The matcher into a package of its own, with fold's relaxations
+      behind options.
+    - parameterize's `comparer` on it: the test that the abstraction is
+      general, not fold's shape.
+
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
 candidates and the evidence for each, gathered from the friction log.
