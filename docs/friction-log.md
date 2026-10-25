@@ -2236,3 +2236,7 @@ not: extract_function needs whole statements, and probing with ranges
 only gets refusals that quote the statements near the range, which is
 reading the source a few lines at a time. Reading the one function
 being refactored, and nothing else, was enough.
+
+## 2026-10-24: roadmap item 27, one matcher for code with holes
+
+Nothing by hand: the item with replace_text.
