@@ -159,6 +159,14 @@ loop asks whether the change is complete; if not, the model's next batch
 runs on what the kept batches left (`-stages`, default 2 more), and a
 repair restarts from there, not from the module at the start.
 
+## Step 1, rerun (cost-history 18)
+
+With the three fixes the loop costs what editing by hand does (Haiku
+10% less, Sonnet 10% more), passing 11/16 and 14/16 against 16/16.
+What fails is routes, where remove_dead_code's refusal names only the
+first use left, so each repair fixes one file; listing every use is the
+next fix. Then lending-xl.
+
 ## Recording
 
 Each step in its own PR: the results in `docs/cost-history.md`, the

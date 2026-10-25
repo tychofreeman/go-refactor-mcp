@@ -940,7 +940,8 @@ when the loop stops and the hidden tests judging the result. Two variants
 for Haiku: the plan may first ask to read declarations (`read`), or source
 comes only with a repair (`-no-read`); then Sonnet with the one that won.
 Compared with the manual arm of section 14 (same tasks and model, Claude
-Code editing by hand). $3.44 in all.
+Code editing by hand). $3.44 in all. The loop's costs here are upper
+bounds: it summed a resumed session's running totals (section 18).
 
 | | passed | cost per task | requests |
 |---|---|---|---|
@@ -981,6 +982,49 @@ and at Haiku's price matches editing by hand. What stands between it and
 a saving: a shorter tools reference (the schemas of the steps a plan uses
 are a fraction of 44), asking the model whether it is done when the tests
 pass instead of stopping, and the stub bug.
+
+## 18. The loop with its fixes (Oct 25)
+
+After section 17: a batch no longer stubs what an earlier step removed
+(#332), the loop asks whether the change is done when the module's tests
+pass (#333), and the tools reference is compact (#334: 38K characters
+in place of 76K; the planning request writes about 20K tokens to the
+cache, not 31K). `loop.py -no-read` on freight-xl's four tasks, 4
+attempts each, $1.89 (`eval-runs/loop-haiku-fixed`, `loop-sonnet-fixed`).
+
+| | passed | cost per task | requests |
+|---|---|---|---|
+| Haiku by hand (section 14) | 16/16 | $0.0124 | 9.6 |
+| Haiku loop | 11/16 | $0.0111 | 3.0 |
+| Sonnet by hand (section 14) | 16/16 | $0.0973 | 5.3 |
+| Sonnet loop | 14/16 | $0.107 | 2.2 |
+
+- **Cost is now at par with editing by hand:** Haiku's loop 10% cheaper,
+  Sonnet's 10% dearer. The planning request is most of it (Sonnet: $0.090
+  of an attempt's ~$0.10); the "done?" turn reads the cache and writes
+  about 1K tokens.
+- **dispatch and run pass in every attempt with both models**, by fold
+  and by wrapper, fold, inline and rename. Sonnet passes tail 4/4.
+- **What fails, both models: routes** (Haiku 1/4, Sonnet 2/4). The
+  plan was right, but remove_dead_code's refusal names only the first
+  use left ("Road is used at audit/audit_test.go:11:42"): each repair
+  fixed that file's test literals and was refused at the next file, until
+  the repairs ran out. A refusal listing every use would let one repair
+  fix them all.
+- **Haiku's tail** (2/4): it wrote `tail` by hand and asked
+  inline_function to inline `last` everywhere, which is refused for a
+  two-statement body inside expressions; it repeated that in its
+  repairs. The derivation that works (wrapper, fold, inline) is the
+  reference's; Haiku found it in sections 16 and 17 in some attempts.
+
+**A correction to section 17:** a resumed `claude -p` session reports
+its cost so far, not the request's, and loop.py summed those totals, so
+an attempt of several requests was counted more than once. The loop now
+takes the last total. Section 17's means are upper bounds; since the
+first request is most of an attempt, the true values are near the lower
+bounds (each attempt's total over its requests): Haiku with reads
+$0.011-0.029 (not $0.0286), Haiku without $0.010-0.013, Sonnet without
+$0.144-0.174.
 
 ## What made the difference
 

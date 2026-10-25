@@ -476,6 +476,10 @@ results are in `docs/cost-history.md`.
   folds into rewrites. The cost is the prompt (31K tokens, mostly input
   schemas). Open: a shorter tools reference, asking "done?" when tests
   pass, and a batch's stubs re-declaring fields an earlier step removed.
+  All three done (cost-history 18): Haiku's loop 11/16 at $0.0111 (by
+  hand $0.0124), Sonnet's 14/16 at $0.107 (by hand $0.0973). A resumed
+  `claude -p` session reports its running total cost, not the request's:
+  take the last total, do not sum them (section 17's costs were summed).
 - Where a session's cost goes (cost-history 12,
   `eval-tasks/learning/cost.py`): cache writes 69%, output 18%, cache
   reads 13%, though cache reads are 88% of input tokens. About 38% of

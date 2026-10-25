@@ -2446,3 +2446,9 @@ heredoc. Nothing else by hand.
 `compact` and `-reference` in loop.py, and probe.py's `tool_list`, with
 replace_text (Python files). This entry appended with a heredoc. Nothing
 else by hand.
+
+## 2026-10-25: the loop's cost accounting (cost-history 18)
+
+loop.py's usage record, the session's cost from its last total, and a
+guard for a line past a file's end, with replace_text; docs with
+replace_text. This entry appended with a heredoc. Nothing else by hand.

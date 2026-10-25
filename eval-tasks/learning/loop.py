@@ -159,6 +159,8 @@ def named_places(module, text, limit=8):
             continue
         seen.add((file, line))
         lines = open(path).read().splitlines()
+        if not 1 <= line <= len(lines):
+            continue  # a line of the file as a step left it, past its end now
         start = line
         while start > 1 and not re.match(r"(func|type|var|const) ", lines[start - 1]):
             start -= 1
@@ -215,6 +217,7 @@ class Model:
 
     def __init__(self, name, cwd):
         self.name, self.cwd, self.session, self.cost, self.requests = name, cwd, None, 0.0, 0
+        self.usage = []  # per request: tokens written to the cache, read from it, and output
 
     def ask(self, text):
         # No tools and no MCP servers: the model answers with JSON, and
@@ -229,7 +232,10 @@ class Model:
         except json.JSONDecodeError:
             return None, (r.stdout + r.stderr)[:300]
         self.session = res.get("session_id", self.session)
-        self.cost += res.get("total_cost_usd", 0.0)
+        # A resumed session reports what the whole session has cost so far.
+        self.cost = res.get("total_cost_usd", self.cost)
+        u = res.get("usage") or {}
+        self.usage.append([u.get("cache_creation_input_tokens", 0), u.get("cache_read_input_tokens", 0), u.get("output_tokens", 0)])
         return res.get("result", ""), ""
 
 
@@ -237,7 +243,7 @@ class Ref:
     """Answers with the reference batch: checks the loop for free."""
 
     def __init__(self, ref):
-        self.ref, self.cost, self.requests = ref, 0.0, 0
+        self.ref, self.cost, self.requests, self.usage = ref, 0.0, 0, []
 
     def ask(self, text):
         self.requests += 1
@@ -343,7 +349,7 @@ def main():
                 log = []
                 row = {"task": t["name"], "model": m, "run": n}
                 row.update(attempt(t, model, tools, binary, a.repairs, log, may_read=not a.no_read, stages=a.stages))
-                row.update(cost=model.cost, requests=model.requests)
+                row.update(cost=model.cost, requests=model.requests, usage=model.usage)
                 with open(os.path.join(a.out, f"{t['name']}-{m}-{n}.txt"), "w") as f:
                     f.write("\n\n==== next answer ====\n\n".join(log))
                 results.write(json.dumps(row) + "\n")
