@@ -731,6 +731,55 @@ What is left to measure is whether the tools change what a session
 costs in another way: a cheaper model doing with them what a larger
 one does by hand (section 14).
 
+## 14. A cheaper model with the tools (Oct 24)
+
+The question: does Haiku with gorefactor do what Sonnet does by hand,
+at a fraction of the price? freight-xl (dispatch, routes, tail, run),
+the user's-moves instructions (`claude-md-derivations`), mcp and manual
+arms, 4 runs each, one run per model (`eval-runs/model-haiku`,
+`eval-runs/model-sonnet`; $4.63 in all, $0.48 of it Haiku, as the CLI
+reports cost):
+
+| model | arm | passed | cost a run | requests | first request | written to the cache | ToolSearch | gorefactor refused (16 runs) |
+|---|---|---|---|---|---|---|---|---|
+| Haiku | manual | 16/16 | $0.0124 | 9.6 | 20.9K | 29.4K | 0 | - |
+| Haiku | mcp | 16/16 | $0.0175 | 9.9 | 23.3K | 40.9K | 1.1 | 15 |
+| Sonnet | manual | 16/16 | $0.0973 | 5.3 | 20.1K | 15.8K | 0 | - |
+| Sonnet | mcp | 16/16 | $0.1621 | 7.3 | 22.5K | 27.0K | 1.6 | 4 |
+
+By task, cost a run, mcp against manual: Sonnet dispatch $0.13 against
+$0.12, routes $0.27 against $0.10, tail $0.12 against $0.09, run $0.13
+against $0.08; Haiku about $0.02 against $0.01 on every task. The code
+left behind scored alike in every cell.
+
+What it shows:
+- Every run passed. Haiku did these tasks by hand, so the tools did not
+  enable the cheaper model. Haiku by hand cost an eighth of Sonnet by
+  hand: the model is the largest cost lever measured, and it does not
+  need the tools here.
+- With the tools, both models cost more than by hand: Sonnet 67% more,
+  Haiku 41% more. Sonnet took two more requests a session, and every
+  mcp session writes more to the cache (the instructions, the larger
+  CLAUDE.md, loaded schemas, larger results).
+- The 25% saving on freight-xl in section 9 was between two arms that
+  both used the tools (the user's moves against the baseline
+  instructions), never against editing by hand. Against by hand there
+  is no saving on these tasks.
+- Routes is most of Sonnet's gap: no operation does what it needs (the
+  Contacts shape, fields into a map; section 8), so the runs made 157
+  edits through the tools, 21 of them replace_expression, and no
+  refactoring. Where an operation fits (tail, run), Sonnet derived 8-9
+  steps and still cost a third more than by hand.
+- The derived share fell with the smaller model: Haiku made 8
+  refactorings in 16 runs against Sonnet's 17, and 15 refused calls
+  against 4.
+
+So on code of this size, with changes a model gets right by hand, the
+tools do not pay for themselves in cost, and do not stand in for a
+larger model. Where they could still show worth: changes that a model
+gets wrong by hand (a failure rate, not a cost), which these tasks do
+not have, since every arm passed.
+
 ## What made the difference
 
 - **Smaller results** (#75, rename locations): the largest single win when
