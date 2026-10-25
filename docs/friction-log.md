@@ -2400,3 +2400,9 @@ This entry appended with a heredoc. Nothing else by hand.
 probe.py's `-model`, `-schemas`, `-plan` and the file list with
 replace_text (a Python file, which no Go tool edits); the docs with
 replace_text. This entry appended with a heredoc. Nothing else by hand.
+
+## 2026-10-25: the plans with bodies (cost-history 16)
+
+Docs with replace_text; this entry appended with a heredoc. The
+test-literal fixes added to the answers' batches were a one-off script
+in the scratchpad. Nothing by hand in the repo.

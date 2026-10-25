@@ -459,6 +459,9 @@ results are in `docs/cost-history.md`.
   answer against Sonnet's $0.072. It missed fold for near-duplicates
   (dispatch, 0 of 4). Batches fail mostly on content written for bodies
   the view does not show, so a planner needs bodies where it writes code.
+  With the whole module and the test files' literals, 28 of 29 parsed
+  answers on those tasks passed; with bodies in view both models wrote
+  more by hand (Sonnet dropped fold on dispatch).
 - Where a session's cost goes (cost-history 12,
   `eval-tasks/learning/cost.py`): cache writes 69%, output 18%, cache
   reads 13%, though cache reads are 88% of input tokens. About 38% of
