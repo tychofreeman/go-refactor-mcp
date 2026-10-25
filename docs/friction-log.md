@@ -2379,3 +2379,8 @@ hidden test, undone with a second replace_text: all_occurrences matches
 text, not names. In a batch, `$1.end` addresses the line of the call
 after an extract_variable, not the line after it; `$1.end+1` was
 refused as the wrong line. This entry appended with a heredoc.
+
+## 2026-10-25: a plan for a loop of our own
+
+The plan with create_file, the roadmap, the session note and this entry
+with replace_text, in one batch. Nothing by hand.

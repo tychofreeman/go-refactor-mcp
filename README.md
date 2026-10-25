@@ -1402,6 +1402,21 @@ hand or a tool got in the way.
     extract the second argument too. The order check should treat
     such a local as stable.
 
+30. **Plan, then execute: a loop of our own** (the user, 2026-10-25):
+    with the tools, Sonnet and Haiku both cost more than editing by
+    hand (cost-history 14), and the gap is turns, not the tools'
+    context (13). A loop of our own could plan the whole derivation in
+    one request from names and signatures, run it with the engine, and
+    send only refusals or failing tests back, in two or three requests
+    instead of 7-20. The call-tree probe is its planning half (7 of 16
+    batches passed from the call tree, the failures the tools'
+    interface, not the plans). Plan: `docs/plan-and-execute.md`.
+    Step 1, the probe with repairs and the input schemas, against the
+    manual arm with the same model (about $2-4); step 2, a runner on
+    the API with its own context, only if step 1 pays. A research
+    instrument: the decision that Claude through MCP is the product
+    stands, and the user decides on the result.
+
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
 candidates and the evidence for each, gathered from the friction log.
