@@ -2387,3 +2387,10 @@ refused as the wrong line. This entry appended with a heredoc. Merging
 main (#324, roadmap item 29 and its friction entry) conflicted in the
 README and this log; resolved by hand with a script, this item
 renumbered 30.
+
+## 2026-10-25: move_parameter and private locals (roadmap item 30)
+
+Golden cases with create_file; the change with add_parameter (readsVar's
+`private`), replace_declaration, add_declaration and replace_text, in one
+batch; the nested-order case's input and the roadmap with replace_text.
+This entry appended with a heredoc. Nothing else by hand.

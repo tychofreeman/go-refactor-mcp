@@ -130,11 +130,12 @@ func (t *target) checkOrder(c call, from, to int) error {
 		passed = args[from+1 : min(to, len(args))]
 	}
 	info := c.pkg.TypesInfo
+	private := privateLocals(c)
 	moved := args[from]
 	for _, b := range passed {
 		why := ""
 		switch {
-		case hasEffect(info, moved) && readsVar(info, b), hasEffect(info, b) && readsVar(info, moved):
+		case hasEffect(info, moved) && readsVar(info, b, private), hasEffect(info, b) && readsVar(info, moved, private):
 			why = "one has side effects the other could observe"
 		case unsafeArg(info, moved) && unsafeArg(info, b):
 			why = "both could have side effects or panic"
@@ -181,18 +182,54 @@ func hasEffect(info *types.Info, e ast.Expr) bool {
 }
 
 // readsVar reports whether evaluating e reads a variable, whose value a
-// side effect could change. (A function literal captures variables rather
-// than reading them.)
-func readsVar(info *types.Info, e ast.Expr) bool {
+// side effect could change, other than one private says no other code can
+// reach. (A function literal captures variables rather than reading them.)
+func readsVar(info *types.Info, e ast.Expr, private func(*types.Var) bool) bool {
 	found := false
 	ast.Inspect(e, func(n ast.Node) bool {
 		if _, ok := n.(*ast.FuncLit); ok || found {
 			return false
 		}
 		if id, ok := n.(*ast.Ident); ok {
-			_, found = info.Uses[id].(*types.Var)
+			v, isVar := info.Uses[id].(*types.Var)
+			found = isVar && !private(v)
 		}
 		return !found
 	})
 	return found
+}
+
+// privateLocals returns a test for the variables of the function around c
+// that only its own reads and writes reach (no pointer to them, no closure
+// capturing them) and whose values hold no pointers: no call can change
+// or observe them.
+func privateLocals(c call) func(*types.Var) bool {
+	for _, f := range c.pkg.Syntax {
+		if f.FileStart <= c.expr.Pos() && c.expr.Pos() < f.FileEnd {
+			if fn := analysis.OutermostFunc(analysis.PathTo(f, c.expr)); fn != nil {
+				fa := analysis.AnalyzeFunc(c.pkg.TypesInfo, fn)
+				return func(v *types.Var) bool { return fa.IsLocal(v) && !fa.Escapes(v) && plainValue(v.Type()) }
+			}
+		}
+	}
+	return func(*types.Var) bool { return false }
+}
+
+// plainValue reports whether values of t hold no pointers, so that a copy
+// shares nothing with the original.
+func plainValue(t types.Type) bool {
+	switch u := t.Underlying().(type) {
+	case *types.Basic:
+		return u.Kind() != types.UnsafePointer
+	case *types.Array:
+		return plainValue(u.Elem())
+	case *types.Struct:
+		for i := range u.NumFields() {
+			if !plainValue(u.Field(i).Type()) {
+				return false
+			}
+		}
+		return true
+	}
+	return false
 }

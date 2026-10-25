@@ -1415,7 +1415,10 @@ hand or a tool got in the way.
     is not taken and that no closure captures cannot be read or
     written by the call. Two of four Haiku runs hit it and had to
     extract the second argument too. The order check should treat
-    such a local as stable.
+    such a local as stable. *Done:* a local of the function around
+    the call, which no pointer or closure reaches and whose value holds
+    no pointers (`privateLocals`), no longer counts as a read a call
+    could change.
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
