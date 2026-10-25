@@ -76,18 +76,18 @@ type relaxer struct {
 }
 
 // Call matches a format string whose %s takes text of the call's.
-func (r *relaxer) Call(m *pattern.Matcher, p, x *ast.CallExpr, info *types.Info, b map[pattern.HoleKey]ast.Expr) bool {
-	return matchFormat(m, p, x, info, b, r)
+func (r *relaxer) Call(a *pattern.Attempt, p, x *ast.CallExpr) bool {
+	return matchFormat(a, p, x, r)
 }
 
 // Concat matches a string concatenation whose operands make up the pattern's.
-func (r *relaxer) Concat(m *pattern.Matcher, p, x *ast.BinaryExpr, info *types.Info, b map[pattern.HoleKey]ast.Expr) bool {
-	return matchConcat(m, p, x, info, b, r)
+func (r *relaxer) Concat(a *pattern.Attempt, p, x *ast.BinaryExpr) bool {
+	return matchConcat(a, p, x, r)
 }
 
 // Address matches *p against an addressable expression, passed as &x.
-func (r *relaxer) Address(m *pattern.Matcher, p *ast.StarExpr, x ast.Expr, info *types.Info, b map[pattern.HoleKey]ast.Expr) bool {
-	return matchAddress(m, p, x, info, b, r)
+func (r *relaxer) Address(a *pattern.Attempt, p *ast.StarExpr, x ast.Expr) bool {
+	return matchAddress(a, p, x, r)
 }
 
 // folder finds the code that does what fn does and replaces it with calls.
@@ -435,12 +435,12 @@ func (f *folder) try(p *packages.Package, file *ast.File, x ast.Expr, stack []as
 	if f.sets != nil {
 		return f.trySetter(p, file, x, stack)
 	}
-	b := map[pattern.HoleKey]ast.Expr{}
-	f.m.Miss = nil
-	if !f.m.Match(f.body, x, info, b) {
-		f.keepNearest(0)
+	a := f.m.At(info)
+	if !a.Match(f.body, x) {
+		f.keepNearest(a.Miss, 0)
 		return false, nil
 	}
+	b := a.Bound
 	where := f.ws.Position(x.Pos())
 	skip := func(why string) (bool, error) {
 		f.skipped = append(f.skipped, where+": "+why)
@@ -506,14 +506,16 @@ func (f *folder) trySetter(p *packages.Package, file *ast.File, x ast.Expr, stac
 	if !ok || !pattern.SameObj(pattern.BaseName(info.TypeOf(lit)), pattern.BaseName(f.self.Type())) {
 		return false, nil
 	}
-	b := map[pattern.HoleKey]ast.Expr{{Obj: f.self, Field: ""}: lit}
+	a := f.m.At(info)
+	b := a.Bound
+	b[pattern.HoleKey{Obj: f.self, Field: ""}] = lit
 	var drop []int
 	for _, s := range f.sets {
 		i := slices.IndexFunc(lit.Elts, func(e ast.Expr) bool {
 			kv, ok := e.(*ast.KeyValueExpr)
 			return ok && pattern.IdentOf(kv.Key) != nil && pattern.IdentOf(kv.Key).Name == s.field
 		})
-		if i < 0 || !f.m.Match(s.value, lit.Elts[i].(*ast.KeyValueExpr).Value, info, b) {
+		if i < 0 || !a.Match(s.value, lit.Elts[i].(*ast.KeyValueExpr).Value) {
 			return false, nil
 		}
 		drop = append(drop, i)
@@ -838,13 +840,14 @@ func (f *folder) removeImports(path string, es []edit.TextEdit) {
 // matchAddress reports whether x, which is not a dereference, is the
 // pattern's *p for a pointer parameter p: an addressable expression of
 // p's element type, so that the call passes &x.
-func matchAddress(m *pattern.Matcher, pp *ast.StarExpr, x ast.Expr, info *types.Info, b map[pattern.HoleKey]ast.Expr, rel *relaxer) bool {
+func matchAddress(a *pattern.Attempt, pp *ast.StarExpr, x ast.Expr, rel *relaxer) bool {
+	info, b := a.Info, a.Bound
 	id, ok := ast.Unparen(pp.X).(*ast.Ident)
 	if !ok {
 		return false
 	}
-	po := m.Pkg.TypesInfo.Uses[id]
-	if _, hole := m.Holes[po]; !hole || po == nil || po == m.Recv {
+	po := a.Pkg.TypesInfo.Uses[id]
+	if _, hole := a.Holes[po]; !hole || po == nil || po == a.Recv {
 		return false
 	}
 	ptr, ok := po.Type().Underlying().(*types.Pointer)
@@ -885,14 +888,15 @@ func addressable(info *types.Info, x ast.Expr) bool {
 // print them as they are: log.Printf("email to %s", to) is
 // log.Printf("%s to %s", channel, to) with channel "email". Text with a
 // % in it is not taken.
-func matchFormat(m *pattern.Matcher, pp, xc *ast.CallExpr, info *types.Info, b map[pattern.HoleKey]ast.Expr, rel *relaxer) bool {
-	pinfo := m.Pkg.TypesInfo
+func matchFormat(a *pattern.Attempt, pp, xc *ast.CallExpr, rel *relaxer) bool {
+	info, b := a.Info, a.Bound
+	pinfo := a.Pkg.TypesInfo
 	fi := formatIndex(pinfo, pp)
 	if fi < 0 || pp.Ellipsis.IsValid() || len(xc.Args) <= fi || len(xc.Args) > len(pp.Args) {
 		return false
 	}
 	for i := 0; i < fi; i++ {
-		if !m.Match(pp.Args[i], xc.Args[i], info, b) {
+		if !a.Match(pp.Args[i], xc.Args[i]) {
 			return false
 		}
 	}
@@ -924,7 +928,7 @@ func matchFormat(m *pattern.Matcher, pp, xc *ast.CallExpr, info *types.Info, b m
 		arg := pp.Args[fi+(k+1)/2]
 		if strings.HasPrefix(rest, part) && xi < len(xc.Args) {
 			c := maps.Clone(b)
-			if m.Match(arg, xc.Args[xi], info, c) {
+			if matchIn(a, c, arg, xc.Args[xi]) {
 				if r := try(k+1, rest[len(part):], xi+1, c); r != nil {
 					return r
 				}
@@ -935,7 +939,7 @@ func matchFormat(m *pattern.Matcher, pp, xc *ast.CallExpr, info *types.Info, b m
 		}
 		for j := 0; j <= len(rest) && !strings.Contains(rest[:j], "%"); j++ {
 			c := maps.Clone(b)
-			if bindText(m, arg, rest[:j], xc.Args[fi].Pos(), c, rel) {
+			if bindText(a, arg, rest[:j], xc.Args[fi].Pos(), c, rel) {
 				if r := try(k+1, rest[j:], xi, c); r != nil {
 					return r
 				}
@@ -953,8 +957,8 @@ func matchFormat(m *pattern.Matcher, pp, xc *ast.CallExpr, info *types.Info, b m
 
 // bindText binds the pattern's arg, if it is a parameter of type string,
 // to a literal of text in b; it reports whether it could.
-func bindText(m *pattern.Matcher, arg ast.Expr, text string, pos token.Pos, b map[pattern.HoleKey]ast.Expr, rel *relaxer) bool {
-	po := stringParam(m, arg)
+func bindText(a *pattern.Attempt, arg ast.Expr, text string, pos token.Pos, b map[pattern.HoleKey]ast.Expr, rel *relaxer) bool {
+	po := stringParam(a, arg)
 	if po == nil {
 		return false
 	}
@@ -975,13 +979,13 @@ func bindText(m *pattern.Matcher, arg ast.Expr, text string, pos token.Pos, b ma
 
 // stringParam is the parameter of type string that arg, of the pattern,
 // is, or nil.
-func stringParam(m *pattern.Matcher, arg ast.Expr) types.Object {
+func stringParam(a *pattern.Attempt, arg ast.Expr) types.Object {
 	id, ok := ast.Unparen(arg).(*ast.Ident)
 	if !ok {
 		return nil
 	}
-	po := m.Pkg.TypesInfo.Uses[id]
-	if _, hole := m.Holes[po]; !hole || po == nil || po == m.Recv || !types.Identical(po.Type(), types.Typ[types.String]) {
+	po := a.Pkg.TypesInfo.Uses[id]
+	if _, hole := a.Holes[po]; !hole || po == nil || po == a.Recv || !types.Identical(po.Type(), types.Typ[types.String]) {
 		return nil
 	}
 	return po
@@ -991,8 +995,9 @@ func stringParam(m *pattern.Matcher, arg ast.Expr) types.Object {
 // pattern's concatenation pp, + being associative: each operand of pp
 // matches one of x's in order, but a string parameter may match a run of
 // them, so to+": "+text is first+" "+last+": "+ref with to first+" "+last.
-func matchConcat(m *pattern.Matcher, pp, x *ast.BinaryExpr, info *types.Info, b map[pattern.HoleKey]ast.Expr, rel *relaxer) bool {
-	ps, xs := concatOperands(m.Pkg.TypesInfo, pp), concatOperands(info, x)
+func matchConcat(a *pattern.Attempt, pp, x *ast.BinaryExpr, rel *relaxer) bool {
+	info, b := a.Info, a.Bound
+	ps, xs := concatOperands(a.Pkg.TypesInfo, pp), concatOperands(info, x)
 	// try matches ps[i:] to xs[j:]; it returns the holes, or nil.
 	var try func(i, j int, b map[pattern.HoleKey]ast.Expr) map[pattern.HoleKey]ast.Expr
 	try = func(i, j int, b map[pattern.HoleKey]ast.Expr) map[pattern.HoleKey]ast.Expr {
@@ -1003,15 +1008,15 @@ func matchConcat(m *pattern.Matcher, pp, x *ast.BinaryExpr, info *types.Info, b 
 			return nil
 		}
 		c := maps.Clone(b)
-		if m.Match(ps[i], xs[j], info, c) {
+		if matchIn(a, c, ps[i], xs[j]) {
 			if r := try(i+1, j+1, c); r != nil {
 				return r
 			}
 		}
-		po := stringParam(m, ps[i])
+		po := stringParam(a, ps[i])
 		for k := j + 2; po != nil && k <= len(xs)-(len(ps)-i-1); k++ {
 			c := maps.Clone(b)
-			if bindRun(m, po, xs[j:k], c, rel) {
+			if bindRun(po, xs[j:k], c, rel) {
 				if r := try(i+1, k, c); r != nil {
 					return r
 				}
@@ -1029,7 +1034,7 @@ func matchConcat(m *pattern.Matcher, pp, x *ast.BinaryExpr, info *types.Info, b 
 
 // bindRun binds the string parameter po to the concatenation of run in
 // b; it reports whether it could.
-func bindRun(m *pattern.Matcher, po types.Object, run []ast.Expr, b map[pattern.HoleKey]ast.Expr, rel *relaxer) bool {
+func bindRun(po types.Object, run []ast.Expr, b map[pattern.HoleKey]ast.Expr, rel *relaxer) bool {
 	e := run[0]
 	for _, y := range run[1:] {
 		e = &ast.BinaryExpr{X: e, OpPos: y.Pos(), Op: token.ADD, Y: y}
@@ -1041,6 +1046,15 @@ func bindRun(m *pattern.Matcher, po types.Object, run []ast.Expr, b map[pattern.
 	b[k] = e
 	rel.runs[e] = run
 	return true
+}
+
+// matchIn reports whether x matches the pattern's p with the holes bound
+// as in b, which the match adds to; a's own bindings stay as they were.
+func matchIn(a *pattern.Attempt, b map[pattern.HoleKey]ast.Expr, p, x ast.Expr) bool {
+	saved := a.Bound
+	a.Bound = b
+	defer func() { a.Bound = saved }()
+	return a.Match(p, x)
 }
 
 // concatOperands lists the operands of e as a string concatenation,
@@ -1433,21 +1447,20 @@ func (f *folder) foldStmts(p *packages.Package, file *ast.File, list []ast.Stmt,
 		if f.inDone(list[i].Pos()) || line != 0 && pos.Line != line {
 			continue
 		}
-		b := map[pattern.HoleKey]ast.Expr{}
-		f.m.Locals = map[types.Object]types.Object{}
+		a := f.m.At(info)
+		a.Locals = map[types.Object]types.Object{}
 		matched := true
-		f.m.Miss = nil
 		for k := range f.stmts {
-			if !f.m.MatchStmt(f.stmts[k], list[i+k], info, b) {
-				f.keepNearest(k)
+			if !a.MatchStmt(f.stmts[k], list[i+k]) {
+				f.keepNearest(a.Miss, k)
 				matched = false
 				break
 			}
 		}
-		f.m.Locals = nil
 		if !matched {
 			continue
 		}
+		b := a.Bound
 		seq := list[i : i+n]
 		where := f.ws.Position(seq[0].Pos())
 		skip := ""
@@ -1492,14 +1505,14 @@ func (f *folder) foldStmts(p *packages.Package, file *ast.File, list []ast.Stmt,
 	return nil
 }
 
-// keepNearest keeps the last match's miss as the nearest if it got
-// further than any before: past k of the pattern's statements, then
-// deeper. A miss at the top of the pattern is no near miss.
-func (f *folder) keepNearest(k int) {
-	if f.m.Miss == nil {
+// keepNearest keeps miss, an attempt's, as the nearest if it got further
+// than any before: past k of the pattern's statements, then deeper. A
+// miss at the top of the pattern is no near miss.
+func (f *folder) keepNearest(miss *pattern.Miss, k int) {
+	if miss == nil {
 		return
 	}
-	n := *f.m.Miss
+	n := *miss
 	n.Depth += k
 	if n.Depth > 0 && (f.nearest == nil || n.Depth > f.nearest.Depth) {
 		f.nearest = &n

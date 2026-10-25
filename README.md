@@ -1318,6 +1318,11 @@ hand or a tool got in the way.
     - The attempt: one type for matching one site (the matcher, the
       site's info, the bindings, the code's locals and the miss), so
       the compare functions and the relaxations take `(p, x)`.
+      *Done:* `Matcher.At(info)` starts a `pattern.Attempt`, which
+      embeds the `Matcher` and holds `Info`, `Bound`, `Locals` and
+      `Miss`; the matching methods are its own, without `info`, `b`,
+      `pinfo` or `sub`. fold's backtracking relaxations try a copy of
+      the bindings with `matchIn`.
     - Two comparers behind one interface, rules per kind of node
       (fold's) and field by field (parameterize's, with its literal
       hook), sharing name resolution and the miss, in place of

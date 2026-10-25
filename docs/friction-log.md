@@ -2305,3 +2305,20 @@ side effects. A list of calls known to be pure would cover it.
 ## 2026-10-24: roadmap item 27's follow-ups
 
 Docs only: replace_text for the roadmap entry. Nothing by hand.
+
+## 2026-10-24: the attempt, `pattern.Attempt` (roadmap item 27)
+
+Through the tools: the tests first (replace_declaration and
+add_declaration), add_declaration for `Attempt`, `At`, `sub` and fold's
+`matchIn`, replace_declaration for `Matcher`, `Relaxations` and
+`keepNearest`, rename for the receivers and parameters `m` to `a` (22
+steps), remove_parameter for `bindRun`'s unused matcher. By hand, as
+twenty-odd replace_text steps (all_occurrences): turning the parameters
+`info` and `b` of thirteen methods into the receiver's fields, that is
+dropping them from every signature and call and writing `m.Info` and
+`m.Bound` for each use, and the receivers from `*Matcher` to
+`*Attempt`. No refactoring does this: it is introduce_parameter's
+inverse (a parameter every call passes as the same expression of the
+receiver becomes that expression), or a parameter object. Text
+replacement worked because the names were distinct (`info` but not
+`pinfo`, `b[` only for the bindings); on other code it would not be safe.

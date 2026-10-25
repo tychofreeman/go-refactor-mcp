@@ -54,18 +54,40 @@ var joined = "ab"
 var other = s + "c"
 `)
 	m := &Matcher{Pkg: pkg, Holes: map[types.Object]int{}}
-	info := pkg.TypesInfo
-	if !m.Match(v["pattern"], v["same"], info, map[HoleKey]ast.Expr{}) {
+	if !m.At(pkg.TypesInfo).Match(v["pattern"], v["same"]) {
 		t.Errorf("s + \"b\" does not match itself")
 	}
-	if m.Match(v["pattern"], v["joined"], info, map[HoleKey]ast.Expr{}) {
+	if m.At(pkg.TypesInfo).Match(v["pattern"], v["joined"]) {
 		t.Errorf("without relaxations, s + \"b\" matches \"ab\"")
 	}
-	if m.Match(v["pattern"], v["other"], info, map[HoleKey]ast.Expr{}) {
+	a := m.At(pkg.TypesInfo)
+	if a.Match(v["pattern"], v["other"]) {
 		t.Errorf("s + \"b\" matches s + \"c\"")
 	}
-	if m.Miss == nil || m.Miss.Depth != 1 {
-		t.Errorf("miss = %+v, want the operands \"b\" and \"c\", one below the top", m.Miss)
+	if a.Miss == nil || a.Miss.Depth != 1 {
+		t.Errorf("miss = %+v, want the operands \"b\" and \"c\", one below the top", a.Miss)
+	}
+}
+
+func TestAttemptBindsHoles(t *testing.T) {
+	pkg, v := load(t, `package p
+
+var s = "a"
+var u = "b"
+var pattern = s + "!"
+var code = u + "!"
+`)
+	s := pkg.TypesInfo.Uses[v["pattern"].(*ast.BinaryExpr).X.(*ast.Ident)]
+	m := &Matcher{Pkg: pkg, Holes: map[types.Object]int{s: 1}}
+	a := m.At(pkg.TypesInfo)
+	if !a.Match(v["pattern"], v["code"]) {
+		t.Fatal("s + \"!\" with s a hole does not match u + \"!\"")
+	}
+	if got := types.ExprString(a.Bound[HoleKey{Obj: s}]); got != "u" {
+		t.Errorf("s is bound to %q, want u", got)
+	}
+	if b := m.At(pkg.TypesInfo).Bound; len(b) != 0 {
+		t.Errorf("a new attempt starts with %v bound", b)
 	}
 }
 
@@ -103,18 +125,19 @@ func c(k int) string {
 		}
 	}
 	param := func(fn string) types.Object { return info.Defs[fns[fn].Type.Params.List[0].Names[0]] }
-	compare := func(other string) (*Matcher, map[string]string, bool) {
+	compare := func(other string) (*Attempt, map[string]string, bool) {
 		lits := map[string]string{}
 		m := &Matcher{
 			Pkg:        &packages.Package{TypesInfo: info},
-			Locals:     map[types.Object]types.Object{param("a"): param(other)},
 			Structural: true,
 			Literal: func(p, x *ast.BasicLit) bool {
 				lits[p.Value] = x.Value
 				return true
 			},
 		}
-		return m, lits, m.MatchStmt(fns["a"].Body, fns[other].Body, info, map[HoleKey]ast.Expr{})
+		a := m.At(info)
+		a.Locals = map[types.Object]types.Object{param("a"): param(other)}
+		return a, lits, a.MatchStmt(fns["a"].Body, fns[other].Body)
 	}
 	_, lits, ok := compare("b")
 	if !ok {

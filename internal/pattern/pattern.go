@@ -13,24 +13,19 @@ import (
 	"golang.org/x/tools/go/packages"
 )
 
-// Matcher matches code against a pattern, code of package Pkg: it knows
-// what each of the pattern's names is (a hole, a field of a struct
-// parameter, a local the pattern declares), binds the holes, and keeps
-// where the last match failed.
+// Matcher is a pattern, code of package Pkg, with what each of its names
+// is: a hole, a field of a struct parameter, a local the pattern
+// declares. At starts an attempt to match it against code.
 type Matcher struct {
-	Pkg *packages.Package // the pattern's
-	// Locals are, while matching statements, the code's variables
-	// standing for the pattern's locals; BodyLocals are the pattern's locals.
-	Locals, BodyLocals map[types.Object]types.Object
-	Holes              map[types.Object]int // the holes (a function's parameters and receiver), and how often the pattern uses each
+	Pkg        *packages.Package             // the pattern's
+	BodyLocals map[types.Object]types.Object // the pattern's locals
+	Holes      map[types.Object]int          // the holes (a function's parameters and receiver), and how often the pattern uses each
 	// Fields are the struct holes the pattern uses only by their fields:
 	// the fields, in the order the pattern first uses them. Each field is
 	// a hole of its own.
 	Fields map[types.Object][]string
 	Recv   types.Object // the hole that is a method's receiver, or nil
 	Relax  Relaxations  // rules for code of another shape, or nil
-	depth  int          // how deep the comparison under way is
-	Miss   *Miss        // where the last match failed, or nil
 	// Structural compares every node but identifiers and literals field
 	// by field, in place of the rules for each kind of node: code of any
 	// shape, compared exactly.
@@ -40,16 +35,36 @@ type Matcher struct {
 	Literal func(p, x *ast.BasicLit) bool
 }
 
+// Attempt is a match of the pattern against code of one package: what
+// it has bound the holes to, the code's variables standing for the
+// pattern's locals, and where the last match failed.
+type Attempt struct {
+	*Matcher
+	Info  *types.Info          // the code's
+	Bound map[HoleKey]ast.Expr // the code each hole stands for
+	// Locals are the code's variables standing for the pattern's locals,
+	// or nil where the pattern may declare none (matching an expression).
+	Locals map[types.Object]types.Object
+	depth  int   // how deep the comparison under way is
+	Miss   *Miss // where the last match failed, or nil
+}
+
+// At starts an attempt to match the pattern against code whose info is
+// info, with no hole bound.
+func (m *Matcher) At(info *types.Info) *Attempt {
+	return &Attempt{Matcher: m, Info: info, Bound: map[HoleKey]ast.Expr{}}
+}
+
 // Relaxations match code that does what the pattern does in another
 // shape: rules a user of the matcher adds (fold's), which matching
 // itself does not have. Without them, "a" + "b" does not match "ab".
 type Relaxations interface {
 	// Call matches a call whose arguments differ in number from the pattern's.
-	Call(m *Matcher, p, x *ast.CallExpr, info *types.Info, b map[HoleKey]ast.Expr) bool
+	Call(a *Attempt, p, x *ast.CallExpr) bool
 	// Concat matches a string concatenation by its operands.
-	Concat(m *Matcher, p, x *ast.BinaryExpr, info *types.Info, b map[HoleKey]ast.Expr) bool
+	Concat(a *Attempt, p, x *ast.BinaryExpr) bool
 	// Address matches *p against an expression that is not a dereference.
-	Address(m *Matcher, p *ast.StarExpr, x ast.Expr, info *types.Info, b map[HoleKey]ast.Expr) bool
+	Address(a *Attempt, p *ast.StarExpr, x ast.Expr) bool
 }
 
 // HoleKey is a hole: a parameter, or with Field one field of a struct
@@ -68,100 +83,103 @@ type Miss struct {
 	Depth            int
 }
 
-// Match reports whether x, of the package whose info is info, is the
-// pattern p (of Pkg) with its holes filled in b.
-func (m *Matcher) Match(p, x ast.Expr, info *types.Info, b map[HoleKey]ast.Expr) bool {
-	m.depth++
-	ok := m.compareExpr(p, x, info, b)
-	m.depth--
-	m.note(ok, p, x)
+// Match reports whether x, code of the attempt's package, is the
+// pattern's p with its holes bound as in Bound, binding the others.
+func (a *Attempt) Match(p, x ast.Expr) bool {
+	a.depth++
+	ok := a.compareExpr(p, x)
+	a.depth--
+	a.note(ok, p, x)
 	return ok
+}
+
+// sub reports whether x matches the pattern's p, or both are missing.
+func (a *Attempt) sub(p, x ast.Expr) bool {
+	if p == nil || x == nil {
+		return p == nil && x == nil
+	}
+	return a.Match(p, x)
 }
 
 // note keeps where a match failed: the innermost comparison that
 // failed, unless a comparison around it then matched another way.
-func (m *Matcher) note(ok bool, p, x ast.Node) {
+func (a *Attempt) note(ok bool, p, x ast.Node) {
 	if ok {
-		m.Miss = nil
-	} else if m.Miss == nil {
-		m.Miss = &Miss{P: p, X: x, Depth: m.depth}
-	} else if _, id := m.Miss.P.(*ast.Ident); id && m.Miss.AroundP == nil {
+		a.Miss = nil
+	} else if a.Miss == nil {
+		a.Miss = &Miss{P: p, X: x, Depth: a.depth}
+	} else if _, id := a.Miss.P.(*ast.Ident); id && a.Miss.AroundP == nil {
 		pe, okP := p.(ast.Expr)
 		xe, okX := x.(ast.Expr)
 		if okP && okX {
-			m.Miss.AroundP, m.Miss.AroundX = pe, xe
+			a.Miss.AroundP, a.Miss.AroundX = pe, xe
 		}
 	}
 }
 
 // compareExpr reports whether x is the pattern p, comparing their nodes;
 // Match calls it and keeps where it failed.
-func (m *Matcher) compareExpr(p ast.Expr, x ast.Expr, info *types.Info, b map[HoleKey]ast.Expr) bool {
-	if m.Structural {
+func (a *Attempt) compareExpr(p ast.Expr, x ast.Expr) bool {
+	if a.Structural {
 		switch p.(type) {
 		case *ast.Ident, *ast.BasicLit:
 		default:
-			return m.fields(p, x, info, b)
+			return a.fields(p, x)
 		}
 	}
 	p, x = ast.Unparen(p), ast.Unparen(x)
-	pinfo := m.Pkg.TypesInfo
-	sub := func(p, x ast.Expr) bool {
-		if p == nil || x == nil {
-			return p == nil && x == nil
-		}
-		return m.Match(p, x, info, b)
-	}
+	pinfo := a.Pkg.TypesInfo
 	switch pp := p.(type) {
 	case *ast.Ident:
-		return m.matchIdent(pp, x, info, b, pinfo)
+		return a.matchIdent(pp, x)
 	case *ast.BasicLit:
 		xb, ok := x.(*ast.BasicLit)
-		if m.Literal != nil {
-			return ok && xb.Kind == pp.Kind && m.Literal(pp, xb)
+		if a.Literal != nil {
+			return ok && xb.Kind == pp.Kind && a.Literal(pp, xb)
 		}
 		return ok && xb.Kind == pp.Kind && xb.Value == pp.Value
 	case *ast.SelectorExpr:
-		return m.matchSelector(pp, x, info, b, pinfo, sub)
+		return a.matchSelector(pp, x)
 	case *ast.CallExpr:
-		return m.matchCall(pp, x, info, b, sub)
+		return a.matchCall(pp, x)
 	case *ast.BinaryExpr:
-		return m.matchBinary(pp, x, info, b, pinfo, sub)
+		return a.matchBinary(pp, x)
 	case *ast.UnaryExpr:
 		xu, ok := x.(*ast.UnaryExpr)
-		return ok && xu.Op == pp.Op && sub(pp.X, xu.X)
+		return ok && xu.Op == pp.Op && a.sub(pp.X, xu.X)
 	case *ast.StarExpr:
 		if xs, ok := x.(*ast.StarExpr); ok {
-			return sub(pp.X, xs.X)
+			return a.sub(pp.X, xs.X)
 		}
-		return m.Relax != nil && m.Relax.Address(m, pp, x, info, b)
+		return a.Relax != nil && a.Relax.Address(a, pp, x)
 	case *ast.IndexExpr:
 		xi, ok := x.(*ast.IndexExpr)
-		return ok && sub(pp.X, xi.X) && sub(pp.Index, xi.Index)
+		return ok && a.sub(pp.X, xi.X) && a.sub(pp.Index, xi.Index)
 	case *ast.SliceExpr:
 		xs, ok := x.(*ast.SliceExpr)
-		return ok && xs.Slice3 == pp.Slice3 && sub(pp.X, xs.X) && sub(pp.Low, xs.Low) && sub(pp.High, xs.High) && sub(pp.Max, xs.Max)
+		return ok && xs.Slice3 == pp.Slice3 && a.sub(pp.X, xs.X) && a.sub(pp.Low, xs.Low) && a.sub(pp.High, xs.High) && a.sub(pp.Max, xs.Max)
 	case *ast.TypeAssertExpr:
 		xt, ok := x.(*ast.TypeAssertExpr)
-		return ok && pp.Type != nil && xt.Type != nil && sub(pp.X, xt.X) && types.Identical(pinfo.TypeOf(pp.Type), info.TypeOf(xt.Type))
+		return ok && pp.Type != nil && xt.Type != nil && a.sub(pp.X, xt.X) && types.Identical(pinfo.TypeOf(pp.Type), a.Info.TypeOf(xt.Type))
 	case *ast.CompositeLit:
-		return matchComposite(pp, x, info, pinfo, sub)
+		return a.matchComposite(pp, x)
 	case *ast.KeyValueExpr:
 		xk, ok := x.(*ast.KeyValueExpr)
-		return ok && sub(pp.Key, xk.Key) && sub(pp.Value, xk.Value)
+		return ok && a.sub(pp.Key, xk.Key) && a.sub(pp.Value, xk.Value)
 	}
 	return false
 }
 
 // matchComposite reports whether x matches the composite literal pp of the
 // pattern, element by element.
-func matchComposite(pp *ast.CompositeLit, x ast.Expr, info *types.Info, pinfo *types.Info, sub func(p ast.Expr, x ast.Expr) bool) bool {
+func (a *Attempt) matchComposite(pp *ast.CompositeLit, x ast.Expr) bool {
+	pinfo := a.Pkg.TypesInfo
 	xc, ok := x.(*ast.CompositeLit)
-	if !ok || len(xc.Elts) != len(pp.Elts) || types.TypeString(pinfo.TypeOf(pp), nil) != types.TypeString(info.TypeOf(xc), nil) {
+	if !ok || len(xc.Elts) != len(pp.Elts) || types.TypeString(pinfo.TypeOf(pp), nil) != types.TypeString(a.Info.TypeOf(xc), nil) {
 		return false
 	}
 	for i := range pp.Elts {
-		if !sub(pp.Elts[i], xc.Elts[i]) {
+		if !a.sub(pp.Elts[i], xc.Elts[i]) {
 			return false
 		}
 	}
@@ -170,27 +188,28 @@ func matchComposite(pp *ast.CompositeLit, x ast.Expr, info *types.Info, pinfo *t
 
 // matchBinary reports whether x matches the binary expression pp of the
 // pattern; string concatenations match by their operands.
-func (m *Matcher) matchBinary(pp *ast.BinaryExpr, x ast.Expr, info *types.Info, b map[HoleKey]ast.Expr, pinfo *types.Info, sub func(p ast.Expr, x ast.Expr) bool) bool {
-	if m.Relax != nil && pp.Op == token.ADD && analysis.IsString(pinfo.TypeOf(pp)) {
+func (a *Attempt) matchBinary(pp *ast.BinaryExpr, x ast.Expr) bool {
+	pinfo := a.Pkg.TypesInfo
+	if a.Relax != nil && pp.Op == token.ADD && analysis.IsString(pinfo.TypeOf(pp)) {
 		xb, ok := x.(*ast.BinaryExpr)
-		return ok && xb.Op == token.ADD && m.Relax.Concat(m, pp, xb, info, b)
+		return ok && xb.Op == token.ADD && a.Relax.Concat(a, pp, xb)
 	}
 	xb, ok := x.(*ast.BinaryExpr)
-	return ok && xb.Op == pp.Op && sub(pp.X, xb.X) && sub(pp.Y, xb.Y)
+	return ok && xb.Op == pp.Op && a.sub(pp.X, xb.X) && a.sub(pp.Y, xb.Y)
 }
 
 // matchCall reports whether x matches the call pp of the pattern, argument
 // by argument or as a format string.
-func (m *Matcher) matchCall(pp *ast.CallExpr, x ast.Expr, info *types.Info, b map[HoleKey]ast.Expr, sub func(p ast.Expr, x ast.Expr) bool) bool {
+func (a *Attempt) matchCall(pp *ast.CallExpr, x ast.Expr) bool {
 	xc, ok := x.(*ast.CallExpr)
-	if !ok || xc.Ellipsis.IsValid() != pp.Ellipsis.IsValid() || !sub(pp.Fun, xc.Fun) {
+	if !ok || xc.Ellipsis.IsValid() != pp.Ellipsis.IsValid() || !a.sub(pp.Fun, xc.Fun) {
 		return false
 	}
 	if len(xc.Args) != len(pp.Args) {
-		return m.Relax != nil && m.Relax.Call(m, pp, xc, info, b)
+		return a.Relax != nil && a.Relax.Call(a, pp, xc)
 	}
 	for i := range pp.Args {
-		if !sub(pp.Args[i], xc.Args[i]) {
+		if !a.sub(pp.Args[i], xc.Args[i]) {
 			return false
 		}
 	}
@@ -200,115 +219,111 @@ func (m *Matcher) matchCall(pp *ast.CallExpr, x ast.Expr, info *types.Info, b ma
 // matchSelector reports whether x matches the selector pp of the pattern: a
 // field of a struct parameter, a qualified name, or the same field or
 // method of matching operands.
-func (m *Matcher) matchSelector(pp *ast.SelectorExpr, x ast.Expr, info *types.Info, b map[HoleKey]ast.Expr, pinfo *types.Info, sub func(p ast.Expr, x ast.Expr) bool) bool {
+func (a *Attempt) matchSelector(pp *ast.SelectorExpr, x ast.Expr) bool {
+	pinfo := a.Pkg.TypesInfo
 	if id := IdentOf(pp.X); id != nil {
 		po := pinfo.Uses[id]
-		if _, byField := m.Fields[po]; byField {
+		if _, byField := a.Fields[po]; byField {
 			k := HoleKey{po, pp.Sel.Name}
-			if prev, ok := b[k]; ok {
+			if prev, ok := a.Bound[k]; ok {
 				return types.ExprString(prev) == types.ExprString(x)
 			}
-			xt := info.TypeOf(x)
-			if xt == nil || !info.Types[x].IsValue() || !types.AssignableTo(xt, pinfo.TypeOf(pp)) && types.TypeString(xt, nil) != types.TypeString(pinfo.TypeOf(pp), nil) {
+			xt := a.Info.TypeOf(x)
+			if xt == nil || !a.Info.Types[x].IsValue() || !types.AssignableTo(xt, pinfo.TypeOf(pp)) && types.TypeString(xt, nil) != types.TypeString(pinfo.TypeOf(pp), nil) {
 				return false
 			}
-			b[k] = x
+			a.Bound[k] = x
 			return true
 		}
 		if _, pkgName := po.(*types.PkgName); pkgName {
 			if xi, ok := x.(*ast.Ident); ok { // Name in the package itself
-				return xi.Name == pp.Sel.Name && SameObj(pinfo.Uses[pp.Sel], info.Uses[xi])
+				return xi.Name == pp.Sel.Name && SameObj(pinfo.Uses[pp.Sel], a.Info.Uses[xi])
 			}
 		}
 	}
 	xs, ok := x.(*ast.SelectorExpr)
-	return ok && xs.Sel.Name == pp.Sel.Name && sub(pp.X, xs.X) && SameObj(pinfo.Uses[pp.Sel], info.Uses[xs.Sel])
+	return ok && xs.Sel.Name == pp.Sel.Name && a.sub(pp.X, xs.X) && SameObj(pinfo.Uses[pp.Sel], a.Info.Uses[xs.Sel])
 }
 
 // matchIdent reports whether x matches the identifier pp of the pattern: a
 // name a local of fn declares, a hole, or the same object.
-func (m *Matcher) matchIdent(pp *ast.Ident, x ast.Expr, info *types.Info, b map[HoleKey]ast.Expr, pinfo *types.Info) bool {
+func (a *Attempt) matchIdent(pp *ast.Ident, x ast.Expr) bool {
+	pinfo := a.Pkg.TypesInfo
 	if pd := pinfo.Defs[pp]; pd != nil || pp.Name == "_" {
 		// A local fn declares: the occurrence's own name for it.
 		xi, ok := x.(*ast.Ident)
 		if !ok || pp.Name == "_" {
 			return ok && xi.Name == "_"
 		}
-		xd := info.Defs[xi]
-		if xd == nil || m.Locals == nil {
+		xd := a.Info.Defs[xi]
+		if xd == nil || a.Locals == nil {
 			return false
 		}
-		m.Locals[pd] = xd
+		a.Locals[pd] = xd
 		return true
 	}
-	if xo, local := m.Locals[pinfo.Uses[pp]]; local {
+	if xo, local := a.Locals[pinfo.Uses[pp]]; local {
 		xi, ok := x.(*ast.Ident)
-		return ok && info.Uses[xi] == xo
+		return ok && a.Info.Uses[xi] == xo
 	}
-	if _, local := m.BodyLocals[pinfo.Uses[pp]]; local {
+	if _, local := a.BodyLocals[pinfo.Uses[pp]]; local {
 		return false
 	}
 	po := pinfo.Uses[pp]
-	if _, hole := m.Holes[po]; hole && po != nil {
-		if prev, ok := b[HoleKey{po, ""}]; ok {
+	if _, hole := a.Holes[po]; hole && po != nil {
+		if prev, ok := a.Bound[HoleKey{po, ""}]; ok {
 			return types.ExprString(prev) == types.ExprString(x)
 		}
-		xt := info.TypeOf(x)
-		if xt == nil || !info.Types[x].IsValue() {
+		xt := a.Info.TypeOf(x)
+		if xt == nil || !a.Info.Types[x].IsValue() {
 			return false
 		}
-		if po == m.Recv {
+		if po == a.Recv {
 			if !SameObj(BaseName(xt), BaseName(po.Type())) {
 				return false
 			}
 		} else if !types.AssignableTo(xt, po.Type()) && types.TypeString(xt, nil) != types.TypeString(po.Type(), nil) {
 			return false
 		}
-		b[HoleKey{po, ""}] = x
+		a.Bound[HoleKey{po, ""}] = x
 		return true
 	}
 	switch x := x.(type) {
 	case *ast.Ident:
 		// Names the type checker gives no object (a type switch's symbol)
 		// are the same when spelled the same.
-		return x.Name == pp.Name && (SameObj(po, info.Uses[x]) || po == nil && info.Uses[x] == nil)
+		return x.Name == pp.Name && (SameObj(po, a.Info.Uses[x]) || po == nil && a.Info.Uses[x] == nil)
 	case *ast.SelectorExpr: // pkg.Name in another package
-		_, pkgName := info.Uses[IdentOf(x.X)].(*types.PkgName)
-		return pkgName && x.Sel.Name == pp.Name && SameObj(po, info.Uses[x.Sel])
+		_, pkgName := a.Info.Uses[IdentOf(x.X)].(*types.PkgName)
+		return pkgName && x.Sel.Name == pp.Name && SameObj(po, a.Info.Uses[x.Sel])
 	}
 	return false
 }
 
 // MatchStmt reports whether x is the pattern's statement p.
-func (m *Matcher) MatchStmt(p, x ast.Stmt, info *types.Info, b map[HoleKey]ast.Expr) bool {
-	m.depth++
-	ok := m.compareStmt(p, x, info, b)
-	m.depth--
-	m.note(ok, p, x)
+func (a *Attempt) MatchStmt(p, x ast.Stmt) bool {
+	a.depth++
+	ok := a.compareStmt(p, x)
+	a.depth--
+	a.note(ok, p, x)
 	return ok
 }
 
 // compareStmt reports whether x is the pattern's statement p, comparing
 // their nodes; MatchStmt calls it and keeps where it failed.
-func (m *Matcher) compareStmt(p ast.Stmt, x ast.Stmt, info *types.Info, b map[HoleKey]ast.Expr) bool {
+func (a *Attempt) compareStmt(p ast.Stmt, x ast.Stmt) bool {
 	if p == nil || x == nil {
 		return p == nil && x == nil
 	}
-	if m.Structural {
-		return m.fields(p, x, info, b)
-	}
-	expr := func(p, x ast.Expr) bool {
-		if p == nil || x == nil {
-			return p == nil && x == nil
-		}
-		return m.Match(p, x, info, b)
+	if a.Structural {
+		return a.fields(p, x)
 	}
 	exprs := func(p, x []ast.Expr) bool {
 		if len(p) != len(x) {
 			return false
 		}
 		for i := range p {
-			if !expr(p[i], x[i]) {
+			if !a.sub(p[i], x[i]) {
 				return false
 			}
 		}
@@ -322,7 +337,7 @@ func (m *Matcher) compareStmt(p ast.Stmt, x ast.Stmt, info *types.Info, b map[Ho
 			return false
 		}
 		for i := range p.List {
-			if !m.MatchStmt(p.List[i], x.List[i], info, b) {
+			if !a.MatchStmt(p.List[i], x.List[i]) {
 				return false
 			}
 		}
@@ -331,25 +346,25 @@ func (m *Matcher) compareStmt(p ast.Stmt, x ast.Stmt, info *types.Info, b map[Ho
 	switch pp := p.(type) {
 	case *ast.ExprStmt:
 		xs, ok := x.(*ast.ExprStmt)
-		return ok && expr(pp.X, xs.X)
+		return ok && a.sub(pp.X, xs.X)
 	case *ast.AssignStmt:
 		xs, ok := x.(*ast.AssignStmt)
 		return ok && xs.Tok == pp.Tok && exprs(pp.Rhs, xs.Rhs) && exprs(pp.Lhs, xs.Lhs)
 	case *ast.IncDecStmt:
 		xs, ok := x.(*ast.IncDecStmt)
-		return ok && xs.Tok == pp.Tok && expr(pp.X, xs.X)
+		return ok && xs.Tok == pp.Tok && a.sub(pp.X, xs.X)
 	case *ast.BlockStmt:
 		xs, ok := x.(*ast.BlockStmt)
 		return ok && block(pp, xs)
 	case *ast.IfStmt:
 		xs, ok := x.(*ast.IfStmt)
-		return ok && m.MatchStmt(pp.Init, xs.Init, info, b) && expr(pp.Cond, xs.Cond) && block(pp.Body, xs.Body) && m.MatchStmt(pp.Else, xs.Else, info, b)
+		return ok && a.MatchStmt(pp.Init, xs.Init) && a.sub(pp.Cond, xs.Cond) && block(pp.Body, xs.Body) && a.MatchStmt(pp.Else, xs.Else)
 	case *ast.ForStmt:
 		xs, ok := x.(*ast.ForStmt)
-		return ok && m.MatchStmt(pp.Init, xs.Init, info, b) && expr(pp.Cond, xs.Cond) && m.MatchStmt(pp.Post, xs.Post, info, b) && block(pp.Body, xs.Body)
+		return ok && a.MatchStmt(pp.Init, xs.Init) && a.sub(pp.Cond, xs.Cond) && a.MatchStmt(pp.Post, xs.Post) && block(pp.Body, xs.Body)
 	case *ast.RangeStmt:
 		xs, ok := x.(*ast.RangeStmt)
-		return ok && xs.Tok == pp.Tok && expr(pp.X, xs.X) && expr(pp.Key, xs.Key) && expr(pp.Value, xs.Value) && block(pp.Body, xs.Body)
+		return ok && xs.Tok == pp.Tok && a.sub(pp.X, xs.X) && a.sub(pp.Key, xs.Key) && a.sub(pp.Value, xs.Value) && block(pp.Body, xs.Body)
 	case *ast.DeclStmt:
 		xs, ok := x.(*ast.DeclStmt)
 		pg, _ := pp.Decl.(*ast.GenDecl)
@@ -363,11 +378,11 @@ func (m *Matcher) compareStmt(p ast.Stmt, x ast.Stmt, info *types.Info, b map[Ho
 			if ps == nil || vs == nil || len(ps.Names) != len(vs.Names) || (ps.Type == nil) != (vs.Type == nil) || !exprs(ps.Values, vs.Values) {
 				return false
 			}
-			if ps.Type != nil && !types.Identical(m.Pkg.TypesInfo.TypeOf(ps.Type), info.TypeOf(vs.Type)) {
+			if ps.Type != nil && !types.Identical(a.Pkg.TypesInfo.TypeOf(ps.Type), a.Info.TypeOf(vs.Type)) {
 				return false
 			}
 			for j := range ps.Names {
-				if !expr(ps.Names[j], vs.Names[j]) {
+				if !a.sub(ps.Names[j], vs.Names[j]) {
 					return false
 				}
 			}
@@ -382,23 +397,23 @@ func (m *Matcher) compareStmt(p ast.Stmt, x ast.Stmt, info *types.Info, b map[Ho
 
 // node compares two nodes of any kind, for Structural: expressions and
 // statements by Match and MatchStmt, the rest field by field.
-func (m *Matcher) node(p, x ast.Node, info *types.Info, b map[HoleKey]ast.Expr) bool {
+func (a *Attempt) node(p, x ast.Node) bool {
 	switch p := p.(type) {
 	case *ast.CommentGroup:
 		return true
 	case ast.Expr:
 		if x, ok := x.(ast.Expr); ok {
-			return m.Match(p, x, info, b)
+			return a.Match(p, x)
 		}
 	case ast.Stmt:
 		if x, ok := x.(ast.Stmt); ok {
-			return m.MatchStmt(p, x, info, b)
+			return a.MatchStmt(p, x)
 		}
 	}
-	m.depth++
-	ok := m.fields(p, x, info, b)
-	m.depth--
-	m.note(ok, p, x)
+	a.depth++
+	ok := a.fields(p, x)
+	a.depth--
+	a.note(ok, p, x)
 	return ok
 }
 
@@ -406,7 +421,7 @@ var posType = reflect.TypeOf(token.NoPos)
 
 // fields compares p and x, nodes of one kind, field by field: the nodes
 // in them by node, other values by equality; positions do not count.
-func (m *Matcher) fields(p, x ast.Node, info *types.Info, b map[HoleKey]ast.Expr) bool {
+func (a *Attempt) fields(p, x ast.Node) bool {
 	if reflect.TypeOf(p) != reflect.TypeOf(x) {
 		return false
 	}
@@ -426,7 +441,7 @@ func (m *Matcher) fields(p, x ast.Node, info *types.Info, b map[HoleKey]ast.Expr
 			}
 			np, okP := fp.Interface().(ast.Node)
 			nx, okX := fx.Interface().(ast.Node)
-			if okP && okX && !m.node(np, nx, info, b) {
+			if okP && okX && !a.node(np, nx) {
 				return false
 			}
 		case reflect.Slice:
@@ -436,7 +451,7 @@ func (m *Matcher) fields(p, x ast.Node, info *types.Info, b map[HoleKey]ast.Expr
 			for j := range fp.Len() {
 				np, okP := fp.Index(j).Interface().(ast.Node)
 				nx, okX := fx.Index(j).Interface().(ast.Node)
-				if okP && okX && !m.node(np, nx, info, b) {
+				if okP && okX && !a.node(np, nx) {
 					return false
 				}
 			}
