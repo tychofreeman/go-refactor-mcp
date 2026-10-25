@@ -1352,6 +1352,47 @@ hand or a tool got in the way.
       (`analysis.ReadOnlyCall`: no side effects, never panics), which
       remove_dead_code uses, since deleting a read drops nothing.
 
+28. **A parameter into what the body can work out, and methods onto
+    another type** (the user, 2026-10-24): the largest hand edit of
+    item 27 (#317) turned `info` and `b`, parameters of thirteen
+    methods that the bodies read and passed down, into the receiver's
+    `m.Info` and `m.Bound`: twenty-odd replace_text steps, safe only
+    because the names were distinct. remove_parameter refuses a
+    parameter the body reads, rightly. Two operations, in this order:
+    - `value` on remove_parameter (Fowler's Replace Parameter with
+      Query, IntelliJ's Inline Parameter; the inverse of
+      introduce_parameter): every use of the parameter becomes value,
+      an expression the body can evaluate (`m.Info`), and every call
+      drops its argument. An option, not a tool (the budget, item 25);
+      plain remove_parameter's refusal for a parameter the body reads
+      names it. What the engine proves: each call passes the value in
+      the caller's terms (`a.Info` at `a.Match(p, x, a.Info, b)`), or
+      forwards the caller's own parameter in a call on the same
+      receiver, which by induction is the value (the recursive calls);
+      evaluating the value at each use gives what the argument gave at
+      the call (nothing between writes `m.Info`, and it cannot panic:
+      `analysis.Stable` and `MayPanic`, as introduce_parameter uses);
+      and the body never assigns the parameter (writing through it, as
+      `b[k] = x` does, is fine: it is the same map).
+    - `move_method`: a method moves to another receiver type that
+      holds the old receiver (`*Matcher` to `*Attempt`, which embeds
+      it) or to one of its parameters' types, and every call follows.
+      #317 changed thirteen receivers by hand; #318 moved two methods
+      to `ByKind` in three refactorings each, through a parameter of
+      an empty struct (method_to_function, add_parameter,
+      function_to_method). Whether it is a tool or an option of
+      function_to_method (a receiver from a parameter of any type) is
+      for the budget to decide.
+    With both, #317's derivation would have been: declare `Attempt`
+    (an edit), move the methods, then remove_parameter with `value`
+    for `info` and `b`. IntelliJ's other route, Introduce Parameter
+    Object then Convert to Instance Method, needs the same two. Not
+    this: one `change_signature` in place of add_parameter,
+    remove_parameter and move_parameter (IntelliJ's Change Signature)
+    would free two places of the budget and make several signature
+    changes in one call, but would not have done #317: Change
+    Signature does not delete a parameter the body uses either.
+
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
 candidates and the evidence for each, gathered from the friction log.
