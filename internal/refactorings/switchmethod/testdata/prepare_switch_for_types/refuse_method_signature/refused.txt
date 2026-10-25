@@ -1,0 +1,1 @@
+interface Kind has a method shelve() int, but the switch needs shelve(shelves map[string]int); give the method another name, or change its signature first
