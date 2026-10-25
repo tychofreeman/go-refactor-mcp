@@ -469,6 +469,13 @@ results are in `docs/cost-history.md`.
   With the whole module and the test files' literals, 28 of 29 parsed
   answers on those tasks passed; with bodies in view both models wrote
   more by hand (Sonnet dropped fold on dispatch).
+- The plan-then-execute loop (cost-history 17, `loop.py -no-read`): Haiku
+  12/16 on freight-xl at $0.0126 a task in 1.2 requests, the same cost as
+  Haiku by hand (16/16, 9.6 requests); Sonnet 14/16 at 1.8 times Sonnet
+  by hand. Letting the plan read bodies doubled Haiku's cost and turned
+  folds into rewrites. The cost is the prompt (31K tokens, mostly input
+  schemas). Open: a shorter tools reference, asking "done?" when tests
+  pass, and a batch's stubs re-declaring fields an earlier step removed.
 - Where a session's cost goes (cost-history 12,
   `eval-tasks/learning/cost.py`): cache writes 69%, output 18%, cache
   reads 13%, though cache reads are 88% of input tokens. About 38% of

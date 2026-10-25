@@ -140,6 +140,15 @@ for bodies in view; one passed ($0.021, 2 requests, against $0.0099
 for Haiku by hand), one answered JSON that did not parse, which now
 gets a repair.
 
+## Step 1, run (cost-history 17)
+
+Haiku without reads: 12/16 at the cost of Haiku by hand; Sonnet 14/16
+at 1.8 times. Before step 2, three fixes: a shorter tools reference
+(the prompt is the cost), a "done?" turn when the module's tests pass
+(two Sonnet answers planned in stages and the loop stopped after the
+first), and the stub bug (a batch re-declared the fields its own first
+step removed). Then lending-xl.
+
 ## Recording
 
 Each step in its own PR: the results in `docs/cost-history.md`, the

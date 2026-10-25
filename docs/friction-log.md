@@ -2420,3 +2420,8 @@ loop.py with create_file (written in the scratchpad first), then its
 fixes with replace_text (one refused for a docstring quoted wrongly, and
 resent); the plan doc with replace_text. This entry appended with a
 heredoc. Nothing else by hand.
+
+## 2026-10-25: the loop without reads (cost-history 17)
+
+`-no-read` in loop.py and the docs with replace_text. This entry appended
+with a heredoc. Nothing else by hand.
