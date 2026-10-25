@@ -932,6 +932,56 @@ Sonnet's price, and what is missing is bodies where content must be
 written, not the plan. A repair turn with the bodies it names would
 answer most of the failures.
 
+## 17. Plan, then execute: the loop (Oct 25)
+
+Roadmap item 29, step 1: `eval-tasks/learning/loop.py` on freight-xl's four
+tasks, 4 attempts each, up to two repairs, the module's own tests deciding
+when the loop stops and the hidden tests judging the result. Two variants
+for Haiku: the plan may first ask to read declarations (`read`), or source
+comes only with a repair (`-no-read`); then Sonnet with the one that won.
+Compared with the manual arm of section 14 (same tasks and model, Claude
+Code editing by hand). $3.44 in all.
+
+| | passed | cost per task | requests |
+|---|---|---|---|
+| Haiku by hand (section 14) | 16/16 | $0.0124 | 9.6 |
+| Haiku loop, read | 12/16 | $0.0286 | 2.3 |
+| Haiku loop, no read | 12/16 | $0.0126 | 1.2 |
+| Sonnet by hand (section 14) | 16/16 | $0.0973 | 5.3 |
+| Sonnet loop, no read | 14/16 | $0.174 | 1.2 |
+
+- **Reading costs and rewrites.** With `read`, Haiku asked for 8-60
+  declarations a task and rewrote them with replace_statements and
+  replace_text; dispatch wrote 15 lines by hand an attempt. Without it,
+  the same model folded (dispatch 5 lines, run by fold and inline) at
+  less than half the cost, with the same passes. Section 16's finding,
+  now in cost.
+- **dispatch, tail and run pass in every attempt of every variant**, mostly
+  in one request: the plan from the call tree is the change.
+- **routes fails, for three reasons, none of them the plan's shape:**
+  - A batch that replaced `Shipment` without `Road` and `Rail` was
+    applied with those fields declared again as stubs: the batch's
+    create_from_usage declares what the steps use and nothing declares,
+    including what an earlier step of the same batch removed. The module's
+    tests then passed on unchanged code. An engine bug, which a session
+    through the MCP can hit too.
+  - Two Sonnet answers planned in stages ("I'll rewrite the uses in a
+    follow-up") and sent only add_field; it passed the module's tests, and
+    the loop stopped. The loop takes passing tests for done.
+  - replace_text on test files whose text the plan guessed.
+- **The loop costs what its prompt costs.** One planning request writes
+  about 31K tokens to the cache, most of it the tools' input schemas (75K
+  characters); Claude Code's own context, with its tools turned off
+  (`--tools ""`), is a few thousand. That is about Haiku's whole cost by
+  hand, and at Sonnet's prices 1.8 times Sonnet's by hand, though the loop
+  takes 1.2 requests against 5-10.
+
+So the loop does in one or two requests what the mcp arm did in 7-20,
+and at Haiku's price matches editing by hand. What stands between it and
+a saving: a shorter tools reference (the schemas of the steps a plan uses
+are a fraction of 44), asking the model whether it is done when the tests
+pass instead of stopping, and the stub bug.
+
 ## What made the difference
 
 - **Smaller results** (#75, rename locations): the largest single win when

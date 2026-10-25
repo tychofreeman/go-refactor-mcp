@@ -49,12 +49,9 @@ The module, as a call tree (names, signatures and doc comments; no bodies):
 The change:
 {prompt}
 
-Answer with one JSON object and nothing else, either
-{{"batch": {{"steps": [the whole change as gorefactor steps, in order]}}}}
-or, only if you must write code whose current form you cannot see here
-(a body you rewrite, a format you copy), first
-{{"read": ["pkg.Name" or "pkg.Type.Method", ...]}}
-to be sent their source, once. Prefer refactorings that derive the change
+Answer with one JSON object and nothing else:
+{{"batch": {{"steps": [the whole change as gorefactor steps, in order]}}}}{read}
+Prefer refactorings that derive the change
 (fold, inline_function, rename, extract_struct, ...) to edits that rewrite
 code. Address declarations by name where a tool allows it; a batch with
 check "end" may pass through code that does not compile yet. After it
@@ -70,6 +67,14 @@ Answer with the batch: {{"batch": {{"steps": [...]}}}}."""
 UNPARSED = """Your answer was not one JSON object with a "batch" key that parses.
 Answer with that JSON alone, nothing before or after it:
 {"batch": {"steps": [...]}}."""
+
+# MAY_READ, in PLAN, lets the first answer ask for source; without it
+# (-no-read), source comes only with a repair, for what failed.
+MAY_READ = """
+or, only if you must write code whose current form you cannot see here
+(a body you rewrite, a format you copy), first
+{"read": ["pkg.Name" or "pkg.Type.Method", ...]}
+to be sent their source, once."""
 
 REPAIR = """The batch did not succeed:
 
@@ -204,10 +209,11 @@ class Ref:
         return json.dumps({"batch": self.ref}), ""
 
 
-def attempt(task, model, tools, binary, repairs, log):
+def attempt(task, model, tools, binary, repairs, log, may_read=True):
     module = os.path.join(ROOT, "eval-tasks", task["dir"])
     decls = declarations(module)
-    text = PLAN.format(tools=tools, view=probe.view("calltree", module), prompt=task["prompt"])
+    text = PLAN.format(tools=tools, view=probe.view("calltree", module), prompt=task["prompt"],
+                       read=MAY_READ if may_read else "")
     row = {"reads": 0, "repairs": 0, "refusals": [], "error": ""}
     answer, err = model.ask(text)
     ans = probe.parse(answer)
@@ -258,6 +264,7 @@ def main():
     p.add_argument("-runs", type=int, default=4)
     p.add_argument("-repairs", type=int, default=2)
     p.add_argument("-out", required=True)
+    p.add_argument("-no-read", action="store_true", help="the plan cannot ask for source; only repairs send it")
     a = p.parse_args()
     os.makedirs(a.out, exist_ok=True)
     tmp = tempfile.mkdtemp(prefix="loop-")
@@ -274,7 +281,7 @@ def main():
                 model = Ref(ref) if m == "ref" else Model(m, empty)
                 log = []
                 row = {"task": t["name"], "model": m, "run": n}
-                row.update(attempt(t, model, tools, binary, a.repairs, log))
+                row.update(attempt(t, model, tools, binary, a.repairs, log, may_read=not a.no_read))
                 row.update(cost=model.cost, requests=model.requests)
                 with open(os.path.join(a.out, f"{t['name']}-{m}-{n}.txt"), "w") as f:
                     f.write("\n\n==== next answer ====\n\n".join(log))
