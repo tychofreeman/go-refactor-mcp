@@ -1277,6 +1277,8 @@ hand or a tool got in the way.
     - The match state (`locals`, `bodyLocals`, `holes`, `fields`,
       `recv`) into a type of its own, with the `match*` methods on it
       (`extract_struct`). #309 made `match`'s cases methods first.
+      *Done:* `matcher`, embedded in `folder`, also holds what the
+      relaxations make (`addressOf`, `made`, `runs`).
     - A miss result from `match` and `matchStmt` (`add_result`), used in
       fold's "nothing matches" refusal: the nearest copy and where it
       differs.
