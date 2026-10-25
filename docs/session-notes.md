@@ -459,7 +459,7 @@ results are in `docs/cost-history.md`.
   answer against Sonnet's $0.072. It missed fold for near-duplicates
   (dispatch, 0 of 4). Batches fail mostly on content written for bodies
   the view does not show, so a planner needs bodies where it writes code.
-  With the whole module and the test files' literals, 29 of 30 parsed
+  With the whole module and the test files' literals, 28 of 29 parsed
   answers on those tasks passed; with bodies in view both models wrote
   more by hand (Sonnet dropped fold on dispatch).
 - Where a session's cost goes (cost-history 12,

@@ -921,7 +921,7 @@ not show: test literals still wrote `Kind: "book"`, or set `Road` and
 replace_text steps, the same in every answer), they pass the hidden
 tests: routes 8 of 8, kinds 6 of 7 (Haiku 3 of 3; one Sonnet answer
 refused by change_field_type). So with the bodies and the tests in view,
-the plans of 29 of 30 parsed answers on these tasks would have
+the plans of 28 of 29 parsed answers on these tasks would have
 succeeded; the plans were right, and what they lacked was what they
 could not read. Seeing bodies also made the models write more by hand:
 on dispatch both replaced the ten bodies with replace_statements, and
