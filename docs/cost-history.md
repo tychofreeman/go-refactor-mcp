@@ -843,6 +843,72 @@ many, in a larger module, or where the prompt does not say behavior
 must be kept, is untested; this run gives no evidence that the tools
 lower the failure rate.
 
+## 16. Can Haiku plan the derivation? (Oct 25)
+
+The user asked how well Haiku thinks about the general shape of the
+code: given a change, can it say which steps reach it? The call-tree
+probe (`eval-tasks/learning/probe.py`, section 9's setting, roadmap item
+29's planning half) asks that in one turn with no tools. It has three
+new options for this run:
+- `-model`;
+- `-schemas`: the tools' input schemas, as the server publishes them, in
+  place of the CLI's descriptions;
+- `-plan`: the derivation in words, one entry per step, before the
+  batch.
+
+The view is the call tree (names, signatures, doc comments; no bodies),
+now headed by the module's file list: in a trial, Haiku guessed
+`freight/truck.go` and the batch failed on the path, not the plan.
+Tasks: freight-xl's four and lending-xl's five (set C, shapes no move
+names). Four answers per task and model, the same prompt for Sonnet
+(`eval-runs/plan-probe`, $2.86 in all).
+
+| | batches passing the hidden tests | cost per answer |
+|---|---|---|
+| Haiku | 15/36 (freight 6/16, lending 9/20) | $0.0075 |
+| Sonnet | 19/36 (freight 11/16, lending 8/20) | $0.072 |
+
+Sonnet's freight score was 7/16 in section 9's probe without the
+schemas and file list.
+
+The plans, read against each task's reference derivation
+(`eval-tasks/learning/refs`). A plan counts when it names a sound
+derivation of the reference's shape, whether or not its batch passed:
+
+| task | reference shape | Haiku | Sonnet |
+|---|---|---|---|
+| dispatch | write `dispatch`, fold the ten bodies | 0/4: replaced each body by hand | 4/4 |
+| routes | accessors, fold the uses, change what they read, remove the fields | 1/4 | 0/4: rewrote the uses |
+| run | wrapper, fold the callers, inline the old one | 3/4 (renamed the old one first) | 4/4 |
+| tail | wrapper, fold, inline `last` | 4/4 (3 by function_to_method and remove_parameter, also sound) | 4/4 |
+| address | extract_struct, rename the embedded field | 4/4 | 4/4 |
+| kinds | widen the field to `any`, types with the cases' bodies, rewrite the writes, narrow | 4/4 | 2/4 narrowed; 2 kept `any` or rewrote the type |
+| policy | thread a parameter up from the leaves | 4/4 | 4/4 |
+| phases, dryrun | written by hand in the reference too | wrote them (phases); reused Import on a copy (dryrun) | the same |
+
+So Haiku sees the shapes about as well as Sonnet: it named the
+derivations for run, tail, address, policy and kinds, the last one
+being the user's widen-then-narrow derivation (README item 24),
+unprompted in every run, more consistently than Sonnet. Where it
+differed, it went both ways. On dispatch it never used fold and
+rewrote ten bodies it could not see. On routes it found
+encapsulate-then-change-representation once, which Sonnet never did.
+
+Why batches failed, for both models: content written for bodies the
+call tree does not show (`<body of case "book">` placeholders, guessed
+log formats; all of phases and kinds, Haiku's dispatch); add_parameter
+refusing a parameter named `policy` that would hide the package
+variable (5 of 8 policy plans relied on that shadowing, so the bodies
+need no rewrite); tests that still use a removed field (routes). The
+first is the view; the second a choice to make (README, roadmap item
+29's repairs, or an option); the third is in step 1's plan already
+(the test files' uses in the view).
+
+For roadmap item 29: the planning half works with Haiku at a tenth of
+Sonnet's price, and what is missing is bodies where content must be
+written, not the plan. A repair turn with the bodies it names would
+answer most of the failures.
+
 ## What made the difference
 
 - **Smaller results** (#75, rename locations): the largest single win when

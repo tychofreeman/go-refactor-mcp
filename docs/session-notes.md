@@ -452,6 +452,13 @@ results are in `docs/cost-history.md`.
   change" in the prompt, the model reads the trap and writes a test or
   a variable for it; the tools cost about 20% more. Untested: the hazard
   as one site among many, or a prompt that does not ask to keep behavior.
+- Haiku plans derivations about as well as Sonnet (cost-history 16, the
+  call-tree probe with `-model haiku -schemas -plan`): from names and
+  signatures alone it named the reference's shape on most tasks, the
+  user's widen-then-narrow kind derivation in 4 of 4, at $0.0075 an
+  answer against Sonnet's $0.072. It missed fold for near-duplicates
+  (dispatch, 0 of 4). Batches fail mostly on content written for bodies
+  the view does not show, so a planner needs bodies where it writes code.
 - Where a session's cost goes (cost-history 12,
   `eval-tasks/learning/cost.py`): cache writes 69%, output 18%, cache
   reads 13%, though cache reads are 88% of input tokens. About 38% of

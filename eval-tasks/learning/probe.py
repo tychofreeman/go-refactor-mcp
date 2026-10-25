@@ -13,6 +13,12 @@ Run from the repository root:
     python3 eval-tasks/learning/probe.py -tasks eval-tasks/derivations-freight.json \
         -only freight-dispatch,freight-run -runs 4 -out eval-runs/calltree-probe
 
+-model picks the model (default sonnet); -schemas gives the tools' input
+schemas, as the server publishes them, in place of the CLI's descriptions;
+-plan also asks for the derivation in words, one entry per step, which is
+kept with the answer, and the tools the batch uses are compared with the
+reference's.
+
 Needs the claude CLI; it costs a few cents a question.
 """
 import argparse
@@ -42,7 +48,7 @@ The change:
 {prompt}
 
 Answer with one JSON object and nothing else:
-{{"where": [the existing functions and methods whose code must change, each
+{{{plan}"where": [the existing functions and methods whose code must change, each
 as "pkg.Name" or "pkg.Type.Method", pkg being the package's name],
  "batch": {{"steps": [the change as gorefactor steps, in order; a line of Go
 you write yourself goes in an edit step (add_declaration,
@@ -51,13 +57,54 @@ Line numbers you do not know: address declarations by name where a tool
 allows it."""
 
 
+PLAN = """"plan": [the derivation in words, one entry per step: the operation
+(a refactoring, or an edit you write) and what it applies to, as you would
+explain the change to a colleague before touching the code],
+ """
+
+
+def schemas():
+    """The server's tools as it publishes them: each one's name,
+    description and input schema."""
+    d = tempfile.mkdtemp(prefix="probe-mcp-")
+    binary = os.path.join(d, "refactor-mcp")
+    sh(["go", "build", "-o", binary, "./cmd/refactor-mcp"])
+    p = subprocess.Popen([binary], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, cwd=d)
+
+    def rpc(i, method, params):
+        p.stdin.write(json.dumps({"jsonrpc": "2.0", "id": i, "method": method, "params": params}) + "\n")
+        p.stdin.flush()
+        while True:
+            m = json.loads(p.stdout.readline())
+            if m.get("id") == i:
+                return m["result"]
+
+    rpc(1, "initialize", {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "probe", "version": "0"}})
+    p.stdin.write(json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}) + "\n")
+    p.stdin.flush()
+    tools = rpc(2, "tools/list", {})["tools"]
+    p.kill()
+    shutil.rmtree(d)
+    return "\n\n".join(f"{t['name']}: {t['description']}\ninput schema: {json.dumps(t['inputSchema'])}" for t in tools)
+
+
+def tools_of(batch):
+    """The tools a batch's steps use, in order, without repeats."""
+    out = []
+    for s in batch.get("steps", []):
+        if isinstance(s, dict) and s.get("tool") not in out:
+            out.append(s.get("tool"))
+    return out
+
+
 def sh(cmd, cwd=ROOT, stdin=None):
     return subprocess.run(cmd, cwd=cwd, input=stdin, capture_output=True, text=True)
 
 
 def view(kind, module):
     if kind == "calltree":
-        return sh(["go", "run", "./cmd/calltree", module]).stdout
+        files = sorted(os.path.relpath(os.path.join(d, f), module) for d, _, fs in os.walk(module) for f in fs if f.endswith(".go"))
+        return "Files: " + ", ".join(files) + "\n\n" + sh(["go", "run", "./cmd/calltree", module]).stdout
     return sh(["go", "run", "./eval-tasks/learning/views", kind, module]).stdout
 
 
@@ -119,8 +166,8 @@ def written(batch):
     return len(lines)
 
 
-def ask(text, cwd):
-    r = sh(["claude", "-p", "--model", "sonnet", "--output-format", "json"], cwd=cwd, stdin=text)
+def ask(text, cwd, model):
+    r = sh(["claude", "-p", "--model", model, "--output-format", "json"], cwd=cwd, stdin=text)
     try:
         res = json.loads(r.stdout)
     except json.JSONDecodeError:
@@ -145,9 +192,12 @@ def main():
     p.add_argument("-views", default=",".join(VIEWS))
     p.add_argument("-runs", type=int, default=4)
     p.add_argument("-out", required=True)
+    p.add_argument("-model", default="sonnet")
+    p.add_argument("-schemas", action="store_true")
+    p.add_argument("-plan", action="store_true")
     a = p.parse_args()
     os.makedirs(a.out, exist_ok=True)
-    tools = sh(["go", "run", "./cmd/refactor", "list"]).stdout
+    tools = schemas() if a.schemas else sh(["go", "run", "./cmd/refactor", "list"]).stdout
     tasks = [t for t in json.load(open(a.tasks)) if not a.only or t["name"] in a.only.split(",")]
     results = open(os.path.join(a.out, "results.jsonl"), "a")
     empty = tempfile.mkdtemp(prefix="probe-empty-")
@@ -160,11 +210,13 @@ def main():
         if not (ok and passed):
             raise SystemExit(f"{t['name']}: the reference does not pass ({why})")
         for v in a.views.split(","):
-            text = QUESTION.format(prompt=t["prompt"], tools=tools, view_name=v, view=view(v, module))
+            text = QUESTION.format(prompt=t["prompt"], tools=tools, view_name=v, view=view(v, module),
+                                   plan=PLAN if a.plan else "")
             for n in range(1, a.runs + 1):
-                answer, cost, err = ask(text, empty)
+                answer, cost, err = ask(text, empty, a.model)
                 ans = parse(answer)
-                row = {"task": t["name"], "view": v, "run": n, "cost": cost, "prompt_chars": len(text), "error": err}
+                row = {"task": t["name"], "view": v, "run": n, "model": a.model, "cost": cost,
+                       "prompt_chars": len(text), "error": err}
                 if ans is None:
                     row.update(parsed=False)
                 else:
@@ -175,8 +227,9 @@ def main():
                     shutil.rmtree(d)
                     row.update(parsed=True, where=sorted(where), precision=len(hit) / len(where) if where else 0.0,
                                recall=len(hit) / len(want) if want else 0.0, applied=ok, refusal=why,
-                               passed=passed, steps=len(batch.get("steps", [])), written=written(batch))
-                with open(os.path.join(a.out, f"{t['name']}-{v}-{n}.txt"), "w") as f:
+                               passed=passed, steps=len(batch.get("steps", [])), written=written(batch),
+                               plan=ans.get("plan"), tools=tools_of(batch), ref_tools=tools_of(ref))
+                with open(os.path.join(a.out, f"{t['name']}-{v}-{a.model}-{n}.txt"), "w") as f:
                     f.write(answer or err)
                 results.write(json.dumps(row) + "\n")
                 results.flush()
