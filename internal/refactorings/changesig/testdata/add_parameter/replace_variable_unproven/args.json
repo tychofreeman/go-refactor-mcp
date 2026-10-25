@@ -1,0 +1,1 @@
+{"file": "a.go", "name": "capFee", "parameter": "policy", "type": "Policy", "before": "f", "replace_variable": true, "value": "DefaultPolicy()"}

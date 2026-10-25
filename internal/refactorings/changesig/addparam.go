@@ -12,10 +12,12 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/imports"
 	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
 
@@ -30,6 +32,7 @@ func (*AddParameter) Name() string { return "add_parameter" }
 func (*AddParameter) Description() string {
 	return `Add a parameter to a function or method, and pass the same value for it at every call in the workspace: with name retries, type int and value 3, func send(to string) becomes func send(to string, retries int), and send(addr) becomes send(addr, 3). The body does not use it yet, so behavior is unchanged; add it, then change the body.
 Identify the function by file and name, or by line at its declaration or any call. value is Go source that every call can see (a name of the function's package is qualified at calls in other packages: Dose{} becomes garden.Dose{}); it must have no side effects and not be able to panic. before puts the parameter ahead of that one (default: last).
+replace_variable turns a package variable the body reads into a parameter: with parameter rate, type float64 and value rate, func cost(n int) float64 { return float64(n) * rate } becomes func cost(rate float64, n int) float64 with the same body, and each call passes rate. A call passing another value (defaultRate()) is an edit, and the result lists it.
 Refuses, saying why: a function used as a value, a method that would start or stop implementing an interface from outside the module, a name that clashes, a value that does not type-check at some call.`
 }
 
@@ -44,7 +47,8 @@ func (*AddParameter) InputSchema() json.RawMessage {
     "parameter": {"type": "string",  "description": "Name of the new parameter."},
     "type":      {"type": "string",  "description": "Type of the new parameter, as Go source valid in the declaring file, e.g. string or *bytes.Buffer."},
     "value":     {"type": "string",  "description": "Go expression every call passes for the new parameter, e.g. \"\" or nil or cfg.OutDir."},
-    "before":    {"type": "string",  "description": "Optional: an existing parameter; the new one goes just before it."}
+    "before":    {"type": "string",  "description": "Optional: an existing parameter; the new one goes just before it."},
+    "replace_variable": {"type": "boolean", "description": "The parameter is named like a package variable the body reads, and takes its place: the body reads the parameter instead. Calls whose value is not that variable are edits, listed in a note."}
   },
   "required": ["file", "name", "parameter", "type", "value"],
   "additionalProperties": false
@@ -60,6 +64,9 @@ type addArgs struct {
 	Type      string  `json:"type"`
 	Value     literal `json:"value"`
 	Before    string  `json:"before,omitempty"`
+	// ReplaceVariable: the parameter takes the place of the package
+	// variable of the same name that the body reads.
+	ReplaceVariable bool `json:"replace_variable,omitempty"`
 }
 
 // literal is Go source text, given as a JSON string or, for a number or
@@ -114,8 +121,13 @@ func (*AddParameter) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refact
 	}
 	var fes []edit.FileEdit
 	adders := map[string]*imports.Adder{}
+	var unproven []string
 	for _, m := range t.group() {
-		if err := m.checkNewName(a.Parameter); err != nil {
+		v, err := m.hides(a.Parameter, a.ReplaceVariable)
+		if err != nil {
+			return nil, err
+		}
+		if err := m.checkReplaced(v, a.ReplaceVariable, typ); err != nil {
 			return nil, err
 		}
 		if err := m.checkInterfaces(func(ps []string) []string { return slices.Insert(ps, at, typeKey(typ)) }); err != nil {
@@ -129,6 +141,9 @@ func (*AddParameter) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refact
 			if err := m.checkValue(c, values[i], typ); err != nil {
 				return nil, err
 			}
+			if v != nil && !passes(c, values[i], v) {
+				unproven = append(unproven, fmt.Sprintf("at %s: %s", ws.Position(c.expr.Pos()), values[i]))
+			}
 		}
 		fes = append(fes, edit.FileEdit{Path: m.declFile(), Edits: []edit.TextEdit{m.paramEdit(at, a.Parameter, a.Type)}})
 		for i, c := range m.calls {
@@ -139,7 +154,11 @@ func (*AddParameter) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refact
 	for path, ad := range adders {
 		fes = append(fes, edit.FileEdit{Path: path, Edits: ad.Edits()})
 	}
-	return t.newPlan(fmt.Sprintf("added parameter %q to %s", a.Parameter+" "+a.Type, t.groupName()), fes), nil
+	plan := t.newPlan(fmt.Sprintf("added parameter %q to %s", a.Parameter+" "+a.Type, t.groupName()), fes)
+	if a.ReplaceVariable {
+		plan.Notes = append(plan.Notes, replacedNote(ws, t, a.Parameter, unproven)...)
+	}
+	return plan, nil
 }
 
 // insertIndex returns the position in the flattened parameter list where
@@ -168,19 +187,28 @@ func (t *target) insertIndex(before string) (int, error) {
 // body's top level, which share that scope), or that the body uses for
 // something declared outside the function, which the parameter would hide.
 func (t *target) checkNewName(name string) error {
+	_, err := t.hides(name, false)
+	return err
+}
+
+// hides checks name as checkNewName does. With replace, the body may use
+// one package variable of the function's package by that name, which the
+// parameter is to take the place of; hides returns it.
+func (t *target) hides(name string, replace bool) (*types.Var, error) {
 	if t.decl == nil {
-		return nil // an interface method: a parameter's name there is only documentation
+		return nil, nil // an interface method: a parameter's name there is only documentation
 	}
 	info := t.pkg.TypesInfo
 	if fs := info.Scopes[t.decl.Type]; fs != nil {
 		if o := fs.Lookup(name); o != nil {
 			if t.decl.Body.Pos() <= o.Pos() && o.Pos() < t.decl.Body.End() {
-				return refactor.Refusef("the body of %s declares %q at its top level (at %s), which a parameter of that name would clash with",
+				return nil, refactor.Refusef("the body of %s declares %q at its top level (at %s), which a parameter of that name would clash with",
 					t.obj.Name(), name, t.ws.Position(o.Pos()))
 			}
-			return refactor.Refusef("%s already has a parameter or result named %q", t.obj.Name(), name)
+			return nil, refactor.Refusef("%s already has a parameter or result named %q", t.obj.Name(), name)
 		}
 	}
+	var hidden *types.Var
 	for id, o := range info.Uses {
 		if id.Name != name || id.Pos() < t.decl.Body.Pos() || id.Pos() >= t.decl.Body.End() {
 			continue
@@ -191,14 +219,145 @@ func (t *target) checkNewName(name string) error {
 		if o.Pos().IsValid() && t.decl.Pos() <= o.Pos() && o.Pos() < t.decl.End() {
 			continue // declared inside the function, in a nested scope
 		}
+		v, isVar := o.(*types.Var)
+		pkgVar := isVar && o.Parent() == t.pkg.Types.Scope()
+		if replace && pkgVar {
+			hidden = v
+			continue
+		}
 		where := "the universe"
 		if o.Pos().IsValid() {
 			where = t.ws.Position(o.Pos())
 		}
-		return refactor.Refusef("the body of %s uses the %s %q declared at %s; a parameter named %q would hide it",
-			t.obj.Name(), kind(o), name, where, name)
+		hint := ""
+		if pkgVar {
+			hint = "; with replace_variable, the parameter takes its place"
+		}
+		return nil, refactor.Refusef("the body of %s uses the %s %q declared at %s; a parameter named %q would hide it%s",
+			t.obj.Name(), kind(o), name, where, name, hint)
+	}
+	return hidden, nil
+}
+
+// checkReplaced refuses replace_variable when typ is not the type of the
+// package variable v it replaces, or when the body writes v, since the
+// parameter would then take those writes. Without v there is nothing to
+// replace, and the parameter is added as without the option.
+func (t *target) checkReplaced(v *types.Var, replace bool, typ types.Type) error {
+	switch {
+	case !replace || v == nil:
+		return nil
+	case !types.Identical(v.Type(), typ):
+		return refactor.Refusef("the parameter's type %s is not the type %s of the variable %s it would replace",
+			types.TypeString(typ, types.RelativeTo(t.pkg.Types)), types.TypeString(v.Type(), types.RelativeTo(t.pkg.Types)), v.Name())
+	}
+	if pos := writeTo(t.pkg.TypesInfo, t.decl.Body, v); pos.IsValid() {
+		return refactor.Refusef("the body of %s assigns %s (at %s); a parameter would take that write from the variable",
+			t.obj.Name(), v.Name(), t.ws.Position(pos))
 	}
 	return nil
+}
+
+// passes reports whether the value a call passes is the variable v itself.
+func passes(c call, value string, v *types.Var) bool {
+	if value != v.Name() || c.pkg.Types == nil {
+		return false
+	}
+	scope := c.pkg.Types.Scope().Innermost(c.expr.Lparen)
+	if scope == nil {
+		return false
+	}
+	_, o := scope.LookupParent(value, c.expr.Lparen)
+	return o == v
+}
+
+// replacedNote says which calls of replace_variable are edits: those that
+// pass another value than the variable, or every call when the module
+// assigns the variable somewhere, since a call's value may then differ
+// from what the body read.
+func replacedNote(ws *workspace.Workspace, t *target, name string, unproven []string) []string {
+	var v *types.Var
+	for _, m := range t.group() {
+		if hv, _ := m.hides(name, true); hv != nil {
+			v = hv
+		}
+	}
+	if v == nil {
+		return nil
+	}
+	var notes []string
+	for _, p := range ws.Pkgs {
+		for _, f := range p.Syntax {
+			if pos := writeTo(p.TypesInfo, f, v); pos.IsValid() {
+				notes = append(notes, fmt.Sprintf("%s is assigned at %s, so no call is proven to pass what the body read: the step is an edit; check that each call passes the variable's value", v.Name(), ws.Position(pos)))
+				return notes
+			}
+		}
+	}
+	if len(unproven) > 0 {
+		notes = append(notes, fmt.Sprintf("the body now reads the parameter %s where it read the package variable: an edit at %d call%s whose value is not the variable, so not proven the same (%s); check that each passes what %s holds",
+			name, len(unproven), textutil.Plural(len(unproven)), strings.Join(unproven, "; "), v.Name()))
+	}
+	return notes
+}
+
+// writeTo returns the position of the first place in n that assigns v or
+// part of it (a field, an array element), takes its address, or calls a
+// pointer method on it; or token.NoPos.
+func writeTo(info *types.Info, n ast.Node, v *types.Var) token.Pos {
+	is := func(e ast.Expr) bool {
+		for {
+			switch x := ast.Unparen(e).(type) {
+			case *ast.Ident:
+				return info.Uses[x] == v
+			case *ast.SelectorExpr:
+				if sel := info.Selections[x]; sel == nil || sel.Kind() != types.FieldVal || sel.Indirect() {
+					return false
+				}
+				e = x.X
+			case *ast.IndexExpr:
+				if !analysis.IsArray(info.TypeOf(x.X)) {
+					return false
+				}
+				e = x.X
+			default:
+				return false
+			}
+		}
+	}
+	pos := token.NoPos
+	ast.Inspect(n, func(n ast.Node) bool {
+		if pos.IsValid() {
+			return false
+		}
+		var written []ast.Expr
+		switch n := n.(type) {
+		case *ast.AssignStmt:
+			written = n.Lhs
+		case *ast.IncDecStmt:
+			written = []ast.Expr{n.X}
+		case *ast.RangeStmt:
+			if n.Tok == token.ASSIGN {
+				written = []ast.Expr{n.Key, n.Value}
+			}
+		case *ast.UnaryExpr:
+			if n.Op == token.AND {
+				written = []ast.Expr{n.X}
+			}
+		case *ast.SelectorExpr:
+			if sel := info.Selections[n]; sel != nil && sel.Kind() == types.MethodVal && analysis.PtrRecv(sel) && !analysis.IsPointer(info.TypeOf(n.X)) {
+				written = []ast.Expr{n.X}
+			}
+		}
+		for _, e := range written {
+			if e != nil && is(e) {
+				pos = e.Pos()
+				break
+			}
+		}
+		return true
+	})
+	return pos
 }
 
 // evalType checks the type expression in the declaring file, where the
