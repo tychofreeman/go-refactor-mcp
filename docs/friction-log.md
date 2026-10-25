@@ -2345,3 +2345,11 @@ Through the tools: extract_function for `bindHole`, add_declaration for
 replace_statements for `matchIdent`'s body. By hand, with replace_text:
 the one line of `matchSelector` that looks up its operand's object, and
 doc comments.
+
+## 2026-10-24: calls known not to have side effects (roadmap item 27)
+
+Through the tools: the tests and goldens first (replace_text,
+add_declaration, create_file; the test's call declared `ReadOnlyCall`
+as a stub), add_declaration for `readOnlyFuncs` and `ReadOnlyCall`.
+By hand, with replace_text: the `reflect.TypeOf` entry of the table and
+the one-line condition in remove_dead_code's check.

@@ -1343,6 +1343,14 @@ hand or a tool got in the way.
     - A list of standard-library calls without side effects
       (`reflect.TypeOf`, `json.Valid`), so that `analysis` stops
       refusing them; remove_dead_code refused `posType` for it.
+      *Done,* in two lists, since the two calls differ: `reflect.TypeOf`
+      is stable (a value's dynamic type never changes) and joins
+      `knownFuncs`, which every refactoring uses; `json.Valid` reads a
+      slice that other code can change, so it is not stable, and
+      `HasEffect` still stops a refactoring from moving it past code
+      that writes through a local. It goes in `readOnlyFuncs`
+      (`analysis.ReadOnlyCall`: no side effects, never panics), which
+      remove_dead_code uses, since deleting a read drops nothing.
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
