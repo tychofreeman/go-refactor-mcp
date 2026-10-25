@@ -1,0 +1,2 @@
+m.go:14:63: writes "book", which is not a Kind
+No type implements Kind yet: make a type for each kind first, its cases becoming the type's methods, then write the types where these uses have the old values, and narrow last.

@@ -69,6 +69,32 @@ type fieldChange struct {
 	cannot   []string // uses that cannot follow, "file:line:col: why"
 }
 
+// narrowHint says what comes before narrowing a field to iface: a type
+// for each kind, written where a use has the kind's old value.
+func narrowHint(ws *workspace.Workspace, iface types.Type, name string) string {
+	it := iface.Underlying().(*types.Interface)
+	var impl []string
+	for _, p := range ws.Pkgs {
+		if p.Types == nil {
+			continue
+		}
+		for _, n := range p.Types.Scope().Names() {
+			tn, ok := p.Types.Scope().Lookup(n).(*types.TypeName)
+			if !ok || tn.IsAlias() || types.IsInterface(tn.Type()) {
+				continue
+			}
+			if types.Implements(tn.Type(), it) || types.Implements(types.NewPointer(tn.Type()), it) {
+				impl = append(impl, n)
+			}
+		}
+	}
+	if len(impl) == 0 {
+		return fmt.Sprintf("No type implements %s yet: make a type for each kind first, its cases becoming the type's methods, then write the types where these uses have the old values, and narrow last.", name)
+	}
+	slices.Sort(impl)
+	return fmt.Sprintf("Write each kind's type (%s) where these uses have its old value, then narrow.", strings.Join(slices.Compact(impl), ", "))
+}
+
 // fieldMode is how the uses of a field follow its new type.
 type fieldMode interface {
 	// write handles v, a value written to the field.
@@ -146,7 +172,11 @@ func (*ChangeFieldType) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 		return nil, err
 	}
 	if len(c.cannot) > 0 {
-		return nil, refactor.Refusef("these uses of %s cannot follow its new type %s, so nothing changed:\n  %s", field.Name(), t.typeName(newT), strings.Join(c.cannot, "\n  "))
+		var hint string
+		if narrow {
+			hint = "\n" + narrowHint(ws, newT, t.typeName(newT))
+		}
+		return nil, refactor.Refusef("these uses of %s cannot follow its new type %s, so nothing changed:\n  %s%s", field.Name(), t.typeName(newT), strings.Join(c.cannot, "\n  "), hint)
 	}
 	plan := &refactor.Plan{
 		Summary: fmt.Sprintf("changed field %s from %s to %s (%d use%s)", field.Name(), t.typeName(field.Type()), t.typeName(newT), uses, map[bool]string{true: "", false: "s"}[uses == 1]),

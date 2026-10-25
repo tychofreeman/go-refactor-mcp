@@ -2472,3 +2472,10 @@ extract_function (which made it a method on its own: a function_to_method
 step after it was refused as redundant); the field, the check and the
 plan's branch with add_field, replace_statements, add_declaration and
 replace_text. This entry appended with a heredoc. Nothing else by hand.
+
+## 2026-10-25: the narrowing refusal says what comes first
+
+Golden cases with create_file and replace_text; the hint and
+`narrowHint` with replace_text and add_declaration in one batch; the plan
+doc with replace_text. This entry appended with a heredoc. Nothing else
+by hand.

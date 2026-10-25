@@ -1,1 +1,2 @@
 m.go:16:44: compared with "atlas", which no Kind equals
+Write each kind's type (Book) where these uses have its old value, then narrow.
