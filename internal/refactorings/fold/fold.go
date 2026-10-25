@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"go/ast"
 	"go/constant"
+	"go/printer"
 	"go/token"
 	"go/types"
 	"maps"
@@ -84,6 +85,8 @@ type matcher struct {
 	addressOf map[ast.Expr]bool       // arguments &x made for a *p of the body that x matched
 	made      map[ast.Expr]bool       // string literals made from a format's text, for a %s of the body
 	runs      map[ast.Expr][]ast.Expr // concatenations made of a run of operands, for a string parameter of the body
+	depth     int                     // how deep the comparison under way is
+	miss      *miss                   // where the last match failed, or nil
 }
 
 // folder finds the code that does what fn does and replaces it with calls.
@@ -106,6 +109,7 @@ type folder struct {
 
 	n       int      // occurrences folded
 	skipped []string // why matches were left, "file:line: reason"
+	nearest *miss    // of the matches that failed, the one that got furthest
 	by      map[string][]edit.TextEdit
 	adders  map[string]*imports.Adder
 	order   []string
@@ -117,6 +121,13 @@ type folder struct {
 type holeKey struct {
 	obj   types.Object
 	field string
+}
+
+// miss is where a match failed: the innermost nodes of the pattern (p)
+// and of the code (x) that differ, depth comparisons below the top.
+type miss struct {
+	p, x  ast.Node
+	depth int
 }
 
 // count is how often the body uses the hole k.
@@ -437,7 +448,9 @@ func (f *folder) try(p *packages.Package, file *ast.File, x ast.Expr, stack []as
 		return f.trySetter(p, file, x, stack)
 	}
 	b := map[holeKey]ast.Expr{}
+	f.miss = nil
 	if !f.match(f.body, x, info, b) {
+		f.keepNearest(0)
 		return false, nil
 	}
 	where := f.ws.Position(x.Pos())
@@ -837,6 +850,26 @@ func (f *folder) removeImports(path string, es []edit.TextEdit) {
 // match reports whether x, of the package whose info is info, is the
 // pattern p (of fn's package) with its holes filled in b.
 func (m *matcher) match(p, x ast.Expr, info *types.Info, b map[holeKey]ast.Expr) bool {
+	m.depth++
+	ok := m.compareExpr(p, x, info, b)
+	m.depth--
+	m.note(ok, p, x)
+	return ok
+}
+
+// note keeps where a match failed: the innermost comparison that
+// failed, unless a comparison around it then matched another way.
+func (m *matcher) note(ok bool, p, x ast.Node) {
+	if ok {
+		m.miss = nil
+	} else if m.miss == nil {
+		m.miss = &miss{p: p, x: x, depth: m.depth}
+	}
+}
+
+// compareExpr reports whether x is the pattern p, comparing their nodes;
+// match calls it and keeps where it failed.
+func (m *matcher) compareExpr(p ast.Expr, x ast.Expr, info *types.Info, b map[holeKey]ast.Expr) bool {
 	p, x = ast.Unparen(p), ast.Unparen(x)
 	pinfo := m.pkg.TypesInfo
 	sub := func(p, x ast.Expr) bool {
@@ -1596,6 +1629,16 @@ func (f *folder) mayStop(info *types.Info, s ast.Stmt, pos token.Pos) string {
 
 // matchStmt reports whether x is the pattern's statement p.
 func (m *matcher) matchStmt(p, x ast.Stmt, info *types.Info, b map[holeKey]ast.Expr) bool {
+	m.depth++
+	ok := m.compareStmt(p, x, info, b)
+	m.depth--
+	m.note(ok, p, x)
+	return ok
+}
+
+// compareStmt reports whether x is the pattern's statement p, comparing
+// their nodes; matchStmt calls it and keeps where it failed.
+func (m *matcher) compareStmt(p ast.Stmt, x ast.Stmt, info *types.Info, b map[holeKey]ast.Expr) bool {
 	if p == nil || x == nil {
 		return p == nil && x == nil
 	}
@@ -1696,8 +1739,10 @@ func (f *folder) foldStmts(p *packages.Package, file *ast.File, list []ast.Stmt,
 		b := map[holeKey]ast.Expr{}
 		f.locals = map[types.Object]types.Object{}
 		matched := true
+		f.miss = nil
 		for k := range f.stmts {
 			if !f.matchStmt(f.stmts[k], list[i+k], info, b) {
+				f.keepNearest(k)
 				matched = false
 				break
 			}
@@ -1748,6 +1793,31 @@ func (f *folder) foldStmts(p *packages.Package, file *ast.File, list []ast.Stmt,
 		i += n - 1
 	}
 	return nil
+}
+
+// keepNearest keeps the last match's miss as the nearest if it got
+// further than any before: past k of the pattern's statements, then
+// deeper. A miss at the top of the pattern is no near miss.
+func (f *folder) keepNearest(k int) {
+	if f.miss == nil {
+		return
+	}
+	n := *f.miss
+	n.depth += k
+	if n.depth > 0 && (f.nearest == nil || n.depth > f.nearest.depth) {
+		f.nearest = &n
+	}
+}
+
+// short is n's source on one line: its first, with " ..." if there are more.
+func short(n ast.Node) string {
+	var b strings.Builder
+	printer.Fprint(&b, token.NewFileSet(), n)
+	s, _, more := strings.Cut(b.String(), "\n")
+	if more {
+		s += " ..."
+	}
+	return s
 }
 
 // inDone reports whether pos is in statements already folded.
@@ -1920,6 +1990,9 @@ func (*Fold) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan,
 		why := ""
 		if len(f.skipped) > 0 {
 			why = "; what matched was left: " + strings.Join(limit(f.skipped, 5), "; ")
+		}
+		if f.nearest != nil {
+			why = fmt.Sprintf("; the nearest, %s, has %s where the body has %s", ws.Position(f.nearest.x.Pos()), short(f.nearest.x), short(f.nearest.p)) + why
 		}
 		return nil, refactor.Refusef("nothing in the module matches the body of %s (%s)%s", fn.Name(), f.shape(), why)
 	}

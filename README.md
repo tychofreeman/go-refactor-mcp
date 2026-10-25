@@ -1281,7 +1281,11 @@ hand or a tool got in the way.
       relaxations make (`addressOf`, `made`, `runs`).
     - A miss result from `match` and `matchStmt` (`add_result`), used in
       fold's "nothing matches" refusal: the nearest copy and where it
-      differs.
+      differs. *Done,* as state rather than a result: `match` and
+      `matchStmt` wrap `compareExpr` and `compareStmt` and keep the
+      innermost failed comparison in `matcher.miss`; fold keeps the
+      miss that got furthest (statements, then depth) and the refusal
+      says "the nearest, m.go:5:28, has x where the body has 2".
     - The matcher into a package of its own, with fold's relaxations
       behind options.
     - parameterize's `comparer` on it: the test that the abstraction is
