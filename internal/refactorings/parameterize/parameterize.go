@@ -16,6 +16,7 @@ import (
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
+	"github.com/tychofreeman/go-refactor-mcp/internal/pattern"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
@@ -133,6 +134,22 @@ func (f *fun) sameShape(g *fun) error {
 	return nil
 }
 
+// where is where a match against g failed, on each side: the innermost
+// expressions around it that are not names, or the statement's kind and
+// line.
+func (g *fun) where(miss *pattern.Miss) (string, string) {
+	p, x := miss.P, miss.X
+	if miss.AroundP != nil {
+		p, x = miss.AroundP, miss.AroundX
+	}
+	pe, okP := p.(ast.Expr)
+	xe, okX := x.(ast.Expr)
+	if okP && okX {
+		return types.ExprString(pe), types.ExprString(xe)
+	}
+	return fmt.Sprintf("%s (line %d)", reflect.TypeOf(p).Elem().Name(), g.ws.Fset.Position(p.Pos()).Line), fmt.Sprintf("line %d", g.ws.Fset.Position(x.Pos()).Line)
+}
+
 // checkNames refuses a new function name taken in the package (or by a
 // method of the receiver's type), or parameter names the body uses.
 func (f *fun) checkNames(name string, params []string) error {
@@ -159,125 +176,6 @@ func (f *fun) checkNames(name string, params []string) error {
 		}
 	}
 	return nil
-}
-
-// comparer compares a's body with b's: the same but for constants, with
-// parameters matched by position and locals by declaration.
-type comparer struct {
-	a, b   *fun
-	locals map[types.Object]types.Object
-	lits   map[*ast.BasicLit]*ast.BasicLit // each of a's constants, and b's there
-	stack  []ast.Expr                      // the expressions being compared, of a and b in turn
-	bad    [2]string                       // where they first differ in other than a constant
-}
-
-var posType = reflect.TypeOf(token.NoPos)
-
-// eq reports whether a and b are the same but for constants.
-func (c *comparer) eq(a, b ast.Node) bool {
-	switch an := a.(type) {
-	case *ast.Ident:
-		bn, ok := b.(*ast.Ident)
-		if !ok || !c.ident(an, bn) {
-			return c.mismatch(a, b)
-		}
-		return true
-	case *ast.BasicLit:
-		bn, ok := b.(*ast.BasicLit)
-		if !ok || an.Kind != bn.Kind {
-			return c.mismatch(a, b)
-		}
-		c.lits[an] = bn
-		return true
-	case *ast.CommentGroup:
-		return true
-	}
-	if reflect.TypeOf(a) != reflect.TypeOf(b) {
-		return c.mismatch(a, b)
-	}
-	if ea, ok := a.(ast.Expr); ok {
-		c.stack = append(c.stack, ea, b.(ast.Expr))
-		defer func() { c.stack = c.stack[:len(c.stack)-2] }()
-	}
-	va, vb := reflect.ValueOf(a).Elem(), reflect.ValueOf(b).Elem()
-	for i := range va.NumField() {
-		fa, fb := va.Field(i), vb.Field(i)
-		if fa.Type() == posType {
-			continue
-		}
-		switch fa.Kind() {
-		case reflect.Interface, reflect.Pointer:
-			if fa.IsNil() || fb.IsNil() {
-				if fa.IsNil() != fb.IsNil() {
-					return c.mismatch(a, b)
-				}
-				continue
-			}
-			na, okA := fa.Interface().(ast.Node)
-			nb, okB := fb.Interface().(ast.Node)
-			if okA && okB && !c.eq(na, nb) {
-				return false
-			}
-		case reflect.Slice:
-			if fa.Len() != fb.Len() {
-				return c.mismatch(a, b)
-			}
-			for j := range fa.Len() {
-				na, okA := fa.Index(j).Interface().(ast.Node)
-				nb, okB := fb.Index(j).Interface().(ast.Node)
-				if okA && okB && !c.eq(na, nb) {
-					return false
-				}
-			}
-		case reflect.Int, reflect.Bool, reflect.String:
-			if fa.Interface() != fb.Interface() {
-				return c.mismatch(a, b)
-			}
-		}
-	}
-	return true
-}
-
-// ident reports whether a and b mean the same: parameters at the same
-// position, locals declared at the same place, or the same object.
-func (c *comparer) ident(a, b *ast.Ident) bool {
-	ia, ib := c.a.pkg.TypesInfo, c.b.pkg.TypesInfo
-	if d := ia.Defs[a]; d != nil {
-		if e := ib.Defs[b]; e != nil {
-			c.locals[d] = e
-			return true
-		}
-		return false
-	}
-	oa, ob := ia.Uses[a], ib.Uses[b]
-	if i := slices.Index(c.a.params, oa); i >= 0 && oa != nil {
-		return c.b.params[i] == ob
-	}
-	if oa != nil && oa == c.a.recv {
-		return ob == c.b.recv
-	}
-	if l, ok := c.locals[oa]; ok {
-		return l == ob
-	}
-	return a.Name == b.Name && oa == ob
-}
-
-// mismatch notes where a and b first differ: the innermost expressions
-// around them that are not names. It returns false.
-func (c *comparer) mismatch(a, b ast.Node) bool {
-	if c.bad[0] != "" {
-		return false
-	}
-	ea, eb := a, b
-	if _, ident := a.(*ast.Ident); ident && len(c.stack) >= 2 {
-		ea, eb = c.stack[len(c.stack)-2], c.stack[len(c.stack)-1]
-	}
-	if x, ok := ea.(ast.Expr); ok {
-		c.bad[0], c.bad[1] = types.ExprString(x), types.ExprString(eb.(ast.Expr))
-	} else {
-		c.bad[0], c.bad[1] = fmt.Sprintf("%s (line %d)", reflect.TypeOf(a).Elem().Name(), c.a.ws.Fset.Position(a.Pos()).Line), fmt.Sprintf("line %d", c.b.ws.Fset.Position(b.Pos()).Line)
-	}
-	return false
 }
 
 // Plan checks preconditions and computes the edits.
@@ -311,12 +209,28 @@ func (*Parameterize) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refact
 	var at []*ast.BasicLit
 	lits := make([]map[*ast.BasicLit]*ast.BasicLit, len(fs))
 	for i, g := range fs[1:] {
-		c := &comparer{a: first, b: g, locals: map[types.Object]types.Object{}, lits: map[*ast.BasicLit]*ast.BasicLit{}}
-		if !c.eq(first.decl.Body, g.decl.Body) {
-			return nil, refactor.Refusef("%s and %s differ at %s and %s, which are not constants; parameterize makes a parameter only of constants", first.name, g.name, c.bad[0], c.bad[1])
+		found := map[*ast.BasicLit]*ast.BasicLit{}
+		m := &pattern.Matcher{
+			Pkg:        first.pkg,
+			Locals:     map[types.Object]types.Object{},
+			Structural: true,
+			Literal: func(p, x *ast.BasicLit) bool {
+				found[p] = x
+				return true
+			},
 		}
-		lits[i+1] = c.lits
-		for p, x := range c.lits {
+		for j, p := range first.params {
+			m.Locals[p] = g.params[j]
+		}
+		if first.recv != nil {
+			m.Locals[first.recv] = g.recv
+		}
+		if !m.MatchStmt(first.decl.Body, g.decl.Body, g.pkg.TypesInfo, map[pattern.HoleKey]ast.Expr{}) {
+			at, there := g.where(m.Miss)
+			return nil, refactor.Refusef("%s and %s differ at %s and %s, which are not constants; parameterize makes a parameter only of constants", first.name, g.name, at, there)
+		}
+		lits[i+1] = found
+		for p, x := range found {
 			if p.Value != x.Value && !slices.Contains(at, p) {
 				at = append(at, p)
 			}

@@ -1291,7 +1291,18 @@ hand or a tool got in the way.
       `Relaxations` (Call, Concat, Address), which fold's `relaxer`
       implements and a nil `Relax` leaves off.
     - parameterize's `comparer` on it: the test that the abstraction is
-      general, not fold's shape.
+      general, not fold's shape. *Done,* and what it showed: what the
+      two share is the answer to "what is this name?" (`matchIdent`:
+      locals by declaration, parameters through a seeded `Locals`) and
+      where a match failed (`Miss`, with the expressions around a
+      name). What they do not share is the comparison of nodes: fold's
+      rules per kind cover the shapes fold folds, parameterize needs
+      every shape compared exactly, so `Structural` brings the
+      comparer's field-by-field walk into the package and `Literal`
+      makes constants of one kind its holes. Old and new parameterize
+      gave the same results on closures, labels, type assertions and
+      parentheses (a scratch module, both CLIs). merge's `canon` is
+      left as it is.
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the

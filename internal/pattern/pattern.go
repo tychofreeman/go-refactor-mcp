@@ -7,6 +7,7 @@ import (
 	"go/ast"
 	"go/token"
 	"go/types"
+	"reflect"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"golang.org/x/tools/go/packages"
@@ -30,6 +31,13 @@ type Matcher struct {
 	Relax  Relaxations  // rules for code of another shape, or nil
 	depth  int          // how deep the comparison under way is
 	Miss   *Miss        // where the last match failed, or nil
+	// Structural compares every node but identifiers and literals field
+	// by field, in place of the rules for each kind of node: code of any
+	// shape, compared exactly.
+	Structural bool
+	// Literal, if set, decides whether literals of the same kind match, in
+	// place of comparing their values.
+	Literal func(p, x *ast.BasicLit) bool
 }
 
 // Relaxations match code that does what the pattern does in another
@@ -54,8 +62,10 @@ type HoleKey struct {
 // Miss is where a match failed: the innermost nodes of the pattern (p)
 // and of the code (x) that differ, depth comparisons below the top.
 type Miss struct {
-	P, X  ast.Node
-	Depth int
+	P, X ast.Node
+	// For identifiers, the innermost expressions around P and X, if any.
+	AroundP, AroundX ast.Expr
+	Depth            int
 }
 
 // Match reports whether x, of the package whose info is info, is the
@@ -75,12 +85,25 @@ func (m *Matcher) note(ok bool, p, x ast.Node) {
 		m.Miss = nil
 	} else if m.Miss == nil {
 		m.Miss = &Miss{P: p, X: x, Depth: m.depth}
+	} else if _, id := m.Miss.P.(*ast.Ident); id && m.Miss.AroundP == nil {
+		pe, okP := p.(ast.Expr)
+		xe, okX := x.(ast.Expr)
+		if okP && okX {
+			m.Miss.AroundP, m.Miss.AroundX = pe, xe
+		}
 	}
 }
 
 // compareExpr reports whether x is the pattern p, comparing their nodes;
 // Match calls it and keeps where it failed.
 func (m *Matcher) compareExpr(p ast.Expr, x ast.Expr, info *types.Info, b map[HoleKey]ast.Expr) bool {
+	if m.Structural {
+		switch p.(type) {
+		case *ast.Ident, *ast.BasicLit:
+		default:
+			return m.fields(p, x, info, b)
+		}
+	}
 	p, x = ast.Unparen(p), ast.Unparen(x)
 	pinfo := m.Pkg.TypesInfo
 	sub := func(p, x ast.Expr) bool {
@@ -94,6 +117,9 @@ func (m *Matcher) compareExpr(p ast.Expr, x ast.Expr, info *types.Info, b map[Ho
 		return m.matchIdent(pp, x, info, b, pinfo)
 	case *ast.BasicLit:
 		xb, ok := x.(*ast.BasicLit)
+		if m.Literal != nil {
+			return ok && xb.Kind == pp.Kind && m.Literal(pp, xb)
+		}
 		return ok && xb.Kind == pp.Kind && xb.Value == pp.Value
 	case *ast.SelectorExpr:
 		return m.matchSelector(pp, x, info, b, pinfo, sub)
@@ -243,7 +269,9 @@ func (m *Matcher) matchIdent(pp *ast.Ident, x ast.Expr, info *types.Info, b map[
 	}
 	switch x := x.(type) {
 	case *ast.Ident:
-		return x.Name == pp.Name && SameObj(po, info.Uses[x])
+		// Names the type checker gives no object (a type switch's symbol)
+		// are the same when spelled the same.
+		return x.Name == pp.Name && (SameObj(po, info.Uses[x]) || po == nil && info.Uses[x] == nil)
 	case *ast.SelectorExpr: // pkg.Name in another package
 		_, pkgName := info.Uses[IdentOf(x.X)].(*types.PkgName)
 		return pkgName && x.Sel.Name == pp.Name && SameObj(po, info.Uses[x.Sel])
@@ -265,6 +293,9 @@ func (m *Matcher) MatchStmt(p, x ast.Stmt, info *types.Info, b map[HoleKey]ast.E
 func (m *Matcher) compareStmt(p ast.Stmt, x ast.Stmt, info *types.Info, b map[HoleKey]ast.Expr) bool {
 	if p == nil || x == nil {
 		return p == nil && x == nil
+	}
+	if m.Structural {
+		return m.fields(p, x, info, b)
 	}
 	expr := func(p, x ast.Expr) bool {
 		if p == nil || x == nil {
@@ -347,6 +378,75 @@ func (m *Matcher) compareStmt(p ast.Stmt, x ast.Stmt, info *types.Info, b map[Ho
 		return ok
 	}
 	return false
+}
+
+// node compares two nodes of any kind, for Structural: expressions and
+// statements by Match and MatchStmt, the rest field by field.
+func (m *Matcher) node(p, x ast.Node, info *types.Info, b map[HoleKey]ast.Expr) bool {
+	switch p := p.(type) {
+	case *ast.CommentGroup:
+		return true
+	case ast.Expr:
+		if x, ok := x.(ast.Expr); ok {
+			return m.Match(p, x, info, b)
+		}
+	case ast.Stmt:
+		if x, ok := x.(ast.Stmt); ok {
+			return m.MatchStmt(p, x, info, b)
+		}
+	}
+	m.depth++
+	ok := m.fields(p, x, info, b)
+	m.depth--
+	m.note(ok, p, x)
+	return ok
+}
+
+var posType = reflect.TypeOf(token.NoPos)
+
+// fields compares p and x, nodes of one kind, field by field: the nodes
+// in them by node, other values by equality; positions do not count.
+func (m *Matcher) fields(p, x ast.Node, info *types.Info, b map[HoleKey]ast.Expr) bool {
+	if reflect.TypeOf(p) != reflect.TypeOf(x) {
+		return false
+	}
+	vp, vx := reflect.ValueOf(p).Elem(), reflect.ValueOf(x).Elem()
+	for i := range vp.NumField() {
+		fp, fx := vp.Field(i), vx.Field(i)
+		if fp.Type() == posType {
+			continue
+		}
+		switch fp.Kind() {
+		case reflect.Interface, reflect.Pointer:
+			if fp.IsNil() || fx.IsNil() {
+				if fp.IsNil() != fx.IsNil() {
+					return false
+				}
+				continue
+			}
+			np, okP := fp.Interface().(ast.Node)
+			nx, okX := fx.Interface().(ast.Node)
+			if okP && okX && !m.node(np, nx, info, b) {
+				return false
+			}
+		case reflect.Slice:
+			if fp.Len() != fx.Len() {
+				return false
+			}
+			for j := range fp.Len() {
+				np, okP := fp.Index(j).Interface().(ast.Node)
+				nx, okX := fx.Index(j).Interface().(ast.Node)
+				if okP && okX && !m.node(np, nx, info, b) {
+					return false
+				}
+			}
+		case reflect.Int, reflect.Bool, reflect.String:
+			if fp.Interface() != fx.Interface() {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // SameObj reports whether a and b, from any variants of their packages,
