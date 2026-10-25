@@ -2368,3 +2368,8 @@ in the scratchpad (transcript usage by arm; the server's tools/list).
 
 Docs only: replace_text for cost-history and the session notes; one
 figure corrected with sed, and this entry appended with a heredoc.
+
+## 2026-10-25: a plan for a loop of our own
+
+The plan with create_file, the roadmap, the session note and this entry
+with replace_text, in one batch. Nothing by hand.

@@ -405,6 +405,11 @@ results are in `docs/cost-history.md`.
   written against what the refactoring makes); the user agreed.
 - **Claude via MCP is the product**, not the Ollama loop or standalone
   evaluation (2026-10-17): the user said those were not what they need.
+  Revisited (2026-10-25): after cost-history 14, the user asked
+  whether a loop of our own should make the change. It stands; a
+  plan-and-execute loop is to be tried as an experiment
+  (`docs/plan-and-execute.md`, roadmap item 29), and the user decides
+  on its result.
 - **Choose the next tool by evidence:** the friction log for hand edits,
   A/B transcripts for a fresh model's refusals and wasted turns.
 - **Query tool deferred** (2026-10-18): about 55% of greps were symbol
