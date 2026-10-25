@@ -66,6 +66,11 @@ explain the change to a colleague before touching the code],
 def schemas():
     """The server's tools as it publishes them: each one's name,
     description and input schema."""
+    return "\n\n".join(f"{t['name']}: {t['description']}\ninput schema: {json.dumps(t['inputSchema'])}" for t in tool_list())
+
+
+def tool_list():
+    """The server's tools/list: name, description and input schema of each."""
     d = tempfile.mkdtemp(prefix="probe-mcp-")
     binary = os.path.join(d, "refactor-mcp")
     sh(["go", "build", "-o", binary, "./cmd/refactor-mcp"])
@@ -85,7 +90,7 @@ def schemas():
     tools = rpc(2, "tools/list", {})["tools"]
     p.kill()
     shutil.rmtree(d)
-    return "\n\n".join(f"{t['name']}: {t['description']}\ninput schema: {json.dumps(t['inputSchema'])}" for t in tools)
+    return tools
 
 
 def tools_of(batch):

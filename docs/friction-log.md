@@ -2440,3 +2440,9 @@ loop.py's attempt rewritten with one replace_text (Python; the new
 function generated in the scratchpad), the prompts and flags with
 replace_text; the plan doc with replace_text. This entry appended with a
 heredoc. Nothing else by hand.
+
+## 2026-10-25: the loop's compact tools reference
+
+`compact` and `-reference` in loop.py, and probe.py's `tool_list`, with
+replace_text (Python files). This entry appended with a heredoc. Nothing
+else by hand.

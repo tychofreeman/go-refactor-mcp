@@ -40,7 +40,7 @@ that runs refactorings and edits. You have no tools in this conversation:
 you answer with JSON, and a program runs it and tells you what happened.
 
 The tools (each step of a batch is {{"tool": NAME, "args": {{...}}}}, with
-the arguments in that tool's input schema):
+the arguments the tool takes):
 
 {tools}
 
@@ -90,6 +90,34 @@ REPAIR = """The batch did not succeed:
 {source}Nothing of it was kept: the next batch runs on the module as it was
 before this one. Answer with that whole batch again, corrected:
 {{"batch": {{"steps": [...]}}}}."""
+
+
+# The sentences most tools' descriptions end with, which the compact
+# reference says once.
+BY_NAME = "Without line, name alone identifies it as a package-level symbol of file's package (Name, or Type.Method or Type.Field); unlike a line number, a name stays valid after edits."
+APPLIES = "Applies the change and returns what changed; undo reverts it."
+NOT_STEPS = ("batch", "inspect", "undo")
+
+
+def compact(tools):
+    """The tools as a batch's steps need them: each step's description,
+    without the sentences every tool repeats, and its arguments as a
+    signature (name: type, a ? for optional), without their descriptions."""
+    out = ["Where a tool takes file and name without line, name is a package-level symbol of file's package (Name, Type.Method or Type.Field), and stays valid after earlier steps."]
+    for t in tools:
+        if t["name"] in NOT_STEPS:
+            continue
+        s = t["inputSchema"]
+        args = []
+        for k, v in s.get("properties", {}).items():
+            typ = v.get("type", "any")
+            if typ == "array":
+                typ = (v.get("items") or {}).get("type", "any") + "[]"
+            args.append(f"{k}{'' if k in s.get('required', []) else '?'}: {typ}")
+        desc = t["description"].replace(BY_NAME, "").replace(APPLIES, "")
+        desc = "\n".join(l for l in desc.splitlines() if l.strip())
+        out.append(f"{t['name']}({', '.join(args)})\n{desc}")
+    return "\n\n".join(out)
 
 
 def declarations(module):
@@ -295,13 +323,15 @@ def main():
     p.add_argument("-repairs", type=int, default=2)
     p.add_argument("-out", required=True)
     p.add_argument("-no-read", action="store_true", help="the plan cannot ask for source; only repairs send it")
+    p.add_argument("-reference", default="compact", choices=["compact", "full"],
+                   help="the tools as compact signatures and descriptions, or as the server publishes them")
     p.add_argument("-stages", type=int, default=2, help="batches after the first that the model may send when asked if it is done")
     a = p.parse_args()
     os.makedirs(a.out, exist_ok=True)
     tmp = tempfile.mkdtemp(prefix="loop-")
     binary = os.path.join(tmp, "refactor")
     probe.sh(["go", "build", "-o", binary, "./cmd/refactor"])
-    tools = probe.schemas()
+    tools = compact(probe.tool_list()) if a.reference == "compact" else probe.schemas()
     tasks = [t for t in json.load(open(a.tasks)) if not a.only or t["name"] in a.only.split(",")]
     results = open(os.path.join(a.out, "results.jsonl"), "a")
     for t in tasks:
