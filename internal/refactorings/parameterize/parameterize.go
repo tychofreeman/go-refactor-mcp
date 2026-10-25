@@ -211,12 +211,11 @@ func (*Parameterize) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refact
 	for i, g := range fs[1:] {
 		found := map[*ast.BasicLit]*ast.BasicLit{}
 		m := &pattern.Matcher{
-			Pkg:        first.pkg,
-			Structural: true,
-			Literal: func(p, x *ast.BasicLit) bool {
+			Pkg: first.pkg,
+			Compare: pattern.Exactly{Literal: func(p, x *ast.BasicLit) bool {
 				found[p] = x
 				return true
-			},
+			}},
 		}
 		a := m.At(g.pkg.TypesInfo)
 		a.Locals = map[types.Object]types.Object{}
