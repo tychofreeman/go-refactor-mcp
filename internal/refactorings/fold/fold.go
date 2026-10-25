@@ -22,6 +22,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/gocode"
 	"github.com/tychofreeman/go-refactor-mcp/internal/imports"
 	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
+	"github.com/tychofreeman/go-refactor-mcp/internal/pattern"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
@@ -68,38 +69,39 @@ type foldArgs struct {
 	In   string `json:"in,omitempty"`
 }
 
-// matcher matches code against fn's body, the pattern: it knows what each
-// of the pattern's names is (a hole, a field of a struct parameter, one
-// of fn's locals), and keeps what matching made on the way.
-type matcher struct {
-	pkg *packages.Package // fn's
-	// locals are, while matching statements, the occurrence's variables
-	// standing for fn's locals; bodyLocals are fn's locals.
-	locals, bodyLocals map[types.Object]types.Object
-	holes              map[types.Object]int // fn's parameters (and receiver), and how often the body uses each
-	// fields are the struct parameters the body uses only by their fields:
-	// the fields, in the order the body first uses them. Each field is a
-	// hole of its own, and the call passes a literal of the struct.
-	fields    map[types.Object][]string
-	recv      types.Object            // fn's receiver, or nil
+type relaxer struct {
 	addressOf map[ast.Expr]bool       // arguments &x made for a *p of the body that x matched
 	made      map[ast.Expr]bool       // string literals made from a format's text, for a %s of the body
 	runs      map[ast.Expr][]ast.Expr // concatenations made of a run of operands, for a string parameter of the body
-	depth     int                     // how deep the comparison under way is
-	miss      *miss                   // where the last match failed, or nil
+}
+
+// Call matches a format string whose %s takes text of the call's.
+func (r *relaxer) Call(m *pattern.Matcher, p, x *ast.CallExpr, info *types.Info, b map[pattern.HoleKey]ast.Expr) bool {
+	return matchFormat(m, p, x, info, b, r)
+}
+
+// Concat matches a string concatenation whose operands make up the pattern's.
+func (r *relaxer) Concat(m *pattern.Matcher, p, x *ast.BinaryExpr, info *types.Info, b map[pattern.HoleKey]ast.Expr) bool {
+	return matchConcat(m, p, x, info, b, r)
+}
+
+// Address matches *p against an addressable expression, passed as &x.
+func (r *relaxer) Address(m *pattern.Matcher, p *ast.StarExpr, x ast.Expr, info *types.Info, b map[pattern.HoleKey]ast.Expr) bool {
+	return matchAddress(m, p, x, info, b, r)
 }
 
 // folder finds the code that does what fn does and replaces it with calls.
 type folder struct {
 	ws *workspace.Workspace
-	matcher
+	m  pattern.Matcher
+	relaxer
 	fn    *types.Func
 	decl  *ast.FuncDecl
-	body  ast.Expr        // what fn returns: the pattern; or nil, and
-	stmts []ast.Stmt      // fn's statements: the pattern, for a function without results
-	root  ast.Node        // body or fn's block: where the pattern's names are
-	done  [][2]token.Pos  // statements folded, which a later match must not overlap
-	uses  map[holeKey]int // how often the body uses each field of fields
+	body  ast.Expr                // what fn returns: the pattern; or nil, and
+	stmts []ast.Stmt              // fn's statements: the pattern, for a function without results
+	root  ast.Node                // body or fn's block: where the pattern's names are
+	done  [][2]token.Pos          // statements folded, which a later match must not overlap
+	uses  map[pattern.HoleKey]int // how often the body uses each field of fields
 	// self and sets are a setter's: the struct parameter it sets fields
 	// of and returns, and the fields with what it sets them to, in order.
 	self types.Object
@@ -107,41 +109,27 @@ type folder struct {
 	rest map[ast.Expr]rest // literals folded through the setter, by what to write for them
 	effs *analysis.Effects // what calls do, built when needed
 
-	n       int      // occurrences folded
-	skipped []string // why matches were left, "file:line: reason"
-	nearest *miss    // of the matches that failed, the one that got furthest
+	n       int           // occurrences folded
+	skipped []string      // why matches were left, "file:line: reason"
+	nearest *pattern.Miss // of the matches that failed, the one that got furthest
 	by      map[string][]edit.TextEdit
 	adders  map[string]*imports.Adder
 	order   []string
 	removed []string // imports removed because only folded code used them
 }
 
-// holeKey is a hole: a parameter, or with field one field of a struct
-// parameter the body uses only by its fields.
-type holeKey struct {
-	obj   types.Object
-	field string
-}
-
-// miss is where a match failed: the innermost nodes of the pattern (p)
-// and of the code (x) that differ, depth comparisons below the top.
-type miss struct {
-	p, x  ast.Node
-	depth int
-}
-
 // count is how often the body uses the hole k.
-func (f *folder) count(k holeKey) int {
-	if k.field != "" {
+func (f *folder) count(k pattern.HoleKey) int {
+	if k.Field != "" {
 		return f.uses[k]
 	}
-	return f.holes[k.obj]
+	return f.m.Holes[k.Obj]
 }
 
 // pattern reads fn's declaration: its body must be one return of one
 // value, which uses every parameter.
 func (f *folder) pattern(id *ast.Ident) error {
-	for _, file := range f.pkg.Syntax {
+	for _, file := range f.m.Pkg.Syntax {
 		for _, d := range file.Decls {
 			if fd, ok := d.(*ast.FuncDecl); ok && fd.Name == id {
 				f.decl = fd
@@ -171,39 +159,39 @@ func (f *folder) pattern(id *ast.Ident) error {
 	} else {
 		f.stmts, f.root = list, f.decl.Body
 	}
-	info := f.pkg.TypesInfo
+	info := f.m.Pkg.TypesInfo
 	for _, fl := range f.decl.Type.Params.List {
 		if len(fl.Names) == 0 {
 			return refactor.Refusef("the parameters of %s have no names", name)
 		}
 		for _, n := range fl.Names {
-			f.holes[info.Defs[n]] = 0
+			f.m.Holes[info.Defs[n]] = 0
 		}
 	}
 	if r := f.decl.Recv; r != nil && len(r.List[0].Names) == 1 && r.List[0].Names[0].Name != "_" {
-		f.recv = info.Defs[r.List[0].Names[0]]
-		f.holes[f.recv] = 0
+		f.m.Recv = info.Defs[r.List[0].Names[0]]
+		f.m.Holes[f.m.Recv] = 0
 	}
-	f.bodyLocals = map[types.Object]types.Object{}
+	f.m.BodyLocals = map[types.Object]types.Object{}
 	ast.Inspect(f.root, func(n ast.Node) bool {
 		if id, ok := n.(*ast.Ident); ok {
 			if d := info.Defs[id]; d != nil {
-				f.bodyLocals[d] = d
+				f.m.BodyLocals[d] = d
 			}
-			if c, hole := f.holes[info.Uses[id]]; hole {
-				f.holes[info.Uses[id]] = c + 1
+			if c, hole := f.m.Holes[info.Uses[id]]; hole {
+				f.m.Holes[info.Uses[id]] = c + 1
 			}
 		}
 		return true
 	})
 	if id, ok := ast.Unparen(f.body).(*ast.Ident); ok {
-		if _, hole := f.holes[info.Uses[id]]; hole {
+		if _, hole := f.m.Holes[info.Uses[id]]; hole {
 			return refactor.Refusef("the body of %s is only its parameter %s, so every value of its type would match", name, id.Name)
 		}
 	}
-	f.fields, f.uses = map[types.Object][]string{}, map[holeKey]int{}
-	for o := range f.holes {
-		if _, named := o.Type().(*types.Named); o == f.recv || !named {
+	f.m.Fields, f.uses = map[types.Object][]string{}, map[pattern.HoleKey]int{}
+	for o := range f.m.Holes {
+		if _, named := o.Type().(*types.Named); o == f.m.Recv || !named {
 			continue
 		}
 		if _, isStruct := o.Type().Underlying().(*types.Struct); !isStruct {
@@ -213,11 +201,11 @@ func (f *folder) pattern(id *ast.Ident) error {
 		byField := 0
 		ast.Inspect(f.root, func(n ast.Node) bool {
 			sel, ok := n.(*ast.SelectorExpr)
-			if id := identOf(selX(sel)); !ok || id == nil || info.Uses[id] != o {
+			if id := pattern.IdentOf(selX(sel)); !ok || id == nil || info.Uses[id] != o {
 				return true
 			}
 			if s := info.Selections[sel]; s != nil && s.Kind() == types.FieldVal && len(s.Index()) == 1 {
-				k := holeKey{o, sel.Sel.Name}
+				k := pattern.HoleKey{Obj: o, Field: sel.Sel.Name}
 				if f.uses[k] == 0 {
 					order = append(order, sel.Sel.Name)
 				}
@@ -228,12 +216,12 @@ func (f *folder) pattern(id *ast.Ident) error {
 		})
 		// A body that is only one field of o would match every value of
 		// the field's type: o stays one hole.
-		if byField > 0 && byField == f.holes[o] && !fieldOf(info, f.body, o) {
-			f.fields[o] = order
+		if byField > 0 && byField == f.m.Holes[o] && !fieldOf(info, f.body, o) {
+			f.m.Fields[o] = order
 		}
 	}
-	for o, c := range f.holes {
-		if c == 0 && o != f.recv {
+	for o, c := range f.m.Holes {
+		if c == 0 && o != f.m.Recv {
 			return refactor.Refusef("%s's body does not use its parameter %s, so a call could not be built from what matches", name, o.Name())
 		}
 	}
@@ -251,7 +239,7 @@ func (f *folder) shape() string {
 		for _, s := range f.sets {
 			fields = append(fields, s.field)
 		}
-		return "literals of " + baseName(f.self.Type()).Name() + " giving " + strings.Join(fields, ", ")
+		return "literals of " + pattern.BaseName(f.self.Type()).Name() + " giving " + strings.Join(fields, ", ")
 	}
 	if f.body != nil {
 		return types.ExprString(f.body)
@@ -286,11 +274,11 @@ func statementsOnly(body *ast.BlockStmt) string {
 // assignedHole is the name of a parameter (or the receiver) the body
 // assigns, increments or takes the address of, or "".
 func (f *folder) assignedHole() string {
-	info := f.pkg.TypesInfo
+	info := f.m.Pkg.TypesInfo
 	name := ""
 	hole := func(e ast.Expr) {
-		if id := identOf(e); id != nil && name == "" {
-			if _, ok := f.holes[info.Uses[id]]; ok {
+		if id := pattern.IdentOf(e); id != nil && name == "" {
+			if _, ok := f.m.Holes[info.Uses[id]]; ok {
 				name = id.Name
 			}
 		}
@@ -330,12 +318,12 @@ type rest struct {
 // receiver to expressions of the other parameters, then returns it; it
 // reports whether the body is one.
 func (f *folder) setter(list []ast.Stmt) bool {
-	info := f.pkg.TypesInfo
+	info := f.m.Pkg.TypesInfo
 	ret, ok := list[len(list)-1].(*ast.ReturnStmt)
-	if len(list) < 2 || !ok || len(ret.Results) != 1 || identOf(ret.Results[0]) == nil {
+	if len(list) < 2 || !ok || len(ret.Results) != 1 || pattern.IdentOf(ret.Results[0]) == nil {
 		return false
 	}
-	self := info.Uses[identOf(ret.Results[0])]
+	self := info.Uses[pattern.IdentOf(ret.Results[0])]
 	params := slices.Clone(f.decl.Type.Params.List)
 	if f.decl.Recv != nil {
 		params = append(params, f.decl.Recv.List...)
@@ -362,7 +350,7 @@ func (f *folder) setter(list []ast.Stmt) bool {
 			return false
 		}
 		sel, ok := as.Lhs[0].(*ast.SelectorExpr)
-		if !ok || identOf(sel.X) == nil || info.Uses[identOf(sel.X)] != self {
+		if !ok || pattern.IdentOf(sel.X) == nil || info.Uses[pattern.IdentOf(sel.X)] != self {
 			return false
 		}
 		if s := info.Selections[sel]; s == nil || s.Kind() != types.FieldVal || len(s.Index()) != 1 {
@@ -447,9 +435,9 @@ func (f *folder) try(p *packages.Package, file *ast.File, x ast.Expr, stack []as
 	if f.sets != nil {
 		return f.trySetter(p, file, x, stack)
 	}
-	b := map[holeKey]ast.Expr{}
-	f.miss = nil
-	if !f.match(f.body, x, info, b) {
+	b := map[pattern.HoleKey]ast.Expr{}
+	f.m.Miss = nil
+	if !f.m.Match(f.body, x, info, b) {
 		f.keepNearest(0)
 		return false, nil
 	}
@@ -461,7 +449,7 @@ func (f *folder) try(p *packages.Package, file *ast.File, x ast.Expr, stack []as
 	if len(stack) > 0 && assigned(stack[len(stack)-1], x) {
 		return skip("it is assigned or its address taken")
 	}
-	if p.PkgPath != f.pkg.PkgPath && !f.fn.Exported() {
+	if p.PkgPath != f.m.Pkg.PkgPath && !f.fn.Exported() {
 		return skip(fmt.Sprintf("%s is not exported, so package %s cannot call it", f.fn.Name(), p.Name))
 	}
 	// Arguments are evaluated once, before the body: one that has effects
@@ -515,17 +503,17 @@ func (f *folder) replace(file *ast.File, x ast.Expr, call string) {
 func (f *folder) trySetter(p *packages.Package, file *ast.File, x ast.Expr, stack []ast.Node) (bool, error) {
 	info := p.TypesInfo
 	lit, ok := x.(*ast.CompositeLit)
-	if !ok || !sameObj(baseName(info.TypeOf(lit)), baseName(f.self.Type())) {
+	if !ok || !pattern.SameObj(pattern.BaseName(info.TypeOf(lit)), pattern.BaseName(f.self.Type())) {
 		return false, nil
 	}
-	b := map[holeKey]ast.Expr{{f.self, ""}: lit}
+	b := map[pattern.HoleKey]ast.Expr{{Obj: f.self, Field: ""}: lit}
 	var drop []int
 	for _, s := range f.sets {
 		i := slices.IndexFunc(lit.Elts, func(e ast.Expr) bool {
 			kv, ok := e.(*ast.KeyValueExpr)
-			return ok && identOf(kv.Key) != nil && identOf(kv.Key).Name == s.field
+			return ok && pattern.IdentOf(kv.Key) != nil && pattern.IdentOf(kv.Key).Name == s.field
 		})
-		if i < 0 || !f.match(s.value, lit.Elts[i].(*ast.KeyValueExpr).Value, info, b) {
+		if i < 0 || !f.m.Match(s.value, lit.Elts[i].(*ast.KeyValueExpr).Value, info, b) {
 			return false, nil
 		}
 		drop = append(drop, i)
@@ -538,7 +526,7 @@ func (f *folder) trySetter(p *packages.Package, file *ast.File, x ast.Expr, stac
 	if len(stack) > 0 && assigned(stack[len(stack)-1], x) {
 		return skip("it has its address taken")
 	}
-	if p.PkgPath != f.pkg.PkgPath && !f.fn.Exported() {
+	if p.PkgPath != f.m.Pkg.PkgPath && !f.fn.Exported() {
 		return skip(fmt.Sprintf("%s is not exported, so package %s cannot call it", f.fn.Name(), p.Name))
 	}
 	typ, why := f.elided(p, lit, stack)
@@ -561,7 +549,7 @@ func (f *folder) trySetter(p *packages.Package, file *ast.File, x ast.Expr, stac
 		return skip("fields with effects or that could panic would be evaluated in another order")
 	}
 	for k, e := range b {
-		if n := f.count(k); k.obj != f.self && n > 1 && (analysis.HasEffect(info, e) || analysis.MayPanic(info, e) != nil) {
+		if n := f.count(k); k.Obj != f.self && n > 1 && (analysis.HasEffect(info, e) || analysis.MayPanic(info, e) != nil) {
 			return skip(fmt.Sprintf("%s, used %d times in the body, would be evaluated once", types.ExprString(e), n))
 		}
 	}
@@ -611,10 +599,10 @@ func (f *folder) elided(p *packages.Package, lit *ast.CompositeLit, stack []ast.
 	if _, ptr := slot.(*types.Pointer); ptr {
 		return "", "its & is elided in the enclosing literal"
 	}
-	if tn := baseName(f.self.Type()); tn.Pkg().Path() != f.fn.Pkg().Path() {
+	if tn := pattern.BaseName(f.self.Type()); tn.Pkg().Path() != f.fn.Pkg().Path() {
 		return "", fmt.Sprintf("its type is elided in the enclosing literal, and %s is declared in another package than %s", tn.Name(), f.fn.Name())
 	}
-	return baseName(f.self.Type()).Name(), ""
+	return pattern.BaseName(f.self.Type()).Name(), ""
 }
 
 // literal is lit's source in src, at offsets off, as r says to write it.
@@ -653,7 +641,7 @@ func (r rest) literal(lit *ast.CompositeLit, src []byte, off func(token.Pos) int
 
 // call is the call of fn that a match with holes b in file of package p,
 // inside stack, becomes; or why there is none.
-func (f *folder) call(p *packages.Package, file *ast.File, b map[holeKey]ast.Expr, stack []ast.Node) (string, string, error) {
+func (f *folder) call(p *packages.Package, file *ast.File, b map[pattern.HoleKey]ast.Expr, stack []ast.Node) (string, string, error) {
 	path := f.ws.Fset.Position(file.Pos()).Filename
 	src, err := os.ReadFile(path)
 	if err != nil {
@@ -681,7 +669,7 @@ func (f *folder) call(p *packages.Package, file *ast.File, b map[holeKey]ast.Exp
 	}
 	// qualify writes name, of fn's package, for code in file.
 	qualify := func(name string) (string, error) {
-		if p.PkgPath == f.pkg.PkgPath {
+		if p.PkgPath == f.m.Pkg.PkgPath {
 			return name, nil
 		}
 		if f.adders[path] == nil {
@@ -690,7 +678,7 @@ func (f *folder) call(p *packages.Package, file *ast.File, b map[holeKey]ast.Exp
 		q, err := f.adders[path].Name(f.fn.Pkg())
 		return q + "." + name, err
 	}
-	if lit := b[holeKey{f.self, ""}]; lit != nil && f.rest[lit].typ != "" {
+	if lit := b[pattern.HoleKey{Obj: f.self, Field: ""}]; lit != nil && f.rest[lit].typ != "" {
 		r := f.rest[lit]
 		if r.typ, err = qualify(r.typ); err != nil {
 			return "", err.Error(), nil
@@ -700,10 +688,10 @@ func (f *folder) call(p *packages.Package, file *ast.File, b map[holeKey]ast.Exp
 	var args []string
 	for _, fl := range f.decl.Type.Params.List {
 		for _, n := range fl.Names {
-			o := f.pkg.TypesInfo.Defs[n]
-			fs, byField := f.fields[o]
+			o := f.m.Pkg.TypesInfo.Defs[n]
+			fs, byField := f.m.Fields[o]
 			if !byField {
-				args = append(args, text(b[holeKey{o, ""}]))
+				args = append(args, text(b[pattern.HoleKey{Obj: o, Field: ""}]))
 				continue
 			}
 			t, err := qualify(o.Type().(*types.Named).Obj().Name())
@@ -712,7 +700,7 @@ func (f *folder) call(p *packages.Package, file *ast.File, b map[holeKey]ast.Exp
 			}
 			var elts []string
 			for _, fld := range fs {
-				elts = append(elts, fld+": "+text(b[holeKey{o, fld}]))
+				elts = append(elts, fld+": "+text(b[pattern.HoleKey{Obj: o, Field: fld}]))
 			}
 			args = append(args, t+"{"+strings.Join(elts, ", ")+"}")
 		}
@@ -735,8 +723,8 @@ func (f *folder) call(p *packages.Package, file *ast.File, b map[holeKey]ast.Exp
 // that matters: the body has neither effects nor panics but in its
 // holes, or k is an argument of the body's outermost call whose other
 // arguments have neither.
-func (f *folder) first(k holeKey) bool {
-	info := f.pkg.TypesInfo
+func (f *folder) first(k pattern.HoleKey) bool {
+	info := f.m.Pkg.TypesInfo
 	if !analysis.HasEffect(info, f.body) && analysis.MayPanic(info, f.body) == nil {
 		return true
 	}
@@ -747,10 +735,10 @@ func (f *folder) first(k holeKey) bool {
 	is := func(a ast.Expr) bool {
 		switch a := ast.Unparen(a).(type) {
 		case *ast.Ident:
-			return k.field == "" && info.Uses[a] == k.obj
+			return k.Field == "" && info.Uses[a] == k.Obj
 		case *ast.SelectorExpr:
-			id := identOf(a.X)
-			return k.field == a.Sel.Name && id != nil && info.Uses[id] == k.obj
+			id := pattern.IdentOf(a.X)
+			return k.Field == a.Sel.Name && id != nil && info.Uses[id] == k.Obj
 		}
 		return false
 	}
@@ -763,7 +751,7 @@ func (f *folder) first(k holeKey) bool {
 	case *ast.Ident:
 		return true
 	case *ast.SelectorExpr:
-		_, pkgName := info.Uses[identOf(fun.X)].(*types.PkgName)
+		_, pkgName := info.Uses[pattern.IdentOf(fun.X)].(*types.PkgName)
 		return pkgName
 	}
 	return false
@@ -772,10 +760,10 @@ func (f *folder) first(k holeKey) bool {
 // receiver is the receiver of the call: what matched the body's receiver,
 // or, when the body does not use it, the receiver of the method of the
 // same type the occurrence is in; or why there is none.
-func (f *folder) receiver(info *types.Info, b map[holeKey]ast.Expr, stack []ast.Node, text func(ast.Expr) string) (string, string) {
+func (f *folder) receiver(info *types.Info, b map[pattern.HoleKey]ast.Expr, stack []ast.Node, text func(ast.Expr) string) (string, string) {
 	recvT := f.fn.Signature().Recv().Type()
 	_, ptr := recvT.(*types.Pointer)
-	if e, ok := b[holeKey{f.recv, ""}]; ok {
+	if e, ok := b[pattern.HoleKey{Obj: f.m.Recv, Field: ""}]; ok {
 		_, isPtr := info.TypeOf(e).(*types.Pointer)
 		switch ast.Unparen(e).(type) {
 		case *ast.Ident, *ast.SelectorExpr, *ast.IndexExpr, *ast.CompositeLit:
@@ -791,14 +779,14 @@ func (f *folder) receiver(info *types.Info, b map[holeKey]ast.Expr, stack []ast.
 		}
 		return "(" + text(e) + ")", ""
 	}
-	base := baseName(recvT)
+	base := pattern.BaseName(recvT)
 	for i := len(stack) - 1; i >= 0; i-- {
 		fd, ok := stack[i].(*ast.FuncDecl)
 		if !ok || fd.Recv == nil || len(fd.Recv.List[0].Names) != 1 {
 			continue
 		}
 		r := info.Defs[fd.Recv.List[0].Names[0]]
-		if r != nil && base != nil && sameObj(baseName(r.Type()), base) && fd.Recv.List[0].Names[0].Name != "_" {
+		if r != nil && base != nil && pattern.SameObj(pattern.BaseName(r.Type()), base) && fd.Recv.List[0].Names[0].Name != "_" {
 			return fd.Recv.List[0].Names[0].Name, ""
 		}
 	}
@@ -847,209 +835,16 @@ func (f *folder) removeImports(path string, es []edit.TextEdit) {
 	}, code)...)
 }
 
-// match reports whether x, of the package whose info is info, is the
-// pattern p (of fn's package) with its holes filled in b.
-func (m *matcher) match(p, x ast.Expr, info *types.Info, b map[holeKey]ast.Expr) bool {
-	m.depth++
-	ok := m.compareExpr(p, x, info, b)
-	m.depth--
-	m.note(ok, p, x)
-	return ok
-}
-
-// note keeps where a match failed: the innermost comparison that
-// failed, unless a comparison around it then matched another way.
-func (m *matcher) note(ok bool, p, x ast.Node) {
-	if ok {
-		m.miss = nil
-	} else if m.miss == nil {
-		m.miss = &miss{p: p, x: x, depth: m.depth}
-	}
-}
-
-// compareExpr reports whether x is the pattern p, comparing their nodes;
-// match calls it and keeps where it failed.
-func (m *matcher) compareExpr(p ast.Expr, x ast.Expr, info *types.Info, b map[holeKey]ast.Expr) bool {
-	p, x = ast.Unparen(p), ast.Unparen(x)
-	pinfo := m.pkg.TypesInfo
-	sub := func(p, x ast.Expr) bool {
-		if p == nil || x == nil {
-			return p == nil && x == nil
-		}
-		return m.match(p, x, info, b)
-	}
-	switch pp := p.(type) {
-	case *ast.Ident:
-		return m.matchIdent(pp, x, info, b, pinfo)
-	case *ast.BasicLit:
-		xb, ok := x.(*ast.BasicLit)
-		return ok && xb.Kind == pp.Kind && xb.Value == pp.Value
-	case *ast.SelectorExpr:
-		return m.matchSelector(pp, x, info, b, pinfo, sub)
-	case *ast.CallExpr:
-		return m.matchCall(pp, x, info, b, sub)
-	case *ast.BinaryExpr:
-		return m.matchBinary(pp, x, info, b, pinfo, sub)
-	case *ast.UnaryExpr:
-		xu, ok := x.(*ast.UnaryExpr)
-		return ok && xu.Op == pp.Op && sub(pp.X, xu.X)
-	case *ast.StarExpr:
-		if xs, ok := x.(*ast.StarExpr); ok {
-			return sub(pp.X, xs.X)
-		}
-		return m.matchAddress(pp, x, info, b)
-	case *ast.IndexExpr:
-		xi, ok := x.(*ast.IndexExpr)
-		return ok && sub(pp.X, xi.X) && sub(pp.Index, xi.Index)
-	case *ast.SliceExpr:
-		xs, ok := x.(*ast.SliceExpr)
-		return ok && xs.Slice3 == pp.Slice3 && sub(pp.X, xs.X) && sub(pp.Low, xs.Low) && sub(pp.High, xs.High) && sub(pp.Max, xs.Max)
-	case *ast.TypeAssertExpr:
-		xt, ok := x.(*ast.TypeAssertExpr)
-		return ok && pp.Type != nil && xt.Type != nil && sub(pp.X, xt.X) && types.Identical(pinfo.TypeOf(pp.Type), info.TypeOf(xt.Type))
-	case *ast.CompositeLit:
-		return matchComposite(pp, x, info, pinfo, sub)
-	case *ast.KeyValueExpr:
-		xk, ok := x.(*ast.KeyValueExpr)
-		return ok && sub(pp.Key, xk.Key) && sub(pp.Value, xk.Value)
-	}
-	return false
-}
-
-// matchComposite reports whether x matches the composite literal pp of the
-// pattern, element by element.
-func matchComposite(pp *ast.CompositeLit, x ast.Expr, info *types.Info, pinfo *types.Info, sub func(p ast.Expr, x ast.Expr) bool) bool {
-	xc, ok := x.(*ast.CompositeLit)
-	if !ok || len(xc.Elts) != len(pp.Elts) || types.TypeString(pinfo.TypeOf(pp), nil) != types.TypeString(info.TypeOf(xc), nil) {
-		return false
-	}
-	for i := range pp.Elts {
-		if !sub(pp.Elts[i], xc.Elts[i]) {
-			return false
-		}
-	}
-	return true
-}
-
-// matchBinary reports whether x matches the binary expression pp of the
-// pattern; string concatenations match by their operands.
-func (m *matcher) matchBinary(pp *ast.BinaryExpr, x ast.Expr, info *types.Info, b map[holeKey]ast.Expr, pinfo *types.Info, sub func(p ast.Expr, x ast.Expr) bool) bool {
-	if pp.Op == token.ADD && analysis.IsString(pinfo.TypeOf(pp)) {
-		xb, ok := x.(*ast.BinaryExpr)
-		return ok && xb.Op == token.ADD && m.matchConcat(pp, xb, info, b)
-	}
-	xb, ok := x.(*ast.BinaryExpr)
-	return ok && xb.Op == pp.Op && sub(pp.X, xb.X) && sub(pp.Y, xb.Y)
-}
-
-// matchCall reports whether x matches the call pp of the pattern, argument
-// by argument or as a format string.
-func (m *matcher) matchCall(pp *ast.CallExpr, x ast.Expr, info *types.Info, b map[holeKey]ast.Expr, sub func(p ast.Expr, x ast.Expr) bool) bool {
-	xc, ok := x.(*ast.CallExpr)
-	if !ok || xc.Ellipsis.IsValid() != pp.Ellipsis.IsValid() || !sub(pp.Fun, xc.Fun) {
-		return false
-	}
-	if len(xc.Args) != len(pp.Args) {
-		return m.matchFormat(pp, xc, info, b)
-	}
-	for i := range pp.Args {
-		if !sub(pp.Args[i], xc.Args[i]) {
-			return false
-		}
-	}
-	return true
-}
-
-// matchSelector reports whether x matches the selector pp of the pattern: a
-// field of a struct parameter, a qualified name, or the same field or
-// method of matching operands.
-func (m *matcher) matchSelector(pp *ast.SelectorExpr, x ast.Expr, info *types.Info, b map[holeKey]ast.Expr, pinfo *types.Info, sub func(p ast.Expr, x ast.Expr) bool) bool {
-	if id := identOf(pp.X); id != nil {
-		po := pinfo.Uses[id]
-		if _, byField := m.fields[po]; byField {
-			k := holeKey{po, pp.Sel.Name}
-			if prev, ok := b[k]; ok {
-				return types.ExprString(prev) == types.ExprString(x)
-			}
-			xt := info.TypeOf(x)
-			if xt == nil || !info.Types[x].IsValue() || !types.AssignableTo(xt, pinfo.TypeOf(pp)) && types.TypeString(xt, nil) != types.TypeString(pinfo.TypeOf(pp), nil) {
-				return false
-			}
-			b[k] = x
-			return true
-		}
-		if _, pkgName := po.(*types.PkgName); pkgName {
-			if xi, ok := x.(*ast.Ident); ok { // Name in the package itself
-				return xi.Name == pp.Sel.Name && sameObj(pinfo.Uses[pp.Sel], info.Uses[xi])
-			}
-		}
-	}
-	xs, ok := x.(*ast.SelectorExpr)
-	return ok && xs.Sel.Name == pp.Sel.Name && sub(pp.X, xs.X) && sameObj(pinfo.Uses[pp.Sel], info.Uses[xs.Sel])
-}
-
-// matchIdent reports whether x matches the identifier pp of the pattern: a
-// name a local of fn declares, a hole, or the same object.
-func (m *matcher) matchIdent(pp *ast.Ident, x ast.Expr, info *types.Info, b map[holeKey]ast.Expr, pinfo *types.Info) bool {
-	if pd := pinfo.Defs[pp]; pd != nil || pp.Name == "_" {
-		// A local fn declares: the occurrence's own name for it.
-		xi, ok := x.(*ast.Ident)
-		if !ok || pp.Name == "_" {
-			return ok && xi.Name == "_"
-		}
-		xd := info.Defs[xi]
-		if xd == nil || m.locals == nil {
-			return false
-		}
-		m.locals[pd] = xd
-		return true
-	}
-	if xo, local := m.locals[pinfo.Uses[pp]]; local {
-		xi, ok := x.(*ast.Ident)
-		return ok && info.Uses[xi] == xo
-	}
-	if _, local := m.bodyLocals[pinfo.Uses[pp]]; local {
-		return false
-	}
-	po := pinfo.Uses[pp]
-	if _, hole := m.holes[po]; hole && po != nil {
-		if prev, ok := b[holeKey{po, ""}]; ok {
-			return types.ExprString(prev) == types.ExprString(x)
-		}
-		xt := info.TypeOf(x)
-		if xt == nil || !info.Types[x].IsValue() {
-			return false
-		}
-		if po == m.recv {
-			if !sameObj(baseName(xt), baseName(po.Type())) {
-				return false
-			}
-		} else if !types.AssignableTo(xt, po.Type()) && types.TypeString(xt, nil) != types.TypeString(po.Type(), nil) {
-			return false
-		}
-		b[holeKey{po, ""}] = x
-		return true
-	}
-	switch x := x.(type) {
-	case *ast.Ident:
-		return x.Name == pp.Name && sameObj(po, info.Uses[x])
-	case *ast.SelectorExpr: // pkg.Name in another package
-		_, pkgName := info.Uses[identOf(x.X)].(*types.PkgName)
-		return pkgName && x.Sel.Name == pp.Name && sameObj(po, info.Uses[x.Sel])
-	}
-	return false
-}
-
 // matchAddress reports whether x, which is not a dereference, is the
 // pattern's *p for a pointer parameter p: an addressable expression of
 // p's element type, so that the call passes &x.
-func (m *matcher) matchAddress(pp *ast.StarExpr, x ast.Expr, info *types.Info, b map[holeKey]ast.Expr) bool {
+func matchAddress(m *pattern.Matcher, pp *ast.StarExpr, x ast.Expr, info *types.Info, b map[pattern.HoleKey]ast.Expr, rel *relaxer) bool {
 	id, ok := ast.Unparen(pp.X).(*ast.Ident)
 	if !ok {
 		return false
 	}
-	po := m.pkg.TypesInfo.Uses[id]
-	if _, hole := m.holes[po]; !hole || po == nil || po == m.recv {
+	po := m.Pkg.TypesInfo.Uses[id]
+	if _, hole := m.Holes[po]; !hole || po == nil || po == m.Recv {
 		return false
 	}
 	ptr, ok := po.Type().Underlying().(*types.Pointer)
@@ -1058,12 +853,12 @@ func (m *matcher) matchAddress(pp *ast.StarExpr, x ast.Expr, info *types.Info, b
 		return false
 	}
 	u := &ast.UnaryExpr{OpPos: x.Pos(), Op: token.AND, X: x}
-	k := holeKey{po, ""}
+	k := pattern.HoleKey{Obj: po, Field: ""}
 	if prev, ok := b[k]; ok {
 		return types.ExprString(prev) == types.ExprString(u)
 	}
 	b[k] = u
-	m.addressOf[u] = true
+	rel.addressOf[u] = true
 	return true
 }
 
@@ -1090,14 +885,14 @@ func addressable(info *types.Info, x ast.Expr) bool {
 // print them as they are: log.Printf("email to %s", to) is
 // log.Printf("%s to %s", channel, to) with channel "email". Text with a
 // % in it is not taken.
-func (m *matcher) matchFormat(pp, xc *ast.CallExpr, info *types.Info, b map[holeKey]ast.Expr) bool {
-	pinfo := m.pkg.TypesInfo
+func matchFormat(m *pattern.Matcher, pp, xc *ast.CallExpr, info *types.Info, b map[pattern.HoleKey]ast.Expr, rel *relaxer) bool {
+	pinfo := m.Pkg.TypesInfo
 	fi := formatIndex(pinfo, pp)
 	if fi < 0 || pp.Ellipsis.IsValid() || len(xc.Args) <= fi || len(xc.Args) > len(pp.Args) {
 		return false
 	}
 	for i := 0; i < fi; i++ {
-		if !m.match(pp.Args[i], xc.Args[i], info, b) {
+		if !m.Match(pp.Args[i], xc.Args[i], info, b) {
 			return false
 		}
 	}
@@ -1111,8 +906,8 @@ func (m *matcher) matchFormat(pp, xc *ast.CallExpr, info *types.Info, b map[hole
 	}
 	// try matches parts[k:] to rest, the format's text still to match,
 	// and the arguments from xi; it returns the holes, or nil.
-	var try func(k int, rest string, xi int, b map[holeKey]ast.Expr) map[holeKey]ast.Expr
-	try = func(k int, rest string, xi int, b map[holeKey]ast.Expr) map[holeKey]ast.Expr {
+	var try func(k int, rest string, xi int, b map[pattern.HoleKey]ast.Expr) map[pattern.HoleKey]ast.Expr
+	try = func(k int, rest string, xi int, b map[pattern.HoleKey]ast.Expr) map[pattern.HoleKey]ast.Expr {
 		if k == len(parts) {
 			if rest == "" && xi == len(xc.Args) {
 				return b
@@ -1129,7 +924,7 @@ func (m *matcher) matchFormat(pp, xc *ast.CallExpr, info *types.Info, b map[hole
 		arg := pp.Args[fi+(k+1)/2]
 		if strings.HasPrefix(rest, part) && xi < len(xc.Args) {
 			c := maps.Clone(b)
-			if m.match(arg, xc.Args[xi], info, c) {
+			if m.Match(arg, xc.Args[xi], info, c) {
 				if r := try(k+1, rest[len(part):], xi+1, c); r != nil {
 					return r
 				}
@@ -1140,7 +935,7 @@ func (m *matcher) matchFormat(pp, xc *ast.CallExpr, info *types.Info, b map[hole
 		}
 		for j := 0; j <= len(rest) && !strings.Contains(rest[:j], "%"); j++ {
 			c := maps.Clone(b)
-			if m.bindText(arg, rest[:j], xc.Args[fi].Pos(), c) {
+			if bindText(m, arg, rest[:j], xc.Args[fi].Pos(), c, rel) {
 				if r := try(k+1, rest[j:], xi, c); r != nil {
 					return r
 				}
@@ -1158,12 +953,12 @@ func (m *matcher) matchFormat(pp, xc *ast.CallExpr, info *types.Info, b map[hole
 
 // bindText binds the pattern's arg, if it is a parameter of type string,
 // to a literal of text in b; it reports whether it could.
-func (m *matcher) bindText(arg ast.Expr, text string, pos token.Pos, b map[holeKey]ast.Expr) bool {
-	po := m.stringParam(arg)
+func bindText(m *pattern.Matcher, arg ast.Expr, text string, pos token.Pos, b map[pattern.HoleKey]ast.Expr, rel *relaxer) bool {
+	po := stringParam(m, arg)
 	if po == nil {
 		return false
 	}
-	k := holeKey{po, ""}
+	k := pattern.HoleKey{Obj: po, Field: ""}
 	if prev, ok := b[k]; ok {
 		l, ok := prev.(*ast.BasicLit)
 		if !ok || l.Kind != token.STRING {
@@ -1174,19 +969,19 @@ func (m *matcher) bindText(arg ast.Expr, text string, pos token.Pos, b map[holeK
 	}
 	lit := &ast.BasicLit{ValuePos: pos, Kind: token.STRING, Value: strconv.Quote(text)}
 	b[k] = lit
-	m.made[lit] = true
+	rel.made[lit] = true
 	return true
 }
 
 // stringParam is the parameter of type string that arg, of the pattern,
 // is, or nil.
-func (m *matcher) stringParam(arg ast.Expr) types.Object {
+func stringParam(m *pattern.Matcher, arg ast.Expr) types.Object {
 	id, ok := ast.Unparen(arg).(*ast.Ident)
 	if !ok {
 		return nil
 	}
-	po := m.pkg.TypesInfo.Uses[id]
-	if _, hole := m.holes[po]; !hole || po == nil || po == m.recv || !types.Identical(po.Type(), types.Typ[types.String]) {
+	po := m.Pkg.TypesInfo.Uses[id]
+	if _, hole := m.Holes[po]; !hole || po == nil || po == m.Recv || !types.Identical(po.Type(), types.Typ[types.String]) {
 		return nil
 	}
 	return po
@@ -1196,11 +991,11 @@ func (m *matcher) stringParam(arg ast.Expr) types.Object {
 // pattern's concatenation pp, + being associative: each operand of pp
 // matches one of x's in order, but a string parameter may match a run of
 // them, so to+": "+text is first+" "+last+": "+ref with to first+" "+last.
-func (m *matcher) matchConcat(pp, x *ast.BinaryExpr, info *types.Info, b map[holeKey]ast.Expr) bool {
-	ps, xs := concatOperands(m.pkg.TypesInfo, pp), concatOperands(info, x)
+func matchConcat(m *pattern.Matcher, pp, x *ast.BinaryExpr, info *types.Info, b map[pattern.HoleKey]ast.Expr, rel *relaxer) bool {
+	ps, xs := concatOperands(m.Pkg.TypesInfo, pp), concatOperands(info, x)
 	// try matches ps[i:] to xs[j:]; it returns the holes, or nil.
-	var try func(i, j int, b map[holeKey]ast.Expr) map[holeKey]ast.Expr
-	try = func(i, j int, b map[holeKey]ast.Expr) map[holeKey]ast.Expr {
+	var try func(i, j int, b map[pattern.HoleKey]ast.Expr) map[pattern.HoleKey]ast.Expr
+	try = func(i, j int, b map[pattern.HoleKey]ast.Expr) map[pattern.HoleKey]ast.Expr {
 		if i == len(ps) || j == len(xs) {
 			if i == len(ps) && j == len(xs) {
 				return b
@@ -1208,15 +1003,15 @@ func (m *matcher) matchConcat(pp, x *ast.BinaryExpr, info *types.Info, b map[hol
 			return nil
 		}
 		c := maps.Clone(b)
-		if m.match(ps[i], xs[j], info, c) {
+		if m.Match(ps[i], xs[j], info, c) {
 			if r := try(i+1, j+1, c); r != nil {
 				return r
 			}
 		}
-		po := m.stringParam(ps[i])
+		po := stringParam(m, ps[i])
 		for k := j + 2; po != nil && k <= len(xs)-(len(ps)-i-1); k++ {
 			c := maps.Clone(b)
-			if m.bindRun(po, xs[j:k], c) {
+			if bindRun(m, po, xs[j:k], c, rel) {
 				if r := try(i+1, k, c); r != nil {
 					return r
 				}
@@ -1234,17 +1029,17 @@ func (m *matcher) matchConcat(pp, x *ast.BinaryExpr, info *types.Info, b map[hol
 
 // bindRun binds the string parameter po to the concatenation of run in
 // b; it reports whether it could.
-func (m *matcher) bindRun(po types.Object, run []ast.Expr, b map[holeKey]ast.Expr) bool {
+func bindRun(m *pattern.Matcher, po types.Object, run []ast.Expr, b map[pattern.HoleKey]ast.Expr, rel *relaxer) bool {
 	e := run[0]
 	for _, y := range run[1:] {
 		e = &ast.BinaryExpr{X: e, OpPos: y.Pos(), Op: token.ADD, Y: y}
 	}
-	k := holeKey{po, ""}
+	k := pattern.HoleKey{Obj: po, Field: ""}
 	if prev, ok := b[k]; ok {
 		return types.ExprString(prev) == types.ExprString(e)
 	}
 	b[k] = e
-	m.runs[e] = run
+	rel.runs[e] = run
 	return true
 }
 
@@ -1298,9 +1093,9 @@ func (f *folder) impure(info *types.Info, e ast.Expr) bool {
 // nothing that matters (a side effect, an assignment, a possible panic)
 // comes before its first use; and no argument the call evaluates before
 // it could panic.
-func (f *folder) evaluatedFirst(info *types.Info, seq []ast.Stmt, b map[holeKey]ast.Expr, k holeKey) bool {
+func (f *folder) evaluatedFirst(info *types.Info, seq []ast.Stmt, b map[pattern.HoleKey]ast.Expr, k pattern.HoleKey) bool {
 	e := b[k]
-	if k.field != "" || f.addressOf[e] || f.effectful(info, e, f.count(k) > 1) {
+	if k.Field != "" || f.addressOf[e] || f.effectful(info, e, f.count(k) > 1) {
 		return false
 	}
 	for _, s := range seq {
@@ -1311,22 +1106,22 @@ func (f *folder) evaluatedFirst(info *types.Info, seq []ast.Stmt, b map[holeKey]
 			return false
 		}
 	}
-	if f.recv != nil && k.obj != f.recv {
-		if a := b[holeKey{f.recv, ""}]; a != nil && f.impure(info, a) {
+	if f.m.Recv != nil && k.Obj != f.m.Recv {
+		if a := b[pattern.HoleKey{Obj: f.m.Recv, Field: ""}]; a != nil && f.impure(info, a) {
 			return false
 		}
 	}
 	for _, fl := range f.decl.Type.Params.List {
 		for _, n := range fl.Names {
-			o := f.pkg.TypesInfo.Defs[n]
-			if o == k.obj {
+			o := f.m.Pkg.TypesInfo.Defs[n]
+			if o == k.Obj {
 				return true
 			}
-			keys := []holeKey{{o, ""}}
-			if fs, byField := f.fields[o]; byField {
+			keys := []pattern.HoleKey{{Obj: o, Field: ""}}
+			if fs, byField := f.m.Fields[o]; byField {
 				keys = nil
 				for _, fld := range fs {
-					keys = append(keys, holeKey{o, fld})
+					keys = append(keys, pattern.HoleKey{Obj: o, Field: fld})
 				}
 			}
 			for _, ok := range keys {
@@ -1537,7 +1332,7 @@ func (f *folder) nilAddress(info *types.Info, e ast.Expr) bool {
 // panic may come before the code that ran before x's first use when that
 // code returns and panics no other way, and the pointer is a local
 // variable that nothing else changes.
-func (f *folder) movedAddress(info *types.Info, seq []ast.Stmt, b map[holeKey]ast.Expr, stack []ast.Node) string {
+func (f *folder) movedAddress(info *types.Info, seq []ast.Stmt, b map[pattern.HoleKey]ast.Expr, stack []ast.Node) string {
 	for _, e := range b {
 		u, ok := e.(*ast.UnaryExpr)
 		if !ok || !f.addressOf[e] {
@@ -1627,104 +1422,6 @@ func (f *folder) mayStop(info *types.Info, s ast.Stmt, pos token.Pos) string {
 	return why
 }
 
-// matchStmt reports whether x is the pattern's statement p.
-func (m *matcher) matchStmt(p, x ast.Stmt, info *types.Info, b map[holeKey]ast.Expr) bool {
-	m.depth++
-	ok := m.compareStmt(p, x, info, b)
-	m.depth--
-	m.note(ok, p, x)
-	return ok
-}
-
-// compareStmt reports whether x is the pattern's statement p, comparing
-// their nodes; matchStmt calls it and keeps where it failed.
-func (m *matcher) compareStmt(p ast.Stmt, x ast.Stmt, info *types.Info, b map[holeKey]ast.Expr) bool {
-	if p == nil || x == nil {
-		return p == nil && x == nil
-	}
-	expr := func(p, x ast.Expr) bool {
-		if p == nil || x == nil {
-			return p == nil && x == nil
-		}
-		return m.match(p, x, info, b)
-	}
-	exprs := func(p, x []ast.Expr) bool {
-		if len(p) != len(x) {
-			return false
-		}
-		for i := range p {
-			if !expr(p[i], x[i]) {
-				return false
-			}
-		}
-		return true
-	}
-	block := func(p, x *ast.BlockStmt) bool {
-		if p == nil || x == nil {
-			return p == nil && x == nil
-		}
-		if len(p.List) != len(x.List) {
-			return false
-		}
-		for i := range p.List {
-			if !m.matchStmt(p.List[i], x.List[i], info, b) {
-				return false
-			}
-		}
-		return true
-	}
-	switch pp := p.(type) {
-	case *ast.ExprStmt:
-		xs, ok := x.(*ast.ExprStmt)
-		return ok && expr(pp.X, xs.X)
-	case *ast.AssignStmt:
-		xs, ok := x.(*ast.AssignStmt)
-		return ok && xs.Tok == pp.Tok && exprs(pp.Rhs, xs.Rhs) && exprs(pp.Lhs, xs.Lhs)
-	case *ast.IncDecStmt:
-		xs, ok := x.(*ast.IncDecStmt)
-		return ok && xs.Tok == pp.Tok && expr(pp.X, xs.X)
-	case *ast.BlockStmt:
-		xs, ok := x.(*ast.BlockStmt)
-		return ok && block(pp, xs)
-	case *ast.IfStmt:
-		xs, ok := x.(*ast.IfStmt)
-		return ok && m.matchStmt(pp.Init, xs.Init, info, b) && expr(pp.Cond, xs.Cond) && block(pp.Body, xs.Body) && m.matchStmt(pp.Else, xs.Else, info, b)
-	case *ast.ForStmt:
-		xs, ok := x.(*ast.ForStmt)
-		return ok && m.matchStmt(pp.Init, xs.Init, info, b) && expr(pp.Cond, xs.Cond) && m.matchStmt(pp.Post, xs.Post, info, b) && block(pp.Body, xs.Body)
-	case *ast.RangeStmt:
-		xs, ok := x.(*ast.RangeStmt)
-		return ok && xs.Tok == pp.Tok && expr(pp.X, xs.X) && expr(pp.Key, xs.Key) && expr(pp.Value, xs.Value) && block(pp.Body, xs.Body)
-	case *ast.DeclStmt:
-		xs, ok := x.(*ast.DeclStmt)
-		pg, _ := pp.Decl.(*ast.GenDecl)
-		xg, _ := xs.Decl.(*ast.GenDecl)
-		if !ok || pg == nil || xg == nil || pg.Tok != xg.Tok || len(pg.Specs) != len(xg.Specs) {
-			return false
-		}
-		for i := range pg.Specs {
-			ps, _ := pg.Specs[i].(*ast.ValueSpec)
-			vs, _ := xg.Specs[i].(*ast.ValueSpec)
-			if ps == nil || vs == nil || len(ps.Names) != len(vs.Names) || (ps.Type == nil) != (vs.Type == nil) || !exprs(ps.Values, vs.Values) {
-				return false
-			}
-			if ps.Type != nil && !types.Identical(m.pkg.TypesInfo.TypeOf(ps.Type), info.TypeOf(vs.Type)) {
-				return false
-			}
-			for j := range ps.Names {
-				if !expr(ps.Names[j], vs.Names[j]) {
-					return false
-				}
-			}
-		}
-		return true
-	case *ast.EmptyStmt:
-		_, ok := x.(*ast.EmptyStmt)
-		return ok
-	}
-	return false
-}
-
 // foldStmts folds the runs of list, statements of a block inside stack,
 // that match the pattern's statements; with line, only one starting on
 // that line.
@@ -1736,18 +1433,18 @@ func (f *folder) foldStmts(p *packages.Package, file *ast.File, list []ast.Stmt,
 		if f.inDone(list[i].Pos()) || line != 0 && pos.Line != line {
 			continue
 		}
-		b := map[holeKey]ast.Expr{}
-		f.locals = map[types.Object]types.Object{}
+		b := map[pattern.HoleKey]ast.Expr{}
+		f.m.Locals = map[types.Object]types.Object{}
 		matched := true
-		f.miss = nil
+		f.m.Miss = nil
 		for k := range f.stmts {
-			if !f.matchStmt(f.stmts[k], list[i+k], info, b) {
+			if !f.m.MatchStmt(f.stmts[k], list[i+k], info, b) {
 				f.keepNearest(k)
 				matched = false
 				break
 			}
 		}
-		f.locals = nil
+		f.m.Locals = nil
 		if !matched {
 			continue
 		}
@@ -1799,12 +1496,12 @@ func (f *folder) foldStmts(p *packages.Package, file *ast.File, list []ast.Stmt,
 // further than any before: past k of the pattern's statements, then
 // deeper. A miss at the top of the pattern is no near miss.
 func (f *folder) keepNearest(k int) {
-	if f.miss == nil {
+	if f.m.Miss == nil {
 		return
 	}
-	n := *f.miss
-	n.depth += k
-	if n.depth > 0 && (f.nearest == nil || n.depth > f.nearest.depth) {
+	n := *f.m.Miss
+	n.Depth += k
+	if n.Depth > 0 && (f.nearest == nil || n.Depth > f.nearest.Depth) {
 		f.nearest = &n
 	}
 }
@@ -1838,7 +1535,7 @@ func usedAfter(info *types.Info, seq []ast.Stmt, stack []ast.Node) string {
 		switch s := s.(type) {
 		case *ast.AssignStmt:
 			for _, l := range s.Lhs {
-				if id := identOf(l); id != nil && info.Defs[id] != nil {
+				if id := pattern.IdentOf(l); id != nil && info.Defs[id] != nil {
 					declared[info.Defs[id]] = true
 				}
 			}
@@ -1885,41 +1582,6 @@ func stmtList(n ast.Node) []ast.Stmt {
 	return nil
 }
 
-// sameObj reports whether a and b, from any variants of their packages,
-// are the same object.
-func sameObj(a, b types.Object) bool {
-	switch {
-	case a == nil || b == nil:
-		return false
-	case a.Name() != b.Name():
-		return false
-	case a.Pkg() == nil || b.Pkg() == nil:
-		return a.Pkg() == nil && b.Pkg() == nil
-	}
-	if pa, ok := a.(*types.PkgName); ok {
-		pb, ok := b.(*types.PkgName)
-		return ok && pa.Imported().Path() == pb.Imported().Path()
-	}
-	return a.Pkg().Path() == b.Pkg().Path() && a.Pos() == b.Pos()
-}
-
-// baseName is the type name of t, T or *T, or nil.
-func baseName(t types.Type) types.Object {
-	if p, ok := t.(*types.Pointer); ok {
-		t = p.Elem()
-	}
-	if n, ok := t.(*types.Named); ok {
-		return n.Obj()
-	}
-	return nil
-}
-
-// identOf is e's identifier, if it is one.
-func identOf(e ast.Expr) *ast.Ident {
-	id, _ := ast.Unparen(e).(*ast.Ident)
-	return id
-}
-
 // selX is sel's operand, or nil for a nil sel.
 func selX(sel *ast.SelectorExpr) ast.Expr {
 	if sel == nil {
@@ -1931,7 +1593,7 @@ func selX(sel *ast.SelectorExpr) ast.Expr {
 // fieldOf reports whether e is a field of the variable o.
 func fieldOf(info *types.Info, e ast.Expr, o types.Object) bool {
 	sel, ok := ast.Unparen(e).(*ast.SelectorExpr)
-	return ok && info.Uses[identOf(selX(sel))] == o
+	return ok && info.Uses[pattern.IdentOf(selX(sel))] == o
 }
 
 // assigned reports whether x is written by parent: the left of an
@@ -1972,7 +1634,8 @@ func (*Fold) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan,
 	if !ok {
 		return nil, refactor.Refusef("%s is not a function or method", a.Name)
 	}
-	f := &folder{ws: ws, matcher: matcher{pkg: pkg, holes: map[types.Object]int{}}, fn: fn}
+	f := &folder{ws: ws, m: pattern.Matcher{Pkg: pkg, Holes: map[types.Object]int{}}, fn: fn}
+	f.m.Relax = &f.relaxer
 	if err := f.pattern(id); err != nil {
 		return nil, err
 	}
@@ -1992,7 +1655,7 @@ func (*Fold) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan,
 			why = "; what matched was left: " + strings.Join(limit(f.skipped, 5), "; ")
 		}
 		if f.nearest != nil {
-			why = fmt.Sprintf("; the nearest, %s, has %s where the body has %s", ws.Position(f.nearest.x.Pos()), short(f.nearest.x), short(f.nearest.p)) + why
+			why = fmt.Sprintf("; the nearest, %s, has %s where the body has %s", ws.Position(f.nearest.X.Pos()), short(f.nearest.X), short(f.nearest.P)) + why
 		}
 		return nil, refactor.Refusef("nothing in the module matches the body of %s (%s)%s", fn.Name(), f.shape(), why)
 	}

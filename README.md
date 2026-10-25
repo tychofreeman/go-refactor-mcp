@@ -1287,7 +1287,9 @@ hand or a tool got in the way.
       miss that got furthest (statements, then depth) and the refusal
       says "the nearest, m.go:5:28, has x where the body has 2".
     - The matcher into a package of its own, with fold's relaxations
-      behind options.
+      behind options. *Done:* `internal/pattern`'s `Matcher`, with
+      `Relaxations` (Call, Concat, Address), which fold's `relaxer`
+      implements and a nil `Relax` leaves off.
     - parameterize's `comparer` on it: the test that the abstraction is
       general, not fold's shape.
 
@@ -1321,6 +1323,7 @@ internal/
   mcpserver/                  MCP tools: one per refactoring, plus inspect, undo, check
   workspace/                  go/packages loading (incl. tests), apply, undo, errors
   locate/                     file+line+name (+column) → *ast.Ident
+  pattern/                    matching code against a pattern with holes (fold's matcher), with where it failed
   refactor/                   Refactoring interface, Refusal, Run (the safety engine)
     refactortest/             golden-test harness shared by all refactorings
   refactorings/

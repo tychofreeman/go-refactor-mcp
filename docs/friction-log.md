@@ -2265,3 +2265,25 @@ call in `try` by lines) and replace_text for the loop in `foldStmts` and
 the refusal in `Plan`, whose lines had moved. The roadmap planned a miss
 *result* through add_result; state on the matcher needed no change at
 the matchers' forty-odd returns.
+
+## 2026-10-24: fold's matcher into `internal/pattern` (roadmap item 27)
+
+Through the tools: method_to_function for the six relaxations,
+extract_struct for their state (`relaxer`), add_parameter to pass it
+(`&m.relaxer` was refused, rightly: it panics on a nil `m`; `nil` went
+in and the calls were replaced in the same batch), add_declaration for
+the `Relaxations` interface and `relaxer`'s methods, rename to export
+what fold uses, and one move_declaration with `with_dependencies` for
+the package. The test of the package with create_file. By hand, with
+replace_text: the three writes from `m.addressOf` to `rel.addressOf`
+and the like, the three calls of the relaxations through `m.Relax`
+(behind a nil check), `relaxer` out of the matcher and into `folder`
+(no tool moves a field between structs), and the docs that named fn.
+Two gaps the move showed:
+- rename refuses a type that is embedded (`folder` embedded `matcher`);
+  renaming the field `folder.matcher` to `m` first made it a named
+  field, after which the type could be renamed.
+- move_declaration moved `HoleKey` to another package and left fold's
+  unkeyed literals of it, `pattern.HoleKey{o, ""}`, which type-check
+  but fail `go vet` (composites). Keyed with replace_expression, twelve
+  sites. A move to another package should key them.
