@@ -1408,6 +1408,15 @@ hand or a tool got in the way.
     instrument: the decision that Claude through MCP is the product
     stands, and the user decides on the result.
 
+30. **move_parameter counts a local as observable** (2026-10-25, the
+    trap run, cost-history 15): with `from := p.Bin()` extracted,
+    `l.Transfer(from, p.Bin(), p.Qty())` is refused ("moving p.Bin()
+    past from would change the order"), though a local whose address
+    is not taken and that no closure captures cannot be read or
+    written by the call. Two of four Haiku runs hit it and had to
+    extract the second argument too. The order check should treat
+    such a local as stable.
+
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
 candidates and the evidence for each, gathered from the friction log.

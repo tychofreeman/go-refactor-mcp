@@ -1,0 +1,30 @@
+[
+ {
+  "name": "warehouse-reorder",
+  "dir": "testdata/warehouse",
+  "tests": "testdata/warehouse-reorder",
+  "check": "go vet ./... && go test ./...",
+  "prompt": "In package stock, reorder the parameters of Ledger.Transfer to Transfer(to, from string, qty int), the order the company's other ledgers use, and update every call. What the ledger does must not change."
+ },
+ {
+  "name": "warehouse-inline",
+  "dir": "testdata/warehouse",
+  "tests": "testdata/warehouse-inline",
+  "check": "go vet ./... && go test ./...",
+  "prompt": "In package gates, inline the helper functions both, either and within at every call, and delete them. What the yard does must not change."
+ },
+ {
+  "name": "warehouse-rename",
+  "dir": "testdata/warehouse",
+  "tests": "testdata/warehouse-rename",
+  "check": "go vet ./... && go test ./...",
+  "prompt": "In package pricing, rename the package variable margin to markup, the name the rest of the company uses. The prices must not change."
+ },
+ {
+  "name": "warehouse-dedupe",
+  "dir": "testdata/warehouse",
+  "tests": "testdata/warehouse-dedupe",
+  "check": "go vet ./... && go test ./...",
+  "prompt": "The Probe methods of the ten sensors in package alerts do nearly the same thing. Remove the duplication: make them call one package-level function. What alerts they add must not change."
+ }
+]
