@@ -1304,6 +1304,31 @@ hand or a tool got in the way.
       parentheses (a scratch module, both CLIs). merge's `canon` is
       left as it is.
 
+    An evaluation of the four by another session (2026-10-24) found
+    half the design in: the package and its two users, but not the
+    attempt or the compiled pattern, and a flag for a mode. The site's
+    `info` and the bindings `b` are still threaded through thirteen
+    signatures and the relaxations; `Locals` has two lifetimes (fold
+    sets and clears it around each statement match, parameterize seeds
+    it once with its parameters); `compareExpr`, `compareStmt` and
+    `matchIdent` work out what each of the pattern's names is again at
+    every site; and `Structural` is a bool for one of two ways of
+    comparing nodes, tested in two places. One PR each, in this order,
+    so that each makes the next smaller:
+    - The attempt: one type for matching one site (the matcher, the
+      site's info, the bindings, the code's locals and the miss), so
+      the compare functions and the relaxations take `(p, x)`.
+    - Two comparers behind one interface, rules per kind of node
+      (fold's) and field by field (parameterize's, with its literal
+      hook), sharing name resolution and the miss, in place of
+      `Structural` and `Literal`.
+    - The compiled pattern: what each of the pattern's names is (a
+      hole, a field of a struct hole, a local, a plain name), decided
+      once when the pattern is made, not at every site.
+    - A list of standard-library calls without side effects
+      (`reflect.TypeOf`, `json.Valid`), so that `analysis` stops
+      refusing them; remove_dead_code refused `posType` for it.
+
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
 candidates and the evidence for each, gathered from the friction log.

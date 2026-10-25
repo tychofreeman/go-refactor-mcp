@@ -2301,3 +2301,7 @@ the matcher (the literal hook in the `BasicLit` case, names without an
 object), and `var posType = reflect.TypeOf(token.NoPos)`, which
 remove_dead_code refused because it cannot tell `reflect.TypeOf` has no
 side effects. A list of calls known to be pure would cover it.
+
+## 2026-10-24: roadmap item 27's follow-ups
+
+Docs only: replace_text for the roadmap entry. Nothing by hand.
