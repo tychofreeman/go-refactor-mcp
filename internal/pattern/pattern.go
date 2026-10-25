@@ -132,6 +132,7 @@ func (a *Attempt) note(ok bool, p, x ast.Node) {
 	}
 }
 
+// Expr compares expressions by the rules for p's kind of expression.
 func (k ByKind) Expr(a *Attempt, p ast.Expr, x ast.Expr) bool {
 	p, x = ast.Unparen(p), ast.Unparen(x)
 	pinfo := a.Pkg.TypesInfo
@@ -321,6 +322,7 @@ func (a *Attempt) compareStmt(p ast.Stmt, x ast.Stmt) bool {
 	return a.comparer().Stmt(a, p, x)
 }
 
+// Stmt compares statements by the rules for p's kind of statement.
 func (k ByKind) Stmt(a *Attempt, p ast.Stmt, x ast.Stmt) bool {
 	exprs := func(p, x []ast.Expr) bool {
 		if len(p) != len(x) {
