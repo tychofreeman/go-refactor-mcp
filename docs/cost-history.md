@@ -904,6 +904,29 @@ first is the view; the second a choice to make (README, roadmap item
 29's repairs, or an option); the third is in step 1's plan already
 (the test files' uses in the view).
 
+**With the bodies** (same day, `-views whole`, `eval-runs/plan-probe-whole`,
+$1.68): the four tasks whose batches failed on content, rerun with the
+whole module in the view. That view has every file but the tests.
+
+| task | Haiku, call tree → whole | Sonnet, call tree → whole |
+|---|---|---|
+| phases | 0/4 → 4/4 | 0/4 → 4/4 |
+| dispatch | 0/4 → 4/4 | 4/4 → 2/2 (2 answers refused by the API's safeguards) |
+| kinds | 0/4 → 0/3 (1 unparsed) | 0/4 → 0/4 |
+| routes | 0/4 → 0/4 | 0/4 → 0/4 |
+
+Kinds and routes now failed only in test files, which the view does
+not show: test literals still wrote `Kind: "book"`, or set `Road` and
+`Rail`. Adding those literal fixes to each answer's batch (5 to 8
+replace_text steps, the same in every answer), they pass the hidden
+tests: routes 8 of 8, kinds 6 of 7 (Haiku 3 of 3; one Sonnet answer
+refused by change_field_type). So with the bodies and the tests in view,
+the plans of 29 of 30 parsed answers on these tasks would have
+succeeded; the plans were right, and what they lacked was what they
+could not read. Seeing bodies also made the models write more by hand:
+on dispatch both replaced the ten bodies with replace_statements, and
+Sonnet stopped using fold, which it used in 4 of 4 from the call tree.
+
 For roadmap item 29: the planning half works with Haiku at a tenth of
 Sonnet's price, and what is missing is bodies where content must be
 written, not the plan. A repair turn with the bodies it names would
