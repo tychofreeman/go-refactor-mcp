@@ -2337,3 +2337,11 @@ with replace_text: deleting the literal hook's branch from
 and `Literal` (parameterize's and the test's) to set `Compare`. Moving a
 method to another receiver type took three refactorings and a
 parameter of an empty struct; a `move_method` would be one.
+
+## 2026-10-24: what the pattern's names are, decided once (roadmap item 27)
+
+Through the tools: extract_function for `bindHole`, add_declaration for
+`name`, `nameKind` and `nameOf`, add_field for the cache,
+replace_statements for `matchIdent`'s body. By hand, with replace_text:
+the one line of `matchSelector` that looks up its operand's object, and
+doc comments.

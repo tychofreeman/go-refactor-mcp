@@ -15,7 +15,9 @@ import (
 
 // Matcher is a pattern, code of package Pkg, with what each of its names
 // is: a hole, a field of a struct parameter, a local the pattern
-// declares. At starts an attempt to match it against code.
+// declares. At starts an attempt to match it against code. What each
+// name is, is decided the first time it is matched, so the facts are set
+// before the first attempt.
 type Matcher struct {
 	Pkg        *packages.Package             // the pattern's
 	BodyLocals map[types.Object]types.Object // the pattern's locals
@@ -24,9 +26,10 @@ type Matcher struct {
 	// the fields, in the order the pattern first uses them. Each field is
 	// a hole of its own.
 	Fields  map[types.Object][]string
-	Recv    types.Object // the hole that is a method's receiver, or nil
-	Relax   Relaxations  // rules for code of another shape, or nil
-	Compare Comparer     // how nodes are compared: ByKind if nil
+	Recv    types.Object        // the hole that is a method's receiver, or nil
+	Relax   Relaxations         // rules for code of another shape, or nil
+	Compare Comparer            // how nodes are compared: ByKind if nil
+	names   map[*ast.Ident]name // what each identifier of the pattern matched so far is
 }
 
 // Attempt is a match of the pattern against code of one package: what
@@ -226,7 +229,7 @@ func (a *Attempt) matchCall(pp *ast.CallExpr, x ast.Expr) bool {
 func (a *Attempt) matchSelector(pp *ast.SelectorExpr, x ast.Expr) bool {
 	pinfo := a.Pkg.TypesInfo
 	if id := IdentOf(pp.X); id != nil {
-		po := pinfo.Uses[id]
+		po := a.nameOf(id).obj
 		if _, byField := a.Fields[po]; byField {
 			k := HoleKey{po, pp.Sel.Name}
 			if prev, ok := a.Bound[k]; ok {
@@ -249,12 +252,51 @@ func (a *Attempt) matchSelector(pp *ast.SelectorExpr, x ast.Expr) bool {
 	return ok && xs.Sel.Name == pp.Sel.Name && a.sub(pp.X, xs.X) && SameObj(pinfo.Uses[pp.Sel], a.Info.Uses[xs.Sel])
 }
 
-// matchIdent reports whether x matches the identifier pp of the pattern: a
-// name a local of fn declares, a hole, or the same object.
+// name is what an identifier of the pattern is, by the Matcher's facts.
+type name struct {
+	kind nameKind
+	obj  types.Object // what it declares or uses, or nil
+}
+
+// nameKind is the kind of a name of the pattern.
+type nameKind int
+
+const (
+	plain     nameKind = iota // a name the code must use too
+	declared                  // a local the pattern declares there
+	bodyLocal                 // a local of the pattern's, declared outside what is matched
+	hole                      // a hole, which stands for what the code has in its place
+)
+
+// nameOf is what the pattern's identifier id is: decided the first time
+// it is matched, and kept for every site after.
+func (m *Matcher) nameOf(id *ast.Ident) name {
+	if n, ok := m.names[id]; ok {
+		return n
+	}
+	pinfo := m.Pkg.TypesInfo
+	n := name{plain, pinfo.Uses[id]}
+	if d := pinfo.Defs[id]; d != nil || id.Name == "_" {
+		n = name{declared, d}
+	} else if _, ok := m.BodyLocals[n.obj]; ok {
+		n.kind = bodyLocal
+	} else if _, ok := m.Holes[n.obj]; ok && n.obj != nil {
+		n.kind = hole
+	}
+	if m.names == nil {
+		m.names = map[*ast.Ident]name{}
+	}
+	m.names[id] = n
+	return n
+}
+
+// matchIdent reports whether x matches the identifier pp of the pattern,
+// by what pp is: a local the pattern declares, one it binds, a hole, or
+// the same object.
 func (a *Attempt) matchIdent(pp *ast.Ident, x ast.Expr) bool {
-	pinfo := a.Pkg.TypesInfo
-	if pd := pinfo.Defs[pp]; pd != nil || pp.Name == "_" {
-		// A local fn declares: the occurrence's own name for it.
+	n := a.nameOf(pp)
+	if n.kind == declared {
+		// The occurrence's own name for it.
 		xi, ok := x.(*ast.Ident)
 		if !ok || pp.Name == "_" {
 			return ok && xi.Name == "_"
@@ -263,45 +305,50 @@ func (a *Attempt) matchIdent(pp *ast.Ident, x ast.Expr) bool {
 		if xd == nil || a.Locals == nil {
 			return false
 		}
-		a.Locals[pd] = xd
+		a.Locals[n.obj] = xd
 		return true
 	}
-	if xo, local := a.Locals[pinfo.Uses[pp]]; local {
+	if xo, local := a.Locals[n.obj]; local {
 		xi, ok := x.(*ast.Ident)
 		return ok && a.Info.Uses[xi] == xo
 	}
-	if _, local := a.BodyLocals[pinfo.Uses[pp]]; local {
+	switch n.kind {
+	case bodyLocal:
 		return false
-	}
-	po := pinfo.Uses[pp]
-	if _, hole := a.Holes[po]; hole && po != nil {
-		if prev, ok := a.Bound[HoleKey{po, ""}]; ok {
-			return types.ExprString(prev) == types.ExprString(x)
-		}
-		xt := a.Info.TypeOf(x)
-		if xt == nil || !a.Info.Types[x].IsValue() {
-			return false
-		}
-		if po == a.Recv {
-			if !SameObj(BaseName(xt), BaseName(po.Type())) {
-				return false
-			}
-		} else if !types.AssignableTo(xt, po.Type()) && types.TypeString(xt, nil) != types.TypeString(po.Type(), nil) {
-			return false
-		}
-		a.Bound[HoleKey{po, ""}] = x
-		return true
+	case hole:
+		return a.bindHole(n.obj, x)
 	}
 	switch x := x.(type) {
 	case *ast.Ident:
 		// Names the type checker gives no object (a type switch's symbol)
 		// are the same when spelled the same.
-		return x.Name == pp.Name && (SameObj(po, a.Info.Uses[x]) || po == nil && a.Info.Uses[x] == nil)
+		return x.Name == pp.Name && (SameObj(n.obj, a.Info.Uses[x]) || n.obj == nil && a.Info.Uses[x] == nil)
 	case *ast.SelectorExpr: // pkg.Name in another package
 		_, pkgName := a.Info.Uses[IdentOf(x.X)].(*types.PkgName)
-		return pkgName && x.Sel.Name == pp.Name && SameObj(po, a.Info.Uses[x.Sel])
+		return pkgName && x.Sel.Name == pp.Name && SameObj(n.obj, a.Info.Uses[x.Sel])
 	}
 	return false
+}
+
+// bindHole reports whether x can stand for the hole po: what po is already
+// bound to, or else a value of po's type, which it binds.
+func (a *Attempt) bindHole(po types.Object, x ast.Expr) bool {
+	if prev, ok := a.Bound[HoleKey{po, ""}]; ok {
+		return types.ExprString(prev) == types.ExprString(x)
+	}
+	xt := a.Info.TypeOf(x)
+	if xt == nil || !a.Info.Types[x].IsValue() {
+		return false
+	}
+	if po == a.Recv {
+		if !SameObj(BaseName(xt), BaseName(po.Type())) {
+			return false
+		}
+	} else if !types.AssignableTo(xt, po.Type()) && types.TypeString(xt, nil) != types.TypeString(po.Type(), nil) {
+		return false
+	}
+	a.Bound[HoleKey{po, ""}] = x
+	return true
 }
 
 // MatchStmt reports whether x is the pattern's statement p.
