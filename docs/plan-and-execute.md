@@ -164,8 +164,9 @@ repair restarts from there, not from the module at the start.
 With the three fixes the loop costs what editing by hand does (Haiku
 10% less, Sonnet 10% more), passing 11/16 and 14/16 against 16/16.
 What fails is routes, where remove_dead_code's refusal names only the
-first use left, so each repair fixes one file; listing every use is the
-next fix. Then lending-xl.
+first use left, so each repair fixes one file. It now names every use
+left, sorted, with their count ("Road is used in 3 places: ..."). Then
+lending-xl.
 
 ## Recording
 
