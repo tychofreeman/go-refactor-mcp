@@ -893,6 +893,63 @@ func TestBatchDeclaresMissing(t *testing.T) {
 	}
 }
 
+// removeF is an edit that deletes the function F.
+type removeF struct{}
+
+func (removeF) Name() string                 { return "remove_f" }
+func (removeF) Description() string          { return "" }
+func (removeF) InputSchema() json.RawMessage { return json.RawMessage(`{}`) }
+func (removeF) ChangesBehavior()             {}
+func (removeF) Plan(ws *workspace.Workspace, _ json.RawMessage) (*refactor.Plan, error) {
+	path := ws.Abs("m.go")
+	src, _ := os.ReadFile(path)
+	decl := "func F() int { return 1 }\n"
+	i := strings.Index(string(src), decl)
+	return &refactor.Plan{Summary: "removed F", Edits: []edit.FileEdit{{Path: path, Edits: []edit.TextEdit{{Start: i, End: i + len(decl)}}}}}, nil
+}
+
+// A name the module declared when the batch began, that a step removed, is
+// not declared again as a stub: its uses are what is left to change.
+func TestBatchDoesNotRedeclareWhatAStepRemoved(t *testing.T) {
+	opts := refactor.Options{Declare: declare{"\nfunc F() int { panic(\"not implemented\") }\n"}}
+	ws, path := setup(t, src)
+	b, err := refactor.RunBatch(ws, []refactor.Step{{Refactoring: removeF{}}}, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.Applied || !strings.Contains(b.String(), "undefined: F") || !strings.Contains(b.String(), "F was not declared for you, since an earlier step removed it") {
+		t.Errorf("want F left undefined, with why, got:\n%s", b)
+	}
+	if got, _ := os.ReadFile(path); string(got) != src || ws.CanUndo() {
+		t.Errorf("not rolled back; file:\n%s", got)
+	}
+
+	// A field, which errors name by its type.
+	const fields = "package m\n\ntype T struct{ A int }\n\nfunc F() int { return 1 }\n\nvar X = T{A: F()}.A\n"
+	ws, _ = setup(t, fields)
+	b, err = refactor.RunBatch(ws, []refactor.Step{{Refactoring: removeField{}}}, refactor.Options{Declare: declare{"\nvar unused int\n"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.Applied || !strings.Contains(b.String(), "A was not declared for you, since an earlier step removed it") {
+		t.Errorf("want A left undefined, with why, got:\n%s", b)
+	}
+}
+
+// removeField is an edit that deletes the field A of T.
+type removeField struct{}
+
+func (removeField) Name() string                 { return "remove_field" }
+func (removeField) Description() string          { return "" }
+func (removeField) InputSchema() json.RawMessage { return json.RawMessage(`{}`) }
+func (removeField) ChangesBehavior()             {}
+func (removeField) Plan(ws *workspace.Workspace, _ json.RawMessage) (*refactor.Plan, error) {
+	path := ws.Abs("m.go")
+	src, _ := os.ReadFile(path)
+	i := strings.Index(string(src), "{ A int }")
+	return &refactor.Plan{Summary: "removed A", Edits: []edit.FileEdit{{Path: path, Edits: []edit.TextEdit{{Start: i, End: i + len("{ A int }"), NewText: "{}"}}}}}, nil
+}
+
 // declarePicky is a fix like declare that cannot tell B's results: asked
 // for B it refuses, as create_from_usage does; asked for A alone, it
 // declares A.
