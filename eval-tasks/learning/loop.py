@@ -3,10 +3,12 @@
 For each task, a fresh model with no tools gets the task, the tools' input
 schemas and the call-tree view (as probe.py -schemas gives them), and
 answers with the whole change as one gorefactor batch; or first asks to
-read the declarations it must write code for, once. The batch runs on a
+read declarations, which it may also do in place of any later batch, at
+most three times; it gets them as inspect shows them, with line numbers,
+from the module as the kept batches left it. The batch runs on a
 fresh copy of the module, then the module's own tests. A refusal or a
 failing test goes back in the same conversation (claude -p --resume, so
-the prefix stays cached) with the source of each declaration it names,
+the prefix stays cached) with the numbered source of each place it names,
 for the batch again, at most -repairs times. When a batch applies and
 the tests pass, the model is asked whether the change is done; if not,
 its next batch runs on top, at most -stages more. The task's hidden
@@ -60,7 +62,8 @@ check "end" may pass through code that does not compile yet. After it
 runs, the module's own tests run; you get one message back with what
 failed, if anything."""
 
-READ = """The source you asked for:
+READ = """The source you asked for, from the module as it is now, with its
+line numbers:
 
 {source}
 
@@ -79,9 +82,15 @@ Answer with that JSON alone, nothing before or after it:
 # (-no-read), source comes only with a repair, for what failed.
 MAY_READ = """
 or, only if you must write code whose current form you cannot see here
-(a body you rewrite, a format you copy), first
-{"read": ["pkg.Name" or "pkg.Type.Method", ...]}
-to be sent their source, once."""
+(a body you rewrite or move, a format you copy, lines you address),
+{"read": ["Name", "Type.Method" or "pkg.Name", ...]}
+for their source with line numbers: functions, methods, types and
+variables, tests included. You may answer with a read in place of a
+batch, now or after any later message, at most three times in all."""
+
+# READ_HINT ends the later prompts when the model may read.
+READ_HINT = """
+Or, to see source first: {"read": ["Name", ...]}."""
 
 REPAIR = """The batch did not succeed:
 
@@ -120,28 +129,12 @@ def compact(tools):
     return "\n\n".join(out)
 
 
-def declarations(module):
-    """Maps "pkg.Name" and "file" to (file, start, end) of each top-level
-    function and method of module."""
-    out = {}
-    for f in probe.funcs(module):
-        pkg = os.path.basename(os.path.dirname(f["file"]))
-        out[pkg + "." + f["name"]] = (f["file"], f["start"], f["end"])
-    return out
-
-
-def source(module, decls, names):
-    """The source of the named declarations, each headed by its place."""
-    parts = []
-    for n in names:
-        d = decls.get(n) or decls.get(n.split(".", 1)[-1])
-        if d is None:
-            parts.append(f"== {n}: no such function or method")
-            continue
-        file, start, end = d
-        lines = open(os.path.join(module, file)).read().splitlines()
-        parts.append(f"== {n} ({file}:{start})\n" + "\n".join(lines[start - 1:end]))
-    return "\n\n".join(parts)
+def source(binary, module, names):
+    """The named declarations of module as inspect shows them, each with
+    its file and line numbers."""
+    r = subprocess.run([binary, "-C", module, "inspect", json.dumps({"names": [str(n) for n in names]})],
+                       capture_output=True, text=True)
+    return (r.stdout + r.stderr).strip()
 
 
 PLACE = re.compile(r"([\w./-]+\.go):(\d+)")
@@ -169,7 +162,8 @@ def named_places(module, text, limit=8):
             end += 1
         if end - start > 60:
             start, end = max(1, line - 5), min(len(lines), line + 5)
-        parts.append(f"== {file}:{start}-{end}\n" + "\n".join(lines[start - 1:end]))
+        numbered = (f"{i:4}  {text}" for i, text in enumerate(lines[start - 1:end], start))
+        parts.append(f"== {file}:{start}-{end}\n" + "\n".join(numbered))
         if len(parts) == limit:
             break
     return "".join(p + "\n\n" for p in parts)
@@ -259,19 +253,12 @@ def attempt(task, model, tools, binary, repairs, log, may_read=True, stages=2):
     more. A refusal or a failing test gets a repair, at most repairs in
     all; the next batch then runs where the failed one began."""
     module = os.path.join(ROOT, "eval-tasks", task["dir"])
-    decls = declarations(module)
     text = PLAN.format(tools=tools, view=probe.view("calltree", module), prompt=task["prompt"],
                        read=MAY_READ if may_read else "")
     row = {"reads": 0, "repairs": 0, "stages": 0, "refusals": [], "error": ""}
-    answer, err = model.ask(text)
-    ans = probe.parse(answer)
-    log.append(answer or err)
-    if ans and ans.get("read") and not ans.get("batch"):
-        row["reads"] = len(ans["read"])
-        answer, err = model.ask(READ.format(source=source(module, decls, ans["read"])))
-        ans = probe.parse(answer)
-        log.append(answer or err)
-    base, batches, left = module, [], repairs  # base: where the next batch runs
+    base, batches, left, reads = module, [], repairs, 3  # base: where the next batch runs
+    hint = READ_HINT if may_read else ""
+    ans = err = None
 
     def ask(text):
         nonlocal ans, err
@@ -279,9 +266,15 @@ def attempt(task, model, tools, binary, repairs, log, may_read=True, stages=2):
         ans = probe.parse(answer)
         log.append(answer or err)
 
+    ask(text)
     while True:
         if ans and ans.get("done") is True and batches:
             break
+        if may_read and reads and ans and isinstance(ans.get("read"), list) and not ans.get("batch"):
+            reads -= 1
+            row["reads"] += len(ans["read"])
+            ask(READ.format(source=source(binary, base, ans["read"])))
+            continue
         if not ans or not isinstance(ans.get("batch"), dict):
             row["refusals"].append(err or "no batch in the answer")
             if left == 0:
@@ -300,7 +293,7 @@ def attempt(task, model, tools, binary, repairs, log, may_read=True, stages=2):
             base = d
             if row["stages"] > stages:
                 break
-            ask(DONE)
+            ask(DONE + hint)
             continue
         row["refusals"].append(what.splitlines()[0][:200])
         if left == 0:
@@ -310,7 +303,7 @@ def attempt(task, model, tools, binary, repairs, log, may_read=True, stages=2):
         row["repairs"] += 1
         places = named_places(d, what)
         shutil.rmtree(d)
-        ask(REPAIR.format(what=what, source=places))
+        ask(REPAIR.format(what=what, source=places) + hint)
     row["applied"] = bool(batches)
     row["passed"] = bool(batches) and hidden(base, task["tests"])
     if base != module:

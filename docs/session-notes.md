@@ -489,7 +489,13 @@ results are in `docs/cost-history.md`.
   attempts stopped on case bodies the no-read plan cannot see (Haiku
   said so and sent no batch). Kinds needs reads: with them 8/8 (Haiku
   $0.020, Sonnet $0.197, a session $0.25), rewritten with edits, no
-  prepare_switch_for_types.
+  prepare_switch_for_types. Those reads came once, before the first
+  batch, functions only, without line numbers (not in the "done?"
+  turn, as first recorded). With numbered reads of any declaration in
+  any turn: 7/8, same cost, same edits, every read at the start. The
+  read's form was not the cause; with bodies in view the models write
+  the code out. Only a name-addressed step that moves a case into a
+  type would remove the reason to read.
 - Where a session's cost goes (cost-history 12,
   `eval-tasks/learning/cost.py`): cache writes 69%, output 18%, cache
   reads 13%, though cache reads are 88% of input tokens. About 38% of

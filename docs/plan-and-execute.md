@@ -194,13 +194,25 @@ show whether it does in a repair.
 
 It did not pass (cost-history 19, kinds again: 0/8): both refusals
 fired, and the attempts then stopped on code they could not see. Kinds
-needs the cases' bodies; a run without `-no-read`, where the plan and
-the "done?" turn can ask for them, is the test of that.
+needs the cases' bodies; a run without `-no-read`, where the first
+answer can ask for them, is the test of that.
 
 With reads, kinds passed 8/8 (Haiku $0.020, Sonnet $0.197, against
 $0.25 for Sonnet in a session), but by rewriting with edits, not by
 the derivation: no attempt used prepare_switch_for_types. So reads are
-what a moved-code task needs, and they trade derivation for edits.
+what a moved-code task needs, and they seemed to trade derivation for
+edits. But a read then came once, before the first batch, of functions
+only, and without line numbers, which the line-addressed steps of the
+derivation (extract_function, introduce_parameter) need: none of the 8
+attempts used one.
+
+With reads numbered, of types and variables too, allowed in any turn
+(cost-history 19, kinds with numbered reads): 7/8 at the same cost, and
+the same edits. Every attempt read once, at the start; none used a
+line-addressed step or prepare_switch_for_types. The read's form was
+not the cause: with the bodies in view, the models write the types out.
+A derivation here would need a step addressed by name that moves a case
+into a type's method, so the plan has no reason to see the body.
 
 ## Recording
 
