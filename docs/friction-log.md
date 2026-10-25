@@ -2353,3 +2353,7 @@ add_declaration, create_file; the test's call declared `ReadOnlyCall`
 as a stub), add_declaration for `readOnlyFuncs` and `ReadOnlyCall`.
 By hand, with replace_text: the `reflect.TypeOf` entry of the table and
 the one-line condition in remove_dead_code's check.
+
+## 2026-10-24: roadmap item 28
+
+Docs only: replace_text for the roadmap entry. Nothing by hand.
