@@ -151,6 +151,13 @@ results are in `docs/cost-history.md`.
   the count (50: 44 tools today, raised from 44 by the user "for now")
   and the instructions' size; raise it only with the user. README roadmap item 25.
 
+- **A parameter may take a package variable's place** (2026-10-25, the
+  user): add_parameter's `replace_variable` lets the new parameter hide
+  the package variable the body reads. Where the engine cannot prove a
+  call passes the variable's value, the user chose to allow it and list
+  those calls as edits in a note, over refusing them: the plans that
+  wanted it pass `DefaultPolicy()` from other packages, which no proof
+  reaches. README roadmap item 31.
 - **Options over new tools** (2026-10-21): the pointer alias (gap A)
   is `pointer` on `extract_variable`, not a tool of its own: the model
   already reaches for extract_variable, and its refusal for a field

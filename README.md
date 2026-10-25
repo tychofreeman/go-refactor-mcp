@@ -1420,6 +1420,18 @@ hand or a tool got in the way.
     no pointers (`privateLocals`), no longer counts as a read a call
     could change.
 
+31. **A parameter in place of a package variable** (the user,
+    2026-10-25, from cost-history 16): 5 of 8 plans for lending-policy
+    named the new parameter like the package variable the body reads, so
+    the body would read the parameter with no edit; add_parameter
+    refused the hiding. *Done:* `replace_variable` on add_parameter. It
+    refuses a parameter of another type than the variable, and a body
+    that writes it. A call passing the variable itself, in a module that
+    never assigns it, keeps behavior; any other call (`DefaultPolicy()`
+    from another package) is an edit, which the result's note lists, as
+    the user chose. Without a variable to hide, the option does nothing.
+    The six plans, replayed with it: five pass the hidden tests.
+
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
 candidates and the evidence for each, gathered from the friction log.

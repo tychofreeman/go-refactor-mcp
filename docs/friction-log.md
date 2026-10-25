@@ -2406,3 +2406,10 @@ replace_text. This entry appended with a heredoc. Nothing else by hand.
 Docs with replace_text; this entry appended with a heredoc. The
 test-literal fixes added to the answers' batches were a one-off script
 in the scratchpad. Nothing by hand in the repo.
+
+## 2026-10-25: add_parameter's replace_variable (roadmap item 31)
+
+Golden cases with create_file (one args.json corrected with replace_text);
+the option with replace_text, replace_declaration (checkNewName onto
+`hides`) and add_declaration in one batch; docs with replace_text. This
+entry appended with a heredoc. Nothing else by hand.
