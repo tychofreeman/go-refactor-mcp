@@ -1332,7 +1332,14 @@ hand or a tool got in the way.
       (`matchIdent`) and for the nodes inside, so the miss stays shared.
     - The compiled pattern: what each of the pattern's names is (a
       hole, a field of a struct hole, a local, a plain name), decided
-      once when the pattern is made, not at every site.
+      once when the pattern is made, not at every site. *Done* for
+      identifiers: `Matcher.nameOf` decides what each of the pattern's
+      identifiers is (`declared`, `bodyLocal`, `hole`, `plain`) the
+      first time it is matched and keeps it; `matchIdent` switches on
+      that (complexity 27 to 18, with `bindHole` apart) and
+      `matchSelector` uses its object. What is left of compiling is
+      fold's: `Plan` works out `Holes`, `Fields` and `BodyLocals` from
+      fn, which `pattern` could do from a function declaration.
     - A list of standard-library calls without side effects
       (`reflect.TypeOf`, `json.Valid`), so that `analysis` stops
       refusing them; remove_dead_code refused `posType` for it.
