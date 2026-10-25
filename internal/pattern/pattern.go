@@ -23,16 +23,10 @@ type Matcher struct {
 	// Fields are the struct holes the pattern uses only by their fields:
 	// the fields, in the order the pattern first uses them. Each field is
 	// a hole of its own.
-	Fields map[types.Object][]string
-	Recv   types.Object // the hole that is a method's receiver, or nil
-	Relax  Relaxations  // rules for code of another shape, or nil
-	// Structural compares every node but identifiers and literals field
-	// by field, in place of the rules for each kind of node: code of any
-	// shape, compared exactly.
-	Structural bool
-	// Literal, if set, decides whether literals of the same kind match, in
-	// place of comparing their values.
-	Literal func(p, x *ast.BasicLit) bool
+	Fields  map[types.Object][]string
+	Recv    types.Object // the hole that is a method's receiver, or nil
+	Relax   Relaxations  // rules for code of another shape, or nil
+	Compare Comparer     // how nodes are compared: ByKind if nil
 }
 
 // Attempt is a match of the pattern against code of one package: what
@@ -53,6 +47,14 @@ type Attempt struct {
 // info, with no hole bound.
 func (m *Matcher) At(info *types.Info) *Attempt {
 	return &Attempt{Matcher: m, Info: info, Bound: map[HoleKey]ast.Expr{}}
+}
+
+// comparer is how the pattern's nodes are compared.
+func (m *Matcher) comparer() Comparer {
+	if m.Compare == nil {
+		return ByKind{}
+	}
+	return m.Compare
 }
 
 // Relaxations match code that does what the pattern does in another
@@ -83,11 +85,24 @@ type Miss struct {
 	Depth            int
 }
 
+// Comparer compares a node of the pattern with one of the code: rules for
+// each kind of node, calling back into the attempt (Match, MatchStmt) for
+// the nodes inside. What a name is, is the attempt's to say.
+type Comparer interface {
+	Expr(a *Attempt, p, x ast.Expr) bool
+	Stmt(a *Attempt, p, x ast.Stmt) bool
+}
+
+// ByKind compares nodes by rules for each kind of node, which cover the
+// shapes fold folds, with the Matcher's relaxations. A Matcher without a
+// comparer uses it.
+type ByKind struct{}
+
 // Match reports whether x, code of the attempt's package, is the
 // pattern's p with its holes bound as in Bound, binding the others.
 func (a *Attempt) Match(p, x ast.Expr) bool {
 	a.depth++
-	ok := a.compareExpr(p, x)
+	ok := a.comparer().Expr(a, p, x)
 	a.depth--
 	a.note(ok, p, x)
 	return ok
@@ -117,16 +132,7 @@ func (a *Attempt) note(ok bool, p, x ast.Node) {
 	}
 }
 
-// compareExpr reports whether x is the pattern p, comparing their nodes;
-// Match calls it and keeps where it failed.
-func (a *Attempt) compareExpr(p ast.Expr, x ast.Expr) bool {
-	if a.Structural {
-		switch p.(type) {
-		case *ast.Ident, *ast.BasicLit:
-		default:
-			return a.fields(p, x)
-		}
-	}
+func (k ByKind) Expr(a *Attempt, p ast.Expr, x ast.Expr) bool {
 	p, x = ast.Unparen(p), ast.Unparen(x)
 	pinfo := a.Pkg.TypesInfo
 	switch pp := p.(type) {
@@ -134,9 +140,6 @@ func (a *Attempt) compareExpr(p ast.Expr, x ast.Expr) bool {
 		return a.matchIdent(pp, x)
 	case *ast.BasicLit:
 		xb, ok := x.(*ast.BasicLit)
-		if a.Literal != nil {
-			return ok && xb.Kind == pp.Kind && a.Literal(pp, xb)
-		}
 		return ok && xb.Kind == pp.Kind && xb.Value == pp.Value
 	case *ast.SelectorExpr:
 		return a.matchSelector(pp, x)
@@ -315,9 +318,10 @@ func (a *Attempt) compareStmt(p ast.Stmt, x ast.Stmt) bool {
 	if p == nil || x == nil {
 		return p == nil && x == nil
 	}
-	if a.Structural {
-		return a.fields(p, x)
-	}
+	return a.comparer().Stmt(a, p, x)
+}
+
+func (k ByKind) Stmt(a *Attempt, p ast.Stmt, x ast.Stmt) bool {
 	exprs := func(p, x []ast.Expr) bool {
 		if len(p) != len(x) {
 			return false
@@ -395,7 +399,38 @@ func (a *Attempt) compareStmt(p ast.Stmt, x ast.Stmt) bool {
 	return false
 }
 
-// node compares two nodes of any kind, for Structural: expressions and
+// Exactly compares code of any shape exactly: every node but names and
+// literals field by field. Literal, if set, decides whether literals of
+// the same kind match, in place of comparing their values.
+type Exactly struct {
+	Literal func(p, x *ast.BasicLit) bool
+}
+
+// Expr compares names by what they are, literals by Literal, and the
+// rest field by field.
+func (e Exactly) Expr(a *Attempt, p, x ast.Expr) bool {
+	switch pp := p.(type) {
+	case *ast.Ident:
+		return a.matchIdent(pp, ast.Unparen(x))
+	case *ast.BasicLit:
+		xb, ok := ast.Unparen(x).(*ast.BasicLit)
+		if !ok || xb.Kind != pp.Kind {
+			return false
+		}
+		if e.Literal != nil {
+			return e.Literal(pp, xb)
+		}
+		return xb.Value == pp.Value
+	}
+	return a.fields(p, x)
+}
+
+// Stmt compares statements field by field.
+func (Exactly) Stmt(a *Attempt, p, x ast.Stmt) bool {
+	return a.fields(p, x)
+}
+
+// node compares two nodes of any kind, for Exactly: expressions and
 // statements by Match and MatchStmt, the rest field by field.
 func (a *Attempt) node(p, x ast.Node) bool {
 	switch p := p.(type) {

@@ -1326,7 +1326,10 @@ hand or a tool got in the way.
     - Two comparers behind one interface, rules per kind of node
       (fold's) and field by field (parameterize's, with its literal
       hook), sharing name resolution and the miss, in place of
-      `Structural` and `Literal`.
+      `Structural` and `Literal`. *Done:* `pattern.Comparer` (`Expr`,
+      `Stmt`) with `ByKind`, the default, and `Exactly{Literal}`, which
+      parameterize uses; both call back into the attempt for names
+      (`matchIdent`) and for the nodes inside, so the miss stays shared.
     - The compiled pattern: what each of the pattern's names is (a
       hole, a field of a struct hole, a local, a plain name), decided
       once when the pattern is made, not at every site.

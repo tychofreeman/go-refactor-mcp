@@ -2322,3 +2322,18 @@ inverse (a parameter every call passes as the same expression of the
 receiver becomes that expression), or a parameter object. Text
 replacement worked because the names were distinct (`info` but not
 `pinfo`, `b[` only for the bindings); on other code it would not be safe.
+
+## 2026-10-24: two comparers in place of `Structural` (roadmap item 27)
+
+Through the tools, as a derivation: extract_function for each compare
+function's rules (past the `Structural` test), method_to_function,
+add_parameter `k ByKind` and function_to_method to make them
+`ByKind.Expr` and `ByKind.Stmt`; add_declaration for `Comparer`,
+`Exactly` and `comparer`, add_field for `Compare`, replace_statements
+for the two dispatching bodies, remove_dead_code for `Structural` and
+`Literal`, inline_function for the one-line `compareExpr`. By hand,
+with replace_text: deleting the literal hook's branch from
+`ByKind.Expr`, and the two literals of `Matcher` that set `Structural`
+and `Literal` (parameterize's and the test's) to set `Compare`. Moving a
+method to another receiver type took three refactorings and a
+parameter of an empty struct; a `move_method` would be one.

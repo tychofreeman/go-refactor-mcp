@@ -128,12 +128,11 @@ func c(k int) string {
 	compare := func(other string) (*Attempt, map[string]string, bool) {
 		lits := map[string]string{}
 		m := &Matcher{
-			Pkg:        &packages.Package{TypesInfo: info},
-			Structural: true,
-			Literal: func(p, x *ast.BasicLit) bool {
+			Pkg: &packages.Package{TypesInfo: info},
+			Compare: Exactly{Literal: func(p, x *ast.BasicLit) bool {
 				lits[p.Value] = x.Value
 				return true
-			},
+			}},
 		}
 		a := m.At(info)
 		a.Locals = map[types.Object]types.Object{param("a"): param(other)}
