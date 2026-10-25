@@ -183,6 +183,15 @@ interface that already has the method, and a narrowing refusal that
 says which steps come first. Whether to go on to step 2 is the user's
 call.
 
+Both are done (#338, #339): prepare_switch_for_types uses a method the
+interface has when its signature is the one the cases need, and the
+narrowing refusal ends with what comes first: "No type implements Kind
+yet: make a type for each kind first, ...", or, once some do, "Write
+each kind's type (Book, DVD) where these uses have its old value, then
+narrow." Section 10 found that a refusal naming the right steps did not
+change what the model did next in a session; a rerun of kinds would
+show whether it does in a repair.
+
 ## Recording
 
 Each step in its own PR: the results in `docs/cost-history.md`, the
