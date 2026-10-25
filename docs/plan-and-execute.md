@@ -168,6 +168,21 @@ first use left, so each repair fixes one file. It now names every use
 left, sorted, with their count ("Road is used in 3 places: ..."). Then
 lending-xl.
 
+## Step 1 on routes again and on lending-xl (cost-history 19)
+
+With the refusal listing every use, Sonnet passed routes 3/4 (2/4
+before), one attempt by fixing four uses in one repair; Haiku stayed
+at 1/4, its plans rewriting the uses instead. On lending-xl the loop
+passed Haiku 11/20 at $0.012 and Sonnet 15/20 at $0.146, against
+Sonnet in a session with the tools 20/20 at $0.176. Kinds failed every
+attempt: the plans named the derivation but broke on
+prepare_switch_for_types after declaring the interface's method
+themselves, and on narrowing the field while uses still needed the old
+type. The next fixes, if any: prepare_switch_for_types accepting an
+interface that already has the method, and a narrowing refusal that
+says which steps come first. Whether to go on to step 2 is the user's
+call.
+
 ## Recording
 
 Each step in its own PR: the results in `docs/cost-history.md`, the

@@ -2459,3 +2459,8 @@ The golden case with create_file in one batch; `checkUnused` with
 replace_statements (`function`) and replace_text; the plan doc with
 replace_text. One replace_statements left a placeholder line, replaced
 by the next. This entry appended with a heredoc. Nothing else by hand.
+
+## 2026-10-25: the loop on routes and lending-xl (cost-history 19)
+
+Docs with replace_text. This entry appended with a heredoc. Nothing
+else by hand.

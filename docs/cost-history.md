@@ -1026,6 +1026,53 @@ bounds (each attempt's total over its requests): Haiku with reads
 $0.011-0.029 (not $0.0286), Haiku without $0.010-0.013, Sonnet without
 $0.144-0.174.
 
+## 19. The loop on routes again, and on lending-xl (Oct 25)
+
+remove_dead_code's refusal now names every use left, sorted, with
+their count (#336). `loop.py -no-read`, 4 attempts per task and model,
+the engine built from that branch; $0.60 for routes, $3.15 for
+lending-xl.
+
+**Routes** (`eval-runs/loop-{haiku,sonnet}-routes`): Sonnet 3/4 (2/4 in
+section 18), Haiku 1/4 (1/4). The new refusal fired in three attempts
+("Road is used in 20 places: ..."); Sonnet's third attempt got "RailOld
+is used in 4 places", fixed all four in one repair, and passed.
+Sonnet's failure was tests failing after a batch, not a refusal.
+Haiku's failures were its plans: two replaced the fields with a map
+and rewrote each use from bodies it had not seen, and one asked
+remove_dead_code to remove `Road` while 63 uses were left.
+
+**Lending-xl** (set C, shapes no move names; `eval-runs/loop-{haiku,sonnet}-lending`):
+
+| task | Haiku loop | Sonnet loop |
+|---|---|---|
+| phases | 0/4 | 3/4 |
+| kinds | 0/4 | 0/4 |
+| policy | 3/4 | 4/4 |
+| address | 4/4 | 4/4 |
+| dryrun | 4/4 | 4/4 |
+| all | 11/20, $0.0121, 2.6 requests | 15/20, $0.146, 2.9 requests |
+
+No arm by hand ran lending-xl with either model; the nearest is section
+9's Sonnet with the tools in a session, 20/20 at $0.176 a run (10.7
+turns): the loop is 17% cheaper and fails a quarter of the tasks.
+
+- **Kinds fails every attempt, both models.** It is the kind-into-types
+  derivation (74 steps through the tools by hand, README item 24). The
+  plans named it (widen, prepare, types, narrow) but broke on two
+  refusals: prepare_switch_for_types after the plan had declared the
+  interface's method itself ("interface Kind already has a method
+  LoanDays", 2 attempts), and change_field_type narrowing the field
+  while uses still needed the old type ("these uses of Kind cannot
+  follow its new type Kind", 6 attempts); the repairs then wrote the
+  types by hand with replace_text that did not type-check.
+- **Haiku's phases** (0/4): written by hand in the reference too; its
+  batches applied and the tests failed, from code written for bodies the
+  plan had not seen, as in section 16.
+- **Address, dryrun and policy** pass in 23 of 24 attempts, in two
+  requests (address, dryrun) or three (policy, through
+  `replace_variable`).
+
 ## What made the difference
 
 - **Smaller results** (#75, rename locations): the largest single win when
