@@ -432,6 +432,13 @@ results are in `docs/cost-history.md`.
   tokens (instructions 1.46K, tool names 0.37K), about 8% of a hybrid
   session; a loaded schema 500-800 more. The mcp arm's gap over manual
   is turns (twice the requests), not that context.
+- Haiku and Sonnet, with and without the tools, on freight-xl
+  (cost-history 14): all 64 runs passed; with the tools both cost more
+  than by hand (Sonnet 67%, Haiku 41%), and Haiku by hand cost an eighth
+  of Sonnet by hand. The tools neither saved cost nor enabled the
+  cheaper model on tasks every arm gets right. Section 9's 25% was tools
+  against tools, not against by hand. Next evidence would come from
+  tasks a model gets wrong by hand.
 - Where a session's cost goes (cost-history 12,
   `eval-tasks/learning/cost.py`): cache writes 69%, output 18%, cache
   reads 13%, though cache reads are 88% of input tokens. About 38% of

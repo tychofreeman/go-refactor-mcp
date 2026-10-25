@@ -2363,3 +2363,8 @@ Docs only: replace_text for the roadmap entry. Nothing by hand.
 Docs only: replace_text for cost-history and the session notes, and
 this entry appended with a heredoc. The measuring scripts were one-offs
 in the scratchpad (transcript usage by arm; the server's tools/list).
+
+## 2026-10-24: a cheaper model with the tools (cost-history 14)
+
+Docs only: replace_text for cost-history and the session notes; one
+figure corrected with sed, and this entry appended with a heredoc.
