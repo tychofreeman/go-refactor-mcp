@@ -2484,3 +2484,8 @@ by hand.
 
 Docs with replace_text. This entry appended with a heredoc. Nothing
 else by hand.
+
+## 2026-10-25: kinds with reads (cost-history 19)
+
+Docs with replace_text. This entry appended with a heredoc. Nothing
+else by hand.

@@ -1086,6 +1086,17 @@ string literals and guessed replace_text targets in code it had not
 seen. Moving each case into its type needs the cases, which `-no-read`
 withholds from the plan and the "done?" turn.
 
+**Kinds with reads** (the plan and the "done?" turn may ask for source;
+`eval-runs/loop-{haiku,sonnet}-kinds-read`, $0.87): 8/8. Haiku $0.020 a
+task in 4.5 requests (8.5 reads), Sonnet $0.197 in 4.5 (11), against
+Sonnet in a session with today's tools (section 10) at $0.25 and 19
+turns. But none derived: no attempt used prepare_switch_for_types.
+Haiku widened and narrowed with change_field_type (three attempts
+after a narrowing refusal) and wrote the types and the writes with
+replace_statements and replace_text; Sonnet wrote all of it with edits.
+As in sections 16 and 17, with the bodies in view both models rewrite;
+the tools still check each step and the tests decide.
+
 ## What made the difference
 
 - **Smaller results** (#75, rename locations): the largest single win when
