@@ -1073,6 +1073,19 @@ turns): the loop is 17% cheaper and fails a quarter of the tasks.
   requests (address, dryrun) or three (policy, through
   `replace_variable`).
 
+**Kinds again, with both fixes** (#338, #339;
+`eval-runs/loop-{haiku,sonnet}-kinds2`, $1.12): 0/4 for each model
+still. Both new refusals fired: Haiku's plans declared `Label(title
+string)` where the switch needs `Label(it Item)`, and
+prepare_switch_for_types said so (3 attempts); the narrowing refusal
+named the missing middle. What stopped the attempts then was that the
+plan sees no bodies: asked whether it was done, Haiku answered that it
+could not write the next batch without the case bodies and Import's
+source, and sent none; Sonnet made the types call the old switches with
+string literals and guessed replace_text targets in code it had not
+seen. Moving each case into its type needs the cases, which `-no-read`
+withholds from the plan and the "done?" turn.
+
 ## What made the difference
 
 - **Smaller results** (#75, rename locations): the largest single win when
