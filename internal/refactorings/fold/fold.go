@@ -67,35 +67,42 @@ type foldArgs struct {
 	In   string `json:"in,omitempty"`
 }
 
-// folder finds the code that does what fn does and replaces it with calls.
-type folder struct {
-	ws    *workspace.Workspace
-	pkg   *packages.Package // fn's
-	fn    *types.Func
-	decl  *ast.FuncDecl
-	body  ast.Expr   // what fn returns: the pattern; or nil, and
-	stmts []ast.Stmt // fn's statements: the pattern, for a function without results
-	root  ast.Node   // body or fn's block: where the pattern's names are
+// matcher matches code against fn's body, the pattern: it knows what each
+// of the pattern's names is (a hole, a field of a struct parameter, one
+// of fn's locals), and keeps what matching made on the way.
+type matcher struct {
+	pkg *packages.Package // fn's
 	// locals are, while matching statements, the occurrence's variables
 	// standing for fn's locals; bodyLocals are fn's locals.
 	locals, bodyLocals map[types.Object]types.Object
-	done               [][2]token.Pos       // statements folded, which a later match must not overlap
 	holes              map[types.Object]int // fn's parameters (and receiver), and how often the body uses each
 	// fields are the struct parameters the body uses only by their fields:
 	// the fields, in the order the body first uses them. Each field is a
 	// hole of its own, and the call passes a literal of the struct.
-	fields map[types.Object][]string
-	uses   map[holeKey]int // how often the body uses each of those fields
-	recv   types.Object    // fn's receiver, or nil
-	// self and sets are a setter's: the struct parameter it sets fields
-	// of and returns, and the fields with what it sets them to, in order.
-	self      types.Object
-	sets      []set
-	rest      map[ast.Expr]rest       // literals folded through the setter, by what to write for them
+	fields    map[types.Object][]string
+	recv      types.Object            // fn's receiver, or nil
 	addressOf map[ast.Expr]bool       // arguments &x made for a *p of the body that x matched
 	made      map[ast.Expr]bool       // string literals made from a format's text, for a %s of the body
 	runs      map[ast.Expr][]ast.Expr // concatenations made of a run of operands, for a string parameter of the body
-	effs      *analysis.Effects       // what calls do, built when needed
+}
+
+// folder finds the code that does what fn does and replaces it with calls.
+type folder struct {
+	ws *workspace.Workspace
+	matcher
+	fn    *types.Func
+	decl  *ast.FuncDecl
+	body  ast.Expr        // what fn returns: the pattern; or nil, and
+	stmts []ast.Stmt      // fn's statements: the pattern, for a function without results
+	root  ast.Node        // body or fn's block: where the pattern's names are
+	done  [][2]token.Pos  // statements folded, which a later match must not overlap
+	uses  map[holeKey]int // how often the body uses each field of fields
+	// self and sets are a setter's: the struct parameter it sets fields
+	// of and returns, and the fields with what it sets them to, in order.
+	self types.Object
+	sets []set
+	rest map[ast.Expr]rest // literals folded through the setter, by what to write for them
+	effs *analysis.Effects // what calls do, built when needed
 
 	n       int      // occurrences folded
 	skipped []string // why matches were left, "file:line: reason"
@@ -829,27 +836,27 @@ func (f *folder) removeImports(path string, es []edit.TextEdit) {
 
 // match reports whether x, of the package whose info is info, is the
 // pattern p (of fn's package) with its holes filled in b.
-func (f *folder) match(p, x ast.Expr, info *types.Info, b map[holeKey]ast.Expr) bool {
+func (m *matcher) match(p, x ast.Expr, info *types.Info, b map[holeKey]ast.Expr) bool {
 	p, x = ast.Unparen(p), ast.Unparen(x)
-	pinfo := f.pkg.TypesInfo
+	pinfo := m.pkg.TypesInfo
 	sub := func(p, x ast.Expr) bool {
 		if p == nil || x == nil {
 			return p == nil && x == nil
 		}
-		return f.match(p, x, info, b)
+		return m.match(p, x, info, b)
 	}
 	switch pp := p.(type) {
 	case *ast.Ident:
-		return f.matchIdent(pp, x, info, b, pinfo)
+		return m.matchIdent(pp, x, info, b, pinfo)
 	case *ast.BasicLit:
 		xb, ok := x.(*ast.BasicLit)
 		return ok && xb.Kind == pp.Kind && xb.Value == pp.Value
 	case *ast.SelectorExpr:
-		return f.matchSelector(pp, x, info, b, pinfo, sub)
+		return m.matchSelector(pp, x, info, b, pinfo, sub)
 	case *ast.CallExpr:
-		return f.matchCall(pp, x, info, b, sub)
+		return m.matchCall(pp, x, info, b, sub)
 	case *ast.BinaryExpr:
-		return f.matchBinary(pp, x, info, b, pinfo, sub)
+		return m.matchBinary(pp, x, info, b, pinfo, sub)
 	case *ast.UnaryExpr:
 		xu, ok := x.(*ast.UnaryExpr)
 		return ok && xu.Op == pp.Op && sub(pp.X, xu.X)
@@ -857,7 +864,7 @@ func (f *folder) match(p, x ast.Expr, info *types.Info, b map[holeKey]ast.Expr) 
 		if xs, ok := x.(*ast.StarExpr); ok {
 			return sub(pp.X, xs.X)
 		}
-		return f.matchAddress(pp, x, info, b)
+		return m.matchAddress(pp, x, info, b)
 	case *ast.IndexExpr:
 		xi, ok := x.(*ast.IndexExpr)
 		return ok && sub(pp.X, xi.X) && sub(pp.Index, xi.Index)
@@ -893,10 +900,10 @@ func matchComposite(pp *ast.CompositeLit, x ast.Expr, info *types.Info, pinfo *t
 
 // matchBinary reports whether x matches the binary expression pp of the
 // pattern; string concatenations match by their operands.
-func (f *folder) matchBinary(pp *ast.BinaryExpr, x ast.Expr, info *types.Info, b map[holeKey]ast.Expr, pinfo *types.Info, sub func(p ast.Expr, x ast.Expr) bool) bool {
+func (m *matcher) matchBinary(pp *ast.BinaryExpr, x ast.Expr, info *types.Info, b map[holeKey]ast.Expr, pinfo *types.Info, sub func(p ast.Expr, x ast.Expr) bool) bool {
 	if pp.Op == token.ADD && analysis.IsString(pinfo.TypeOf(pp)) {
 		xb, ok := x.(*ast.BinaryExpr)
-		return ok && xb.Op == token.ADD && f.matchConcat(pp, xb, info, b)
+		return ok && xb.Op == token.ADD && m.matchConcat(pp, xb, info, b)
 	}
 	xb, ok := x.(*ast.BinaryExpr)
 	return ok && xb.Op == pp.Op && sub(pp.X, xb.X) && sub(pp.Y, xb.Y)
@@ -904,13 +911,13 @@ func (f *folder) matchBinary(pp *ast.BinaryExpr, x ast.Expr, info *types.Info, b
 
 // matchCall reports whether x matches the call pp of the pattern, argument
 // by argument or as a format string.
-func (f *folder) matchCall(pp *ast.CallExpr, x ast.Expr, info *types.Info, b map[holeKey]ast.Expr, sub func(p ast.Expr, x ast.Expr) bool) bool {
+func (m *matcher) matchCall(pp *ast.CallExpr, x ast.Expr, info *types.Info, b map[holeKey]ast.Expr, sub func(p ast.Expr, x ast.Expr) bool) bool {
 	xc, ok := x.(*ast.CallExpr)
 	if !ok || xc.Ellipsis.IsValid() != pp.Ellipsis.IsValid() || !sub(pp.Fun, xc.Fun) {
 		return false
 	}
 	if len(xc.Args) != len(pp.Args) {
-		return f.matchFormat(pp, xc, info, b)
+		return m.matchFormat(pp, xc, info, b)
 	}
 	for i := range pp.Args {
 		if !sub(pp.Args[i], xc.Args[i]) {
@@ -923,10 +930,10 @@ func (f *folder) matchCall(pp *ast.CallExpr, x ast.Expr, info *types.Info, b map
 // matchSelector reports whether x matches the selector pp of the pattern: a
 // field of a struct parameter, a qualified name, or the same field or
 // method of matching operands.
-func (f *folder) matchSelector(pp *ast.SelectorExpr, x ast.Expr, info *types.Info, b map[holeKey]ast.Expr, pinfo *types.Info, sub func(p ast.Expr, x ast.Expr) bool) bool {
+func (m *matcher) matchSelector(pp *ast.SelectorExpr, x ast.Expr, info *types.Info, b map[holeKey]ast.Expr, pinfo *types.Info, sub func(p ast.Expr, x ast.Expr) bool) bool {
 	if id := identOf(pp.X); id != nil {
 		po := pinfo.Uses[id]
-		if _, byField := f.fields[po]; byField {
+		if _, byField := m.fields[po]; byField {
 			k := holeKey{po, pp.Sel.Name}
 			if prev, ok := b[k]; ok {
 				return types.ExprString(prev) == types.ExprString(x)
@@ -950,7 +957,7 @@ func (f *folder) matchSelector(pp *ast.SelectorExpr, x ast.Expr, info *types.Inf
 
 // matchIdent reports whether x matches the identifier pp of the pattern: a
 // name a local of fn declares, a hole, or the same object.
-func (f *folder) matchIdent(pp *ast.Ident, x ast.Expr, info *types.Info, b map[holeKey]ast.Expr, pinfo *types.Info) bool {
+func (m *matcher) matchIdent(pp *ast.Ident, x ast.Expr, info *types.Info, b map[holeKey]ast.Expr, pinfo *types.Info) bool {
 	if pd := pinfo.Defs[pp]; pd != nil || pp.Name == "_" {
 		// A local fn declares: the occurrence's own name for it.
 		xi, ok := x.(*ast.Ident)
@@ -958,21 +965,21 @@ func (f *folder) matchIdent(pp *ast.Ident, x ast.Expr, info *types.Info, b map[h
 			return ok && xi.Name == "_"
 		}
 		xd := info.Defs[xi]
-		if xd == nil || f.locals == nil {
+		if xd == nil || m.locals == nil {
 			return false
 		}
-		f.locals[pd] = xd
+		m.locals[pd] = xd
 		return true
 	}
-	if xo, local := f.locals[pinfo.Uses[pp]]; local {
+	if xo, local := m.locals[pinfo.Uses[pp]]; local {
 		xi, ok := x.(*ast.Ident)
 		return ok && info.Uses[xi] == xo
 	}
-	if _, local := f.bodyLocals[pinfo.Uses[pp]]; local {
+	if _, local := m.bodyLocals[pinfo.Uses[pp]]; local {
 		return false
 	}
 	po := pinfo.Uses[pp]
-	if _, hole := f.holes[po]; hole && po != nil {
+	if _, hole := m.holes[po]; hole && po != nil {
 		if prev, ok := b[holeKey{po, ""}]; ok {
 			return types.ExprString(prev) == types.ExprString(x)
 		}
@@ -980,7 +987,7 @@ func (f *folder) matchIdent(pp *ast.Ident, x ast.Expr, info *types.Info, b map[h
 		if xt == nil || !info.Types[x].IsValue() {
 			return false
 		}
-		if po == f.recv {
+		if po == m.recv {
 			if !sameObj(baseName(xt), baseName(po.Type())) {
 				return false
 			}
@@ -1003,13 +1010,13 @@ func (f *folder) matchIdent(pp *ast.Ident, x ast.Expr, info *types.Info, b map[h
 // matchAddress reports whether x, which is not a dereference, is the
 // pattern's *p for a pointer parameter p: an addressable expression of
 // p's element type, so that the call passes &x.
-func (f *folder) matchAddress(pp *ast.StarExpr, x ast.Expr, info *types.Info, b map[holeKey]ast.Expr) bool {
+func (m *matcher) matchAddress(pp *ast.StarExpr, x ast.Expr, info *types.Info, b map[holeKey]ast.Expr) bool {
 	id, ok := ast.Unparen(pp.X).(*ast.Ident)
 	if !ok {
 		return false
 	}
-	po := f.pkg.TypesInfo.Uses[id]
-	if _, hole := f.holes[po]; !hole || po == nil || po == f.recv {
+	po := m.pkg.TypesInfo.Uses[id]
+	if _, hole := m.holes[po]; !hole || po == nil || po == m.recv {
 		return false
 	}
 	ptr, ok := po.Type().Underlying().(*types.Pointer)
@@ -1023,7 +1030,7 @@ func (f *folder) matchAddress(pp *ast.StarExpr, x ast.Expr, info *types.Info, b 
 		return types.ExprString(prev) == types.ExprString(u)
 	}
 	b[k] = u
-	f.addressOf[u] = true
+	m.addressOf[u] = true
 	return true
 }
 
@@ -1050,14 +1057,14 @@ func addressable(info *types.Info, x ast.Expr) bool {
 // print them as they are: log.Printf("email to %s", to) is
 // log.Printf("%s to %s", channel, to) with channel "email". Text with a
 // % in it is not taken.
-func (f *folder) matchFormat(pp, xc *ast.CallExpr, info *types.Info, b map[holeKey]ast.Expr) bool {
-	pinfo := f.pkg.TypesInfo
+func (m *matcher) matchFormat(pp, xc *ast.CallExpr, info *types.Info, b map[holeKey]ast.Expr) bool {
+	pinfo := m.pkg.TypesInfo
 	fi := formatIndex(pinfo, pp)
 	if fi < 0 || pp.Ellipsis.IsValid() || len(xc.Args) <= fi || len(xc.Args) > len(pp.Args) {
 		return false
 	}
 	for i := 0; i < fi; i++ {
-		if !f.match(pp.Args[i], xc.Args[i], info, b) {
+		if !m.match(pp.Args[i], xc.Args[i], info, b) {
 			return false
 		}
 	}
@@ -1089,7 +1096,7 @@ func (f *folder) matchFormat(pp, xc *ast.CallExpr, info *types.Info, b map[holeK
 		arg := pp.Args[fi+(k+1)/2]
 		if strings.HasPrefix(rest, part) && xi < len(xc.Args) {
 			c := maps.Clone(b)
-			if f.match(arg, xc.Args[xi], info, c) {
+			if m.match(arg, xc.Args[xi], info, c) {
 				if r := try(k+1, rest[len(part):], xi+1, c); r != nil {
 					return r
 				}
@@ -1100,7 +1107,7 @@ func (f *folder) matchFormat(pp, xc *ast.CallExpr, info *types.Info, b map[holeK
 		}
 		for j := 0; j <= len(rest) && !strings.Contains(rest[:j], "%"); j++ {
 			c := maps.Clone(b)
-			if f.bindText(arg, rest[:j], xc.Args[fi].Pos(), c) {
+			if m.bindText(arg, rest[:j], xc.Args[fi].Pos(), c) {
 				if r := try(k+1, rest[j:], xi, c); r != nil {
 					return r
 				}
@@ -1118,8 +1125,8 @@ func (f *folder) matchFormat(pp, xc *ast.CallExpr, info *types.Info, b map[holeK
 
 // bindText binds the pattern's arg, if it is a parameter of type string,
 // to a literal of text in b; it reports whether it could.
-func (f *folder) bindText(arg ast.Expr, text string, pos token.Pos, b map[holeKey]ast.Expr) bool {
-	po := f.stringParam(arg)
+func (m *matcher) bindText(arg ast.Expr, text string, pos token.Pos, b map[holeKey]ast.Expr) bool {
+	po := m.stringParam(arg)
 	if po == nil {
 		return false
 	}
@@ -1134,19 +1141,19 @@ func (f *folder) bindText(arg ast.Expr, text string, pos token.Pos, b map[holeKe
 	}
 	lit := &ast.BasicLit{ValuePos: pos, Kind: token.STRING, Value: strconv.Quote(text)}
 	b[k] = lit
-	f.made[lit] = true
+	m.made[lit] = true
 	return true
 }
 
 // stringParam is the parameter of type string that arg, of the pattern,
 // is, or nil.
-func (f *folder) stringParam(arg ast.Expr) types.Object {
+func (m *matcher) stringParam(arg ast.Expr) types.Object {
 	id, ok := ast.Unparen(arg).(*ast.Ident)
 	if !ok {
 		return nil
 	}
-	po := f.pkg.TypesInfo.Uses[id]
-	if _, hole := f.holes[po]; !hole || po == nil || po == f.recv || !types.Identical(po.Type(), types.Typ[types.String]) {
+	po := m.pkg.TypesInfo.Uses[id]
+	if _, hole := m.holes[po]; !hole || po == nil || po == m.recv || !types.Identical(po.Type(), types.Typ[types.String]) {
 		return nil
 	}
 	return po
@@ -1156,8 +1163,8 @@ func (f *folder) stringParam(arg ast.Expr) types.Object {
 // pattern's concatenation pp, + being associative: each operand of pp
 // matches one of x's in order, but a string parameter may match a run of
 // them, so to+": "+text is first+" "+last+": "+ref with to first+" "+last.
-func (f *folder) matchConcat(pp, x *ast.BinaryExpr, info *types.Info, b map[holeKey]ast.Expr) bool {
-	ps, xs := concatOperands(f.pkg.TypesInfo, pp), concatOperands(info, x)
+func (m *matcher) matchConcat(pp, x *ast.BinaryExpr, info *types.Info, b map[holeKey]ast.Expr) bool {
+	ps, xs := concatOperands(m.pkg.TypesInfo, pp), concatOperands(info, x)
 	// try matches ps[i:] to xs[j:]; it returns the holes, or nil.
 	var try func(i, j int, b map[holeKey]ast.Expr) map[holeKey]ast.Expr
 	try = func(i, j int, b map[holeKey]ast.Expr) map[holeKey]ast.Expr {
@@ -1168,15 +1175,15 @@ func (f *folder) matchConcat(pp, x *ast.BinaryExpr, info *types.Info, b map[hole
 			return nil
 		}
 		c := maps.Clone(b)
-		if f.match(ps[i], xs[j], info, c) {
+		if m.match(ps[i], xs[j], info, c) {
 			if r := try(i+1, j+1, c); r != nil {
 				return r
 			}
 		}
-		po := f.stringParam(ps[i])
+		po := m.stringParam(ps[i])
 		for k := j + 2; po != nil && k <= len(xs)-(len(ps)-i-1); k++ {
 			c := maps.Clone(b)
-			if f.bindRun(po, xs[j:k], c) {
+			if m.bindRun(po, xs[j:k], c) {
 				if r := try(i+1, k, c); r != nil {
 					return r
 				}
@@ -1194,7 +1201,7 @@ func (f *folder) matchConcat(pp, x *ast.BinaryExpr, info *types.Info, b map[hole
 
 // bindRun binds the string parameter po to the concatenation of run in
 // b; it reports whether it could.
-func (f *folder) bindRun(po types.Object, run []ast.Expr, b map[holeKey]ast.Expr) bool {
+func (m *matcher) bindRun(po types.Object, run []ast.Expr, b map[holeKey]ast.Expr) bool {
 	e := run[0]
 	for _, y := range run[1:] {
 		e = &ast.BinaryExpr{X: e, OpPos: y.Pos(), Op: token.ADD, Y: y}
@@ -1204,7 +1211,7 @@ func (f *folder) bindRun(po types.Object, run []ast.Expr, b map[holeKey]ast.Expr
 		return types.ExprString(prev) == types.ExprString(e)
 	}
 	b[k] = e
-	f.runs[e] = run
+	m.runs[e] = run
 	return true
 }
 
@@ -1588,7 +1595,7 @@ func (f *folder) mayStop(info *types.Info, s ast.Stmt, pos token.Pos) string {
 }
 
 // matchStmt reports whether x is the pattern's statement p.
-func (f *folder) matchStmt(p, x ast.Stmt, info *types.Info, b map[holeKey]ast.Expr) bool {
+func (m *matcher) matchStmt(p, x ast.Stmt, info *types.Info, b map[holeKey]ast.Expr) bool {
 	if p == nil || x == nil {
 		return p == nil && x == nil
 	}
@@ -1596,7 +1603,7 @@ func (f *folder) matchStmt(p, x ast.Stmt, info *types.Info, b map[holeKey]ast.Ex
 		if p == nil || x == nil {
 			return p == nil && x == nil
 		}
-		return f.match(p, x, info, b)
+		return m.match(p, x, info, b)
 	}
 	exprs := func(p, x []ast.Expr) bool {
 		if len(p) != len(x) {
@@ -1617,7 +1624,7 @@ func (f *folder) matchStmt(p, x ast.Stmt, info *types.Info, b map[holeKey]ast.Ex
 			return false
 		}
 		for i := range p.List {
-			if !f.matchStmt(p.List[i], x.List[i], info, b) {
+			if !m.matchStmt(p.List[i], x.List[i], info, b) {
 				return false
 			}
 		}
@@ -1638,10 +1645,10 @@ func (f *folder) matchStmt(p, x ast.Stmt, info *types.Info, b map[holeKey]ast.Ex
 		return ok && block(pp, xs)
 	case *ast.IfStmt:
 		xs, ok := x.(*ast.IfStmt)
-		return ok && f.matchStmt(pp.Init, xs.Init, info, b) && expr(pp.Cond, xs.Cond) && block(pp.Body, xs.Body) && f.matchStmt(pp.Else, xs.Else, info, b)
+		return ok && m.matchStmt(pp.Init, xs.Init, info, b) && expr(pp.Cond, xs.Cond) && block(pp.Body, xs.Body) && m.matchStmt(pp.Else, xs.Else, info, b)
 	case *ast.ForStmt:
 		xs, ok := x.(*ast.ForStmt)
-		return ok && f.matchStmt(pp.Init, xs.Init, info, b) && expr(pp.Cond, xs.Cond) && f.matchStmt(pp.Post, xs.Post, info, b) && block(pp.Body, xs.Body)
+		return ok && m.matchStmt(pp.Init, xs.Init, info, b) && expr(pp.Cond, xs.Cond) && m.matchStmt(pp.Post, xs.Post, info, b) && block(pp.Body, xs.Body)
 	case *ast.RangeStmt:
 		xs, ok := x.(*ast.RangeStmt)
 		return ok && xs.Tok == pp.Tok && expr(pp.X, xs.X) && expr(pp.Key, xs.Key) && expr(pp.Value, xs.Value) && block(pp.Body, xs.Body)
@@ -1658,7 +1665,7 @@ func (f *folder) matchStmt(p, x ast.Stmt, info *types.Info, b map[holeKey]ast.Ex
 			if ps == nil || vs == nil || len(ps.Names) != len(vs.Names) || (ps.Type == nil) != (vs.Type == nil) || !exprs(ps.Values, vs.Values) {
 				return false
 			}
-			if ps.Type != nil && !types.Identical(f.pkg.TypesInfo.TypeOf(ps.Type), info.TypeOf(vs.Type)) {
+			if ps.Type != nil && !types.Identical(m.pkg.TypesInfo.TypeOf(ps.Type), info.TypeOf(vs.Type)) {
 				return false
 			}
 			for j := range ps.Names {
@@ -1895,7 +1902,7 @@ func (*Fold) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan,
 	if !ok {
 		return nil, refactor.Refusef("%s is not a function or method", a.Name)
 	}
-	f := &folder{ws: ws, pkg: pkg, fn: fn, holes: map[types.Object]int{}}
+	f := &folder{ws: ws, matcher: matcher{pkg: pkg, holes: map[types.Object]int{}}, fn: fn}
 	if err := f.pattern(id); err != nil {
 		return nil, err
 	}

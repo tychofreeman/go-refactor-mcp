@@ -2240,3 +2240,17 @@ being refactored, and nothing else, was enough.
 ## 2026-10-24: roadmap item 27, one matcher for code with holes
 
 Nothing by hand: the item with replace_text.
+
+## 2026-10-24: fold's match state into `matcher` (roadmap item 27)
+
+extract_struct moved the fields the matchers use into `matcher`,
+embedded in `folder`, and rename named the receivers. By hand, with
+replace_text in the same batch (check "end"): the receivers of the
+twelve matchers, `(f *folder)` to `(f *matcher)`, one line repeated.
+No operation moves a method to a struct its receiver embeds; through
+the tools it would be method_to_function, an alias of folder and
+change_parameter_type to it, change_type to matcher with a fix at each
+call from folder's code, then function_to_method: four steps per
+method for what is one line of text. A candidate: function_to_method
+(or a move of a method) onto an embedded field, when the body uses
+only what that field provides.
