@@ -212,21 +212,22 @@ func (*Parameterize) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refact
 		found := map[*ast.BasicLit]*ast.BasicLit{}
 		m := &pattern.Matcher{
 			Pkg:        first.pkg,
-			Locals:     map[types.Object]types.Object{},
 			Structural: true,
 			Literal: func(p, x *ast.BasicLit) bool {
 				found[p] = x
 				return true
 			},
 		}
+		a := m.At(g.pkg.TypesInfo)
+		a.Locals = map[types.Object]types.Object{}
 		for j, p := range first.params {
-			m.Locals[p] = g.params[j]
+			a.Locals[p] = g.params[j]
 		}
 		if first.recv != nil {
-			m.Locals[first.recv] = g.recv
+			a.Locals[first.recv] = g.recv
 		}
-		if !m.MatchStmt(first.decl.Body, g.decl.Body, g.pkg.TypesInfo, map[pattern.HoleKey]ast.Expr{}) {
-			at, there := g.where(m.Miss)
+		if !a.MatchStmt(first.decl.Body, g.decl.Body) {
+			at, there := g.where(a.Miss)
 			return nil, refactor.Refusef("%s and %s differ at %s and %s, which are not constants; parameterize makes a parameter only of constants", first.name, g.name, at, there)
 		}
 		lits[i+1] = found
