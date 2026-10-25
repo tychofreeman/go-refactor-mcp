@@ -834,7 +834,7 @@ in section 14.
 Two of Haiku's reorder runs were refused by move_parameter after
 extracting only one argument (`moving p.Bin() past from`): a local
 that nothing else can reach cannot observe the call, so that refusal is
-false (README, roadmap item 29).
+false (README, roadmap item 30).
 
 So on a module this small, with "must not change" in the prompt, the
 traps are the only thing of interest in the code, and both models find

@@ -1393,7 +1393,22 @@ hand or a tool got in the way.
     changes in one call, but would not have done #317: Change
     Signature does not delete a parameter the body uses either.
 
-29. **move_parameter counts a local as observable** (2026-10-25, the
+29. **Plan, then execute: a loop of our own** (the user, 2026-10-25):
+    with the tools, Sonnet and Haiku both cost more than editing by
+    hand (cost-history 14), and the gap is turns, not the tools'
+    context (13). A loop of our own could plan the whole derivation in
+    one request from names and signatures, run it with the engine, and
+    send only refusals or failing tests back, in two or three requests
+    instead of 7-20. The call-tree probe is its planning half (7 of 16
+    batches passed from the call tree, the failures the tools'
+    interface, not the plans). Plan: `docs/plan-and-execute.md`.
+    Step 1, the probe with repairs and the input schemas, against the
+    manual arm with the same model (about $2-4); step 2, a runner on
+    the API with its own context, only if step 1 pays. A research
+    instrument: the decision that Claude through MCP is the product
+    stands, and the user decides on the result.
+
+30. **move_parameter counts a local as observable** (2026-10-25, the
     trap run, cost-history 15): with `from := p.Bin()` extracted,
     `l.Transfer(from, p.Bin(), p.Qty())` is refused ("moving p.Bin()
     past from would change the order"), though a local whose address
