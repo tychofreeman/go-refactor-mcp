@@ -480,6 +480,11 @@ results are in `docs/cost-history.md`.
   hand $0.0124), Sonnet's 14/16 at $0.107 (by hand $0.0973). A resumed
   `claude -p` session reports its running total cost, not the request's:
   take the last total, do not sum them (section 17's costs were summed).
+  With remove_dead_code naming every use left (cost-history 19), Sonnet
+  passed routes 3/4. On lending-xl the loop passed Haiku 11/20 ($0.012)
+  and Sonnet 15/20 ($0.146, against $0.176 and 20/20 for Sonnet in a
+  session with the tools); kinds failed every attempt on
+  prepare_switch_for_types and narrowing refusals.
 - Where a session's cost goes (cost-history 12,
   `eval-tasks/learning/cost.py`): cache writes 69%, output 18%, cache
   reads 13%, though cache reads are 88% of input tokens. About 38% of
