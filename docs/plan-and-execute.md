@@ -149,6 +149,11 @@ at 1.8 times. Before step 2, three fixes: a shorter tools reference
 first), and the stub bug (a batch re-declared the fields its own first
 step removed). Then lending-xl.
 
+The stub bug is fixed: a batch takes what the module declares when it
+begins, and declares no stub for a name that was declared then (a
+package-level name by its file, a field or method by its type); the
+refusal says that an earlier step removed it.
+
 ## Recording
 
 Each step in its own PR: the results in `docs/cost-history.md`, the

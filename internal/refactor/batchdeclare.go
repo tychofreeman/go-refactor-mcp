@@ -3,6 +3,7 @@ package refactor
 import (
 	"encoding/json"
 	"fmt"
+	"go/types"
 	"regexp"
 	"slices"
 	"strings"
@@ -14,31 +15,81 @@ import (
 // declares.
 var (
 	undefinedName = regexp.MustCompile(`^(.+\.go):\d+:\d+: undefined: (?:(\w+)\.)?(\w+)$`)
-	missingMethod = regexp.MustCompile(`^(.+\.go):\d+:\d+: .* undefined \(type .* has no field or method (\w+)\)$`)
-	unknownField  = regexp.MustCompile(`^(.+\.go):\d+:\d+: unknown field (\w+) in struct literal`)
+	missingMethod = regexp.MustCompile(`^(.+\.go):\d+:\d+: .* undefined \(type (\S+) has no field or method (\w+)\)$`)
+	unknownField  = regexp.MustCompile(`^(.+\.go):\d+:\d+: unknown field (\w+) in struct literal(?: of type (\S+))?`)
 )
+
+// declaredNames returns what the workspace declares: "file\x00Name" for
+// each name at package level of each file's package (the file relative to
+// the root), and "Type.Name" for each field and method of a named type. A
+// batch takes them when it begins, so that it does not declare again what
+// a step removed.
+func declaredNames(ws *workspace.Workspace) map[string]bool {
+	out := map[string]bool{}
+	for _, p := range ws.Pkgs {
+		if p.Types == nil {
+			continue
+		}
+		scope := p.Types.Scope()
+		for _, n := range scope.Names() {
+			for _, f := range p.CompiledGoFiles {
+				out[ws.Rel(f)+"\x00"+n] = true
+			}
+			named, ok := scope.Lookup(n).Type().(*types.Named)
+			if _, isType := scope.Lookup(n).(*types.TypeName); !isType || !ok {
+				continue
+			}
+			for i := range named.NumMethods() {
+				out[n+"."+named.Method(i).Name()] = true
+			}
+			if st, ok := named.Underlying().(*types.Struct); ok {
+				for i := range st.NumFields() {
+					out[n+"."+st.Field(i).Name()] = true
+				}
+			}
+		}
+	}
+	return out
+}
+
+// bareType is the name of the type an error spells t (Shipment,
+// *freight.Shipment), without its package or pointer.
+func bareType(t string) string {
+	t = strings.TrimLeft(t, "*")
+	return t[strings.LastIndex(t, ".")+1:]
+}
 
 // declareMissing runs opts.Declare on each file whose errors errs name
 // functions or methods nothing declares, for those names, except a name
-// close to one its package declares, which may be misspelled instead. It
-// returns the steps it applied, and a note on each name it left; it calls
-// done on each step just after applying it.
-func declareMissing(ws *workspace.Workspace, errs []string, opts Options, done func(*Result)) ([]*Result, []string, error) {
+// close to one its package declares, which may be misspelled instead, and
+// a name its package declared when the batch began (before), which a step
+// removed. It returns the steps it applied, and a note on each name it
+// left; it calls done on each step just after applying it.
+func declareMissing(ws *workspace.Workspace, errs []string, before map[string]bool, opts Options, done func(*Result)) ([]*Result, []string, error) {
 	byFile := map[string][]string{}
 	var files, skipped []string
 	for _, e := range errs {
-		var file, name string
+		var file, name, key string // key: how before has it
 		if m := undefinedName.FindStringSubmatch(e); m != nil {
 			file, name = m[1], m[3]
+			key = file + "\x00" + name
 			if close := closeName(ws, file, name); m[2] == "" && close != "" {
 				skipped = append(skipped, fmt.Sprintf("%s was not declared for you, since it is close to %s; if it is meant to be new, declare it with create_from_usage", name, close))
 				continue
 			}
 		} else if m := missingMethod.FindStringSubmatch(e); m != nil {
-			file, name = m[1], m[2]
+			file, name = m[1], m[3]
+			key = bareType(m[2]) + "." + name
 		} else if m := unknownField.FindStringSubmatch(e); m != nil {
 			file, name = m[1], m[2]
+			key = bareType(m[3]) + "." + name
 		} else {
+			continue
+		}
+		if before[key] {
+			if note := fmt.Sprintf("%s was not declared for you, since an earlier step removed it; change what still uses it", name); !slices.Contains(skipped, note) {
+				skipped = append(skipped, note)
+			}
 			continue
 		}
 		if _, ok := byFile[file]; !ok {

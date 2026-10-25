@@ -639,6 +639,7 @@ func runBatch(ws *workspace.Workspace, steps []Step, opts Options) (*BatchResult
 		b.Refused = err.Error()
 		return b, nil
 	}
+	before := declaredNames(ws)                       // by file: what its package declared when the batch began
 	lines := map[string]*lineMap{}                    // by file, relative to the root: its lines through the batch
 	made := make([]map[string]*stepLines, len(steps)) // by step, then file: the lines it made
 	applied := 0
@@ -694,7 +695,7 @@ func runBatch(ws *workspace.Workspace, steps []Step, opts Options) (*BatchResult
 		if len(errs) == 0 || opts.Declare == nil {
 			return nil, nil
 		}
-		_, notDeclared, err := declareMissing(ws, errs, opts, done)
+		_, notDeclared, err := declareMissing(ws, errs, before, opts, done)
 		if err != nil {
 			if rerr := rollback(); rerr != nil {
 				return nil, fmt.Errorf("declaring what the steps call: %v; %v", err, rerr)

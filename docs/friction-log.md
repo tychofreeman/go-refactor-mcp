@@ -2425,3 +2425,11 @@ heredoc. Nothing else by hand.
 
 `-no-read` in loop.py and the docs with replace_text. This entry appended
 with a heredoc. Nothing else by hand.
+
+## 2026-10-25: a batch's stubs and what a step removed
+
+The test with add_declaration and replace_text; the fix with
+add_declaration, replace_declaration and replace_text in two batches
+(the first keyed fields by the using file's package, which missed fields
+of another package's type); the plan doc with replace_text. This entry
+appended with a heredoc. Nothing else by hand.
