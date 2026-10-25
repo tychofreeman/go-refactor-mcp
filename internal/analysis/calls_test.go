@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"go/types"
 	"path/filepath"
+	"reflect"
 	"strings"
 )
 
@@ -33,6 +34,7 @@ func f(s string, xs []string, b []byte, o types.Object, pkg *types.Package) {
 	_ = bytes.ToUpper(b)
 	_ = strings.Join(xs, ",")
 	_ = mine(s)
+	_ = reflect.TypeOf(s)
 }
 `
 	fset := token.NewFileSet()
@@ -59,6 +61,7 @@ func f(s string, xs []string, b []byte, o types.Object, pkg *types.Package) {
 		"bytes.ToUpper(b)":      {false, 0}, // reads memory others can change
 		`strings.Join(xs, ",")`: {false, 0},
 		"mine(s)":               {false, 0}, // not on the list
+		"reflect.TypeOf(s)":     {true, NoPanic},
 	}
 	seen := 0
 	ast.Inspect(f, func(n ast.Node) bool {
@@ -75,6 +78,63 @@ func f(s string, xs []string, b []byte, o types.Object, pkg *types.Package) {
 		known, panics := KnownCall(info, call)
 		if known != w.known || known && panics != w.panics {
 			t.Errorf("%s: known=%v panics=%v, want %v %v", text, known, panics, w.known, w.panics)
+		}
+		return true
+	})
+	if seen != len(want) {
+		t.Errorf("checked %d calls, want %d", seen, len(want))
+	}
+}
+
+func TestReadOnlyCall(t *testing.T) {
+	src := `package p
+
+import (
+	"bytes"
+	"encoding/json"
+	"os"
+	"strings"
+)
+
+func f(s string, xs []string, b []byte) {
+	_ = json.Valid(b)
+	_ = bytes.Equal(b, b)
+	_ = strings.Join(xs, ",")
+	_ = os.Getenv(s)
+	_ = strings.Repeat(s, 2)
+}
+`
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "p.go", src, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	info := &types.Info{Uses: map[*ast.Ident]types.Object{}, Types: map[ast.Expr]types.TypeAndValue{}}
+	conf := types.Config{Importer: importer.Default()}
+	if _, err := conf.Check("example.com/p", fset, []*ast.File{f}, info); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]bool{
+		"json.Valid(b)":         true,
+		"bytes.Equal(b, b)":     true,
+		`strings.Join(xs, ",")`: false, // can panic when the result is too long
+		"os.Getenv(s)":          false, // reads the environment, which others can set
+		"strings.Repeat(s, 2)":  false, // can panic
+	}
+	seen := 0
+	ast.Inspect(f, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		text := types.ExprString(call)
+		w, ok := want[text]
+		if !ok {
+			return true
+		}
+		seen++
+		if got := ReadOnlyCall(info, call); got != w {
+			t.Errorf("%s: read only = %v, want %v", text, got, w)
 		}
 		return true
 	})

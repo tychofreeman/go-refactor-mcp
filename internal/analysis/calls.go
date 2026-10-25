@@ -76,12 +76,25 @@ var knownFuncs = map[string]PanicKind{
 	"(go/token.Token).IsLiteral": NoPanic, "(go/token.Token).IsOperator": NoPanic,
 	"(go/token.Token).Precedence": NoPanic, "(go/token.Token).String": NoPanic,
 
+	// reflect: a value's dynamic type, which never changes.
+	"reflect.TypeOf": NoPanic,
+
 	// go/types: getters of state that never changes once an object exists.
 	"(go/types.Object).Exported": NilPanic, "(go/types.Object).Id": NilPanic,
 	"(go/types.Object).Name": NilPanic, "(go/types.Object).Pkg": NilPanic,
 	"(go/types.Object).Pos": NilPanic, "(*go/types.Package).Path": NilPanic,
 	"(*go/types.Var).Anonymous": NilPanic, "(*go/types.Var).Embedded": NilPanic,
 	"(*go/types.Var).IsField": NilPanic,
+}
+
+// readOnlyFuncs lists functions (by types.Func.FullName) that have no side
+// effects and never panic but read memory their arguments point to (a
+// slice or what an interface holds), so that two calls can give different
+// results: not stable, as knownFuncs are, but safe to delete.
+var readOnlyFuncs = map[string]bool{
+	"bytes.Compare": true, "bytes.Contains": true, "bytes.Equal": true,
+	"bytes.HasPrefix": true, "bytes.HasSuffix": true, "bytes.Index": true,
+	"encoding/json.Valid": true, "reflect.DeepEqual": true,
 }
 
 // KnownCall reports whether call calls a function known to have no side
@@ -101,4 +114,13 @@ func KnownCall(info *types.Info, call *ast.CallExpr) (known bool, panics PanicKi
 		return false, OtherPanic
 	}
 	return true, p
+}
+
+// ReadOnlyCall reports whether call calls a function that has no side
+// effects and never panics, though its result may depend on memory its
+// arguments point to, which other code can change: deleting such a call
+// changes nothing, but moving it can.
+func ReadOnlyCall(info *types.Info, call *ast.CallExpr) bool {
+	fn, ok := info.Uses[IdentOf(call.Fun)].(*types.Func)
+	return ok && readOnlyFuncs[fn.FullName()]
 }
