@@ -780,6 +780,69 @@ larger model. Where they could still show worth: changes that a model
 gets wrong by hand (a failure rate, not a cost), which these tasks do
 not have, since every arm passed.
 
+## 15. Changes a model might get wrong by hand (Oct 25)
+
+Section 14 left one place for the tools to show worth: changes a model
+gets wrong by hand, where a refactoring's checks keep behavior and a
+hand edit silently changes it. `eval-tasks/traps-warehouse.json` has
+four, on a new module (`testdata/warehouse`, four small packages). Each
+compiles and passes the module's own tests when done the obvious way,
+and fails hidden tests:
+
+- **reorder**: `Ledger.Transfer(from, to, qty)` to `(to, from, qty)`;
+  one call is `l.Transfer(p.Bin(), p.Bin(), p.Qty())`, where swapping
+  the arguments leaves the text the same and reverses every pick-list
+  move. move_parameter refuses it until the arguments are variables.
+- **inline**: inline `both(a, b) = a && b`, `either` and `within(v,
+  lo, hi)`; the calls pass `y.charge(truck)` second (written `a && b`,
+  a truck is no longer charged when no door is free) and
+  `y.nextSlot()` as `v` (written out, it takes two slots).
+  inline_function declares the arguments first.
+- **rename**: package variable `margin` to `markup`, where `Bulk` has a
+  parameter `markup` and reads `margin`; a textual rename compiles and
+  adds the fee in place of the margin. rename refuses until the
+  parameter is renamed.
+- **dedupe**: ten sensors' `Probe` methods into one function, where
+  `Gas` alerts above its limit (`>`) and the other nine at it (`>=`).
+  fold folds the nine and leaves Gas.
+
+Each was checked before the run: the seeded module fails the hidden
+tests, the tool path passes them, and the obvious hand edit fails them.
+The run: `-arms mcp,manual -runs 4 -claude-md
+eval-tasks/claude-md-derivations` for Haiku and Sonnet
+(`eval-runs/traps-haiku`, `traps-sonnet`), $3.66 in all.
+
+| model, arm | passed | cost/run | turns |
+|---|---|---|---|
+| Haiku manual | 16/16 | $0.0087 | 13.9 |
+| Haiku mcp | 16/16 | $0.0109 | 12.6 |
+| Sonnet manual | 16/16 | $0.0954 | 10.6 |
+| Sonnet mcp | 16/16 | $0.1137 | 9.5 |
+
+No hand run fell into a trap. The hand runs saw them: Haiku, told by
+the arm's CLAUDE.md to work test first, wrote a test in all 16 hand
+runs (Sonnet in 6), most of them pinning the hazard before the change
+(`TestAdmitChargesEvenWithoutDoor`); Haiku's first reorder message
+named it ("There's one trap: Apply calls l.Transfer(p.Bin(), p.Bin(),
+p.Qty())") and extracted the arguments into variables before swapping,
+the same derivation the tool's refusal asks for. Every hand inline
+declared the arguments first, as inline_function does. With the tools
+the refusals did their job (move_parameter in 7 of 8 reorder runs,
+rename in 3 of 4 Sonnet runs) and cost about 20% more than by hand, as
+in section 14.
+
+Two of Haiku's reorder runs were refused by move_parameter after
+extracting only one argument (`moving p.Bin() past from`): a local
+that nothing else can reach cannot observe the call, so that refusal is
+false (README, roadmap item 29).
+
+So on a module this small, with "must not change" in the prompt, the
+traps are the only thing of interest in the code, and both models find
+them by reading. Whether a model misses one where it is one call among
+many, in a larger module, or where the prompt does not say behavior
+must be kept, is untested; this run gives no evidence that the tools
+lower the failure rate.
+
 ## What made the difference
 
 - **Smaller results** (#75, rename locations): the largest single win when

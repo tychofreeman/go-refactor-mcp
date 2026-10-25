@@ -439,6 +439,14 @@ results are in `docs/cost-history.md`.
   cheaper model on tasks every arm gets right. Section 9's 25% was tools
   against tools, not against by hand. Next evidence would come from
   tasks a model gets wrong by hand.
+- Tasks built so that the obvious hand edit silently changes behavior
+  (cost-history 15, `eval-tasks/traps-warehouse.json`: argument order,
+  short-circuit and double evaluation when inlining, a rename captured
+  by a parameter, one near-duplicate that differs): 64 of 64 runs passed,
+  Haiku and Sonnet by hand included. On a small module with "must not
+  change" in the prompt, the model reads the trap and writes a test or
+  a variable for it; the tools cost about 20% more. Untested: the hazard
+  as one site among many, or a prompt that does not ask to keep behavior.
 - Where a session's cost goes (cost-history 12,
   `eval-tasks/learning/cost.py`): cache writes 69%, output 18%, cache
   reads 13%, though cache reads are 88% of input tokens. About 38% of

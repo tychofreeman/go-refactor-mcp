@@ -2368,3 +2368,14 @@ in the scratchpad (transcript usage by arm; the server's tools/list).
 
 Docs only: replace_text for cost-history and the session notes; one
 figure corrected with sed, and this entry appended with a heredoc.
+
+## 2026-10-25: tasks a model might get wrong by hand (cost-history 15)
+
+The module, hidden tests and task file were made with create_file
+steps in one CLI batch, and names the tool examples use (Move, Check,
+Water, Discount) renamed with rename; prompts and tests followed with
+replace_text. One replace_text of `Move` also changed `l.Moves` in a
+hidden test, undone with a second replace_text: all_occurrences matches
+text, not names. In a batch, `$1.end` addresses the line of the call
+after an extract_variable, not the line after it; `$1.end+1` was
+refused as the wrong line. This entry appended with a heredoc.
