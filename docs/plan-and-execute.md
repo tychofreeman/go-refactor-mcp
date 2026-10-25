@@ -154,6 +154,11 @@ begins, and declares no stub for a name that was declared then (a
 package-level name by its file, a field or method by its type); the
 refusal says that an earlier step removed it.
 
+The "done?" turn: when a batch applies and the module's tests pass, the
+loop asks whether the change is complete; if not, the model's next batch
+runs on what the kept batches left (`-stages`, default 2 more), and a
+repair restarts from there, not from the module at the start.
+
 ## Recording
 
 Each step in its own PR: the results in `docs/cost-history.md`, the

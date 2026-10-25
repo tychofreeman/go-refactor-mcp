@@ -7,8 +7,10 @@ read the declarations it must write code for, once. The batch runs on a
 fresh copy of the module, then the module's own tests. A refusal or a
 failing test goes back in the same conversation (claude -p --resume, so
 the prefix stays cached) with the source of each declaration it names,
-for the batch again, at most -repairs times. The task's hidden tests
-judge the last batch that ran.
+for the batch again, at most -repairs times. When a batch applies and
+the tests pass, the model is asked whether the change is done; if not,
+its next batch runs on top, at most -stages more. The task's hidden
+tests judge what the kept batches left.
 
 Run from the repository root:
 
@@ -64,6 +66,11 @@ READ = """The source you asked for:
 
 Answer with the batch: {{"batch": {{"steps": [...]}}}}."""
 
+DONE = """The batch applied, and the module's own tests pass. If that
+completes the change asked for, answer {"done": true}. If not, answer
+with the next batch, which runs on the module as this one left it:
+{"batch": {"steps": [...]}}."""
+
 UNPARSED = """Your answer was not one JSON object with a "batch" key that parses.
 Answer with that JSON alone, nothing before or after it:
 {"batch": {"steps": [...]}}."""
@@ -81,7 +88,7 @@ REPAIR = """The batch did not succeed:
 {what}
 
 {source}Nothing of it was kept: the next batch runs on the module as it was
-at the start. Answer with the whole batch again, corrected:
+before this one. Answer with that whole batch again, corrected:
 {{"batch": {{"steps": [...]}}}}."""
 
 
@@ -206,15 +213,22 @@ class Ref:
 
     def ask(self, text):
         self.requests += 1
+        if self.requests > 1:
+            return json.dumps({"done": True}), ""
         return json.dumps({"batch": self.ref}), ""
 
 
-def attempt(task, model, tools, binary, repairs, log, may_read=True):
+def attempt(task, model, tools, binary, repairs, log, may_read=True, stages=2):
+    """One attempt at task. A batch that applies and passes the module's
+    tests is kept, and the model is asked whether the change is done; if
+    not, its next batch runs on what the kept ones left, at most stages
+    more. A refusal or a failing test gets a repair, at most repairs in
+    all; the next batch then runs where the failed one began."""
     module = os.path.join(ROOT, "eval-tasks", task["dir"])
     decls = declarations(module)
     text = PLAN.format(tools=tools, view=probe.view("calltree", module), prompt=task["prompt"],
                        read=MAY_READ if may_read else "")
-    row = {"reads": 0, "repairs": 0, "refusals": [], "error": ""}
+    row = {"reads": 0, "repairs": 0, "stages": 0, "refusals": [], "error": ""}
     answer, err = model.ask(text)
     ans = probe.parse(answer)
     log.append(answer or err)
@@ -223,36 +237,52 @@ def attempt(task, model, tools, binary, repairs, log, may_read=True):
         answer, err = model.ask(READ.format(source=source(module, decls, ans["read"])))
         ans = probe.parse(answer)
         log.append(answer or err)
-    batch, d, ok = {}, None, False
-    for n in range(repairs + 1):
-        if not ans or not isinstance(ans.get("batch"), dict):
-            row["refusals"].append(err or "no batch in the answer")
-            if n == repairs:
-                row["error"] = err or "no batch in the answer"
-                break
-            row["repairs"] += 1
-            answer, err = model.ask(UNPARSED)
-            ans = probe.parse(answer)
-            log.append(answer or err)
-            continue
-        batch = ans["batch"]
-        if d:
-            shutil.rmtree(d)
-        d, ok, what = run_batch(binary, module, batch)
-        if ok or n == repairs:
-            if not ok:
-                row["refusals"].append(what.splitlines()[0][:200])
-            break
-        row["repairs"] += 1
-        row["refusals"].append(what.splitlines()[0][:200])
-        answer, err = model.ask(REPAIR.format(what=what, source=named_places(d, what)))
+    base, batches, left = module, [], repairs  # base: where the next batch runs
+
+    def ask(text):
+        nonlocal ans, err
+        answer, err = model.ask(text)
         ans = probe.parse(answer)
         log.append(answer or err)
-    row["applied"] = ok
-    row["passed"] = bool(ok and d and hidden(d, task["tests"]))
-    if d:
+
+    while True:
+        if ans and ans.get("done") is True and batches:
+            break
+        if not ans or not isinstance(ans.get("batch"), dict):
+            row["refusals"].append(err or "no batch in the answer")
+            if left == 0:
+                row["error"] = err or "no batch in the answer"
+                break
+            left -= 1
+            row["repairs"] += 1
+            ask(UNPARSED)
+            continue
+        d, ok, what = run_batch(binary, base, ans["batch"])
+        if ok:
+            batches.append(ans["batch"])
+            row["stages"] += 1
+            if base != module:
+                shutil.rmtree(base)
+            base = d
+            if row["stages"] > stages:
+                break
+            ask(DONE)
+            continue
+        row["refusals"].append(what.splitlines()[0][:200])
+        if left == 0:
+            shutil.rmtree(d)
+            break
+        left -= 1
+        row["repairs"] += 1
+        places = named_places(d, what)
         shutil.rmtree(d)
-    row.update(steps=len(batch.get("steps", [])), written=probe.written(batch), tools=probe.tools_of(batch))
+        ask(REPAIR.format(what=what, source=places))
+    row["applied"] = bool(batches)
+    row["passed"] = bool(batches) and hidden(base, task["tests"])
+    if base != module:
+        shutil.rmtree(base)
+    every = {"steps": [s for b in batches for s in b.get("steps", [])]}
+    row.update(steps=len(every["steps"]), written=probe.written(every), tools=probe.tools_of(every))
     return row
 
 
@@ -265,6 +295,7 @@ def main():
     p.add_argument("-repairs", type=int, default=2)
     p.add_argument("-out", required=True)
     p.add_argument("-no-read", action="store_true", help="the plan cannot ask for source; only repairs send it")
+    p.add_argument("-stages", type=int, default=2, help="batches after the first that the model may send when asked if it is done")
     a = p.parse_args()
     os.makedirs(a.out, exist_ok=True)
     tmp = tempfile.mkdtemp(prefix="loop-")
@@ -281,14 +312,14 @@ def main():
                 model = Ref(ref) if m == "ref" else Model(m, empty)
                 log = []
                 row = {"task": t["name"], "model": m, "run": n}
-                row.update(attempt(t, model, tools, binary, a.repairs, log, may_read=not a.no_read))
+                row.update(attempt(t, model, tools, binary, a.repairs, log, may_read=not a.no_read, stages=a.stages))
                 row.update(cost=model.cost, requests=model.requests)
                 with open(os.path.join(a.out, f"{t['name']}-{m}-{n}.txt"), "w") as f:
                     f.write("\n\n==== next answer ====\n\n".join(log))
                 results.write(json.dumps(row) + "\n")
                 results.flush()
                 shutil.rmtree(empty)
-                print(json.dumps({k: row[k] for k in ("task", "model", "run", "passed", "requests", "repairs", "reads", "cost")}), flush=True)
+                print(json.dumps({k: row[k] for k in ("task", "model", "run", "passed", "requests", "repairs", "stages", "reads", "cost")}), flush=True)
     shutil.rmtree(tmp)
 
 
