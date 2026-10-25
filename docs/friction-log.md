@@ -2254,3 +2254,14 @@ call from folder's code, then function_to_method: four steps per
 method for what is one line of text. A candidate: function_to_method
 (or a move of a method) onto an embedded field, when the body uses
 only what that field provides.
+
+## 2026-10-24: fold's nearest miss (roadmap item 27)
+
+Nothing by hand. The goldens with create_file and replace_text, first;
+extract_function made `match` and `matchStmt` wrappers of
+`compareExpr` and `compareStmt`; then the change with add_declaration,
+add_field, replace_statements (the wrappers' bodies by `function`, the
+call in `try` by lines) and replace_text for the loop in `foldStmts` and
+the refusal in `Plan`, whose lines had moved. The roadmap planned a miss
+*result* through add_result; state on the matcher needed no change at
+the matchers' forty-odd returns.
