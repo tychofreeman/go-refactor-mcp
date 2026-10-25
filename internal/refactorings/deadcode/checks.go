@@ -1,6 +1,7 @@
 package deadcode
 
 import (
+	"cmp"
 	"go/ast"
 	"go/token"
 	"go/types"
@@ -218,10 +219,12 @@ func dependencyInterface(ws *workspace.Workspace, fn *types.Func) string {
 	return ""
 }
 
-// checkUnused refuses a declaration used anywhere but inside itself.
+// checkUnused refuses a declaration used anywhere but inside itself,
+// naming every use, so that one change can remove them all.
 func (t *target) checkUnused(ws *workspace.Workspace) error {
 	key := analysis.ObjectKey(ws.Fset, origin(t.obj))
 	from, to := t.node().Pos(), t.node().End()
+	var used []token.Pos
 	for _, p := range ws.Pkgs {
 		if p.TypesInfo == nil {
 			continue
@@ -236,10 +239,25 @@ func (t *target) checkUnused(ws *workspace.Workspace) error {
 			if t.inGroup(ws, id.Pos()) {
 				continue // inside what goes with it
 			}
-			return refactor.Refusef("%s is used at %s", t.obj.Name(), ws.Position(id.Pos()))
+			used = append(used, id.Pos())
 		}
 	}
-	return nil
+	if len(used) == 0 {
+		return nil
+	}
+	slices.SortFunc(used, func(a, b token.Pos) int {
+		pa, pb := ws.Fset.Position(a), ws.Fset.Position(b)
+		return cmp.Or(cmp.Compare(pa.Filename, pb.Filename), cmp.Compare(pa.Line, pb.Line), cmp.Compare(pa.Column, pb.Column))
+	})
+	where := make([]string, len(used))
+	for i, pos := range used {
+		where[i] = ws.Position(pos)
+	}
+	where = slices.Compact(where) // a package and its test variant see the same uses
+	if len(where) == 1 {
+		return refactor.Refusef("%s is used at %s", t.obj.Name(), where[0])
+	}
+	return refactor.Refusef("%s is used in %d places: %s; change or remove them first", t.obj.Name(), len(where), strings.Join(where, ", "))
 }
 
 // inGroup reports whether pos is inside a declaration of t's group.

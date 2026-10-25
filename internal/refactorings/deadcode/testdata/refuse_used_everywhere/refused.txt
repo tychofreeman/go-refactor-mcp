@@ -1,0 +1,1 @@
+helper is used in 3 places: a_test.go:5:37, b.go:3:23, c.go:3:23; change or remove them first

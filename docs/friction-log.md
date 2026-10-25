@@ -2452,3 +2452,10 @@ else by hand.
 loop.py's usage record, the session's cost from its last total, and a
 guard for a line past a file's end, with replace_text; docs with
 replace_text. This entry appended with a heredoc. Nothing else by hand.
+
+## 2026-10-25: remove_dead_code names every use left
+
+The golden case with create_file in one batch; `checkUnused` with
+replace_statements (`function`) and replace_text; the plan doc with
+replace_text. One replace_statements left a placeholder line, replaced
+by the next. This entry appended with a heredoc. Nothing else by hand.
