@@ -2287,3 +2287,17 @@ Two gaps the move showed:
   unkeyed literals of it, `pattern.HoleKey{o, ""}`, which type-check
   but fail `go vet` (composites). Keyed with replace_expression, twelve
   sites. A move to another package should key them.
+
+## 2026-10-24: parameterize on `pattern.Matcher` (roadmap item 27)
+
+Through the tools: the test first (extract_function for its `check`
+helper, add_declaration for the test, whose keyed literal declared
+`Structural` and `Literal` as stubs), then add_declaration,
+insert_statements and replace_statements for the matcher's structural
+walk and the literal hook, replace_statements for parameterize's loop,
+remove_dead_code for `comparer` and its methods. By hand, with
+replace_text: the docs of the two new fields, two one-line changes in
+the matcher (the literal hook in the `BasicLit` case, names without an
+object), and `var posType = reflect.TypeOf(token.NoPos)`, which
+remove_dead_code refused because it cannot tell `reflect.TypeOf` has no
+side effects. A list of calls known to be pure would cover it.
