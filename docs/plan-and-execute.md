@@ -112,6 +112,16 @@ its Ollama model loop is not reused. A manual arm in the same runner
 runs the tests), so a difference between the arms comes from the
 derivation, not from the runner's context.
 
+## What the planning half showed (cost-history 16)
+
+With the input schemas and the file list, Sonnet's call-tree batches
+passed 11 of 16 on freight-xl (7 before), and Haiku planned as well as
+Sonnet at a tenth of the price (15 of 36 against 19 of 36 over freight
+and lending). The failures were content for bodies the view does not
+show, add_parameter refusing a parameter that hides the package
+variable, and tests using a removed field. Step 1's repairs should send
+the bodies a refusal or failing test names.
+
 ## Recording
 
 Each step in its own PR: the results in `docs/cost-history.md`, the

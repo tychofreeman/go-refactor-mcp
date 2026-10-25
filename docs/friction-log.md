@@ -2394,3 +2394,9 @@ Golden cases with create_file; the change with add_parameter (readsVar's
 `private`), replace_declaration, add_declaration and replace_text, in one
 batch; the nested-order case's input and the roadmap with replace_text.
 This entry appended with a heredoc. Nothing else by hand.
+
+## 2026-10-25: Haiku's plans (cost-history 16)
+
+probe.py's `-model`, `-schemas`, `-plan` and the file list with
+replace_text (a Python file, which no Go tool edits); the docs with
+replace_text. This entry appended with a heredoc. Nothing else by hand.
