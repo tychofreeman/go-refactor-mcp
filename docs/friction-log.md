@@ -2574,6 +2574,13 @@ This entry appended with a heredoc. Nothing else by hand.
 replace_text; goldens with create_file. This entry appended with a
 heredoc. Nothing else by hand.
 
+## 2026-10-25: extract_function adds the case for a value with none
+
+`missingCase` with add_field and add_declaration, the hook and the
+plan's case edit with replace_text; goldens with create_file and
+delete_file. By hand: the kinds reference (atlas's Renewable by case),
+by a Python script. This entry appended with a heredoc.
+
 ## 2026-10-25: kinds with the refusals fixed (cost-history 19)
 
 Docs with replace_text. This entry appended with a heredoc. Nothing

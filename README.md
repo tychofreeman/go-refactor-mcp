@@ -1494,6 +1494,13 @@ hand or a tool got in the way.
     (`give receiver "k" to make it a method of Book`). The kinds
     reference adds the receiver last and names it. *Done.*
 
+    A value with no case (Renewable's `atlas`, which stopped 7 of 8
+    attempts in the next rerun): extract_function by case adds the
+    case, by default, when the code after the switch is what runs for
+    it (no default, every case returns, the code after it ends in a
+    return): the new case calls a copy of that code, which stays. The
+    kinds reference extracts atlas's Renewable so. *Done.*
+
     The prompt's `Label(title string)`: prepare_switch_for_types takes
     a method the interface declares when the cases read their
     variables only as fields (`it.Title`) of the parameters' types, in

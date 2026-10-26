@@ -61,7 +61,7 @@ func (*ExtractFunction) Name() string { return "extract_function" }
 
 func (*ExtractFunction) Description() string {
 	return `Move a run of whole statements into a new function, declared after the one they are in, and call it in their place: in func report(plants []Plant) string, extracting total := 0 and the loop that adds each p.Height to it, as sum, gives total := sum(plants) there and func sum(plants []Plant) int { total := 0; for ...; return total }. Locals the statements use become parameters, and those they set that are used afterwards become results; the result lists both. Statements that use the receiver become a method of its type.
-Identify the statements by file, start_line and end_line: whole statements of one block, as inspect numbers them; or a case's body by function and case ("fern" in function Water, or default), which stays valid after earlier steps. doc becomes the new function's doc comment.
+Identify the statements by file, start_line and end_line: whole statements of one block, as inspect numbers them; or a case's body by function and case ("fern" in function Water, or default), which stays valid after earlier steps; for a value with no case, when the code after the switch is what runs for it, a new case calls a copy of that code. doc becomes the new function's doc comment.
 Returns: when every path returns, the call becomes return sum(...); early error returns (if err != nil { return err }) make the new function return an error, which the call checks.
 Refuses, saying why: other returns, defer, recover, fallthrough, a break, continue or goto out of the lines, a variable they declare that a pointer or closure keeps and that is used after them.`
 }
@@ -114,6 +114,9 @@ type extraction struct {
 	// split gives the extracted case's value a case of its own, when
 	// the statements are the body of a case of several values.
 	split []edit.TextEdit
+	// missing is the case to add for a value the switch has no case for:
+	// the selection is then the code after the switch, which stays.
+	missing *missingCase
 
 	start, end int // byte range of the selected text: whole lines, from the first to the last token
 
@@ -176,7 +179,9 @@ func (*ExtractFunction) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 		tf: ws.Fset.File(file.Pos()),
 	}
 	if err := a.caseLines(x.tf, file, src); err != nil {
-		return nil, err
+		if a.StartLine, a.EndLine, x.missing, err = x.missingCase(a, err); err != nil {
+			return nil, err
+		}
 	}
 	switch {
 	case a.StartLine < 1:
@@ -308,6 +313,65 @@ func (x *extraction) splitCase(value string) error {
 	b.WriteString("case " + text(cc.List[k]) + ":")
 	x.split = []edit.TextEdit{{Start: x.tf.Offset(cc.Case), End: x.tf.Offset(cc.Colon) + 1, NewText: b.String()}}
 	return nil
+}
+
+// A missingCase is a case to add, at the end of a switch, for a value it
+// has no case for, whose body calls the new function.
+type missingCase struct {
+	value  string // as written in the new case
+	at     int    // the start of the line of the switch's closing brace
+	indent string // the switch's
+}
+
+// missingCase answers err, the refusal of a value that no case of the
+// function's switch has, when the code after the switch is what runs for
+// it: the switch has no default, every case returns, and the statements
+// after it in its block end in a return. It returns the lines of those
+// statements, which the new function copies, and the case to add.
+func (x *extraction) missingCase(a args, err error) (int, int, *missingCase, error) {
+	if a.Case == "default" || !strings.HasPrefix(err.Error(), "no case ") {
+		return 0, 0, nil, err
+	}
+	fd := locate.Func(x.file, a.Function)
+	var switches []*ast.SwitchStmt
+	ast.Inspect(fd.Body, func(n ast.Node) bool {
+		if sw, ok := n.(*ast.SwitchStmt); ok {
+			switches = append(switches, sw)
+		}
+		return true
+	})
+	if len(switches) != 1 {
+		return 0, 0, nil, err
+	}
+	sw := switches[0]
+	if x.line(sw.Body.Lbrace) == x.line(sw.Body.Rbrace) {
+		return 0, 0, nil, err
+	}
+	for _, s := range sw.Body.List {
+		if cc := s.(*ast.CaseClause); cc.List == nil || !analysis.TerminatingList(x.info, cc.Body, nil) {
+			return 0, 0, nil, err
+		}
+	}
+	path, _ := astutil.PathEnclosingInterval(x.file, sw.Pos(), sw.End())
+	block, ok := path[1].(*ast.BlockStmt)
+	if !ok {
+		return 0, 0, nil, err
+	}
+	rest := block.List[slices.Index(block.List, ast.Stmt(sw))+1:]
+	if len(rest) == 0 || !analysis.TerminatingList(x.info, rest, nil) {
+		return 0, 0, nil, err
+	}
+	value := a.Case
+	if token.IsIdentifier(value) && x.pkg.Types.Scope().Lookup(value) == nil && types.Universe.Lookup(value) == nil {
+		value = strconv.Quote(value) // a bare word, as for a case that is there
+	}
+	line := x.line(sw.Pos())
+	m := &missingCase{
+		value:  value,
+		at:     x.off(x.tf.LineStart(x.line(sw.Body.Rbrace))),
+		indent: string(x.src[x.off(x.tf.LineStart(line)):x.off(sw.Pos())]),
+	}
+	return x.line(rest[0].Pos()), x.line(rest[len(rest)-1].End()), m, nil
 }
 
 func checkName(name string) error {
@@ -1826,15 +1890,21 @@ func (x *extraction) plan() (*refactor.Plan, error) {
 	if final != nil {
 		end = x.off(final.End())
 	}
+	site := edit.TextEdit{Start: x.start, End: end, NewText: siteText}
+	notes := x.notes(f, names)
+	if m := x.missing; m != nil {
+		// The code after the switch stays; the new case calls its copy.
+		site = edit.TextEdit{Start: m.at, End: m.at, NewText: m.indent + "case " + m.value + ":\n" + gocode.Reindent(siteText, m.indent+"\t", false) + "\n"}
+		notes = append(notes, fmt.Sprintf("no case %s: the code after the switch runs for it, so the new case %s calls %s, a copy of that code, which stays", m.value, m.value, x.name))
+	}
 	edits := []edit.TextEdit{
-		{Start: x.start, End: end, NewText: siteText},
+		site,
 		{Start: at, End: at, NewText: fn.String()},
 	}
 	edits = append(edits, x.importEdits()...)
 	edits = append(edits, hoistFile...)
 	edits = append(edits, x.split...)
 
-	notes := x.notes(f, names)
 	if final != nil {
 		notes = append(notes, fmt.Sprintf("the return after the selected lines returned what the new function's error says, so the call site is %q", strings.TrimSpace(siteText)))
 	}
