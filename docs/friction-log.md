@@ -2522,3 +2522,8 @@ Nothing else by hand.
 
 The prompt line in `loop.py` and the docs with replace_text. This entry
 appended with a heredoc. Nothing else by hand.
+
+## 2026-10-25: the bare word keeps the case's own refusal
+
+The fix with replace_text, the golden case with create_file. This entry
+appended with a heredoc. Nothing else by hand.
