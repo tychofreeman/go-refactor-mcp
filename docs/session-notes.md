@@ -308,6 +308,19 @@ results are in `docs/cost-history.md`.
   `uses`), not `grep -n` for anchors (a name addresses a
   declaration); before adding a flag or a case, ask whether the
   change is made easy first.
+  Measured again on the session of 2026-10-18 to 10-26 (one
+  transcript, tool calls classified by day): of about 4,150 writes to
+  the repo, 92% went through gorefactor (3,822 steps), 95% leaving out
+  the friction log's entries, appended with a heredoc by habit (126,
+  one a PR); Edit and Write 47, none after Oct 22; Bash writes about
+  150 (Python rewriting JSON or a merge conflict, `sed -i`, `cp` of a
+  golden). The share rose from 78% on Oct 18 to 97-99% of writes other
+  than the log's on Oct 25-26. But what went through the tools was
+  mostly text: replace_text 1,659 steps (1,009 on Go source), create_file
+  1,214 (mostly goldens), add_declaration 292, replace_statements 227;
+  refactorings 198 (5%). And reads did not move: Go source read with
+  `sed -n`, `cat` or `grep` 492 times against 82 `inspect` calls,
+  though since Oct 24 a third of Go reads were `inspect` (34 to 80).
 
 - **Would a fresh model recognize it?** (2026-10-22, a probe, $0.23):
   three Sonnet sessions, `claude -p` in a copy of the repo at the

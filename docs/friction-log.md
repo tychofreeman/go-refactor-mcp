@@ -2903,3 +2903,8 @@ with replace_text. Nothing by hand. This entry appended with a heredoc.
 
 The results in cost-history, plan-and-execute and the session notes
 with replace_text. Nothing by hand. This entry appended with a heredoc.
+
+## 2026-10-26: how this session used the tools
+
+The analysis in the session notes with replace_text. Nothing by hand.
+This entry appended with a heredoc.
