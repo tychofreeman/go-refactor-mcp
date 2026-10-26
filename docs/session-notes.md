@@ -526,7 +526,10 @@ results are in `docs/cost-history.md`.
   is Import's edit, which needs its body, and the stages run out.
   Reads make the model default to edits (the user, 2026-10-26), so
   `-read-after` opens them only once a batch has applied: derive
-  first, read for the edit that remains.
+  first, read for the edit that remains. Run: 7/8, but every first
+  batch only prepared, and every attempt then read the five switches
+  and wrote the methods out: a plan that can read later defers the
+  move to after the read.
 - Where a session's cost goes (cost-history 12,
   `eval-tasks/learning/cost.py`): cache writes 69%, output 18%, cache
   reads 13%, though cache reads are 88% of input tokens. About 38% of

@@ -2687,3 +2687,9 @@ heredoc.
 `-read-after` and its two prompts with replace_text in one batch, then
 the reply to a read asked for too early the same way. Nothing by hand.
 This entry appended with a heredoc.
+
+## 2026-10-26: cost-history 19, kinds with reads after a batch
+
+The results in cost-history, plan-and-execute and the session notes
+with replace_text in one batch. Nothing by hand. This entry appended
+with a heredoc.
