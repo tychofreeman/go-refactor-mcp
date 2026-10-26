@@ -256,7 +256,7 @@ func stdCall(info *types.Info, fn *types.Func, call *ast.CallExpr, private func(
 		inPlaceRecv = !IsPointer(t) && !types.IsInterface(t)
 	}
 	if se.panics == OtherPanic || (se.panics == NilPanic && !inPlaceRecv) {
-		s.Unsafe = "calls " + types.ExprString(call.Fun)
+		s.Unsafe, s.Panics = "calls "+types.ExprString(call.Fun), se.panics
 	}
 	if call.Ellipsis.IsValid() && s.Reads == "" {
 		s.Reads = "spreads " + types.ExprString(call.Args[len(call.Args)-1])

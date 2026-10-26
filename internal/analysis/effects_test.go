@@ -494,3 +494,76 @@ func TestEffectsFuncStandardLibraryWrites(t *testing.T) {
 		}
 	}
 }
+
+const whereSrc = `package p
+
+type T struct{ n int }
+
+func field(p *T) int { return p.n }
+
+func quot(x, y int) int { return x / y }
+
+func both(p *T, x, y int) int { return p.n + x/y }
+
+func viaCall(p *T) int { return field(p) }
+
+func spin() {
+	for {
+	}
+}
+
+func set(p *T) { p.n = 1 }
+
+func first(xs []int) int { return xs[0] }
+`
+
+// TestEffectsWhere checks where a summary says its findings are, and how
+// it says the code can panic.
+func TestEffectsWhere(t *testing.T) {
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "p.go", whereSrc, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	info := &types.Info{
+		Defs: map[*ast.Ident]types.Object{}, Uses: map[*ast.Ident]types.Object{},
+		Types: map[ast.Expr]types.TypeAndValue{}, Selections: map[*ast.SelectorExpr]*types.Selection{},
+	}
+	pkg, err := (&types.Config{}).Check("example.com/p", fset, []*ast.File{f}, info)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := NewEffects()
+	e.AddPackage([]*ast.File{f}, info)
+	text := func(n ast.Node) string {
+		switch n := n.(type) {
+		case nil:
+			return ""
+		case ast.Expr:
+			return types.ExprString(n)
+		case *ast.ForStmt:
+			return "for"
+		}
+		return "?"
+	}
+	type where struct {
+		effect, reads, unsafe, panic string
+		panics                       PanicKind
+	}
+	want := map[string]where{
+		"field":   {reads: "p.n", unsafe: "p.n", panics: NilPanic},
+		"quot":    {unsafe: "x / y", panic: "x / y", panics: OtherPanic},
+		"both":    {reads: "p.n", unsafe: "p.n", panic: "x / y", panics: OtherPanic},
+		"viaCall": {reads: "field(p)", unsafe: "field(p)", panics: NilPanic},
+		"spin":    {unsafe: "for"},
+		"set":     {effect: "p.n", reads: "p.n", unsafe: "p.n", panics: NilPanic},
+		"first":   {reads: "xs[0]", unsafe: "xs[0]", panic: "xs[0]", panics: OtherPanic},
+	}
+	for name, w := range want {
+		s := e.Func(pkg.Scope().Lookup(name).(*types.Func))
+		got := where{text(s.At.Effect), text(s.At.Reads), text(s.At.Unsafe), text(s.At.Panic), s.Panics}
+		if got != w {
+			t.Errorf("%s: got %+v, want %+v (summary %+v)", name, got, w, *s)
+		}
+	}
+}
