@@ -1,9 +1,11 @@
 package analysis
 
 import (
+	"fmt"
 	"go/ast"
 	"go/token"
 	"go/types"
+	"slices"
 )
 
 // Times says how often an expression would be evaluated after a move,
@@ -214,6 +216,81 @@ func EvaluatedAfter(root ast.Node, pos token.Pos) []ast.Node {
 		return true // it encloses pos; look inside
 	})
 	return out
+}
+
+// Reach says how often the code at the start of path (from a node
+// outward, as PathTo gives it) is evaluated for each time the body of the
+// node at its end runs: once, maybe (under a condition), or several times
+// (in a loop or a function literal), with why, as a phrase ("inside a
+// for loop"), or "" when once.
+func Reach(path []ast.Node) (Times, string) {
+	times, why := Once, ""
+	note := func(t Times, w string) {
+		if t > times || why == "" {
+			times, why = max(times, t), w
+		}
+	}
+	for i := 1; i < len(path)-1; i++ {
+		child, parent := path[i-1], path[i]
+		var grandparent ast.Node
+		if i+1 < len(path) {
+			grandparent = path[i+1]
+		}
+		switch p := parent.(type) {
+		case *ast.FuncLit:
+			return Several, "inside a function literal, which may run later, several times, or not at all"
+		case *ast.ForStmt:
+			switch child {
+			case p.Init:
+			case p.Cond:
+				return Several, "in the loop condition, which is evaluated before every iteration"
+			case p.Post:
+				return Several, "in the loop's post statement, which runs after every iteration"
+			default:
+				return Several, "inside a for loop"
+			}
+		case *ast.RangeStmt:
+			if child != p.X {
+				return Several, "inside a range loop"
+			}
+		case *ast.IfStmt:
+			outer, elseIf := grandparent.(*ast.IfStmt)
+			elseIf = elseIf && outer.Else == p
+			switch {
+			case child == p.Body:
+				note(Maybe, "inside an if")
+			case child == p.Else:
+				if _, chain := child.(*ast.IfStmt); chain {
+					note(Maybe, "in an else-if, which is only evaluated when the preceding conditions are false")
+				} else {
+					note(Maybe, "in an else")
+				}
+			case elseIf: // the condition or init of an else-if
+				note(Maybe, "in an else-if, which is only evaluated when the preceding conditions are false")
+			}
+		case *ast.CaseClause:
+			if x, ok := child.(ast.Expr); ok && slices.Contains(p.List, x) {
+				note(Maybe, "a case expression, which is only evaluated if the earlier cases do not match")
+			} else {
+				note(Maybe, "inside a case")
+			}
+		case *ast.CommClause:
+			if child == p.Comm {
+				note(Maybe, "part of a select case, which is evaluated as part of the select statement")
+			} else {
+				note(Maybe, "inside a select case")
+			}
+		case *ast.BinaryExpr:
+			if (p.Op == token.LAND || p.Op == token.LOR) && child == p.Y {
+				when := "true"
+				if p.Op == token.LOR {
+					when = "false"
+				}
+				note(Maybe, fmt.Sprintf("the right operand of %s, which is only evaluated when the left operand is %s", p.Op, when))
+			}
+		}
+	}
+	return times, why
 }
 
 // OfNodes summarizes what evaluating nodes, statements or expressions in

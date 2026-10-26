@@ -125,13 +125,11 @@ results are in `docs/cost-history.md`.
   expression, `Past`, `Times`, `Dereferenced`) and word the refusal
   from the `Obstacle`; they do not restate the rules. When a check in a
   refactoring asks "can this run before/after/more often", express it
-  as a Move. Still to port: changesig, inline_function, fold, slide,
-  and the path conditions (item 35, steps 2-5). Next after that: one
-  notion of memory ownership (`private`, `pointsPrivate`,
-  `freshLocals`, the `private` callback, `privateLocals`, `Func`'s
-  escape sets), then a `Site` type for the fifteen context structs
-  that each carry ws, pkg, info, file and src with their own `quote`
-  and `declaredAt`.
+  as a Move; where a use sits on its path decides `Times` through
+  `analysis.Reach`. All five steps are done; fold's own hole judgments
+  and inline_function's `lhsEvaluatedFirst` remain (README item 35).
+  Next: one notion of memory ownership (item 36), then a `Site` type
+  for the refactorings' context structs (item 37).
 
 - **Tool descriptions: an example per use, the rules in refusals**
   (2026-10-21): cutting `fold`'s description from 668 to about 260

@@ -331,12 +331,9 @@ func (x *inliner) decideParam(p *param) error {
 			return refactor.Refusef("the argument %s has effects (because of calls or channel operations) but %q uses %s %d times; inlined in an expression it would run %d times",
 				x.quote(p.arg), x.fn.Name(), p.name, len(p.uses), len(p.uses))
 		}
-		path := analysis.PathTo(x.decl, p.uses[0])
-		for i := 1; i < len(path); i++ {
-			if why := conditionalOrRepeated(path[i], path[i-1]); why != "" {
-				return refactor.Refusef("the argument %s has effects, and %q uses %s %s; inlined, the argument would not run exactly once",
-					x.quote(p.arg), x.fn.Name(), p.name, why)
-			}
+		if times, why := analysis.Reach(analysis.PathTo(x.decl.Body, p.uses[0])); times != analysis.Once {
+			return refactor.Refusef("the argument %s has effects, and %q uses %s %s; inlined, the argument would not run exactly once",
+				x.quote(p.arg), x.fn.Name(), p.name, why)
 		}
 		p.subst = true
 	}
@@ -461,31 +458,11 @@ func (x *inliner) classify(p *param) int {
 }
 
 // firstUseUnconditional reports whether p's first use in the body is
-// evaluated whenever the body runs (not in a nested block, an else if, a
-// for loop's post statement, a function literal or the right side of &&
-// or ||), so a panic the argument would
-// have raised at the call still happens, before anything else.
+// evaluated whenever the body runs, so a panic the argument would have
+// raised at the call still happens, before anything else.
 func (x *inliner) firstUseUnconditional(p *param) bool {
-	path := analysis.PathTo(x.decl.Body, p.uses[0])
-	for i := 1; i < len(path)-1; i++ {
-		switch n := path[i].(type) {
-		case *ast.BlockStmt, *ast.CaseClause, *ast.CommClause, *ast.FuncLit:
-			return false
-		case *ast.IfStmt: // path runs from the use outward
-			if outer, ok := path[i+1].(*ast.IfStmt); ok && outer.Else == n {
-				return false // an else if
-			}
-		case *ast.ForStmt:
-			if n.Post != nil && path[i-1] == n.Post {
-				return false // runs only after a pass
-			}
-		case *ast.BinaryExpr:
-			if (n.Op == token.LAND || n.Op == token.LOR) && path[i-1] == n.Y {
-				return false
-			}
-		}
-	}
-	return true
+	times, _ := analysis.Reach(analysis.PathTo(x.decl.Body, p.uses[0]))
+	return times == analysis.Once
 }
 
 // isVarPath reports whether e is a variable or a field of one reached
@@ -653,20 +630,6 @@ func (x *inliner) wholeOperand(path []ast.Node) bool {
 		return true
 	}
 	return false
-}
-
-// conditionalOrRepeated says why code at child is not evaluated exactly
-// once each time n is, or "".
-func conditionalOrRepeated(n, child ast.Node) string {
-	switch n := n.(type) {
-	case *ast.BinaryExpr:
-		if (n.Op == token.LAND || n.Op == token.LOR) && child == n.Y {
-			return fmt.Sprintf("in the right operand of %s, which is only evaluated sometimes", n.Op)
-		}
-	case *ast.FuncLit:
-		return "inside a function literal, which may run later, several times, or not at all"
-	}
-	return ""
 }
 
 func paramName(v *types.Var) string {

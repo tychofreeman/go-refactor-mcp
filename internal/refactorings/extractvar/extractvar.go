@@ -28,6 +28,7 @@ import (
 	"go/token"
 	"go/types"
 	"os"
+	"slices"
 	"strings"
 
 	"golang.org/x/tools/go/packages"
@@ -167,12 +168,12 @@ func (x *extraction) plan(expr ast.Expr, all bool) (*refactor.Plan, error) {
 	}
 	x.fa = analysis.AnalyzeFunc(x.info, x.fn)
 
-	stmt, container, cond, err := x.place(path)
+	stmt, container, err := x.place(path)
 	if err != nil {
 		return nil, err
 	}
-	if cond != "" && !isConst {
-		return nil, refactor.Refusef("cannot extract %s: %s, so computing it once before the statement could change behavior", x.quote(expr), cond)
+	if times, why := analysis.Reach(path[:slices.Index(path, container)+1]); times != analysis.Once && !isConst {
+		return nil, refactor.Refusef("cannot extract %s: it is %s, so computing it once before the statement could change behavior", x.quote(expr), why)
 	}
 	scope := x.blockScope(container, path)
 	if scope == nil {
@@ -366,27 +367,15 @@ func (x *extraction) validate(expr ast.Expr, path []ast.Node) (types.TypeAndValu
 // ---------------------------------------------------------------------------
 // Where the declaration goes
 
-// place finds the statement to insert the declaration before, the block
-// (or case clause) that contains it, and, if the expression is not
-// evaluated exactly once per execution of that statement, why not.
-func (x *extraction) place(path []ast.Node) (stmt ast.Stmt, container ast.Node, cond string, err error) {
+// place finds the statement to insert the declaration before and the
+// block (or case clause) that contains it.
+func (x *extraction) place(path []ast.Node) (stmt ast.Stmt, container ast.Node, err error) {
 	expr := path[0]
 	i := 1
 scan:
 	for ; i < len(path); i++ {
 		switch p := path[i].(type) {
-		case *ast.BinaryExpr:
-			if (p.Op == token.LAND || p.Op == token.LOR) && path[i-1] == p.Y && cond == "" {
-				when := "true"
-				if p.Op == token.LOR {
-					when = "false"
-				}
-				cond = fmt.Sprintf("it is the right operand of %s, which is only evaluated when the left operand is %s", p.Op, when)
-			}
 		case *ast.CaseClause:
-			if cond == "" {
-				cond = "it is a case expression, which is only evaluated if the earlier cases do not match"
-			}
 			// path[i+1] is the switch body; path[i+2] the switch statement.
 			if i+2 >= len(path) {
 				break scan
@@ -395,35 +384,29 @@ scan:
 			stmt, _ = path[i].(ast.Stmt)
 			break scan
 		case *ast.FuncLit, *ast.FuncDecl, *ast.File:
-			return nil, nil, "", refactor.Refusef("%s is not inside a statement (it may be part of a function signature)", x.quote(expr))
+			return nil, nil, refactor.Refusef("%s is not inside a statement (it may be part of a function signature)", x.quote(expr))
 		case ast.Stmt:
 			stmt = p
-			if f, ok := p.(*ast.ForStmt); ok && path[i-1] == f.Cond && cond == "" {
-				cond = "it is in the loop condition, which is evaluated before every iteration"
-			}
 			break scan
 		}
 	}
 	if stmt == nil {
-		return nil, nil, "", refactor.Refusef("could not find the statement containing %s", x.quote(expr))
+		return nil, nil, refactor.Refusef("could not find the statement containing %s", x.quote(expr))
 	}
 
 	for i+1 < len(path) {
 		switch p := path[i+1].(type) {
 		case *ast.BlockStmt:
-			return stmt, p, cond, nil
+			return stmt, p, nil
 		case *ast.CaseClause:
-			return stmt, p, cond, nil
+			return stmt, p, nil
 		case *ast.CommClause:
 			if p.Comm != stmt {
-				return stmt, p, cond, nil
-			}
-			if cond == "" {
-				cond = "it is part of a select case, which is evaluated as part of the select statement"
+				return stmt, p, nil
 			}
 			// path[i+1] is the CommClause, i+2 the select body, i+3 the select.
 			if i+3 >= len(path) {
-				return nil, nil, "", refactor.Refusef("cannot find the select statement containing %s", x.quote(expr))
+				return nil, nil, refactor.Refusef("cannot find the select statement containing %s", x.quote(expr))
 			}
 			i += 3
 			stmt = path[i].(ast.Stmt)
@@ -431,25 +414,19 @@ scan:
 		case *ast.LabeledStmt:
 			stmt = p
 		case *ast.IfStmt:
-			if p.Init != stmt && cond == "" {
-				cond = "it is in an else-if, which is only evaluated when the preceding conditions are false"
-			}
 			stmt = p
 		case *ast.SwitchStmt:
 			stmt = p // from Init: evaluated once, first
 		case *ast.TypeSwitchStmt:
 			stmt = p // from Init or the guard: evaluated once
 		case *ast.ForStmt:
-			if p.Post == stmt && cond == "" {
-				cond = "it is in the loop's post statement, which runs after every iteration"
-			}
 			stmt = p
 		default:
-			return nil, nil, "", refactor.Refusef("cannot find a place to declare the variable before the statement at %s", x.ws.Position(stmt.Pos()))
+			return nil, nil, refactor.Refusef("cannot find a place to declare the variable before the statement at %s", x.ws.Position(stmt.Pos()))
 		}
 		i++
 	}
-	return nil, nil, "", refactor.Refusef("cannot find a place to declare the variable before the statement at %s", x.ws.Position(stmt.Pos()))
+	return nil, nil, refactor.Refusef("cannot find a place to declare the variable before the statement at %s", x.ws.Position(stmt.Pos()))
 }
 
 // blockScope returns the scope that a declaration inserted into container
