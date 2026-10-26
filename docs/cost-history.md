@@ -1303,6 +1303,23 @@ notes of a step the batch dropped, and names only the methods whose
 signature changed, with introduce_parameter for a parameter that
 stands for an expression of the old ones; `split` became the default.
 
+**Without reads, after #374-#376**
+(`eval-runs/loop-{haiku,sonnet}-kinds-noread2`, $1.08): 3/8, against
+2/8 before. Haiku 1/4 at $0.026 a task in 3 requests, its first pass
+of kinds without a read (73 lines); Sonnet 2/4 at $0.245 in 3.5 (53
+and 37 lines). `values` did its work: every narrowing refusal after it
+listed only Import's `strings.TrimSpace(f[2])`, where before it listed
+ten literals. No case was refused as shared. What stopped the five
+failures: narrowing with `values` before the types implemented `Kind`
+(3: one Haiku plan narrowed right after preparing, two Sonnet plans had
+written the methods with `Label(title string)` while prepare had
+declared `Label(it Item)`), refused as "Atlas{} is not a Kind" without
+saying why; `kindOf` returning the types before they had the methods
+(3, as before); Import's error for an unknown kind and a feed test,
+written without seeing Import (2); introduce_parameter on a helper
+that already read `title`, since the plan's own `Kind` had made
+prepare supply it (1).
+
 ## What made the difference
 
 - **Smaller results** (#75, rename locations): the largest single win when
