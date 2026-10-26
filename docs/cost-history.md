@@ -1288,6 +1288,21 @@ reads half its attempts still derive first; Haiku derives as often
 but does not finish. Reading still turns most plans into rewrites
 (5 of 8 here).
 
+The refusals of both runs, tallied from the attempts replayed for
+their full text (31, and one answer without a batch): narrowing refused
+while old constants were still written or compared (13, in 13 of 16
+attempts; it cost one of two repairs each time, and four of the seven
+failures ran out of repairs after it); the interface's method retyped
+by hand while the guard still called `k.Label(it)` (5); `kindOf`
+returning the types as `Kind` before they had the methods (3); a case
+shared by two values without `split` (2); eight of one each. What
+followed: narrowing takes `values` for the old constants and writes
+them itself (#374); the note that names the steps for a signature
+changed as text reaches a batch's refusal, where it had stayed in the
+notes of a step the batch dropped, and names only the methods whose
+signature changed, with introduce_parameter for a parameter that
+stands for an expression of the old ones; `split` became the default.
+
 ## What made the difference
 
 - **Smaller results** (#75, rename locations): the largest single win when

@@ -260,10 +260,10 @@ func Run(ws *workspace.Workspace, r Refactoring, args json.RawMessage, opts Opti
 		if _, uerr := ws.Undo(); uerr != nil {
 			return nil, fmt.Errorf("the step broke the build and undo failed: %v (%s)", uerr, reason)
 		}
-		res.Refused, res.Summary = reason, ""
 		if sigNote != "" {
-			res.Notes = append(res.Notes, sigNote)
+			reason += "\n" + sigNote
 		}
+		res.Refused, res.Summary = reason, ""
 		return res, nil
 	}
 	res.Applied = true
@@ -370,6 +370,10 @@ func newErrors(before, after []string) []string {
 	return out
 }
 
+// signaturePrefix begins signatureNote's note, which a batch keeps when
+// its run again with check "end" replaces the refusal it is in.
+const signaturePrefix = "this edit changes the signature of"
+
 // signatureNote is, for edits that change the signature of a function or
 // interface method (its name, parameters or results), a note naming the
 // tools that change one with every call: for one signature whose
@@ -402,11 +406,13 @@ func signatureNote(ws *workspace.Workspace, fes []edit.FileEdit) string {
 			if !touched(s.from, s.to) || slices.Contains(names, s.name) {
 				continue
 			}
+			i := slices.IndexFunc(after, func(a signature) bool { return a.name == s.name })
+			if i >= 0 && types.ExprString(after[i].typ) == types.ExprString(s.typ) {
+				continue // rewritten as it was
+			}
 			names = append(names, s.name)
-			for _, a := range after {
-				if a.name == s.name {
-					steps = paramSteps(s.name, s.typ, a.typ)
-				}
+			if i >= 0 {
+				steps = paramSteps(s.name, s.typ, after[i].typ)
 			}
 		}
 	}
@@ -414,9 +420,9 @@ func signatureNote(ws *workspace.Workspace, fes []edit.FileEdit) string {
 	case len(names) == 0:
 		return ""
 	case len(names) == 1 && len(steps) > 0:
-		return fmt.Sprintf("this edit changes the signature of %s, which its calls (and an interface method's implementations) do not follow as text; send instead, in one batch: %s", names[0], strings.Join(steps, "; then "))
+		return fmt.Sprintf(signaturePrefix+" %s, which its calls (and an interface method's implementations) do not follow as text; send instead, in one batch: %s", names[0], strings.Join(steps, "; then "))
 	}
-	return fmt.Sprintf("this edit changes the signature of %s; add_parameter, remove_parameter, move_parameter, change_parameter_type and add_result change a signature with every call (and an interface method with its implementations), and rename a name", orList(names, "and"))
+	return fmt.Sprintf(signaturePrefix+" %s; add_parameter, remove_parameter, move_parameter, change_parameter_type and add_result change a signature with every call (and an interface method with its implementations), and rename a name", orList(names, "and"))
 }
 
 // signature is a function's, method's or interface method's type, by name.
@@ -511,7 +517,7 @@ func paramSteps(name string, old, new *ast.FuncType) []string {
 		}
 	}
 	if len(add) > 0 && len(remove) > 0 {
-		add = append(add, "the edits that make the body (each implementation, for an interface method) use the new parameters in place of the old")
+		add = append(add, "the edits that make the body (each implementation, for an interface method) use the new parameters in place of the old (or, for a new parameter that stands for an expression of the old ones, introduce_parameter of that expression by function on one body, in place of add_parameter and these edits: every implementation gets it)")
 	}
 	return slices.Concat(add, retype, remove)
 }
@@ -609,6 +615,10 @@ func RunBatch(ws *workspace.Workspace, steps []Step, opts Options) (*BatchResult
 		// Every step ran: the errors left at the end are the ones to fix.
 		if b.FailedStep < b.Total {
 			retry.Refused = fmt.Sprintf("step %d did not type-check on its own, so the batch ran again with check \"end\"; ", b.FailedStep) + retry.Refused
+		}
+		if i := strings.Index(b.Refused, signaturePrefix); i >= 0 {
+			line, _, _ := strings.Cut(b.Refused[i:], "\n")
+			retry.Refused += "\n" + line
 		}
 		return retry, nil
 	case !retry.Applied:
