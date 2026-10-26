@@ -585,6 +585,14 @@ results are in `docs/cost-history.md`.
   third of the lines. Writing wins on local changes (dispatch, tail,
   kinds), deriving where one step carries a change to many uses
   (routes, run); the tools reference is the derivation's fixed cost.
+  An index of the tools (a line each, full entries on request) halved
+  the first request but lost the derivations: plans asked for the
+  tools the task's words name, not fold. With the five tools that
+  carry a change given in full beside it (`-full-tools`, 29% of the
+  reference), freight-xl came back to 16/16 for Sonnet at 23% below
+  the reference, Haiku 13/16 at 19% below; kinds cost 15% more, in
+  asks for the other tools its derivation uses. A plan chooses a
+  derivation from the examples it sees.
 - Where a session's cost goes (cost-history 12,
   `eval-tasks/learning/cost.py`): cache writes 69%, output 18%, cache
   reads 13%, though cache reads are 88% of input tokens. About 38% of
