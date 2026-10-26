@@ -263,6 +263,12 @@ source comes after a batch (and counts against the three reads). The
 reference's first 52 steps, the cases moved and the string cases kept,
 pass the module's tests, so such a first batch exists.
 
+Run (cost-history 19, reads only after a batch): 7/8 at the cost of
+reads at the start, and the same rewrites. Every first batch prepared
+the switches and stopped; every second answer read all five switches
+and Import, then wrote the methods out. Deferring the reads deferred
+the move with them.
+
 ## Recording
 
 Each step in its own PR: the results in `docs/cost-history.md`, the

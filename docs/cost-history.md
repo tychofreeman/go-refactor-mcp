@@ -1197,6 +1197,23 @@ no plan can see Import without a read; plans guessed its body (one
 replaced lines 236-238 of a 230-line file) or left it, and narrowing
 then refused the string Import writes.
 
+**Reads only after a batch has applied** (#366 `-read-after`, with
+#367's refusal for emptying a live case; `-stages 3`;
+`eval-runs/loop-{haiku,sonnet}-kinds-after`, $1.03): 7/8. Haiku 3/4 at
+$0.023 a task in 6.5 requests, Sonnet 4/4 at $0.236 in 6.25; against
+reads at the start (8/8, $0.020 and $0.197) about the same. But no
+attempt derived: every first batch was the preparation alone
+(`change_field_type` to `any`, `prepare_switch_for_types` five times,
+sometimes the types), 6-10 steps, and stopped there; then every
+attempt read all five switches and Import, and wrote the methods out
+with `add_declaration` and `replace_statements` (64-127 lines by hand,
+against none for the cases in the no-read runs). No
+`extract_function` or `function_to_method` in any attempt. The prompt
+said to "leave for later what needs code you cannot see", and the
+plans counted moving the cases as that. So when reads come does not
+matter: a plan that knows it can read later defers the move and
+reads; reads, whenever they open, make the model write the code out.
+
 ## What made the difference
 
 - **Smaller results** (#75, rename locations): the largest single win when
