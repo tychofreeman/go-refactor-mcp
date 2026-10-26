@@ -570,10 +570,7 @@ func (x *inliner) decideShape() error {
 // read through a pointer or a slice, which the body could change. The
 // variables and fields assigned to are not operands; nil if there is none.
 func (x *inliner) lhsEvaluatedFirst(as *ast.AssignStmt) ast.Expr {
-	stable := func(e ast.Expr) bool {
-		_, ok := x.callerFA.Stable(e, false)
-		return ok && analysis.MayPanic(x.info, e) == nil
-	}
+	stable := func(e ast.Expr) bool { return x.movable(x.callerFA, e, false) }
 	var check func(e ast.Expr) ast.Expr
 	check = func(e ast.Expr) ast.Expr {
 		switch e := e.(type) {
@@ -616,6 +613,15 @@ func (x *inliner) lhsEvaluatedFirst(as *ast.AssignStmt) ast.Expr {
 		}
 	}
 	return nil
+}
+
+// movable reports whether e, an expression of the function fa, gives the
+// same value and does nothing else wherever it is evaluated: stable (with
+// sharing, making no new reference value), and unable to panic.
+func (x *inliner) movable(fa *analysis.Func, e ast.Expr, sharing bool) bool {
+	s := x.ws.Effects().Of(fa, e)
+	_, ok := s.Stable(sharing)
+	return ok && s.At.Panic == nil
 }
 
 // checkBareReturns refuses a void body whose bare returns, inlined into a

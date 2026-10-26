@@ -258,6 +258,9 @@ func stdCall(info *types.Info, fn *types.Func, call *ast.CallExpr, private func(
 	if se.panics == OtherPanic || (se.panics == NilPanic && !inPlaceRecv) {
 		s.Unsafe, s.Panics = "calls "+types.ExprString(call.Fun), se.panics
 	}
+	if se.fresh {
+		s.Makes = "makes a new value each call: " + types.ExprString(call)
+	}
 	if call.Ellipsis.IsValid() && s.Reads == "" {
 		s.Reads = "spreads " + types.ExprString(call.Args[len(call.Args)-1])
 	}

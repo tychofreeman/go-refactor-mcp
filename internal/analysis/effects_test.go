@@ -561,7 +561,7 @@ func TestEffectsWhere(t *testing.T) {
 	}
 	for name, w := range want {
 		s := e.Func(pkg.Scope().Lookup(name).(*types.Func))
-		got := where{text(s.At.Effect), text(s.At.Reads), text(s.At.Unsafe), text(s.At.Panic), s.Panics}
+		got := where{text(s.At.Effect), text(s.At.Reads), text(s.At.Unsafe), text(s.At.OtherPanic), s.Panics}
 		if got != w {
 			t.Errorf("%s: got %+v, want %+v (summary %+v)", name, got, w, *s)
 		}
@@ -616,7 +616,7 @@ func TestEffectsOf(t *testing.T) {
 		"p.n":      {reads: true, unsafe: true, panics: NilPanic},
 		"x / y":    {unsafe: true, panics: OtherPanic},
 		"x + y":    {},
-		"local.n":  {}, // memory g made
+		"local.n":  {reads: true, unsafe: true, panics: NilPanic}, // memory the rest of g can change
 		"field(p)": {reads: true, unsafe: true, panics: NilPanic},
 		"bump()":   {effect: true, reads: true},
 	}

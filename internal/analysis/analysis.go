@@ -165,6 +165,12 @@ func AnalyzeFunc(info *types.Info, fn ast.Node) *Func {
 	return f
 }
 
+// Outside returns a Func for code whose function is not known: no local
+// is known to escape, and no type assertion to be one with a comma, ok.
+func Outside(info *types.Info) *Func {
+	return &Func{Info: info, Addressed: map[*types.Var]bool{}, Captured: map[*types.Var]bool{}, CapturedAsync: map[*types.Var]bool{}, AsyncLits: map[*types.Var][]*ast.FuncLit{}, Modified: map[*types.Var][]ast.Node{}}
+}
+
 // Escapes reports whether code other than direct reads and writes in this
 // function body can reach v.
 func (f *Func) Escapes(v *types.Var) bool { return f.Addressed[v] || f.Captured[v] }
@@ -172,7 +178,7 @@ func (f *Func) Escapes(v *types.Var) bool { return f.Addressed[v] || f.Captured[
 // IsLocal reports whether v is a variable declared in this function
 // (including its parameters and results).
 func (f *Func) IsLocal(v *types.Var) bool {
-	return !v.IsField() && v.Parent() != nil && v.Pkg() != nil && v.Parent() != v.Pkg().Scope() &&
+	return f.Node != nil && !v.IsField() && v.Parent() != nil && v.Pkg() != nil && v.Parent() != v.Pkg().Scope() &&
 		v.Pos() >= f.Node.Pos() && v.Pos() < f.Node.End()
 }
 

@@ -148,7 +148,7 @@ func (t *target) check(ws *workspace.Workspace) error {
 					return false
 				}
 				call, isCall := n.(*ast.CallExpr)
-				effect = effect || analysis.HasEffect(t.pkg.TypesInfo, n) && !(isCall && analysis.ReadOnlyCall(t.pkg.TypesInfo, call))
+				effect = effect || ws.Effects().Acts(t.pkg.TypesInfo, n) && !(isCall && analysis.ReadOnlyCall(t.pkg.TypesInfo, call))
 				return !effect
 			})
 			if effect {

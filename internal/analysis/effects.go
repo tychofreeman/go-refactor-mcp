@@ -14,6 +14,7 @@ type Summary struct {
 	Reads  string // a read of what other code can change: a package variable, memory through a pointer
 	Unsafe string // something that could panic or not finish
 	Stops  string // of Unsafe, something that might not finish or return: a loop, a channel operation, os.Exit, unknown code
+	Makes  string // a new reference value: a pointer, slice, map, channel or function value
 
 	At     Where     // where each of the above was found
 	Panics PanicKind // how it can panic: NilPanic when only by dereferencing nil
@@ -22,8 +23,9 @@ type Summary struct {
 // Where says where, in the code summarized, each finding of a Summary
 // is: the node that does it, or the call through which it happens.
 type Where struct {
-	Effect, Reads, Unsafe, Stops ast.Node
-	Panic                        ast.Node // the first that can panic other than by dereferencing nil
+	Effect, Reads, Unsafe, Stops, Makes ast.Node
+	Panic                               ast.Node // the first that can panic
+	OtherPanic                          ast.Node // the first that can panic other than by dereferencing nil
 }
 
 // Effects summarizes calls: of functions known to have no side effects,
@@ -85,22 +87,65 @@ func (e *Effects) Call(info *types.Info, call *ast.CallExpr) Summary {
 }
 
 // Of summarizes what evaluating x, an expression in the body of f, can
-// do. Memory f made itself is f's own, as in a summary of f.
+// do, as if it were evaluated anywhere in f: memory f made itself is not
+// its own, since the rest of f can change it, and neither are the locals
+// a pointer or closure can change. x is taken out of its context: a type
+// assertion x itself is not one with a comma, ok.
 func (e *Effects) Of(f *Func, x ast.Expr) Summary {
-	var blk *ast.BlockStmt
-	switch n := f.Node.(type) {
-	case *ast.FuncDecl:
-		blk = n.Body
-	case *ast.FuncLit:
-		blk = n.Body
-	}
-	fresh := map[*types.Var]bool{}
-	if blk != nil {
-		fresh = freshLocals(f, blk)
-	}
-	b := &body{e: e, f: f, fresh: fresh, sync: map[*ast.FuncLit]bool{}}
+	b := &body{e: e, f: f, fresh: map[*types.Var]bool{}, sync: map[*ast.FuncLit]bool{}, callees: map[ast.Expr]bool{}, root: x}
 	ast.Inspect(x, b.visit)
 	return b.s
+}
+
+// StableAddress is Stable for the address of x, an expression in the
+// body of f, rather than its value: it depends only on operands that are
+// stable.
+func (e *Effects) StableAddress(f *Func, x ast.Expr) (ast.Node, bool) {
+	ops, culprit := f.AddressOperands(x)
+	if culprit != nil {
+		return culprit, false
+	}
+	for _, op := range ops {
+		if c, ok := e.Of(f, op).Stable(false); !ok {
+			return c, false
+		}
+	}
+	return nil, true
+}
+
+// Acts reports whether n itself, apart from its operands, can do more
+// than compute a value: a call with side effects, that reads what other
+// code can change or that could panic or not finish, or a receive.
+func (e *Effects) Acts(info *types.Info, n ast.Node) bool {
+	switch n := n.(type) {
+	case *ast.CallExpr:
+		s := e.Call(info, n)
+		return s.Effect != "" || s.Reads != "" || s.Unsafe != ""
+	case *ast.UnaryExpr:
+		return n.Op == token.ARROW
+	}
+	return false
+}
+
+// FirstActBefore returns the first node inside root that Acts and is
+// evaluated before pos (it ends before pos and does not enclose it),
+// ignoring the bodies of function literals and the node skip.
+func (e *Effects) FirstActBefore(info *types.Info, root ast.Node, pos token.Pos, skip ast.Node) ast.Node {
+	var first ast.Node
+	ast.Inspect(root, func(n ast.Node) bool {
+		if n == nil || first != nil || n.Pos() >= pos || (skip != nil && n == skip) {
+			return false
+		}
+		if _, ok := n.(*ast.FuncLit); ok {
+			return false // defining a closure runs nothing
+		}
+		if n.End() <= pos && e.Acts(info, n) {
+			first = n
+			return false
+		}
+		return true
+	})
+	return first
 }
 
 func (e *Effects) call(info *types.Info, call *ast.CallExpr, private func(target ast.Expr, inPlace bool) bool) Summary {
@@ -159,8 +204,14 @@ func (s *Summary) add(o Summary) {
 	if s.Stops == "" {
 		s.Stops, s.At.Stops = o.Stops, o.At.Stops
 	}
+	if s.Makes == "" {
+		s.Makes, s.At.Makes = o.Makes, o.At.Makes
+	}
 	if s.At.Panic == nil {
 		s.At.Panic = o.At.Panic
+	}
+	if s.At.OtherPanic == nil {
+		s.At.OtherPanic = o.At.OtherPanic
 	}
 	s.Panics = max(s.Panics, o.Panics)
 }
@@ -174,11 +225,38 @@ func (s Summary) at(n ast.Node) Summary {
 		}
 		return n
 	}
-	s.At = Where{Effect: where(s.Effect), Reads: where(s.Reads), Unsafe: where(s.Unsafe), Stops: where(s.Stops)}
-	if s.Panics == OtherPanic {
+	s.At = Where{Effect: where(s.Effect), Reads: where(s.Reads), Unsafe: where(s.Unsafe), Stops: where(s.Stops), Makes: where(s.Makes)}
+	if s.Panics != NoPanic {
 		s.At.Panic = n
 	}
+	if s.Panics == OtherPanic {
+		s.At.OtherPanic = n
+	}
 	return s
+}
+
+// Stable reports whether the value s summarizes depends only on
+// constants, functions and local variables no other code can reach, so
+// that evaluating it again, or elsewhere in the function, gives the same
+// value: it has no side effects, reads nothing other code can change and
+// finishes. With sharing it must also make no new reference value, so
+// that one value can stand for evaluating it each time. It can still
+// panic (At.OtherPanic and Panics say how). It returns the first finding in
+// the way.
+func (s Summary) Stable(sharing bool) (ast.Node, bool) {
+	var first ast.Node
+	note := func(what string, at ast.Node) {
+		if what != "" && (first == nil || at != nil && at.Pos() < first.Pos()) {
+			first = at
+		}
+	}
+	note(s.Effect, s.At.Effect)
+	note(s.Reads, s.At.Reads)
+	note(s.Stops, s.At.Stops)
+	if sharing {
+		note(s.Makes, s.At.Makes)
+	}
+	return first, s.Effect == "" && s.Reads == "" && s.Stops == "" && (!sharing || s.Makes == "")
 }
 
 // stopsFuncs are functions that end the program or the goroutine rather
@@ -431,6 +509,9 @@ type body struct {
 	fresh map[*types.Var]bool
 	sync  map[*ast.FuncLit]bool // literals whose bodies run during the call
 	s     Summary
+
+	callees map[ast.Expr]bool // the functions of the calls seen
+	root    ast.Expr          // for Of, the expression summarized, evaluated out of its context
 }
 
 // summarize computes what calling the function declared by src can do,
@@ -439,7 +520,7 @@ type body struct {
 // memory it made itself, are not side effects.
 func (e *Effects) summarize(src funcSource) *Summary {
 	f := AnalyzeFunc(src.info, src.decl)
-	b := &body{e: e, f: f, fresh: freshLocals(f, src.decl.Body), sync: map[*ast.FuncLit]bool{}}
+	b := &body{e: e, f: f, fresh: freshLocals(f, src.decl.Body), sync: map[*ast.FuncLit]bool{}, callees: map[ast.Expr]bool{}}
 	ast.Inspect(src.decl.Body, b.visit)
 	return &b.s
 }
@@ -490,6 +571,8 @@ func (b *body) stops(n ast.Node, kind PanicKind, what string) {
 	b.s.add(Summary{Unsafe: what, Stops: what, Panics: kind}.at(n))
 }
 
+func (b *body) makes(n ast.Node, what string) { b.s.add(Summary{Makes: what}.at(n)) }
+
 func (b *body) assigns(x ast.Expr) {
 	if id, ok := x.(*ast.Ident); ok && id.Name == "_" {
 		return
@@ -505,6 +588,7 @@ func (b *body) visit(n ast.Node) bool {
 	s := &b.s
 	switch n := n.(type) {
 	case *ast.FuncLit:
+		b.makes(n, "makes a function value")
 		return b.sync[n] // defining a closure runs nothing
 	case *ast.GoStmt:
 		b.effect(n, "starts a goroutine")
@@ -515,9 +599,12 @@ func (b *body) visit(n ast.Node) bool {
 		b.effect(n, "selects on channels")
 		b.stops(n, OtherPanic, "selects on channels, which might block")
 	case *ast.UnaryExpr:
-		if n.Op == token.ARROW {
+		switch n.Op {
+		case token.ARROW:
 			b.effect(n, "receives from a channel")
 			b.stops(n, NoPanic, "receives from a channel, which might block")
+		case token.AND:
+			b.makes(n, "takes the address of "+types.ExprString(n.X))
 		}
 	case *ast.ForStmt:
 		b.stops(n, NoPanic, "has a loop that might not finish")
@@ -554,6 +641,16 @@ func (b *body) visit(n ast.Node) bool {
 	case *ast.IncDecStmt:
 		b.assigns(n.X)
 	case *ast.CallExpr:
+		b.callees[ast.Unparen(n.Fun)] = true
+		if tv := info.Types[n.Fun]; tv.IsType() && len(n.Args) == 1 && toArray(tv.Type, info.TypeOf(n.Args[0])) {
+			b.unsafe(n, OtherPanic, "converts "+types.ExprString(n.Args[0])+" to an array")
+		}
+		if IsReference(info.TypeOf(n)) {
+			b.makes(n, "makes a new "+info.TypeOf(n).String())
+		}
+		if bi, ok := info.Uses[IdentOf(n.Fun)].(*types.Builtin); ok && (bi.Name() == "len" || bi.Name() == "cap") && len(n.Args) == 1 && IsMapOrChan(info.TypeOf(n.Args[0])) && !b.pointsPrivate(n.Args[0]) {
+			b.read(n, "reads the size of "+types.ExprString(n.Args[0]))
+		}
 		s.add(b.call(n).at(n))
 	case *ast.StarExpr:
 		if !info.Types[n].IsType() && !b.pointsPrivate(n.X) {
@@ -562,9 +659,15 @@ func (b *body) visit(n ast.Node) bool {
 		}
 	case *ast.SelectorExpr:
 		sel := info.Selections[n]
-		if sel != nil && sel.Kind() == types.FieldVal && sel.Indirect() && !(IsPointer(info.TypeOf(n.X)) && b.pointsPrivate(n.X)) {
+		if sel == nil {
+			break
+		}
+		if sel.Indirect() && !(IsPointer(info.TypeOf(n.X)) && b.pointsPrivate(n.X)) && (sel.Kind() == types.FieldVal || valueReceiver(sel)) {
 			b.read(n, "reads "+types.ExprString(n)+" through a pointer")
 			b.unsafe(n, NilPanic, "reads "+types.ExprString(n)+" through a pointer")
+		}
+		if sel.Kind() == types.MethodVal && !b.callees[n] {
+			b.makes(n, "makes the method value "+types.ExprString(n))
 		}
 	case *ast.IndexExpr:
 		tv := info.Types[n.X]
@@ -582,7 +685,9 @@ func (b *body) visit(n ast.Node) bool {
 				b.unsafe(n, OtherPanic, "indexes "+types.ExprString(n.X))
 			}
 		case *types.Basic: // a string
-			b.unsafe(n, OtherPanic, "indexes "+types.ExprString(n.X))
+			if info.Types[n.X].Value == nil || info.Types[n.Index].Value == nil {
+				b.unsafe(n, OtherPanic, "indexes "+types.ExprString(n.X))
+			}
 		default:
 			if !b.pointsPrivate(n.X) {
 				b.read(n, "reads the element "+types.ExprString(n))
@@ -590,18 +695,38 @@ func (b *body) visit(n ast.Node) bool {
 			b.unsafe(n, OtherPanic, "indexes "+types.ExprString(n.X))
 		}
 	case *ast.SliceExpr:
-		b.unsafe(n, OtherPanic, "slices "+types.ExprString(n.X))
+		switch {
+		case n.Low != nil || n.High != nil || n.Max != nil:
+			b.unsafe(n, OtherPanic, "slices "+types.ExprString(n.X))
+		case IsPointer(info.TypeOf(n.X)):
+			b.unsafe(n, NilPanic, "slices "+types.ExprString(n.X)+", a pointer")
+		}
+		if IsArray(info.TypeOf(n.X)) || IsPointer(info.TypeOf(n.X)) {
+			b.makes(n, "makes a slice of "+types.ExprString(n.X))
+		}
 	case *ast.TypeAssertExpr:
-		if n.Type != nil && !commaOK(n, b.f.Node) {
+		if n.Type != nil && (n == b.root || b.f.Node == nil || !commaOK(n, b.f.Node)) {
 			b.unsafe(n, OtherPanic, "asserts the type of "+types.ExprString(n.X))
 		}
 	case *ast.BinaryExpr:
-		if (n.Op == token.QUO || n.Op == token.REM) && isInteger(info.TypeOf(n)) && info.Types[n.Y].Value == nil {
+		switch {
+		case (n.Op == token.QUO || n.Op == token.REM) && isInteger(info.TypeOf(n)) && info.Types[n.Y].Value == nil:
 			b.unsafe(n, OtherPanic, "divides by "+types.ExprString(n.Y))
+		case (n.Op == token.SHL || n.Op == token.SHR) && !isUnsigned(info.TypeOf(n.Y)) && info.Types[n.Y].Value == nil:
+			b.unsafe(n, OtherPanic, "shifts by "+types.ExprString(n.Y))
+		}
+	case *ast.CompositeLit:
+		if t := info.TypeOf(n); !IsStruct(t) && !IsArray(t) {
+			b.makes(n, "makes a new "+t.String())
 		}
 	case *ast.Ident:
-		if v, ok := info.Uses[n].(*types.Var); ok && !v.IsField() && v.Pkg() != nil && v.Parent() == v.Pkg().Scope() {
+		v, ok := info.Uses[n].(*types.Var)
+		switch {
+		case !ok:
+		case !v.IsField() && v.Pkg() != nil && v.Parent() == v.Pkg().Scope():
 			b.read(n, "reads the package variable "+v.Name())
+		case b.root != nil && b.f.IsLocal(v) && b.f.Escapes(v):
+			b.read(n, "reads "+v.Name()+", which a pointer or closure can change")
 		}
 	}
 	return true
@@ -653,6 +778,33 @@ func commaOK(ta *ast.TypeAssertExpr, fn ast.Node) bool {
 		return !found
 	})
 	return found
+}
+
+// toArray reports whether converting a value of type from to type to
+// makes an array of a slice, or a pointer to one: a conversion that
+// panics when the slice is too short.
+func toArray(to, from types.Type) bool {
+	if !IsSlice(from) {
+		return false
+	}
+	switch u := to.Underlying().(type) {
+	case *types.Array:
+		return true
+	case *types.Pointer:
+		_, ok := u.Elem().Underlying().(*types.Array)
+		return ok
+	}
+	return false
+}
+
+// valueReceiver reports whether sel selects a method with a value
+// receiver, which copies what it is called on.
+func valueReceiver(sel *types.Selection) bool {
+	if sel.Kind() != types.MethodVal {
+		return false
+	}
+	recv := sel.Obj().(*types.Func).Signature().Recv()
+	return recv != nil && !IsPointer(recv.Type())
 }
 
 func isInteger(t types.Type) bool {

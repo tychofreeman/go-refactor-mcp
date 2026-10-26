@@ -2,11 +2,12 @@ package m
 
 import "fmt"
 
-func run(n int) {
-	describe(n)
+func run(err error) {
+	describe(err)
 }
 
-func describe(n int) string {
+// describe's Sprintf calls err's Error method, which could do anything.
+func describe(err error) string {
 	fmt.Println("describing")
-	return fmt.Sprintf("%d", n)
+	return fmt.Sprintf("%v", err)
 }

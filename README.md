@@ -1565,9 +1565,31 @@ hand or a tool got in the way.
     3. *Done.* A summary of one expression (`Effects.Of(f, x)`), the
        body walker applied to it, with the memory f made itself as
        f's own.
-    4. The callers of MayPanic, Stable, HasEffect and FirstEffectBefore
-       moved to it, with verdicts kept, checked by a differential test
-       over the goldens, the stress tests and the module.
+    4. *Done.* The callers of MayPanic, Stable, HasEffect and
+       FirstEffectBefore moved to the summaries: `Summary.Stable`,
+       `At.Panic` (any panic) and `At.OtherPanic` (other than a nil
+       dereference), `Effects.StableAddress`, `Effects.Acts` and
+       `FirstActBefore`, through `Workspace.Effects()`, which knows no
+       module function yet. The walker learned what only Stable and
+       MayPanic knew: shifts, conversions to arrays, which slices and
+       string indexes can panic, the size of a map read through `len`,
+       locals a pointer or closure can change, and `Makes` (a new
+       reference value: `&`, a literal, a function value, a fresh
+       result). `TestDifferential` compares the old and new verdicts on
+       every expression of the goldens and this module (and of
+       `DIFF_DIR`), and fails on any difference without a reason. The
+       reasons, all looser where facts allow or stricter where the old
+       check missed something: fmt calls of values without methods do
+       nothing else; without sharing a new reference value is stable;
+       a call that can panic is stable (callers ask At.Panic); a call
+       that only makes a new value does not act; `make` of a size not
+       known in range can panic; fold looked at an expression's own node
+       only, missing calls inside it, and now also counts a new
+       reference value when an expression is evaluated another number
+       of times. Two goldens used fmt as their example of an effect and
+       now use a call of `Error` and `os.Getenv`.
+    7. Changesig's `riskOf` and `unsafeValue` hold a fourth and fifth
+       copy of the panic rules; move them onto the summaries too.
     5. Calls of the module's own functions judged by their summaries
        (computed once a load): by value, as stable as the arguments;
        reading through a pointer, not stable; an effect, not stable;

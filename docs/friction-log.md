@@ -2629,3 +2629,24 @@ declaration, since introduce_parameter refused `fd.Body` falsely
 being defined counts as a write that could change what the expression
 reads). That check is one of the analyses roadmap item 34 merges.
 This entry appended with a heredoc.
+
+## 2026-10-25: the callers onto the summaries
+
+Through the tools: the call sites with replace_text (one batch of 38
+steps), the helpers (`panics`, `movable`, `risky`, `Effects.Acts`,
+`FirstActBefore`, `StableAddress`, `Summary.Stable`, `Outside`,
+`Workspace.Effects`) with add_declaration, the workspace field with
+add_field and its resets with insert_statements, the harness with
+create_file and replace_declaration. By hand:
+- The walker's new cases, written into `body.visit` by a script and
+  sent as replace_statements.
+- `Where.Panic` renamed to `OtherPanic` with replace_text: rename
+  refused because a test prints a Summary with %+v, where reflection
+  sees field names. The refusal is right in general; a test's message
+  is not behavior worth keeping.
+- add_parameter refused `m.ws.Effects()` and `t.ws.Effects()` as
+  values ("has side effects": it makes the Effects on first use), so
+  the parameters were added with `nil` and the calls then changed with
+  replace_text. Step 5, which sees into the module's functions, would
+  still refuse it: the lazy assignment is an effect.
+This entry appended with a heredoc.

@@ -25,6 +25,7 @@ import (
 
 	"golang.org/x/tools/go/packages"
 
+	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 )
 
@@ -55,8 +56,9 @@ type Workspace struct {
 	// brought up to date, for tests and benchmarks.
 	FullLoads, IncrementalUpdates int
 
-	undo   []Change
-	stamps map[string]stamp // size and mtime of each relevant file at the last update
+	undo    []Change
+	stamps  map[string]stamp  // size and mtime of each relevant file at the last update
+	effects *analysis.Effects // made on first use after each update
 }
 
 // Refresh brings the workspace up to date with the files on disk, if any
@@ -205,6 +207,7 @@ func Load(dir string, patterns ...string) (*Workspace, error) {
 
 // Reload re-reads and re-type-checks all packages from disk.
 func (w *Workspace) Reload() error {
+	w.effects = nil
 	// Snapshot before loading: if a file changes during the load, the next
 	// Refresh sees a different stamp and updates again.
 	stamps, err := snapshot(w.Root)
@@ -347,6 +350,17 @@ func (w *Workspace) TypesInfos() []*types.Info {
 		}
 	}
 	return out
+}
+
+// Effects returns the summaries of what the workspace's code can do, made
+// once for each state of the packages. It knows the standard library's
+// functions; the module's own functions are not known yet, so a call of
+// one could do anything.
+func (w *Workspace) Effects() *analysis.Effects {
+	if w.effects == nil {
+		w.effects = analysis.NewEffects()
+	}
+	return w.effects
 }
 
 // FileSyntax returns the parsed file at the absolute path and the first

@@ -135,9 +135,9 @@ func (t *target) checkOrder(c call, from, to int) error {
 	for _, b := range passed {
 		why := ""
 		switch {
-		case hasEffect(info, moved) && readsVar(info, b, private), hasEffect(info, b) && readsVar(info, moved, private):
+		case hasEffect(info, moved, t.ws.Effects()) && readsVar(info, b, private), hasEffect(info, b, t.ws.Effects()) && readsVar(info, moved, private):
 			why = "one has side effects the other could observe"
-		case unsafeArg(info, moved) && unsafeArg(info, b):
+		case unsafeArg(info, moved, t.ws.Effects()) && unsafeArg(info, b, t.ws.Effects()):
 			why = "both could have side effects or panic"
 		}
 		if why != "" {
@@ -162,20 +162,20 @@ func (t *target) checkNoCallIn(arg ast.Expr) error {
 	return nil
 }
 
-func unsafeArg(info *types.Info, e ast.Expr) bool {
-	bad, _ := unsafeValue(info, e, nil)
+func unsafeArg(info *types.Info, e ast.Expr, effs *analysis.Effects) bool {
+	bad, _ := unsafeValue(info, e, effs)
 	return bad != nil
 }
 
 // hasEffect reports whether evaluating e could have a side effect.
 // (Defining a function literal runs nothing.)
-func hasEffect(info *types.Info, e ast.Expr) bool {
+func hasEffect(info *types.Info, e ast.Expr, effs *analysis.Effects) bool {
 	found := false
 	ast.Inspect(e, func(n ast.Node) bool {
 		if _, ok := n.(*ast.FuncLit); ok || found {
 			return false
 		}
-		found = analysis.HasEffect(info, n)
+		found = effs.Acts(info, n)
 		return !found
 	})
 	return found

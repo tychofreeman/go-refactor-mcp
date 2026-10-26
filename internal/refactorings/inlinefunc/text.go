@@ -308,7 +308,7 @@ func (x *inliner) resultLines() ([]string, error) {
 // has no effects, and every variable of the inlined code it reads is used
 // elsewhere too (else that variable would be declared and not used).
 func (x *inliner) droppable(r ast.Expr) bool {
-	if _, stable := x.calleeFA.Stable(r, false); !stable || analysis.MayPanic(x.info, r) != nil {
+	if !x.movable(x.calleeFA, r, false) {
 		return false
 	}
 	for _, id := range analysis.ScopeRefs(x.info, r) {

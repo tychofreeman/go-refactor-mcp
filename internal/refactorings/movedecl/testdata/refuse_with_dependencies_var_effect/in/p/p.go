@@ -1,8 +1,8 @@
 package p
 
-import "fmt"
+import "os"
 
-var greeting = fmt.Sprint("hi")
+var greeting = os.Getenv("GREETING")
 
 // Greet greets.
 func Greet() string { return greeting }

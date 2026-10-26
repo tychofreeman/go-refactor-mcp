@@ -539,7 +539,7 @@ func (f *folder) trySetter(p *packages.Package, file *ast.File, x ast.Expr, stac
 	// setter's order.
 	moved, others := 0, 0
 	for i, e := range lit.Elts {
-		if kv, ok := e.(*ast.KeyValueExpr); ok && (analysis.HasEffect(info, kv.Value) || analysis.MayPanic(info, kv.Value) != nil) {
+		if kv, ok := e.(*ast.KeyValueExpr); ok && f.risky(info, kv.Value, false) {
 			if slices.Contains(drop, i) {
 				moved++
 			} else {
@@ -551,7 +551,7 @@ func (f *folder) trySetter(p *packages.Package, file *ast.File, x ast.Expr, stac
 		return skip("fields with effects or that could panic would be evaluated in another order")
 	}
 	for k, e := range b {
-		if n := f.count(k); k.Obj != f.self && n > 1 && (analysis.HasEffect(info, e) || analysis.MayPanic(info, e) != nil) {
+		if n := f.count(k); k.Obj != f.self && n > 1 && f.risky(info, e, true) {
 			return skip(fmt.Sprintf("%s, used %d times in the body, would be evaluated once", types.ExprString(e), n))
 		}
 	}
@@ -727,7 +727,7 @@ func (f *folder) call(p *packages.Package, file *ast.File, b map[pattern.HoleKey
 // arguments have neither.
 func (f *folder) first(k pattern.HoleKey) bool {
 	info := f.m.Pkg.TypesInfo
-	if !analysis.HasEffect(info, f.body) && analysis.MayPanic(info, f.body) == nil {
+	if !f.risky(info, f.body, false) {
 		return true
 	}
 	call, ok := ast.Unparen(f.body).(*ast.CallExpr)
@@ -745,7 +745,7 @@ func (f *folder) first(k pattern.HoleKey) bool {
 		return false
 	}
 	for _, a := range call.Args {
-		if !is(a) && (analysis.HasEffect(info, a) || analysis.MayPanic(info, a) != nil) {
+		if !is(a) && f.risky(info, a, false) {
 			return false
 		}
 	}
@@ -1081,7 +1081,7 @@ func (f *folder) effects() *analysis.Effects {
 // value: a call in it has side effects, reads what other code can
 // change, or could panic or not finish; or e could panic itself.
 func (f *folder) impure(info *types.Info, e ast.Expr) bool {
-	if analysis.MayPanic(info, e) != nil {
+	if f.ws.Effects().Of(analysis.Outside(info), e).At.OtherPanic != nil {
 		return true
 	}
 	found := false
@@ -1098,6 +1098,15 @@ func (f *folder) impure(info *types.Info, e ast.Expr) bool {
 		return !found
 	})
 	return found
+}
+
+// risky reports whether evaluating e in another order could matter: it
+// has side effects or could panic other than by a nil dereference; and,
+// when counted (evaluated another number of times), whether it makes a
+// new reference value.
+func (f *folder) risky(info *types.Info, e ast.Expr, counted bool) bool {
+	s := f.ws.Effects().Of(analysis.Outside(info), e)
+	return s.Effect != "" || s.At.OtherPanic != nil || counted && s.Makes != ""
 }
 
 // evaluatedFirst reports whether the argument for the hole k, which
@@ -1205,7 +1214,7 @@ func (f *folder) matters(info *types.Info, s ast.Stmt, pos token.Pos) bool {
 			found = n.Op == token.ARROW
 		}
 		if e, ok := n.(ast.Expr); ok && !found {
-			found = analysis.MayPanic(info, e) != nil
+			found = f.ws.Effects().Of(analysis.Outside(info), e).At.OtherPanic != nil
 		}
 		return !found
 	})
