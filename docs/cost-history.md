@@ -1358,6 +1358,16 @@ rename; none wrote a case body. Repairs used by the passes: Sonnet 3,
 by rewriting): without reads Sonnet costs 76% more and Haiku 55% more,
 for a derivation every time it passes.
 
+**Repairs that patch the batch** (#387 `-patch`, otherwise the same;
+`eval-runs/loop-{haiku,sonnet}-kinds-patch`, $1.17): Sonnet 4/4 at
+$0.261 a task (from $0.347, 25% less) in 4.75 requests; all 11 of its
+repairs answered with a patch, and a request after the first wrote
+1,175 output tokens on average, from 3,669 (68% less). Its passes wrote
+34-50 lines (54-79 before). Sonnet without reads now costs about what
+a session with the tools did on kinds ($0.25). Haiku never patched: 0
+of 16 repairs, each a whole batch again, at the same cost ($0.031) and
+1/4 (2/4 before, within noise).
+
 ## What made the difference
 
 - **Smaller results** (#75, rename locations): the largest single win when

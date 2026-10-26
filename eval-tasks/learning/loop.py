@@ -13,7 +13,9 @@ failing test goes back in the same conversation (claude -p --resume, so
 the prefix stays cached) with the numbered source of each place it names,
 for the batch again, at most -repairs times. When a batch applies and
 the tests pass, the model is asked whether the change is done; if not,
-its next batch runs on top, at most -stages more. The task's hidden
+its next batch runs on top, at most -stages more. With -patch, a repair
+lists the failed batch's steps and may answer with those from one on,
+the ones before kept: a repair's output is most of what the loop costs. The task's hidden
 tests judge what the kept batches left.
 
 Run from the repository root:
@@ -127,6 +129,54 @@ REPAIR = """The batch did not succeed:
 {source}Nothing of it was kept: the next batch runs on the module as it was
 before this one. Answer with that whole batch again, corrected:
 {{"batch": {{"steps": [...]}}}}."""
+
+
+# PATCH, with -patch, asks a repair for the steps from one on, those
+# before it kept, in place of the whole batch again: a repair's output
+# is most of what the loop costs.
+PATCH = """The batch did not succeed:
+
+{what}
+
+{source}Nothing of it was kept: the next batch runs on the module as it was
+before this one. Its steps were:
+
+{listing}
+
+Answer with the steps that replace it from one of them on, the ones
+before kept as they were (line numbers still as when the batch began):
+{{"patch": {{"from": N, "steps": [...]}}}}{suggest}
+or with the whole batch again: {{"batch": {{"steps": [...]}}}}."""
+
+
+def listing(steps):
+    """The steps, numbered, each with its tool and its arguments cut short."""
+    out = []
+    for i, s in enumerate(steps, 1):
+        args = {k: v if not isinstance(v, str) or len(v) <= 40 else v[:37] + "..." for k, v in (s.get("args") or {}).items()}
+        out.append(f"{i:3}  {s.get('tool')}  {json.dumps(args)[:140]}")
+    return "\n".join(out)
+
+
+def suggestion(what, n):
+    """Which from fits the failure what, of a batch of n steps."""
+    m = re.match(r"REFUSED batch at step (\d+) of", what)
+    if m:
+        return f"\n(from {m.group(1)} redoes the refused step and what follows it; from {n + 1} adds steps after them all)"
+    return f"\n(from {n + 1} adds steps after them all)"
+
+
+def patched(last, patch):
+    """The batch last with its steps from patch["from"] on replaced by
+    patch["steps"], or None if patch is not one."""
+    if not isinstance(patch, dict) or not isinstance(patch.get("steps"), list):
+        return None
+    try:
+        k = int(patch.get("from", 1))
+    except (TypeError, ValueError):
+        return None
+    k = min(max(k, 1), len(last["steps"]) + 1)
+    return dict(last, steps=last["steps"][:k - 1] + patch["steps"])
 
 
 # The sentences most tools' descriptions end with, which the compact
@@ -274,19 +324,21 @@ class Ref:
         return json.dumps({"batch": self.ref}), ""
 
 
-def attempt(task, model, tools, binary, repairs, log, may_read=True, stages=2, read_after=False):
+def attempt(task, model, tools, binary, repairs, log, may_read=True, stages=2, read_after=False, patch=False):
     """One attempt at task. A batch that applies and passes the module's
     tests is kept, and the model is asked whether the change is done; if
     not, its next batch runs on what the kept ones left, at most stages
     more. A refusal or a failing test gets a repair, at most repairs in
     all; the next batch then runs where the failed one began. With
-    read_after, reads open only once a batch has applied."""
+    read_after, reads open only once a batch has applied; with patch, a
+    repair may answer with the failed batch's steps from one on."""
     module = os.path.join(ROOT, "eval-tasks", task["dir"])
     text = PLAN.format(tools=tools, view=probe.view("calltree", module), prompt=task["prompt"],
                        read=READ_AFTER if read_after else MAY_READ if may_read else "")
     may_read = may_read and not read_after
-    row = {"reads": 0, "repairs": 0, "stages": 0, "refusals": [], "error": ""}
+    row = {"reads": 0, "repairs": 0, "patches": 0, "stages": 0, "refusals": [], "error": ""}
     base, batches, left, reads = module, [], repairs, 3  # base: where the next batch runs
+    last = None  # the batch that failed last, which a patch changes
     hint = READ_HINT if may_read else ""
     ans = err = None
 
@@ -310,6 +362,9 @@ def attempt(task, model, tools, binary, repairs, log, may_read=True, stages=2, r
             row["refusals"].append("read before a batch applied")
             ask(NOT_YET)
             continue
+        if patch and last and ans and not isinstance(ans.get("batch"), dict) and (b := patched(last, ans.get("patch"))):
+            ans = {"batch": b}
+            row["patches"] += 1
         if not ans or not isinstance(ans.get("batch"), dict):
             row["refusals"].append(err or "no batch in the answer")
             if left == 0:
@@ -319,8 +374,10 @@ def attempt(task, model, tools, binary, repairs, log, may_read=True, stages=2, r
             row["repairs"] += 1
             ask(UNPARSED)
             continue
-        d, ok, what = run_batch(binary, base, ans["batch"])
+        last = ans["batch"]
+        d, ok, what = run_batch(binary, base, last)
         if ok:
+            last = None
             batches.append(ans["batch"])
             row["stages"] += 1
             if base != module:
@@ -340,7 +397,10 @@ def attempt(task, model, tools, binary, repairs, log, may_read=True, stages=2, r
         row["repairs"] += 1
         places = named_places(d, what)
         shutil.rmtree(d)
-        ask(REPAIR.format(what=what, source=places) + hint)
+        if patch and isinstance(last.get("steps"), list):
+            ask(PATCH.format(what=what, source=places, listing=listing(last["steps"]), suggest=suggestion(what, len(last["steps"]))) + hint)
+        else:
+            ask(REPAIR.format(what=what, source=places) + hint)
     row["applied"] = bool(batches)
     row["passed"] = bool(batches) and hidden(base, task["tests"])
     if base != module:
@@ -360,6 +420,7 @@ def main():
     p.add_argument("-out", required=True)
     p.add_argument("-no-read", action="store_true", help="the plan cannot ask for source; only repairs send it")
     p.add_argument("-read-after", action="store_true", help="the plan may ask for source only once a batch has applied")
+    p.add_argument("-patch", action="store_true", help="a repair may answer with the failed batch's steps from one on, the ones before kept")
     p.add_argument("-reference", default="compact", choices=["compact", "full"],
                    help="the tools as compact signatures and descriptions, or as the server publishes them")
     p.add_argument("-stages", type=int, default=2, help="batches after the first that the model may send when asked if it is done")
@@ -379,7 +440,7 @@ def main():
                 model = Ref(ref) if m == "ref" else Model(m, empty)
                 log = []
                 row = {"task": t["name"], "model": m, "run": n}
-                row.update(attempt(t, model, tools, binary, a.repairs, log, may_read=not a.no_read, stages=a.stages, read_after=a.read_after))
+                row.update(attempt(t, model, tools, binary, a.repairs, log, may_read=not a.no_read, stages=a.stages, read_after=a.read_after, patch=a.patch))
                 row.update(cost=model.cost, requests=model.requests, usage=model.usage)
                 with open(os.path.join(a.out, f"{t['name']}-{m}-{n}.txt"), "w") as f:
                     f.write("\n\n==== next answer ====\n\n".join(log))
