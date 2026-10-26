@@ -2573,3 +2573,7 @@ This entry appended with a heredoc. Nothing else by hand.
 `ifchain.go` with create_file, the hook, description and schema with
 replace_text; goldens with create_file. This entry appended with a
 heredoc. Nothing else by hand.
+
+## 2026-10-25: roadmap item 33, output holes in the pattern
+
+Nothing by hand: the item and this entry with replace_text.
