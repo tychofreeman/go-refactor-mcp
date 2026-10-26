@@ -410,6 +410,12 @@ routes (1/4 from 4/4) and kinds fell to 2/4. The examples are what
 lead a plan to a derivation; an index without them saves the cost
 and loses the choice.
 
+So `-full-tools`, with `-index`: the tools named are given in full from
+the start, the rest as index lines. For the tools that carry a change
+to every place it reaches (fold, extract_function, change_field_type,
+introduce_parameter, remove_dead_code, `CARRIERS` in loop.py) the
+plan's tools section is 11.2K characters, 29% of the reference.
+
 ## Recording
 
 Each step in its own PR: the results in `docs/cost-history.md`, the

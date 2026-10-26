@@ -2935,3 +2935,8 @@ hand.
 
 The run's results in cost-history and plan-and-execute, and this entry,
 with replace_text. Nothing by hand.
+
+## 2026-10-26: loop.py gives the carrying tools in full with the index
+
+`-full-tools`, `FULL`, `CARRIERS` and index's skip with replace_text in
+one batch; the docs and this entry with replace_text. Nothing by hand.
