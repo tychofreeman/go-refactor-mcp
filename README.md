@@ -1682,8 +1682,17 @@ hand or a tool got in the way.
        reference, passed as an argument, is not a read of what it
        points to. Out of its context, a write to a local a pointer or
        closure can reach is an effect (the walker's `partial`).
-    3. inline_function's `movable`, `droppable`, `lhsEvaluatedFirst`
-       and its effect walks.
+    3. *Done.* inline_function: `classify` sorts an argument by its
+       summary (an effect, a panic, a read, or none), `effectBefore` is
+       one move of the argument into the body (`PastFunc`, the body's
+       function, since the argument's summary is the caller's), past
+       what the body evaluates before the last use and the rest of each
+       use's statement (`EvaluatedAfter`), `droppable` a move with
+       `Unused` times, and the result's own effects a summary;
+       `pureRead` is deleted. `lhsEvaluatedFirst` keeps `movable` (stable
+       and no panic), since what it moves past is the whole inlined
+       body. Loosened with a reason: a call that only reads classes as
+       a read, not an effect; a dropped result that reads may be dropped.
     4. fold's `first`, `risky` and `impure`; slide's `checkIndependent`
        (two statements swapping is each moving past the other).
     5. The path conditions (inline_variable's `evaluatedOnce`,

@@ -433,7 +433,8 @@ func (x *inliner) mustBind(p *param, why string) error {
 	return nil
 }
 
-// classify sorts an argument by how freely it can be moved into the body.
+// classify sorts an argument by how freely it can be moved into the body:
+// by what evaluating it does.
 func (x *inliner) classify(p *param) int {
 	if p.arg == nil {
 		return effectArg
@@ -447,43 +448,16 @@ func (x *inliner) classify(p *param) int {
 	if tv := x.info.Types[p.arg]; tv.Value != nil {
 		return constArg
 	}
-	if x.movable(x.callerFA, p.arg, len(p.uses) > 1) {
-		return stableArg
-	}
-	if x.isVarPath(p.arg) {
+	s := x.ws.Effects().Of(x.callerFA, p.arg)
+	switch {
+	case s.Effect != "", s.Makes != "" && len(p.uses) > 1: // one new value would stand for several
+		return effectArg
+	case s.Panics != analysis.NoPanic:
+		return panicArg
+	case s.Reads != "":
 		return readArg
 	}
-	if x.pureRead(p.arg) {
-		return panicArg
-	}
-	return effectArg
-}
-
-// pureRead reports whether evaluating e only reads memory: no calls (other
-// than conversions and len/cap), receives, function literals or composite
-// literals. It may still panic (a nil pointer, an index out of range).
-func (x *inliner) pureRead(e ast.Expr) bool {
-	ok := true
-	ast.Inspect(e, func(n ast.Node) bool {
-		switch n := n.(type) {
-		case *ast.FuncLit, *ast.CompositeLit:
-			ok = false
-		case *ast.CallExpr:
-			if tv, isT := x.info.Types[n.Fun]; isT && tv.IsType() {
-				return ok
-			}
-			if b, isB := x.info.Uses[analysis.IdentOf(n.Fun)].(*types.Builtin); isB && (b.Name() == "len" || b.Name() == "cap") {
-				return ok
-			}
-			ok = false
-		case *ast.UnaryExpr:
-			if n.Op == token.ARROW {
-				ok = false
-			}
-		}
-		return ok
-	})
-	return ok
+	return stableArg
 }
 
 // firstUseUnconditional reports whether p's first use in the body is
@@ -529,104 +503,38 @@ func (x *inliner) isVarPath(e ast.Expr) bool {
 	return false
 }
 
-// effectBefore returns something in the body that could change a variable
-// before p's last use (counting a use in a loop as the end of the loop), or
-// nil.
+// effectBefore returns something in the body that could change the
+// argument's value or panic before p's last use (counting a use in a loop
+// as the end of the loop), or nil: the argument moves into the body,
+// past everything evaluated before that point and past the rest of each
+// use's own statement, since Go does not order a plain read against a
+// call next to it.
 func (x *inliner) effectBefore(p *param) ast.Node {
 	last := token.NoPos
-	var once []*ast.Ident // uses not in a loop: evaluated once, in place
+	var past []ast.Node
 	for _, u := range p.uses {
 		end := u.End()
+		var stmt ast.Node
 		for _, n := range analysis.PathTo(x.decl.Body, u) {
 			switch n.(type) {
 			case *ast.ForStmt, *ast.RangeStmt:
 				end = max(end, n.End())
 			}
+			if _, ok := n.(ast.Stmt); ok && stmt == nil {
+				stmt = n
+			}
 		}
-		if end == u.End() {
-			once = append(once, u)
+		if end == u.End() && stmt != nil {
+			past = append(past, analysis.EvaluatedAfter(stmt, u.End())...)
 		}
 		last = max(last, end)
 	}
-	// A call around a use runs after its arguments are evaluated, so it
-	// does not count; any other call in the use's statement does, since Go
-	// does not order a plain read against a call next to it.
-	encloses := func(n ast.Node) bool {
-		for _, u := range once {
-			if n.Pos() <= u.Pos() && u.End() <= n.End() {
-				return true
-			}
-		}
-		return false
+	past = append(analysis.EvaluatedBefore(x.decl.Body, last, nil), past...)
+	m := analysis.Move{Effects: x.ws.Effects(), Func: x.callerFA, Expr: p.arg, Past: past, PastFunc: x.calleeFA}
+	if o := m.Check(); o != nil {
+		return o.Past
 	}
-	var bad ast.Node
-	for _, u := range once {
-		path := analysis.PathTo(x.decl.Body, u)
-		var stmt ast.Node
-		for _, n := range path {
-			if _, ok := n.(ast.Stmt); ok {
-				stmt = n
-				break
-			}
-		}
-		if stmt == nil {
-			continue
-		}
-		ast.Inspect(stmt, func(n ast.Node) bool {
-			if n == nil || bad != nil {
-				return false
-			}
-			if _, ok := n.(*ast.FuncLit); ok {
-				return false
-			}
-			if x.ws.Effects().Acts(x.info, n) && !encloses(n) {
-				bad = n
-			}
-			return bad == nil
-		})
-		if bad != nil {
-			return bad
-		}
-	}
-	ast.Inspect(x.decl.Body, func(n ast.Node) bool {
-		if n == nil || bad != nil || n.Pos() >= last {
-			return false
-		}
-		switch n := n.(type) {
-		case *ast.FuncLit:
-			return false
-		case *ast.SendStmt, *ast.GoStmt:
-			bad = n
-		case *ast.AssignStmt:
-			if n.End() >= last {
-				return true // the write happens after the use (only its parts count)
-			}
-			for _, l := range n.Lhs {
-				if id, ok := l.(*ast.Ident); ok && (id.Name == "_" || (n.Tok == token.DEFINE && x.info.Defs[id] != nil)) {
-					continue
-				}
-				if x.calleeFA.RootVar(l) == nil {
-					bad = n
-				}
-			}
-		case *ast.IncDecStmt:
-			if n.End() <= last && x.calleeFA.RootVar(n.X) == nil {
-				bad = n
-			}
-		case *ast.RangeStmt:
-			if analysis.IsMapOrChan(x.info.TypeOf(n.X)) {
-				if _, ok := x.info.TypeOf(n.X).Underlying().(*types.Chan); ok {
-					bad = n
-				}
-			}
-		default:
-			if x.ws.Effects().Acts(x.info, n) && !encloses(n) {
-				bad = n
-			}
-		}
-		return bad == nil
-	})
-	return bad
+	return nil
 }
 
 // capture returns what would capture a name in p's argument at one of p's
@@ -694,20 +602,7 @@ func (x *inliner) checkExprOrder() error {
 				x.quote(effectful[i-1].arg), x.quote(effectful[i].arg), x.fn.Name())
 		}
 	}
-	var own ast.Node
-	ast.Inspect(x.results[0], func(n ast.Node) bool {
-		if n == nil || own != nil {
-			return false
-		}
-		if _, ok := n.(*ast.FuncLit); ok {
-			return false
-		}
-		if x.ws.Effects().Acts(x.info, n) {
-			own = n
-		}
-		return own == nil
-	})
-	if own != nil {
+	if own := x.ws.Effects().Of(x.calleeFA, x.results[0]).At.Effect; own != nil {
 		return refactor.Refusef("%q's result %s has calls of its own, and the argument %s has effects; inlining could change their order. Assign the call to a variable first",
 			x.fn.Name(), x.dquote(own), x.quote(effectful[0].arg))
 	}

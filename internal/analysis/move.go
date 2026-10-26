@@ -28,6 +28,7 @@ type Move struct {
 	Func         *Func
 	Expr         ast.Expr
 	Past         []ast.Node
+	PastFunc     *Func // the function Past belongs to, when not Func: an argument moving into an inlined body
 	Times        Times
 	Dereferenced bool // every use dereferences the value, so a nil dereference in Expr panics there anyway and may move
 }
@@ -102,8 +103,12 @@ func (m Move) Check() *Obstacle {
 	if len(m.Past) == 0 {
 		return nil
 	}
-	p := m.Effects.OfNodes(m.Func, m.Past)
-	written, where := writtenLocal(m.Func, m.Past, m.Func.LocalsRead(m.Expr))
+	pf := m.PastFunc
+	if pf == nil {
+		pf = m.Func
+	}
+	p := m.Effects.OfNodes(pf, m.Past)
+	written, where := writtenLocal(pf, m.Past, m.Func.LocalsRead(m.Expr))
 	before := func(o Obstacle, past ast.Node, does string) *Obstacle {
 		o.Past, o.PastDoes = past, does
 		return o.why(q + " " + o.Does + ", and " + nodeText(past) + " " + does + " before it")
@@ -175,6 +180,23 @@ func EvaluatedBefore(root ast.Node, pos token.Pos, skip ast.Node) []ast.Node {
 			return false
 		}
 		if n.End() <= pos {
+			out = append(out, n)
+			return false
+		}
+		return true // it encloses pos; look inside
+	})
+	return out
+}
+
+// EvaluatedAfter returns the code inside root that is evaluated after
+// pos: the largest nodes that start at or after it, in order.
+func EvaluatedAfter(root ast.Node, pos token.Pos) []ast.Node {
+	var out []ast.Node
+	ast.Inspect(root, func(n ast.Node) bool {
+		if n == nil || n.End() <= pos {
+			return false
+		}
+		if n.Pos() >= pos {
 			out = append(out, n)
 			return false
 		}
