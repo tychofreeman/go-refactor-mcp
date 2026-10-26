@@ -1,1 +1,1 @@
-m.decl could panic: it reads a field through a pointer, and xs[0] (at a.go:9:7) could panic before it
+m.decl could panic: it reads m.decl through a pointer, and xs[0] (at a.go:9:7) could panic before it

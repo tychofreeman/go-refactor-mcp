@@ -1626,8 +1626,8 @@ hand or a tool got in the way.
        reference value when an expression is evaluated another number
        of times. Two goldens used fmt as their example of an effect and
        now use a call of `Error` and `os.Getenv`.
-    7. Changesig's `riskOf` and `unsafeValue` hold a fourth and fifth
-       copy of the panic rules; move them onto the summaries too.
+    7. *Done* in item 35, step 2: changesig's `riskOf` and
+       `unsafeValue`, the last copies of the panic rules, became moves.
     5. *Done.* Calls of the module's own functions judged by their
        summaries, made once for each state of the workspace
        (`Workspace.Effects()`, which changesig, fold, slide and inspect
@@ -1676,12 +1676,49 @@ hand or a tool got in the way.
        `&v` of a variable or field is the same pointer each time, so it
        may be shared; stricter: a write to a local the expression reads,
        between declaration and use, is found by the move as well.
-    2. changesig: `checkEvaluation`, `riskOf`, `unsafeValue` and
-       move_parameter's `checkOrder` (item 34's step 7 falls out).
-    3. inline_function's `movable`, `droppable`, `lhsEvaluatedFirst`
-       and its effect walks.
-    4. fold's `first`, `risky` and `impure`; slide's `checkIndependent`
-       (two statements swapping is each moving past the other).
+    2. *Done.* changesig: `checkEvaluation` is one move (to the call,
+       past everything the body does first, Several or Maybe by the
+       path), `unsafeValue` a move with `Unused` times, `checkOrder` two
+       moves of each argument past the other, and `checkArgEffects` a
+       summary; `risk`, `riskOf`, `risks`, `firstRisk`, `syncWalk`,
+       `assignsOutside`, `readsVar` and `privateLocals` are deleted,
+       and item 34's step 7 with them. introduce_parameter keeps its
+       own policy that the value has no side effects at all (its own
+       check, not a move rule). Verdicts loosened with a reason: two
+       nil dereferences may swap as arguments; a local that holds a
+       reference, passed as an argument, is not a read of what it
+       points to. Out of its context, a write to a local a pointer or
+       closure can reach is an effect (the walker's `partial`).
+    3. *Done.* inline_function: `classify` sorts an argument by its
+       summary (an effect, a panic, a read, or none), `effectBefore` is
+       one move of the argument into the body (`PastFunc`, the body's
+       function, since the argument's summary is the caller's), past
+       what the body evaluates before the last use and the rest of each
+       use's statement (`EvaluatedAfter`), `droppable` a move with
+       `Unused` times, and the result's own effects a summary;
+       `pureRead` is deleted. `lhsEvaluatedFirst` keeps `movable` (stable
+       and no panic), since what it moves past is the whole inlined
+       body. Loosened with a reason: a call that only reads classes as
+       a read, not an effect; a dropped result that reads may be dropped.
+    4. *Done.* slide: `checkIndependent` is two moves, each statement
+       past the other (`Move.Expr` takes a statement), and `checkJumps`
+       a move with `Maybe` times; its own walker (`addEffects`, 100
+       lines, with `effect`, `shared`, `unsafe`, `nilDeref`) is deleted,
+       and its field-path helpers moved to `analysis` (`PathOf`,
+       `PathAbove`, `ParentsIn`, `Overlaps`), where the move uses them:
+       a write to `p.y` does not touch a read of `p.x`, and a method
+       with a pointer receiver called on a local writes it. fold:
+       `evaluatedFirst` is a move of the argument past what the matched
+       statements evaluate before its first use, `Shared` when the body
+       uses the parameter several times; `effectful` reads the summary;
+       `matters` is deleted. Found on the way: `Shared` need not refuse a
+       panic (it panics the first time either way), `Several` must also
+       refuse a new reference value (two allocations are two pointers),
+       and inline_variable's several uses are `Several`, not `Shared`.
+       Still fold's own: `first`, `risky`, `impure`, `staleRead` and
+       `nilAddress`, which judge a hole's argument against the call's
+       evaluation order; a later step once a body's summary can stand
+       as `Past`.
     5. The path conditions (inline_variable's `evaluatedOnce`,
        changesig's `notOnEveryCall`, inline_function's
        `conditionalOrRepeated`), which decide `Times` from where a use

@@ -1,1 +1,1 @@
-line 14 could panic or not finish (it calls squares, which makes []int of a size that may be out of range)
+line 14 could panic: it calls squares, which makes []int of a size that may be out of range, and line 15 calls fmt.Println, so swapping them would change what happens

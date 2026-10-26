@@ -402,15 +402,17 @@ func (t *target) qualified(o types.Object, c call) bool {
 	return home != nil && o.Exported() && o.Parent() == home.Scope() && c.pkg.Types != nil && c.pkg.Types.Path() != home.Path()
 }
 
-// checkArgEffects refuses a call whose arguments or receiver have side
-// effects.
+// checkArgEffects refuses a call whose receiver or an argument has side
+// effects: the new argument repeats some of them, and its evaluation is
+// not ordered with theirs.
 func (t *target) checkArgEffects(c call, csrc []byte) error {
-	if x := c.recv(); x != nil && firstRisk(c.pkg.TypesInfo, x, func(r risk) bool { return r.effect }, t.ws.Effects()) != nil {
+	acts := func(e ast.Expr) bool { return t.ws.Effects().Of(analysis.Outside(c.pkg.TypesInfo), e).Effect != "" }
+	if x := c.recv(); x != nil && acts(x) {
 		return refactor.Refusef("the receiver %s at %s has side effects; assign it to a variable first",
 			csrc[t.off(x.Pos()):t.off(x.End())], t.ws.Position(x.Pos()))
 	}
 	for i, arg := range c.expr.Args {
-		if firstRisk(c.pkg.TypesInfo, arg, func(r risk) bool { return r.effect }, t.ws.Effects()) != nil {
+		if acts(arg) {
 			p := t.params[min(i, len(t.params)-1)]
 			return refactor.Refusef("the argument %s for %s at %s has side effects; assign it to a variable first",
 				csrc[t.off(arg.Pos()):t.off(arg.End())], p.name, t.ws.Position(arg.Pos()))

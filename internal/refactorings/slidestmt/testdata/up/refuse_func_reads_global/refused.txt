@@ -1,1 +1,1 @@
-that could change what line 11 reads (it calls get, which reads the package variable count)
+line 10 has side effects (calls fmt.Println), and line 11 calls get, which reads the package variable count, so swapping them would change what happens

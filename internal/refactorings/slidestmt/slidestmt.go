@@ -101,7 +101,7 @@ func (m *MoveStatement) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 	}
 	f := analysis.AnalyzeFunc(pkg.TypesInfo, analysis.OutermostFunc(analysis.PathTo(file, first)))
 	effects := ws.Effects()
-	if err := checkIndependent(factsOf(f, tf, first, effects), factsOf(f, tf, second, effects)); err != nil {
+	if err := checkIndependent(factsOf(f, tf, first, effects), factsOf(f, tf, second, effects), f, effects); err != nil {
 		return nil, err
 	}
 	swapped := string(src[bStart:bEnd]) + string(src[aEnd:bStart]) + string(src[aStart:aEnd])

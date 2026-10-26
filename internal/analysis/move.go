@@ -14,7 +14,8 @@ const (
 	Once    Times = iota // as often as now
 	Maybe                // once or not at all (it moves under a condition)
 	Several              // once for each of several uses, each evaluating it again
-	Shared               // once, with the one value standing for several uses
+	Shared               // once, with the one value standing for several evaluations
+	Unused               // once more or once less, where nothing uses the value (an argument added or dropped)
 )
 
 // Move is a change to where, or how often, an expression is evaluated:
@@ -25,19 +26,24 @@ const (
 type Move struct {
 	Effects      *Effects
 	Func         *Func
-	Expr         ast.Expr
+	Expr         ast.Node // what moves: an expression, or a statement
 	Past         []ast.Node
+	PastFunc     *Func // the function Past belongs to, when not Func: an argument moving into an inlined body
 	Times        Times
 	Dereferenced bool // every use dereferences the value, so a nil dereference in Expr panics there anyway and may move
 }
 
 // Obstacle is why a Move would change behavior: Kind, what the
-// expression does that cannot move; In, the part of it that does so;
-// Past, what it cannot move past (nil when the number of evaluations
-// alone is the problem); and Why, a sentence.
+// expression does that cannot move, and In, the part of it that does
+// so, with Does saying what ("reads p.n through a pointer"); Past, what
+// it cannot move past, with PastDoes saying what that does ("has side
+// effects", "leaves"), or nil when the number of evaluations alone is
+// the problem; and Why, the whole as a sentence.
 type Obstacle struct {
 	Kind     Problem
 	In, Past ast.Node
+	Does     string
+	PastDoes string
 	Why      string
 }
 
@@ -56,76 +62,122 @@ const (
 // as before and nothing it moves past could change its value, be changed
 // by it, or panic or stop before it where it would have before.
 func (m Move) Check() *Obstacle {
-	s := m.Effects.Of(m.Func, m.Expr)
+	var s Summary
+	if x, ok := m.Expr.(ast.Expr); ok {
+		s = m.Effects.Of(m.Func, x)
+	} else {
+		s = m.Effects.OfNodes(m.Func, []ast.Node{m.Expr})
+	}
 	panics, panicAt := s.Panics, s.At.Panic
 	if m.Dereferenced && panics == NilPanic {
 		panics, panicAt = NoPanic, nil // the use panics the same way
 	} else if m.Dereferenced {
 		panicAt = s.At.OtherPanic
 	}
-	text := func(n ast.Node) string {
-		if x, ok := n.(ast.Expr); ok {
-			return types.ExprString(x)
-		}
-		return "the code"
-	}
+	q := nodeText(m.Expr)
+	acts := Obstacle{Kind: Acts, In: s.At.Effect, Does: "has side effects (" + s.Effect + ")"}
+	panicking := Obstacle{Kind: Panics, In: panicAt, Does: "could panic: it " + s.Unsafe}
+	reads := Obstacle{Kind: Reads, In: s.At.Reads, Does: s.Reads}
 	switch m.Times {
-	case Maybe:
+	case Maybe, Unused:
+		then := ", which would then not always happen"
+		if m.Times == Unused {
+			then = ", which would then happen another number of times"
+		}
 		if s.Effect != "" {
-			return &Obstacle{Kind: Acts, In: s.At.Effect, Why: text(m.Expr) + " " + s.Effect + ", which would then not always happen"}
+			return acts.why(q + " " + acts.Does + then)
 		}
 		if panics != NoPanic {
-			return &Obstacle{Kind: Panics, In: panicAt, Why: text(m.Expr) + " can panic (" + s.Unsafe + "), which would then not always happen"}
+			return panicking.why(q + " " + panicking.Does + then)
 		}
 	case Several, Shared:
+		then := ", which would then happen another number of times"
 		if s.Effect != "" {
-			return &Obstacle{Kind: Acts, In: s.At.Effect, Why: text(m.Expr) + " " + s.Effect + ", which would then happen another number of times"}
+			return acts.why(q + " " + acts.Does + then)
 		}
 		if s.Reads != "" {
-			return &Obstacle{Kind: Reads, In: s.At.Reads, Why: text(m.Expr) + " " + s.Reads + ", which could change between evaluations"}
+			return reads.why(q + " " + s.Reads + ", which could change between evaluations")
 		}
-		if panics != NoPanic {
-			return &Obstacle{Kind: Panics, In: panicAt, Why: text(m.Expr) + " can panic (" + s.Unsafe + "), which would then happen another number of times"}
+		if panics != NoPanic && m.Times == Several { // shared, it panics the first time either way
+			return panicking.why(q + " " + panicking.Does + then)
 		}
-		if m.Times == Shared && s.Makes != "" {
-			return &Obstacle{Kind: Makes, In: s.At.Makes, Why: text(m.Expr) + " " + s.Makes + ", and one value would stand for several"}
+		if s.Makes != "" {
+			return (&Obstacle{Kind: Makes, In: s.At.Makes, Does: s.Makes}).why(q + " " + s.Makes + ", and each evaluation makes another")
 		}
 	}
 	if len(m.Past) == 0 {
 		return nil
 	}
-	p := m.Effects.OfNodes(m.Func, m.Past)
-	reads := m.Func.LocalsRead(m.Expr)
-	written, where := writtenLocal(m.Func, m.Past, reads)
-	switch {
-	case s.Effect != "":
-		if first := p.first(); first != nil || where != nil {
-			if first == nil {
-				first = where
-			}
-			return &Obstacle{Kind: Acts, In: s.At.Effect, Past: first, Why: text(m.Expr) + " " + s.Effect + ", and moving it past " + text(first) + " changes the order of what happens"}
+	pf := m.PastFunc
+	if pf == nil {
+		pf = m.Func
+	}
+	p := m.Effects.OfNodes(pf, m.Past)
+	written, where := writtenLocal(pf, m.Func, m.Past, m.Expr)
+	before := func(o Obstacle, past ast.Node, does string) *Obstacle {
+		o.Past, o.PastDoes = past, does
+		return o.why(q + " " + o.Does + ", and " + nodeText(past) + " " + does + " before it")
+	}
+	if s.Effect != "" {
+		switch {
+		case p.Effect != "":
+			return before(acts, p.At.Effect, p.Effect)
+		case p.Reads != "":
+			return before(acts, p.At.Reads, p.Reads)
+		case p.Stops != "":
+			return before(acts, p.At.Stops, p.Stops)
+		case p.Panics == OtherPanic: // a nil dereference panics either way, only what is printed before differs
+			return before(acts, p.At.OtherPanic, "could panic (it "+p.Unsafe+")")
+		case where != nil:
+			return before(acts, where, "assigns "+written.Name())
 		}
 	}
 	if written != nil {
-		return &Obstacle{Kind: Reads, In: useOf(m.Func.Info, m.Expr, written), Past: where, Why: text(m.Expr) + " reads " + written.Name() + ", which " + text(where) + " changes"}
+		reads.In, reads.Does = useOf(m.Func.Info, m.Expr, written), "reads "+written.Name()
+		return before(reads, where, "assigns "+written.Name())
 	}
 	if s.Reads != "" && p.Effect != "" {
-		return &Obstacle{Kind: Reads, In: s.At.Reads, Past: p.At.Effect, Why: text(m.Expr) + " " + s.Reads + ", which " + text(p.At.Effect) + " could change (it " + p.Effect + ")"}
+		return before(reads, p.At.Effect, p.Effect)
 	}
 	if panics != NoPanic {
 		switch {
 		case p.Stops != "":
-			return &Obstacle{Kind: Panics, In: panicAt, Past: p.At.Stops, Why: text(m.Expr) + " can panic (" + s.Unsafe + "), and " + text(p.At.Stops) + " " + p.Stops}
+			return before(panicking, p.At.Stops, p.Stops)
 		case transfers(m.Past) != nil:
-			t := transfers(m.Past)
-			return &Obstacle{Kind: Panics, In: panicAt, Past: t, Why: text(m.Expr) + " can panic (" + s.Unsafe + "), and would no longer before " + text(t)}
-		case p.Effect != "" && (panics == OtherPanic || p.Panics != NoPanic):
-			return &Obstacle{Kind: Panics, In: panicAt, Past: p.At.Effect, Why: text(m.Expr) + " can panic (" + s.Unsafe + "), and " + text(p.At.Effect) + " " + p.Effect + ", which would then happen in another order"}
+			return before(panicking, transfers(m.Past), "leaves")
+		case p.Effect != "" && panics == OtherPanic:
+			return before(panicking, p.At.Effect, p.Effect)
 		case p.Panics != NoPanic && (panics == OtherPanic || p.Panics == OtherPanic):
-			return &Obstacle{Kind: Panics, In: panicAt, Past: p.At.Panic, Why: text(m.Expr) + " can panic (" + s.Unsafe + "), and so can " + text(p.At.Panic) + " (it " + p.Unsafe + "); which panics first would change"}
+			return before(panicking, p.At.Panic, "could panic (it "+p.Unsafe+")")
 		}
 	}
 	return nil
+}
+
+// why returns o with its sentence.
+func (o Obstacle) why(sentence string) *Obstacle {
+	o.Why = sentence
+	return &o
+}
+
+// nodeText is the source-like text of an expression, or a word for a
+// statement.
+func nodeText(n ast.Node) string {
+	switch n := n.(type) {
+	case ast.Expr:
+		return types.ExprString(n)
+	case *ast.ReturnStmt:
+		return "return"
+	case *ast.BranchStmt:
+		return n.Tok.String()
+	case *ast.ExprStmt:
+		return types.ExprString(n.X)
+	case *ast.AssignStmt:
+		return types.ExprString(n.Lhs[0]) + " " + n.Tok.String() + " " + types.ExprString(n.Rhs[0])
+	case *ast.IncDecStmt:
+		return types.ExprString(n.X) + n.Tok.String()
+	}
+	return "the code"
 }
 
 // EvaluatedBefore returns the code inside root that is evaluated before
@@ -147,16 +199,21 @@ func EvaluatedBefore(root ast.Node, pos token.Pos, skip ast.Node) []ast.Node {
 	return out
 }
 
-// first returns where the first thing s found is, or nil when it found
-// nothing that another evaluation could notice.
-func (s Summary) first() ast.Node {
-	var first ast.Node
-	for _, n := range []ast.Node{s.At.Effect, s.At.Reads, s.At.Unsafe} {
-		if n != nil && (first == nil || n.Pos() < first.Pos()) {
-			first = n
+// EvaluatedAfter returns the code inside root that is evaluated after
+// pos: the largest nodes that start at or after it, in order.
+func EvaluatedAfter(root ast.Node, pos token.Pos) []ast.Node {
+	var out []ast.Node
+	ast.Inspect(root, func(n ast.Node) bool {
+		if n == nil || n.End() <= pos {
+			return false
 		}
-	}
-	return first
+		if n.Pos() >= pos {
+			out = append(out, n)
+			return false
+		}
+		return true // it encloses pos; look inside
+	})
+	return out
 }
 
 // OfNodes summarizes what evaluating nodes, statements or expressions in
@@ -170,22 +227,38 @@ func (e *Effects) OfNodes(f *Func, nodes []ast.Node) Summary {
 	return b.s
 }
 
-// writtenLocal returns the first of the locals vars that the code in
-// nodes assigns, and where, or nil.
-func writtenLocal(f *Func, nodes []ast.Node, vars []*types.Var) (*types.Var, ast.Node) {
+// writtenLocal returns the first write in nodes to a part of a local
+// variable that x reads (outside function literals, which run later if
+// at all), and where: an assignment, ++ or --, a range clause, taking its
+// address, or a method with a pointer receiver called on it.
+func writtenLocal(pf, f *Func, nodes []ast.Node, x ast.Node) (*types.Var, ast.Node) {
+	reads := map[*types.Var][]string{}
+	parents := ParentsIn(x)
+	ast.Inspect(x, func(n ast.Node) bool {
+		if _, ok := n.(*ast.FuncLit); ok {
+			return false
+		}
+		if id, ok := n.(*ast.Ident); ok {
+			if v, ok := f.Info.Uses[id].(*types.Var); ok && f.IsLocal(v) {
+				reads[v] = append(reads[v], PathAbove(f.Info, id, parents))
+			}
+		}
+		return true
+	})
 	var v *types.Var
 	var at ast.Node
-	note := func(x ast.Expr, n ast.Node) {
+	note := func(e ast.Expr, n ast.Node) {
 		if at != nil {
 			return
 		}
-		r := f.RootVar(x)
+		r := pf.RootVar(e)
 		if r == nil {
 			return
 		}
-		for _, w := range vars {
-			if w == r {
-				v, at = w, n
+		path := PathOf(pf.Info, e)
+		for _, p := range reads[r] {
+			if Overlaps(p, path) {
+				v, at = r, n
 				return
 			}
 		}
@@ -202,14 +275,20 @@ func writtenLocal(f *Func, nodes []ast.Node, vars []*types.Var) (*types.Var, ast
 			case *ast.IncDecStmt:
 				note(n.X, n)
 			case *ast.RangeStmt:
-				for _, x := range []ast.Expr{n.Key, n.Value} {
-					if x != nil && n.Tok != token.DEFINE {
-						note(x, n)
+				for _, e := range []ast.Expr{n.Key, n.Value} {
+					if e != nil && n.Tok != token.DEFINE {
+						note(e, n)
 					}
 				}
 			case *ast.UnaryExpr:
 				if n.Op == token.AND {
 					note(n.X, n) // a pointer to it is made; it may be written through
+				}
+			case *ast.CallExpr:
+				if sel, ok := ast.Unparen(n.Fun).(*ast.SelectorExpr); ok {
+					if s := pf.Info.Selections[sel]; s != nil && s.Kind() == types.MethodVal && !IsPointer(pf.Info.TypeOf(sel.X)) && !valueReceiver(s) {
+						note(sel.X, n) // called through its address
+					}
 				}
 			}
 			return at == nil
@@ -219,7 +298,7 @@ func writtenLocal(f *Func, nodes []ast.Node, vars []*types.Var) (*types.Var, ast
 }
 
 // useOf returns the first identifier in x that refers to v.
-func useOf(info *types.Info, x ast.Expr, v *types.Var) ast.Node {
+func useOf(info *types.Info, x ast.Node, v *types.Var) ast.Node {
 	var found ast.Node
 	ast.Inspect(x, func(n ast.Node) bool {
 		if id, ok := n.(*ast.Ident); ok && found == nil && info.Uses[id] == v {

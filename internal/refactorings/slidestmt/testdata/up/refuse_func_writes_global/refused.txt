@@ -1,1 +1,1 @@
-and so does line 11 (it calls bump, which assigns to count)
+line 10 has side effects (calls fmt.Println), and line 11 calls bump, which assigns to count, so swapping them would change what happens
