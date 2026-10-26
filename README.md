@@ -1628,6 +1628,11 @@ hand or a tool got in the way.
        now use a call of `Error` and `os.Getenv`.
     7. *Done* in item 35, step 2: changesig's `riskOf` and
        `unsafeValue`, the last copies of the panic rules, became moves.
+    8. *Done.* `stopsFuncs` is a `stops` fact in `stdFuncs` (a function
+       with it is neither known nor read-only). `syncCalls` stays its
+       own table: it says how a function treats its function-valued
+       arguments (runs them before returning, reads or writes its first
+       argument), a different kind of fact with its own summary.
     5. *Done.* Calls of the module's own functions judged by their
        summaries, made once for each state of the workspace
        (`Workspace.Effects()`, which changesig, fold, slide and inspect

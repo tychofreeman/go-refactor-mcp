@@ -16,6 +16,7 @@ type stdEffect struct {
 	writes int       // the argument (1, 2, ...) whose memory it writes, -1 for the receiver, 0 for none
 	panics PanicKind // how it can panic
 	fresh  bool      // its result is new each call (an error, a pointer), so two calls give unequal results
+	stops  bool      // it ends the program or the goroutine rather than return
 }
 
 var (
@@ -30,6 +31,7 @@ var (
 	pure        = stdEffect{}
 	badArgument = stdEffect{panics: OtherPanic}
 	newValue    = stdEffect{fresh: true}
+	stops       = stdEffect{stops: true}
 )
 
 // stdFuncs lists standard library functions by types.Func.FullName.
@@ -42,6 +44,15 @@ var (
 // while a file is parsed, so they are reads of their receiver at most.
 // The methods of go/ast nodes read their fields, which can be assigned.
 var stdFuncs = map[string]stdEffect{
+	// Functions that do not return.
+	"os.Exit": stops, "runtime.Goexit": stops,
+	"log.Fatal": stops, "log.Fatalf": stops, "log.Fatalln": stops,
+	"log.Panic": stops, "log.Panicf": stops, "log.Panicln": stops,
+	"(*log.Logger).Fatal": stops, "(*log.Logger).Fatalf": stops, "(*log.Logger).Fatalln": stops,
+	"(*log.Logger).Panic": stops, "(*log.Logger).Panicf": stops, "(*log.Logger).Panicln": stops,
+	"(*testing.common).FailNow": stops, "(*testing.common).Fatal": stops, "(*testing.common).Fatalf": stops,
+	"(*testing.common).Skip": stops, "(*testing.common).Skipf": stops, "(*testing.common).SkipNow": stops,
+
 	// strings, on strings.
 	"strings.Compare": pure, "strings.Contains": pure, "strings.ContainsAny": pure,
 	"strings.ContainsRune": pure, "strings.Count": pure, "strings.Cut": pure,
@@ -203,6 +214,10 @@ func stdCall(info *types.Info, fn *types.Func, call *ast.CallExpr, private func(
 	se, ok := stdEffectOf(info, fn, call)
 	if !ok {
 		return Summary{}, false
+	}
+	if se.stops {
+		name := types.ExprString(call.Fun)
+		return Summary{Effect: "calls " + name, Unsafe: "calls " + name + ", which does not return", Stops: "calls " + name + ", which does not return", Panics: OtherPanic}, true
 	}
 	isPrivate := func(target ast.Expr, inPlace bool) bool { return private != nil && private(target, inPlace) }
 	// what returns the expression %r or %N names, and whether that memory
