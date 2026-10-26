@@ -416,6 +416,16 @@ to every place it reaches (fold, extract_function, change_field_type,
 introduce_parameter, remove_dead_code, `CARRIERS` in loop.py) the
 plan's tools section is 11.2K characters, 29% of the reference.
 
+Run (cost-history 19, the index with the carrying tools in full): on
+freight-xl the cheapest arm yet, Sonnet 16/16 at 23% below the full
+reference and half of writing by hand, Haiku 13/16 at 19% below; the
+folds came back (routes 3 of 4, run 4 of 4). On kinds Sonnet 4/4 at
+15% more than with the reference, from asks for the tools the
+derivation needs beyond the five (prepare_switch_for_types,
+function_to_method). Next, if wanted: add prepare_switch_for_types and
+function_to_method to the list, or give in full the tools a task's
+shape calls for.
+
 ## Recording
 
 Each step in its own PR: the results in `docs/cost-history.md`, the

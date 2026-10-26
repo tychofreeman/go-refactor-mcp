@@ -2940,3 +2940,8 @@ with replace_text. Nothing by hand.
 
 `-full-tools`, `FULL`, `CARRIERS` and index's skip with replace_text in
 one batch; the docs and this entry with replace_text. Nothing by hand.
+
+## 2026-10-26: results of the index with the carrying tools in full
+
+The results in cost-history 19, plan-and-execute, the session notes
+and this entry with replace_text in one batch. Nothing by hand.
