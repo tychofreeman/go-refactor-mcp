@@ -2820,6 +2820,11 @@ from a script that read the test's `got:` lines. By hand:
 `writtenLocal` rewritten whole through replace_declaration. This entry
 appended with a heredoc.
 
+## 2026-10-26: the case for and against step 2
+
+The section in plan-and-execute with replace_text. Nothing by hand.
+This entry appended with a heredoc.
+
 ## 2026-10-26: cost-history 19, kinds without reads with four repairs
 
 The run's results in cost-history and the session notes with
