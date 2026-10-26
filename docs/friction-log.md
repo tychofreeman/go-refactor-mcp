@@ -2728,3 +2728,9 @@ hand. This entry appended with a heredoc.
 The two runs' results in cost-history, plan-and-execute and the
 session notes with replace_text in one batch. Nothing by hand. This
 entry appended with a heredoc.
+
+## 2026-10-26: the signature note reaches a batch's refusal
+
+The test with add_declaration, the note's changes with replace_text
+and add_declaration (check "end"), the tally in cost-history with
+replace_text. Nothing by hand. This entry appended with a heredoc.
