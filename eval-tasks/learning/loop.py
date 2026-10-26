@@ -13,7 +13,10 @@ failing test goes back in the same conversation (claude -p --resume, so
 the prefix stays cached) with the numbered source of each place it names,
 for the batch again, at most -repairs times. When a batch applies and
 the tests pass, the model is asked whether the change is done; if not,
-its next batch runs on top, at most -stages more. With -patch, a repair
+its next batch runs on top, at most -stages more. With -arm manual, the
+model answers with text edits ({"file", "old", "new"} or {"file",
+"content"}) that the loop applies, without the tools reference: the
+same loop, to compare deriving with writing and nothing else different. With -patch, a repair
 lists the failed batch's steps and may answer with those from one on,
 the ones before kept: a repair's output is most of what the loop costs. The task's hidden
 tests judge what the kept batches left.
@@ -150,25 +153,36 @@ or with the whole batch again: {{"batch": {{"steps": [...]}}}}."""
 
 
 def listing(steps):
-    """The steps, numbered, each with its tool and its arguments cut short."""
+    """The steps, numbered, each with its tool and its arguments cut short
+    (or, an edit of the manual arm, its file and what it replaces)."""
+    short = lambda v: v if not isinstance(v, str) or len(v) <= 40 else v[:37] + "..."
     out = []
     for i, s in enumerate(steps, 1):
-        args = {k: v if not isinstance(v, str) or len(v) <= 40 else v[:37] + "..." for k, v in (s.get("args") or {}).items()}
-        out.append(f"{i:3}  {s.get('tool')}  {json.dumps(args)[:140]}")
+        if not isinstance(s, dict):
+            out.append(f"{i:3}  {short(json.dumps(s))}")
+        elif "tool" in s:
+            args = {k: short(v) for k, v in (s.get("args") or {}).items()}
+            out.append(f"{i:3}  {s.get('tool')}  {json.dumps(args)[:140]}")
+        else:
+            what = "content" if "content" in s else "old: " + json.dumps(short(s.get("old")))
+            out.append(f"{i:3}  {s.get('file')}  {what}")
     return "\n".join(out)
 
 
-def suggestion(what, n):
-    """Which from fits the failure what, of a batch of n steps."""
-    m = re.match(r"REFUSED batch at step (\d+) of", what)
+def suggestion(what, n, unit="step"):
+    """Which from fits the failure what, of a batch of n steps (or edits)."""
+    m = re.match(r"REFUSED \w+ at (?:step|edit) (\d+) of", what)
     if m:
-        return f"\n(from {m.group(1)} redoes the refused step and what follows it; from {n + 1} adds steps after them all)"
-    return f"\n(from {n + 1} adds steps after them all)"
+        return f"\n(from {m.group(1)} redoes the refused {unit} and what follows it; from {n + 1} adds {unit}s after them all)"
+    return f"\n(from {n + 1} adds {unit}s after them all)"
 
 
 def patched(last, patch):
     """The batch last with its steps from patch["from"] on replaced by
-    patch["steps"], or None if patch is not one."""
+    patch["steps"] (the manual arm's patch["edits"]), or None if patch is
+    not one."""
+    if isinstance(patch, dict) and "steps" not in patch and isinstance(patch.get("edits"), list):
+        patch = dict(patch, steps=patch["edits"])
     if not isinstance(patch, dict) or not isinstance(patch.get("steps"), list):
         return None
     try:
@@ -284,6 +298,129 @@ def hidden(d, tests):
     return probe.sh(["sh", "-c", "go vet ./... && go test ./..."], cwd=d).returncode == 0
 
 
+# The manual arm (-arm manual): the same loop, but the model answers
+# with text edits, which the loop applies, in place of gorefactor steps.
+PLAN_MANUAL = """You are making a change to a Go module. You have no tools in this
+conversation: you answer with JSON, and a program applies it and tells
+you what happened.
+
+The module, as a call tree (names, signatures and doc comments; no bodies):
+
+{view}
+
+The change:
+{prompt}
+
+Answer with one JSON object and nothing else:
+{{"edits": [the whole change as edits, in order]}}
+where an edit is {{"file": PATH, "old": TEXT, "new": TEXT}}, which
+replaces the one occurrence of old in the file as the edits before it
+left it (old exactly as in the file, its indentation included, without
+line numbers), or {{"file": PATH, "content": TEXT}}, which writes a
+whole file.{read}
+After the edits, the module's own tests run; you get one message back
+with what failed, if anything."""
+
+MANUAL_READ = """
+Or, to see code first: {"read": ["Name", "Type.Method" or "pkg.Name", ...]}
+for the source of functions, methods, types and variables, tests
+included, with line numbers. You may answer with a read in place of
+edits, now or after any later message, at most three times in all."""
+
+READ_MANUAL = """The source you asked for, from the module as it is now, with its
+line numbers:
+
+{source}
+
+Answer with the edits: {{"edits": [...]}}."""
+
+DONE_MANUAL = """The edits applied, and the module's own tests pass. If that
+completes the change asked for, answer {"done": true}. If not, answer
+with the next edits, which apply to the module as these left it:
+{"edits": [...]}."""
+
+UNPARSED_MANUAL = """Your answer was not one JSON object with an "edits" key that parses.
+Answer with that JSON alone, nothing before or after it:
+{"edits": [...]}."""
+
+REPAIR_MANUAL = """The edits did not succeed:
+
+{what}
+
+{source}Nothing of them was kept: the next edits apply to the module as it
+was before these. Answer with all of them again, corrected:
+{{"edits": [...]}}."""
+
+PATCH_MANUAL = """The edits did not succeed:
+
+{what}
+
+{source}Nothing of them was kept: the next edits apply to the module as it
+was before these. They were:
+
+{listing}
+
+Answer with the edits that replace them from one of them on, the ones
+before kept as they were:
+{{"patch": {{"from": N, "edits": [...]}}}}{suggest}
+or with all of them again: {{"edits": [...]}}."""
+
+
+def run_edits(binary, module, batch):
+    """Applies the edits of batch["steps"], in order, to a fresh copy of
+    module, then runs go vet and the module's own tests, as run_batch
+    does. After an edit that cannot apply, the copy has those before it."""
+    d = probe.copy_module(module)
+    edits = batch["steps"]
+    for i, e in enumerate(edits, 1):
+        if why := apply_edit(d, e):
+            return d, False, f"REFUSED edits at edit {i} of {len(edits)}: {why}"
+    t = probe.sh(["sh", "-c", "go vet ./... && go test ./..."], cwd=d)
+    if t.returncode != 0:
+        return d, False, "The edits applied, but the module's tests failed:\n" + (t.stdout + t.stderr)[:3000]
+    return d, True, ""
+
+
+def apply_edit(d, e):
+    """Applies the edit e in d, or says why it cannot."""
+    if not isinstance(e, dict) or not isinstance(e.get("file"), str):
+        return 'an edit is {"file": PATH, "old": TEXT, "new": TEXT} or {"file": PATH, "content": TEXT}'
+    path = os.path.normpath(os.path.join(d, e["file"]))
+    if not path.startswith(d + os.sep):
+        return f"{e['file']} is outside the module"
+    if isinstance(e.get("content"), str):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        open(path, "w").write(e["content"])
+        return ""
+    if not isinstance(e.get("old"), str) or not isinstance(e.get("new"), str):
+        return f"{e['file']}: give old and new, or content"
+    if not os.path.isfile(path):
+        return f"{e['file']} does not exist; give content to write a new file"
+    src = open(path).read()
+    n = src.count(e["old"]) if e["old"] else 0
+    if n != 1:
+        return f"{e['file']}: old occurs {n} times; it must occur exactly once, as in the file (indentation included, no line numbers)"
+    open(path, "w").write(src.replace(e["old"], e["new"], 1))
+    return ""
+
+
+class Arm:
+    """What the model answers with and how the loop runs it: gorefactor
+    steps (the refactor arm) or text edits (the manual arm)."""
+
+    def __init__(self, name, plan, may_read, read, done, unparsed, repair, patch, run, unit):
+        self.name, self.plan, self.may_read, self.read, self.done = name, plan, may_read, read, done
+        self.unparsed, self.repair, self.patch, self.run, self.unit = unparsed, repair, patch, run, unit
+
+    def batch(self, ans):
+        """The batch an answer gives, {"steps": [...]} and its options, or None."""
+        if not ans:
+            return None
+        if self.name == "manual":
+            return {"steps": ans["edits"]} if isinstance(ans.get("edits"), list) else None
+        return ans["batch"] if isinstance(ans.get("batch"), dict) else None
+
+
 class Model:
     """One conversation with claude -p, continued with --resume."""
 
@@ -324,17 +461,25 @@ class Ref:
         return json.dumps({"batch": self.ref}), ""
 
 
-def attempt(task, model, tools, binary, repairs, log, may_read=True, stages=2, read_after=False, patch=False):
+ARMS = {
+    "refactor": Arm("refactor", PLAN, MAY_READ, READ, DONE, UNPARSED, REPAIR, PATCH, run_batch, "step"),
+    "manual": Arm("manual", PLAN_MANUAL, MANUAL_READ, READ_MANUAL, DONE_MANUAL, UNPARSED_MANUAL, REPAIR_MANUAL, PATCH_MANUAL, run_edits, "edit"),
+}
+
+
+def attempt(task, model, tools, binary, repairs, log, may_read=True, stages=2, read_after=False, patch=False, arm=ARMS["refactor"]):
     """One attempt at task. A batch that applies and passes the module's
     tests is kept, and the model is asked whether the change is done; if
     not, its next batch runs on what the kept ones left, at most stages
     more. A refusal or a failing test gets a repair, at most repairs in
     all; the next batch then runs where the failed one began. With
     read_after, reads open only once a batch has applied; with patch, a
-    repair may answer with the failed batch's steps from one on."""
+    repair may answer with the failed batch's steps from one on. arm says
+    what the model answers with: steps, or text edits (a batch's steps
+    then being the edits)."""
     module = os.path.join(ROOT, "eval-tasks", task["dir"])
-    text = PLAN.format(tools=tools, view=probe.view("calltree", module), prompt=task["prompt"],
-                       read=READ_AFTER if read_after else MAY_READ if may_read else "")
+    text = arm.plan.format(tools=tools, view=probe.view("calltree", module), prompt=task["prompt"],
+                           read=READ_AFTER if read_after else arm.may_read if may_read else "")
     may_read = may_read and not read_after
     row = {"reads": 0, "repairs": 0, "patches": 0, "stages": 0, "refusals": [], "error": ""}
     base, batches, left, reads = module, [], repairs, 3  # base: where the next batch runs
@@ -355,30 +500,31 @@ def attempt(task, model, tools, binary, repairs, log, may_read=True, stages=2, r
         if may_read and reads and ans and isinstance(ans.get("read"), list) and not ans.get("batch"):
             reads -= 1
             row["reads"] += len(ans["read"])
-            ask(READ.format(source=source(binary, base, ans["read"])))
+            ask(arm.read.format(source=source(binary, base, ans["read"])))
             continue
         if read_after and reads and not batches and ans and isinstance(ans.get("read"), list) and not ans.get("batch"):
             reads -= 1
             row["refusals"].append("read before a batch applied")
             ask(NOT_YET)
             continue
-        if patch and last and ans and not isinstance(ans.get("batch"), dict) and (b := patched(last, ans.get("patch"))):
-            ans = {"batch": b}
+        batch = arm.batch(ans)
+        if patch and last and ans and batch is None and (b := patched(last, ans.get("patch"))):
+            batch = b
             row["patches"] += 1
-        if not ans or not isinstance(ans.get("batch"), dict):
+        if batch is None:
             row["refusals"].append(err or "no batch in the answer")
             if left == 0:
                 row["error"] = err or "no batch in the answer"
                 break
             left -= 1
             row["repairs"] += 1
-            ask(UNPARSED)
+            ask(arm.unparsed)
             continue
-        last = ans["batch"]
-        d, ok, what = run_batch(binary, base, last)
+        last = batch
+        d, ok, what = arm.run(binary, base, last)
         if ok:
             last = None
-            batches.append(ans["batch"])
+            batches.append(batch)
             row["stages"] += 1
             if base != module:
                 shutil.rmtree(base)
@@ -387,7 +533,7 @@ def attempt(task, model, tools, binary, repairs, log, may_read=True, stages=2, r
                 break
             if read_after:
                 may_read, hint = True, READ_OPEN
-            ask(DONE + hint)
+            ask(arm.done + hint)
             continue
         row["refusals"].append(what.splitlines()[0][:200])
         if left == 0:
@@ -398,15 +544,18 @@ def attempt(task, model, tools, binary, repairs, log, may_read=True, stages=2, r
         places = named_places(d, what)
         shutil.rmtree(d)
         if patch and isinstance(last.get("steps"), list):
-            ask(PATCH.format(what=what, source=places, listing=listing(last["steps"]), suggest=suggestion(what, len(last["steps"]))) + hint)
+            ask(arm.patch.format(what=what, source=places, listing=listing(last["steps"]), suggest=suggestion(what, len(last["steps"]), arm.unit)) + hint)
         else:
-            ask(REPAIR.format(what=what, source=places) + hint)
+            ask(arm.repair.format(what=what, source=places) + hint)
     row["applied"] = bool(batches)
     row["passed"] = bool(batches) and hidden(base, task["tests"])
     if base != module:
         shutil.rmtree(base)
     every = {"steps": [s for b in batches for s in b.get("steps", [])]}
-    row.update(steps=len(every["steps"]), written=probe.written(every), tools=probe.tools_of(every))
+    if arm.name == "manual":  # an edit's new or content is what it writes
+        row.update(steps=len(every["steps"]), written=probe.written({"steps": [{"args": e} for e in every["steps"] if isinstance(e, dict)]}), tools=["edits"])
+    else:
+        row.update(steps=len(every["steps"]), written=probe.written(every), tools=probe.tools_of(every))
     return row
 
 
@@ -421,10 +570,14 @@ def main():
     p.add_argument("-no-read", action="store_true", help="the plan cannot ask for source; only repairs send it")
     p.add_argument("-read-after", action="store_true", help="the plan may ask for source only once a batch has applied")
     p.add_argument("-patch", action="store_true", help="a repair may answer with the failed batch's steps from one on, the ones before kept")
+    p.add_argument("-arm", default="refactor", choices=sorted(ARMS),
+                   help="what the model answers with: gorefactor steps, or text edits the loop applies")
     p.add_argument("-reference", default="compact", choices=["compact", "full"],
                    help="the tools as compact signatures and descriptions, or as the server publishes them")
     p.add_argument("-stages", type=int, default=2, help="batches after the first that the model may send when asked if it is done")
     a = p.parse_args()
+    if a.arm == "manual" and (a.read_after or "ref" in a.models.split(",")):
+        p.error("the manual arm has no reference edits, and -read-after asks for a first batch that moves code by name")
     os.makedirs(a.out, exist_ok=True)
     tmp = tempfile.mkdtemp(prefix="loop-")
     binary = os.path.join(tmp, "refactor")
@@ -439,8 +592,8 @@ def main():
                 empty = tempfile.mkdtemp(prefix="loop-empty-")
                 model = Ref(ref) if m == "ref" else Model(m, empty)
                 log = []
-                row = {"task": t["name"], "model": m, "run": n}
-                row.update(attempt(t, model, tools, binary, a.repairs, log, may_read=not a.no_read, stages=a.stages, read_after=a.read_after, patch=a.patch))
+                row = {"task": t["name"], "model": m, "run": n, "arm": a.arm}
+                row.update(attempt(t, model, tools, binary, a.repairs, log, may_read=not a.no_read, stages=a.stages, read_after=a.read_after, patch=a.patch, arm=ARMS[a.arm]))
                 row.update(cost=model.cost, requests=model.requests, usage=model.usage)
                 with open(os.path.join(a.out, f"{t['name']}-{m}-{n}.txt"), "w") as f:
                     f.write("\n\n==== next answer ====\n\n".join(log))

@@ -1368,6 +1368,34 @@ a session with the tools did on kinds ($0.25). Haiku never patched: 0
 of 16 repairs, each a whole batch again, at the same cost ($0.031) and
 1/4 (2/4 before, within noise).
 
+**The manual arm against it** (#391 `-arm manual`: the same loop,
+`-patch`, four repairs, three stages, reads allowed; text edits in
+place of steps, no tools reference;
+`eval-runs/loop-{haiku,sonnet}-kinds-manual`, $0.80):
+
+| | refactor arm, no reads | manual arm, reads |
+|---|---|---|
+| Haiku passed | 1/4 | 4/4 |
+| Haiku cost a task | $0.031 | $0.0146 |
+| Sonnet passed | 4/4 | 4/4 |
+| Sonnet cost a task | $0.261 | $0.186 |
+| lines written by passes | 33 (Haiku); 34-50 (Sonnet) | 73-81; 67-70 |
+| first request's cache write | 19-20K tokens | 6.9-7.6K |
+| requests | 5.25; 4.75 | 5; 5.5 |
+
+In the same loop, writing by hand cost less than deriving: Sonnet 29%
+less, Haiku 53% less and four times the passes, for about twice the
+lines written. The difference is mostly the prompt: the tools
+reference is about 12K tokens the manual arm never sends, written to
+the cache in every attempt and read in every request after; output
+was about the same for Sonnet (9.2K against 9.7K an attempt). Every
+manual attempt read the five switches, Import and the other uses
+(9-13 declarations), wrote the change in 12-18 edits, and spent two
+repairs on test files it had not read: `go vet` names the first
+`Kind: "book"` literals of each package, and the next repair fixes
+those and meets the rest. `values` is what saves the refactor arm the
+same repairs. No manual attempt failed on Import: it read it.
+
 ## What made the difference
 
 - **Smaller results** (#75, rename locations): the largest single win when
