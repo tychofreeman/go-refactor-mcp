@@ -819,6 +819,12 @@ hand or a tool got in the way.
       same checks backward, and with `move_statement_in`/`_out`
       (`docs/edits.md`) gives "wrap in an if and move the statements
       in", one of the user's derivations.
+    - **A branch of an if** (the user, 2026-10-25): add_case adds
+      `else if` and `else` branches to an if, as it adds cases to a
+      switch: at the line of the if, at the end of its chain (before
+      its else); at the line of a branch, before or after it. *Done.*
+      Not yet: a `branch` address (`"branch": "p.Height > 10"`) for
+      extract_function and replace_statements, as `case` is.
 
 21. **Experience for a fresh model** (asked for by the user, 2026-10-21):
     refactoring by hand, the user tries several approaches before one
