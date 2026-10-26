@@ -1720,10 +1720,7 @@ hand or a tool got in the way.
        panic (it panics the first time either way), `Several` must also
        refuse a new reference value (two allocations are two pointers),
        and inline_variable's several uses are `Several`, not `Shared`.
-       Still fold's own: `first`, `risky`, `impure`, `staleRead` and
-       `nilAddress`, which judge a hole's argument against the call's
-       evaluation order; a later step once a body's summary can stand
-       as `Past`.
+       fold's own hole judgments became moves in step 6.
     5. *Done.* `analysis.Reach(path)`: how often code is evaluated for
        each time the body at the path's end runs (Once, Maybe, Several)
        and why, as a phrase. It replaces six walks: inline_variable's
@@ -1737,11 +1734,32 @@ hand or a tool got in the way.
        post and body; a function literal). Left as they are:
        inline_variable's `repeatingAncestor`, which needs the loop node,
        not the count.
-    Next, in order (2026-10-26): one notion of memory ownership (item
-    36), a `Site` type for the refactorings' context structs (item 37),
-    `stopsFuncs` and `syncCalls` into `stdFuncs`, then fold's remaining
-    hole judgments and inline_function's `lhsEvaluatedFirst` once a
-    function's summary can stand as `Past`.
+    6. *Done.* The last judgments of their own. A function's summary
+       stands as `Past` through its call: since item 34's step 5 a call
+       of a module function is summarized by its body, so moving past
+       the call is moving past what it does. inline_function's
+       `lhsEvaluatedFirst` moves each operand on the left past the call
+       (its arguments and body), and `movable` is deleted. fold judges
+       an argument by where the code it replaces evaluated it: one that
+       acts, panics or takes an address moves past what that code
+       evaluates before its first use (`Shared` when the body uses it
+       several times), and each argument the call evaluates before it
+       but that code after it moves past it; one that only reads moves
+       past what that code evaluates before its last use, since one
+       value now stands for every use (`staleRead`). The expression
+       case uses the same judgment as the statement case; a literal's
+       fields set move past the elements after them and the other
+       fields set. `first`, `risky`, `nilAddress` and `effectful` are
+       deleted; `impure` stays as what decides which arguments move
+       like an effect. Loosened with a reason: an operand on the left
+       that reads through a pointer may stay first when the body
+       writes nothing it reads (`lhs_pointer_read_body_writes_nothing`);
+       a field of a struct argument may be evaluated first in a fold
+       of statements; an argument that only panics may be used several
+       times when it is evaluated first. Stricter: a field set that
+       acts may not move past one that reads through a pointer
+       (`refuse_setter_past_read`). Address arguments keep fold's own
+       relaxation (`movedAddress`, item 23).
 36. **Ownership of memory** (2026-10-26). *Done* in its first form:
     `analysis.Owner` is three-valued (`Anyone`, `ThisFunc`, `ThisCode`),
     and `Func.Owns(v)`, `Func.Owner(x)` and `Func.Pointee(x)` answer it

@@ -2935,3 +2935,15 @@ hand.
 
 The run's results in cost-history and plan-and-execute, and this entry,
 with replace_text. Nothing by hand.
+
+## 2026-10-26: fold and inline_function on moves (item 35, step 6)
+
+The new `evaluatedFirst` and `staleRead` with replace_declaration, the
+expression, literal and statement cases and `lhsEvaluatedFirst`'s
+check with replace_text, `first`, `risky`, `nilAddress`, `effectful`
+and `movable` with remove_dead_code, all in one batch; the three
+goldens it broke then fixed with replace_text (an address argument
+judged on its own, field holes in order, a refusal's wording). New
+goldens with create_file, each with its go.mod in a second batch (the
+first ran without them: a golden's module needs its own). Nothing by
+hand. This entry appended with replace_text.

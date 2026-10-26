@@ -1,1 +1,1 @@
-would be evaluated before the statements
+would be evaluated before the code it is in

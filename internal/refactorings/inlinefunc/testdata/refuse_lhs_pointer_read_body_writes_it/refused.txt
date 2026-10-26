@@ -1,0 +1,1 @@
+`p.xs` on the left of the assignment is evaluated before the call
