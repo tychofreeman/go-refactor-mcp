@@ -635,7 +635,7 @@ func (b *body) visit(n ast.Node) bool {
 			}
 			b.assigns(l)
 		}
-		if (n.Tok == token.QUO_ASSIGN || n.Tok == token.REM_ASSIGN) && isInteger(info.TypeOf(n.Lhs[0])) && info.Types[n.Rhs[0]].Value == nil {
+		if (n.Tok == token.QUO_ASSIGN || n.Tok == token.REM_ASSIGN) && !isFloatOrComplex(info.TypeOf(n.Lhs[0])) && info.Types[n.Rhs[0]].Value == nil {
 			b.unsafe(n, OtherPanic, "divides by "+types.ExprString(n.Rhs[0]))
 		}
 	case *ast.IncDecStmt:
@@ -710,7 +710,7 @@ func (b *body) visit(n ast.Node) bool {
 		}
 	case *ast.BinaryExpr:
 		switch {
-		case (n.Op == token.QUO || n.Op == token.REM) && isInteger(info.TypeOf(n)) && info.Types[n.Y].Value == nil:
+		case (n.Op == token.QUO || n.Op == token.REM) && !isFloatOrComplex(info.TypeOf(n)) && info.Types[n.Y].Value == nil:
 			b.unsafe(n, OtherPanic, "divides by "+types.ExprString(n.Y))
 		case (n.Op == token.SHL || n.Op == token.SHR) && !isUnsigned(info.TypeOf(n.Y)) && info.Types[n.Y].Value == nil:
 			b.unsafe(n, OtherPanic, "shifts by "+types.ExprString(n.Y))

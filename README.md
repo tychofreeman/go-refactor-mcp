@@ -1604,7 +1604,11 @@ hand or a tool got in the way.
        they now print. A loop in a callee still counts as something
        that might not finish, so such calls stay walls. The user waived
        the question of a nil dereference moving with a call (2026-10-25).
-    6. The old analyses deleted.
+    6. *Done.* The old analyses deleted (Func.Stable,
+       Func.StableAddress, MayPanic, HasEffect, FirstEffectBefore), with
+       the differential test that compared them; TestMayPanic became
+       TestEffectsPanic, which found that the walker missed a division
+       of a type parameter.
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the

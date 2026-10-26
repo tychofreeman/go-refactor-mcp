@@ -2661,3 +2661,10 @@ By hand, by script through replace_text: fourteen goldens whose stand-in
 functions were pure (`func load() int { return 3 }`) given a `println`,
 and their `line` arguments and one refusal's position moved with the
 lines that grew. This entry appended with a heredoc.
+
+## 2026-10-25: the old analyses deleted
+
+The five functions with remove_dead_code (one call, with also), the
+differential test with delete_file, TestMayPanic ported and the walker's
+division fixed with replace_text, the package comment and the roadmap
+with replace_text. Nothing by hand. This entry appended with a heredoc.
