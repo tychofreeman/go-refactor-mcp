@@ -1336,6 +1336,28 @@ so) and still failed its repairs, and twice ran introduce_parameter
 on a helper that already read `title`. What remains is the edit in
 Import: the derivation's refusals are no longer what stops the plans.
 
+The failing test reaches Import's body by itself: a repair sends the
+source of each place a failure names, and the panic's stack trace
+names `lending.go:236`, in Import. Sonnet's attempts that failed had
+used both repairs on the narrowing refusal and the `kindOf` order
+before the panic came; one that met the panic with a repair left
+fixed Import in four text edits (keeping the kind's name for the
+error, `it.Kind == nil` in place of `LoanDays(it) == 0`).
+
+**With four repairs in place of two**
+(`eval-runs/loop-{haiku,sonnet}-kinds-noread-r4`, $1.51): 6/8, the
+best of kinds without reads. Sonnet 4/4 at $0.347 a task in 4
+requests (54-79 lines), Haiku 2/4 at $0.031 in 5.75 (53 and 58). Every
+pass derived: two the reference's way (extraction by case,
+add_parameter, function_to_method; one Haiku also with
+introduce_parameter and remove_parameter for `Label`), two by extract,
+delegate and inline, one Sonnet with fold, introduce_parameter and
+rename; none wrote a case body. Repairs used by the passes: Sonnet 3,
+2, 2, 1; Haiku 4 and 2. So three repairs would have passed 5/8, two
+3/8. Against reads before the first batch (8/8 at $0.020 and $0.197,
+by rewriting): without reads Sonnet costs 76% more and Haiku 55% more,
+for a derivation every time it passes.
+
 ## What made the difference
 
 - **Smaller results** (#75, rename locations): the largest single win when

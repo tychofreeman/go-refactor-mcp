@@ -554,7 +554,13 @@ results are in `docs/cost-history.md`.
   After #367, #371 and #372: with reads after the first batch 7/8
   (2 Sonnet derived, 41-57 lines); without reads 2/8, the first
   passes without a read (Sonnet, Import found through the narrowing
-  refusal). Haiku derives but does not finish.
+  refusal). Haiku derives but does not finish. After `values`
+  (#374), the signature note (#375), split by default (#376) and
+  refusals saying why (#378, #381), with four repairs: 6/8 without
+  reads (Sonnet 4/4 $0.347, Haiku 2/4 $0.031), every pass derived.
+  Import's edit needs its body, and a failing test brings it: a
+  repair sends the source of what a failure names. What the runs
+  lacked was a repair to spend on it.
 - Where a session's cost goes (cost-history 12,
   `eval-tasks/learning/cost.py`): cache writes 69%, output 18%, cache
   reads 13%, though cache reads are 88% of input tokens. About 38% of
