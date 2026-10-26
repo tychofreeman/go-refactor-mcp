@@ -75,7 +75,7 @@ func (*ExtractFunction) InputSchema() json.RawMessage {
     "end_line":   {"type": "integer", "description": "1-based last line of the statements to extract (inclusive)."},
     "function":   {"type": "string",  "description": "Instead of the lines, with case: the function (Name or Type.Method) with the switch."},
     "case":       {"type": "string",  "description": "Instead of the lines: the case whose body to extract, its value as written (\"\\\"fern\\\"\", Red) or default."},
-    "split":      {"type": "boolean", "description": "With case, of several values (case \"fern\", \"moss\":): the value gets a case of its own, the others a copy of the body."},
+    "split":      {"type": "boolean", "description": "With case, of several values (case \"fern\", \"moss\":): unless false, the value gets a case of its own, the others a copy of the body."},
     "name":       {"type": "string",  "description": "Name for the new function."},
     "doc":        {"type": "string",  "description": "Optional doc comment for the new function, without or with the leading //; start it with the function's name."}
   },
@@ -90,7 +90,7 @@ type args struct {
 	EndLine   int    `json:"end_line"`
 	Function  string `json:"function,omitempty"`
 	Case      string `json:"case,omitempty"`
-	Split     bool   `json:"split,omitempty"`
+	Split     *bool  `json:"split,omitempty"`
 	Name      string `json:"name"`
 	Doc       string `json:"doc,omitempty"`
 }
@@ -196,7 +196,7 @@ func (*ExtractFunction) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 	if err := x.selectStatements(a.StartLine, a.EndLine); err != nil {
 		return nil, err
 	}
-	if a.Split {
+	if a.Case != "" && a.splits() {
 		if err := x.splitCase(a.Case); err != nil {
 			return nil, err
 		}
@@ -235,9 +235,13 @@ func (a *args) caseLines(tf *token.File, file *ast.File, src []byte) error {
 		return refactor.Refusef("no function %s in %s; give Name, or Type.Method for a method", a.Function, a.File)
 	}
 	var err error
-	a.StartLine, a.EndLine, err = locate.CaseBody(tf, src, fd, a.Case, a.Split)
+	a.StartLine, a.EndLine, err = locate.CaseBody(tf, src, fd, a.Case, a.splits())
 	return err
 }
+
+// splits reports whether a case of several values is split: unless
+// split is false.
+func (a *args) splits() bool { return a.Split == nil || *a.Split }
 
 // splitCase sets x.split when the statements are the body of a case of
 // several values: value, as the model gave it, gets a case of its own

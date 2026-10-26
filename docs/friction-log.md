@@ -2729,6 +2729,14 @@ The two runs' results in cost-history, plan-and-execute and the
 session notes with replace_text in one batch. Nothing by hand. This
 entry appended with a heredoc.
 
+## 2026-10-26: extract_function splits a shared case by default
+
+The default golden copied from case_split with cp (no tool copies a
+directory of fixtures), its args and the other goldens' args and
+refusal with replace_text; `split` a pointer, `splits` and the
+messages with replace_text and add_declaration (check "end"); the
+roadmap with replace_text. This entry appended with a heredoc.
+
 ## 2026-10-26: the signature note reaches a batch's refusal
 
 The test with add_declaration, the note's changes with replace_text

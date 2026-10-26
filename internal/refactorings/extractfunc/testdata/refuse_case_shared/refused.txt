@@ -1,1 +1,1 @@
-case "dvd" on line 7 shares its body with "cd"; extract_function with split true gives it a case of its own; or give start_line and end_line for the shared body
+case "dvd" on line 7 shares its body with "cd"; extract_function without split false gives it a case of its own; or give start_line and end_line for the shared body

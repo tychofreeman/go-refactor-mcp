@@ -1492,7 +1492,10 @@ hand or a tool got in the way.
     the body. Refused when a value is not a constant (the order of
     comparison would change), the case before falls through into it,
     or the body declares a label or a type. In the rerun 5 of 8
-    attempts met the shared case of Renewable. *Done.*
+    attempts met the shared case of Renewable. *Done.* Since then the
+    default (the user, 2026-10-26, after two Sonnet attempts without
+    reads still sent it without `split`): `split: false` refuses a
+    shared case as before. *Done.*
 
     A value no case has: the refusal says what runs for it, the default
     case, or the code after the switch, with add_case to make it a case

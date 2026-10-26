@@ -307,7 +307,7 @@ func CaseBody(tf *token.File, src []byte, fd *ast.FuncDecl, value string, split 
 				others = append(others, string(src[tf.Offset(e.Pos()):tf.Offset(e.End())]))
 			}
 		}
-		return 0, 0, refactor.Refusef("case %s on line %d shares its body with %s; extract_function with split true gives it a case of its own; or give start_line and end_line for the shared body", value, line, strings.Join(others, ", "))
+		return 0, 0, refactor.Refusef("case %s on line %d shares its body with %s; extract_function without split false gives it a case of its own; or give start_line and end_line for the shared body", value, line, strings.Join(others, ", "))
 	}
 	if len(cc.Body) == 0 {
 		return 0, 0, refactor.Refusef("case %s on line %d of %s has no statements", value, line, name)
