@@ -27,7 +27,7 @@ func KnownCall(info *types.Info, call *ast.CallExpr) (known bool, panics PanicKi
 		return false, OtherPanic
 	}
 	se, ok := stdFuncs[fn.FullName()]
-	if !ok || se.reads != "" || se.writes != 0 || se.fresh {
+	if !ok || se.reads != "" || se.writes != 0 || se.fresh || se.stops {
 		return false, OtherPanic
 	}
 	return true, se.panics
@@ -40,5 +40,5 @@ func KnownCall(info *types.Info, call *ast.CallExpr) (known bool, panics PanicKi
 func ReadOnlyCall(info *types.Info, call *ast.CallExpr) bool {
 	fn, ok := info.Uses[IdentOf(call.Fun)].(*types.Func)
 	se, known := stdFuncs[fn.FullName()]
-	return ok && known && se.writes == 0 && se.panics == NoPanic
+	return ok && known && se.writes == 0 && se.panics == NoPanic && !se.stops
 }

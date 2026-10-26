@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"go/types"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -40,6 +41,7 @@ func f(s string, xs []string, b []byte, o types.Object, pkg *types.Package) {
 	_ = o.Type()
 	_ = errors.New(s)
 	_ = json.Valid(b)
+	os.Exit(1)
 }
 `
 	fset := token.NewFileSet()
@@ -70,6 +72,7 @@ func f(s string, xs []string, b []byte, o types.Object, pkg *types.Package) {
 		"o.Type()":              {true, NilPanic}, // fixed once type checking is done
 		"errors.New(s)":         {false, 0},       // a new error each call
 		"json.Valid(b)":         {false, 0},       // reads the slice
+		"os.Exit(1)":            {false, 0},       // does not return
 	}
 	seen := 0
 	ast.Inspect(f, func(n ast.Node) bool {

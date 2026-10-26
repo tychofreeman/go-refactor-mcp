@@ -2859,3 +2859,11 @@ replace_text. Nothing by hand. This entry appended with a heredoc.
 
 The run's results in cost-history and plan-and-execute with
 replace_text. Nothing by hand. This entry appended with a heredoc.
+
+## 2026-10-26: stopsFuncs into stdFuncs
+
+The field and the entries with replace_text (the entries rewritten from
+the old literal by a script: still no tool moves the elements of one
+composite literal into another), the table with remove_dead_code, the
+test case with replace_text. Nothing by hand. This entry appended with
+a heredoc.
