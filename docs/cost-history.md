@@ -1421,8 +1421,9 @@ cheaper, the tools reference outweighing the few lines. Where it
 reaches many uses (routes: 55-72 declarations read; run: 31) the
 manual arm read and rewrote each, and the derivation, one step for
 all of them, cost a third to two thirds as much. The refactor arm's
-passes used fold on every task, and remove_dead_code, inline_function
-and function_to_method where the task named them. Against kinds, where
+passes used fold on every task (but for Haiku's two routes passes,
+which wrote the field's uses with edits), and remove_dead_code,
+inline_function and function_to_method where the task named them. Against kinds, where
 the manual arm won: there the change was one new shape (types from a
 type code) in five switches, which the plans read whole either way.
 
