@@ -2782,3 +2782,8 @@ replace_text (check "end"; the first try reused the name
 `missingMethod`, which batchdeclare.go has, and was refused), the
 roadmap with replace_text. Nothing by hand. This entry appended with a
 heredoc.
+
+## 2026-10-26: cost-history 19, kinds without reads after #378 and #381
+
+The run's results in cost-history with replace_text. Nothing by hand.
+This entry appended with a heredoc.
