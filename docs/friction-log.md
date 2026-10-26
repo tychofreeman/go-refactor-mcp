@@ -2701,3 +2701,9 @@ replace_text in one batch. Nothing by hand. This entry appended with a
 heredoc.
 The run's results in cost-history, plan-and-execute and the session
 notes with replace_text in one batch, by hand none.
+
+## 2026-10-26: function_to_method's receiver hint for an undeclared type
+
+The golden with create_file in one batch, the refusal's hint and the
+roadmap with replace_text. Nothing by hand. This entry appended with a
+heredoc.
