@@ -220,6 +220,18 @@ roadmap item 32); the kinds reference is now the derivation with it,
 without a line number or a case body, and passes the dry run. A run
 without reads would show whether the plans take it.
 
+They mostly did not (cost-history 19, kinds with the case address:
+0/8). One Sonnet attempt used it for every case and wrote the methods
+as calls of the extracted functions, but ran out of stages; Haiku
+declared `Label(title string)` from the prompt, which
+prepare_switch_for_types refuses for cases that use `it`; the other
+Sonnet attempts asked for the bodies or wrote methods that call back
+into the switch. Candidates: accept a bare word for a string case
+(`book` for `"book"`); say in the plan prompt that steps addressed by
+name move code the plan does not see; more stages; prepare taking a
+method whose parameters are what the cases read (`it.Title` as
+`title`).
+
 ## Recording
 
 Each step in its own PR: the results in `docs/cost-history.md`, the

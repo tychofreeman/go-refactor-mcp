@@ -498,7 +498,10 @@ results are in `docs/cost-history.md`.
   type would remove the reason to read. The user chose an address
   over a tool: `case` with `function` on extract_function and
   replace_statements (roadmap item 32); splitting a case of several
-  values on request is for later.
+  values on request is for later. Run without reads: 0/8. Only one
+  attempt used it (and ran out of stages); Haiku stuck on the
+  prompt's `Label(title string)`, which prepare refuses, and Sonnet
+  asked for bodies it did not need.
 - Where a session's cost goes (cost-history 12,
   `eval-tasks/learning/cost.py`): cache writes 69%, output 18%, cache
   reads 13%, though cache reads are 88% of input tokens. About 38% of
