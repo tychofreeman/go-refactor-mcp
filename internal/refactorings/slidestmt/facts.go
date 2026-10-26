@@ -44,7 +44,7 @@ func (a access) String() string { return a.v.Name() + a.path }
 // A closure that runs only during its statement (passed to ast.Inspect,
 // say) is part of that statement.
 func escapes(f *analysis.Func, v *types.Var) bool {
-	return f.Addressed[v] || f.CapturedAsync[v]
+	return f.Owns(v) != analysis.ThisCode
 }
 
 // factsOf computes the facts for s, a statement of f's body.

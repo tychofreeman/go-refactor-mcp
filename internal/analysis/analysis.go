@@ -41,7 +41,8 @@ type Func struct {
 	AsyncLits map[*types.Var][]*ast.FuncLit
 	// Modified lists where each local is written: assignment (also of a
 	// field or array element of it), ++/--, or a range loop with =.
-	Modified map[*types.Var][]ast.Node
+	Modified  map[*types.Var][]ast.Node
+	freshVars map[*types.Var]bool // the locals that only hold memory the function made, computed on first use (fresh)
 }
 
 // SyncLit reports whether lit, whose parent node is parent, only runs

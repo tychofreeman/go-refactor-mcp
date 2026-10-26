@@ -98,10 +98,10 @@ func (e *Effects) Of(f *Func, x ast.Expr) Summary {
 }
 
 // walker returns a body that summarizes code of f evaluated out of its
-// context (root, for the part summarized): memory f made itself is not
-// its own, since the rest of f can change it.
+// context (root, for the part summarized): only memory nothing else in f
+// reaches is its own, since the rest of f can change the rest.
 func (e *Effects) walker(f *Func, root ast.Expr) *body {
-	return &body{e: e, f: f, fresh: map[*types.Var]bool{}, sync: map[*ast.FuncLit]bool{}, callees: map[ast.Expr]bool{}, root: root, addressed: map[ast.Expr]ast.Expr{}, partial: true}
+	return &body{e: e, f: f, own: ThisCode, sync: map[*ast.FuncLit]bool{}, callees: map[ast.Expr]bool{}, root: root, addressed: map[ast.Expr]ast.Expr{}}
 }
 
 // StableAddress is Stable for the address of x, an expression in the
@@ -511,16 +511,15 @@ func isFreshValue(info *types.Info, v *types.Var, rhs ast.Expr) bool {
 
 // body walks one function body for summarize.
 type body struct {
-	e     *Effects
-	f     *Func
-	fresh map[*types.Var]bool
-	sync  map[*ast.FuncLit]bool // literals whose bodies run during the call
-	s     Summary
+	e    *Effects
+	f    *Func
+	own  Owner                 // whose memory counts as the summarized code's own: ThisFunc for a whole function, ThisCode for part of one out of its context
+	sync map[*ast.FuncLit]bool // literals whose bodies run during the call
+	s    Summary
 
 	callees   map[ast.Expr]bool     // the functions of the calls seen
 	root      ast.Expr              // for Of, the expression summarized, evaluated out of its context
 	addressed map[ast.Expr]ast.Expr // operands whose address is taken: reads of the pointer they go through only (addressedIn)
-	partial   bool                  // part of f is summarized, out of its context: what escapes f's own code is not private
 }
 
 // summarize computes what calling the function declared by src can do,
@@ -529,40 +528,19 @@ type body struct {
 // memory it made itself, are not side effects.
 func (e *Effects) summarize(src funcSource) *Summary {
 	f := AnalyzeFunc(src.info, src.decl)
-	b := &body{e: e, f: f, fresh: freshLocals(f, src.decl.Body), sync: map[*ast.FuncLit]bool{}, callees: map[ast.Expr]bool{}, addressed: addressedIn(src.info, src.decl.Body)}
+	b := &body{e: e, f: f, own: ThisFunc, sync: map[*ast.FuncLit]bool{}, callees: map[ast.Expr]bool{}, addressed: addressedIn(src.info, src.decl.Body)}
 	ast.Inspect(src.decl.Body, b.visit)
 	return &b.s
 }
 
-// pointsPrivate reports whether x (a pointer, slice or map) is a variable
-// that only holds memory this call made.
-func (b *body) pointsPrivate(x ast.Expr) bool {
-	id, ok := ast.Unparen(x).(*ast.Ident)
-	if !ok {
-		return false
-	}
-	v, ok := b.f.Info.Uses[id].(*types.Var)
-	return ok && b.fresh[v]
-}
+// pointsPrivate reports whether the memory x (a pointer, slice or map)
+// points to belongs to the summarized code.
+func (b *body) pointsPrivate(x ast.Expr) bool { return b.f.Pointee(x) >= b.own }
 
 // private reports whether writing to the assignable expression x changes
-// only memory of this call: a local variable or part of one, or memory a
-// fresh local points to.
-func (b *body) private(x ast.Expr) bool {
-	if v := b.f.RootVar(x); v != nil {
-		return !b.partial || !b.f.Escapes(v) // out of context, a pointer or closure could read it
-	}
-	info := b.f.Info
-	switch x := ast.Unparen(x).(type) {
-	case *ast.IndexExpr:
-		return b.pointsPrivate(x.X)
-	case *ast.SelectorExpr:
-		return IsPointer(info.TypeOf(x.X)) && b.pointsPrivate(x.X)
-	case *ast.StarExpr:
-		return b.pointsPrivate(x.X)
-	}
-	return false
-}
+// only memory the summarized code owns: a local variable or part of one,
+// or memory a fresh local points to.
+func (b *body) private(x ast.Expr) bool { return b.f.Owner(x) >= b.own }
 
 // effect, read, unsafe and stops record what n does, where it is the
 // first of its kind: a side effect, a read of what other code can change,
@@ -749,7 +727,7 @@ func (b *body) visit(n ast.Node) bool {
 		case !ok:
 		case !v.IsField() && v.Pkg() != nil && v.Parent() == v.Pkg().Scope():
 			b.read(n, "reads the package variable "+v.Name())
-		case b.root != nil && b.f.IsLocal(v) && b.f.Escapes(v):
+		case b.root != nil && b.f.Owns(v) == ThisFunc:
 			b.read(n, "reads "+v.Name()+", which a pointer or closure can change")
 		}
 	}

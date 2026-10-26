@@ -2840,6 +2840,14 @@ one with all_occurrences for the result's removed value), two goldens'
 wording with replace_text. Nothing by hand. This entry appended with a
 heredoc.
 
+## 2026-10-26: Owner, whose memory it is
+
+`owner.go` and its test with create_file, `Func.freshVars` with
+add_field, `private` and `pointsPrivate` with replace_declaration, the
+body's `fresh` and `partial` fields and the two constructors with
+replace_text, slide's `escapes` with replace_text. Nothing by hand.
+This entry appended with a heredoc.
+
 ## 2026-10-26: loop.py repairs may patch the failed batch
 
 `-patch`, its prompt and helpers with replace_text in batches, then
