@@ -1,1 +1,1 @@
-line 7 has side effects
+line 6 reads the element xs[0], and line 7 defers a call, so swapping them would change what happens

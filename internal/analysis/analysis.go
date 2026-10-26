@@ -207,7 +207,7 @@ func (f *Func) RootVar(e ast.Expr) *types.Var {
 }
 
 // LocalsRead returns the local variables e reads, in order of appearance.
-func (f *Func) LocalsRead(e ast.Expr) []*types.Var {
+func (f *Func) LocalsRead(e ast.Node) []*types.Var {
 	var out []*types.Var
 	seen := map[*types.Var]bool{}
 	for _, id := range ScopeRefs(f.Info, e) {

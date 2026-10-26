@@ -44,7 +44,7 @@ func (t *target) checkEvaluation(info *types.Info, file *ast.File, expr ast.Expr
 		return refactor.Refusef("%s %s, and it is not evaluated on every call (%s (at %s) returns before it)", q, o.Does, t.brief(o.Past), t.ws.Position(o.Past.Pos()))
 	case o.Kind == analysis.Reads:
 		return refactor.Refusef("%s reads memory that %s (at %s) could change before it", q, t.brief(o.Past), t.ws.Position(o.Past.Pos()))
-	case o.Kind == analysis.Panics && o.PastDoes == "could panic":
+	case o.Kind == analysis.Panics && strings.HasPrefix(o.PastDoes, "could panic"):
 		return refactor.Refusef("%s %s, and %s (at %s) could panic before it", q, o.Does, t.brief(o.Past), t.ws.Position(o.Past.Pos()))
 	default:
 		return refactor.Refusef("%s %s, and %s (at %s) has side effects before it (it %s)", q, o.Does, t.brief(o.Past), t.ws.Position(o.Past.Pos()), o.PastDoes)

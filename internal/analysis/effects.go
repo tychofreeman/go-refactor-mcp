@@ -603,6 +603,8 @@ func (b *body) visit(n ast.Node) bool {
 		return b.sync[n] // defining a closure runs nothing
 	case *ast.GoStmt:
 		b.effect(n, "starts a goroutine")
+	case *ast.DeferStmt:
+		b.effect(n, "defers a call")
 	case *ast.SendStmt:
 		b.effect(n, "sends on a channel")
 		b.stops(n, OtherPanic, "sends on a channel, which might block")

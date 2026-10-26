@@ -1098,24 +1098,28 @@ func (f *folder) risky(info *types.Info, e ast.Expr, counted bool) bool {
 }
 
 // evaluatedFirst reports whether the argument for the hole k, which
-// could panic, may still be evaluated once before the statements seq:
-// it has no side effects, and if the body uses it more than once it
-// reads nothing other code can change, so each use has its value; in seq
-// nothing that matters (a side effect, an assignment, a possible panic)
-// comes before its first use; and no argument the call evaluates before
-// it could panic.
+// could panic or has effects, may still be evaluated once before the
+// statements seq: a move of it past what seq evaluates before its first
+// use, evaluated once for each use the body makes of it; and no
+// argument the call evaluates before it could panic.
 func (f *folder) evaluatedFirst(info *types.Info, seq []ast.Stmt, b map[pattern.HoleKey]ast.Expr, k pattern.HoleKey) bool {
 	e := b[k]
-	if k.Field != "" || f.addressOf[e] || f.effectful(info, e, f.count(k) > 1) {
+	if k.Field != "" || f.addressOf[e] {
 		return false
 	}
+	var past []ast.Node
 	for _, s := range seq {
 		if s.Pos() >= e.Pos() {
 			break
 		}
-		if f.matters(info, s, e.Pos()) {
-			return false
-		}
+		past = append(past, analysis.EvaluatedBefore(s, e.Pos(), nil)...)
+	}
+	m := analysis.Move{Effects: f.ws.Effects(), Func: analysis.Outside(info), Expr: e, Past: past}
+	if f.count(k) > 1 {
+		m.Times = analysis.Shared // one value for each use the body makes of it
+	}
+	if m.Check() != nil {
+		return false
 	}
 	if f.m.Recv != nil && k.Obj != f.m.Recv {
 		if a := b[pattern.HoleKey{Obj: f.m.Recv, Field: ""}]; a != nil && f.impure(info, a) {
@@ -1145,68 +1149,12 @@ func (f *folder) evaluatedFirst(info *types.Info, seq []ast.Stmt, b map[pattern.
 	return true
 }
 
-// effectful reports whether evaluating e has side effects or, with
+// effectful reports whether evaluating e has side effects, or, with
 // shared, reads memory other code can change: a package variable, or
 // through a pointer, a slice or a map.
 func (f *folder) effectful(info *types.Info, e ast.Expr, shared bool) bool {
-	found := false
-	ast.Inspect(e, func(n ast.Node) bool {
-		switch n := n.(type) {
-		case *ast.FuncLit:
-			return false
-		case *ast.CallExpr:
-			s := f.ws.Effects().Call(info, n)
-			found = s.Effect != "" || shared && s.Reads != ""
-		case *ast.UnaryExpr:
-			found = n.Op == token.ARROW
-		case *ast.StarExpr:
-			found = shared && !info.Types[n].IsType()
-		case *ast.SelectorExpr:
-			s := info.Selections[n]
-			found = shared && s != nil && s.Kind() == types.FieldVal && s.Indirect()
-		case *ast.IndexExpr:
-			if tv := info.Types[n.X]; shared && !tv.IsType() {
-				switch tv.Type.Underlying().(type) {
-				case *types.Slice, *types.Map, *types.Pointer:
-					found = true
-				}
-			}
-		case *ast.Ident:
-			v, ok := info.Uses[n].(*types.Var)
-			found = shared && ok && !v.IsField() && v.Pkg() != nil && v.Parent() == v.Pkg().Scope()
-		}
-		return !found
-	})
-	return found
-}
-
-// matters reports whether code of the statement s that is evaluated
-// before pos does something an argument evaluated ahead of it could
-// change or see: a side effect, an assignment, or a possible panic.
-func (f *folder) matters(info *types.Info, s ast.Stmt, pos token.Pos) bool {
-	found := false
-	ast.Inspect(s, func(n ast.Node) bool {
-		if _, lit := n.(*ast.FuncLit); lit || n == nil || found || n.Pos() >= pos {
-			return false
-		}
-		if n.End() > pos {
-			return true
-		}
-		switch n := n.(type) {
-		case *ast.AssignStmt, *ast.IncDecStmt, *ast.SendStmt, *ast.GoStmt, *ast.DeferStmt:
-			found = true
-		case *ast.CallExpr:
-			s := f.ws.Effects().Call(info, n)
-			found = s.Effect != "" || s.Unsafe != ""
-		case *ast.UnaryExpr:
-			found = n.Op == token.ARROW
-		}
-		if e, ok := n.(ast.Expr); ok && !found {
-			found = f.ws.Effects().Of(analysis.Outside(info), e).At.OtherPanic != nil
-		}
-		return !found
-	})
-	return found
+	s := f.ws.Effects().Of(analysis.Outside(info), e)
+	return s.Effect != "" || shared && s.Reads != ""
 }
 
 // staleRead is why e, an argument that reads memory other code can

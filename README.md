@@ -1693,8 +1693,25 @@ hand or a tool got in the way.
        and no panic), since what it moves past is the whole inlined
        body. Loosened with a reason: a call that only reads classes as
        a read, not an effect; a dropped result that reads may be dropped.
-    4. fold's `first`, `risky` and `impure`; slide's `checkIndependent`
-       (two statements swapping is each moving past the other).
+    4. *Done.* slide: `checkIndependent` is two moves, each statement
+       past the other (`Move.Expr` takes a statement), and `checkJumps`
+       a move with `Maybe` times; its own walker (`addEffects`, 100
+       lines, with `effect`, `shared`, `unsafe`, `nilDeref`) is deleted,
+       and its field-path helpers moved to `analysis` (`PathOf`,
+       `PathAbove`, `ParentsIn`, `Overlaps`), where the move uses them:
+       a write to `p.y` does not touch a read of `p.x`, and a method
+       with a pointer receiver called on a local writes it. fold:
+       `evaluatedFirst` is a move of the argument past what the matched
+       statements evaluate before its first use, `Shared` when the body
+       uses the parameter several times; `effectful` reads the summary;
+       `matters` is deleted. Found on the way: `Shared` need not refuse a
+       panic (it panics the first time either way), `Several` must also
+       refuse a new reference value (two allocations are two pointers),
+       and inline_variable's several uses are `Several`, not `Shared`.
+       Still fold's own: `first`, `risky`, `impure`, `staleRead` and
+       `nilAddress`, which judge a hole's argument against the call's
+       evaluation order; a later step once a body's summary can stand
+       as `Past`.
     5. The path conditions (inline_variable's `evaluatedOnce`,
        changesig's `notOnEveryCall`, inline_function's
        `conditionalOrRepeated`), which decide `Times` from where a use

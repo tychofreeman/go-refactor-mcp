@@ -1,1 +1,1 @@
-line 7 has side effects
+line 6 reads the package variable count, and line 7 calls bump, which assigns to count, so swapping them would change what happens

@@ -100,7 +100,7 @@ func TestMove(t *testing.T) {
 		"several: a / b":           "a / b",
 		"several: a + 1":           "",
 		"shared: &T{}":             "&T{}",
-		"several: &T{}":            "",
+		"several: &T{}":            "&T{}", // two allocations are two pointers
 		"several: p.n":             "p.n",
 		"maybe: a / b":             "a / b",
 		"maybe: p.n":               "p.n", // a panic that would not always happen

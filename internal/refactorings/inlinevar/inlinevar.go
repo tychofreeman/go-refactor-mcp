@@ -313,7 +313,7 @@ func (x *inliner) checkVariable() error {
 // initializer to its use, or, for several uses, one value shared by all.
 func (x *inliner) checkEvaluation() error {
 	m := x.move()
-	m.Times = analysis.Shared
+	m.Times = analysis.Several // each use evaluates it again
 	o := m.Check()
 	if o == nil {
 		return nil // same value and no effects however often and wherever it is evaluated
