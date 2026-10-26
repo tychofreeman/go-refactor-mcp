@@ -2792,3 +2792,10 @@ goldens' wording and the walker's `partial` with replace_text. By
 hand: `Move.Check` and `Obstacle` rewritten as whole declarations
 (the obstacle's `Does` and `PastDoes`), sent through
 replace_declaration. This entry appended with a heredoc.
+
+## 2026-10-26: inline_function onto Move
+
+`classify` and `effectBefore` with replace_declaration, `EvaluatedAfter`
+with add_declaration, `PastFunc` with add_field, the two other sites
+with replace_text, `pureRead` with remove_dead_code. Nothing by hand.
+This entry appended with a heredoc.
