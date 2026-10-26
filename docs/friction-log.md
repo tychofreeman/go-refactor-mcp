@@ -2511,3 +2511,9 @@ heredoc.
 
 Docs with replace_text. This entry appended with a heredoc. Nothing
 else by hand.
+
+## 2026-10-25: a bare word for a string case
+
+The retry in `locate.CaseBody` and the roadmap with replace_text; the
+golden cases with create_file. This entry appended with a heredoc.
+Nothing else by hand.
