@@ -515,91 +515,16 @@
    }
   },
   {
-   "tool": "replace_text",
-   "args": {
-    "files": [
-     "desk/desk.go",
-     "notices/notices.go"
-    ],
-    "old": "Kind == \"atlas\"",
-    "new": "Kind == (lending.Atlas{})",
-    "all_occurrences": true
-   }
-  },
-  {
-   "tool": "replace_text",
-   "args": {
-    "file": "notices/notices.go",
-    "old": "Kind == \"dvd\"",
-    "new": "Kind == (lending.DVD{})"
-   }
-  },
-  {
-   "tool": "replace_text",
-   "args": {
-    "file": "lending/lending_test.go",
-    "old": "Kind: \"book\"",
-    "new": "Kind: Book{}",
-    "all_occurrences": true
-   }
-  },
-  {
-   "tool": "replace_text",
-   "args": {
-    "file": "lending/lending_test.go",
-    "old": "Kind: \"dvd\"",
-    "new": "Kind: DVD{}",
-    "all_occurrences": true
-   }
-  },
-  {
-   "tool": "replace_text",
-   "args": {
-    "file": "lending/lending_test.go",
-    "old": "Kind: \"atlas\"",
-    "new": "Kind: Atlas{}",
-    "all_occurrences": true
-   }
-  },
-  {
-   "tool": "replace_text",
-   "args": {
-    "files": [
-     "desk/desk_test.go"
-    ],
-    "old": "Kind: \"atlas\"",
-    "new": "Kind: lending.Atlas{}",
-    "all_occurrences": true
-   }
-  },
-  {
-   "tool": "replace_text",
-   "args": {
-    "files": [
-     "desk/desk_test.go"
-    ],
-    "old": "Kind: \"book\"",
-    "new": "Kind: lending.Book{}",
-    "all_occurrences": true
-   }
-  },
-  {
-   "tool": "replace_text",
-   "args": {
-    "files": [
-     "notices/notices_test.go"
-    ],
-    "old": "Kind: \"dvd\"",
-    "new": "Kind: lending.DVD{}",
-    "all_occurrences": true
-   }
-  },
-  {
    "tool": "change_field_type",
    "args": {
     "file": "lending/lending.go",
     "name": "Item.Kind",
-    "type": "Kind"
+    "type": "Kind",
+    "values": {
+     "book": "Book{}",
+     "dvd": "DVD{}",
+     "atlas": "Atlas{}"
+    }
    }
   }
  ]

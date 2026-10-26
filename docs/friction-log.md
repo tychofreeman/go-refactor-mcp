@@ -2736,3 +2736,17 @@ directory of fixtures), its args and the other goldens' args and
 refusal with replace_text; `split` a pointer, `splits` and the
 messages with replace_text and add_declaration (check "end"); the
 roadmap with replace_text. This entry appended with a heredoc.
+
+## 2026-10-26: the signature note reaches a batch's refusal
+
+The test with add_declaration, the note's changes with replace_text
+and add_declaration (check "end"), the tally in cost-history with
+replace_text. Nothing by hand. This entry appended with a heredoc.
+
+## 2026-10-26: narrowing writes the values given for old constants
+
+The goldens with create_file in one batch, `values` with replace_text
+and add_declaration (check "end"), the hint, description, golden and
+roadmap with replace_text. By script: the kinds reference's eight
+replace_text steps removed and `values` added with Python's json, at
+the file's own indent this time. This entry appended with a heredoc.

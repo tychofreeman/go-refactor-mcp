@@ -746,6 +746,21 @@ func TestSignatureEditPointsToTools(t *testing.T) {
 		"add_parameter of by string on Shape.Area", "remove_parameter scale")
 }
 
+// In a batch too, an edit that changes an interface method's signature
+// is refused with the steps, for the methods whose signature changed only.
+func TestSignatureEditInBatch(t *testing.T) {
+	cs, _ := setup(t)
+	out, _ := call(t, cs, "add_declaration", map[string]any{"file": "calc/calc.go", "content": "type Shape interface {\n\tArea(scale int) int\n\tSides() int\n}\n\ntype Sq struct{}\n\nfunc (Sq) Area(scale int) int { return scale }\n\nfunc (Sq) Sides() int { return 4 }\n\nfunc Total(s Shape) int { return s.Area(2) + s.Sides() }"})
+	mustContain(t, "add_declaration", out, "APPLIED")
+	out, _ = call(t, cs, "batch", map[string]any{"steps": []any{
+		map[string]any{"tool": "replace_declaration", "args": map[string]any{"file": "calc/calc.go", "name": "Shape", "content": "type Shape interface {\n\tArea(by string) int\n\tSides() int\n}"}},
+	}})
+	mustContain(t, "batch", out, "REFUSED batch", "this edit changes the signature of Shape.Area", "remove_parameter scale")
+	if strings.Contains(out, "Shape.Sides") {
+		t.Errorf("the note names Shape.Sides, whose signature did not change:\n%s", out)
+	}
+}
+
 // A refactoring may run while the only errors are in tests written first,
 // if it fixes some of them and adds none.
 func TestRefactoringTowardATest(t *testing.T) {
