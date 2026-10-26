@@ -1525,6 +1525,13 @@ hand or a tool got in the way.
     add_parameter appended the receiver): Haiku's derived kinds attempt
     stopped there and dropped `Label`. *Done.*
 
+    Types used as an interface before they have its methods (`kindOf`
+    returning `Book{}` as a `Kind` before the cases became methods, 3
+    attempts in each of two runs without reads): the refusal of the
+    edit, of a refactoring after it in a batch, and of a batch at its
+    end says which types lack which interface's methods and to give
+    them the methods in earlier steps. *Done.*
+
     A value with no case (Renewable's `atlas`, which stopped 7 of 8
     attempts in the next rerun): extract_function by case adds the
     case, by default, when the code after the switch is what runs for
