@@ -378,6 +378,14 @@ code to see cannot write edits, so the arms compare each in its own
 way of working: the manual arm with reads, the refactor arm without.
 Lines written count an edit's new text and a whole file's content.
 
+Run on kinds (cost-history 19, manual arm): the manual arm passed 8/8
+at $0.0146 (Haiku) and $0.186 (Sonnet) a task, against the refactor
+arm's 5/8 at $0.031 and $0.261, writing about twice the lines. In the
+same loop, on a task whose shape no move names, reading and writing
+is cheaper than deriving, mostly by the tools reference in every
+request. What is left to compare: tasks where a move names the change
+(freight-xl's fold and inline), where the derivation writes least.
+
 ## Recording
 
 Each step in its own PR: the results in `docs/cost-history.md`, the

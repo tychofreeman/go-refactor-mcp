@@ -2866,3 +2866,8 @@ The arm's texts, `run_edits`, `Arm` and the rewiring of `attempt` and
 `main` with replace_text in batches, then two wording fixes the
 scripted check showed; the docs with replace_text. Nothing by hand.
 This entry appended with a heredoc.
+
+## 2026-10-26: cost-history 19, the manual arm on kinds
+
+The results in cost-history, plan-and-execute and the session notes
+with replace_text. Nothing by hand. This entry appended with a heredoc.

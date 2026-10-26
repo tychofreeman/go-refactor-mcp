@@ -560,7 +560,12 @@ results are in `docs/cost-history.md`.
   reads (Sonnet 4/4 $0.347, Haiku 2/4 $0.031), every pass derived.
   Import's edit needs its body, and a failing test brings it: a
   repair sends the source of what a failure names. What the runs
-  lacked was a repair to spend on it.
+  lacked was a repair to spend on it. Repairs that patch the batch
+  (`-patch`) cut Sonnet's cost a quarter, to $0.261. The manual arm
+  in the same loop (`-arm manual`: reads, then text edits) passed
+  kinds 8/8 at $0.0146 (Haiku) and $0.186 (Sonnet), cheaper than
+  deriving, mostly by not sending the tools reference (12K tokens);
+  it wrote twice the lines. Not yet compared: tasks a move names.
 - Where a session's cost goes (cost-history 12,
   `eval-tasks/learning/cost.py`): cache writes 69%, output 18%, cache
   reads 13%, though cache reads are 88% of input tokens. About 38% of
