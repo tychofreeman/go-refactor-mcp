@@ -21,8 +21,8 @@ func (x *inliner) deletable() (bool, string) {
 	}
 	key := x.posKey(x.fn.Pos())
 	call := x.posKey(x.id.Pos())
-	for _, p := range x.ws.Pkgs {
-		if p.TypesInfo == nil || !x.fn.Exported() && p.PkgPath != x.pkg.PkgPath {
+	for _, p := range x.WS.Pkgs {
+		if p.TypesInfo == nil || !x.fn.Exported() && p.PkgPath != x.Pkg.PkgPath {
 			continue
 		}
 		for id, o := range p.TypesInfo.Uses {
@@ -33,22 +33,22 @@ func (x *inliner) deletable() (bool, string) {
 			if x.posKey(id.Pos()) == call {
 				continue
 			}
-			if pos := x.ws.Fset.Position(id.Pos()); pos.Filename == x.dtf.Name() && x.doff(x.decl.Pos()) <= pos.Offset && pos.Offset < x.doff(x.decl.End()) {
+			if pos := x.WS.Fset.Position(id.Pos()); pos.Filename == x.dtf.Name() && x.doff(x.decl.Pos()) <= pos.Offset && pos.Offset < x.doff(x.decl.End()) {
 				return false, "it calls itself"
 			}
-			return false, fmt.Sprintf("it is still used, for example at %s", x.ws.Position(id.Pos()))
+			return false, fmt.Sprintf("it is still used, for example at %s", x.WS.Position(id.Pos()))
 		}
 	}
 	if x.sig.Recv() != nil {
-		if _, at, found := analysis.InterfaceWithMethod(x.ws.TypesInfos(), x.fn.Pkg().Path(), x.fn.Name()); found {
-			return false, fmt.Sprintf("an interface at %s has a method named %s, which this method may be needed to implement", x.ws.Position(at), x.fn.Name())
+		if _, at, found := analysis.InterfaceWithMethod(x.WS.TypesInfos(), x.fn.Pkg().Path(), x.fn.Name()); found {
+			return false, fmt.Sprintf("an interface at %s has a method named %s, which this method may be needed to implement", x.WS.Position(at), x.fn.Name())
 		}
 	}
 	return true, ""
 }
 
 func (x *inliner) posKey(p token.Pos) string {
-	pos := x.ws.Fset.Position(p)
+	pos := x.WS.Fset.Position(p)
 	return fmt.Sprintf("%s:%d", pos.Filename, pos.Offset)
 }
 
@@ -84,14 +84,14 @@ type span struct{ start, end int }
 // used only by the deleted function's signature, by an absorbed variable
 // declaration, or by a dropped argument.
 func (x *inliner) importEdits(deletedFn bool) []edit.FileEdit {
-	sameFile := x.dtf.Name() == x.tf.Name()
+	sameFile := x.dtf.Name() == x.TF.Name()
 	var caller []span
 	for _, e := range x.callerEdits {
 		caller = append(caller, span{e.Start, e.End})
 	}
 	for _, p := range x.params {
 		if p.drop && p.arg != nil {
-			caller = append(caller, span{x.off(p.arg.Pos()), x.off(p.arg.End())})
+			caller = append(caller, span{x.Off(p.arg.Pos()), x.Off(p.arg.End())})
 		}
 	}
 	var callee []span
@@ -105,14 +105,14 @@ func (x *inliner) importEdits(deletedFn bool) []edit.FileEdit {
 	}
 	var out []edit.FileEdit
 	if sameFile {
-		if es := x.unusedImports(x.file, x.tf, x.src, append(caller, callee...)); len(es) > 0 {
-			out = append(out, edit.FileEdit{Path: x.tf.Name(), Edits: es})
+		if es := x.unusedImports(x.File, x.TF, x.Src, append(caller, callee...)); len(es) > 0 {
+			out = append(out, edit.FileEdit{Path: x.TF.Name(), Edits: es})
 		}
 		return out
 	}
 	if len(caller) > 0 {
-		if es := x.unusedImports(x.file, x.tf, x.src, caller); len(es) > 0 {
-			out = append(out, edit.FileEdit{Path: x.tf.Name(), Edits: es})
+		if es := x.unusedImports(x.File, x.TF, x.Src, caller); len(es) > 0 {
+			out = append(out, edit.FileEdit{Path: x.TF.Name(), Edits: es})
 		}
 	}
 	if len(callee) > 0 {
@@ -140,9 +140,9 @@ func (x *inliner) unusedImports(file *ast.File, tf *token.File, src []byte, dele
 		return false
 	}
 	used, before := map[*types.PkgName]bool{}, map[*types.PkgName]bool{}
-	for id, o := range x.info.Uses {
+	for id, o := range x.Info.Uses {
 		pn, ok := o.(*types.PkgName)
-		if !ok || x.ws.Fset.File(id.Pos()) != tf {
+		if !ok || x.WS.Fset.File(id.Pos()) != tf {
 			continue
 		}
 		before[pn] = true
@@ -164,11 +164,11 @@ func (x *inliner) unusedImports(file *ast.File, tf *token.File, src []byte, dele
 			}
 			var pn *types.PkgName
 			if is.Name != nil {
-				pn, _ = x.info.Defs[is.Name].(*types.PkgName)
+				pn, _ = x.Info.Defs[is.Name].(*types.PkgName)
 			} else {
-				pn, _ = x.info.Implicits[is].(*types.PkgName)
+				pn, _ = x.Info.Implicits[is].(*types.PkgName)
 			}
-			if pn == nil || !before[pn] || used[pn] || (tf == x.tf && x.usedQ[pn.Name()]) {
+			if pn == nil || !before[pn] || used[pn] || (tf == x.TF && x.usedQ[pn.Name()]) {
 				continue
 			}
 			dead = append(dead, is)

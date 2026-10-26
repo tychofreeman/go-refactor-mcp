@@ -1758,11 +1758,23 @@ hand or a tool got in the way.
     (which counts a closure that runs during its statement, where
     `Owns` does not; its callers in inline_function and extract_function
     mean the stricter test) and inline_function's `neverChanges`.
-37. **A site**: fifteen refactorings carry `ws, pkg, info, file, src`
-    and a target, with six copies each of `quote` and `declaredAt`, nine
-    of `text`, ten of `off`, and seven `find` functions from a
-    `locate.IdentQuery`. One `Site` type with those as methods, and one
-    `find`; `extract_struct` and `move_declaration` can do most of it.
+37. **A site** (2026-10-26): fifteen refactorings carry `ws, pkg, info,
+    file, src` and a target, with six copies each of `quote` and
+    `declaredAt`, nine of `text`, ten of `off`, and seven `find`
+    functions from a `locate.IdentQuery`. `internal/site.Site` is that
+    file of the workspace (`WS`, `Pkg`, `Info`, `File`, `TF`, `Src`)
+    with `Off`, `Text`, `Quote`, `Position` and `DeclaredAt`, and
+    `site.At(ws, path)` makes one. Done so far: inline_variable,
+    extract_variable and inline_function embed it (extract_struct,
+    rename of each field to its exported name, then move_declaration
+    for the first and an alias replaced by the package's type for the
+    others, since move_declaration cannot merge into a type that
+    exists). Found: move_declaration with `new_name` on an embedded
+    type does not rename the field in keyed literals (`inliner{site:
+    site{...}}` stays; it rolled back as a bug in its checks).
+    Next: the twelve others (some lack `info`, `tf` or `file`, which
+    `site.At` fills), inline_function's second site (the declaring
+    file: `dfile`, `dtf`, `dsrc`), then one `find`.
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the

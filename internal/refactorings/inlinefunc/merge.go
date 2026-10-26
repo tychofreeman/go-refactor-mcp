@@ -74,7 +74,7 @@ func (x *inliner) mergeExisting(cands []existingMerge) {
 		case *ast.DeclStmt:
 			c := cs[0]
 			if absorb {
-				x.callerEdits = append(x.callerEdits, x.deleteLine(x.src, x.tf, decls[0]))
+				x.callerEdits = append(x.callerEdits, x.deleteLine(x.Src, x.TF, decls[0]))
 				accept(cs)
 				continue
 			}
@@ -87,14 +87,14 @@ func (x *inliner) mergeExisting(cands []existingMerge) {
 		case *ast.AssignStmt:
 			declared := 0
 			for _, lhs := range d.Lhs {
-				if id, ok := lhs.(*ast.Ident); ok && x.info.Defs[id] != nil {
+				if id, ok := lhs.(*ast.Ident); ok && x.Info.Defs[id] != nil {
 					declared++
 				}
 			}
 			switch {
 			case absorb:
 				for _, ds := range decls {
-					x.callerEdits = append(x.callerEdits, x.deleteLine(x.src, x.tf, ds))
+					x.callerEdits = append(x.callerEdits, x.deleteLine(x.Src, x.TF, ds))
 				}
 				accept(cs)
 			case declared == len(cs):
@@ -124,7 +124,7 @@ func (x *inliner) topDecl(v *types.Var) (ast.Stmt, int) {
 				continue
 			}
 			spec := gd.Specs[0].(*ast.ValueSpec)
-			if len(spec.Names) == 1 && x.info.Defs[spec.Names[0]] == v {
+			if len(spec.Names) == 1 && x.Info.Defs[spec.Names[0]] == v {
 				return s, i
 			}
 		case *ast.AssignStmt:
@@ -132,7 +132,7 @@ func (x *inliner) topDecl(v *types.Var) (ast.Stmt, int) {
 				continue
 			}
 			for _, l := range s.Lhs {
-				if id, ok := l.(*ast.Ident); ok && x.info.Defs[id] == v {
+				if id, ok := l.(*ast.Ident); ok && x.Info.Defs[id] == v {
 					return s, i
 				}
 			}
@@ -150,7 +150,7 @@ func (x *inliner) assignedBeforeRead(v *types.Var, idx int, reuse bool) bool {
 	for _, s := range x.decl.Body.List[idx+1:] {
 		var refs []*ast.Ident
 		ast.Inspect(s, func(n ast.Node) bool {
-			if id, ok := n.(*ast.Ident); ok && x.info.Uses[id] == v {
+			if id, ok := n.(*ast.Ident); ok && x.Info.Uses[id] == v {
 				refs = append(refs, id)
 			}
 			return true
@@ -194,10 +194,10 @@ func (x *inliner) absorbable(o *types.Var) (*ast.DeclStmt, bool) {
 			continue
 		}
 		spec := gd.Specs[0].(*ast.ValueSpec)
-		if len(spec.Names) != 1 || len(spec.Values) > 0 || x.info.Defs[spec.Names[0]] != o {
+		if len(spec.Names) != 1 || len(spec.Values) > 0 || x.Info.Defs[spec.Names[0]] != o {
 			continue
 		}
-		for id, u := range x.info.Uses {
+		for id, u := range x.Info.Uses {
 			if u == o && id.Pos() > ds.End() && id.Pos() < x.stmt.Pos() {
 				return nil, false
 			}
@@ -213,9 +213,9 @@ func (x *inliner) absorbable(o *types.Var) (*ast.DeclStmt, bool) {
 // hasCommentOn reports whether a comment is on the lines of n (deleting
 // n would delete it).
 func (x *inliner) hasCommentOn(n ast.Node) bool {
-	first, last := x.tf.Line(n.Pos()), x.tf.Line(n.End())
-	for _, cg := range x.file.Comments {
-		if x.tf.Line(cg.End()) >= first && x.tf.Line(cg.Pos()) <= last {
+	first, last := x.TF.Line(n.Pos()), x.TF.Line(n.End())
+	for _, cg := range x.File.Comments {
+		if x.TF.Line(cg.End()) >= first && x.TF.Line(cg.Pos()) <= last {
 			return true
 		}
 	}
@@ -230,8 +230,8 @@ func (x *inliner) argsRead(o types.Object) bool {
 		exprs = append(exprs, sel.X)
 	}
 	for _, e := range exprs {
-		for _, id := range analysis.ScopeRefs(x.info, e) {
-			if x.info.Uses[id] == o {
+		for _, id := range analysis.ScopeRefs(x.Info, e) {
+			if x.Info.Uses[id] == o {
 				return true
 			}
 		}
@@ -250,7 +250,7 @@ func (x *inliner) deadAfter(v *types.Var) bool {
 	if x.shape == terminal {
 		return true
 	}
-	for id, o := range x.info.Uses {
+	for id, o := range x.Info.Uses {
 		if o == v && id.Pos() >= x.stmt.End() && id.Pos() < x.callerFA.Node.End() {
 			return false
 		}

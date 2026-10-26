@@ -2860,6 +2860,25 @@ replace_text. Nothing by hand. This entry appended with a heredoc.
 The run's results in cost-history and plan-and-execute with
 replace_text. Nothing by hand. This entry appended with a heredoc.
 
+## 2026-10-26: site.Site for three refactorings
+
+The derivation per refactoring: extract_struct of the six fields into
+`Site` (embedded; the one keyed literal rewritten), rename of each
+field to its exported name, then move_declaration to
+`internal/site/site.go` for the first (it created the package), and for
+the next two, whose target type now existed, replace_declaration of the
+local type to an alias `type Site = site.Site`, two replace_text for
+the embedded field and the literal, remove_dead_code of the alias.
+The helpers with add_declaration on Site, the calls with replace_text,
+the old helpers with remove_dead_code; a parameter named `site` that
+shadowed the package renamed with rename (by line). Refused on the
+way: move_declaration with `new_name` on the extracted type ("rolled
+back ... a bug in the precondition checks": the keyed literal keeps the
+old field name), so the type was extracted under its final name; and
+`string(x.text(` became `(x.Text(` by text, with the parentheses then
+dropped by a scripted replace_text. Nothing by hand. This entry
+appended with a heredoc.
+
 ## 2026-10-26: stopsFuncs into stdFuncs
 
 The field and the entries with replace_text (the entries rewritten from
