@@ -1427,6 +1427,34 @@ inline_function and function_to_method where the task named them. Against kinds,
 the manual arm won: there the change was one new shape (types from a
 type code) in five switches, which the plans read whole either way.
 
+**The refactor arm with a tool index** (#398 `-index`: a line a tool,
+the full entries of those asked for; otherwise as above;
+`eval-runs/loop-{haiku,sonnet}-{freight,kinds}-index`, $3.23). The
+first request wrote about 9.5K tokens, from 20.5K.
+
+| Sonnet, cost a task (passed) | full reference | index | manual |
+|---|---|---|---|
+| dispatch | $0.095 (4/4) | $0.061 (4/4) | $0.070 (4/4) |
+| tail | $0.110 (4/4) | $0.075 (4/4) | $0.066 (4/4) |
+| routes | $0.114 (4/4) | $0.159 (1/4) | $0.323 (4/4) |
+| run | $0.103 (4/4) | $0.171 (4/4) | $0.176 (4/4) |
+| kinds | $0.261 (4/4) | $0.272 (2/4) | $0.186 (4/4) |
+
+Haiku: freight 13/16 at $0.0116 (14/16 at $0.0113 with the
+reference), kinds 0/4. Where the change is local the index did what it
+was for: dispatch and tail cost a third less, dispatch now below
+writing it by hand. Where a step carries the change to many places it
+lost the step: no Sonnet routes plan asked for `fold`, which every plan
+with the reference used for the 60 uses; they asked for the tools the
+task's words name (change_field_type, extract_struct, rename) and
+rewrote the uses, refused by remove_dead_code until the repairs ran
+out. Kinds plans asked for extract_function only in a later ask, after
+preparing. As the session notes record for fold's description (2/4
+runs used it with its examples, 0/4 without), a model
+chooses a derivation from the tools' examples; a first sentence does
+not show it which tool fits a shape. Asking took 1-3 more requests an
+attempt.
+
 ## What made the difference
 
 - **Smaller results** (#75, rename locations): the largest single win when

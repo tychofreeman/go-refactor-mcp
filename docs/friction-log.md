@@ -2930,3 +2930,8 @@ This entry appended with a heredoc.
 `attempt` and the flag with replace_text in batches; the docs and this
 entry with replace_text, anchored on the log's last lines. Nothing by
 hand.
+
+## 2026-10-26: cost-history 19, the tool index
+
+The run's results in cost-history and plan-and-execute, and this entry,
+with replace_text. Nothing by hand.
