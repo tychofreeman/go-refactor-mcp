@@ -396,6 +396,13 @@ and rewriting each one. So the loop's answer to the project's
 question: deriving pays when a step carries a change to many places,
 and the tools reference is its fixed cost.
 
+To lower that fixed cost: `-index`. The plan gets a line a tool (its
+name and its description's first sentence, 4.5K characters for 44
+tools, against 39K for the reference) and asks first for the full
+entries of the tools it will use, `{"tools": [...]}`; it may ask again
+after any later message, four times in all. The entries it gets are
+the reference's own.
+
 ## Recording
 
 Each step in its own PR: the results in `docs/cost-history.md`, the

@@ -16,7 +16,9 @@ the tests pass, the model is asked whether the change is done; if not,
 its next batch runs on top, at most -stages more. With -arm manual, the
 model answers with text edits ({"file", "old", "new"} or {"file",
 "content"}) that the loop applies, without the tools reference: the
-same loop, to compare deriving with writing and nothing else different. With -patch, a repair
+same loop, to compare deriving with writing and nothing else different.
+With -index, the plan gets a line a tool in place of the tools
+reference, and asks for the full entries of those it will use. With -patch, a repair
 lists the failed batch's steps and may answer with those from one on,
 the ones before kept: a repair's output is most of what the loop costs. The task's hidden
 tests judge what the kept batches left.
@@ -200,11 +202,52 @@ APPLIES = "Applies the change and returns what changed; undo reverts it."
 NOT_STEPS = ("batch", "inspect", "undo")
 
 
+NAMES = "Where a tool takes file and name without line, name is a package-level symbol of file's package (Name, Type.Method or Type.Field), and stays valid after earlier steps."
+
+
 def compact(tools):
     """The tools as a batch's steps need them: each step's description,
     without the sentences every tool repeats, and its arguments as a
     signature (name: type, a ? for optional), without their descriptions."""
-    out = ["Where a tool takes file and name without line, name is a package-level symbol of file's package (Name, Type.Method or Type.Field), and stays valid after earlier steps."]
+    return "\n\n".join([NAMES] + list(entries(tools).values()))
+
+
+# INDEX, with -index, stands for the tools reference in the plan: a line
+# a tool, and the full entries of those the model asks for.
+INDEX = """Only an index here, a line for each tool. Before your first batch, ask
+for the full description and arguments of each tool you will use, all
+in one answer: {{"tools": ["fold", "rename", ...]}}. You may ask for
+more the same way after any later message.
+
+{index}"""
+
+TOOLS = """The tools you asked for, with their arguments:
+
+{entries}
+
+Answer with the batch: {{"batch": {{"steps": [...]}}}}, or ask for more
+tools: {{"tools": [...]}}."""
+
+# TOOLS_HINT ends the later prompts with -index.
+TOOLS_HINT = """
+Or, for tools whose description you have not seen: {"tools": ["name", ...]}."""
+
+
+def index(tools):
+    """A line for each step's tool: its name and its description's first
+    sentence."""
+    out = []
+    for t in tools:
+        if t["name"] in NOT_STEPS:
+            continue
+        first = re.split(r"(?<=[.:])\s", t["description"].strip(), maxsplit=1)[0]
+        out.append(f"{t['name']}: {first.rstrip(':')[:160]}")
+    return "\n".join(out)
+
+
+def entries(tools):
+    """Each step's tool by name, as compact describes it."""
+    out = {}
     for t in tools:
         if t["name"] in NOT_STEPS:
             continue
@@ -217,8 +260,8 @@ def compact(tools):
             args.append(f"{k}{'' if k in s.get('required', []) else '?'}: {typ}")
         desc = t["description"].replace(BY_NAME, "").replace(APPLIES, "")
         desc = "\n".join(l for l in desc.splitlines() if l.strip())
-        out.append(f"{t['name']}({', '.join(args)})\n{desc}")
-    return "\n\n".join(out)
+        out[t["name"]] = f"{t['name']}({', '.join(args)})\n{desc}"
+    return out
 
 
 def source(binary, module, names):
@@ -467,7 +510,7 @@ ARMS = {
 }
 
 
-def attempt(task, model, tools, binary, repairs, log, may_read=True, stages=2, read_after=False, patch=False, arm=ARMS["refactor"]):
+def attempt(task, model, tools, binary, repairs, log, may_read=True, stages=2, read_after=False, patch=False, arm=ARMS["refactor"], tool_entries=None):
     """One attempt at task. A batch that applies and passes the module's
     tests is kept, and the model is asked whether the change is done; if
     not, its next batch runs on what the kept ones left, at most stages
@@ -476,15 +519,18 @@ def attempt(task, model, tools, binary, repairs, log, may_read=True, stages=2, r
     read_after, reads open only once a batch has applied; with patch, a
     repair may answer with the failed batch's steps from one on. arm says
     what the model answers with: steps, or text edits (a batch's steps
-    then being the edits)."""
+    then being the edits). With tool_entries, tools is an index, and the
+    model asks for the entries of the tools it will use."""
     module = os.path.join(ROOT, "eval-tasks", task["dir"])
     text = arm.plan.format(tools=tools, view=probe.view("calltree", module), prompt=task["prompt"],
                            read=READ_AFTER if read_after else arm.may_read if may_read else "")
     may_read = may_read and not read_after
-    row = {"reads": 0, "repairs": 0, "patches": 0, "stages": 0, "refusals": [], "error": ""}
+    row = {"reads": 0, "repairs": 0, "patches": 0, "tool_asks": 0, "tools_asked": 0, "stages": 0, "refusals": [], "error": ""}
+    asks = 4  # tool asks left, with an index
+    more = TOOLS_HINT if tool_entries else ""
     base, batches, left, reads = module, [], repairs, 3  # base: where the next batch runs
     last = None  # the batch that failed last, which a patch changes
-    hint = READ_HINT if may_read else ""
+    hint = (READ_HINT if may_read else "") + more
     ans = err = None
 
     def ask(text):
@@ -508,6 +554,16 @@ def attempt(task, model, tools, binary, repairs, log, may_read=True, stages=2, r
             ask(NOT_YET)
             continue
         batch = arm.batch(ans)
+        if tool_entries and asks and batch is None and ans and isinstance(ans.get("tools"), list) and not ans.get("patch"):
+            asks -= 1
+            names = [str(n) for n in ans["tools"]]
+            row["tool_asks"] += 1
+            row["tools_asked"] += len(names)
+            text = "\n\n".join([NAMES] + [tool_entries[n] for n in names if n in tool_entries])
+            if unknown := [n for n in names if n not in tool_entries]:
+                text += "\n\nNo tool is named " + ", ".join(unknown) + "."
+            ask(TOOLS.format(entries=text) + hint)
+            continue
         if patch and last and ans and batch is None and (b := patched(last, ans.get("patch"))):
             batch = b
             row["patches"] += 1
@@ -532,7 +588,7 @@ def attempt(task, model, tools, binary, repairs, log, may_read=True, stages=2, r
             if row["stages"] > stages:
                 break
             if read_after:
-                may_read, hint = True, READ_OPEN
+                may_read, hint = True, READ_OPEN + more
             ask(arm.done + hint)
             continue
         row["refusals"].append(what.splitlines()[0][:200])
@@ -570,19 +626,24 @@ def main():
     p.add_argument("-no-read", action="store_true", help="the plan cannot ask for source; only repairs send it")
     p.add_argument("-read-after", action="store_true", help="the plan may ask for source only once a batch has applied")
     p.add_argument("-patch", action="store_true", help="a repair may answer with the failed batch's steps from one on, the ones before kept")
+    p.add_argument("-index", action="store_true", help="the plan gets a line a tool, and asks for the full entries of those it will use")
     p.add_argument("-arm", default="refactor", choices=sorted(ARMS),
                    help="what the model answers with: gorefactor steps, or text edits the loop applies")
     p.add_argument("-reference", default="compact", choices=["compact", "full"],
                    help="the tools as compact signatures and descriptions, or as the server publishes them")
     p.add_argument("-stages", type=int, default=2, help="batches after the first that the model may send when asked if it is done")
     a = p.parse_args()
-    if a.arm == "manual" and (a.read_after or "ref" in a.models.split(",")):
-        p.error("the manual arm has no reference edits, and -read-after asks for a first batch that moves code by name")
+    if a.arm == "manual" and (a.read_after or a.index or "ref" in a.models.split(",")):
+        p.error("the manual arm has no reference edits and no tools, and -read-after asks for a first batch that moves code by name")
     os.makedirs(a.out, exist_ok=True)
     tmp = tempfile.mkdtemp(prefix="loop-")
     binary = os.path.join(tmp, "refactor")
     probe.sh(["go", "build", "-o", binary, "./cmd/refactor"])
-    tools = compact(probe.tool_list()) if a.reference == "compact" else probe.schemas()
+    listed = probe.tool_list()
+    tools = compact(listed) if a.reference == "compact" else probe.schemas()
+    tool_entries = None
+    if a.index:
+        tools, tool_entries = INDEX.format(index=index(listed)), entries(listed)
     tasks = [t for t in json.load(open(a.tasks)) if not a.only or t["name"] in a.only.split(",")]
     results = open(os.path.join(a.out, "results.jsonl"), "a")
     for t in tasks:
@@ -593,7 +654,7 @@ def main():
                 model = Ref(ref) if m == "ref" else Model(m, empty)
                 log = []
                 row = {"task": t["name"], "model": m, "run": n, "arm": a.arm}
-                row.update(attempt(t, model, tools, binary, a.repairs, log, may_read=not a.no_read, stages=a.stages, read_after=a.read_after, patch=a.patch, arm=ARMS[a.arm]))
+                row.update(attempt(t, model, tools, binary, a.repairs, log, may_read=not a.no_read, stages=a.stages, read_after=a.read_after, patch=a.patch, arm=ARMS[a.arm], tool_entries=tool_entries))
                 row.update(cost=model.cost, requests=model.requests, usage=model.usage)
                 with open(os.path.join(a.out, f"{t['name']}-{m}-{n}.txt"), "w") as f:
                     f.write("\n\n==== next answer ====\n\n".join(log))
