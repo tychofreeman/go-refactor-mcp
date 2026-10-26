@@ -505,6 +505,10 @@ results are in `docs/cost-history.md`.
   addressed by name carry code you cannot see) changed that: 5 of 8
   plans then derived by case, but each batch (40-69 steps) met four
   or five refusals of detail, more than two repairs clear: 0/8.
+  With those fixed, still 0/8: every attempt stopped at Renewable's
+  `atlas`, which has no case. A batch's refusal gives lines of the
+  module at the refused step; a repair resends the batch from the
+  start, so those lines point at other code.
 - Where a session's cost goes (cost-history 12,
   `eval-tasks/learning/cost.py`): cache writes 69%, output 18%, cache
   reads 13%, though cache reads are 88% of input tokens. About 38% of
