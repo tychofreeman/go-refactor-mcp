@@ -403,6 +403,13 @@ entries of the tools it will use, `{"tools": [...]}`; it may ask again
 after any later message, four times in all. The entries it gets are
 the reference's own.
 
+Run (cost-history 19, tool index): the first request halved, and local
+changes cost a third less (dispatch now cheaper than writing by hand),
+but plans chose tools by the task's words: none asked for `fold` on
+routes (1/4 from 4/4) and kinds fell to 2/4. The examples are what
+lead a plan to a derivation; an index without them saves the cost
+and loses the choice.
+
 ## Recording
 
 Each step in its own PR: the results in `docs/cost-history.md`, the
