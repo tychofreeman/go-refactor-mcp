@@ -482,6 +482,23 @@
    }
   },
   {
+   "tool": "introduce_parameter",
+   "args": {
+    "file": "lending/lending.go",
+    "function": "Book.Label",
+    "expression": "it.Title",
+    "parameter": "title"
+   }
+  },
+  {
+   "tool": "remove_parameter",
+   "args": {
+    "file": "lending/lending.go",
+    "name": "Kind.Label",
+    "parameter": "it"
+   }
+  },
+  {
    "tool": "add_declaration",
    "args": {
     "file": "lending/lending.go",

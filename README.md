@@ -1128,8 +1128,15 @@ hand or a tool got in the way.
         for a composite literal in an `if` (`replace_expression`;
         *Done*: it uses `analysis.InControlHeader`, as
         `inline_variable` did),
-        `introduce_parameter` through an interface method, narrowing
-        leaving empty switches, a case equal to the default.
+        `introduce_parameter` through an interface method (*Done*:
+        each method of the interface's types gets the parameter for
+        the same expression of its own parameters, found with
+        `pattern`, and `function` addresses the expression by name;
+        so `Label(it Item)` becomes the prompt's `Label(title string)`
+        in two steps, introduce_parameter of `it.Title` in
+        `Book.Label` and remove_parameter of `it`, and the kinds
+        reference ends with them), narrowing leaving empty switches,
+        a case equal to the default.
       - A fresh model on the recipe: `eval-tasks/claude-md-kind-recipe`
         (the algebraic arm and the recipe, with shapes for its
         example), `lending-kinds`, 4 runs, against the algebraic arm

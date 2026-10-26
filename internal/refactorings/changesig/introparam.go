@@ -15,6 +15,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/imports"
 	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
+	"github.com/tychofreeman/go-refactor-mcp/internal/pattern"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
@@ -29,7 +30,8 @@ func (*IntroduceParameter) Name() string { return "introduce_parameter" }
 
 func (*IntroduceParameter) Description() string {
 	return `Replace an expression in a function's body with a new parameter, and pass the expression at every call, written in the call's own terms: introducing u.Name as name, func greet(u User) string { return "hi " + u.Name } becomes func greet(u User, name string) string { return "hi " + name }, and greet(a) becomes greet(a, a.Name). Then remove_parameter u once the body no longer uses it. The receiver works too: m.decl in a method of m becomes mv.decl at the call mv.check().
-Identify the expression by file, the line it starts on and its source text (column if the text is on the line twice). The parameter goes last.
+In a method of an interface, every method of the interface's types gets it, each for the same expression of its own parameters: p.Name in Fern.Water makes Water(p Plant) Water(p Plant, name string) in Species and every species, and s.Water(p) s.Water(p, p.Name).
+Identify the expression by file and its source text, with function (its first use in that body) or the line it starts on (column if the text is on the line twice). The parameter goes last.
 The expression is then evaluated once, at the call, so it must give the same value and do the same there: one that could panic or reads memory other code can change must be what the body evaluates first, on every call. Refusals say which rule a case breaks.`
 }
 
@@ -38,18 +40,20 @@ func (*IntroduceParameter) InputSchema() json.RawMessage {
   "type": "object",
   "properties": {
     "file":       {"type": "string",  "description": "Path of the file, relative to the workspace root."},
+    "function":   {"type": "string",  "description": "Instead of line: the function (Name or Type.Method) whose body uses the expression; its first use."},
     "line":       {"type": "integer", "description": "1-based line on which the expression starts."},
     "expression": {"type": "string",  "description": "Source text of the expression, e.g. \"p.x\"."},
     "parameter":  {"type": "string",  "description": "Name of the new parameter."},
     "column":     {"type": "integer", "description": "Optional 1-based column where the expression starts, only needed if the text occurs more than once on the line."}
   },
-  "required": ["file", "line", "expression", "parameter"],
+  "required": ["file", "expression", "parameter"],
   "additionalProperties": false
 }`)
 }
 
 type introArgs struct {
 	File       string `json:"file"`
+	Function   string `json:"function,omitempty"`
 	Line       int    `json:"line"`
 	Column     int    `json:"column,omitempty"`
 	Expression string `json:"expression"`
@@ -78,7 +82,7 @@ func (*IntroduceParameter) Plan(ws *workspace.Workspace, raw json.RawMessage) (*
 	if err != nil {
 		return nil, err
 	}
-	expr, err := locate.FindExpr(ws, file, src, want, a.Line, a.Column, false)
+	expr, err := findIntroduced(ws, file, src, want, a)
 	if err != nil {
 		return nil, err
 	}
@@ -87,7 +91,7 @@ func (*IntroduceParameter) Plan(ws *workspace.Workspace, raw json.RawMessage) (*
 		return nil, refactor.Refusef("%s is not in the body of a declared function", a.Expression)
 	}
 	declPos := ws.Fset.Position(fd.Name.Pos())
-	t, err := findTarget(ws, locate.IdentQuery{File: declPos.Filename, Line: declPos.Line, Column: declPos.Column, Name: fd.Name.Name})
+	t, err := findFamily(ws, locate.IdentQuery{File: declPos.Filename, Line: declPos.Line, Column: declPos.Column, Name: fd.Name.Name})
 	if err != nil {
 		return nil, err
 	}
@@ -98,9 +102,12 @@ func (*IntroduceParameter) Plan(ws *workspace.Workspace, raw json.RawMessage) (*
 				file = f
 			}
 		}
-		if expr, err = locate.FindExpr(ws, file, src, want, a.Line, a.Column, false); err != nil {
+		if expr, err = findIntroduced(ws, file, src, want, a); err != nil {
 			return nil, err
 		}
+	}
+	if t.members != nil {
+		return t.introduceFamily(a, file, src, expr)
 	}
 	if err := t.checkIntroduced(pkg.TypesInfo, file, expr); err != nil {
 		return nil, err
@@ -148,6 +155,156 @@ func (*IntroduceParameter) Plan(ws *workspace.Workspace, raw json.RawMessage) (*
 		fes = append(fes, edit.FileEdit{Path: p, Edits: ad.Edits()})
 	}
 	return t.newPlan(fmt.Sprintf("introduced parameter %q for %s in %s", a.Parameter+" "+typSrc, a.Expression, t.obj.Name()), fes), nil
+}
+
+// findIntroduced finds the expression a names: on a.Line, or else the
+// first in the body of a.Function.
+func findIntroduced(ws *workspace.Workspace, file *ast.File, src []byte, want []string, a introArgs) (ast.Expr, error) {
+	if a.Function == "" || a.Line != 0 {
+		return locate.FindExpr(ws, file, src, want, a.Line, a.Column, false)
+	}
+	fd := locate.Func(file, a.Function)
+	if fd == nil || fd.Body == nil {
+		return nil, refactor.Refusef("no function %s with a body in %s; give Name, or Type.Method for a method", a.Function, a.File)
+	}
+	tf := ws.Fset.File(file.Pos())
+	var found ast.Expr
+	ast.Inspect(fd.Body, func(n ast.Node) bool {
+		if e, ok := n.(ast.Expr); ok && found == nil && locate.TokensMatch(tf, src, e, want) {
+			found = e
+		}
+		return found == nil
+	})
+	if found == nil {
+		return nil, refactor.Refusef("%s does not use %s", a.Function, a.Expression)
+	}
+	return found, nil
+}
+
+// introduceFamily introduces the parameter in every method of t's family
+// (an interface method and the methods that implement it): in each body,
+// the expression written with that method's own parameters becomes the
+// parameter, and every call of any of them passes expr, of t's body.
+func (t *target) introduceFamily(a introArgs, file *ast.File, src []byte, expr ast.Expr) (*refactor.Plan, error) {
+	info := t.pkg.TypesInfo
+	params := t.paramObjects(info)
+	for _, id := range analysis.ScopeRefs(info, expr) {
+		if i, ok := params[info.Uses[id]]; ok && i < 0 {
+			return nil, refactor.Refusef("%s uses the receiver %s, and each method of %s has its own; introduce a parameter for an expression of the parameters", a.Expression, id.Name, t.groupName())
+		}
+	}
+	at, err := t.named().insertIndex("")
+	if err != nil {
+		return nil, err
+	}
+	typ := info.TypeOf(expr)
+	srcs := map[string][]byte{t.declFile(): src}
+	read := func(path string) ([]byte, error) {
+		if srcs[path] == nil {
+			b, err := os.ReadFile(path)
+			if err != nil {
+				return nil, err
+			}
+			srcs[path] = b
+		}
+		return srcs[path], nil
+	}
+	var fes []edit.FileEdit
+	adders := map[string]*imports.Adder{}
+	typSrc := ""
+	for _, m := range t.group() {
+		mfile := m.syntaxFile()
+		ts, missing := analysis.TypeString(typ, mfile, m.pkg.Types, analysis.ImportMap(m.pkg.Types))
+		if missing != "" {
+			return nil, refactor.Refusef("the type of %s, %s, cannot be written in %s without importing %s", a.Expression, typ, t.ws.Rel(m.declFile()), missing)
+		}
+		if m == t {
+			typSrc = ts
+		}
+		if err := m.checkNewName(a.Parameter); err != nil {
+			return nil, err
+		}
+		if err := m.checkInterfaces(func(ps []string) []string { return slices.Insert(ps, at, typeKey(typ)) }); err != nil {
+			return nil, err
+		}
+		edits := []edit.TextEdit{m.paramEdit(at, a.Parameter, ts)}
+		if m.decl != nil {
+			for _, x := range m.occurrences(t, expr) {
+				if err := m.checkIntroduced(m.pkg.TypesInfo, mfile, x); err != nil {
+					return nil, refactor.Refusef("in %s.%s: %v", t.typeName(receiverBase(m.obj.Signature().Recv().Type())), m.obj.Name(), err)
+				}
+				edits = append(edits, edit.TextEdit{Start: m.off(x.Pos()), End: m.off(x.End()), NewText: a.Parameter})
+			}
+		}
+		fes = append(fes, edit.FileEdit{Path: m.declFile(), Edits: edits})
+		for _, c := range m.calls {
+			cpath := t.ws.Fset.Position(c.expr.Pos()).Filename
+			csrc, err := read(cpath)
+			if err != nil {
+				return nil, err
+			}
+			if err := t.checkCall(info, expr, c, csrc); err != nil {
+				return nil, err
+			}
+			value, err := t.substitute(info, src, expr, c, csrc, adders)
+			if err != nil {
+				return nil, err
+			}
+			fes = append(fes, edit.FileEdit{Path: cpath, Edits: []edit.TextEdit{m.argEdit(c.expr, at, value)}})
+		}
+	}
+	for p, ad := range adders {
+		fes = append(fes, edit.FileEdit{Path: p, Edits: ad.Edits()})
+	}
+	return t.newPlan(fmt.Sprintf("introduced parameter %q for %s in %s", a.Parameter+" "+typSrc, a.Expression, t.groupName()), fes), nil
+}
+
+// occurrences returns the expressions of m's body that are expr, of t's
+// body, with each of t's parameters in it m's parameter at the same place.
+func (m *target) occurrences(t *target, expr ast.Expr) []ast.Expr {
+	tparams := t.paramObjects(t.pkg.TypesInfo)
+	holes := map[types.Object]int{}
+	for o, i := range tparams {
+		if i >= 0 {
+			holes[o] = 1
+		}
+	}
+	p := &pattern.Matcher{Pkg: t.pkg, Holes: holes}
+	minfo := m.pkg.TypesInfo
+	mparams := m.paramObjects(minfo)
+	var out []ast.Expr
+	ast.Inspect(m.decl.Body, func(n ast.Node) bool {
+		x, ok := n.(ast.Expr)
+		if !ok {
+			return true
+		}
+		at := p.At(minfo)
+		if !at.Match(expr, x) {
+			return true
+		}
+		for k, b := range at.Bound {
+			id, ok := ast.Unparen(b).(*ast.Ident)
+			if !ok {
+				return true
+			}
+			if j, ok := mparams[minfo.Uses[id]]; !ok || j != tparams[k.Obj] {
+				return true
+			}
+		}
+		out = append(out, x)
+		return false
+	})
+	return out
+}
+
+// syntaxFile returns the file of t.pkg that declares t.
+func (t *target) syntaxFile() *ast.File {
+	for _, f := range t.pkg.Syntax {
+		if f.Pos() <= t.declPos() && t.declPos() < f.End() {
+			return f
+		}
+	}
+	return nil
 }
 
 // checkIntroduced checks that evaluating expr once at the call, instead of

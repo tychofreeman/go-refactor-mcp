@@ -2701,3 +2701,12 @@ replace_text in one batch. Nothing by hand. This entry appended with a
 heredoc.
 The run's results in cost-history, plan-and-execute and the session
 notes with replace_text in one batch, by hand none.
+
+## 2026-10-26: introduce_parameter through an interface method
+
+The goldens with create_file, the family path, `function` and the
+description with replace_text and add_declaration (check "end"), the
+kinds reference's two new steps and the docs with replace_text. By
+script, then reverted: inserting the reference's steps with Python's
+json reformatted the whole file; replace_text did it instead. This
+entry appended with a heredoc.
