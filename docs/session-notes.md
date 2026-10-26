@@ -487,7 +487,9 @@ results are in `docs/cost-history.md`.
   prepare_switch_for_types and narrowing refusals. With both fixed
   (#338, #339) kinds still failed 0/8: the refusals fired, and the
   attempts stopped on case bodies the no-read plan cannot see (Haiku
-  said so and sent no batch). Kinds needs reads.
+  said so and sent no batch). Kinds needs reads: with them 8/8 (Haiku
+  $0.020, Sonnet $0.197, a session $0.25), rewritten with edits, no
+  prepare_switch_for_types.
 - Where a session's cost goes (cost-history 12,
   `eval-tasks/learning/cost.py`): cache writes 69%, output 18%, cache
   reads 13%, though cache reads are 88% of input tokens. About 38% of

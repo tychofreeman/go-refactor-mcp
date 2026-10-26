@@ -197,6 +197,11 @@ fired, and the attempts then stopped on code they could not see. Kinds
 needs the cases' bodies; a run without `-no-read`, where the plan and
 the "done?" turn can ask for them, is the test of that.
 
+With reads, kinds passed 8/8 (Haiku $0.020, Sonnet $0.197, against
+$0.25 for Sonnet in a session), but by rewriting with edits, not by
+the derivation: no attempt used prepare_switch_for_types. So reads are
+what a moved-code task needs, and they trade derivation for edits.
+
 ## Recording
 
 Each step in its own PR: the results in `docs/cost-history.md`, the
