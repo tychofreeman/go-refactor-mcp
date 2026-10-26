@@ -170,10 +170,31 @@ func AnalyzeFunc(info *types.Info, fn ast.Node) *Func {
 	return f
 }
 
-// Outside returns a Func for code whose function is not known: no local
-// is known to escape, and no type assertion to be one with a comma, ok.
+// Outside returns a Func for code in no function, or parsed apart from
+// any (a value given for a new argument): no local is known to escape,
+// and no type assertion to be one with a comma, ok.
 func Outside(info *types.Info) *Func {
 	return &Func{Info: info, Addressed: map[*types.Var]bool{}, Captured: map[*types.Var]bool{}, CapturedAsync: map[*types.Var]bool{}, AsyncLits: map[*types.Var][]*ast.FuncLit{}, Modified: map[*types.Var][]ast.Node{}}
+}
+
+// FuncAround returns the facts of the function some code is in, from
+// path, the nodes around it in either order: the outermost FuncDecl or
+// FuncLit, whose facts cover the literals in it; or, when there is none,
+// those of code in no function.
+func FuncAround(info *types.Info, path []ast.Node) *Func {
+	var fn ast.Node
+	for _, n := range path {
+		switch n.(type) {
+		case *ast.FuncDecl, *ast.FuncLit:
+			if fn == nil || n.Pos() < fn.Pos() {
+				fn = n
+			}
+		}
+	}
+	if fn == nil {
+		return Outside(info)
+	}
+	return AnalyzeFunc(info, fn)
 }
 
 // Escapes reports whether code other than direct reads and writes in this

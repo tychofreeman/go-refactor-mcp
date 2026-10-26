@@ -2936,6 +2936,30 @@ hand.
 The run's results in cost-history and plan-and-execute, and this entry,
 with replace_text. Nothing by hand.
 
+## 2026-10-26: fold and inline_function on moves (item 35, step 6)
+
+The new `evaluatedFirst` and `staleRead` with replace_declaration, the
+expression, literal and statement cases and `lhsEvaluatedFirst`'s
+check with replace_text, `first`, `risky`, `nilAddress`, `effectful`
+and `movable` with remove_dead_code, all in one batch; the three
+goldens it broke then fixed with replace_text (an address argument
+judged on its own, field holes in order, a refusal's wording). New
+goldens with create_file, each with its go.mod in a second batch (the
+first ran without them: a golden's module needs its own). Nothing by
+hand. This entry appended with replace_text.
+
+## 2026-10-26: owned, and the function around fold's code (item 36)
+
+`owned` with extract_struct of body's `f` and `own`; its three methods
+by replace_text of their receivers (the embedding promotes them, so
+every call kept working), the callback's parameters and uses with
+replace_text over both files; `FuncAround` with add_declaration; fold's
+three judgments' parameter with replace_text (`all_occurrences` for
+`analysis.Outside(info)` and the calls). The new golden with
+create_file, from a case written first in a scratch module and run with
+both branches' CLIs. Nothing by hand. This entry appended with
+replace_text.
+
 ## 2026-10-26: loop.py gives the carrying tools in full with the index
 
 `-full-tools`, `FULL`, `CARRIERS` and index's skip with replace_text in
@@ -2945,6 +2969,17 @@ one batch; the docs and this entry with replace_text. Nothing by hand.
 
 The results in cost-history 19, plan-and-execute, the session notes
 and this entry with replace_text in one batch. Nothing by hand.
+## 2026-10-26: the file openings onto site.At (item 37)
+
+Each opening found by a pattern in a script and replaced with
+replace_text in one batch (the imports followed). Refused twice on the
+way, with nothing changed: the local `at` clashed with an `at` already
+in four functions, and the `ws.Fset.File(file.Pos())` replaced with
+`all_occurrences` also stood in other functions of two files; renamed
+to `opened` and those two replacements dropped. inline_function's and
+create_from_usage's openings, of other shapes, with replace_text.
+Nothing by hand. This entry appended with replace_text.
+
 
 ## 2026-10-26: seven tools in full beside the index
 

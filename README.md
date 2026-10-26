@@ -1720,10 +1720,7 @@ hand or a tool got in the way.
        panic (it panics the first time either way), `Several` must also
        refuse a new reference value (two allocations are two pointers),
        and inline_variable's several uses are `Several`, not `Shared`.
-       Still fold's own: `first`, `risky`, `impure`, `staleRead` and
-       `nilAddress`, which judge a hole's argument against the call's
-       evaluation order; a later step once a body's summary can stand
-       as `Past`.
+       fold's own hole judgments became moves in step 6.
     5. *Done.* `analysis.Reach(path)`: how often code is evaluated for
        each time the body at the path's end runs (Once, Maybe, Several)
        and why, as a phrase. It replaces six walks: inline_variable's
@@ -1737,11 +1734,32 @@ hand or a tool got in the way.
        post and body; a function literal). Left as they are:
        inline_variable's `repeatingAncestor`, which needs the loop node,
        not the count.
-    Next, in order (2026-10-26): one notion of memory ownership (item
-    36), a `Site` type for the refactorings' context structs (item 37),
-    `stopsFuncs` and `syncCalls` into `stdFuncs`, then fold's remaining
-    hole judgments and inline_function's `lhsEvaluatedFirst` once a
-    function's summary can stand as `Past`.
+    6. *Done.* The last judgments of their own. A function's summary
+       stands as `Past` through its call: since item 34's step 5 a call
+       of a module function is summarized by its body, so moving past
+       the call is moving past what it does. inline_function's
+       `lhsEvaluatedFirst` moves each operand on the left past the call
+       (its arguments and body), and `movable` is deleted. fold judges
+       an argument by where the code it replaces evaluated it: one that
+       acts, panics or takes an address moves past what that code
+       evaluates before its first use (`Shared` when the body uses it
+       several times), and each argument the call evaluates before it
+       but that code after it moves past it; one that only reads moves
+       past what that code evaluates before its last use, since one
+       value now stands for every use (`staleRead`). The expression
+       case uses the same judgment as the statement case; a literal's
+       fields set move past the elements after them and the other
+       fields set. `first`, `risky`, `nilAddress` and `effectful` are
+       deleted; `impure` stays as what decides which arguments move
+       like an effect. Loosened with a reason: an operand on the left
+       that reads through a pointer may stay first when the body
+       writes nothing it reads (`lhs_pointer_read_body_writes_nothing`);
+       a field of a struct argument may be evaluated first in a fold
+       of statements; an argument that only panics may be used several
+       times when it is evaluated first. Stricter: a field set that
+       acts may not move past one that reads through a pointer
+       (`refuse_setter_past_read`). Address arguments keep fold's own
+       relaxation (`movedAddress`, item 23).
 36. **Ownership of memory** (2026-10-26). *Done* in its first form:
     `analysis.Owner` is three-valued (`Anyone`, `ThisFunc`, `ThisCode`),
     and `Func.Owns(v)`, `Func.Owner(x)` and `Func.Pointee(x)` answer it
@@ -1751,10 +1769,17 @@ hand or a tool got in the way.
     comparison each against `body.own`, the owner whose memory counts as
     the summarized code's: `ThisFunc` for a whole function, `ThisCode`
     for part of one out of its context, which replaces the `partial`
-    flag; slide's `escapes` is `Owns(v) != ThisCode`. Left: the
-    `private` callback through `call`, `stdCall`, `fmtCall` and
-    `syncCallSummary` (one implementation, `writesPrivate`, but still
-    threaded), `Outside(info)` for code in no function, `Func.Escapes`
+    flag; slide's `escapes` is `Owns(v) != ThisCode`. Then (2026-10-26) the
+    `private` callback became a value: `owned`, the `Func` and `Owner`
+    of a body, which `body` embeds and `call`, `stdCall`, `fmtCall` and
+    `syncCallSummary` take (the zero `owned`, for `Effects.Call`, owns
+    nothing). And `Outside(info)` is now only for code in no function
+    or parsed apart (a value given for a new argument): fold and the
+    signature changes' call sites take the function they are in,
+    `analysis.FuncAround`. That fixed a fold that read a local after a
+    write through a pointer to it (`refuse_stale_read_of_escaped_local`:
+    out of its function, nothing showed the local escaped). Left:
+    `Func.Escapes`
     (which counts a closure that runs during its statement, where
     `Owns` does not; its callers in inline_function and extract_function
     mean the stricter test) and inline_function's `neverChanges`.
@@ -1780,11 +1805,23 @@ hand or a tool got in the way.
     goes through the file set, so it holds for a position in any
     file (`target` reads other files). `site.At` refuses a file
     outside the module's packages, and extract_function, invert_if
-    and extract_variable open their file with it. Left: move_declaration's
-    `mover` and `source` (two files at once), the other copies of
-    the opening (`ws.FileSyntax` then `os.ReadFile`, about twenty),
-    and the seven `find`s, which look for different kinds of thing
-    and so are not one function.
+    and extract_variable open their file with it. Then (2026-10-26)
+    eleven more openings: the edits add_declaration, replace_expression,
+    insert_statements, fix_imports, add_case, replace_statements and
+    add_element, slide, introduce_parameter, inline_function's caller
+    file and create_from_usage's interface file, each now one call of
+    `site.At` (an edit's refusal for a file outside the packages now
+    reads "module's packages", as the refactorings' did). Left as they
+    are, because they are not the same opening: locate and the switch
+    refactorings need no source and name the patterns in their refusal;
+    replace_text's imports skip files that are not Go quietly;
+    merge_duplicate_function and create_from_usage's destinations pick
+    the file among a package's syntax or write files that may not be
+    loaded; the declaration edits (replace_declaration, change_type,
+    add_field) open the file a declaration is in, by name. Also left:
+    move_declaration's `mover` and `source` (two files at once), and
+    the seven `find`s, which look for different kinds of thing and so
+    are not one function.
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the

@@ -126,8 +126,9 @@ results are in `docs/cost-history.md`.
   from the `Obstacle`; they do not restate the rules. When a check in a
   refactoring asks "can this run before/after/more often", express it
   as a Move; where a use sits on its path decides `Times` through
-  `analysis.Reach`. All five steps are done; fold's own hole judgments
-  and inline_function's `lhsEvaluatedFirst` remain (README item 35).
+  `analysis.Reach`. All six steps are done: past a call of a module
+  function is past its body, by its summary, so "past a function" is
+  `Past: []ast.Node{call}` (README item 35, step 6).
   Ownership is `analysis.Owner` (item 36): a summary's notion of its
   own memory is `body.own`, `ThisFunc` for a function and `ThisCode`
   for an expression judged out of context. `site.Site` (item 37) is

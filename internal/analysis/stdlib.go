@@ -204,11 +204,11 @@ func stdEffectOf(info *types.Info, fn *types.Func, call *ast.CallExpr) (stdEffec
 }
 
 // stdCall summarizes a call of a standard library function Effects
-// knows. private reports whether the memory a write goes to belongs to
-// the caller alone: target is written in place when inPlace (a variable,
-// or the x of &x), else it points to what is written.
-func stdCall(info *types.Info, fn *types.Func, call *ast.CallExpr, private func(target ast.Expr, inPlace bool) bool) (Summary, bool) {
-	if s, ok := fmtCall(info, fn, call, private); ok {
+// knows. A write to memory o owns is not a side effect: o.writes says,
+// for its target in place when inPlace (a variable, or the x of &x), or
+// what the target points to.
+func stdCall(info *types.Info, fn *types.Func, call *ast.CallExpr, o owned) (Summary, bool) {
+	if s, ok := fmtCall(info, fn, call, o); ok {
 		return s, true
 	}
 	se, ok := stdEffectOf(info, fn, call)
@@ -219,14 +219,13 @@ func stdCall(info *types.Info, fn *types.Func, call *ast.CallExpr, private func(
 		name := types.ExprString(call.Fun)
 		return Summary{Effect: "calls " + name, Unsafe: "calls " + name + ", which does not return", Stops: "calls " + name + ", which does not return", Panics: OtherPanic}, true
 	}
-	isPrivate := func(target ast.Expr, inPlace bool) bool { return private != nil && private(target, inPlace) }
 	// what returns the expression %r or %N names, and whether that memory
 	// is the caller's own.
 	what := func(ref string) (ast.Expr, bool) {
 		if ref == "r" {
 			x := ast.Unparen(call.Fun).(*ast.SelectorExpr).X
 			inPlace := !IsPointer(info.TypeOf(x)) && !types.IsInterface(info.TypeOf(x))
-			return x, isPrivate(x, inPlace)
+			return x, o.writes(x, inPlace)
 		}
 		i, _ := strconv.Atoi(ref)
 		if i < 1 || i > len(call.Args) {
@@ -234,9 +233,9 @@ func stdCall(info *types.Info, fn *types.Func, call *ast.CallExpr, private func(
 		}
 		arg := call.Args[i-1]
 		if u, ok := ast.Unparen(arg).(*ast.UnaryExpr); ok && u.Op == token.AND {
-			return arg, isPrivate(u.X, true)
+			return arg, o.writes(u.X, true)
 		}
-		return arg, isPrivate(arg, false)
+		return arg, o.writes(arg, false)
 	}
 	var s Summary
 	if se.reads != "" {
@@ -286,7 +285,7 @@ func stdCall(info *types.Info, fn *types.Func, call *ast.CallExpr, private func(
 // Errorf: no side effect unless it calls a method of an argument
 // (String, Error, Format, GoString, or any method of an interface value)
 // or, for Fprint, writes to a writer that is not the caller's own.
-func fmtCall(info *types.Info, fn *types.Func, call *ast.CallExpr, private func(target ast.Expr, inPlace bool) bool) (Summary, bool) {
+func fmtCall(info *types.Info, fn *types.Func, call *ast.CallExpr, o owned) (Summary, bool) {
 	if fn.Pkg() == nil || fn.Pkg().Path() != "fmt" || fn.Signature().Recv() != nil {
 		return Summary{}, false
 	}
@@ -300,7 +299,7 @@ func fmtCall(info *types.Info, fn *types.Func, call *ast.CallExpr, private func(
 		}
 		w := args[0]
 		u, ok := ast.Unparen(w).(*ast.UnaryExpr)
-		if !ok || u.Op != token.AND || private == nil || !private(u.X, true) || !isBuilder(info.TypeOf(u.X)) {
+		if !ok || u.Op != token.AND || !o.writes(u.X, true) || !isBuilder(info.TypeOf(u.X)) {
 			s.Effect = "writes to " + types.ExprString(w)
 		}
 		args = args[1:]

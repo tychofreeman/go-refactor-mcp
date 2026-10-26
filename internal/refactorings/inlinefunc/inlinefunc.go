@@ -132,20 +132,19 @@ func (*InlineFunction) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refa
 		return nil, err
 	}
 	path := ws.Fset.Position(id.Pos()).Filename
-	_, file := ws.FileSyntax(path)
-	src, err := os.ReadFile(path)
+	opened, err := site.At(ws, path)
 	if err != nil {
 		return nil, err
 	}
 	x := &inliner{
-		Site:    site.Site{WS: ws, Pkg: pkg, Info: pkg.TypesInfo, File: file, TF: ws.Fset.File(file.Pos()), Src: src},
+		Site:    site.Site{WS: ws, Pkg: pkg, Info: pkg.TypesInfo, File: opened.File, TF: opened.TF, Src: opened.Src},
 		keep:    a.KeepFunction,
 		id:      id,
 		merged:  map[*types.Var]*ast.Ident{},
 		dropped: map[int]bool{},
 		usedQ:   map[string]bool{},
 	}
-	x.imp = imports.New(ws, pkg, file, src)
+	x.imp = imports.New(ws, pkg, x.File, x.Src)
 	return x.plan()
 }
 
@@ -563,12 +562,14 @@ func (x *inliner) decideShape() error {
 }
 
 // lhsEvaluatedFirst returns the first operand on the left of as that Go
-// evaluates before the right side and that inlining could move after the
-// body: one with a call or that can panic, a package variable, or memory
-// read through a pointer or a slice, which the body could change. The
-// variables and fields assigned to are not operands; nil if there is none.
+// evaluates before the right side and that would not mean the same
+// evaluated after the inlined body: a move of it past the call, whose
+// arguments and body inlining runs first. The variables and fields
+// assigned to are not operands; nil if there is none.
 func (x *inliner) lhsEvaluatedFirst(as *ast.AssignStmt) ast.Expr {
-	stable := func(e ast.Expr) bool { return x.movable(x.callerFA, e, false) }
+	stable := func(e ast.Expr) bool {
+		return (analysis.Move{Effects: x.WS.Effects(), Func: x.callerFA, Expr: e, Past: []ast.Node{x.call}}).Check() == nil
+	}
 	var check func(e ast.Expr) ast.Expr
 	check = func(e ast.Expr) ast.Expr {
 		switch e := e.(type) {
@@ -611,15 +612,6 @@ func (x *inliner) lhsEvaluatedFirst(as *ast.AssignStmt) ast.Expr {
 		}
 	}
 	return nil
-}
-
-// movable reports whether e, an expression of the function fa, gives the
-// same value and does nothing else wherever it is evaluated: stable (with
-// sharing, making no new reference value), and unable to panic.
-func (x *inliner) movable(fa *analysis.Func, e ast.Expr, sharing bool) bool {
-	s := x.WS.Effects().Of(fa, e)
-	_, ok := s.Stable(sharing)
-	return ok && s.At.Panic == nil
 }
 
 // checkBareReturns refuses a void body whose bare returns, inlined into a

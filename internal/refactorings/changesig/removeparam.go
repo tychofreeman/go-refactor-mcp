@@ -96,7 +96,7 @@ func (*RemoveParameter) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 				dropped = args[at:]
 			}
 			for _, arg := range dropped {
-				if bad, why := unsafeValue(c.pkg.TypesInfo, arg, m.WS.Effects()); bad != nil {
+				if bad, why := unsafeValue(funcAround(c), arg, m.WS.Effects()); bad != nil {
 					return nil, refactor.Refusef("the argument %s at %s %s (%s), so not passing it would change behavior; move it out of the call first (for example `_ = %s`)",
 						types.ExprString(arg), m.WS.Position(arg.Pos()), why, types.ExprString(bad.(ast.Expr)), types.ExprString(arg))
 				}
