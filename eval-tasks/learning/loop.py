@@ -5,7 +5,9 @@ schemas and the call-tree view (as probe.py -schemas gives them), and
 answers with the whole change as one gorefactor batch; or first asks to
 read declarations, which it may also do in place of any later batch, at
 most three times; it gets them as inspect shows them, with line numbers,
-from the module as the kept batches left it. The batch runs on a
+from the module as the kept batches left it. With -read-after it may read
+only once a batch has applied: the first batch derives what moves by name,
+and reads come for the edits that remain. The batch runs on a
 fresh copy of the module, then the module's own tests. A refusal or a
 failing test goes back in the same conversation (claude -p --resume, so
 the prefix stays cached) with the numbered source of each place it names,
@@ -91,6 +93,20 @@ or, only if you must write code whose current form you cannot see here
 for their source with line numbers: functions, methods, types and
 variables, tests included. You may answer with a read in place of a
 batch, now or after any later message, at most three times in all."""
+
+# READ_AFTER, in PLAN with -read-after, asks for a first batch that
+# derives without reading, and says source comes once it applies.
+READ_AFTER = """
+Your first batch must leave the module's tests passing: make the change
+easy with steps that move code by name, and leave for later what needs
+code you cannot see. Once it applies, you may ask for the source of what
+is left to change, {"read": ["Name", "Type.Method" or "pkg.Name", ...]},
+with line numbers, at most three times in all."""
+
+# NOT_YET answers a read asked for before a batch applied, with -read-after.
+NOT_YET = """Source comes once a batch has applied. Answer first with a batch
+that derives what it can by name and leaves the module's tests passing:
+{"batch": {"steps": [...]}}."""
 
 # READ_HINT ends the later prompts when the model may read.
 READ_HINT = """
@@ -250,15 +266,17 @@ class Ref:
         return json.dumps({"batch": self.ref}), ""
 
 
-def attempt(task, model, tools, binary, repairs, log, may_read=True, stages=2):
+def attempt(task, model, tools, binary, repairs, log, may_read=True, stages=2, read_after=False):
     """One attempt at task. A batch that applies and passes the module's
     tests is kept, and the model is asked whether the change is done; if
     not, its next batch runs on what the kept ones left, at most stages
     more. A refusal or a failing test gets a repair, at most repairs in
-    all; the next batch then runs where the failed one began."""
+    all; the next batch then runs where the failed one began. With
+    read_after, reads open only once a batch has applied."""
     module = os.path.join(ROOT, "eval-tasks", task["dir"])
     text = PLAN.format(tools=tools, view=probe.view("calltree", module), prompt=task["prompt"],
-                       read=MAY_READ if may_read else "")
+                       read=READ_AFTER if read_after else MAY_READ if may_read else "")
+    may_read = may_read and not read_after
     row = {"reads": 0, "repairs": 0, "stages": 0, "refusals": [], "error": ""}
     base, batches, left, reads = module, [], repairs, 3  # base: where the next batch runs
     hint = READ_HINT if may_read else ""
@@ -279,6 +297,11 @@ def attempt(task, model, tools, binary, repairs, log, may_read=True, stages=2):
             row["reads"] += len(ans["read"])
             ask(READ.format(source=source(binary, base, ans["read"])))
             continue
+        if read_after and reads and not batches and ans and isinstance(ans.get("read"), list) and not ans.get("batch"):
+            reads -= 1
+            row["refusals"].append("read before a batch applied")
+            ask(NOT_YET)
+            continue
         if not ans or not isinstance(ans.get("batch"), dict):
             row["refusals"].append(err or "no batch in the answer")
             if left == 0:
@@ -297,6 +320,8 @@ def attempt(task, model, tools, binary, repairs, log, may_read=True, stages=2):
             base = d
             if row["stages"] > stages:
                 break
+            if read_after:
+                may_read, hint = True, READ_HINT
             ask(DONE + hint)
             continue
         row["refusals"].append(what.splitlines()[0][:200])
@@ -326,6 +351,7 @@ def main():
     p.add_argument("-repairs", type=int, default=2)
     p.add_argument("-out", required=True)
     p.add_argument("-no-read", action="store_true", help="the plan cannot ask for source; only repairs send it")
+    p.add_argument("-read-after", action="store_true", help="the plan may ask for source only once a batch has applied")
     p.add_argument("-reference", default="compact", choices=["compact", "full"],
                    help="the tools as compact signatures and descriptions, or as the server publishes them")
     p.add_argument("-stages", type=int, default=2, help="batches after the first that the model may send when asked if it is done")
@@ -345,7 +371,7 @@ def main():
                 model = Ref(ref) if m == "ref" else Model(m, empty)
                 log = []
                 row = {"task": t["name"], "model": m, "run": n}
-                row.update(attempt(t, model, tools, binary, a.repairs, log, may_read=not a.no_read, stages=a.stages))
+                row.update(attempt(t, model, tools, binary, a.repairs, log, may_read=not a.no_read, stages=a.stages, read_after=a.read_after))
                 row.update(cost=model.cost, requests=model.requests, usage=model.usage)
                 with open(os.path.join(a.out, f"{t['name']}-{m}-{n}.txt"), "w") as f:
                     f.write("\n\n==== next answer ====\n\n".join(log))

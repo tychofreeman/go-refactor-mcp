@@ -2673,3 +2673,9 @@ The five functions with remove_dead_code (one call, with also), the
 differential test with delete_file, TestMayPanic ported and the walker's
 division fixed with replace_text, the package comment and the roadmap
 with replace_text. Nothing by hand. This entry appended with a heredoc.
+
+## 2026-10-26: loop.py reads only after a batch applied
+
+`-read-after` and its two prompts with replace_text in one batch, then
+the reply to a read asked for too early the same way. Nothing by hand.
+This entry appended with a heredoc.
