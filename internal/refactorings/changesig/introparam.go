@@ -396,7 +396,7 @@ func (t *target) qualified(o types.Object, c call) bool {
 // effects: the new argument repeats some of them, and its evaluation is
 // not ordered with theirs.
 func (t *target) checkArgEffects(c call, csrc []byte) error {
-	acts := func(e ast.Expr) bool { return t.WS.Effects().Of(analysis.Outside(c.pkg.TypesInfo), e).Effect != "" }
+	acts := func(e ast.Expr) bool { return t.WS.Effects().Of(funcAround(c), e).Effect != "" }
 	if x := c.recv(); x != nil && acts(x) {
 		return refactor.Refusef("the receiver %s at %s has side effects; assign it to a variable first",
 			csrc[t.Off(x.Pos()):t.Off(x.End())], t.WS.Position(x.Pos()))

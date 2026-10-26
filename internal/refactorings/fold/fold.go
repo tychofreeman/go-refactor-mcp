@@ -440,6 +440,7 @@ func (f *folder) try(p *packages.Package, file *ast.File, x ast.Expr, stack []as
 		return false, nil
 	}
 	b := a.Bound
+	fa := analysis.FuncAround(info, stack)
 	where := f.ws.Position(x.Pos())
 	skip := func(why string) (bool, error) {
 		f.skipped = append(f.skipped, where+": "+why)
@@ -454,14 +455,14 @@ func (f *folder) try(p *packages.Package, file *ast.File, x ast.Expr, stack []as
 	// Arguments are evaluated once, before the body: one that has effects
 	// or could panic, or takes an address, moves there.
 	for k, e := range b {
-		if f.impure(info, e) || f.addressOf[e] {
-			if why := f.evaluatedFirst(info, []ast.Node{x}, b, k); why != "" {
+		if f.impure(fa, e) || f.addressOf[e] {
+			if why := f.evaluatedFirst(fa, []ast.Node{x}, b, k); why != "" {
 				return skip(why)
 			}
 		}
 	}
 	for _, e := range b {
-		if why := f.staleRead(info, []ast.Node{x}, e); why != "" {
+		if why := f.staleRead(fa, []ast.Node{x}, e); why != "" {
 			return skip(why)
 		}
 	}
@@ -498,6 +499,7 @@ func (f *folder) trySetter(p *packages.Package, file *ast.File, x ast.Expr, stac
 	}
 	a := f.m.At(info)
 	b := a.Bound
+	fa := analysis.FuncAround(info, stack)
 	b[pattern.HoleKey{Obj: f.self, Field: ""}] = lit
 	var drop []int
 	for _, s := range f.sets {
@@ -539,13 +541,13 @@ func (f *folder) trySetter(p *packages.Package, file *ast.File, x ast.Expr, stac
 			}
 		}
 		v := lit.Elts[i].(*ast.KeyValueExpr).Value
-		if o := (analysis.Move{Effects: f.ws.Effects(), Func: analysis.Outside(info), Expr: v, Past: past}).Check(); o != nil {
+		if o := (analysis.Move{Effects: f.ws.Effects(), Func: fa, Expr: v, Past: past}).Check(); o != nil {
 			return skip("the fields set would be evaluated in another order: " + o.Why)
 		}
 	}
 	for k, e := range b {
 		if n := f.count(k); k.Obj != f.self && n > 1 {
-			if (analysis.Move{Effects: f.ws.Effects(), Func: analysis.Outside(info), Expr: e, Times: analysis.Shared}).Check() != nil {
+			if (analysis.Move{Effects: f.ws.Effects(), Func: fa, Expr: e, Times: analysis.Shared}).Check() != nil {
 				return skip(fmt.Sprintf("%s, used %d times in the body, would be evaluated once", types.ExprString(e), n))
 			}
 		}
@@ -1026,8 +1028,8 @@ func concatOperands(info *types.Info, e ast.Expr) []ast.Expr {
 // impure reports whether evaluating e could do more than compute a
 // value: a call in it has side effects, reads what other code can
 // change, or could panic or not finish; or e could panic itself.
-func (f *folder) impure(info *types.Info, e ast.Expr) bool {
-	if f.ws.Effects().Of(analysis.Outside(info), e).At.OtherPanic != nil {
+func (f *folder) impure(fa *analysis.Func, e ast.Expr) bool {
+	if f.ws.Effects().Of(fa, e).At.OtherPanic != nil {
 		return true
 	}
 	found := false
@@ -1036,7 +1038,7 @@ func (f *folder) impure(info *types.Info, e ast.Expr) bool {
 		case *ast.FuncLit:
 			return false
 		case *ast.CallExpr:
-			s := f.ws.Effects().Call(info, n)
+			s := f.ws.Effects().Call(fa.Info, n)
 			found = s.Effect != "" || s.Reads != "" || s.Unsafe != ""
 		case *ast.UnaryExpr:
 			found = n.Op == token.ARROW
@@ -1052,7 +1054,7 @@ func (f *folder) impure(info *types.Info, e ast.Expr) bool {
 // first use, one value for each use the body makes of it; and each
 // argument the call evaluates before it that roots evaluated after it,
 // a move of that argument past it.
-func (f *folder) evaluatedFirst(info *types.Info, roots []ast.Node, b map[pattern.HoleKey]ast.Expr, k pattern.HoleKey) string {
+func (f *folder) evaluatedFirst(fa *analysis.Func, roots []ast.Node, b map[pattern.HoleKey]ast.Expr, k pattern.HoleKey) string {
 	e := b[k]
 	text := types.ExprString(e)
 	var past []ast.Node
@@ -1062,7 +1064,7 @@ func (f *folder) evaluatedFirst(info *types.Info, roots []ast.Node, b map[patter
 		}
 		past = append(past, analysis.EvaluatedBefore(r, e.Pos(), nil)...)
 	}
-	m := analysis.Move{Effects: f.ws.Effects(), Func: analysis.Outside(info), Expr: e, Past: past}
+	m := analysis.Move{Effects: f.ws.Effects(), Func: fa, Expr: e, Past: past}
 	n := f.count(k)
 	if n > 1 {
 		m.Times = analysis.Shared // one value for each use the body makes of it
@@ -1080,7 +1082,7 @@ func (f *folder) evaluatedFirst(info *types.Info, roots []ast.Node, b map[patter
 		if a.Pos() < e.Pos() || f.addressOf[a] {
 			return "" // an address is judged on its own: movedAddress, or its own move
 		}
-		if o := (analysis.Move{Effects: f.ws.Effects(), Func: analysis.Outside(info), Expr: a, Past: []ast.Node{e}}).Check(); o != nil {
+		if o := (analysis.Move{Effects: f.ws.Effects(), Func: fa, Expr: a, Past: []ast.Node{e}}).Check(); o != nil {
 			return types.ExprString(a) + " would be evaluated before " + text + ", which it now follows: " + o.Why
 		}
 		return ""
@@ -1121,8 +1123,8 @@ func (f *folder) evaluatedFirst(info *types.Info, roots []ast.Node, b map[patter
 // read it, or "": a move of it past what roots evaluate before its last
 // use, since one value now stands for every use. An argument with
 // effects or that could panic is judged by evaluatedFirst instead.
-func (f *folder) staleRead(info *types.Info, roots []ast.Node, e ast.Expr) string {
-	if f.addressOf[e] || f.made[e] || f.impure(info, e) {
+func (f *folder) staleRead(fa *analysis.Func, roots []ast.Node, e ast.Expr) string {
+	if f.addressOf[e] || f.made[e] || f.impure(fa, e) {
 		return ""
 	}
 	text := types.ExprString(e)
@@ -1142,7 +1144,7 @@ func (f *folder) staleRead(info *types.Info, roots []ast.Node, e ast.Expr) strin
 	for _, r := range roots {
 		past = append(past, analysis.EvaluatedBefore(r, last, nil)...)
 	}
-	o := (analysis.Move{Effects: f.ws.Effects(), Func: analysis.Outside(info), Expr: e, Past: past}).Check()
+	o := (analysis.Move{Effects: f.ws.Effects(), Func: fa, Expr: e, Past: past}).Check()
 	switch {
 	case o == nil:
 		return ""
@@ -1335,12 +1337,13 @@ func (f *folder) foldStmts(p *packages.Package, file *ast.File, list []ast.Stmt,
 			continue
 		}
 		b := a.Bound
+		fa := analysis.FuncAround(info, stack)
 		seq := list[i : i+n]
 		where := f.ws.Position(seq[0].Pos())
 		skip := ""
 		for k, e := range b {
-			if skip == "" && f.impure(info, e) {
-				skip = f.evaluatedFirst(info, stmtNodes(seq), b, k)
+			if skip == "" && f.impure(fa, e) {
+				skip = f.evaluatedFirst(fa, stmtNodes(seq), b, k)
 			}
 		}
 		if skip == "" {
@@ -1353,7 +1356,7 @@ func (f *folder) foldStmts(p *packages.Package, file *ast.File, list []ast.Stmt,
 		}
 		for _, e := range b {
 			if skip == "" {
-				skip = f.staleRead(info, stmtNodes(seq), e)
+				skip = f.staleRead(fa, stmtNodes(seq), e)
 			}
 		}
 		call := ""

@@ -11,6 +11,7 @@ import (
 
 	"golang.org/x/tools/go/ast/astutil"
 
+	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
@@ -148,7 +149,7 @@ func (t *target) checkResultValue(value string, typ types.Type) error {
 		}
 		return refactor.Refusef("the value %s does not work in %s: %s", value, t.obj.Name(), msg)
 	}
-	if bad, why := unsafeValue(info, e, t.WS.Effects()); bad != nil {
+	if bad, why := unsafeValue(analysis.Outside(info), e, t.WS.Effects()); bad != nil {
 		return refactor.Refusef("the value %s %s (%s), and callers would not use it, so returning it would change behavior; use a value without calls, dereferences, indexing or division", value, why, types.ExprString(bad.(ast.Expr)))
 	}
 	if vt := info.Types[e].Type; !assignable(vt, typ) {

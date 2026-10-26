@@ -83,7 +83,7 @@ func (e *Effects) Func(fn *types.Func) *Summary {
 // Call summarizes what call itself does, apart from evaluating its
 // function and arguments.
 func (e *Effects) Call(info *types.Info, call *ast.CallExpr) Summary {
-	return e.call(info, call, nil)
+	return e.call(info, call, owned{})
 }
 
 // Of summarizes what evaluating x, an expression in the body of f, can
@@ -101,7 +101,7 @@ func (e *Effects) Of(f *Func, x ast.Expr) Summary {
 // context (root, for the part summarized): only memory nothing else in f
 // reaches is its own, since the rest of f can change the rest.
 func (e *Effects) walker(f *Func, root ast.Expr) *body {
-	return &body{e: e, f: f, own: ThisCode, sync: map[*ast.FuncLit]bool{}, callees: map[ast.Expr]bool{}, root: root, addressed: map[ast.Expr]ast.Expr{}}
+	return &body{e: e, owned: owned{f: f, own: ThisCode}, sync: map[*ast.FuncLit]bool{}, callees: map[ast.Expr]bool{}, root: root, addressed: map[ast.Expr]ast.Expr{}}
 }
 
 // StableAddress is Stable for the address of x, an expression in the
@@ -155,7 +155,7 @@ func (e *Effects) FirstActBefore(info *types.Info, root ast.Node, pos token.Pos,
 	return first
 }
 
-func (e *Effects) call(info *types.Info, call *ast.CallExpr, private func(target ast.Expr, inPlace bool) bool) Summary {
+func (e *Effects) call(info *types.Info, call *ast.CallExpr, o owned) Summary {
 	name := types.ExprString(call.Fun)
 	if tv, ok := info.Types[call.Fun]; ok && tv.IsType() {
 		return Summary{} // a conversion
@@ -164,10 +164,10 @@ func (e *Effects) call(info *types.Info, call *ast.CallExpr, private func(target
 		return builtinCall(info, call, b.Name())
 	}
 	if fn, ok := info.Uses[IdentOf(call.Fun)].(*types.Func); ok {
-		if s, ok := stdCall(info, fn, call, private); ok {
+		if s, ok := stdCall(info, fn, call, o); ok {
 			return s
 		}
-		if s, ok := syncCallSummary(info, fn, call, private); ok {
+		if s, ok := syncCallSummary(info, fn, call, o); ok {
 			return s
 		}
 	}
@@ -324,7 +324,7 @@ func SyncLits(info *types.Info, call *ast.CallExpr) []*ast.FuncLit {
 // from the literal functions passed to it (see SyncLits): its reads and
 // writes of its first argument, and a function value passed to it, which
 // could do anything.
-func syncCallSummary(info *types.Info, fn *types.Func, call *ast.CallExpr, private func(target ast.Expr, inPlace bool) bool) (Summary, bool) {
+func syncCallSummary(info *types.Info, fn *types.Func, call *ast.CallExpr, o owned) (Summary, bool) {
 	if fn.Pkg() == nil || fn.Signature().Recv() != nil {
 		return Summary{}, false
 	}
@@ -345,7 +345,7 @@ func syncCallSummary(info *types.Info, fn *types.Func, call *ast.CallExpr, priva
 			s.Effect = "passes " + types.ExprString(a) + " to " + types.ExprString(call.Fun)
 			s.Stops = s.Effect + ", which could be any function"
 			s.Panics = OtherPanic
-		case (i == 0 || sc.readsAll) && (private == nil || !private(a, false)):
+		case (i == 0 || sc.readsAll) && !o.writes(a, false):
 			if sc.writes && s.Effect == "" {
 				s.Effect = "changes " + types.ExprString(a)
 			}
@@ -494,11 +494,18 @@ func isFreshValue(info *types.Info, v *types.Var, rhs ast.Expr) bool {
 	return false
 }
 
+// owned is the memory a summary counts as its code's own: what f's
+// Owner ranks at least own. The zero owned has none, for a call
+// summarized outside any body.
+type owned struct {
+	f   *Func
+	own Owner // whose memory counts as the summarized code's own: ThisFunc for a whole function, ThisCode for part of one out of its context
+}
+
 // body walks one function body for summarize.
 type body struct {
-	e    *Effects
-	f    *Func
-	own  Owner                 // whose memory counts as the summarized code's own: ThisFunc for a whole function, ThisCode for part of one out of its context
+	e *Effects
+	owned
 	sync map[*ast.FuncLit]bool // literals whose bodies run during the call
 	s    Summary
 
@@ -513,19 +520,19 @@ type body struct {
 // memory it made itself, are not side effects.
 func (e *Effects) summarize(src funcSource) *Summary {
 	f := AnalyzeFunc(src.info, src.decl)
-	b := &body{e: e, f: f, own: ThisFunc, sync: map[*ast.FuncLit]bool{}, callees: map[ast.Expr]bool{}, addressed: addressedIn(src.info, src.decl.Body)}
+	b := &body{e: e, owned: owned{f: f, own: ThisFunc}, sync: map[*ast.FuncLit]bool{}, callees: map[ast.Expr]bool{}, addressed: addressedIn(src.info, src.decl.Body)}
 	ast.Inspect(src.decl.Body, b.visit)
 	return &b.s
 }
 
 // pointsPrivate reports whether the memory x (a pointer, slice or map)
 // points to belongs to the summarized code.
-func (b *body) pointsPrivate(x ast.Expr) bool { return b.f.Pointee(x) >= b.own }
+func (o owned) pointsPrivate(x ast.Expr) bool { return o.f != nil && o.f.Pointee(x) >= o.own }
 
 // private reports whether writing to the assignable expression x changes
 // only memory the summarized code owns: a local variable or part of one,
 // or memory a fresh local points to.
-func (b *body) private(x ast.Expr) bool { return b.f.Owner(x) >= b.own }
+func (o owned) private(x ast.Expr) bool { return o.f != nil && o.f.Owner(x) >= o.own }
 
 // effect, read, unsafe and stops record what n does, where it is the
 // first of its kind: a side effect, a read of what other code can change,
@@ -747,7 +754,7 @@ func (b *body) call(call *ast.CallExpr) Summary {
 	for _, lit := range SyncLits(info, call) {
 		b.sync[lit] = true
 	}
-	return b.e.call(info, call, b.writesPrivate)
+	return b.e.call(info, call, b.owned)
 }
 
 // commaOK reports whether the type assertion ta in fn is the value of a
@@ -799,15 +806,15 @@ func isInteger(t types.Type) bool {
 	return ok && b.Info()&types.IsInteger != 0
 }
 
-// writesPrivate reports, for Effects.call, whether a call's write goes to
-// memory of this call: target in place (a local variable or part of one),
-// or what target points to (a fresh local, or the address of a local).
-func (b *body) writesPrivate(target ast.Expr, inPlace bool) bool {
+// writes reports whether a call's write goes to memory of its own:
+// target in place (a local variable or part of one), or what target
+// points to (a fresh local, or the address of a local).
+func (o owned) writes(target ast.Expr, inPlace bool) bool {
 	if inPlace {
-		return b.private(target)
+		return o.private(target)
 	}
 	if u, ok := ast.Unparen(target).(*ast.UnaryExpr); ok && u.Op == token.AND {
-		return b.private(u.X)
+		return o.private(u.X)
 	}
-	return b.pointsPrivate(target)
+	return o.pointsPrivate(target)
 }
