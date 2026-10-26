@@ -274,6 +274,10 @@ unannounced): 8/8, and two Sonnet attempts moved every case by name
 in their first batch, then read Import and little else; the other six
 prepared only and rewrote the switches after reading them.
 
+With the first batch told to put existing code in its new place and
+write none the module has (cost-history 19, move): 6/8, three first
+batches moving the cases by name, five still preparing only.
+
 ## Recording
 
 Each step in its own PR: the results in `docs/cost-history.md`, the

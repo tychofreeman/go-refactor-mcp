@@ -1230,6 +1230,27 @@ announcing reads let a derivation happen, where announcing them
 stopped every one, but the plans that stop at preparing still read
 the switches when they can. Haiku never derived with reads possible.
 
+**The first batch moves existing code, later ones add what is new**
+(the user thought "make it easy" confused the model; the first prompt
+now says every line of the change is existing code in a new place or
+new code, the first batch places the existing code by name and writes
+none the module has; `eval-runs/loop-{haiku,sonnet}-kinds-move`,
+$1.26): 6/8. Haiku 2/4 at $0.027 a task in 5.75 requests, Sonnet 4/4
+at $0.288 in 7.25. Three first batches moved the cases by name (two
+Sonnet the reference's way, 15 extractions, parameters and methods;
+one Haiku its 15 extractions), against two before; five still only
+prepared and then read and wrote the switches out. The derived Sonnet
+attempts still wrote 63 lines: they prepared `Label` without first
+declaring the task's `Label(title string)`, so the moved methods took
+the item, and after reading them they wrote the three out again with
+the task's signature, besides Import and the literals. Haiku's derived
+attempt failed at `function_to_method` of a `Label` helper whose first
+parameter is the title ("the type of title, string, is not a type
+declared in package lending"). The wording moved a little toward
+deriving at no gain in passes; a refusal at a function_to_method whose
+first parameter is not the receiver, naming `receiver`, is the next
+fix it shows.
+
 ## What made the difference
 
 - **Smaller results** (#75, rename locations): the largest single win when

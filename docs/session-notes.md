@@ -532,7 +532,9 @@ results are in `docs/cost-history.md`.
   move to after the read. With reads unannounced until they open,
   8/8, and 2 of 8 (Sonnet) derived first and then read only Import
   and a few uses; the six that only prepared still read the switches
-  and wrote them out.
+  and wrote them out. Worded as "every line is existing code in a new
+  place or new code; the first batch places the existing code" (the
+  user, replacing "make it easy"): 6/8, 3 of 8 derived first.
 - Where a session's cost goes (cost-history 12,
   `eval-tasks/learning/cost.py`): cache writes 69%, output 18%, cache
   reads 13%, though cache reads are 88% of input tokens. About 38% of
