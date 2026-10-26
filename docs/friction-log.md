@@ -2567,3 +2567,9 @@ appended with a heredoc. Nothing else by hand.
 
 The fix with replace_text, the golden's no_notes.txt with create_file.
 This entry appended with a heredoc. Nothing else by hand.
+
+## 2026-10-25: add_case adds branches to an if
+
+`ifchain.go` with create_file, the hook, description and schema with
+replace_text; goldens with create_file. This entry appended with a
+heredoc. Nothing else by hand.
