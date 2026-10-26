@@ -353,6 +353,14 @@ arm in the loop for the comparison with nothing else different. Build
 the runner only if those show a saving `claude -p` itself stands in the
 way of.
 
+The first of them is built: `-patch`. A repair lists the failed
+batch's steps, numbered with their arguments cut short, and may answer
+`{"patch": {"from": N, "steps": [...]}}`: steps 1 to N-1 of the failed
+batch are kept and these follow, the whole run from where the failed
+batch began, so line numbers stay as they were. The refusal's step is
+suggested as N; a failing test suggests N past the last step. A whole
+batch is still accepted, and a patch only in reply to a failure.
+
 ## Recording
 
 Each step in its own PR: the results in `docs/cost-history.md`, the
