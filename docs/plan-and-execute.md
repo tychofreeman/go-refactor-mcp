@@ -278,6 +278,13 @@ With the first batch told to put existing code in its new place and
 write none the module has (cost-history 19, move): 6/8, three first
 batches moving the cases by name, five still preparing only.
 
+After the live-case refusal, the receiver hint and introduce_parameter
+through an interface method (cost-history 19, again after #367, #371,
+#372): with reads after the first batch 7/8, two Sonnet attempts
+deriving all the way (41 and 57 lines); without reads 2/8, the first
+passes of kinds without a read, both Sonnet, each finding Import's
+write from the narrowing refusal.
+
 ## Recording
 
 Each step in its own PR: the results in `docs/cost-history.md`, the
