@@ -2960,6 +2960,15 @@ create_file, from a case written first in a scratch module and run with
 both branches' CLIs. Nothing by hand. This entry appended with
 replace_text.
 
+## 2026-10-26: loop.py gives the carrying tools in full with the index
+
+`-full-tools`, `FULL`, `CARRIERS` and index's skip with replace_text in
+one batch; the docs and this entry with replace_text. Nothing by hand.
+
+## 2026-10-26: results of the index with the carrying tools in full
+
+The results in cost-history 19, plan-and-execute, the session notes
+and this entry with replace_text in one batch. Nothing by hand.
 ## 2026-10-26: the file openings onto site.At (item 37)
 
 Each opening found by a pattern in a script and replaced with

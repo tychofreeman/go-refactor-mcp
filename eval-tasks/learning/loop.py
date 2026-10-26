@@ -228,17 +228,29 @@ TOOLS = """The tools you asked for, with their arguments:
 Answer with the batch: {{"batch": {{"steps": [...]}}}}, or ask for more
 tools: {{"tools": [...]}}."""
 
+# FULL follows INDEX with -full-tools: the entries of the tools that
+# carry a change to every place it reaches, which a plan does not choose
+# by name (with the index alone, no plan asked for fold).
+FULL = """
+
+In full, with no need to ask for them, the tools that carry a change to
+every place it reaches:
+
+{entries}"""
+
+CARRIERS = "fold,extract_function,change_field_type,introduce_parameter,remove_dead_code"
+
 # TOOLS_HINT ends the later prompts with -index.
 TOOLS_HINT = """
 Or, for tools whose description you have not seen: {"tools": ["name", ...]}."""
 
 
-def index(tools):
-    """A line for each step's tool: its name and its description's first
-    sentence."""
+def index(tools, skip=()):
+    """A line for each step's tool but those in skip: its name and its
+    description's first sentence."""
     out = []
     for t in tools:
-        if t["name"] in NOT_STEPS:
+        if t["name"] in NOT_STEPS or t["name"] in skip:
             continue
         first = re.split(r"(?<=[.:])\s", t["description"].strip(), maxsplit=1)[0]
         out.append(f"{t['name']}: {first.rstrip(':')[:160]}")
@@ -627,6 +639,7 @@ def main():
     p.add_argument("-read-after", action="store_true", help="the plan may ask for source only once a batch has applied")
     p.add_argument("-patch", action="store_true", help="a repair may answer with the failed batch's steps from one on, the ones before kept")
     p.add_argument("-index", action="store_true", help="the plan gets a line a tool, and asks for the full entries of those it will use")
+    p.add_argument("-full-tools", default="", help=f"with -index, tools given in full from the start, comma-separated (the ones that carry a change to many places: {CARRIERS})")
     p.add_argument("-arm", default="refactor", choices=sorted(ARMS),
                    help="what the model answers with: gorefactor steps, or text edits the loop applies")
     p.add_argument("-reference", default="compact", choices=["compact", "full"],
@@ -643,7 +656,11 @@ def main():
     tools = compact(listed) if a.reference == "compact" else probe.schemas()
     tool_entries = None
     if a.index:
-        tools, tool_entries = INDEX.format(index=index(listed)), entries(listed)
+        tool_entries = entries(listed)
+        full = [n for n in a.full_tools.split(",") if n in tool_entries]
+        tools = INDEX.format(index=index(listed, full))
+        if full:
+            tools += FULL.format(entries="\n\n".join([NAMES] + [tool_entries[n] for n in full]))
     tasks = [t for t in json.load(open(a.tasks)) if not a.only or t["name"] in a.only.split(",")]
     results = open(os.path.join(a.out, "results.jsonl"), "a")
     for t in tasks:

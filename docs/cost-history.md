@@ -1455,6 +1455,38 @@ chooses a derivation from the tools' examples; a first sentence does
 not show it which tool fits a shape. Asking took 1-3 more requests an
 attempt.
 
+**The index with the carrying tools in full** (#400 `-full-tools`:
+fold, extract_function, change_field_type, introduce_parameter and
+remove_dead_code in full, the rest as index lines, 11.2K characters;
+otherwise as above; `eval-runs/loop-{haiku,sonnet}-{freight,kinds}-indexfull`).
+
+| Sonnet, cost a task (passed) | full reference | index | index + carriers | manual |
+|---|---|---|---|---|
+| dispatch | $0.095 (4/4) | $0.061 (4/4) | $0.064 (4/4) | $0.070 (4/4) |
+| tail | $0.110 (4/4) | $0.075 (4/4) | $0.073 (4/4) | $0.066 (4/4) |
+| routes | $0.114 (4/4) | $0.159 (1/4) | $0.119 (4/4) | $0.323 (4/4) |
+| run | $0.103 (4/4) | $0.171 (4/4) | $0.072 (4/4) | $0.176 (4/4) |
+| kinds | $0.261 (4/4) | $0.272 (2/4) | $0.300 (4/4) | $0.186 (4/4) |
+
+On freight-xl it is the cheapest arm: Sonnet 16/16 at $0.082 a task,
+23% below the full reference ($0.106) and half of writing by hand
+($0.159); Haiku 13/16 at $0.0092, 19% below the reference (14/16 at
+$0.0113), against 16/16 at $0.0146 by hand. The local tasks kept the
+index's saving, and the derivations came back: Sonnet's routes plans
+folded in 3 of 4 (0 of 4 with the index alone), run in 4 of 4 (1 of
+4), and run cost less than with the reference, in 3 requests. Haiku's
+routes stayed where it was with the reference (1/4, 2/4 there): its
+plans never fold routes, with or without the examples, and spend the
+repairs on remove_dead_code naming the uses left. On kinds Sonnet
+passed 4/4 again but cost 15% more than with the reference: 7.5
+requests against 4.8, 2.5 asks an attempt for tools outside the list
+(prepare_switch_for_types, function_to_method, add_parameter), each a
+request that resends the plan. Haiku 0/4 (1/4 with the reference),
+stopped on the narrowing refusals as before. So the examples of the
+tools that carry a change are what a plan needs to choose a
+derivation; the rest can be a line. Where the derivation needs other
+tools too (kinds), the asks cost what the index saved.
+
 ## What made the difference
 
 - **Smaller results** (#75, rename locations): the largest single win when
