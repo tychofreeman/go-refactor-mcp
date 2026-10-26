@@ -1456,6 +1456,10 @@ hand or a tool got in the way.
     - narrowing leaves `switch it.Kind {}` once every case is gone; it
       could remove the empty switch.
 
+    After the run without reads (cost-history 19), a bare word names
+    the string case of that text (`book` for `"book"`) when no case is
+    written so: one of Sonnet's repairs went to that refusal. *Done.*
+
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
 candidates and the evidence for each, gathered from the friction log.

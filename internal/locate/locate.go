@@ -278,6 +278,12 @@ func CaseBody(tf *token.File, src []byte, fd *ast.FuncDecl, value string) (first
 	case len(found) == 0 && len(cases) == 0:
 		return 0, 0, refactor.Refusef("%s has no switch", name)
 	case len(found) == 0:
+		// A bare word names the string case of that text: book for "book".
+		if token.IsIdentifier(value) {
+			if first, last, err := CaseBody(tf, src, fd, strconv.Quote(value)); err == nil {
+				return first, last, nil
+			}
+		}
 		return 0, 0, refactor.Refusef("no case %s in a switch of %s; its cases are %s", value, name, strings.Join(cases, ", "))
 	case len(found) > 1:
 		var lines []string
