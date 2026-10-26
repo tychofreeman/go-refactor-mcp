@@ -452,22 +452,13 @@ func (f *folder) try(p *packages.Package, file *ast.File, x ast.Expr, stack []as
 		return skip(fmt.Sprintf("%s is not exported, so package %s cannot call it", f.fn.Name(), p.Name))
 	}
 	// Arguments are evaluated once, before the body: one that has effects
-	// or could panic must be used once, and be what the body evaluates
-	// first.
-	impure := 0
+	// or could panic, or takes an address, moves there.
 	for k, e := range b {
-		if f.impure(info, e) || f.nilAddress(info, e) {
-			impure++
-			if n := f.count(k); n > 1 {
-				return skip(fmt.Sprintf("%s, used %d times in the body, would be evaluated once", types.ExprString(e), n))
-			}
-			if !f.first(k) {
-				return skip(fmt.Sprintf("%s would be evaluated before the rest of the body, not in its order", types.ExprString(e)))
+		if f.impure(info, e) || f.addressOf[e] {
+			if why := f.evaluatedFirst(info, []ast.Node{x}, b, k); why != "" {
+				return skip(why)
 			}
 		}
-	}
-	if impure > 1 {
-		return skip("more than one argument has effects or could panic")
 	}
 	for _, e := range b {
 		if why := f.staleRead(info, []ast.Node{x}, e); why != "" {
@@ -535,23 +526,28 @@ func (f *folder) trySetter(p *packages.Package, file *ast.File, x ast.Expr, stac
 		return skip(why)
 	}
 	// The fields set are evaluated after the rest of the literal, in the
-	// setter's order.
-	moved, others := 0, 0
-	for i, e := range lit.Elts {
-		if kv, ok := e.(*ast.KeyValueExpr); ok && f.risky(info, kv.Value, false) {
-			if slices.Contains(drop, i) {
-				moved++
-			} else {
-				others++
+	// setter's order: each moves past the elements after it and the other
+	// fields set.
+	for _, i := range drop {
+		var past []ast.Node
+		for j, e := range lit.Elts {
+			if j > i || j != i && slices.Contains(drop, j) {
+				if kv, ok := e.(*ast.KeyValueExpr); ok {
+					e = kv.Value
+				}
+				past = append(past, e)
 			}
 		}
-	}
-	if moved > 0 && moved+others > 1 {
-		return skip("fields with effects or that could panic would be evaluated in another order")
+		v := lit.Elts[i].(*ast.KeyValueExpr).Value
+		if o := (analysis.Move{Effects: f.ws.Effects(), Func: analysis.Outside(info), Expr: v, Past: past}).Check(); o != nil {
+			return skip("the fields set would be evaluated in another order: " + o.Why)
+		}
 	}
 	for k, e := range b {
-		if n := f.count(k); k.Obj != f.self && n > 1 && f.risky(info, e, true) {
-			return skip(fmt.Sprintf("%s, used %d times in the body, would be evaluated once", types.ExprString(e), n))
+		if n := f.count(k); k.Obj != f.self && n > 1 {
+			if (analysis.Move{Effects: f.ws.Effects(), Func: analysis.Outside(info), Expr: e, Times: analysis.Shared}).Check() != nil {
+				return skip(fmt.Sprintf("%s, used %d times in the body, would be evaluated once", types.ExprString(e), n))
+			}
 		}
 	}
 	f.rest[lit] = rest{drop, typ}
@@ -718,44 +714,6 @@ func (f *folder) call(p *packages.Package, file *ast.File, b map[pattern.HoleKey
 		return "", err.Error(), nil
 	}
 	return call, "", nil
-}
-
-// first reports whether the hole k is the first thing the body evaluates
-// that matters: the body has neither effects nor panics but in its
-// holes, or k is an argument of the body's outermost call whose other
-// arguments have neither.
-func (f *folder) first(k pattern.HoleKey) bool {
-	info := f.m.Pkg.TypesInfo
-	if !f.risky(info, f.body, false) {
-		return true
-	}
-	call, ok := ast.Unparen(f.body).(*ast.CallExpr)
-	if !ok {
-		return false
-	}
-	is := func(a ast.Expr) bool {
-		switch a := ast.Unparen(a).(type) {
-		case *ast.Ident:
-			return k.Field == "" && info.Uses[a] == k.Obj
-		case *ast.SelectorExpr:
-			id := pattern.IdentOf(a.X)
-			return k.Field == a.Sel.Name && id != nil && info.Uses[id] == k.Obj
-		}
-		return false
-	}
-	for _, a := range call.Args {
-		if !is(a) && f.risky(info, a, false) {
-			return false
-		}
-	}
-	switch fun := ast.Unparen(call.Fun).(type) {
-	case *ast.Ident:
-		return true
-	case *ast.SelectorExpr:
-		_, pkgName := info.Uses[pattern.IdentOf(fun.X)].(*types.PkgName)
-		return pkgName
-	}
-	return false
 }
 
 // receiver is the receiver of the call: what matched the body's receiver,
@@ -1088,50 +1046,55 @@ func (f *folder) impure(info *types.Info, e ast.Expr) bool {
 	return found
 }
 
-// risky reports whether evaluating e in another order could matter: it
-// has side effects or could panic other than by a nil dereference; and,
-// when counted (evaluated another number of times), whether it makes a
-// new reference value.
-func (f *folder) risky(info *types.Info, e ast.Expr, counted bool) bool {
-	s := f.ws.Effects().Of(analysis.Outside(info), e)
-	return s.Effect != "" || s.At.OtherPanic != nil || counted && s.Makes != ""
-}
-
-// evaluatedFirst reports whether the argument for the hole k, which
-// could panic or has effects, may still be evaluated once before the
-// statements seq: a move of it past what seq evaluates before its first
-// use, evaluated once for each use the body makes of it; and no
-// argument the call evaluates before it could panic.
-func (f *folder) evaluatedFirst(info *types.Info, seq []ast.Stmt, b map[pattern.HoleKey]ast.Expr, k pattern.HoleKey) bool {
+// evaluatedFirst is why the argument for the hole k, which could panic
+// or has effects, could not be evaluated once before roots, the code the
+// call replaces, or "": a move of it past what roots evaluate before its
+// first use, one value for each use the body makes of it; and each
+// argument the call evaluates before it that roots evaluated after it,
+// a move of that argument past it.
+func (f *folder) evaluatedFirst(info *types.Info, roots []ast.Node, b map[pattern.HoleKey]ast.Expr, k pattern.HoleKey) string {
 	e := b[k]
-	if k.Field != "" || f.addressOf[e] {
-		return false
-	}
+	text := types.ExprString(e)
 	var past []ast.Node
-	for _, s := range seq {
-		if s.Pos() >= e.Pos() {
+	for _, r := range roots {
+		if r.Pos() >= e.Pos() {
 			break
 		}
-		past = append(past, analysis.EvaluatedBefore(s, e.Pos(), nil)...)
+		past = append(past, analysis.EvaluatedBefore(r, e.Pos(), nil)...)
 	}
 	m := analysis.Move{Effects: f.ws.Effects(), Func: analysis.Outside(info), Expr: e, Past: past}
-	if f.count(k) > 1 {
+	n := f.count(k)
+	if n > 1 {
 		m.Times = analysis.Shared // one value for each use the body makes of it
 	}
-	if m.Check() != nil {
-		return false
+	if o := m.Check(); o != nil {
+		if o.Past == nil {
+			return fmt.Sprintf("%s, used %d times in the body, would be evaluated once", text, n)
+		}
+		return text + " would be evaluated before the code it is in: " + o.Why
+	}
+	before := func(a ast.Expr) string {
+		if a == nil {
+			return text + " would be evaluated after an argument the code it is in does not have"
+		}
+		if a.Pos() < e.Pos() || f.addressOf[a] {
+			return "" // an address is judged on its own: movedAddress, or its own move
+		}
+		if o := (analysis.Move{Effects: f.ws.Effects(), Func: analysis.Outside(info), Expr: a, Past: []ast.Node{e}}).Check(); o != nil {
+			return types.ExprString(a) + " would be evaluated before " + text + ", which it now follows: " + o.Why
+		}
+		return ""
 	}
 	if f.m.Recv != nil && k.Obj != f.m.Recv {
-		if a := b[pattern.HoleKey{Obj: f.m.Recv, Field: ""}]; a != nil && f.impure(info, a) {
-			return false
+		if a := b[pattern.HoleKey{Obj: f.m.Recv, Field: ""}]; a != nil {
+			if why := before(a); why != "" {
+				return why
+			}
 		}
 	}
 	for _, fl := range f.decl.Type.Params.List {
 		for _, n := range fl.Names {
 			o := f.m.Pkg.TypesInfo.Defs[n]
-			if o == k.Obj {
-				return true
-			}
 			keys := []pattern.HoleKey{{Obj: o, Field: ""}}
 			if fs, byField := f.m.Fields[o]; byField {
 				keys = nil
@@ -1140,31 +1103,26 @@ func (f *folder) evaluatedFirst(info *types.Info, seq []ast.Stmt, b map[pattern.
 				}
 			}
 			for _, ok := range keys {
-				if a := b[ok]; a == nil || f.impure(info, a) {
-					return false
+				if ok == k {
+					return ""
+				}
+				if why := before(b[ok]); why != "" {
+					return why
 				}
 			}
 		}
 	}
-	return true
+	return ""
 }
 
-// effectful reports whether evaluating e has side effects, or, with
-// shared, reads memory other code can change: a package variable, or
-// through a pointer, a slice or a map.
-func (f *folder) effectful(info *types.Info, e ast.Expr, shared bool) bool {
-	s := f.ws.Effects().Of(analysis.Outside(info), e)
-	return s.Effect != "" || shared && s.Reads != ""
-}
-
-// staleRead is why e, an argument that reads memory other code can
+// staleRead is why e, an argument that may read memory other code can
 // change (a field through a pointer, an element, a package variable),
 // would not read what the code roots, which it replaces, read where it
-// read it: code there that ends before e's last use could write that
-// memory; or "". An argument with effects or that could panic is judged
-// by impure and evaluatedFirst instead.
+// read it, or "": a move of it past what roots evaluate before its last
+// use, since one value now stands for every use. An argument with
+// effects or that could panic is judged by evaluatedFirst instead.
 func (f *folder) staleRead(info *types.Info, roots []ast.Node, e ast.Expr) string {
-	if f.addressOf[e] || f.made[e] || f.impure(info, e) || !f.effectful(info, e, true) {
+	if f.addressOf[e] || f.made[e] || f.impure(info, e) {
 		return ""
 	}
 	text := types.ExprString(e)
@@ -1180,33 +1138,18 @@ func (f *folder) staleRead(info *types.Info, roots []ast.Node, e ast.Expr) strin
 			})
 		}
 	}
+	var past []ast.Node
 	for _, r := range roots {
-		why, at := "", token.NoPos
-		ast.Inspect(r, func(n ast.Node) bool {
-			if _, lit := n.(*ast.FuncLit); lit || n == nil || why != "" || n.Pos() >= last {
-				return false
-			}
-			if n.End() > last {
-				return true // it encloses the last use, which it reads first
-			}
-			switch n := n.(type) {
-			case *ast.AssignStmt:
-				if n.Tok != token.DEFINE {
-					why = "assigns " + types.ExprString(n.Lhs[0])
-				}
-			case *ast.IncDecStmt:
-				why = "changes " + types.ExprString(n.X)
-			case *ast.CallExpr:
-				why = f.ws.Effects().Call(info, n).Effect
-			}
-			at = n.Pos()
-			return why == ""
-		})
-		if why != "" {
-			return fmt.Sprintf("%s would be read before the code it is in, and code before its last use could change it before then (it %s, at %s)", text, why, f.ws.Position(at))
-		}
+		past = append(past, analysis.EvaluatedBefore(r, last, nil)...)
 	}
-	return ""
+	o := (analysis.Move{Effects: f.ws.Effects(), Func: analysis.Outside(info), Expr: e, Past: past}).Check()
+	switch {
+	case o == nil:
+		return ""
+	case o.Kind == analysis.Reads && o.Past != nil:
+		return fmt.Sprintf("%s would be read before the code it is in, and code before its last use could change it before then (it %s, at %s)", text, o.PastDoes, f.ws.Position(o.Past.Pos()))
+	}
+	return text + " would be read before the code it is in: " + o.Why
 }
 
 // stmtNodes is list as nodes.
@@ -1269,20 +1212,6 @@ func formatParts(s string) []string {
 		i = j + size - 1
 	}
 	return parts
-}
-
-// nilAddress reports whether e is an argument &x made for a *p of the
-// body that can panic: x goes through a pointer that could be nil.
-func (f *folder) nilAddress(info *types.Info, e ast.Expr) bool {
-	if !f.addressOf[e] {
-		return false
-	}
-	for _, p := range analysis.Addressed(info, e) {
-		if p != nil {
-			return true
-		}
-	}
-	return false
 }
 
 // movedAddress is why an argument &x for a *p of the body, evaluated
@@ -1410,8 +1339,8 @@ func (f *folder) foldStmts(p *packages.Package, file *ast.File, list []ast.Stmt,
 		where := f.ws.Position(seq[0].Pos())
 		skip := ""
 		for k, e := range b {
-			if f.impure(info, e) && !f.evaluatedFirst(info, seq, b, k) {
-				skip = types.ExprString(e) + " would be evaluated before the statements, not where it is"
+			if skip == "" && f.impure(info, e) {
+				skip = f.evaluatedFirst(info, stmtNodes(seq), b, k)
 			}
 		}
 		if skip == "" {
