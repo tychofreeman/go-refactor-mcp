@@ -1488,6 +1488,14 @@ hand or a tool got in the way.
     (`give receiver "k" to make it a method of Book`). The kinds
     reference adds the receiver last and names it. *Done.*
 
+    The prompt's `Label(title string)`: prepare_switch_for_types takes
+    a method the interface declares when the cases read their
+    variables only as fields (`it.Title`) of the parameters' types, in
+    order: it declares `title := it.Title` before the switch and the
+    cases read `title`, the user's "extract variables for what
+    differs, move them to the top". The kinds reference with the
+    interface declared first, as Haiku planned it, passes. *Done.*
+
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
 candidates and the evidence for each, gathered from the friction log.

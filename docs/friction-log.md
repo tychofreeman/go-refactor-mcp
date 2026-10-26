@@ -2555,3 +2555,10 @@ edits and `receiverHint` (add_declaration) with replace_text; goldens
 with create_file and delete_file. By hand: the kinds reference's
 receiver arguments, by a Python script. This entry appended with a
 heredoc.
+
+## 2026-10-25: prepare_switch_for_types takes fields as the declared parameters
+
+`supply`, `supplies` and the field with add_declaration and add_field;
+checkDeclared with replace_statements; the plan's changes, description
+and roadmap with replace_text; goldens with create_file. This entry
+appended with a heredoc. Nothing else by hand.
