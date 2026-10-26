@@ -285,6 +285,74 @@ deriving all the way (41 and 57 lines); without reads 2/8, the first
 passes of kinds without a read, both Sonnet, each finding Import's
 write from the narrowing refusal.
 
+## Step 2: the case for and against (2026-10-26)
+
+Step 2 was to be built only if step 1 pays: a runner on the API with
+our own prompt and caching, the engine in-process, and a manual arm in
+the same runner.
+
+What step 1 measured:
+
+| | loop | by hand / in a session |
+|---|---|---|
+| freight-xl, Haiku (section 18) | 11/16, $0.0111 | by hand 16/16, $0.0124 |
+| freight-xl, Sonnet (section 18) | 14/16, $0.107 | by hand 16/16, $0.0973 |
+| lending-xl, Sonnet (section 19) | 15/20, $0.146 | session with the tools 20/20, $0.176 |
+| kinds, Sonnet, reads first | 8/8, $0.197, rewritten | session on kinds, $0.25 |
+| kinds, Sonnet, no reads, 4 repairs | 4/4, $0.347, derived | |
+| kinds, Haiku, no reads, 4 repairs | 2/4, $0.031, derived | |
+
+Where the loop's cost goes (kinds without reads, both runs of
+section 19's last two): output 59-67%, cache writes 26-35%, cache
+reads 5-7%. The first request writes about 19K tokens, our own prompt
+(the tools reference and the call tree); every later request reads 25-40K
+from the cache and writes 5-7K, the turn it adds. `claude -p` with
+`--tools ""`, `--strict-mcp-config` and `--resume` already gives the
+prefix caching step 2 was for, and Claude Code adds little to the
+prompt now (section 17: $0.0114 to $0.0081 a Haiku plan without its
+tools).
+
+For building it:
+
+- The comparison would be fair. Today the loop is compared with
+  Claude Code sessions, another harness with its own prompt, turns and
+  caching; a manual arm in the same runner would say whether
+  deriving beats writing, with nothing else different. That question
+  is the project's.
+- A model per part: the plan with Sonnet, the repairs with Haiku or
+  none, since many refusals now say what to send. The kinds runs show
+  repairs are where Sonnet's cost grows (4 requests, $0.347).
+- Control: no CLI updates mid-run (an update twice lost A/B
+  sessions), our own token accounting, no session files.
+
+Against:
+
+- The saving step 2 promised is mostly had. Caching works, and the
+  prompt is ours. What costs is output, 60% and more, which a runner
+  does not change: the repair protocol does (each repair resends the
+  whole batch, 50-80 steps for kinds; the requests after the first,
+  mostly repairs, were 60% of Sonnet's output in the last run).
+- Step 1 did not pay in the sense the plan set: on tasks every arm
+  passes the loop costs what editing by hand costs (freight-xl), and
+  where it passes by deriving (kinds without reads) it costs more
+  than reading and rewriting. Its gain is the derivation itself, which
+  a runner neither adds nor removes.
+- Both missing pieces fit in `loop.py`: a repair that sends only the
+  steps it changes (the batch kept up to the refused step, then the
+  rest), and a manual arm in which the model answers with whole files
+  or text edits that the loop applies, through the same `claude -p`.
+- Claude through MCP is the product (2026-10-17, upheld 2026-10-25); a
+  runner is a second product to keep up, for a research question
+  `loop.py` can still answer.
+
+Recommendation: not step 2 now. Instead, two changes to `loop.py`,
+each cheap to try: repairs that patch the batch rather than resend it
+(aimed at the output share; if repairs shrank to a fifth, Sonnet's
+kinds cost would fall by about a third, near a session's), and a manual
+arm in the loop for the comparison with nothing else different. Build
+the runner only if those show a saving `claude -p` itself stands in the
+way of.
+
 ## Recording
 
 Each step in its own PR: the results in `docs/cost-history.md`, the
