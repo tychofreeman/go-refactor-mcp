@@ -30,7 +30,6 @@ import (
 	"go/token"
 	"go/types"
 	"go/version"
-	"os"
 	"slices"
 	"sort"
 	"strconv"
@@ -38,14 +37,13 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"golang.org/x/tools/go/packages"
-
 	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/gocode"
 	"github.com/tychofreeman/go-refactor-mcp/internal/imports"
 	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/site"
 	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 	"golang.org/x/tools/go/ast/astutil"
@@ -97,12 +95,7 @@ type args struct {
 
 // extraction holds the state of one planning run.
 type extraction struct {
-	ws   *workspace.Workspace
-	pkg  *packages.Package
-	info *types.Info
-	file *ast.File
-	tf   *token.File
-	src  []byte
+	site.Site
 	path string // absolute
 	rel  string // as given
 	name string
@@ -165,20 +158,18 @@ func (*ExtractFunction) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 		return nil, err
 	}
 	path := ws.Abs(a.File)
-	pkg, file := ws.FileSyntax(path)
-	if file == nil {
-		return nil, refactor.Refusef("file %s is not part of the module's packages", a.File)
-	}
-	src, err := os.ReadFile(path)
+	at, err := site.At(ws, path)
 	if err != nil {
 		return nil, err
 	}
 	x := &extraction{
-		ws: ws, pkg: pkg, info: pkg.TypesInfo, file: file, src: src,
-		path: path, rel: a.File, name: a.Name, doc: a.Doc,
-		tf: ws.Fset.File(file.Pos()),
+		Site: *at,
+		path: path,
+		rel:  a.File,
+		name: a.Name,
+		doc:  a.Doc,
 	}
-	if err := a.caseLines(x.tf, file, src); err != nil {
+	if err := a.caseLines(x.TF, x.File, x.Src); err != nil {
 		if a.StartLine, a.EndLine, x.missing, err = x.missingCase(a, err); err != nil {
 			return nil, err
 		}
@@ -190,8 +181,8 @@ func (*ExtractFunction) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 		return nil, refactor.Refusef("end_line is required (1-based)")
 	case a.EndLine < a.StartLine:
 		return nil, refactor.Refusef("end_line (%d) is before start_line (%d)", a.EndLine, a.StartLine)
-	case a.EndLine > x.tf.LineCount():
-		return nil, refactor.Refusef("end_line %d is past the end of %s, which has %d lines", a.EndLine, a.File, x.tf.LineCount())
+	case a.EndLine > x.TF.LineCount():
+		return nil, refactor.Refusef("end_line %d is past the end of %s, which has %d lines", a.EndLine, a.File, x.TF.LineCount())
 	}
 	if err := x.selectStatements(a.StartLine, a.EndLine); err != nil {
 		return nil, err
@@ -201,7 +192,7 @@ func (*ExtractFunction) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 			return nil, err
 		}
 	}
-	x.fa = analysis.AnalyzeFunc(x.info, x.outermostFunc())
+	x.fa = analysis.AnalyzeFunc(x.Info, x.outermostFunc())
 	// What the new function can name: before any check spells a type.
 	x.nameable = map[*types.TypeName]bool{}
 	x.findReceiver()
@@ -252,7 +243,7 @@ func (x *extraction) splitCase(value string) error {
 		return nil
 	}
 	line := x.line(cc.Pos())
-	text := func(n ast.Node) string { return string(x.src[x.tf.Offset(n.Pos()):x.tf.Offset(n.End())]) }
+	text := func(n ast.Node) string { return string(x.Src[x.TF.Offset(n.Pos()):x.TF.Offset(n.End())]) }
 	k := -1
 	for _, v := range []string{value, strconv.Quote(value)} {
 		want, err := locate.ExprTokens(v)
@@ -260,7 +251,7 @@ func (x *extraction) splitCase(value string) error {
 			continue
 		}
 		for i, e := range cc.List {
-			if k < 0 && locate.TokensMatch(x.tf, x.src, e, want) {
+			if k < 0 && locate.TokensMatch(x.TF, x.Src, e, want) {
 				k = i
 			}
 		}
@@ -269,7 +260,7 @@ func (x *extraction) splitCase(value string) error {
 		return fmt.Errorf("internal error: no value %s in the case on line %d", value, line)
 	}
 	for _, e := range cc.List {
-		if tv, ok := x.info.Types[e]; !ok || tv.Value == nil {
+		if tv, ok := x.Info.Types[e]; !ok || tv.Value == nil {
 			return refactor.Refusef("the case on line %d has %s, which is not a constant; splitting the case would change the order its values are compared in", line, text(e))
 		}
 	}
@@ -288,7 +279,7 @@ func (x *extraction) splitCase(value string) error {
 	if what != "" {
 		return refactor.Refusef("the case on line %d declares %s; splitting it copies its body", line, what)
 	}
-	path, _ := astutil.PathEnclosingInterval(x.file, cc.Pos(), cc.End())
+	path, _ := astutil.PathEnclosingInterval(x.File, cc.Pos(), cc.End())
 	if len(path) > 1 {
 		if block, ok := path[1].(*ast.BlockStmt); ok {
 			if i := slices.Index(block.List, ast.Stmt(cc)); i > 0 {
@@ -301,13 +292,13 @@ func (x *extraction) splitCase(value string) error {
 			}
 		}
 	}
-	indent := string(x.src[x.tf.Offset(x.tf.LineStart(line)):x.tf.Offset(cc.Case)])
-	bodyStart := x.tf.Offset(x.tf.LineStart(x.line(cc.Colon) + 1))
-	bodyEnd := len(x.src)
-	if end := x.line(cc.End()); end < x.tf.LineCount() {
-		bodyEnd = x.tf.Offset(x.tf.LineStart(end + 1))
+	indent := string(x.Src[x.TF.Offset(x.TF.LineStart(line)):x.TF.Offset(cc.Case)])
+	bodyStart := x.TF.Offset(x.TF.LineStart(x.line(cc.Colon) + 1))
+	bodyEnd := len(x.Src)
+	if end := x.line(cc.End()); end < x.TF.LineCount() {
+		bodyEnd = x.TF.Offset(x.TF.LineStart(end + 1))
 	}
-	body := string(x.src[bodyStart:bodyEnd])
+	body := string(x.Src[bodyStart:bodyEnd])
 	var b strings.Builder
 	for i, e := range cc.List {
 		if i != k {
@@ -315,7 +306,7 @@ func (x *extraction) splitCase(value string) error {
 		}
 	}
 	b.WriteString("case " + text(cc.List[k]) + ":")
-	x.split = []edit.TextEdit{{Start: x.tf.Offset(cc.Case), End: x.tf.Offset(cc.Colon) + 1, NewText: b.String()}}
+	x.split = []edit.TextEdit{{Start: x.TF.Offset(cc.Case), End: x.TF.Offset(cc.Colon) + 1, NewText: b.String()}}
 	return nil
 }
 
@@ -336,7 +327,7 @@ func (x *extraction) missingCase(a args, err error) (int, int, *missingCase, err
 	if a.Case == "default" || !strings.HasPrefix(err.Error(), "no case ") {
 		return 0, 0, nil, err
 	}
-	fd := locate.Func(x.file, a.Function)
+	fd := locate.Func(x.File, a.Function)
 	var switches []*ast.SwitchStmt
 	ast.Inspect(fd.Body, func(n ast.Node) bool {
 		if sw, ok := n.(*ast.SwitchStmt); ok {
@@ -352,28 +343,28 @@ func (x *extraction) missingCase(a args, err error) (int, int, *missingCase, err
 		return 0, 0, nil, err
 	}
 	for _, s := range sw.Body.List {
-		if cc := s.(*ast.CaseClause); cc.List == nil || !analysis.TerminatingList(x.info, cc.Body, nil) {
+		if cc := s.(*ast.CaseClause); cc.List == nil || !analysis.TerminatingList(x.Info, cc.Body, nil) {
 			return 0, 0, nil, err
 		}
 	}
-	path, _ := astutil.PathEnclosingInterval(x.file, sw.Pos(), sw.End())
+	path, _ := astutil.PathEnclosingInterval(x.File, sw.Pos(), sw.End())
 	block, ok := path[1].(*ast.BlockStmt)
 	if !ok {
 		return 0, 0, nil, err
 	}
 	rest := block.List[slices.Index(block.List, ast.Stmt(sw))+1:]
-	if len(rest) == 0 || !analysis.TerminatingList(x.info, rest, nil) {
+	if len(rest) == 0 || !analysis.TerminatingList(x.Info, rest, nil) {
 		return 0, 0, nil, err
 	}
 	value := a.Case
-	if token.IsIdentifier(value) && x.pkg.Types.Scope().Lookup(value) == nil && types.Universe.Lookup(value) == nil {
+	if token.IsIdentifier(value) && x.Pkg.Types.Scope().Lookup(value) == nil && types.Universe.Lookup(value) == nil {
 		value = strconv.Quote(value) // a bare word, as for a case that is there
 	}
 	line := x.line(sw.Pos())
 	m := &missingCase{
 		value:  value,
-		at:     x.off(x.tf.LineStart(x.line(sw.Body.Rbrace))),
-		indent: string(x.src[x.off(x.tf.LineStart(line)):x.off(sw.Pos())]),
+		at:     x.Off(x.TF.LineStart(x.line(sw.Body.Rbrace))),
+		indent: string(x.Src[x.Off(x.TF.LineStart(line)):x.Off(sw.Pos())]),
 	}
 	return x.line(rest[0].Pos()), x.line(rest[len(rest)-1].End()), m, nil
 }
@@ -402,11 +393,11 @@ func checkName(name string) error {
 // extracts the if, not its body. Then it checks that the lines contain
 // nothing but those statements and comments.
 func (x *extraction) selectStatements(first, last int) error {
-	if s := locate.SignatureAt(x.tf, x.file, first, last); s != nil {
+	if s := locate.SignatureAt(x.TF, x.File, first, last); s != nil {
 		return signatureRefusal(s)
 	}
 	var lists []stmtList
-	ast.Inspect(x.file, func(n ast.Node) bool {
+	ast.Inspect(x.File, func(n ast.Node) bool {
 		switch n := n.(type) {
 		case *ast.BlockStmt:
 			// The body of a switch or select lists case clauses, not
@@ -458,12 +449,12 @@ func (x *extraction) selectStatements(first, last int) error {
 	}
 
 	// Everything in the lines outside the statements must be a comment.
-	lo := x.off(x.tf.LineStart(first))
-	hi := len(x.src)
-	if last < x.tf.LineCount() {
-		hi = x.off(x.tf.LineStart(last+1)) - 1 // the newline ending the last line
+	lo := x.Off(x.TF.LineStart(first))
+	hi := len(x.Src)
+	if last < x.TF.LineCount() {
+		hi = x.Off(x.TF.LineStart(last+1)) - 1 // the newline ending the last line
 	}
-	sFrom, sTo := x.off(x.stmts[0].Pos()), x.off(x.stmts[len(x.stmts)-1].End())
+	sFrom, sTo := x.Off(x.stmts[0].Pos()), x.Off(x.stmts[len(x.stmts)-1].End())
 	x.start, x.end = -1, -1
 	for _, t := range x.tokens() {
 		if t.end <= lo || t.off >= hi || t.tok == token.SEMICOLON {
@@ -471,9 +462,9 @@ func (x *extraction) selectStatements(first, last int) error {
 		}
 		inStmts := t.off >= sFrom && t.end <= sTo
 		if !inStmts && (t.tok != token.COMMENT || t.off < lo || t.end > hi) {
-			l := x.tf.Line(x.tf.Pos(max(t.off, lo)))
+			l := x.TF.Line(x.TF.Pos(max(t.off, lo)))
 			return refactor.Refusef("line %d contains %s, which is not part of the selected statements; the lines must cover whole statements of one block. %s",
-				l, quoteText(string(x.src[t.off:t.end])), x.statementsAround(stmtList{x.block, x.list}, first))
+				l, quoteText(string(x.Src[t.off:t.end])), x.statementsAround(stmtList{x.block, x.list}, first))
 		}
 		if x.start < 0 {
 			x.start = t.off
@@ -482,11 +473,11 @@ func (x *extraction) selectStatements(first, last int) error {
 	}
 	// Widen to whole lines: from the start of the first line to the end of
 	// the last (without its newline).
-	x.start = x.off(x.tf.LineStart(x.line(x.tf.Pos(x.start))))
-	if e := strings.IndexByte(string(x.src[x.end:]), '\n'); e >= 0 {
+	x.start = x.Off(x.TF.LineStart(x.line(x.TF.Pos(x.start))))
+	if e := strings.IndexByte(string(x.Src[x.end:]), '\n'); e >= 0 {
 		x.end += e
 	} else {
-		x.end = len(x.src)
+		x.end = len(x.Src)
 	}
 	return nil
 }
@@ -527,7 +518,7 @@ func (x *extraction) statementsAround(l stmtList, line int) string {
 
 // funcHint names the function at or near line, if the lines missed its body.
 func (x *extraction) funcHint(line int) string {
-	for _, d := range x.file.Decls {
+	for _, d := range x.File.Decls {
 		if fd, ok := d.(*ast.FuncDecl); ok && fd.Body != nil && x.line(fd.Pos()) <= line && line <= x.line(fd.End()) {
 			return fmt.Sprintf("; the body of %s spans lines %d-%d", fd.Name.Name, x.line(fd.Body.Lbrace)+1, x.line(fd.Body.Rbrace)-1)
 		}
@@ -543,7 +534,7 @@ type tok struct {
 // tokens scans the whole file, including comments.
 func (x *extraction) tokens() []tok {
 	if x.toks == nil {
-		x.toks = scanTokens(x.src)
+		x.toks = scanTokens(x.Src)
 	}
 	return x.toks
 }
@@ -583,7 +574,7 @@ func (x *extraction) checkControlFlow() error {
 			case *ast.DeferStmt:
 				err = refactor.Refusef("the selected lines contain a defer statement at line %d; in a new function the deferred call would run when the new function returns, not when %s does", x.line(n.Pos()), x.enclosingName())
 			case *ast.CallExpr:
-				if id, ok := ast.Unparen(n.Fun).(*ast.Ident); ok && x.info.Uses[id] == recov {
+				if id, ok := ast.Unparen(n.Fun).(*ast.Ident); ok && x.Info.Uses[id] == recov {
 					err = refactor.Refusef("the selected lines call recover() at line %d, which only stops a panic when called directly by a deferred function; moving it would change that", x.line(n.Pos()))
 				}
 			case *ast.BranchStmt:
@@ -608,8 +599,8 @@ func (x *extraction) checkControlFlow() error {
 			if !ok || err != nil {
 				return err == nil
 			}
-			obj := x.info.Defs[ls.Label]
-			for id, o := range x.info.Uses {
+			obj := x.Info.Defs[ls.Label]
+			for id, o := range x.Info.Uses {
 				if o == obj && obj != nil && !x.inSelection(id) {
 					err = refactor.Refusef("the label %s at line %d is used at line %d, outside the selected lines; a jump cannot reach into another function",
 						ls.Label.Name, x.line(ls.Pos()), x.line(id.Pos()))
@@ -632,12 +623,12 @@ func (x *extraction) checkControlFlow() error {
 func (x *extraction) checkTermination() error {
 	var body *ast.BlockStmt
 	var sig *types.Signature
-	for _, n := range analysis.PathTo(x.file, x.stmts[0]) {
+	for _, n := range analysis.PathTo(x.File, x.stmts[0]) {
 		switch n := n.(type) {
 		case *ast.FuncLit:
-			body, sig = n.Body, typeOf[*types.Signature](x.info.TypeOf(n))
+			body, sig = n.Body, typeOf[*types.Signature](x.Info.TypeOf(n))
 		case *ast.FuncDecl:
-			if obj, ok := x.info.Defs[n.Name].(*types.Func); ok {
+			if obj, ok := x.Info.Defs[n.Name].(*types.Func); ok {
 				body, sig = n.Body, obj.Signature()
 			}
 		default:
@@ -649,7 +640,7 @@ func (x *extraction) checkTermination() error {
 		return nil
 	}
 	last := x.stmts[len(x.stmts)-1]
-	if analysis.TerminatingList(x.info, body.List, nil) && !analysis.TerminatingList(x.info, body.List, last) {
+	if analysis.TerminatingList(x.Info, body.List, nil) && !analysis.TerminatingList(x.Info, body.List, last) {
 		return refactor.Refusef("the selected lines end with %s at line %d, which is how %s ends without a return; a call to a new function does not count as that, so the code would no longer compile. Leave that statement out of the selection",
 			x.firstLine(last), x.line(last.Pos()), x.enclosingName())
 	}
@@ -668,7 +659,7 @@ func typeOf[T types.Type](t types.Type) T {
 func (x *extraction) checkBranch(b *ast.BranchStmt, stack []ast.Node) error {
 	line := x.line(b.Pos())
 	if b.Label != nil {
-		if obj := x.info.Uses[b.Label]; obj != nil && !x.inSelectionPos(obj.Pos()) {
+		if obj := x.Info.Uses[b.Label]; obj != nil && !x.inSelectionPos(obj.Pos()) {
 			return refactor.Refusef("the %s at line %d jumps to the label %s, outside the selected lines; a new function cannot jump back into %s",
 				b.Tok, line, b.Label.Name, x.enclosingName())
 		}
@@ -739,7 +730,7 @@ func (x *extraction) analyzeDataFlow() error {
 			if !ok {
 				return true
 			}
-			obj := x.info.Uses[id]
+			obj := x.Info.Uses[id]
 			if obj == nil || !isLocal(obj) || x.inSelectionPos(obj.Pos()) {
 				return true
 			}
@@ -825,7 +816,7 @@ func (x *extraction) analyzeDataFlow() error {
 	var later []*types.Var
 	var badLater []string
 	done := map[types.Object]bool{}
-	for id, obj := range x.info.Uses {
+	for id, obj := range x.Info.Uses {
 		if done[obj] || !isLocal(obj) || !x.inSelectionPos(obj.Pos()) || x.inSelection(id) {
 			continue
 		}
@@ -913,14 +904,14 @@ func (x *extraction) analyzeDataFlow() error {
 			}
 		case *ast.DeclStmt:
 			ast.Inspect(s, func(n ast.Node) bool {
-				if id, ok := n.(*ast.Ident); ok && x.info.Defs[id] != nil {
+				if id, ok := n.(*ast.Ident); ok && x.Info.Defs[id] != nil {
 					ids = append(ids, id)
 				}
 				return true
 			})
 		}
 		for _, id := range ids {
-			if v := taken[id.Name]; v != nil && x.info.Defs[id] != nil {
+			if v := taken[id.Name]; v != nil && x.Info.Defs[id] != nil {
 				return refactor.Refusef("line %d declares a new %s while the selected lines also use the %s declared at line %d; in the new function both would be in the same scope. Rename one of them first",
 					x.line(id.Pos()), id.Name, id.Name, x.line(v.Pos()))
 			}
@@ -936,7 +927,7 @@ func (x *extraction) analyzeDataFlow() error {
 // new function may then use.
 func (x *extraction) findTypeParams() {
 	var fd *ast.FuncDecl
-	for _, n := range analysis.PathTo(x.file, x.stmts[0]) {
+	for _, n := range analysis.PathTo(x.File, x.stmts[0]) {
 		if d, ok := n.(*ast.FuncDecl); ok {
 			fd = d
 		}
@@ -945,10 +936,10 @@ func (x *extraction) findTypeParams() {
 		return
 	}
 	tl := fd.Type.TypeParams
-	x.tparamText = string(x.src[x.off(tl.Opening)+1 : x.off(tl.Closing)])
+	x.tparamText = string(x.Src[x.Off(tl.Opening)+1 : x.Off(tl.Closing)])
 	for _, fld := range tl.List {
 		for _, name := range fld.Names {
-			if tn, ok := x.info.Defs[name].(*types.TypeName); ok {
+			if tn, ok := x.Info.Defs[name].(*types.TypeName); ok {
 				x.tparams = append(x.tparams, tn)
 				x.nameable[tn] = true
 			}
@@ -970,7 +961,7 @@ func (x *extraction) decideGeneric(later []*types.Var) error {
 		set[tp] = true
 	}
 	used := false
-	for id, obj := range x.info.Uses {
+	for id, obj := range x.Info.Uses {
 		if tn, ok := obj.(*types.TypeName); ok && set[tn] && x.inSelection(id) {
 			used = true
 			break
@@ -1077,7 +1068,7 @@ func usesTypeParam(t types.Type, set map[*types.TypeName]bool, seen map[types.Ty
 // it): x.recv, x.recvType and the receiver's type parameters.
 func (x *extraction) findReceiver() {
 	var fd *ast.FuncDecl
-	for _, n := range analysis.PathTo(x.file, x.stmts[0]) {
+	for _, n := range analysis.PathTo(x.File, x.stmts[0]) {
 		if _, ok := n.(*ast.FuncLit); ok {
 			return // a function literal's statements cannot become a method
 		}
@@ -1089,12 +1080,12 @@ func (x *extraction) findReceiver() {
 	if fd == nil || fd.Recv == nil || len(fd.Recv.List) != 1 || len(fd.Recv.List[0].Names) != 1 {
 		return
 	}
-	v, ok := x.info.Defs[fd.Recv.List[0].Names[0]].(*types.Var)
+	v, ok := x.Info.Defs[fd.Recv.List[0].Names[0]].(*types.Var)
 	if !ok || v.Name() == "_" {
 		return
 	}
 	used := false
-	for id, obj := range x.info.Uses {
+	for id, obj := range x.Info.Uses {
 		if obj == v && x.inSelection(id) {
 			used = true
 			break
@@ -1105,8 +1096,8 @@ func (x *extraction) findReceiver() {
 	}
 	x.recv = v
 	rt := fd.Recv.List[0].Type
-	x.recvType = string(x.src[x.off(rt.Pos()):x.off(rt.End())])
-	if fn, ok := x.info.Defs[fd.Name].(*types.Func); ok {
+	x.recvType = string(x.Src[x.Off(rt.Pos()):x.Off(rt.End())])
+	if fn, ok := x.Info.Defs[fd.Name].(*types.Func); ok {
 		tps := fn.Signature().RecvTypeParams()
 		for i := 0; i < tps.Len(); i++ {
 			x.nameable[tps.At(i).Obj()] = true
@@ -1128,19 +1119,19 @@ func (x *extraction) checkMethodName() error {
 	}
 	named = named.Origin()
 	if token.IsExported(x.name) {
-		if iface := analysis.MethodInterface(x.ws.Pkgs, named, x.name, true); iface != "" {
+		if iface := analysis.MethodInterface(x.WS.Pkgs, named, x.name, true); iface != "" {
 			return refactor.Refusef("a method %s could make %s implement %s, which code checks for at run time, and change behavior with no compile error; choose another name",
 				x.name, named.Obj().Name(), iface)
 		}
 	}
-	if o, _, _ := types.LookupFieldOrMethod(types.NewPointer(named), false, x.pkg.Types, x.name); o != nil {
+	if o, _, _ := types.LookupFieldOrMethod(types.NewPointer(named), false, x.Pkg.Types, x.name); o != nil {
 		return refactor.Refusef("%s already has a %s named %s (at %s); choose another name",
-			named.Obj().Name(), kindOf(o), x.name, x.ws.Position(o.Pos()))
+			named.Obj().Name(), kindOf(o), x.name, x.WS.Position(o.Pos()))
 	}
 	// An unexported method can only matter to interfaces in this package.
 	var scopes []*types.Scope
-	for _, p := range x.ws.Pkgs {
-		if p.PkgPath == x.pkg.PkgPath && p.Types != nil {
+	for _, p := range x.WS.Pkgs {
+		if p.PkgPath == x.Pkg.PkgPath && p.Types != nil {
 			scopes = append(scopes, p.Types.Scope())
 		}
 	}
@@ -1176,7 +1167,7 @@ func (x *extraction) checkMethodName() error {
 			}
 			has := false
 			for i := 0; i < iface.NumMethods(); i++ {
-				if m := iface.Method(i); m.Name() == x.name && m.Pkg() == x.pkg.Types {
+				if m := iface.Method(i); m.Name() == x.name && m.Pkg() == x.Pkg.Types {
 					has = true
 				}
 			}
@@ -1256,7 +1247,7 @@ func (x *extraction) readIn(v *types.Var) bool {
 		read := false
 		ast.Inspect(s, func(n ast.Node) bool {
 			id, ok := n.(*ast.Ident)
-			if read || !ok || x.info.Uses[id] != v {
+			if read || !ok || x.Info.Uses[id] != v {
 				return !read
 			}
 			if !x.isAssignTarget(id) {
@@ -1273,7 +1264,7 @@ func (x *extraction) readIn(v *types.Var) bool {
 
 // isDefineTarget reports whether id is on the left of :=.
 func (x *extraction) isDefineTarget(id *ast.Ident) bool {
-	path := analysis.PathTo(x.file, id)
+	path := analysis.PathTo(x.File, id)
 	if len(path) < 2 {
 		return false
 	}
@@ -1300,11 +1291,11 @@ func (x *extraction) pointerEdits() []edit.TextEdit {
 			if !ok {
 				return true
 			}
-			v, ok := x.info.Uses[id].(*types.Var)
+			v, ok := x.Info.Uses[id].(*types.Var)
 			if !ok || !x.flow.pointers[v] {
 				return true
 			}
-			path := analysis.PathTo(x.file, id)
+			path := analysis.PathTo(x.File, id)
 			// The operand id is part of, skipping parentheses.
 			var operand ast.Node = id
 			i := 1
@@ -1324,7 +1315,7 @@ func (x *extraction) pointerEdits() []edit.TextEdit {
 			switch p := parent.(type) {
 			case *ast.UnaryExpr:
 				if p.Op == token.AND {
-					edits = append(edits, edit.TextEdit{Start: x.off(p.Pos()), End: x.off(p.End()), NewText: v.Name()})
+					edits = append(edits, edit.TextEdit{Start: x.Off(p.Pos()), End: x.Off(p.End()), NewText: v.Name()})
 					return true
 				}
 			case *ast.SelectorExpr:
@@ -1357,7 +1348,7 @@ func (x *extraction) pointerEdits() []edit.TextEdit {
 					repl = paren
 				}
 			}
-			edits = append(edits, edit.TextEdit{Start: x.off(id.Pos()), End: x.off(id.End()), NewText: repl})
+			edits = append(edits, edit.TextEdit{Start: x.Off(id.Pos()), End: x.Off(id.End()), NewText: repl})
 			return true
 		})
 	}
@@ -1367,7 +1358,7 @@ func (x *extraction) pointerEdits() []edit.TextEdit {
 // isAssignTarget reports whether id is a whole left-hand operand of = or
 // := (which writes without reading).
 func (x *extraction) isAssignTarget(id *ast.Ident) bool {
-	path := analysis.PathTo(x.file, id)
+	path := analysis.PathTo(x.File, id)
 	if len(path) < 2 {
 		return false
 	}
@@ -1387,7 +1378,7 @@ func (x *extraction) isAssignTarget(id *ast.Ident) bool {
 // other than where it is declared. A named result always counts: a bare
 // return reads it without naming it.
 func (x *extraction) usedOutside(v *types.Var) bool {
-	for _, n := range analysis.PathTo(x.file, x.stmts[0]) {
+	for _, n := range analysis.PathTo(x.File, x.stmts[0]) {
 		var ft *ast.FuncType
 		switch n := n.(type) {
 		case *ast.FuncDecl:
@@ -1398,14 +1389,14 @@ func (x *extraction) usedOutside(v *types.Var) bool {
 		if ft != nil && ft.Results != nil {
 			for _, fld := range ft.Results.List {
 				for _, name := range fld.Names {
-					if x.info.Defs[name] == v {
+					if x.Info.Defs[name] == v {
 						return true
 					}
 				}
 			}
 		}
 	}
-	for id, obj := range x.info.Uses {
+	for id, obj := range x.Info.Uses {
 		if obj == v && !x.inSelection(id) {
 			return true
 		}
@@ -1417,7 +1408,7 @@ func (x *extraction) usedOutside(v *types.Var) bool {
 // literal and v is declared outside the innermost one: the literal
 // captures v, which outlives each call of it.
 func (x *extraction) declaredOutsideLit(v *types.Var) bool {
-	for _, n := range analysis.PathTo(x.file, x.stmts[0]) {
+	for _, n := range analysis.PathTo(x.File, x.stmts[0]) {
 		if lit, ok := n.(*ast.FuncLit); ok {
 			return v.Pos() < lit.Pos() || v.Pos() >= lit.End()
 		}
@@ -1430,7 +1421,7 @@ func (x *extraction) declaredOutsideLit(v *types.Var) bool {
 // value the selection stores can be read by the selection itself in the
 // next iteration.
 func (x *extraction) loopAround(v *types.Var) bool {
-	for _, n := range analysis.PathTo(x.file, x.stmts[0]) {
+	for _, n := range analysis.PathTo(x.File, x.stmts[0]) {
 		switch n := n.(type) {
 		case *ast.ForStmt, *ast.RangeStmt:
 			if v.Pos() < n.Pos() {
@@ -1468,10 +1459,10 @@ func (x *extraction) sharedWithCaller(v *types.Var) bool {
 // every iteration shares the variable: the loop changes v after a literal
 // of the selection that can run later has captured it.
 func (x *extraction) sharedLoopVar(v *types.Var) bool {
-	if fv := x.info.FileVersions[x.file]; fv == "" || version.Compare(fv, "go1.22") >= 0 {
+	if fv := x.Info.FileVersions[x.File]; fv == "" || version.Compare(fv, "go1.22") >= 0 {
 		return false
 	}
-	for _, n := range analysis.PathTo(x.file, x.stmts[0]) {
+	for _, n := range analysis.PathTo(x.File, x.stmts[0]) {
 		var body *ast.BlockStmt
 		switch n := n.(type) {
 		case *ast.ForStmt:
@@ -1495,7 +1486,7 @@ func (x *extraction) assignedFirst(v *types.Var, refs []*ast.Ident) bool {
 	if !x.isAssignTarget(first) {
 		return false
 	}
-	as := analysis.PathTo(x.file, first)[1].(*ast.AssignStmt)
+	as := analysis.PathTo(x.File, first)[1].(*ast.AssignStmt)
 	top := false
 	for _, s := range x.stmts {
 		top = top || s == as
@@ -1504,8 +1495,8 @@ func (x *extraction) assignedFirst(v *types.Var, refs []*ast.Ident) bool {
 		return false
 	}
 	for _, r := range as.Rhs {
-		for _, id := range analysis.ScopeRefs(x.info, r) {
-			if x.info.Uses[id] == v {
+		for _, id := range analysis.ScopeRefs(x.Info, r) {
+			if x.Info.Uses[id] == v {
 				return false
 			}
 		}
@@ -1559,9 +1550,9 @@ func (x *extraction) declaredAtTop(v *types.Var) bool {
 // if it cannot be written there: a type declared inside the function, a
 // type parameter, or a type from a package the file does not import.
 func (x *extraction) typeString(name string, t types.Type) (string, error) {
-	what := "the result type " + types.TypeString(t, types.RelativeTo(x.pkg.Types))
+	what := "the result type " + types.TypeString(t, types.RelativeTo(x.Pkg.Types))
 	if name != "" {
-		what = fmt.Sprintf("%s has type %s, which", name, types.TypeString(t, types.RelativeTo(x.pkg.Types)))
+		what = fmt.Sprintf("%s has type %s, which", name, types.TypeString(t, types.RelativeTo(x.Pkg.Types)))
 	}
 	if bad := localTypeIn(t, x.nameable, map[types.Type]bool{}); bad != nil {
 		return "", refactor.Refusef("%s uses %s %s declared inside %s; it cannot be named in a new package-level function",
@@ -1597,7 +1588,7 @@ func (x *extraction) qualifiers(t types.Type) []string {
 // be imported.
 func (x *extraction) qualifier(p *types.Package) (string, error) {
 	if x.imp == nil {
-		x.imp = imports.New(x.ws, x.pkg, x.file, x.src)
+		x.imp = imports.New(x.WS, x.Pkg, x.File, x.Src)
 	}
 	return x.imp.Name(p)
 }
@@ -1704,7 +1695,7 @@ func localTypeNames(t types.Type, seen map[types.Type]bool) []*types.TypeName {
 
 // outermostFunc returns the outermost function containing the selection.
 func (x *extraction) outermostFunc() ast.Node {
-	return analysis.OutermostFunc(analysis.PathTo(x.file, x.stmts[0]))
+	return analysis.OutermostFunc(analysis.PathTo(x.File, x.stmts[0]))
 }
 
 // isLocal reports whether obj is declared inside a function: not at
@@ -1733,18 +1724,18 @@ func (x *extraction) checkNewName() error {
 	if o := types.Universe.Lookup(x.name); o != nil {
 		return refactor.Refusef("%s is a predeclared %s; a package-level function with that name would hide it in the whole package. Choose another name", x.name, kindOf(o))
 	}
-	for _, p := range x.ws.Pkgs {
-		if p.PkgPath != x.pkg.PkgPath || p.Types == nil {
+	for _, p := range x.WS.Pkgs {
+		if p.PkgPath != x.Pkg.PkgPath || p.Types == nil {
 			continue
 		}
 		if o := p.Types.Scope().Lookup(x.name); o != nil {
 			return refactor.Refusef("%s is already declared in package %s (%s at %s); choose another name",
-				x.name, p.Types.Name(), kindOf(o), x.ws.Position(o.Pos()))
+				x.name, p.Types.Name(), kindOf(o), x.WS.Position(o.Pos()))
 		}
 		for _, f := range p.Syntax {
 			if s := p.TypesInfo.Scopes[f]; s != nil {
 				if o := s.Lookup(x.name); o != nil {
-					return refactor.Refusef("%s is an imported name in %s; choose another name", x.name, x.ws.Rel(x.ws.Fset.File(f.Pos()).Name()))
+					return refactor.Refusef("%s is an imported name in %s; choose another name", x.name, x.WS.Rel(x.WS.Fset.File(f.Pos()).Name()))
 				}
 			}
 		}
@@ -1762,7 +1753,7 @@ func (x *extraction) checkNewName() error {
 	// the new function there.
 	first := x.stmts[0]
 	if scope := x.innermostScope(first.Pos()); scope != nil {
-		if s, o := scope.LookupParent(x.name, first.Pos()); o != nil && s != types.Universe && s != x.pkg.Types.Scope() && !x.inSelectionPos(o.Pos()) {
+		if s, o := scope.LookupParent(x.name, first.Pos()); o != nil && s != types.Universe && s != x.Pkg.Types.Scope() && !x.inSelectionPos(o.Pos()) {
 			return refactor.Refusef("%s is a %s declared at line %d, which would hide the new function at the call site; choose another name",
 				x.name, kindOf(o), x.line(o.Pos()))
 		}
@@ -1772,7 +1763,7 @@ func (x *extraction) checkNewName() error {
 
 // innermostScope returns the innermost scope containing pos.
 func (x *extraction) innermostScope(pos token.Pos) *types.Scope {
-	s := x.info.Scopes[x.file]
+	s := x.Info.Scopes[x.File]
 	if s == nil {
 		return nil
 	}
@@ -1832,7 +1823,7 @@ func (x *extraction) plan() (*refactor.Plan, error) {
 		for _, v := range f.results {
 			results = append(results, ts(v.Name(), v.Type()))
 		}
-		if len(f.results) > 0 && !analysis.TerminatingList(x.info, x.stmts, nil) {
+		if len(f.results) > 0 && !analysis.TerminatingList(x.Info, x.stmts, nil) {
 			tail = strings.Join(names(f.results), ", ")
 		}
 	}
@@ -1870,7 +1861,7 @@ func (x *extraction) plan() (*refactor.Plan, error) {
 	}
 	unit := x.indentUnit(decl)
 	var fn strings.Builder
-	fmt.Fprintf(&fn, "\n\n%s%s {\n", gocode.DocComment(x.doc, gocode.CommentWidth(x.src)), sigText)
+	fmt.Fprintf(&fn, "\n\n%s%s {\n", gocode.DocComment(x.doc, gocode.CommentWidth(x.Src)), sigText)
 	for _, v := range f.locals {
 		fmt.Fprintf(&fn, "%svar %s %s\n", unit, v.Name(), ts(v.Name(), v.Type()))
 	}
@@ -1892,7 +1883,7 @@ func (x *extraction) plan() (*refactor.Plan, error) {
 	siteText := x.callSite(f, sig, indent, names, ts, errName, final)
 	end := x.end
 	if final != nil {
-		end = x.off(final.End())
+		end = x.Off(final.End())
 	}
 	site := edit.TextEdit{Start: x.start, End: end, NewText: siteText}
 	notes := x.notes(f, names)
@@ -1912,7 +1903,7 @@ func (x *extraction) plan() (*refactor.Plan, error) {
 	if final != nil {
 		notes = append(notes, fmt.Sprintf("the return after the selected lines returned what the new function's error says, so the call site is %q", strings.TrimSpace(siteText)))
 	}
-	first, last := x.line(x.tf.Pos(x.start)), x.line(x.tf.Pos(x.end))
+	first, last := x.line(x.TF.Pos(x.start)), x.line(x.TF.Pos(x.end))
 	n := len(x.stmts)
 	return &refactor.Plan{
 		Summary: fmt.Sprintf("extracted lines %d-%d (%d statement%s) into function %s", first, last, n, textutil.Plural(n), x.name),
@@ -2074,11 +2065,11 @@ func (x *extraction) callExpr(f *flow) string {
 func (x *extraction) insertOffset(decl ast.Decl) int {
 	// Insert after the line on which the enclosing declaration ends, so a
 	// trailing comment there stays with it.
-	at := x.off(decl.End())
-	if i := strings.IndexByte(string(x.src[at:]), '\n'); i >= 0 {
+	at := x.Off(decl.End())
+	if i := strings.IndexByte(string(x.Src[at:]), '\n'); i >= 0 {
 		at += i
 	} else {
-		at = len(x.src)
+		at = len(x.Src)
 	}
 	return at
 }
@@ -2094,7 +2085,7 @@ func (x *extraction) checkSpelledTypes() error {
 	for _, v := range f.params {
 		inBody[v.Name()] = "parameter"
 	}
-	for id, obj := range x.info.Defs {
+	for id, obj := range x.Info.Defs {
 		if obj != nil && x.inSelection(id) {
 			inBody[id.Name] = "name declared by the selected statements"
 		}
@@ -2155,7 +2146,7 @@ func (x *extraction) selectedText(edits []edit.TextEdit) (string, error) {
 	for i, e := range edits {
 		shifted[i] = edit.TextEdit{Start: e.Start - x.start, End: e.End - x.start, NewText: e.NewText}
 	}
-	out, err := edit.Apply(x.src[x.start:x.end], shifted)
+	out, err := edit.Apply(x.Src[x.start:x.end], shifted)
 	return string(out), err
 }
 
@@ -2179,7 +2170,7 @@ func reindent(text, from, to string) string { return textutil.Reindent(text, fro
 // topDecl returns the top-level declaration containing the selection.
 func (x *extraction) topDecl() ast.Decl {
 	p := x.stmts[0].Pos()
-	for _, d := range x.file.Decls {
+	for _, d := range x.File.Decls {
 		if d.Pos() <= p && p < d.End() {
 			return d
 		}
@@ -2219,14 +2210,14 @@ func (x *extraction) calledOnlyInSelection(lit *ast.FuncLit) bool {
 	if fn == nil || !x.inSelectionPos(fn.Pos()) || x.fa.Addressed[fn] {
 		return false
 	}
-	for id, obj := range x.info.Uses {
+	for id, obj := range x.Info.Uses {
 		if obj != fn {
 			continue
 		}
 		if !x.inSelection(id) {
 			return false
 		}
-		path, _ := astutil.PathEnclosingInterval(x.file, id.Pos(), id.End())
+		path, _ := astutil.PathEnclosingInterval(x.File, id.Pos(), id.End())
 		if as, ok := path[1].(*ast.AssignStmt); ok && slices.Contains(as.Lhs, ast.Expr(id)) {
 			continue // a write, which runs nothing
 		}
@@ -2256,7 +2247,7 @@ func (x *extraction) holder(lit *ast.FuncLit) *types.Var {
 		}
 		for i, r := range rhs {
 			if lhs[i] != nil && ast.Unparen(r) == lit {
-				out, _ = x.info.ObjectOf(lhs[i]).(*types.Var)
+				out, _ = x.Info.ObjectOf(lhs[i]).(*types.Var)
 			}
 		}
 	}
@@ -2281,7 +2272,7 @@ func (x *extraction) holder(lit *ast.FuncLit) *types.Var {
 
 // enclosingName names the function containing the selection, for messages.
 func (x *extraction) enclosingName() string {
-	path := analysis.PathTo(x.file, x.stmts[0])
+	path := analysis.PathTo(x.File, x.stmts[0])
 	for _, n := range path {
 		switch n := n.(type) {
 		case *ast.FuncLit:
@@ -2293,13 +2284,11 @@ func (x *extraction) enclosingName() string {
 	return "the enclosing function"
 }
 
-func (x *extraction) off(p token.Pos) int { return x.tf.Offset(p) }
-
-func (x *extraction) line(p token.Pos) int { return x.tf.Line(p) }
+func (x *extraction) line(p token.Pos) int { return x.TF.Line(p) }
 
 // firstLine quotes the first line of a statement, shortened if long.
 func (x *extraction) firstLine(s ast.Stmt) string {
-	text := string(x.src[x.off(s.Pos()):x.off(s.End())])
+	text := string(x.Src[x.Off(s.Pos()):x.Off(s.End())])
 	if i := strings.IndexByte(text, '\n'); i >= 0 {
 		text = text[:i] + " ..."
 	}
@@ -2331,8 +2320,8 @@ func (x *extraction) indentUnit(decl ast.Decl) string {
 }
 
 func (x *extraction) indentOf(p token.Pos) string {
-	start := x.off(x.tf.LineStart(x.line(p)))
-	ws := x.src[start:x.off(p)]
+	start := x.Off(x.TF.LineStart(x.line(p)))
+	ws := x.Src[start:x.Off(p)]
 	for i, c := range ws {
 		if c != ' ' && c != '\t' {
 			return string(ws[:i])

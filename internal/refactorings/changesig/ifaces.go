@@ -51,7 +51,7 @@ func (t *target) checkSignatures(afterOf func(*types.Signature) string) error {
 	if recv == nil {
 		return nil
 	}
-	for _, p := range t.ws.Pkgs {
+	for _, p := range t.WS.Pkgs {
 		if p.TypesInfo == nil {
 			continue
 		}
@@ -88,7 +88,7 @@ func (t *target) checkSignatures(afterOf func(*types.Signature) string) error {
 // of the target's family, and so changes with it.
 func (t *target) inFamily(it *types.Interface) bool {
 	for i := range it.NumMethods() {
-		if m := it.Method(i); m.Id() == t.obj.Id() && t.familyKeys[keyOf(t.ws.Fset, m)] {
+		if m := it.Method(i); m.Id() == t.obj.Id() && t.familyKeys[keyOf(t.WS.Fset, m)] {
 			return true
 		}
 	}
@@ -261,10 +261,10 @@ func (t *target) typeName(typ types.Type) string {
 }
 
 func (t *target) where(i iface) string {
-	if !i.pos.IsValid() || !t.ws.Contains(t.ws.Fset.Position(i.pos).Filename) {
+	if !i.pos.IsValid() || !t.WS.Contains(t.WS.Fset.Position(i.pos).Filename) {
 		return ""
 	}
-	return fmt.Sprintf(" (at %s)", t.ws.Position(i.pos))
+	return fmt.Sprintf(" (at %s)", t.WS.Position(i.pos))
 }
 
 // receiverBase returns the named type of a receiver, T or *T.

@@ -21,12 +21,12 @@ import (
 	"go/ast"
 	"go/token"
 	"go/types"
-	"os"
 	"strings"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/site"
 	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
@@ -68,11 +68,7 @@ type args struct {
 }
 
 type inversion struct {
-	ws   *workspace.Workspace
-	info *types.Info
-	file *ast.File
-	tf   *token.File
-	src  []byte
+	site.Site
 	path string
 	rel  string
 }
@@ -99,15 +95,11 @@ func load(ws *workspace.Workspace, a args) (*inversion, *ast.IfStmt, error) {
 		return nil, nil, refactor.Refusef("line is required (1-based)")
 	}
 	path := ws.Abs(a.File)
-	pkg, file := ws.FileSyntax(path)
-	if file == nil {
-		return nil, nil, refactor.Refusef("file %s is not part of the module's packages", a.File)
-	}
-	src, err := os.ReadFile(path)
+	at, err := site.At(ws, path)
 	if err != nil {
 		return nil, nil, err
 	}
-	x := &inversion{ws: ws, info: pkg.TypesInfo, file: file, tf: ws.Fset.File(file.Pos()), src: src, path: path, rel: a.File}
+	x := &inversion{Site: *at, path: path, rel: a.File}
 	s, err := x.find(a)
 	if err != nil {
 		return nil, nil, err
@@ -118,13 +110,13 @@ func load(ws *workspace.Workspace, a args) (*inversion, *ast.IfStmt, error) {
 // find returns the if statement whose if keyword is at the line (and
 // column, if given).
 func (x *inversion) find(a args) (*ast.IfStmt, error) {
-	if a.Line > x.tf.LineCount() {
-		return nil, refactor.Refusef("line %d is past the end of %s, which has %d lines", a.Line, a.File, x.tf.LineCount())
+	if a.Line > x.TF.LineCount() {
+		return nil, refactor.Refusef("line %d is past the end of %s, which has %d lines", a.Line, a.File, x.TF.LineCount())
 	}
 	var found []*ast.IfStmt
-	ast.Inspect(x.file, func(n ast.Node) bool {
-		if s, ok := n.(*ast.IfStmt); ok && x.tf.Line(s.If) == a.Line {
-			if a.Column == 0 || x.tf.Position(s.If).Column == a.Column {
+	ast.Inspect(x.File, func(n ast.Node) bool {
+		if s, ok := n.(*ast.IfStmt); ok && x.TF.Line(s.If) == a.Line {
+			if a.Column == 0 || x.TF.Position(s.If).Column == a.Column {
 				found = append(found, s)
 			}
 		}
@@ -136,7 +128,7 @@ func (x *inversion) find(a args) (*ast.IfStmt, error) {
 	case len(found) > 1:
 		var cols []string
 		for _, s := range found {
-			cols = append(cols, fmt.Sprint(x.tf.Position(s.If).Column))
+			cols = append(cols, fmt.Sprint(x.TF.Position(s.If).Column))
 		}
 		return nil, refactor.Refusef("line %d has %d if statements (columns %s); pass column to choose one", a.Line, len(found), strings.Join(cols, ", "))
 	case a.Column != 0:
@@ -146,7 +138,7 @@ func (x *inversion) find(a args) (*ast.IfStmt, error) {
 }
 
 func (x *inversion) plan(s *ast.IfStmt, keepElse bool) (*refactor.Plan, error) {
-	line := x.tf.Line(s.If)
+	line := x.TF.Line(s.If)
 	var els *ast.BlockStmt
 	switch e := s.Else.(type) {
 	case nil:
@@ -158,7 +150,7 @@ func (x *inversion) plan(s *ast.IfStmt, keepElse bool) (*refactor.Plan, error) {
 	}
 	neg := negate(x, s.Cond)
 	var notes []string
-	if !keepElse && analysis.EndsFlow(x.info, els.List) {
+	if !keepElse && analysis.EndsFlow(x.Info, els.List) {
 		// The else branch becomes the if branch and cannot fall through,
 		// so the old if branch can follow the if, un-nested.
 		p, err := x.placeOf(s)
@@ -174,8 +166,8 @@ func (x *inversion) plan(s *ast.IfStmt, keepElse bool) (*refactor.Plan, error) {
 			text := then(x.head(s, hoist, indent)+neg.text+" {"+x.blockText(els)+"}", x.dedented(s.Body, indent))
 			return &refactor.Plan{
 				Summary: fmt.Sprintf("inverted the if at line %d into a guard clause: condition %s is now %s, and since that branch exits, the else is removed and the former if branch follows, un-nested",
-					line, quote(x.text(s.Cond)), quote(neg.text)),
-				Edits: []edit.FileEdit{{Path: x.path, Edits: []edit.TextEdit{{Start: x.off(s.Pos()), End: x.off(s.End()), NewText: text}}}},
+					line, quote(x.Text(s.Cond)), quote(neg.text)),
+				Edits: []edit.FileEdit{{Path: x.path, Edits: []edit.TextEdit{{Start: x.Off(s.Pos()), End: x.Off(s.End()), NewText: text}}}},
 			}, nil
 		}
 		if !refactor.IsRefusal(err) {
@@ -186,13 +178,13 @@ func (x *inversion) plan(s *ast.IfStmt, keepElse bool) (*refactor.Plan, error) {
 	thenIn := x.inner(s.Body)
 	elseIn := x.inner(els)
 	edits := []edit.TextEdit{
-		{Start: x.off(s.Cond.Pos()), End: x.off(s.Cond.End()), NewText: neg.text},
-		{Start: x.off(s.Body.Lbrace) + 1, End: x.off(s.Body.Rbrace), NewText: elseIn},
-		{Start: x.off(els.Lbrace) + 1, End: x.off(els.Rbrace), NewText: thenIn},
+		{Start: x.Off(s.Cond.Pos()), End: x.Off(s.Cond.End()), NewText: neg.text},
+		{Start: x.Off(s.Body.Lbrace) + 1, End: x.Off(s.Body.Rbrace), NewText: elseIn},
+		{Start: x.Off(els.Lbrace) + 1, End: x.Off(els.Rbrace), NewText: thenIn},
 	}
 	return &refactor.Plan{
 		Summary: fmt.Sprintf("inverted the if at line %d: condition %s is now %s, and the branches are swapped",
-			line, quote(x.text(s.Cond)), quote(neg.text)),
+			line, quote(x.Text(s.Cond)), quote(neg.text)),
 		Edits: []edit.FileEdit{{Path: x.path, Edits: edits}},
 		Notes: notes,
 	}, nil
@@ -201,12 +193,12 @@ func (x *inversion) plan(s *ast.IfStmt, keepElse bool) (*refactor.Plan, error) {
 // guard turns an if without else, the last statement of a function
 // without results or of a loop body, into a guard clause.
 func (x *inversion) guard(s *ast.IfStmt) (*refactor.Plan, error) {
-	line := x.tf.Line(s.If)
+	line := x.TF.Line(s.If)
 	p, err := x.placeOf(s)
 	if err != nil {
 		return nil, err
 	}
-	if analysis.EndsFlow(x.info, s.Body.List) {
+	if analysis.EndsFlow(x.Info, s.Body.List) {
 		return nil, refactor.Refusef("the if at line %d already exits (its body ends in return, continue, break, goto or panic), so it is already a guard clause; inverting it would only move the code after it inside", line)
 	}
 	indent := x.indentOf(s.Pos())
@@ -230,7 +222,7 @@ func (x *inversion) guard(s *ast.IfStmt) (*refactor.Plan, error) {
 	return &refactor.Plan{
 		Summary: fmt.Sprintf("turned the if at line %d into a guard clause: if %s { %s }, followed by its former body, un-nested",
 			line, neg.text, exit),
-		Edits: []edit.FileEdit{{Path: x.path, Edits: []edit.TextEdit{{Start: x.off(s.Pos()), End: x.off(s.End()), NewText: text}}}},
+		Edits: []edit.FileEdit{{Path: x.path, Edits: []edit.TextEdit{{Start: x.Off(s.Pos()), End: x.Off(s.End()), NewText: text}}}},
 		Notes: notes,
 	}, nil
 }
@@ -244,7 +236,7 @@ func (x *inversion) guard(s *ast.IfStmt) (*refactor.Plan, error) {
 //   - a copy of the return statement, when s is followed only by a return
 //     at the end of a function: every path still evaluates it once.
 func (x *inversion) exit(s *ast.IfStmt, p *place, indent string) (string, string, error) {
-	line := x.tf.Line(s.If)
+	line := x.TF.Line(s.If)
 	simple := func(e string) (string, string, error) { return e, indent + "\t" + e, nil }
 	body := x.funcBody(p)
 	if p.last() {
@@ -258,7 +250,7 @@ func (x *inversion) exit(s *ast.IfStmt, p *place, indent string) (string, string
 				}
 				break // a function with results cannot end with this if
 			}
-			switch l := analysis.PathTo(x.file, o)[1].(type) {
+			switch l := analysis.PathTo(x.File, o)[1].(type) {
 			case *ast.ForStmt:
 				if l.Body == o {
 					return simple("continue")
@@ -288,10 +280,10 @@ func (x *inversion) exit(s *ast.IfStmt, p *place, indent string) (string, string
 		var err error
 		ast.Inspect(ret, func(n ast.Node) bool {
 			if id, ok := n.(*ast.Ident); ok && err == nil {
-				if sc := x.info.Scopes[s]; sc != nil {
-					if o := sc.Lookup(id.Name); o != nil && x.info.Uses[id] != o {
+				if sc := x.Info.Scopes[s]; sc != nil {
+					if o := sc.Lookup(id.Name); o != nil && x.Info.Uses[id] != o {
 						err = refactor.Refusef("the guard clause would repeat the return at line %d inside the if at line %d, where %s refers to the variable from the if's init statement, not the one the return uses; rename one first",
-							x.tf.Line(ret.Pos()), line, id.Name)
+							x.TF.Line(ret.Pos()), line, id.Name)
 					}
 				}
 			}
@@ -301,8 +293,8 @@ func (x *inversion) exit(s *ast.IfStmt, p *place, indent string) (string, string
 			return "", "", err
 		}
 	}
-	ls := x.off(x.tf.LineStart(x.tf.Line(ret.Pos())))
-	text := textutil.Reindent(string(x.src[ls:x.off(ret.End())]), indent, indent+"\t")
+	ls := x.Off(x.TF.LineStart(x.TF.Line(ret.Pos())))
+	text := textutil.Reindent(string(x.Src[ls:x.Off(ret.End())]), indent, indent+"\t")
 	return "return (repeating the final return)", text, nil
 }
 
@@ -349,17 +341,11 @@ func lowerFirst(s string) string {
 
 // inner returns the text between a block's braces.
 func (x *inversion) inner(b *ast.BlockStmt) string {
-	return string(x.src[x.off(b.Lbrace)+1 : x.off(b.Rbrace)])
-}
-
-func (x *inversion) off(p token.Pos) int { return x.tf.Offset(p) }
-
-func (x *inversion) text(n ast.Node) string {
-	return string(x.src[x.off(n.Pos()):x.off(n.End())])
+	return string(x.Src[x.Off(b.Lbrace)+1 : x.Off(b.Rbrace)])
 }
 
 func (x *inversion) lineHint(line int) string {
-	s := x.src[x.off(x.tf.LineStart(line)):]
+	s := x.Src[x.Off(x.TF.LineStart(line)):]
 	if i := strings.IndexByte(string(s), '\n'); i >= 0 {
 		s = s[:i]
 	}
@@ -396,11 +382,11 @@ func operand(x *inversion, e ast.Expr) expr {
 	e = ast.Unparen(e)
 	switch e := e.(type) {
 	case *ast.BinaryExpr:
-		return expr{x.text(e), e.Op.Precedence()}
+		return expr{x.Text(e), e.Op.Precedence()}
 	case *ast.UnaryExpr:
-		return expr{x.text(e), unaryPrec}
+		return expr{x.Text(e), unaryPrec}
 	}
-	return expr{x.text(e), operandPrec}
+	return expr{x.Text(e), operandPrec}
 }
 
 // paren parenthesizes e if it binds less tightly than prec.
@@ -441,7 +427,7 @@ func negate(x *inversion, e ast.Expr) expr {
 			return expr{paren(l, token.LAND.Precedence()) + " && " + paren(r, token.LAND.Precedence()), token.LAND.Precedence()}
 		case token.EQL, token.NEQ, token.LSS, token.LEQ, token.GTR, token.GEQ:
 			if op, ok := complement(x, e); ok {
-				return expr{x.text(e.X) + " " + op.String() + " " + x.text(e.Y), op.Precedence()}
+				return expr{x.Text(e.X) + " " + op.String() + " " + x.Text(e.Y), op.Precedence()}
 			}
 		}
 	}
@@ -458,7 +444,7 @@ func complement(x *inversion, e *ast.BinaryExpr) (token.Token, bool) {
 	case token.NEQ:
 		return token.EQL, true
 	}
-	if !totallyOrdered(x.info.TypeOf(e.X)) || !totallyOrdered(x.info.TypeOf(e.Y)) {
+	if !totallyOrdered(x.Info.TypeOf(e.X)) || !totallyOrdered(x.Info.TypeOf(e.Y)) {
 		return 0, false
 	}
 	switch e.Op {

@@ -95,8 +95,8 @@ func (*IntroduceParameter) Plan(ws *workspace.Workspace, raw json.RawMessage) (*
 	if err != nil {
 		return nil, err
 	}
-	if pkg != t.pkg { // work in the package variant the target was found in
-		pkg = t.pkg
+	if pkg != t.Pkg { // work in the package variant the target was found in
+		pkg = t.Pkg
 		for _, f := range pkg.Syntax {
 			if f.Pos() <= t.decl.Pos() && t.decl.Pos() < f.End() {
 				file = f
@@ -128,10 +128,10 @@ func (*IntroduceParameter) Plan(ws *workspace.Workspace, raw json.RawMessage) (*
 		return nil, err
 	}
 
-	o := t.off(expr.Pos())
+	o := t.Off(expr.Pos())
 	fes := []edit.FileEdit{{Path: path, Edits: []edit.TextEdit{
 		t.paramEdit(at, a.Parameter, typSrc),
-		{Start: o, End: t.off(expr.End()), NewText: a.Parameter},
+		{Start: o, End: t.Off(expr.End()), NewText: a.Parameter},
 	}}}
 	srcs := map[string][]byte{path: src}
 	adders := map[string]*imports.Adder{}
@@ -186,7 +186,7 @@ func findIntroduced(ws *workspace.Workspace, file *ast.File, src []byte, want []
 // the expression written with that method's own parameters becomes the
 // parameter, and every call of any of them passes expr, of t's body.
 func (t *target) introduceFamily(a introArgs, file *ast.File, src []byte, expr ast.Expr) (*refactor.Plan, error) {
-	info := t.pkg.TypesInfo
+	info := t.Pkg.TypesInfo
 	params := t.paramObjects(info)
 	for _, id := range analysis.ScopeRefs(info, expr) {
 		if i, ok := params[info.Uses[id]]; ok && i < 0 {
@@ -213,10 +213,10 @@ func (t *target) introduceFamily(a introArgs, file *ast.File, src []byte, expr a
 	adders := map[string]*imports.Adder{}
 	typSrc := ""
 	for _, m := range t.group() {
-		mfile := m.syntaxFile()
-		ts, missing := analysis.TypeString(typ, mfile, m.pkg.Types, analysis.ImportMap(m.pkg.Types))
+		mfile := m.File
+		ts, missing := analysis.TypeString(typ, mfile, m.Pkg.Types, analysis.ImportMap(m.Pkg.Types))
 		if missing != "" {
-			return nil, refactor.Refusef("the type of %s, %s, cannot be written in %s without importing %s", a.Expression, typ, t.ws.Rel(m.declFile()), missing)
+			return nil, refactor.Refusef("the type of %s, %s, cannot be written in %s without importing %s", a.Expression, typ, t.WS.Rel(m.declFile()), missing)
 		}
 		if m == t {
 			typSrc = ts
@@ -230,15 +230,15 @@ func (t *target) introduceFamily(a introArgs, file *ast.File, src []byte, expr a
 		edits := []edit.TextEdit{m.paramEdit(at, a.Parameter, ts)}
 		if m.decl != nil {
 			for _, x := range m.occurrences(t, expr) {
-				if err := m.checkIntroduced(m.pkg.TypesInfo, mfile, x); err != nil {
+				if err := m.checkIntroduced(m.Pkg.TypesInfo, mfile, x); err != nil {
 					return nil, refactor.Refusef("in %s.%s: %v", t.typeName(receiverBase(m.obj.Signature().Recv().Type())), m.obj.Name(), err)
 				}
-				edits = append(edits, edit.TextEdit{Start: m.off(x.Pos()), End: m.off(x.End()), NewText: a.Parameter})
+				edits = append(edits, edit.TextEdit{Start: m.Off(x.Pos()), End: m.Off(x.End()), NewText: a.Parameter})
 			}
 		}
 		fes = append(fes, edit.FileEdit{Path: m.declFile(), Edits: edits})
 		for _, c := range m.calls {
-			cpath := t.ws.Fset.Position(c.expr.Pos()).Filename
+			cpath := t.WS.Fset.Position(c.expr.Pos()).Filename
 			csrc, err := read(cpath)
 			if err != nil {
 				return nil, err
@@ -262,15 +262,15 @@ func (t *target) introduceFamily(a introArgs, file *ast.File, src []byte, expr a
 // occurrences returns the expressions of m's body that are expr, of t's
 // body, with each of t's parameters in it m's parameter at the same place.
 func (m *target) occurrences(t *target, expr ast.Expr) []ast.Expr {
-	tparams := t.paramObjects(t.pkg.TypesInfo)
+	tparams := t.paramObjects(t.Pkg.TypesInfo)
 	holes := map[types.Object]int{}
 	for o, i := range tparams {
 		if i >= 0 {
 			holes[o] = 1
 		}
 	}
-	p := &pattern.Matcher{Pkg: t.pkg, Holes: holes}
-	minfo := m.pkg.TypesInfo
+	p := &pattern.Matcher{Pkg: t.Pkg, Holes: holes}
+	minfo := m.Pkg.TypesInfo
 	mparams := m.paramObjects(minfo)
 	var out []ast.Expr
 	ast.Inspect(m.decl.Body, func(n ast.Node) bool {
@@ -295,16 +295,6 @@ func (m *target) occurrences(t *target, expr ast.Expr) []ast.Expr {
 		return false
 	})
 	return out
-}
-
-// syntaxFile returns the file of t.pkg that declares t.
-func (t *target) syntaxFile() *ast.File {
-	for _, f := range t.pkg.Syntax {
-		if f.Pos() <= t.declPos() && t.declPos() < f.End() {
-			return f
-		}
-	}
-	return nil
 }
 
 // checkIntroduced checks that evaluating expr once at the call, instead of
@@ -341,7 +331,7 @@ func (t *target) checkReads(info *types.Info, expr ast.Expr, q string) error {
 			return refactor.Refusef("%s uses %s, declared in the body of %s, which the calls cannot see", q, v.Name(), t.obj.Name())
 		}
 		if mods := fa.Modified[v]; len(mods) > 0 {
-			return refactor.Refusef("%s changes %s (at %s), so %s could have another value there than at the call", t.obj.Name(), v.Name(), t.ws.Position(mods[0].Pos()), q)
+			return refactor.Refusef("%s changes %s (at %s), so %s could have another value there than at the call", t.obj.Name(), v.Name(), t.WS.Position(mods[0].Pos()), q)
 		}
 		if fa.Addressed[v] {
 			return refactor.Refusef("%s takes the address of %s, so it could change, and %s could have another value there than at the call", t.obj.Name(), v.Name(), q)
@@ -355,7 +345,7 @@ func (t *target) checkReads(info *types.Info, expr ast.Expr, q string) error {
 // evaluation is not ordered with their calls), and every other name in
 // expr means the same thing at the call.
 func (t *target) checkCall(info *types.Info, expr ast.Expr, c call, csrc []byte) error {
-	where := t.ws.Position(c.expr.Pos())
+	where := t.WS.Position(c.expr.Pos())
 	if err := checkNoSpread(c, where); err != nil {
 		return err
 	}
@@ -387,7 +377,7 @@ func (t *target) checkCall(info *types.Info, expr ast.Expr, c call, csrc []byte)
 		if t.qualified(o, c) && there == nil {
 			continue // written pkg.Name at the call
 		}
-		if !sameObject(t.ws.Fset, o, there) {
+		if !sameObject(t.WS.Fset, o, there) {
 			return refactor.Refusef("%s means something else at the call at %s (or is not visible there)", id.Name, where)
 		}
 	}
@@ -406,16 +396,16 @@ func (t *target) qualified(o types.Object, c call) bool {
 // effects: the new argument repeats some of them, and its evaluation is
 // not ordered with theirs.
 func (t *target) checkArgEffects(c call, csrc []byte) error {
-	acts := func(e ast.Expr) bool { return t.ws.Effects().Of(analysis.Outside(c.pkg.TypesInfo), e).Effect != "" }
+	acts := func(e ast.Expr) bool { return t.WS.Effects().Of(analysis.Outside(c.pkg.TypesInfo), e).Effect != "" }
 	if x := c.recv(); x != nil && acts(x) {
 		return refactor.Refusef("the receiver %s at %s has side effects; assign it to a variable first",
-			csrc[t.off(x.Pos()):t.off(x.End())], t.ws.Position(x.Pos()))
+			csrc[t.Off(x.Pos()):t.Off(x.End())], t.WS.Position(x.Pos()))
 	}
 	for i, arg := range c.expr.Args {
 		if acts(arg) {
 			p := t.params[min(i, len(t.params)-1)]
 			return refactor.Refusef("the argument %s for %s at %s has side effects; assign it to a variable first",
-				csrc[t.off(arg.Pos()):t.off(arg.End())], p.name, t.ws.Position(arg.Pos()))
+				csrc[t.Off(arg.Pos()):t.Off(arg.End())], p.name, t.WS.Position(arg.Pos()))
 		}
 	}
 	return nil
@@ -497,7 +487,7 @@ func (t *target) substitute(info *types.Info, src []byte, expr ast.Expr, c call,
 			if err != nil {
 				return "", err
 			}
-			rs = append(rs, repl{t.off(id.Pos()), t.off(id.Pos()), q + "."})
+			rs = append(rs, repl{t.Off(id.Pos()), t.Off(id.Pos()), q + "."})
 			continue
 		}
 		i, ok := params[info.Uses[id]]
@@ -510,7 +500,7 @@ func (t *target) substitute(info *types.Info, src []byte, expr ast.Expr, c call,
 		} else {
 			arg = c.expr.Args[i]
 		}
-		text := string(csrc[t.off(arg.Pos()):t.off(arg.End())])
+		text := string(csrc[t.Off(arg.Pos()):t.Off(arg.End())])
 		if !simpleOperand(arg) {
 			text = "(" + text + ")"
 		}
@@ -525,11 +515,11 @@ func (t *target) substitute(info *types.Info, src []byte, expr ast.Expr, c call,
 				text = "(*" + text + ")"
 			}
 		}
-		rs = append(rs, repl{t.off(id.Pos()), t.off(id.End()), text})
+		rs = append(rs, repl{t.Off(id.Pos()), t.Off(id.End()), text})
 	}
 	sort.Slice(rs, func(i, j int) bool { return rs[i].start > rs[j].start })
-	s := string(src[t.off(expr.Pos()):t.off(expr.End())])
-	base := t.off(expr.Pos())
+	s := string(src[t.Off(expr.Pos()):t.Off(expr.End())])
+	base := t.Off(expr.Pos())
 	for _, r := range rs {
 		s = s[:r.start-base] + r.text + s[r.end-base:]
 	}

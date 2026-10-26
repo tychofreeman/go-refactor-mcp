@@ -12,13 +12,12 @@ import (
 	"sort"
 	"strings"
 
-	"golang.org/x/tools/go/packages"
-
 	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/imports"
 	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/site"
 	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
@@ -74,11 +73,7 @@ type kase struct {
 }
 
 type switcher struct {
-	ws      *workspace.Workspace
-	pkg     *packages.Package
-	info    *types.Info
-	file    *ast.File
-	src     []byte
+	site.Site
 	fd      *ast.FuncDecl
 	stmt    ast.Stmt            // the switch
 	block   *ast.BlockStmt      // its body
@@ -171,7 +166,7 @@ func find(ws *workspace.Workspace, a args, typeSwitch bool) (*switcher, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &switcher{ws: ws, pkg: pkg, info: pkg.TypesInfo, file: file, src: src, fd: fds[0], stmt: found[0], method: a.Method}
+	s := &switcher{Site: site.Site{TF: ws.Fset.File(file.Pos()), WS: ws, Pkg: pkg, Info: pkg.TypesInfo, File: file, Src: src}, fd: fds[0], stmt: found[0], method: a.Method}
 	switch st := found[0].(type) {
 	case *ast.TypeSwitchStmt:
 		s.ts, s.block = st, st.Body
@@ -181,16 +176,10 @@ func find(ws *workspace.Workspace, a args, typeSwitch bool) (*switcher, error) {
 	return s, nil
 }
 
-func (s *switcher) at(n ast.Node) string { return s.ws.Position(n.Pos()) }
-
-func (s *switcher) text(n ast.Node) string {
-	return string(s.src[s.off(n.Pos()):s.off(n.End())])
-}
-
-func (s *switcher) off(p token.Pos) int { return s.ws.Fset.Position(p).Offset }
+func (s *switcher) at(n ast.Node) string { return s.WS.Position(n.Pos()) }
 
 func (s *switcher) typeName(t types.Type) string {
-	return types.TypeString(t, types.RelativeTo(s.pkg.Types))
+	return types.TypeString(t, types.RelativeTo(s.Pkg.Types))
 }
 
 // checkSwitch checks the switch itself: its subject, an interface type of
@@ -206,10 +195,10 @@ func (s *switcher) checkSwitch() error {
 	case *ast.ExprStmt:
 		s.subject = as.X.(*ast.TypeAssertExpr).X
 	}
-	t := s.info.TypeOf(s.subject)
+	t := s.Info.TypeOf(s.subject)
 	named, _ := types.Unalias(t).(*types.Named)
-	if named == nil || !types.IsInterface(named) || named.Obj().Pkg() != s.pkg.Types {
-		return refactor.Refusef("%s is of type %s, not an interface type declared in package %s", s.text(s.subject), s.typeName(t), s.pkg.Types.Name())
+	if named == nil || !types.IsInterface(named) || named.Obj().Pkg() != s.Pkg.Types {
+		return refactor.Refusef("%s is of type %s, not an interface type declared in package %s", s.Text(s.subject), s.typeName(t), s.Pkg.Types.Name())
 	}
 	if named.TypeParams().Len() > 0 {
 		return refactor.Refusef("the interface %s has type parameters; not supported yet", named.Obj().Name())
@@ -243,8 +232,8 @@ func (s *switcher) checkPlace(init ast.Stmt) error {
 // checkStable refuses a subject that the new code evaluates again, when
 // it could have another value then.
 func (s *switcher) checkStable() error {
-	if culprit, ok := s.ws.Effects().Of(analysis.AnalyzeFunc(s.info, s.fd), s.subject).Stable(false); !ok {
-		return refactor.Refusef("%s is evaluated again by the call, and %s could change it; assign it to a variable first (extract_variable)", s.text(s.subject), s.text(culprit))
+	if culprit, ok := s.WS.Effects().Of(analysis.AnalyzeFunc(s.Info, s.fd), s.subject).Stable(false); !ok {
+		return refactor.Refusef("%s is evaluated again by the call, and %s could change it; assign it to a variable first (extract_variable)", s.Text(s.subject), s.Text(culprit))
 	}
 	return nil
 }
@@ -260,23 +249,23 @@ func (s *switcher) collectCases() error {
 			continue
 		case len(cc.List) > 1:
 			return refactor.Refusef("the case at %s lists several types; give each its own case first", s.at(cc))
-		case s.info.Types[cc.List[0]].IsNil():
+		case s.Info.Types[cc.List[0]].IsNil():
 			s.nilCase = cc
 			continue
 		}
-		t := s.info.TypeOf(cc.List[0])
+		t := s.Info.TypeOf(cc.List[0])
 		base := t
 		if p, ok := t.(*types.Pointer); ok {
 			base = p.Elem()
 		}
 		named, ok := types.Unalias(base).(*types.Named)
-		if !ok || named.Obj().Pkg() != s.pkg.Types || types.IsInterface(named) || named.TypeParams().Len() > 0 {
-			return refactor.Refusef("the case %s at %s is not a type of package %s that can have methods", s.typeName(t), s.at(cc), s.pkg.Types.Name())
+		if !ok || named.Obj().Pkg() != s.Pkg.Types || types.IsInterface(named) || named.TypeParams().Len() > 0 {
+			return refactor.Refusef("the case %s at %s is not a type of package %s that can have methods", s.typeName(t), s.at(cc), s.Pkg.Types.Name())
 		}
 		if _, ok := named.Underlying().(*types.Pointer); ok {
 			return refactor.Refusef("the case %s at %s is a pointer type, which cannot have methods", s.typeName(t), s.at(cc))
 		}
-		recv, _ := s.info.Implicits[cc].(*types.Var)
+		recv, _ := s.Info.Implicits[cc].(*types.Var)
 		s.cases = append(s.cases, kase{cc, t, named, recv})
 	}
 	if len(s.cases) == 0 {
@@ -293,8 +282,8 @@ func (s *switcher) collectCases() error {
 		if cc == nil {
 			continue
 		}
-		if v := s.info.Implicits[cc]; v != nil && s.uses(cc, v) {
-			return refactor.Refusef("the case at %s uses %s, which it would no longer have; write nil or %s in its place first", s.at(cc), v.Name(), s.text(s.subject))
+		if v := s.Info.Implicits[cc]; v != nil && s.uses(cc, v) {
+			return refactor.Refusef("the case at %s uses %s, which it would no longer have; write nil or %s in its place first", s.at(cc), v.Name(), s.Text(s.subject))
 		}
 	}
 	return nil
@@ -305,7 +294,7 @@ func (s *switcher) uses(cc *ast.CaseClause, obj types.Object) bool {
 	found := false
 	for _, st := range cc.Body {
 		ast.Inspect(st, func(n ast.Node) bool {
-			if id, ok := n.(*ast.Ident); ok && s.info.Uses[id] == obj {
+			if id, ok := n.(*ast.Ident); ok && s.Info.Uses[id] == obj {
 				found = true
 			}
 			return !found
@@ -342,7 +331,7 @@ func (s *switcher) checkCoverage() error {
 		}
 		if at := s.pointerMade(c.named); at != nil {
 			return refactor.Refusef("a *%s is made at %s; with a method on %s, a *%s in %s would run the case %s, which it does not reach now",
-				c.named.Obj().Name(), s.at(at), c.named.Obj().Name(), c.named.Obj().Name(), s.text(s.subject), c.named.Obj().Name())
+				c.named.Obj().Name(), s.at(at), c.named.Obj().Name(), c.named.Obj().Name(), s.Text(s.subject), c.named.Obj().Name())
 		}
 	}
 	return nil
@@ -353,23 +342,23 @@ func (s *switcher) checkCoverage() error {
 func (s *switcher) namedTypes() []*types.Named {
 	var out []*types.Named
 	seen := map[string]bool{}
-	for _, p := range s.ws.Pkgs {
+	for _, p := range s.WS.Pkgs {
 		if p.TypesInfo == nil {
 			continue
 		}
 		for _, o := range p.TypesInfo.Defs {
 			tn, ok := o.(*types.TypeName)
-			if !ok || tn.IsAlias() || seen[analysis.ObjectKey(s.ws.Fset, tn)] {
+			if !ok || tn.IsAlias() || seen[analysis.ObjectKey(s.WS.Fset, tn)] {
 				continue
 			}
 			if n, ok := tn.Type().(*types.Named); ok && !types.IsInterface(n) {
-				seen[analysis.ObjectKey(s.ws.Fset, tn)] = true
+				seen[analysis.ObjectKey(s.WS.Fset, tn)] = true
 				out = append(out, n)
 			}
 		}
 	}
 	sort.Slice(out, func(i, j int) bool {
-		return analysis.ObjectKey(s.ws.Fset, out[i].Obj()) < analysis.ObjectKey(s.ws.Fset, out[j].Obj())
+		return analysis.ObjectKey(s.WS.Fset, out[i].Obj()) < analysis.ObjectKey(s.WS.Fset, out[j].Obj())
 	})
 	return out
 }
@@ -378,7 +367,7 @@ func (s *switcher) namedTypes() []*types.Named {
 // &v or &T{...} of a T, or new(T); or nil.
 func (s *switcher) pointerMade(named *types.Named) ast.Node {
 	key := typeKey(named)
-	for _, p := range s.ws.Pkgs {
+	for _, p := range s.WS.Pkgs {
 		if p.TypesInfo == nil {
 			continue
 		}
@@ -425,11 +414,11 @@ func (s *switcher) checkName() error {
 		}
 	}
 	for _, c := range s.cases {
-		if o, _, _ := types.LookupFieldOrMethod(types.NewPointer(c.named), true, s.pkg.Types, s.method); o != nil {
+		if o, _, _ := types.LookupFieldOrMethod(types.NewPointer(c.named), true, s.Pkg.Types, s.method); o != nil {
 			return refactor.Refusef("%s already has a %s %s", c.named.Obj().Name(), memberKind(o), s.method)
 		}
 		if token.IsExported(s.method) {
-			if iface := analysis.MethodInterface(s.ws.Pkgs, c.named, s.method, true); iface != "" {
+			if iface := analysis.MethodInterface(s.WS.Pkgs, c.named, s.method, true); iface != "" {
 				return refactor.Refusef("a method %s could make %s implement %s, which code checks for at run time, and change behavior with no compile error; choose another name", s.method, c.named.Obj().Name(), iface)
 			}
 		}
@@ -437,7 +426,7 @@ func (s *switcher) checkName() error {
 			if typeKey(n) == typeKey(c.named) || !embeds(n, c.named, map[string]bool{}) {
 				continue
 			}
-			if o, _, _ := types.LookupFieldOrMethod(types.NewPointer(n), true, s.pkg.Types, s.method); o != nil {
+			if o, _, _ := types.LookupFieldOrMethod(types.NewPointer(n), true, s.Pkg.Types, s.method); o != nil {
 				return refactor.Refusef("%s embeds %s and already has a %s %s, which the new method could hide or make ambiguous", n.Obj().Name(), c.named.Obj().Name(), memberKind(o), s.method)
 			}
 		}
@@ -495,7 +484,7 @@ func (s *switcher) returns(cc *ast.CaseClause) (bool, error) {
 			return !has
 		})
 	}
-	if has && !analysis.TerminatingList(s.info, cc.Body, nil) {
+	if has && !analysis.TerminatingList(s.Info, cc.Body, nil) {
 		return false, refactor.Refusef("the case at %s returns on some paths only; every path of a case must return, or none", s.at(cc))
 	}
 	return has, nil
@@ -505,7 +494,7 @@ func (s *switcher) caseName(cc *ast.CaseClause) string {
 	if cc.List == nil {
 		return "default"
 	}
-	return s.text(cc.List[0])
+	return s.Text(cc.List[0])
 }
 
 // checkBodies checks what the cases do: they all return, or none does;
@@ -553,7 +542,7 @@ func (s *switcher) checkBodies() error {
 	names := map[string]*types.Var{}
 	for v := range vars {
 		if other, ok := names[v.Name()]; ok {
-			return refactor.Refusef("the cases use two variables named %s (declared at %s and %s); rename one first", v.Name(), s.ws.Position(other.Pos()), s.ws.Position(v.Pos()))
+			return refactor.Refusef("the cases use two variables named %s (declared at %s and %s); rename one first", v.Name(), s.WS.Position(other.Pos()), s.WS.Position(v.Pos()))
 		}
 		names[v.Name()] = v
 		s.params = append(s.params, v)
@@ -606,7 +595,7 @@ func (s *switcher) checkLeaves(cc *ast.CaseClause, stays bool) error {
 				}
 			case *ast.CallExpr:
 				if id, ok := ast.Unparen(n.Fun).(*ast.Ident); ok && !stays && id.Name == "recover" {
-					if _, b := s.info.Uses[id].(*types.Builtin); b {
+					if _, b := s.Info.Uses[id].(*types.Builtin); b {
 						err = refactor.Refusef("the recover at %s would recover in the method, not the function", s.at(n))
 					}
 				}
@@ -663,7 +652,7 @@ func (s *switcher) freeVars(c kase) ([]*types.Var, error) {
 	var err error
 	inside := func(p token.Pos) bool { return c.clause.Pos() <= p && p < c.clause.End() }
 	local := func(o types.Object) bool {
-		return o.Parent() != nil && o.Parent() != s.pkg.Types.Scope() && s.fd.Pos() <= o.Pos() && o.Pos() < s.fd.End() && !inside(o.Pos())
+		return o.Parent() != nil && o.Parent() != s.Pkg.Types.Scope() && s.fd.Pos() <= o.Pos() && o.Pos() < s.fd.End() && !inside(o.Pos())
 	}
 	for _, st := range c.clause.Body {
 		ast.Inspect(st, func(n ast.Node) bool {
@@ -671,7 +660,7 @@ func (s *switcher) freeVars(c kase) ([]*types.Var, error) {
 			if !ok || err != nil {
 				return err == nil
 			}
-			switch o := s.info.Uses[id].(type) {
+			switch o := s.Info.Uses[id].(type) {
 			case *types.Var:
 				if o != c.recv && !o.IsField() && local(o) && !seen[o] {
 					seen[o] = true
@@ -679,7 +668,7 @@ func (s *switcher) freeVars(c kase) ([]*types.Var, error) {
 				}
 			case *types.Const, *types.TypeName:
 				if o.Pkg() != nil && local(o) {
-					err = refactor.Refusef("the case %s uses %s, declared in %s at %s; move it to package level first", s.caseName(c.clause), o.Name(), locate.FuncName(s.fd), s.ws.Position(o.Pos()))
+					err = refactor.Refusef("the case %s uses %s, declared in %s at %s; move it to package level first", s.caseName(c.clause), o.Name(), locate.FuncName(s.fd), s.WS.Position(o.Pos()))
 				}
 			}
 			return true
@@ -722,7 +711,7 @@ func (s *switcher) checkWrites(c kase) error {
 					written(n.X, "takes the address of")
 				}
 			case *ast.SelectorExpr:
-				if sel := s.info.Selections[n]; sel != nil && sel.Kind() == types.MethodVal && analysis.PtrRecv(sel) && !analysis.IsPointer(s.info.TypeOf(n.X)) {
+				if sel := s.Info.Selections[n]; sel != nil && sel.Kind() == types.MethodVal && analysis.PtrRecv(sel) && !analysis.IsPointer(s.Info.TypeOf(n.X)) {
 					written(n.X, "calls a pointer method on")
 				}
 			}
@@ -740,15 +729,15 @@ func (s *switcher) root(e ast.Expr) *types.Var {
 		case *ast.ParenExpr:
 			e = x.X
 		case *ast.Ident:
-			v, _ := s.info.Uses[x].(*types.Var)
+			v, _ := s.Info.Uses[x].(*types.Var)
 			return v
 		case *ast.SelectorExpr:
-			if sel := s.info.Selections[x]; sel == nil || sel.Kind() != types.FieldVal || sel.Indirect() || analysis.IsPointer(s.info.TypeOf(x.X)) {
+			if sel := s.Info.Selections[x]; sel == nil || sel.Kind() != types.FieldVal || sel.Indirect() || analysis.IsPointer(s.Info.TypeOf(x.X)) {
 				return nil
 			}
 			e = x.X
 		case *ast.IndexExpr:
-			if !analysis.IsArray(s.info.TypeOf(x.X)) {
+			if !analysis.IsArray(s.Info.TypeOf(x.X)) {
 				return nil
 			}
 			e = x.X
@@ -762,8 +751,8 @@ func (s *switcher) root(e ast.Expr) *types.Var {
 // plan writes the methods after the function, adds the method to the
 // interface, and puts the call in place of the switch.
 func (s *switcher) plan() (*refactor.Plan, error) {
-	path := s.ws.Fset.Position(s.fd.Pos()).Filename
-	adder := imports.New(s.ws, s.pkg, s.file, s.src)
+	path := s.WS.Fset.Position(s.fd.Pos()).Filename
+	adder := imports.New(s.WS, s.Pkg, s.File, s.Src)
 	qual := func(a *imports.Adder) types.Qualifier {
 		return func(p *types.Package) string {
 			n, _ := a.Name(p)
@@ -784,7 +773,7 @@ func (s *switcher) plan() (*refactor.Plan, error) {
 		typeNames = append(typeNames, s.typeName(c.typ))
 	}
 
-	subject := s.text(s.subject)
+	subject := s.Text(s.subject)
 	switch ast.Unparen(s.subject).(type) {
 	case *ast.Ident, *ast.SelectorExpr, *ast.CallExpr, *ast.IndexExpr:
 	default:
@@ -808,16 +797,16 @@ func (s *switcher) plan() (*refactor.Plan, error) {
 	var repl string
 	switch {
 	case stays == nil:
-		repl = fmt.Sprintf("if %s != nil {\n%s\t%s\n%s}", s.text(s.subject), ind, call, ind)
-	case returning && analysis.TerminatingList(s.info, stays.Body, nil):
-		repl = fmt.Sprintf("if %s == nil {\n%s%s}\n%s%s", s.text(s.subject), s.body(stays, ind+"\t"), ind, ind, call)
+		repl = fmt.Sprintf("if %s != nil {\n%s\t%s\n%s}", s.Text(s.subject), ind, call, ind)
+	case returning && analysis.TerminatingList(s.Info, stays.Body, nil):
+		repl = fmt.Sprintf("if %s == nil {\n%s%s}\n%s%s", s.Text(s.subject), s.body(stays, ind+"\t"), ind, ind, call)
 	default:
-		repl = fmt.Sprintf("if %s == nil {\n%s%s} else {\n%s\t%s\n%s}", s.text(s.subject), s.body(stays, ind+"\t"), ind, ind, call, ind)
+		repl = fmt.Sprintf("if %s == nil {\n%s%s} else {\n%s\t%s\n%s}", s.Text(s.subject), s.body(stays, ind+"\t"), ind, ind, call, ind)
 	}
 
 	edits := []edit.TextEdit{
-		{Start: s.off(s.ts.Pos()), End: s.off(s.ts.End()), NewText: repl},
-		{Start: s.off(s.fd.End()), End: s.off(s.fd.End()), NewText: "\n\n" + strings.Join(methods, "\n\n")},
+		{Start: s.Off(s.ts.Pos()), End: s.Off(s.ts.End()), NewText: repl},
+		{Start: s.Off(s.fd.End()), End: s.Off(s.fd.End()), NewText: "\n\n" + strings.Join(methods, "\n\n")},
 	}
 	ifaceEdits, ifacePath, err := s.interfaceEdit(path, adder)
 	if err != nil {
@@ -835,7 +824,7 @@ func (s *switcher) plan() (*refactor.Plan, error) {
 		Notes:   notes,
 		Choices: []string{fmt.Sprintf("the methods go after %s; move_declaration moves them", locate.FuncName(s.fd))},
 	}
-	if analysis.PublicAPI(s.iface.Obj(), s.ws.Pkgs) {
+	if analysis.PublicAPI(s.iface.Obj(), s.WS.Pkgs) {
 		plan.Notes = append(plan.Notes, refactor.APINote(s.iface.Obj().Name(), "adding a method to it"))
 	}
 	return plan, nil
@@ -848,7 +837,7 @@ func (s *switcher) signature(q types.Qualifier) string {
 	for _, v := range s.params {
 		ps = append(ps, v.Name()+" "+types.TypeString(v.Type(), q))
 	}
-	results := s.info.Defs[s.fd.Name].(*types.Func).Signature().Results()
+	results := s.Info.Defs[s.fd.Name].(*types.Func).Signature().Results()
 	for i := range results.Len() {
 		rs = append(rs, types.TypeString(results.At(i).Type(), q))
 	}
@@ -873,8 +862,8 @@ func (s *switcher) args() string {
 
 // indent is the white space before the switch on its line.
 func (s *switcher) indent() string {
-	tf := s.ws.Fset.File(s.stmt.Pos())
-	return leading(string(s.src[s.off(tf.LineStart(tf.Line(s.stmt.Pos()))):s.off(s.stmt.Pos())]) + "x")
+	tf := s.WS.Fset.File(s.stmt.Pos())
+	return leading(string(s.Src[s.Off(tf.LineStart(tf.Line(s.stmt.Pos()))):s.Off(s.stmt.Pos())]) + "x")
 }
 
 // body returns the source of a case's body, as whole lines indented by
@@ -885,20 +874,20 @@ func (s *switcher) body(cc *ast.CaseClause, indent string) string {
 	if len(cc.Body) == 0 {
 		return ""
 	}
-	tf := s.ws.Fset.File(cc.Pos())
+	tf := s.WS.Fset.File(cc.Pos())
 	end := s.block.Rbrace
 	for i, st := range s.block.List {
 		if st == cc && i+1 < len(s.block.List) {
 			end = s.block.List[i+1].Pos()
 		}
 	}
-	to := max(s.off(tf.LineStart(tf.Line(end))), s.off(cc.Body[len(cc.Body)-1].End()))
-	from := s.off(tf.LineStart(tf.Line(cc.Colon) + 1))
+	to := max(s.Off(tf.LineStart(tf.Line(end))), s.Off(cc.Body[len(cc.Body)-1].End()))
+	from := s.Off(tf.LineStart(tf.Line(cc.Colon) + 1))
 	lead := ""
 	if tf.Line(cc.Body[0].Pos()) == tf.Line(cc.Colon) {
-		from, lead = s.off(cc.Body[0].Pos()), indent
+		from, lead = s.Off(cc.Body[0].Pos()), indent
 	}
-	text := lead + strings.TrimRight(string(s.src[from:to]), " \t\n")
+	text := lead + strings.TrimRight(string(s.Src[from:to]), " \t\n")
 	return textutil.Reindent(text, leading(text), indent) + "\n"
 }
 
@@ -916,14 +905,14 @@ func leading(text string) string {
 // interfaceEdit adds the method to the interface's declaration, in its
 // file: the edits, and the file's path.
 func (s *switcher) interfaceEdit(path string, adder *imports.Adder) ([]edit.TextEdit, string, error) {
-	ipath := s.ws.Fset.Position(s.iface.Obj().Pos()).Filename
-	ipkg, ifile := s.ws.FileSyntax(ipath)
+	ipath := s.WS.Fset.Position(s.iface.Obj().Pos()).Filename
+	ipkg, ifile := s.WS.FileSyntax(ipath)
 	if ifile == nil {
 		return nil, "", refactor.Refusef("the declaration of %s was not found", s.iface.Obj().Name())
 	}
 	var it *ast.InterfaceType
 	ast.Inspect(ifile, func(n ast.Node) bool {
-		if ts, ok := n.(*ast.TypeSpec); ok && ts.Name.Name == s.iface.Obj().Name() && s.ws.Fset.Position(ts.Name.Pos()) == s.ws.Fset.Position(s.iface.Obj().Pos()) {
+		if ts, ok := n.(*ast.TypeSpec); ok && ts.Name.Name == s.iface.Obj().Name() && s.WS.Fset.Position(ts.Name.Pos()) == s.WS.Fset.Position(s.iface.Obj().Pos()) {
 			it, _ = ts.Type.(*ast.InterfaceType)
 		}
 		return it == nil
@@ -937,15 +926,15 @@ func (s *switcher) interfaceEdit(path string, adder *imports.Adder) ([]edit.Text
 		if err != nil {
 			return nil, "", err
 		}
-		a = imports.New(s.ws, ipkg, ifile, src)
+		a = imports.New(s.WS, ipkg, ifile, src)
 	}
 	q := func(p *types.Package) string {
 		n, _ := a.Name(p)
 		return n
 	}
 	sig := s.signature(q)
-	tf := s.ws.Fset.File(it.Pos())
-	off := func(p token.Pos) int { return s.ws.Fset.Position(p).Offset }
+	tf := s.WS.Fset.File(it.Pos())
+	off := func(p token.Pos) int { return s.WS.Fset.Position(p).Offset }
 	var e edit.TextEdit
 	switch {
 	case tf.Line(it.Methods.Opening) != tf.Line(it.Methods.Closing):

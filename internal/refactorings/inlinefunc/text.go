@@ -49,9 +49,9 @@ func (x *inliner) replacement() ([]edit.TextEdit, error) {
 // the call's place.
 func (x *inliner) exprText() (string, error) {
 	r := x.results[0]
-	text := x.rewrite(x.doff(r.Pos()), x.doff(r.End()))
+	text := x.rewrite(x.callee.Off(r.Pos()), x.callee.Off(r.End()))
 	if strings.Contains(text, "\n") {
-		text = reindentTail(text, indentOf(x.dsrc, x.dtf, r.Pos()), indentOf(x.Src, x.TF, x.call.Pos()))
+		text = reindentTail(text, indentOf(x.callee.Src, x.callee.TF, r.Pos()), indentOf(x.Src, x.TF, x.call.Pos()))
 	}
 	want := x.sig.Results().At(0).Type()
 	if !x.sameType(r, want) && !x.contextConverts(want, analysis.OwnType(x.WS.Fset, x.Pkg.Types, x.Info, r)) {
@@ -195,10 +195,10 @@ func (x *inliner) bindingLine() (string, error) {
 // bodyText returns the body's statements, with parameters replaced and
 // (outside the terminal shape) the final return removed, indented with ind.
 func (x *inliner) bodyText(ind string) string {
-	lb, rb := x.doff(x.decl.Body.Lbrace)+1, x.doff(x.decl.Body.Rbrace)
+	lb, rb := x.callee.Off(x.decl.Body.Lbrace)+1, x.callee.Off(x.decl.Body.Rbrace)
 	extra := append([]edit.TextEdit(nil), x.bodyEdits...)
 	if x.ret != nil {
-		extra = append(extra, x.deleteLine(x.dsrc, x.dtf, x.ret))
+		extra = append(extra, x.deleteLine(x.callee.Src, x.callee.TF, x.ret))
 	}
 	text := x.rewrite(lb, rb, extra...)
 	from := ""
@@ -234,7 +234,7 @@ func (x *inliner) resultLines() ([]string, error) {
 			if x.droppable(r) {
 				continue
 			}
-			t := x.rewrite(x.doff(r.Pos()), x.doff(r.End()))
+			t := x.rewrite(x.callee.Off(r.Pos()), x.callee.Off(r.End()))
 			if c, ok := ast.Unparen(r).(*ast.CallExpr); ok && !x.isConversionOrBuiltin(c) && !x.resultMatters(c) {
 				out = append(out, t)
 			} else {
@@ -247,7 +247,7 @@ func (x *inliner) resultLines() ([]string, error) {
 		spec := ds.Decl.(*ast.GenDecl).Specs[0].(*ast.ValueSpec)
 		var vals []string
 		for i, r := range x.results {
-			t := x.rewrite(x.doff(r.Pos()), x.doff(r.End()))
+			t := x.rewrite(x.callee.Off(r.Pos()), x.callee.Off(r.End()))
 			if !tuple && spec.Type == nil && !x.sameType(r, x.sig.Results().At(i).Type()) {
 				s, err := x.typeString(x.sig.Results().At(i).Type())
 				if err != nil {
@@ -265,7 +265,7 @@ func (x *inliner) resultLines() ([]string, error) {
 	if tuple {
 		lhs := string(x.Src[x.Off(as.Lhs[0].Pos()):x.Off(as.Lhs[len(as.Lhs)-1].End())])
 		r := x.results[0]
-		return []string{lhs + " " + as.Tok.String() + " " + x.rewrite(x.doff(r.Pos()), x.doff(r.End()))}, nil
+		return []string{lhs + " " + as.Tok.String() + " " + x.rewrite(x.callee.Off(r.Pos()), x.callee.Off(r.End()))}, nil
 	}
 	var lhs, rhs []string
 	isNew := false
@@ -277,7 +277,7 @@ func (x *inliner) resultLines() ([]string, error) {
 		if id, ok := l.(*ast.Ident); ok && id.Name == "_" && x.droppable(r) {
 			continue
 		}
-		t := x.rewrite(x.doff(r.Pos()), x.doff(r.End()))
+		t := x.rewrite(x.callee.Off(r.Pos()), x.callee.Off(r.End()))
 		want := x.sig.Results().At(i).Type()
 		newVar := false
 		if id, ok := l.(*ast.Ident); ok && as.Tok == token.DEFINE && x.Info.Defs[id] != nil {
@@ -355,7 +355,7 @@ func (x *inliner) selfAssign(l, r ast.Expr) bool {
 func (x *inliner) rewrite(start, end int, extra ...edit.TextEdit) string {
 	edits := append([]edit.TextEdit(nil), extra...)
 	in := func(n ast.Node) bool {
-		s, e := x.doff(n.Pos()), x.doff(n.End())
+		s, e := x.callee.Off(n.Pos()), x.callee.Off(n.End())
 		for _, d := range extra { // already replaced
 			if d.Start <= s && e <= d.End {
 				return false
@@ -379,11 +379,11 @@ func (x *inliner) rewrite(start, end int, extra ...edit.TextEdit) string {
 			return true
 		}
 		if v, ok := x.Info.ObjectOf(id).(*types.Var); ok && x.merged[v] != nil && x.merged[v].Name != id.Name {
-			edits = append(edits, edit.TextEdit{Start: x.doff(id.Pos()), End: x.doff(id.End()), NewText: x.merged[v].Name})
+			edits = append(edits, edit.TextEdit{Start: x.callee.Off(id.Pos()), End: x.callee.Off(id.End()), NewText: x.merged[v].Name})
 		}
 		if pn, ok := x.Info.Uses[id].(*types.PkgName); ok {
 			if n, err := x.qualifier(pn.Imported()); err == nil && n != id.Name && n != "" {
-				edits = append(edits, edit.TextEdit{Start: x.doff(id.Pos()), End: x.doff(id.End()), NewText: n})
+				edits = append(edits, edit.TextEdit{Start: x.callee.Off(id.Pos()), End: x.callee.Off(id.End()), NewText: n})
 			}
 		}
 		return true
@@ -393,9 +393,9 @@ func (x *inliner) rewrite(start, end int, extra ...edit.TextEdit) string {
 		edits[i].End -= start
 	}
 	sort.Slice(edits, func(i, j int) bool { return edits[i].Start < edits[j].Start })
-	out, err := edit.Apply(x.dsrc[start:end], edits)
+	out, err := edit.Apply(x.callee.Src[start:end], edits)
 	if err != nil {
-		return string(x.dsrc[start:end]) // overlapping edits would be a bug; the type check catches it
+		return string(x.callee.Src[start:end]) // overlapping edits would be a bug; the type check catches it
 	}
 	return string(out)
 }
@@ -405,7 +405,7 @@ func (x *inliner) useEdit(p *param, u *ast.Ident) edit.TextEdit {
 	path := analysis.PathTo(x.decl, u)
 	parent := path[1]
 	at := func(n ast.Node, s string) edit.TextEdit {
-		return edit.TextEdit{Start: x.doff(n.Pos()), End: x.doff(n.End()), NewText: s}
+		return edit.TextEdit{Start: x.callee.Off(n.Pos()), End: x.callee.Off(n.End()), NewText: s}
 	}
 	if p.addr != nil {
 		v := x.Text(p.addr)
@@ -498,14 +498,6 @@ func convText(t, s string) string {
 func reindentTail(text, from, to string) string {
 	i := strings.IndexByte(text, '\n')
 	return text[:i+1] + textutil.Reindent(text[i+1:], from, to)
-}
-
-func (x *inliner) dquote(n ast.Node) string {
-	s := strings.Join(strings.Fields(x.dtext(n)), " ")
-	if len(s) > 60 {
-		s = s[:57] + "..."
-	}
-	return "`" + s + "`"
 }
 
 func (x *inliner) parenText(e ast.Expr) string {

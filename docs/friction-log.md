@@ -2904,6 +2904,21 @@ with replace_text. Nothing by hand. This entry appended with a heredoc.
 The results in cost-history, plan-and-execute and the session notes
 with replace_text. Nothing by hand. This entry appended with a heredoc.
 
+## 2026-10-26: site.Site for the other refactorings
+
+The same derivation as the first three, run per struct by a script
+(`port.py`: extract_struct and the renames in one batch, then the
+alias, the literals, the helper calls and remove_dead_code of the
+helpers in a second). Each `Site:  Site{` literal is aligned by gofmt,
+so the script found them by pattern rather than with one fixed text.
+remove_dead_code refused while a receiver other than the struct's
+usual one still called a helper (`g.` in prepare.go, `first.` in
+parameterize); those receivers were added to the replacements.
+inline_function's declaring file was extracted to a struct and
+renamed to the named field `callee`. The openings moved onto
+`site.At` with replace_text, the imports with fix_imports. Nothing by
+hand. This entry appended with replace_text.
+
 ## 2026-10-26: how this session used the tools
 
 The analysis in the session notes with replace_text. Nothing by hand.

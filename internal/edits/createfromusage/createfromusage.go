@@ -19,6 +19,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/gocode"
 	"github.com/tychofreeman/go-refactor-mcp/internal/imports"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/site"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 	"golang.org/x/tools/go/ast/astutil"
 	"golang.org/x/tools/go/packages"
@@ -92,7 +93,7 @@ func (*CreateFromUsage) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 		return nil, refactor.Refusef("%s calls no function that is not declared, and uses no type as an interface it lacks methods of", a.File)
 	}
 
-	st := &stubber{ws: ws, pkg: pkg, file: file, caller: path, args: a}
+	st := &stubber{Site: site.Site{WS: ws, Pkg: pkg, File: file}, caller: path, args: a}
 	var decls []decl
 	var names, choices []string
 	for _, s := range stubs {
@@ -182,9 +183,7 @@ type decl struct {
 
 // stubber declares the stubs for the calls of one file.
 type stubber struct {
-	ws      *workspace.Workspace
-	pkg     *packages.Package // of the file with the calls
-	file    *ast.File
+	site.Site
 	caller  string // its path
 	args    args
 	imports map[string][]string // by destination file: the packages its stubs' types are from
@@ -196,7 +195,7 @@ type stubber struct {
 // each package written is noted, so that dest imports that one.
 func (st *stubber) writer(dest, path string, recv *types.Named) func(types.Type) string {
 	names := map[string]string{}
-	if pkg, f := st.ws.FileSyntax(dest); f != nil {
+	if pkg, f := st.WS.FileSyntax(dest); f != nil {
 		for _, spec := range f.Imports {
 			p, _ := strconv.Unquote(spec.Path.Value)
 			switch {
@@ -238,11 +237,11 @@ func (st *stubber) declare(s stub) ([]decl, error) {
 	}
 	home, recv, used := "", "", map[string]bool{}
 	if s.recv != nil {
-		home = st.ws.Fset.Position(s.recv.Obj().Pos()).Filename
-		recv = receiver(st.pkg.TypesInfo, s.recv, s.x)
+		home = st.WS.Fset.Position(s.recv.Obj().Pos()).Filename
+		recv = receiver(st.Pkg.TypesInfo, s.recv, s.x)
 		used[strings.Fields(recv)[0]] = true
 	}
-	dest, err := destination(st.ws, s.target, st.caller, st.args.ToFile, home)
+	dest, err := destination(st.WS, s.target, st.caller, st.args.ToFile, home)
 	if err != nil {
 		return nil, err
 	}
@@ -253,13 +252,13 @@ func (st *stubber) declare(s stub) ([]decl, error) {
 	if recv != "" {
 		sig = "(" + recv + ") " + sig
 	}
-	return []decl{funcDecl(st.ws, dest, sig)}, nil
+	return []decl{funcDecl(st.WS, dest, sig)}, nil
 }
 
 // declareType declares s, a type, as a struct with the fields its keyed
 // literals give, typed as their values are.
 func (st *stubber) declareType(s stub) ([]decl, error) {
-	dest, err := destination(st.ws, s.target, st.caller, st.args.ToFile, "")
+	dest, err := destination(st.WS, s.target, st.caller, st.args.ToFile, "")
 	if err != nil {
 		return nil, err
 	}
@@ -276,7 +275,7 @@ func (st *stubber) declareType(s stub) ([]decl, error) {
 			if _, seen := fieldTypes[key.Name]; !ok || seen {
 				continue
 			}
-			t := typeOf(st.pkg.TypesInfo, kv.Value)
+			t := typeOf(st.Pkg.TypesInfo, kv.Value)
 			if t == nil {
 				return nil, refactor.Refusef("cannot tell the type of field %s of %s from %s; declare %s with add_declaration", key.Name, s.name, types.ExprString(kv.Value), s.name)
 			}
@@ -285,7 +284,7 @@ func (st *stubber) declareType(s stub) ([]decl, error) {
 		}
 	}
 	if len(s.lits) == 0 {
-		return []decl{{file: dest, at: -1, text: fmt.Sprintf("\ntype %s struct{}\n", s.name), choice: fmt.Sprintf("type %s struct{}, in %s: it is only named as a type; add its fields", s.name, st.ws.Rel(dest))}}, nil
+		return []decl{{file: dest, at: -1, text: fmt.Sprintf("\ntype %s struct{}\n", s.name), choice: fmt.Sprintf("type %s struct{}, in %s: it is only named as a type; add its fields", s.name, st.WS.Rel(dest))}}, nil
 	}
 	if len(names) == 0 {
 		return nil, refactor.Refusef("cannot tell the fields of %s: no literal of it names them; write one with field names (%s{name: value}), or declare %s with add_declaration", s.name, s.name, s.name)
@@ -296,7 +295,7 @@ func (st *stubber) declareType(s stub) ([]decl, error) {
 		fmt.Fprintf(&b, "\t%s %s\n", n, fieldTypes[n])
 	}
 	b.WriteString("}\n")
-	return []decl{{file: dest, at: -1, text: b.String(), choice: fmt.Sprintf("type %s struct with %s, in %s", s.name, strings.Join(names, ", "), st.ws.Rel(dest))}}, nil
+	return []decl{{file: dest, at: -1, text: b.String(), choice: fmt.Sprintf("type %s struct with %s, in %s", s.name, strings.Join(names, ", "), st.WS.Rel(dest))}}, nil
 }
 
 // declareField adds s, a field, to its struct, s.recv.
@@ -319,8 +318,8 @@ func (st *stubber) declareField(s stub) ([]decl, error) {
 	if s.ftype == nil {
 		return nil, refactor.Refusef("cannot tell the type of field %s of %s from how %s uses it; add it with add_field", s.name, obj.Name(), st.args.File)
 	}
-	pos := st.ws.Fset.Position(obj.Pos())
-	_, f := st.ws.FileSyntax(pos.Filename)
+	pos := st.WS.Fset.Position(obj.Pos())
+	_, f := st.WS.FileSyntax(pos.Filename)
 	var fields *ast.FieldList
 	ast.Inspect(f, func(n ast.Node) bool {
 		if ts, ok := n.(*ast.TypeSpec); ok && ts.Name.Pos() == obj.Pos() {
@@ -333,13 +332,13 @@ func (st *stubber) declareField(s stub) ([]decl, error) {
 	if fields == nil {
 		return nil, refactor.Refusef("cannot find the declaration of struct %s", obj.Name())
 	}
-	tf := st.ws.Fset.File(f.Pos())
+	tf := st.WS.Fset.File(f.Pos())
 	src, err := os.ReadFile(pos.Filename)
 	if err != nil {
 		return nil, err
 	}
 	field := s.name + " " + st.writer(pos.Filename, obj.Pkg().Path(), nil)(s.ftype)
-	choice := fmt.Sprintf("field %s, in struct %s in %s", field, obj.Name(), st.ws.Rel(pos.Filename))
+	choice := fmt.Sprintf("field %s, in struct %s in %s", field, obj.Name(), st.WS.Rel(pos.Filename))
 	if tf.Line(fields.Opening) != tf.Line(fields.Closing) {
 		at := tf.Offset(tf.LineStart(tf.Line(fields.Closing)))
 		return []decl{{file: pos.Filename, at: at, text: gocode.IndentOf(src, at) + "\t" + field + "\n", choice: choice, field: true}}, nil
@@ -370,15 +369,15 @@ func (st *stubber) signature(s stub, write func(types.Type) string, used map[str
 	if s.sig != nil {
 		return s.name + sigString(s.sig, write), nil
 	}
-	line := st.ws.Fset.Position(s.call.Pos()).Line
-	params, err := parameters(st.pkg.TypesInfo, s.call, write, used)
+	line := st.WS.Fset.Position(s.call.Pos()).Line
+	params, err := parameters(st.Pkg.TypesInfo, s.call, write, used)
 	if err != nil {
 		return "", refactor.Refusef("for %s, called on line %d of %s: %v", s.name, line, st.args.File, err)
 	}
 	res, ok := st.args.Results[s.name]
 	if ok {
 		res = resultText(res)
-	} else if res, ok = results(st.pkg.TypesInfo, st.file, s.call, write); !ok {
+	} else if res, ok = results(st.Pkg.TypesInfo, st.File, s.call, write); !ok {
 		return "", refactor.Refusef("cannot tell the results of %s from its use on line %d of %s; give them in results, e.g. {%q: \"(int, error)\"}", s.name, line, st.args.File, s.name)
 	}
 	return s.name + "(" + strings.Join(params, ", ") + ")" + res, nil
@@ -387,14 +386,14 @@ func (st *stubber) signature(s stub, write func(types.Type) string, used map[str
 // implement declares s.method, of an interface, on s.recv, with the
 // interface's signature.
 func (st *stubber) implement(s stub) ([]decl, error) {
-	home := st.ws.Fset.Position(s.recv.Obj().Pos()).Filename
-	dest, err := destination(st.ws, s.target, st.caller, st.args.ToFile, home)
+	home := st.WS.Fset.Position(s.recv.Obj().Pos()).Filename
+	dest, err := destination(st.WS, s.target, st.caller, st.args.ToFile, home)
 	if err != nil {
 		return nil, err
 	}
 	sig := sigString(s.method.Type().(*types.Signature), st.writer(dest, s.target.PkgPath, s.recv))
-	recv := receiver(st.pkg.TypesInfo, s.recv, s.x)
-	return []decl{funcDecl(st.ws, dest, "("+recv+") "+s.name+sig)}, nil
+	recv := receiver(st.Pkg.TypesInfo, s.recv, s.x)
+	return []decl{funcDecl(st.WS, dest, "("+recv+") "+s.name+sig)}, nil
 }
 
 // extend adds the method s calls to the interface s.recv, and a stub of it
@@ -402,13 +401,13 @@ func (st *stubber) implement(s stub) ([]decl, error) {
 // still does.
 func (st *stubber) extend(s stub) ([]decl, error) {
 	obj := s.recv.Obj()
-	pos := st.ws.Fset.Position(obj.Pos())
-	_, f := st.ws.FileSyntax(pos.Filename)
-	it := interfaceType(st.ws, f, pos.Offset)
+	pos := st.WS.Fset.Position(obj.Pos())
+	_, f := st.WS.FileSyntax(pos.Filename)
+	it := interfaceType(st.WS, f, pos.Offset)
 	if it == nil {
 		return nil, refactor.Refusef("cannot find the declaration of interface %s", obj.Name())
 	}
-	tf := st.ws.Fset.File(f.Pos())
+	tf := st.WS.Fset.File(f.Pos())
 	src, err := os.ReadFile(pos.Filename)
 	if err != nil {
 		return nil, err
@@ -417,7 +416,7 @@ func (st *stubber) extend(s stub) ([]decl, error) {
 	if err != nil {
 		return nil, err
 	}
-	choice := fmt.Sprintf("%s, in interface %s in %s", sig, obj.Name(), st.ws.Rel(pos.Filename))
+	choice := fmt.Sprintf("%s, in interface %s in %s", sig, obj.Name(), st.WS.Rel(pos.Filename))
 	var decls []decl
 	if tf.Line(it.Methods.Opening) == tf.Line(it.Methods.Closing) {
 		// Spread it over lines, which gofmt then indents.
@@ -428,14 +427,14 @@ func (st *stubber) extend(s stub) ([]decl, error) {
 		at := tf.Offset(tf.LineStart(tf.Line(it.Methods.Closing)))
 		decls = append(decls, decl{file: pos.Filename, at: at, text: gocode.IndentOf(src, at) + "\t" + sig + "\n", choice: choice})
 	}
-	for _, t := range implementers(st.ws, s.recv) {
-		home := st.ws.Fset.Position(t.Obj().Pos()).Filename
-		recv := receiver(st.pkg.TypesInfo, t, nil)
+	for _, t := range implementers(st.WS, s.recv) {
+		home := st.WS.Fset.Position(t.Obj().Pos()).Filename
+		recv := receiver(st.Pkg.TypesInfo, t, nil)
 		tsig, err := st.signature(s, st.writer(home, t.Obj().Pkg().Path(), nil), map[string]bool{strings.Fields(recv)[0]: true})
 		if err != nil {
 			return nil, err
 		}
-		decls = append(decls, funcDecl(st.ws, home, "("+recv+") "+tsig))
+		decls = append(decls, funcDecl(st.WS, home, "("+recv+") "+tsig))
 	}
 	return decls, nil
 }

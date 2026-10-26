@@ -18,7 +18,7 @@ import (
 // evaluated once on every call. The value may not have side effects at
 // all: they belong to the body, not to every call.
 func (t *target) checkEvaluation(info *types.Info, file *ast.File, expr ast.Expr, q string) error {
-	m := analysis.Move{Effects: t.ws.Effects(), Func: analysis.AnalyzeFunc(info, t.decl), Expr: expr}
+	m := analysis.Move{Effects: t.WS.Effects(), Func: analysis.AnalyzeFunc(info, t.decl), Expr: expr}
 	if s := m.Effects.Of(m.Func, expr); s.Effect != "" { // the value is evaluated at the call, where the body's effects do not belong
 		return refactor.Refusef("%s has side effects (%s); evaluated at each call instead, they would happen where the body would not", q, t.brief(s.At.Effect))
 	}
@@ -42,13 +42,13 @@ func (t *target) checkEvaluation(info *types.Info, file *ast.File, expr ast.Expr
 	case o.Past == nil:
 		return refactor.Refusef("%s %s, and it is not evaluated on every call (%s)", q, o.Does, where)
 	case o.PastDoes == "leaves":
-		return refactor.Refusef("%s %s, and it is not evaluated on every call (%s (at %s) returns before it)", q, o.Does, t.brief(o.Past), t.ws.Position(o.Past.Pos()))
+		return refactor.Refusef("%s %s, and it is not evaluated on every call (%s (at %s) returns before it)", q, o.Does, t.brief(o.Past), t.WS.Position(o.Past.Pos()))
 	case o.Kind == analysis.Reads:
-		return refactor.Refusef("%s reads memory that %s (at %s) could change before it", q, t.brief(o.Past), t.ws.Position(o.Past.Pos()))
+		return refactor.Refusef("%s reads memory that %s (at %s) could change before it", q, t.brief(o.Past), t.WS.Position(o.Past.Pos()))
 	case o.Kind == analysis.Panics && strings.HasPrefix(o.PastDoes, "could panic"):
-		return refactor.Refusef("%s %s, and %s (at %s) could panic before it", q, o.Does, t.brief(o.Past), t.ws.Position(o.Past.Pos()))
+		return refactor.Refusef("%s %s, and %s (at %s) could panic before it", q, o.Does, t.brief(o.Past), t.WS.Position(o.Past.Pos()))
 	default:
-		return refactor.Refusef("%s %s, and %s (at %s) has side effects before it (it %s)", q, o.Does, t.brief(o.Past), t.ws.Position(o.Past.Pos()), o.PastDoes)
+		return refactor.Refusef("%s %s, and %s (at %s) has side effects before it (it %s)", q, o.Does, t.brief(o.Past), t.WS.Position(o.Past.Pos()), o.PastDoes)
 	}
 }
 
@@ -81,7 +81,7 @@ func (t *target) notOnEveryCall(path []ast.Node) (where string, repeated bool) {
 
 // brief returns n's source for a message, shortened to its start if long.
 func (t *target) brief(n ast.Node) string {
-	s := strings.Join(strings.Fields(t.text(n)), " ")
+	s := strings.Join(strings.Fields(t.Text(n)), " ")
 	if len(s) > 40 {
 		return s[:37] + "..."
 	}

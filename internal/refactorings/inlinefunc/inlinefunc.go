@@ -93,9 +93,7 @@ type inliner struct {
 	fn       *types.Func
 	sig      *types.Signature
 	decl     *ast.FuncDecl
-	dfile    *ast.File
-	dtf      *token.File
-	dsrc     []byte
+	callee   site.Site // the file that declares the function
 	calleeFA *analysis.Func
 	fnScope  *types.Scope // the function's scope: parameters and top-level body declarations
 	returns  []*ast.ReturnStmt
@@ -270,7 +268,7 @@ func (x *inliner) plan() (*refactor.Plan, error) {
 
 	deleted, why := x.deletable()
 	if deleted {
-		fes = append(fes, edit.FileEdit{Path: x.dtf.Name(), Edits: x.deletion()})
+		fes = append(fes, edit.FileEdit{Path: x.callee.TF.Name(), Edits: x.deletion()})
 	}
 	fes = edit.Merge(append(fes, x.importEdits(deleted)...))
 
@@ -389,7 +387,7 @@ func (x *inliner) findCallee() error {
 	for _, f := range x.Pkg.Syntax {
 		for _, d := range f.Decls {
 			if fd, ok := d.(*ast.FuncDecl); ok && x.Info.Defs[fd.Name] == x.fn {
-				x.decl, x.dfile = fd, f
+				x.decl, x.callee.File = fd, f
 			}
 		}
 	}
@@ -406,15 +404,16 @@ func (x *inliner) findCallee() error {
 			}
 		}
 	}
-	x.dtf = x.WS.Fset.File(x.dfile.Pos())
-	if x.dtf.Name() == x.TF.Name() {
-		x.dsrc = x.Src
+	x.callee.WS = x.WS
+	x.callee.TF = x.WS.Fset.File(x.callee.File.Pos())
+	if x.callee.TF.Name() == x.TF.Name() {
+		x.callee.Src = x.Src
 	} else {
-		src, err := os.ReadFile(x.dtf.Name())
+		src, err := os.ReadFile(x.callee.TF.Name())
 		if err != nil {
 			return err
 		}
-		x.dsrc = src
+		x.callee.Src = src
 	}
 	x.calleeFA = analysis.AnalyzeFunc(x.Info, x.decl)
 	x.fnScope = x.Info.Scopes[x.decl.Type]
@@ -1035,10 +1034,6 @@ func (x *inliner) callerHasGoto() bool {
 
 // ---------------------------------------------------------------------------
 // Helpers
-
-func (x *inliner) doff(p token.Pos) int { return x.dtf.Offset(p) }
-
-func (x *inliner) dtext(n ast.Node) string { return string(x.dsrc[x.doff(n.Pos()):x.doff(n.End())]) }
 
 // indentOf returns the leading white space of the line holding p in src.
 func indentOf(src []byte, tf *token.File, p token.Pos) string {

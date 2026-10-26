@@ -33,7 +33,7 @@ func (x *inliner) deletable() (bool, string) {
 			if x.posKey(id.Pos()) == call {
 				continue
 			}
-			if pos := x.WS.Fset.Position(id.Pos()); pos.Filename == x.dtf.Name() && x.doff(x.decl.Pos()) <= pos.Offset && pos.Offset < x.doff(x.decl.End()) {
+			if pos := x.WS.Fset.Position(id.Pos()); pos.Filename == x.callee.TF.Name() && x.callee.Off(x.decl.Pos()) <= pos.Offset && pos.Offset < x.callee.Off(x.decl.End()) {
 				return false, "it calls itself"
 			}
 			return false, fmt.Sprintf("it is still used, for example at %s", x.WS.Position(id.Pos()))
@@ -55,13 +55,13 @@ func (x *inliner) posKey(p token.Pos) string {
 // deletion removes the function (with its doc comment and a blank line next
 // to it) and the imports of its file that nothing else uses.
 func (x *inliner) deletion() []edit.TextEdit {
-	src := x.dsrc
+	src := x.callee.Src
 	start := x.decl.Pos()
 	if x.decl.Doc != nil {
 		start = x.decl.Doc.Pos()
 	}
-	s := x.doff(x.dtf.LineStart(x.dtf.Line(start)))
-	e := x.doff(x.decl.End())
+	s := x.callee.Off(x.callee.TF.LineStart(x.callee.TF.Line(start)))
+	e := x.callee.Off(x.decl.End())
 	for e < len(src) && src[e] != '\n' {
 		e++
 	}
@@ -84,7 +84,7 @@ type span struct{ start, end int }
 // used only by the deleted function's signature, by an absorbed variable
 // declaration, or by a dropped argument.
 func (x *inliner) importEdits(deletedFn bool) []edit.FileEdit {
-	sameFile := x.dtf.Name() == x.TF.Name()
+	sameFile := x.callee.TF.Name() == x.TF.Name()
 	var caller []span
 	for _, e := range x.callerEdits {
 		caller = append(caller, span{e.Start, e.End})
@@ -97,10 +97,10 @@ func (x *inliner) importEdits(deletedFn bool) []edit.FileEdit {
 	var callee []span
 	if deletedFn {
 		callee = append(callee,
-			span{x.doff(x.decl.Pos()), x.doff(x.decl.Body.Lbrace)},
-			span{x.doff(x.decl.Body.Rbrace), x.doff(x.decl.End())})
+			span{x.callee.Off(x.decl.Pos()), x.callee.Off(x.decl.Body.Lbrace)},
+			span{x.callee.Off(x.decl.Body.Rbrace), x.callee.Off(x.decl.End())})
 		if !sameFile {
-			callee = []span{{x.doff(x.decl.Pos()), x.doff(x.decl.End())}}
+			callee = []span{{x.callee.Off(x.decl.Pos()), x.callee.Off(x.decl.End())}}
 		}
 	}
 	var out []edit.FileEdit
@@ -116,8 +116,8 @@ func (x *inliner) importEdits(deletedFn bool) []edit.FileEdit {
 		}
 	}
 	if len(callee) > 0 {
-		if es := x.unusedImports(x.dfile, x.dtf, x.dsrc, callee); len(es) > 0 {
-			out = append(out, edit.FileEdit{Path: x.dtf.Name(), Edits: es})
+		if es := x.unusedImports(x.callee.File, x.callee.TF, x.callee.Src, callee); len(es) > 0 {
+			out = append(out, edit.FileEdit{Path: x.callee.TF.Name(), Edits: es})
 		}
 	}
 	return out

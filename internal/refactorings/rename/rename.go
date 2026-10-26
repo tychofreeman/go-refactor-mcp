@@ -26,6 +26,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/site"
 	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
@@ -419,7 +420,7 @@ func (r *renamer) checkLexical() error {
 				}
 				if strictlyInside(decl, o.Parent()) {
 					return refactor.Refusef("renaming to %q would hide the %s %q declared at %s, which is used at %s",
-						r.new, kind(o), r.new, declaredAt(r.ws, o), r.ws.Position(id.Pos()))
+						r.new, kind(o), r.new, site.DeclaredAt(r.ws, o), r.ws.Position(id.Pos()))
 				}
 			}
 		}
@@ -458,7 +459,7 @@ func (r *renamer) checkFieldOrMethod() error {
 			case keyOf(ws.Fset, sel.Obj()) == r.key:
 				if o, idx, _ := types.LookupFieldOrMethod(sel.Recv(), true, sel.Obj().Pkg(), r.new); o != nil && len(idx) <= len(sel.Index()) {
 					return refactor.Refusef("%s already has a %s named %q (declared at %s)",
-						typeString(sel.Recv()), kind(o), r.new, declaredAt(ws, o))
+						typeString(sel.Recv()), kind(o), r.new, site.DeclaredAt(ws, o))
 				}
 			case sel.Obj().Name() == r.new:
 				// The reverse: an existing selection of the new name would be
@@ -466,7 +467,7 @@ func (r *renamer) checkFieldOrMethod() error {
 				if o, idx, _ := types.LookupFieldOrMethod(sel.Recv(), true, obj.Pkg(), r.old); o != nil &&
 					keyOf(ws.Fset, o) == r.key && len(idx) < len(sel.Index()) {
 					return refactor.Refusef("renaming would hide the promoted %s %q of %s that is used at %s",
-						kind(sel.Obj()), r.new, typeString(sel.Recv()), declaredAt(ws, sel.Obj()))
+						kind(sel.Obj()), r.new, typeString(sel.Recv()), site.DeclaredAt(ws, sel.Obj()))
 				}
 			}
 		}
@@ -487,7 +488,7 @@ func (r *renamer) checkFieldOrMethod() error {
 		}
 		if named != nil {
 			if m, _, _ := types.LookupFieldOrMethod(types.NewPointer(named), false, obj.Pkg(), r.new); m != nil {
-				return refactor.Refusef("type %s already has a %s %q (at %s)", named.Obj().Name(), kind(m), r.new, declaredAt(ws, m))
+				return refactor.Refusef("type %s already has a %s %q (at %s)", named.Obj().Name(), kind(m), r.new, site.DeclaredAt(ws, m))
 			}
 		}
 	case *types.Func: // method
@@ -496,7 +497,7 @@ func (r *renamer) checkFieldOrMethod() error {
 			return nil
 		}
 		if m, _, _ := types.LookupFieldOrMethod(types.NewPointer(named), false, obj.Pkg(), r.new); m != nil {
-			return refactor.Refusef("type %s already has a %s %q (at %s)", named.Obj().Name(), kind(m), r.new, declaredAt(ws, m))
+			return refactor.Refusef("type %s already has a %s %q (at %s)", named.Obj().Name(), kind(m), r.new, site.DeclaredAt(ws, m))
 		}
 		return r.checkInterfaces(named)
 	}
@@ -549,7 +550,7 @@ func (r *renamer) checkEmbedded() error {
 		}
 		if o, idx, _ := types.LookupFieldOrMethod(pr.sel.Recv(), true, r.first.Pkg(), r.new); o != nil && len(idx) <= pr.depth {
 			return refactor.Refusef("%s already has a %s named %q (declared at %s), so %s at %s could not name the renamed field",
-				typeString(pr.sel.Recv()), kind(o), r.new, declaredAt(r.ws, o), types.ExprString(pr.expr), r.ws.Position(pr.expr.Pos()))
+				typeString(pr.sel.Recv()), kind(o), r.new, site.DeclaredAt(r.ws, o), types.ExprString(pr.expr), r.ws.Position(pr.expr.Pos()))
 		}
 	}
 	return r.checkPromotedMethods()
@@ -1165,13 +1166,6 @@ func kind(obj types.Object) string {
 		return "builtin"
 	}
 	return "symbol"
-}
-
-func declaredAt(ws *workspace.Workspace, o types.Object) string {
-	if o.Pkg() == nil {
-		return "universe scope (predeclared)"
-	}
-	return ws.Position(o.Pos())
 }
 
 func typeString(t types.Type) string {

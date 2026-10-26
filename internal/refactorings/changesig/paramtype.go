@@ -113,7 +113,7 @@ func (*ChangeParameterType) Plan(ws *workspace.Workspace, raw json.RawMessage) (
 		if err := m.checkInterfaces(func(ps []string) []string { ps[at] = typeKey(newT); return ps }); err != nil {
 			return nil, err
 		}
-		decl, err := files.of(m.pkg, m.declPos())
+		decl, err := files.of(m.Pkg, m.declPos())
 		if err != nil {
 			return nil, err
 		}
@@ -140,10 +140,10 @@ func (*ChangeParameterType) Plan(ws *workspace.Workspace, raw json.RawMessage) (
 // the declaration of every member of the family. Nothing else changes:
 // the calls and bodies already use the same type.
 func (t *target) respell(name string, at int, old, newT types.Type, variadic bool) (*refactor.Plan, error) {
-	files := newFileEdits(t.ws)
+	files := newFileEdits(t.WS)
 	changed := false
 	for _, m := range t.group() {
-		decl, err := files.of(m.pkg, m.declPos())
+		decl, err := files.of(m.Pkg, m.declPos())
 		if err != nil {
 			return nil, err
 		}
@@ -152,7 +152,7 @@ func (t *target) respell(name string, at int, old, newT types.Type, variadic boo
 		if variadic {
 			typ = "..." + typ
 		}
-		if typ == m.text(p.field.Type) {
+		if typ == m.Text(p.field.Type) {
 			continue
 		}
 		decl.edits = append(decl.edits, m.fieldEdit(p, typ))
@@ -194,21 +194,21 @@ func (t *target) parseType(src string) (types.Type, error) {
 	}
 	// A package with the declaring package's names, the declaring file's
 	// imports, and the packages named in src that the file lacks.
-	scope := types.NewPackage(t.pkg.PkgPath, t.pkg.Name)
-	for _, n := range t.pkg.Types.Scope().Names() {
-		scope.Scope().Insert(t.pkg.Types.Scope().Lookup(n))
+	scope := types.NewPackage(t.Pkg.PkgPath, t.Pkg.Name)
+	for _, n := range t.Pkg.Types.Scope().Names() {
+		scope.Scope().Insert(t.Pkg.Types.Scope().Lookup(n))
 	}
-	for _, f := range t.pkg.Syntax {
-		if t.ws.Fset.File(f.Pos()) != t.ws.Fset.File(t.declPos()) {
+	for _, f := range t.Pkg.Syntax {
+		if t.WS.Fset.File(f.Pos()) != t.WS.Fset.File(t.declPos()) {
 			continue
 		}
 		for _, spec := range f.Imports {
-			if pn := t.pkg.TypesInfo.PkgNameOf(spec); pn != nil {
+			if pn := t.Pkg.TypesInfo.PkgNameOf(spec); pn != nil {
 				scope.Scope().Insert(pn)
 			}
 		}
 	}
-	loaded := loadedPackages(t.ws)
+	loaded := loadedPackages(t.WS)
 	var missing error
 	ast.Inspect(expr, func(n ast.Node) bool {
 		sel, ok := n.(*ast.SelectorExpr)
@@ -223,16 +223,16 @@ func (t *target) parseType(src string) (types.Type, error) {
 		case 1:
 			scope.Scope().Insert(types.NewPkgName(token.NoPos, scope, x.Name, found[0]))
 		case 0:
-			missing = refactor.Refusef("no package %s is loaded; import it in %s first", x.Name, t.ws.Rel(t.declFile()))
+			missing = refactor.Refusef("no package %s is loaded; import it in %s first", x.Name, t.WS.Rel(t.declFile()))
 		default:
-			missing = refactor.Refusef("several packages are named %s; import the one you mean in %s first", x.Name, t.ws.Rel(t.declFile()))
+			missing = refactor.Refusef("several packages are named %s; import the one you mean in %s first", x.Name, t.WS.Rel(t.declFile()))
 		}
 		return false
 	})
 	if missing != nil {
 		return nil, missing
 	}
-	tv, err := types.Eval(t.ws.Fset, scope, token.NoPos, src)
+	tv, err := types.Eval(t.WS.Fset, scope, token.NoPos, src)
 	if err != nil || !tv.IsType() {
 		reason := "it is not a type"
 		if err != nil {
@@ -263,9 +263,9 @@ func loadedPackages(ws *workspace.Workspace) map[string][]*types.Package {
 func (t *target) fieldEdit(p param, typ string) edit.TextEdit {
 	f := p.field
 	if len(f.Names) <= 1 {
-		return edit.TextEdit{Start: t.off(f.Type.Pos()), End: t.off(f.Type.End()), NewText: typ}
+		return edit.TextEdit{Start: t.Off(f.Type.Pos()), End: t.Off(f.Type.End()), NewText: typ}
 	}
-	old := t.text(f.Type)
+	old := t.Text(f.Type)
 	names := func(ids []*ast.Ident) string {
 		var ns []string
 		for _, id := range ids {
@@ -281,7 +281,7 @@ func (t *target) fieldEdit(p param, typ string) edit.TextEdit {
 	if p.index < len(f.Names)-1 {
 		parts = append(parts, names(f.Names[p.index+1:])+" "+old)
 	}
-	return edit.TextEdit{Start: t.off(f.Pos()), End: t.off(f.End()), NewText: strings.Join(parts, ", ")}
+	return edit.TextEdit{Start: t.Off(f.Pos()), End: t.Off(f.End()), NewText: strings.Join(parts, ", ")}
 }
 
 // bodyEdits checks the body's uses of p, and when its type is converted,
@@ -290,11 +290,11 @@ func (t *target) bodyEdits(p param, old, newT types.Type, widen bool, decl *file
 	if t.decl == nil {
 		return nil, nil // an interface method has no body
 	}
-	info := t.pkg.TypesInfo
+	info := t.Pkg.TypesInfo
 	v := info.Defs[p.field.Names[p.index]]
 	var file *ast.File
-	for _, f := range t.pkg.Syntax {
-		if t.ws.Fset.File(f.Pos()) == t.ws.Fset.File(t.decl.Pos()) {
+	for _, f := range t.Pkg.Syntax {
+		if t.WS.Fset.File(f.Pos()) == t.WS.Fset.File(t.decl.Pos()) {
 			file = f
 		}
 	}
@@ -306,7 +306,7 @@ func (t *target) bodyEdits(p param, old, newT types.Type, widen bool, decl *file
 			return err == nil
 		}
 		path, _ := astutil.PathEnclosingInterval(file, id.Pos(), id.End())
-		line := t.ws.Fset.Position(id.Pos()).Line
+		line := t.WS.Fset.Position(id.Pos()).Line
 		if widen {
 			if b, ok := path[1].(*ast.BinaryExpr); ok && !types.IsInterface(old) && (info.Types[b.X].IsNil() || info.Types[b.Y].IsNil()) {
 				err = refactor.Refusef("the body compares %s with nil on line %d; held in the interface %s, a nil %s is not nil, so that would change", p.name, line, t.typeName(newT), t.typeName(old))
@@ -345,8 +345,8 @@ func (t *target) conversion(n ast.Node, typ string) []edit.TextEdit {
 	if strings.HasPrefix(typ, "*") || strings.HasPrefix(typ, "<-") || strings.HasPrefix(typ, "func") {
 		typ = "(" + typ + ")"
 	}
-	return []edit.TextEdit{{Start: t.off(n.Pos()), End: t.off(n.Pos()), NewText: typ + "("},
-		{Start: t.off(n.End()), End: t.off(n.End()), NewText: ")"}}
+	return []edit.TextEdit{{Start: t.Off(n.Pos()), End: t.Off(n.Pos()), NewText: typ + "("},
+		{Start: t.Off(n.End()), End: t.Off(n.End()), NewText: ")"}}
 }
 
 // typeIrrelevant reports whether the use path[0] of a parameter works the
@@ -384,7 +384,7 @@ func typeIrrelevant(info *types.Info, path []ast.Node, sameUnderlying bool) bool
 // convertArg converts the argument at index at of call c to typ, unless
 // it is an untyped constant, which takes the new type as it did the old.
 func (t *target) convertArg(files *fileSet, c call, at int, typ types.Type) error {
-	where := t.ws.Position(c.expr.Pos())
+	where := t.WS.Position(c.expr.Pos())
 	if err := checkNoSpread(c, where); err != nil {
 		return err
 	}

@@ -19,6 +19,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/site"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
 
@@ -154,7 +155,7 @@ func (*ChangeFieldType) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 	if err != nil {
 		return nil, err
 	}
-	t := &target{ws: ws, pkg: declPkg, obj: types.NewFunc(field.Pos(), field.Pkg(), field.Name(), nil)}
+	t := &target{Site: site.Site{WS: ws, Pkg: declPkg}, obj: types.NewFunc(field.Pos(), field.Pkg(), field.Name(), nil)}
 	t.ftype = &ast.FuncType{Params: &ast.FieldList{Closing: decl.End()}}
 	newT, err := t.parseType(a.Type)
 	if err != nil {
@@ -412,7 +413,7 @@ func (m converting) read(c *fieldChange, p *packages.Package, path []ast.Node, e
 	if err != nil {
 		return err
 	}
-	fe.edits = append(fe.edits, (&target{ws: c.ws}).conversion(e, fe.write(c.old))...)
+	fe.edits = append(fe.edits, (&target{Site: site.Site{WS: c.ws}}).conversion(e, fe.write(c.old))...)
 	return nil
 }
 
@@ -456,7 +457,7 @@ func (c *fieldChange) convert(p *packages.Package, v ast.Expr, t types.Type) err
 	if err != nil {
 		return err
 	}
-	fe.edits = append(fe.edits, (&target{ws: c.ws}).conversion(v, fe.write(t))...)
+	fe.edits = append(fe.edits, (&target{Site: site.Site{WS: c.ws}}).conversion(v, fe.write(t))...)
 	return nil
 }
 

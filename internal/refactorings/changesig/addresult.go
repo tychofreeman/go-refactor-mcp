@@ -120,7 +120,7 @@ func (*AddResult) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.
 // resultEdits adds typ to t's results, last.
 func (t *target) resultEdits(typ string) []edit.TextEdit {
 	insert := func(p token.Pos, text string) edit.TextEdit {
-		return edit.TextEdit{Start: t.off(p), End: t.off(p), NewText: text}
+		return edit.TextEdit{Start: t.Off(p), End: t.Off(p), NewText: text}
 	}
 	switch r := t.ftype.Results; {
 	case r == nil || len(r.List) == 0:
@@ -141,14 +141,14 @@ func (t *target) checkResultValue(value string, typ types.Type) error {
 		return refactor.Refusef("the value %s is not a Go expression: %v", value, err)
 	}
 	info := &types.Info{Types: map[ast.Expr]types.TypeAndValue{}, Uses: map[*ast.Ident]types.Object{}, Selections: map[*ast.SelectorExpr]*types.Selection{}}
-	if err := types.CheckExpr(t.ws.Fset, t.pkg.Types, t.decl.Body.Lbrace+1, e, info); err != nil {
+	if err := types.CheckExpr(t.WS.Fset, t.Pkg.Types, t.decl.Body.Lbrace+1, e, info); err != nil {
 		msg := err.Error()
 		if te, ok := err.(types.Error); ok {
 			msg = te.Msg
 		}
 		return refactor.Refusef("the value %s does not work in %s: %s", value, t.obj.Name(), msg)
 	}
-	if bad, why := unsafeValue(info, e, t.ws.Effects()); bad != nil {
+	if bad, why := unsafeValue(info, e, t.WS.Effects()); bad != nil {
 		return refactor.Refusef("the value %s %s (%s), and callers would not use it, so returning it would change behavior; use a value without calls, dereferences, indexing or division", value, why, types.ExprString(bad.(ast.Expr)))
 	}
 	if vt := info.Types[e].Type; !assignable(vt, typ) {
@@ -174,12 +174,12 @@ func (t *target) returnEdits(value string) ([]edit.TextEdit, error) {
 		case *ast.ReturnStmt:
 			switch {
 			case len(n.Results) == 0:
-				at := t.off(n.Return) + len("return")
+				at := t.Off(n.Return) + len("return")
 				es = append(es, edit.TextEdit{Start: at, End: at, NewText: " " + value})
 			case len(n.Results) < before:
-				err = refactor.Refusef("the return at %s gives the results of another call; assign them to variables and return those first", t.ws.Position(n.Pos()))
+				err = refactor.Refusef("the return at %s gives the results of another call; assign them to variables and return those first", t.WS.Position(n.Pos()))
 			default:
-				at := t.off(n.Results[len(n.Results)-1].End())
+				at := t.Off(n.Results[len(n.Results)-1].End())
 				es = append(es, edit.TextEdit{Start: at, End: at, NewText: ", " + value})
 			}
 		}
@@ -194,11 +194,11 @@ func (t *target) returnEdits(value string) ([]edit.TextEdit, error) {
 			return es, nil
 		}
 		last := body.List[n-1]
-		indent := strings.Repeat("\t", t.ws.Fset.Position(last.Pos()).Column-1)
-		at := t.off(last.End())
+		indent := strings.Repeat("\t", t.WS.Fset.Position(last.Pos()).Column-1)
+		at := t.Off(last.End())
 		return append(es, edit.TextEdit{Start: at, End: at, NewText: "\n" + indent + "return " + value}), nil
 	}
-	at := t.off(body.Lbrace) + 1
+	at := t.Off(body.Lbrace) + 1
 	return append(es, edit.TextEdit{Start: at, End: at, NewText: " return " + value + " "}), nil
 }
 
@@ -220,9 +220,9 @@ func (t *target) callResultEdit(c call) (*edit.TextEdit, error) {
 		}
 		i++
 	}
-	where := t.ws.Position(c.expr.Pos())
+	where := t.WS.Position(c.expr.Pos())
 	blank := func(after ast.Node) (*edit.TextEdit, error) {
-		at := t.off(after.End())
+		at := t.Off(after.End())
 		return &edit.TextEdit{Start: at, End: at, NewText: ", _"}, nil
 	}
 	switch p := path[i].(type) {

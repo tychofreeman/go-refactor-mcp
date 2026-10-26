@@ -81,7 +81,7 @@ func (x *inliner) mergeExisting(cands []existingMerge) {
 			_, idx := x.topDecl(c.v)
 			spec := d.Decl.(*ast.GenDecl).Specs[0].(*ast.ValueSpec)
 			if len(spec.Values) == 0 && x.assignedBeforeRead(c.v, idx, c.o.Parent() == x.blockScope) {
-				x.bodyEdits = append(x.bodyEdits, x.deleteLine(x.dsrc, x.dtf, d))
+				x.bodyEdits = append(x.bodyEdits, x.deleteLine(x.callee.Src, x.callee.TF, d))
 				accept(cs)
 			}
 		case *ast.AssignStmt:
@@ -98,7 +98,7 @@ func (x *inliner) mergeExisting(cands []existingMerge) {
 				}
 				accept(cs)
 			case declared == len(cs):
-				x.bodyEdits = append(x.bodyEdits, edit.TextEdit{Start: x.doff(d.TokPos), End: x.doff(d.TokPos) + 2, NewText: "="})
+				x.bodyEdits = append(x.bodyEdits, edit.TextEdit{Start: x.callee.Off(d.TokPos), End: x.callee.Off(d.TokPos) + 2, NewText: "="})
 				accept(cs)
 			default:
 				var keep []existingMerge

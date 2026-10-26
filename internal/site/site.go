@@ -1,13 +1,13 @@
 package site
 
 import (
-	"fmt"
 	"go/ast"
 	"go/token"
 	"go/types"
 	"os"
 	"strings"
 
+	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 	"golang.org/x/tools/go/packages"
 )
@@ -25,8 +25,9 @@ type Site struct {
 	Src  []byte
 }
 
-// Off returns the offset of p in the file's source.
-func (s *Site) Off(p token.Pos) int { return s.TF.Offset(p) }
+// Off returns the offset of p in its file, which for a position in the
+// site's file is its offset in Src.
+func (s *Site) Off(p token.Pos) int { return s.WS.Fset.Position(p).Offset }
 
 // Text returns the source of n.
 func (s *Site) Text(n ast.Node) string { return string(s.Src[s.Off(n.Pos()):s.Off(n.End())]) }
@@ -58,7 +59,7 @@ func DeclaredAt(ws *workspace.Workspace, o types.Object) string {
 func At(ws *workspace.Workspace, path string) (*Site, error) {
 	pkg, file := ws.FileSyntax(path)
 	if file == nil {
-		return nil, fmt.Errorf("%s is not a Go file of the workspace", ws.Rel(path))
+		return nil, refactor.Refusef("file %s is not part of the module's packages", ws.Rel(path))
 	}
 	src, err := os.ReadFile(path)
 	if err != nil {

@@ -27,7 +27,6 @@ import (
 	"go/ast"
 	"go/token"
 	"go/types"
-	"os"
 	"slices"
 	"strings"
 
@@ -109,16 +108,12 @@ func (*ExtractVariable) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 		return nil, err
 	}
 	path := ws.Abs(a.File)
-	pkg, file := ws.FileSyntax(path)
-	if file == nil {
-		return nil, refactor.Refusef("file %s is not part of the module's packages", a.File)
-	}
-	src, err := os.ReadFile(path)
+	at, err := site.At(ws, path)
 	if err != nil {
 		return nil, err
 	}
 	x := &extraction{
-		Site:    site.Site{WS: ws, Pkg: pkg, Info: pkg.TypesInfo, File: file, Src: src, TF: ws.Fset.File(file.Pos())},
+		Site:    *at,
 		name:    a.Name,
 		pointer: a.Pointer,
 	}
@@ -127,7 +122,7 @@ func (*ExtractVariable) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 	if err != nil {
 		return nil, err
 	}
-	expr, err := locate.FindExpr(ws, file, src, want, a.Line, a.Column, a.AllOccurrences)
+	expr, err := locate.FindExpr(ws, x.File, x.Src, want, a.Line, a.Column, a.AllOccurrences)
 	if err != nil {
 		return nil, err
 	}
