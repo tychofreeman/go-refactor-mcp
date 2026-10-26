@@ -2756,3 +2756,8 @@ the file's own indent this time. This entry appended with a heredoc.
 The goldens with replace_text and create_file, `notImplements` with
 add_declaration and replace_text (check "end"), the roadmap with
 replace_text. Nothing by hand. This entry appended with a heredoc.
+
+## 2026-10-26: cost-history 19, kinds without reads after #374-#376
+
+The run's results in cost-history with replace_text. Nothing by hand.
+This entry appended with a heredoc.
