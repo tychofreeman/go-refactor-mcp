@@ -1167,6 +1167,22 @@ refusals, by what a fix would be:
 The prompt line is what moved the plans; what fails now is batches of
 40-69 steps rolled back whole by one refusal, with two repairs.
 
+**Again, with the refusals fixed** (the bare word's own refusal, `split`,
+the missing case saying what runs, function_to_method on an
+interface's method name and with any receiver, prepare taking fields
+as the declared parameters, #347-#352;
+`eval-runs/loop-{haiku,sonnet}-kinds-case3`, $1.03): 0/8. Haiku $0.022
+a task in 4 requests, Sonnet $0.235 in 3.25. The plans now name the
+receiver (`receiver: "b"`) and get through prepare with the prompt's
+`Label(title string)`; two attempts went through three stages. What
+stopped 7 of 8 is Renewable's `atlas`, which has no case: the refusal
+says the code after the switch runs for it, "line 168 on", a line of
+the module as it was at the refused step. The repairs resend the whole
+batch from the start and put `extract_function` of `start_line: 168`
+first, where line 168 is other code ("contain no statements inside a
+function body"). Two Sonnet attempts also extracted a case of several
+values without `split`, after the refusal named it.
+
 ## What made the difference
 
 - **Smaller results** (#75, rename locations): the largest single win when

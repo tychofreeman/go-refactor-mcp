@@ -2573,3 +2573,8 @@ This entry appended with a heredoc. Nothing else by hand.
 `ifchain.go` with create_file, the hook, description and schema with
 replace_text; goldens with create_file. This entry appended with a
 heredoc. Nothing else by hand.
+
+## 2026-10-25: kinds with the refusals fixed (cost-history 19)
+
+Docs with replace_text. This entry appended with a heredoc. Nothing
+else by hand.
