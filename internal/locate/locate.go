@@ -280,8 +280,9 @@ func CaseBody(tf *token.File, src []byte, fd *ast.FuncDecl, value string) (first
 	case len(found) == 0:
 		// A bare word names the string case of that text: book for "book".
 		if token.IsIdentifier(value) {
-			if first, last, err := CaseBody(tf, src, fd, strconv.Quote(value)); err == nil {
-				return first, last, nil
+			// Its own refusal, unless it found no case either.
+			if first, last, err := CaseBody(tf, src, fd, strconv.Quote(value)); err == nil || !strings.HasPrefix(err.Error(), "no case ") {
+				return first, last, err
 			}
 		}
 		return 0, 0, refactor.Refusef("no case %s in a switch of %s; its cases are %s", value, name, strings.Join(cases, ", "))
