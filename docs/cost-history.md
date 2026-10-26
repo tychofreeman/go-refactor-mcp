@@ -1183,6 +1183,20 @@ first, where line 168 is other code ("contain no statements inside a
 function body"). Two Sonnet attempts also extracted a case of several
 values without `split`, after the refusal named it.
 
+**Again, with a missing case extracted and refusals' lines as the batch
+began** (#356, #358; `eval-runs/loop-{haiku,sonnet}-kinds-case4`,
+$0.98): 0/8. Haiku $0.029 a task in 3.5 requests, Sonnet $0.216 in
+3.25. The derivation of the cases now goes through: the refusals come
+at steps 54-75 of batches of 55-81, at narrowing the field
+("these uses of Kind cannot follow") and at tests that fail after it,
+and three attempts (two Sonnet, one Haiku) used all three stages
+without a refusal at the end, Sonnet's second applying every batch.
+What is left is the edit, not the derivation: Import must turn the
+kind's name into a type and still report an unknown one by name, and
+no plan can see Import without a read; plans guessed its body (one
+replaced lines 236-238 of a 230-line file) or left it, and narrowing
+then refused the string Import writes.
+
 ## What made the difference
 
 - **Smaller results** (#75, rename locations): the largest single win when
