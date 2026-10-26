@@ -1501,6 +1501,14 @@ hand or a tool got in the way.
     return): the new case calls a copy of that code, which stays. The
     kinds reference extracts atlas's Renewable so. *Done.*
 
+    A batch's refusal gives lines as the batch began: the lines the
+    model read and sends again, not those of the module at the refused
+    step, which a repair that resent the batch copied into an early
+    step ("line 168 on" pointed at other code). File-qualified lines
+    are mapped in any file, bare ones (`line 12`, `lines 12-14`, a
+    statement listed as `150-152` and its text) in the step's file; a
+    line an earlier step wrote keeps its number, marked `*`. *Done.*
+
     The prompt's `Label(title string)`: prepare_switch_for_types takes
     a method the interface declares when the cases read their
     variables only as fields (`it.Title`) of the parameters' types, in

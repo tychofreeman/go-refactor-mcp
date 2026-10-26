@@ -2589,3 +2589,10 @@ by a Python script. This entry appended with a heredoc.
 
 Docs with replace_text. This entry appended with a heredoc. Nothing
 else by hand.
+
+## 2026-10-25: a batch's refusal gives lines as the batch began
+
+`batchlines.go` and its test with create_file, `stepFile` with
+add_declaration, the three call sites and the roadmap with replace_text.
+By hand: the merge conflict in this file (main's entries and this one
+kept). This entry appended with a heredoc.

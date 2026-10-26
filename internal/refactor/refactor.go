@@ -715,7 +715,7 @@ func runBatch(ws *workspace.Workspace, steps []Step, opts Options) (*BatchResult
 			}
 			b.Steps = append(b.Steps, res)
 			if !res.Applied {
-				b.FailedStep, b.FailedTool, b.Refused = i+1, "check", res.Refused
+				b.FailedStep, b.FailedTool, b.Refused = i+1, "check", startLines(res.Refused, "", lines)
 				return b, rollback()
 			}
 			kept, keptStep, keptNames = applied, i+1, len(names)
@@ -757,7 +757,7 @@ func runBatch(ws *workspace.Workspace, steps []Step, opts Options) (*BatchResult
 		}
 		b.Steps = append(b.Steps, res)
 		if !res.Applied {
-			b.FailedStep, b.FailedTool, b.Refused = i+1, name, res.Refused
+			b.FailedStep, b.FailedTool, b.Refused = i+1, name, startLines(res.Refused, stepFile(ws, args), lines)
 			return b, rollback()
 		}
 		applied++
@@ -771,8 +771,8 @@ func runBatch(ws *workspace.Workspace, steps []Step, opts Options) (*BatchResult
 		}
 		errs := ws.Errors()
 		if len(errs) > 0 {
-			b.Refused = fmt.Sprintf("after all %d step%s the code does not type-check, so the batch was rolled back. Errors were:\n  %s",
-				len(steps), textutil.Plural(len(steps)), strings.Join(limit(errs, 10), "\n  "))
+			b.Refused = startLines(fmt.Sprintf("after all %d step%s the code does not type-check, so the batch was rolled back. Errors were:\n  %s",
+				len(steps), textutil.Plural(len(steps)), strings.Join(limit(errs, 10), "\n  ")), "", lines)
 			for _, s := range skipped {
 				b.Refused += "\n" + s
 			}
