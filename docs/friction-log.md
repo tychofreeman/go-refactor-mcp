@@ -2764,6 +2764,17 @@ replace_declaration that renamed a function was refused ("to rename
 it, use rename"), so add_declaration then remove_dead_code. This entry
 appended with a heredoc.
 
+## 2026-10-26: a value not of the narrowed type is refused with why
+
+The goldens with replace_text and create_file, `notImplements` with
+add_declaration and replace_text (check "end"), the roadmap with
+replace_text. Nothing by hand. This entry appended with a heredoc.
+
+## 2026-10-26: cost-history 19, kinds without reads after #374-#376
+
+The run's results in cost-history with replace_text. Nothing by hand.
+This entry appended with a heredoc.
+
 ## 2026-10-26: changesig onto Move
 
 `checkEvaluation`, `unsafeValue`, `checkArgEffects` and `checkOrder`

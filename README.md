@@ -1116,7 +1116,11 @@ hand or a tool got in the way.
         refusal listing them cost one of two repairs in 13 of 16
         kinds attempts (cost-history 19), and the kinds reference
         drops its eight replace_text steps for it. An edit, said in a
-        note; values that call a function are refused. *Done.*
+        note; values that call a function are refused. *Done.* A
+        value not of the new type is refused with why: the method its
+        type lacks (move the cases first), or has with another
+        signature (`Label(title string)` where `Kind` has `Label(it
+        Item)`), which stopped three plans without reads. *Done.*
       - Deleting one kind's dead case before the end:
         `replace_statements` with empty content over whole case
         clauses deletes them, refused when the case before falls

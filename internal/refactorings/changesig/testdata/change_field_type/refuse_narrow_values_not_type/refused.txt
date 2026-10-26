@@ -1,1 +1,1 @@
-the value for "fern", Moss{}, is not a Species
+the value for "fern", Moss{}, is not a Species: Moss has no method Water; move each kind's cases into its type's methods first, and narrow last
