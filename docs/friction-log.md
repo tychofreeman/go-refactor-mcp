@@ -2624,3 +2624,13 @@ function with a call of another chosen by its arguments (here, which
 field the pointer names). A first try sent several declarations in one
 replace_declaration, which takes one. This entry appended with a
 heredoc.
+
+## 2026-10-25: a summary of one expression
+
+`Effects.Of` and its test with add_declaration. By hand, with
+replace_text: `freshLocals` taking the function's body instead of its
+declaration, since introduce_parameter refused `fd.Body` falsely
+("reads memory that info := f.Info could change before it": a local
+being defined counts as a write that could change what the expression
+reads). That check is one of the analyses roadmap item 34 merges.
+This entry appended with a heredoc.

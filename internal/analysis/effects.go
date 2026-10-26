@@ -84,6 +84,25 @@ func (e *Effects) Call(info *types.Info, call *ast.CallExpr) Summary {
 	return e.call(info, call, nil)
 }
 
+// Of summarizes what evaluating x, an expression in the body of f, can
+// do. Memory f made itself is f's own, as in a summary of f.
+func (e *Effects) Of(f *Func, x ast.Expr) Summary {
+	var blk *ast.BlockStmt
+	switch n := f.Node.(type) {
+	case *ast.FuncDecl:
+		blk = n.Body
+	case *ast.FuncLit:
+		blk = n.Body
+	}
+	fresh := map[*types.Var]bool{}
+	if blk != nil {
+		fresh = freshLocals(f, blk)
+	}
+	b := &body{e: e, f: f, fresh: fresh, sync: map[*ast.FuncLit]bool{}}
+	ast.Inspect(x, b.visit)
+	return b.s
+}
+
 func (e *Effects) call(info *types.Info, call *ast.CallExpr, private func(target ast.Expr, inPlace bool) bool) Summary {
 	name := types.ExprString(call.Fun)
 	if tv, ok := info.Types[call.Fun]; ok && tv.IsType() {
@@ -317,23 +336,24 @@ func nonNegative(info *types.Info, size ast.Expr) bool {
 	return info.Types[size].Value != nil
 }
 
-// freshLocals returns the local variables of fd that only ever hold
-// memory fd made itself (make, new, a composite literal or its address,
-// nil, an append to the variable or a slice of it) and whose address is
-// not taken: writing through them is not seen outside the call.
-func freshLocals(f *Func, fd *ast.FuncDecl) map[*types.Var]bool {
+// freshLocals returns the local variables of the function f, whose body
+// is body, that only ever hold memory the function made itself (make,
+// new, a composite literal or its address, nil, an append to the
+// variable or a slice of it) and whose address is not taken: writing
+// through them is not seen outside the call.
+func freshLocals(f *Func, body *ast.BlockStmt) map[*types.Var]bool {
 	info := f.Info
 	fresh, bad := map[*types.Var]bool{}, map[*types.Var]bool{}
 	note := func(v *types.Var, rhs ast.Expr, ok bool) {
 		switch {
 		case v == nil || !f.IsLocal(v):
-		case !ok || f.Addressed[v] || v.Pos() < fd.Body.Pos() || (rhs != nil && !isFreshValue(info, v, rhs)):
+		case !ok || f.Addressed[v] || v.Pos() < body.Pos() || (rhs != nil && !isFreshValue(info, v, rhs)):
 			bad[v] = true
 		default:
 			fresh[v] = true
 		}
 	}
-	ast.Inspect(fd.Body, func(n ast.Node) bool {
+	ast.Inspect(body, func(n ast.Node) bool {
 		switch n := n.(type) {
 		case *ast.AssignStmt:
 			for i, l := range n.Lhs {
@@ -419,7 +439,7 @@ type body struct {
 // memory it made itself, are not side effects.
 func (e *Effects) summarize(src funcSource) *Summary {
 	f := AnalyzeFunc(src.info, src.decl)
-	b := &body{e: e, f: f, fresh: freshLocals(f, src.decl), sync: map[*ast.FuncLit]bool{}}
+	b := &body{e: e, f: f, fresh: freshLocals(f, src.decl.Body), sync: map[*ast.FuncLit]bool{}}
 	ast.Inspect(src.decl.Body, b.visit)
 	return &b.s
 }
