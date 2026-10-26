@@ -31,12 +31,11 @@ import (
 	"slices"
 	"strings"
 
-	"golang.org/x/tools/go/packages"
-
 	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/site"
 	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
@@ -84,12 +83,7 @@ type args struct {
 
 // extraction holds the state of one planning run.
 type extraction struct {
-	ws      *workspace.Workspace
-	pkg     *packages.Package
-	info    *types.Info
-	file    *ast.File
-	tf      *token.File
-	src     []byte
+	site.Site
 	name    string
 	pointer bool // the variable is a pointer to the expression
 
@@ -124,8 +118,9 @@ func (*ExtractVariable) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 		return nil, err
 	}
 	x := &extraction{
-		ws: ws, pkg: pkg, info: pkg.TypesInfo, file: file, src: src, name: a.Name, pointer: a.Pointer,
-		tf: ws.Fset.File(file.Pos()),
+		Site:    site.Site{WS: ws, Pkg: pkg, Info: pkg.TypesInfo, File: file, Src: src, TF: ws.Fset.File(file.Pos())},
+		name:    a.Name,
+		pointer: a.Pointer,
 	}
 
 	want, err := locate.ExprTokens(a.Expression)
@@ -152,7 +147,7 @@ func checkName(name string) error {
 }
 
 func (x *extraction) plan(expr ast.Expr, all bool) (*refactor.Plan, error) {
-	path := analysis.PathTo(x.file, expr)
+	path := analysis.PathTo(x.File, expr)
 	if path == nil {
 		return nil, fmt.Errorf("internal error: expression not found in file syntax")
 	}
@@ -164,20 +159,20 @@ func (x *extraction) plan(expr ast.Expr, all bool) (*refactor.Plan, error) {
 
 	x.fn = analysis.OutermostFunc(path)
 	if x.fn == nil {
-		return nil, refactor.Refusef("%s is not inside a function body; only expressions in functions can be extracted", x.quote(expr))
+		return nil, refactor.Refusef("%s is not inside a function body; only expressions in functions can be extracted", x.Quote(expr))
 	}
-	x.fa = analysis.AnalyzeFunc(x.info, x.fn)
+	x.fa = analysis.AnalyzeFunc(x.Info, x.fn)
 
 	stmt, container, err := x.place(path)
 	if err != nil {
 		return nil, err
 	}
 	if times, why := analysis.Reach(path[:slices.Index(path, container)+1]); times != analysis.Once && !isConst {
-		return nil, refactor.Refusef("cannot extract %s: it is %s, so computing it once before the statement could change behavior", x.quote(expr), why)
+		return nil, refactor.Refusef("cannot extract %s: it is %s, so computing it once before the statement could change behavior", x.Quote(expr), why)
 	}
 	scope := x.blockScope(container, path)
 	if scope == nil {
-		return nil, fmt.Errorf("internal error: no scope for the block at %s", x.ws.Position(container.Pos()))
+		return nil, fmt.Errorf("internal error: no scope for the block at %s", x.WS.Position(container.Pos()))
 	}
 	insertPos := stmt.Pos()
 
@@ -220,15 +215,15 @@ func (x *extraction) plan(expr ast.Expr, all bool) (*refactor.Plan, error) {
 
 	// Insert the declaration at the start of the statement, followed by a
 	// newline and the statement's indentation; gofmt tidies the rest.
-	path0 := x.tf.Name()
+	path0 := x.TF.Name()
 	edits := []edit.TextEdit{{
-		Start:   x.off(insertPos),
-		End:     x.off(insertPos),
+		Start:   x.Off(insertPos),
+		End:     x.Off(insertPos),
 		NewText: decl + "\n" + x.indentOf(insertPos),
 	}}
 	for _, s := range sites {
 		n, text := x.replacement(s)
-		edits = append(edits, edit.TextEdit{Start: x.off(n.Pos()), End: x.off(n.End()), NewText: text})
+		edits = append(edits, edit.TextEdit{Start: x.Off(n.Pos()), End: x.Off(n.End()), NewText: text})
 	}
 
 	kind := "variable"
@@ -240,7 +235,7 @@ func (x *extraction) plan(expr ast.Expr, all bool) (*refactor.Plan, error) {
 	}
 	return &refactor.Plan{
 		Summary: fmt.Sprintf("extracted %s into %s %q (%d occurrence%s replaced)",
-			x.quote(expr), kind, x.name, len(sites), textutil.Plural(len(sites))),
+			x.Quote(expr), kind, x.name, len(sites), textutil.Plural(len(sites))),
 		Edits: []edit.FileEdit{{Path: path0, Edits: edits}},
 		Notes: notes,
 	}, nil
@@ -253,7 +248,7 @@ func (x *extraction) replacement(site ast.Expr) (ast.Node, string) {
 	if !x.pointer {
 		return w, x.name
 	}
-	if path := analysis.PathTo(x.file, w); len(path) > 1 {
+	if path := analysis.PathTo(x.File, w); len(path) > 1 {
 		if u, ok := path[1].(*ast.UnaryExpr); ok && u.Op == token.AND {
 			return u, x.name // &e.f becomes name
 		}
@@ -272,7 +267,7 @@ func (x *extraction) move(expr ast.Expr, past []ast.Node, times analysis.Times) 
 	if x.pointer {
 		moved = &ast.UnaryExpr{Op: token.AND, X: expr}
 	}
-	m := analysis.Move{Effects: x.ws.Effects(), Func: x.fa, Expr: moved, Past: past, Times: times, Dereferenced: x.pointer}
+	m := analysis.Move{Effects: x.WS.Effects(), Func: x.fa, Expr: moved, Past: past, Times: times, Dereferenced: x.pointer}
 	return m.Check()
 }
 
@@ -280,7 +275,7 @@ func (x *extraction) move(expr ast.Expr, past []ast.Node, times analysis.Times) 
 // Finding the expression
 
 func (x *extraction) matches(e ast.Expr, want []string) bool {
-	return locate.TokensMatch(x.tf, x.src, e, want)
+	return locate.TokensMatch(x.TF, x.Src, e, want)
 }
 
 // ---------------------------------------------------------------------------
@@ -289,11 +284,11 @@ func (x *extraction) matches(e ast.Expr, want []string) bool {
 // validate checks that expr is a value that can be held in a variable, and
 // that it is not used as a variable itself.
 func (x *extraction) validate(expr ast.Expr, path []ast.Node) (types.TypeAndValue, error) {
-	q := x.quote(expr)
-	tv, ok := x.info.Types[expr]
+	q := x.Quote(expr)
+	tv, ok := x.Info.Types[expr]
 	if !ok {
 		if id, ok := expr.(*ast.Ident); ok {
-			if _, isPkg := x.info.Uses[id].(*types.PkgName); isPkg {
+			if _, isPkg := x.Info.Uses[id].(*types.PkgName); isPkg {
 				return tv, refactor.Refusef("%s is a package name, not a value", q)
 			}
 		}
@@ -313,7 +308,7 @@ func (x *extraction) validate(expr ast.Expr, path []ast.Node) (types.TypeAndValu
 		return tv, refactor.Refusef("%s returns multiple values; extract it with an explicit assignment instead", q)
 	}
 	if id := analysis.IdentOf(expr); id != nil {
-		if _, ok := x.info.Instances[id]; ok {
+		if _, ok := x.Info.Instances[id]; ok {
 			if _, isFunc := tv.Type.(*types.Signature); isFunc {
 				return tv, refactor.Refusef("%s is a generic function whose type arguments are inferred from the call; it cannot be stored without explicit type arguments", q)
 			}
@@ -328,7 +323,7 @@ func (x *extraction) validate(expr ast.Expr, path []ast.Node) (types.TypeAndValu
 	iota := types.Universe.Lookup("iota")
 	usesIota := false
 	ast.Inspect(expr, func(n ast.Node) bool {
-		if id, ok := n.(*ast.Ident); ok && x.info.Uses[id] == iota {
+		if id, ok := n.(*ast.Ident); ok && x.Info.Uses[id] == iota {
 			usesIota = true
 		}
 		return !usesIota
@@ -340,7 +335,7 @@ func (x *extraction) validate(expr ast.Expr, path []ast.Node) (types.TypeAndValu
 		if !tv.Addressable() {
 			return tv, refactor.Refusef("%s is not addressable (a map element, a call's result or a computed value), so there is no pointer to it; extract it without pointer", q)
 		}
-	} else if why := analysis.UsedAsVariable(x.info, path); why != "" {
+	} else if why := analysis.UsedAsVariable(x.Info, path); why != "" {
 		hint := ""
 		if tv.Addressable() {
 			hint = "; pass pointer to declare a pointer to it instead"
@@ -384,14 +379,14 @@ scan:
 			stmt, _ = path[i].(ast.Stmt)
 			break scan
 		case *ast.FuncLit, *ast.FuncDecl, *ast.File:
-			return nil, nil, refactor.Refusef("%s is not inside a statement (it may be part of a function signature)", x.quote(expr))
+			return nil, nil, refactor.Refusef("%s is not inside a statement (it may be part of a function signature)", x.Quote(expr))
 		case ast.Stmt:
 			stmt = p
 			break scan
 		}
 	}
 	if stmt == nil {
-		return nil, nil, refactor.Refusef("could not find the statement containing %s", x.quote(expr))
+		return nil, nil, refactor.Refusef("could not find the statement containing %s", x.Quote(expr))
 	}
 
 	for i+1 < len(path) {
@@ -406,7 +401,7 @@ scan:
 			}
 			// path[i+1] is the CommClause, i+2 the select body, i+3 the select.
 			if i+3 >= len(path) {
-				return nil, nil, refactor.Refusef("cannot find the select statement containing %s", x.quote(expr))
+				return nil, nil, refactor.Refusef("cannot find the select statement containing %s", x.Quote(expr))
 			}
 			i += 3
 			stmt = path[i].(ast.Stmt)
@@ -422,29 +417,29 @@ scan:
 		case *ast.ForStmt:
 			stmt = p
 		default:
-			return nil, nil, refactor.Refusef("cannot find a place to declare the variable before the statement at %s", x.ws.Position(stmt.Pos()))
+			return nil, nil, refactor.Refusef("cannot find a place to declare the variable before the statement at %s", x.WS.Position(stmt.Pos()))
 		}
 		i++
 	}
-	return nil, nil, refactor.Refusef("cannot find a place to declare the variable before the statement at %s", x.ws.Position(stmt.Pos()))
+	return nil, nil, refactor.Refusef("cannot find a place to declare the variable before the statement at %s", x.WS.Position(stmt.Pos()))
 }
 
 // blockScope returns the scope that a declaration inserted into container
 // joins. A function body shares its scope with the parameters, which
 // go/types records on the FuncType.
 func (x *extraction) blockScope(container ast.Node, path []ast.Node) *types.Scope {
-	if s := x.info.Scopes[container]; s != nil {
+	if s := x.Info.Scopes[container]; s != nil {
 		return s
 	}
 	for _, n := range path {
 		switch f := n.(type) {
 		case *ast.FuncDecl:
 			if f.Body == container {
-				return x.info.Scopes[f.Type]
+				return x.Info.Scopes[f.Type]
 			}
 		case *ast.FuncLit:
 			if f.Body == container {
-				return x.info.Scopes[f.Type]
+				return x.Info.Scopes[f.Type]
 			}
 		}
 	}
@@ -458,8 +453,8 @@ func (x *extraction) blockScope(container ast.Node, path []ast.Node) *types.Scop
 // thing at the insertion point, e.g. not a variable declared in an if
 // statement's init.
 func (x *extraction) checkReferences(expr ast.Expr, stmt ast.Stmt, scope *types.Scope, insertPos token.Pos) error {
-	for _, id := range analysis.ScopeRefs(x.info, expr) {
-		obj := x.info.Uses[id]
+	for _, id := range analysis.ScopeRefs(x.Info, expr) {
+		obj := x.Info.Uses[id]
 		if obj == nil || (obj.Pos() >= expr.Pos() && obj.Pos() < expr.End()) {
 			continue // declared inside the expression (function literal)
 		}
@@ -468,10 +463,10 @@ func (x *extraction) checkReferences(expr ast.Expr, stmt ast.Stmt, scope *types.
 		}
 		if obj.Pos() >= stmt.Pos() && obj.Pos() < stmt.End() {
 			return refactor.Refusef("%s uses %q, which is declared by the statement itself (at %s) and so does not exist before it",
-				x.quote(expr), id.Name, x.ws.Position(obj.Pos()))
+				x.Quote(expr), id.Name, x.WS.Position(obj.Pos()))
 		}
 		return refactor.Refusef("%s uses %q (declared at %s), which is not visible where the new variable would be declared",
-			x.quote(expr), id.Name, x.ws.Position(obj.Pos()))
+			x.Quote(expr), id.Name, x.WS.Position(obj.Pos()))
 	}
 	return nil
 }
@@ -483,7 +478,7 @@ func (x *extraction) checkReferences(expr ast.Expr, stmt ast.Stmt, scope *types.
 func (x *extraction) checkMove(expr ast.Expr, stmt ast.Stmt) error {
 	if o := x.move(expr, analysis.EvaluatedBefore(stmt, expr.Pos(), nil), analysis.Once); o != nil {
 		return refactor.Refusef("extracting %s would evaluate it before %s (at %s), which comes first in the statement: %s; extract %s first, or choose another expression",
-			x.quote(expr), x.quote(o.Past), x.ws.Position(o.Past.Pos()), o.Why, x.quote(o.Past))
+			x.Quote(expr), x.Quote(o.Past), x.WS.Position(o.Past.Pos()), o.Why, x.Quote(o.Past))
 	}
 	return nil
 }
@@ -506,7 +501,7 @@ func (x *extraction) checkGoto(insertPos token.Pos) error {
 	})
 	for _, g := range gotos {
 		if lp, ok := labels[g.Label.Name]; ok && g.Pos() < insertPos && lp > insertPos {
-			return refactor.Refusef("the goto at %s jumps over the place where the variable would be declared, which Go does not allow", x.ws.Position(g.Pos()))
+			return refactor.Refusef("the goto at %s jumps over the place where the variable would be declared, which Go does not allow", x.WS.Position(g.Pos()))
 		}
 	}
 	return nil
@@ -515,7 +510,7 @@ func (x *extraction) checkGoto(insertPos token.Pos) error {
 // checkNewName refuses names that clash with or hide existing names.
 func (x *extraction) checkNewName(container ast.Node, scope *types.Scope, insertPos token.Pos) error {
 	if o := scope.Lookup(x.name); o != nil {
-		return refactor.Refusef("%q is already declared in this block, at %s", x.name, declaredAt(x.ws, o))
+		return refactor.Refusef("%q is already declared in this block, at %s", x.name, site.DeclaredAt(x.WS, o))
 	}
 	// Later uses of an outer x.name in this block would bind to the new one.
 	var hidden *ast.Ident
@@ -524,29 +519,29 @@ func (x *extraction) checkNewName(container ast.Node, scope *types.Scope, insert
 		if !ok || hidden != nil || id.Name != x.name || id.Pos() < insertPos {
 			return hidden == nil
 		}
-		if o := x.info.Uses[id]; o != nil && o.Parent() != nil && !within(o.Parent(), scope) {
+		if o := x.Info.Uses[id]; o != nil && o.Parent() != nil && !within(o.Parent(), scope) {
 			hidden = id
 		}
 		return true
 	})
 	if hidden != nil {
-		o := x.info.Uses[hidden]
+		o := x.Info.Uses[hidden]
 		return refactor.Refusef("a new %q would hide the %s %q declared at %s, which is used at %s; choose another name",
-			x.name, kindOf(o), x.name, declaredAt(x.ws, o), x.ws.Position(hidden.Pos()))
+			x.name, kindOf(o), x.name, site.DeclaredAt(x.WS, o), x.WS.Position(hidden.Pos()))
 	}
 	return nil
 }
 
 // checkShadowAt refuses if, at a replacement site, the new name would refer
 // to some other declaration nested between the block and the site.
-func (x *extraction) checkShadowAt(site ast.Expr, scope *types.Scope) error {
-	inner := x.pkg.Types.Scope().Innermost(site.Pos())
+func (x *extraction) checkShadowAt(at ast.Expr, scope *types.Scope) error {
+	inner := x.Pkg.Types.Scope().Innermost(at.Pos())
 	if inner == nil {
 		return nil
 	}
-	if s, o := inner.LookupParent(x.name, site.Pos()); o != nil && s != scope && within(s, scope) {
+	if s, o := inner.LookupParent(x.name, at.Pos()); o != nil && s != scope && within(s, scope) {
 		return refactor.Refusef("at %s, %q already refers to the %s declared at %s, so it cannot refer to the new variable there; choose another name",
-			x.ws.Position(site.Pos()), x.name, kindOf(o), declaredAt(x.ws, o))
+			x.WS.Position(at.Pos()), x.name, kindOf(o), site.DeclaredAt(x.WS, o))
 	}
 	return nil
 }
@@ -565,7 +560,7 @@ func within(s, scope *types.Scope) bool {
 // The declaration
 
 func (x *extraction) declaration(expr ast.Expr, tv types.TypeAndValue, isConst bool) (string, error) {
-	rhs := string(x.text(ast.Unparen(expr)))
+	rhs := (x.Text(ast.Unparen(expr)))
 	if isConst {
 		return "const " + x.name + " = " + rhs, nil
 	}
@@ -603,7 +598,7 @@ func (x *extraction) needsExplicitType(expr ast.Expr, tv types.TypeAndValue) boo
 	}
 	e := ast.Unparen(expr)
 	info := &types.Info{Types: map[ast.Expr]types.TypeAndValue{}}
-	if err := types.CheckExpr(x.ws.Fset, x.pkg.Types, e.Pos(), e, info); err != nil {
+	if err := types.CheckExpr(x.WS.Fset, x.Pkg.Types, e.Pos(), e, info); err != nil {
 		return false // the post-change type check still guards correctness
 	}
 	alone := info.Types[e].Type
@@ -613,7 +608,7 @@ func (x *extraction) needsExplicitType(expr ast.Expr, tv types.TypeAndValue) boo
 
 // typeString spells t as it must appear in this file.
 func (x *extraction) typeString(t types.Type) (string, error) {
-	str, missing := analysis.TypeString(t, x.file, x.pkg.Types, analysis.ImportMap(x.pkg.Types))
+	str, missing := analysis.TypeString(t, x.File, x.Pkg.Types, analysis.ImportMap(x.Pkg.Types))
 	if missing != "" {
 		return "", refactor.Refusef("the new variable needs the explicit type %s, but this file does not import %q", str, missing)
 	}
@@ -629,17 +624,17 @@ func (x *extraction) typeString(t types.Type) (string, error) {
 func (x *extraction) occurrences(expr ast.Expr, tv types.TypeAndValue, container ast.Node, insertPos token.Pos) ([]ast.Expr, []string, error) {
 	if o := x.move(expr, nil, analysis.Shared); o != nil {
 		return nil, nil, refactor.Refusef("all_occurrences requires an expression whose value cannot change between its occurrences, but %s could (it involves %s); extract a single occurrence instead (omit all_occurrences)",
-			x.quote(expr), x.quote(o.In))
+			x.Quote(expr), x.Quote(o.In))
 	}
 	for _, id := range x.dependsOn(expr) {
-		v, ok := x.info.Uses[id].(*types.Var)
+		v, ok := x.Info.Uses[id].(*types.Var)
 		if !ok {
 			continue
 		}
 		for _, w := range x.fa.Modified[v] {
 			if w.Pos() >= insertPos {
 				return nil, nil, refactor.Refusef("all_occurrences: %q is modified at %s, after the new variable would be declared, so later occurrences could have a different value; extract a single occurrence instead",
-					id.Name, x.ws.Position(w.Pos()))
+					id.Name, x.WS.Position(w.Pos()))
 			}
 		}
 	}
@@ -651,8 +646,8 @@ func (x *extraction) occurrences(expr ast.Expr, tv types.TypeAndValue, container
 		if !ok || e.Pos() < insertPos || !x.same(e, expr, tv) {
 			return true
 		}
-		if why := analysis.UsedAsVariable(x.info, analysis.PathTo(x.file, e)); why != "" && !x.pointer {
-			skippedWrites = append(skippedWrites, x.ws.Position(e.Pos()))
+		if why := analysis.UsedAsVariable(x.Info, analysis.PathTo(x.File, e)); why != "" && !x.pointer {
+			skippedWrites = append(skippedWrites, x.WS.Position(e.Pos()))
 			return false
 		}
 		sites = append(sites, e)
@@ -686,12 +681,12 @@ func (x *extraction) occurrences(expr ast.Expr, tv types.TypeAndValue, container
 // operands its address depends on.
 func (x *extraction) dependsOn(expr ast.Expr) []*ast.Ident {
 	if !x.pointer {
-		return analysis.ScopeRefs(x.info, expr)
+		return analysis.ScopeRefs(x.Info, expr)
 	}
 	ops, _ := x.fa.AddressOperands(expr)
 	var ids []*ast.Ident
 	for _, op := range ops {
-		ids = append(ids, analysis.ScopeRefs(x.info, op)...)
+		ids = append(ids, analysis.ScopeRefs(x.Info, op)...)
 	}
 	return ids
 }
@@ -708,7 +703,7 @@ func (x *extraction) laterCopies(expr ast.Expr, tv types.TypeAndValue, container
 		if !ok || e == expr || e.Pos() < insertPos || !x.same(e, expr, tv) {
 			return true
 		}
-		out = append(out, x.ws.Position(e.Pos()))
+		out = append(out, x.WS.Position(e.Pos()))
 		return false
 	})
 	return out
@@ -717,10 +712,10 @@ func (x *extraction) laterCopies(expr ast.Expr, tv types.TypeAndValue, container
 // same reports whether e is the same expression as expr: identical tokens,
 // identifiers denoting the same objects, and the same type.
 func (x *extraction) same(e, expr ast.Expr, tv types.TypeAndValue) bool {
-	if !x.matches(e, mustTokens(x.text(expr))) {
+	if !x.matches(e, mustTokens([]byte(x.Text(expr)))) {
 		return false
 	}
-	etv, ok := x.info.Types[e]
+	etv, ok := x.Info.Types[e]
 	if !ok || !types.Identical(etv.Type, tv.Type) {
 		return false
 	}
@@ -729,7 +724,7 @@ func (x *extraction) same(e, expr ast.Expr, tv types.TypeAndValue) bool {
 		return false
 	}
 	for i := range a {
-		if x.info.ObjectOf(a[i]) != x.info.ObjectOf(b[i]) {
+		if x.Info.ObjectOf(a[i]) != x.Info.ObjectOf(b[i]) {
 			return false
 		}
 	}
@@ -755,22 +750,9 @@ func idents(e ast.Expr) []*ast.Ident {
 // ---------------------------------------------------------------------------
 // Helpers
 
-func (x *extraction) off(p token.Pos) int { return x.tf.Offset(p) }
-
-func (x *extraction) text(n ast.Node) []byte { return x.src[x.off(n.Pos()):x.off(n.End())] }
-
-// quote renders a node's source for messages, shortened if long.
-func (x *extraction) quote(n ast.Node) string {
-	s := strings.Join(strings.Fields(string(x.text(n))), " ")
-	if len(s) > 60 {
-		s = s[:57] + "..."
-	}
-	return "`" + s + "`"
-}
-
 func (x *extraction) indentOf(p token.Pos) string {
-	start := x.off(x.tf.LineStart(x.tf.Line(p)))
-	ws := x.src[start:x.off(p)]
+	start := x.Off(x.TF.LineStart(x.TF.Line(p)))
+	ws := x.Src[start:x.Off(p)]
 	for i, c := range ws {
 		if c != ' ' && c != '\t' {
 			return string(ws[:i])
@@ -782,7 +764,7 @@ func (x *extraction) indentOf(p token.Pos) string {
 // widenParens returns the outermost parenthesized expression whose only
 // content is e, or e itself.
 func (x *extraction) widenParens(e ast.Expr) ast.Expr {
-	path := analysis.PathTo(x.file, e)
+	path := analysis.PathTo(x.File, e)
 	out := e
 	for i := 1; i < len(path); i++ {
 		pe, ok := path[i].(*ast.ParenExpr)
@@ -815,13 +797,6 @@ func kindOf(o types.Object) string {
 		return "predeclared"
 	}
 	return "symbol"
-}
-
-func declaredAt(ws *workspace.Workspace, o types.Object) string {
-	if o.Pkg() == nil || !o.Pos().IsValid() {
-		return "universe scope (predeclared)"
-	}
-	return ws.Position(o.Pos())
 }
 
 func isAre(n int) string {

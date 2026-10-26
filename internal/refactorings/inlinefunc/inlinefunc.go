@@ -20,13 +20,12 @@ import (
 	"sort"
 	"strings"
 
-	"golang.org/x/tools/go/packages"
-
 	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/imports"
 	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/site"
 	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
@@ -81,15 +80,9 @@ const (
 )
 
 type inliner struct {
-	ws   *workspace.Workspace
-	pkg  *packages.Package
-	info *types.Info
+	site.Site
 	keep bool
 
-	// The call and its file.
-	file     *ast.File
-	tf       *token.File
-	src      []byte
 	id       *ast.Ident // the function's name at the call
 	call     *ast.CallExpr
 	path     []ast.Node // from the call outwards
@@ -146,8 +139,14 @@ func (*InlineFunction) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refa
 	if err != nil {
 		return nil, err
 	}
-	x := &inliner{ws: ws, pkg: pkg, info: pkg.TypesInfo, keep: a.KeepFunction, file: file, tf: ws.Fset.File(file.Pos()), src: src, id: id,
-		merged: map[*types.Var]*ast.Ident{}, dropped: map[int]bool{}, usedQ: map[string]bool{}}
+	x := &inliner{
+		Site:    site.Site{WS: ws, Pkg: pkg, Info: pkg.TypesInfo, File: file, TF: ws.Fset.File(file.Pos()), Src: src},
+		keep:    a.KeepFunction,
+		id:      id,
+		merged:  map[*types.Var]*ast.Ident{},
+		dropped: map[int]bool{},
+		usedQ:   map[string]bool{},
+	}
 	x.imp = imports.New(ws, pkg, file, src)
 	return x.plan()
 }
@@ -267,7 +266,7 @@ func (x *inliner) plan() (*refactor.Plan, error) {
 	}
 	callerEdits = append(callerEdits, x.callerEdits...)
 	callerEdits = append(callerEdits, x.imp.Edits()...)
-	fes := []edit.FileEdit{{Path: x.tf.Name(), Edits: callerEdits}}
+	fes := []edit.FileEdit{{Path: x.TF.Name(), Edits: callerEdits}}
 
 	deleted, why := x.deletable()
 	if deleted {
@@ -279,7 +278,7 @@ func (x *inliner) plan() (*refactor.Plan, error) {
 	if x.sig.Recv() != nil {
 		what = "method"
 	}
-	summary := fmt.Sprintf("inlined the call to %s %q at %s", what, x.fn.Name(), x.ws.Position(x.call.Pos()))
+	summary := fmt.Sprintf("inlined the call to %s %q at %s", what, x.fn.Name(), x.WS.Position(x.call.Pos()))
 	if deleted {
 		summary += fmt.Sprintf(" and deleted the %s, which has no other uses", what)
 	}
@@ -304,7 +303,7 @@ func (x *inliner) plan() (*refactor.Plan, error) {
 	if !deleted && why != "" {
 		notes = append(notes, fmt.Sprintf("kept %s: %s", x.fn.Name(), why))
 	}
-	if deleted && analysis.PublicAPI(x.fn, x.ws.Pkgs) {
+	if deleted && analysis.PublicAPI(x.fn, x.WS.Pkgs) {
 		notes = append(notes, refactor.APINote(x.fn.Name(), "deleting it"))
 	}
 	if added := x.imp.Paths(); len(added) > 0 {
@@ -318,15 +317,15 @@ func (x *inliner) plan() (*refactor.Plan, error) {
 
 func (x *inliner) findCall() error {
 	name := x.id.Name
-	if o, ok := x.info.Defs[x.id].(*types.Func); ok {
-		return refactor.Refusef("%s is the declaration of %q; give the line of a call to it, or all_calls to inline every call", x.ws.Position(x.id.Pos()), o.Name())
+	if o, ok := x.Info.Defs[x.id].(*types.Func); ok {
+		return refactor.Refusef("%s is the declaration of %q; give the line of a call to it, or all_calls to inline every call", x.WS.Position(x.id.Pos()), o.Name())
 	}
-	fn, ok := x.info.Uses[x.id].(*types.Func)
+	fn, ok := x.Info.Uses[x.id].(*types.Func)
 	if !ok {
-		return refactor.Refusef("%q at %s is not a function or method", name, x.ws.Position(x.id.Pos()))
+		return refactor.Refusef("%q at %s is not a function or method", name, x.WS.Position(x.id.Pos()))
 	}
 	x.fn = fn
-	path := analysis.PathTo(x.file, x.id)
+	path := analysis.PathTo(x.File, x.id)
 	i := 1
 	if sel, ok := path[1].(*ast.SelectorExpr); ok && sel.Sel == x.id {
 		i = 2
@@ -339,7 +338,7 @@ func (x *inliner) findCall() error {
 	}
 	call, ok := path[i].(*ast.CallExpr)
 	if !ok || call.Fun != path[i-1] {
-		return refactor.Refusef("%q at %s is not called there (it is used as a value); only a call can be inlined", name, x.ws.Position(x.id.Pos()))
+		return refactor.Refusef("%q at %s is not called there (it is used as a value); only a call can be inlined", name, x.WS.Position(x.id.Pos()))
 	}
 	x.call, x.path = call, path[i:]
 	for _, n := range x.path {
@@ -353,19 +352,19 @@ func (x *inliner) findCall() error {
 		}
 	}
 	if x.callerFn == nil {
-		return refactor.Refusef("the call to %q at %s is not inside a function (it initializes a package-level variable); only calls in function bodies can be inlined", name, x.ws.Position(call.Pos()))
+		return refactor.Refusef("the call to %q at %s is not inside a function (it initializes a package-level variable); only calls in function bodies can be inlined", name, x.WS.Position(call.Pos()))
 	}
-	x.callerFA = analysis.AnalyzeFunc(x.info, analysis.OutermostFunc(path))
+	x.callerFA = analysis.AnalyzeFunc(x.Info, analysis.OutermostFunc(path))
 	if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
-		s := x.info.Selections[sel]
+		s := x.Info.Selections[sel]
 		switch {
 		case s == nil: // pkg.F
 		case s.Kind() == types.MethodExpr:
-			return refactor.Refusef("%s is a method expression (%s); only ordinary calls x.%s(...) can be inlined", x.quote(sel), x.quote(sel), name)
+			return refactor.Refusef("%s is a method expression (%s); only ordinary calls x.%s(...) can be inlined", x.Quote(sel), x.Quote(sel), name)
 		case types.IsInterface(s.Recv()):
-			return refactor.Refusef("%s calls the interface method %q; which method runs is decided at run time, so there is no body to inline", x.quote(call.Fun), name)
+			return refactor.Refusef("%s calls the interface method %q; which method runs is decided at run time, so there is no body to inline", x.Quote(call.Fun), name)
 		case len(s.Index()) > 1:
-			return refactor.Refusef("%q is promoted from an embedded field of %s; inlining promoted methods is not supported yet", name, x.quote(sel.X))
+			return refactor.Refusef("%q is promoted from an embedded field of %s; inlining promoted methods is not supported yet", name, x.Quote(sel.X))
 		}
 	}
 	return nil
@@ -373,12 +372,12 @@ func (x *inliner) findCall() error {
 
 func (x *inliner) findCallee() error {
 	name := x.fn.Name()
-	if x.fn.Pkg() != x.pkg.Types {
+	if x.fn.Pkg() != x.Pkg.Types {
 		pkgName := "the universe"
 		if x.fn.Pkg() != nil {
 			pkgName = "package " + x.fn.Pkg().Path()
 		}
-		return refactor.Refusef("%q is declared in %s; only functions of the calling package (%s) can be inlined for now", name, pkgName, x.pkg.PkgPath)
+		return refactor.Refusef("%q is declared in %s; only functions of the calling package (%s) can be inlined for now", name, pkgName, x.Pkg.PkgPath)
 	}
 	x.sig = x.fn.Signature()
 	if x.sig.TypeParams().Len() > 0 || x.sig.RecvTypeParams().Len() > 0 {
@@ -387,9 +386,9 @@ func (x *inliner) findCallee() error {
 	if x.sig.Variadic() {
 		return refactor.Refusef("%q is variadic; inlining variadic functions is not supported yet", name)
 	}
-	for _, f := range x.pkg.Syntax {
+	for _, f := range x.Pkg.Syntax {
 		for _, d := range f.Decls {
-			if fd, ok := d.(*ast.FuncDecl); ok && x.info.Defs[fd.Name] == x.fn {
+			if fd, ok := d.(*ast.FuncDecl); ok && x.Info.Defs[fd.Name] == x.fn {
 				x.decl, x.dfile = fd, f
 			}
 		}
@@ -407,9 +406,9 @@ func (x *inliner) findCallee() error {
 			}
 		}
 	}
-	x.dtf = x.ws.Fset.File(x.dfile.Pos())
-	if x.dtf.Name() == x.tf.Name() {
-		x.dsrc = x.src
+	x.dtf = x.WS.Fset.File(x.dfile.Pos())
+	if x.dtf.Name() == x.TF.Name() {
+		x.dsrc = x.Src
 	} else {
 		src, err := os.ReadFile(x.dtf.Name())
 		if err != nil {
@@ -417,8 +416,8 @@ func (x *inliner) findCallee() error {
 		}
 		x.dsrc = src
 	}
-	x.calleeFA = analysis.AnalyzeFunc(x.info, x.decl)
-	x.fnScope = x.info.Scopes[x.decl.Type]
+	x.calleeFA = analysis.AnalyzeFunc(x.Info, x.decl)
+	x.fnScope = x.Info.Scopes[x.decl.Type]
 	return nil
 }
 
@@ -436,10 +435,10 @@ func (x *inliner) scanBody() error {
 		case *ast.FuncLit:
 			return false
 		case *ast.DeferStmt:
-			err = refactor.Refusef("%q uses defer (at %s), which runs when %q returns; inlined, it would run when the caller returns", name, x.ws.Position(n.Pos()), name)
+			err = refactor.Refusef("%q uses defer (at %s), which runs when %q returns; inlined, it would run when the caller returns", name, x.WS.Position(n.Pos()), name)
 		case *ast.CallExpr:
-			if b, ok := x.info.Uses[analysis.IdentOf(n.Fun)].(*types.Builtin); ok && b.Name() == "recover" {
-				err = refactor.Refusef("%q calls recover (at %s), whose meaning depends on the function that calls it", name, x.ws.Position(n.Pos()))
+			if b, ok := x.Info.Uses[analysis.IdentOf(n.Fun)].(*types.Builtin); ok && b.Name() == "recover" {
+				err = refactor.Refusef("%q calls recover (at %s), whose meaning depends on the function that calls it", name, x.WS.Position(n.Pos()))
 			}
 		case *ast.ReturnStmt:
 			x.returns = append(x.returns, n)
@@ -495,7 +494,7 @@ func (x *inliner) decideShape() error {
 			// of a single return, the call's expression keeps that order.
 			if bad := x.lhsEvaluatedFirst(p); bad != nil {
 				if x.exprBody() == nil {
-					return refactor.Refusef("`%s` on the left of the assignment is evaluated before the call to %q, and inlining would run the body first; assign the call to a variable first", x.text(bad), name)
+					return refactor.Refusef("`%s` on the left of the assignment is evaluated before the call to %q, and inlining would run the body first; assign the call to a variable first", x.Text(bad), name)
 				}
 				break // inline the expression in place
 			}
@@ -553,7 +552,7 @@ func (x *inliner) decideShape() error {
 	for _, r := range x.returns {
 		if r != last {
 			return refactor.Refusef("%q returns early (at %s); a function with several returns can only be inlined where it is called as \"return %s(...)\"",
-				name, x.ws.Position(r.Pos()), name)
+				name, x.WS.Position(r.Pos()), name)
 		}
 	}
 	if r, ok := last.(*ast.ReturnStmt); ok {
@@ -579,11 +578,11 @@ func (x *inliner) lhsEvaluatedFirst(as *ast.AssignStmt) ast.Expr {
 		case *ast.ParenExpr:
 			return check(e.X)
 		case *ast.SelectorExpr:
-			s := x.info.Selections[e]
+			s := x.Info.Selections[e]
 			switch {
 			case s == nil: // a package-qualified variable
 				return nil
-			case s.Kind() == types.FieldVal && !s.Indirect() && !analysis.IsPointer(x.info.TypeOf(e.X)):
+			case s.Kind() == types.FieldVal && !s.Indirect() && !analysis.IsPointer(x.Info.TypeOf(e.X)):
 				return check(e.X)
 			case !stable(e.X):
 				return e.X
@@ -593,7 +592,7 @@ func (x *inliner) lhsEvaluatedFirst(as *ast.AssignStmt) ast.Expr {
 			switch {
 			case !stable(e.Index):
 				return e.Index
-			case analysis.IsArray(x.info.TypeOf(e.X)):
+			case analysis.IsArray(x.Info.TypeOf(e.X)):
 				return check(e.X)
 			case !stable(e.X):
 				return e.X
@@ -619,7 +618,7 @@ func (x *inliner) lhsEvaluatedFirst(as *ast.AssignStmt) ast.Expr {
 // same value and does nothing else wherever it is evaluated: stable (with
 // sharing, making no new reference value), and unable to panic.
 func (x *inliner) movable(fa *analysis.Func, e ast.Expr, sharing bool) bool {
-	s := x.ws.Effects().Of(fa, e)
+	s := x.WS.Effects().Of(fa, e)
 	_, ok := s.Stable(sharing)
 	return ok && s.At.Panic == nil
 }
@@ -636,10 +635,10 @@ func (x *inliner) checkBareReturns() error {
 	for i := 0; i < cs.Results().Len(); i++ {
 		names[cs.Results().At(i).Name()] = true
 	}
-	for id, o := range x.info.Defs {
+	for id, o := range x.Info.Defs {
 		if o != nil && names[id.Name] && x.decl.Body.Pos() <= id.Pos() && id.Pos() < x.decl.Body.End() {
 			return refactor.Refusef("%q declares %s (at %s), which has the name of a result of the calling function; its returns would then be rejected (a bare return cannot be used where a result is hidden). Rename it first",
-				x.fn.Name(), id.Name, x.ws.Position(id.Pos()))
+				x.fn.Name(), id.Name, x.WS.Position(id.Pos()))
 		}
 	}
 	return nil
@@ -679,13 +678,13 @@ func (x *inliner) findBlock() error {
 	default:
 		return refactor.Refusef("the call to %q is in the header of a statement (an if, for or switch); move it to its own statement first", x.fn.Name())
 	}
-	x.blockScope = x.info.Scopes[x.block]
+	x.blockScope = x.Info.Scopes[x.block]
 	if x.blockScope == nil { // a function body shares the function's scope
 		switch f := x.path[i+2].(type) {
 		case *ast.FuncDecl:
-			x.blockScope = x.info.Scopes[f.Type]
+			x.blockScope = x.Info.Scopes[f.Type]
 		case *ast.FuncLit:
-			x.blockScope = x.info.Scopes[f.Type]
+			x.blockScope = x.Info.Scopes[f.Type]
 		}
 	}
 	if x.blockScope == nil {
@@ -735,11 +734,11 @@ func (x *inliner) listOf(s ast.Stmt) []ast.Stmt {
 func (x *inliner) callerSig() *types.Signature {
 	switch f := x.callerFn.(type) {
 	case *ast.FuncDecl:
-		if o, ok := x.info.Defs[f.Name].(*types.Func); ok {
+		if o, ok := x.Info.Defs[f.Name].(*types.Func); ok {
 			return o.Signature()
 		}
 	case *ast.FuncLit:
-		s, _ := x.info.TypeOf(f).(*types.Signature)
+		s, _ := x.Info.TypeOf(f).(*types.Signature)
 		return s
 	}
 	return nil
@@ -812,13 +811,13 @@ func (x *inliner) decideMerges() error {
 		if v == nil || returned[v] != 1 || v.Parent() != x.fnScope || x.calleeFA.Escapes(v) {
 			continue
 		}
-		if o, ok := x.info.Uses[id].(*types.Var); ok { // an existing variable
+		if o, ok := x.Info.Uses[id].(*types.Var); ok { // an existing variable
 			if x.canMergeExisting(v, id, o) {
 				existing = append(existing, existingMerge{i, v, id, o})
 			}
 			continue
 		}
-		lobj, _ := x.info.Defs[id].(*types.Var)
+		lobj, _ := x.Info.Defs[id].(*types.Var)
 		if lobj == nil || v == nil || returned[v] != 1 || v.Parent() != x.fnScope || x.isParam(v) ||
 			!types.Identical(v.Type(), lobj.Type()) || x.calleeFA.Escapes(v) {
 			continue
@@ -839,7 +838,7 @@ func (x *inliner) localVar(e ast.Expr) *types.Var {
 	if !ok {
 		return nil
 	}
-	v, ok := x.info.Uses[id].(*types.Var)
+	v, ok := x.Info.Uses[id].(*types.Var)
 	if !ok || !x.inDecl(v.Pos()) || x.isParam(v) {
 		return nil
 	}
@@ -881,9 +880,9 @@ func (x *inliner) inDecl(p token.Pos) bool { return x.decl.Pos() <= p && p < x.d
 // the caller file's names for them.
 func (x *inliner) checkFreeNames() error {
 	pos := x.call.Pos()
-	scope := x.pkg.Types.Scope().Innermost(pos)
-	for _, id := range analysis.ScopeRefs(x.info, x.decl.Body) {
-		obj := x.info.Uses[id]
+	scope := x.Pkg.Types.Scope().Innermost(pos)
+	for _, id := range analysis.ScopeRefs(x.Info, x.decl.Body) {
+		obj := x.Info.Uses[id]
 		if obj == nil || x.inDecl(obj.Pos()) {
 			continue
 		}
@@ -897,16 +896,16 @@ func (x *inliner) checkFreeNames() error {
 			}
 			continue
 		}
-		if obj.Pkg() != nil && obj.Pkg() != x.pkg.Types {
+		if obj.Pkg() != nil && obj.Pkg() != x.Pkg.Types {
 			return refactor.Refusef("%q refers to %s from package %s through a dot import; inlining it is not supported", x.fn.Name(), id.Name, obj.Pkg().Path())
 		}
 		if _, got := scope.LookupParent(id.Name, pos); got != obj {
 			where := "is not visible there"
 			if got != nil {
-				where = fmt.Sprintf("refers to the %s declared at %s instead", analysis.KindOf(got), x.ws.Position(got.Pos()))
+				where = fmt.Sprintf("refers to the %s declared at %s instead", analysis.KindOf(got), x.WS.Position(got.Pos()))
 			}
 			return refactor.Refusef("%q uses %s (the %s declared at %s), but at the call %s; rename one of them first",
-				x.fn.Name(), id.Name, analysis.KindOf(obj), declaredAt(x.ws, obj), where)
+				x.fn.Name(), id.Name, analysis.KindOf(obj), site.DeclaredAt(x.WS, obj), where)
 		}
 	}
 	return nil
@@ -919,10 +918,10 @@ func (x *inliner) qualifier(p *types.Package) (string, error) {
 	if err != nil || n == "" {
 		return n, err
 	}
-	scope := x.pkg.Types.Scope().Innermost(x.call.Pos())
+	scope := x.Pkg.Types.Scope().Innermost(x.call.Pos())
 	if _, got := scope.LookupParent(n, x.call.Pos()); got != nil {
 		if pn, ok := got.(*types.PkgName); !ok || pn.Imported() != p {
-			return "", fmt.Errorf("which the calling file names %s, but at the call %s refers to the %s declared at %s", n, n, analysis.KindOf(got), x.ws.Position(got.Pos()))
+			return "", fmt.Errorf("which the calling file names %s, but at the call %s refers to the %s declared at %s", n, n, analysis.KindOf(got), x.WS.Position(got.Pos()))
 		}
 	}
 	x.usedQ[n] = true
@@ -943,10 +942,10 @@ func (x *inliner) typeString(t types.Type) (string, error) {
 		return "", refusal
 	}
 	// Unqualified names in the spelling must not be hidden at the call.
-	scope := x.pkg.Types.Scope().Innermost(x.call.Pos())
+	scope := x.Pkg.Types.Scope().Innermost(x.call.Pos())
 	var bad error
 	walkNamed(t, map[types.Type]bool{}, func(o *types.TypeName) {
-		if o.Pkg() != x.pkg.Types && o.Pkg() != nil {
+		if o.Pkg() != x.Pkg.Types && o.Pkg() != nil {
 			return
 		}
 		if _, got := scope.LookupParent(o.Name(), x.call.Pos()); got != o && bad == nil {
@@ -981,16 +980,16 @@ func (x *inliner) checkDeclaredNames() error {
 		if v, ok := o.(*types.Var); ok && x.merged[v] != nil {
 			continue // becomes the caller's own variable
 		}
-		names = append(names, decl{n, fmt.Sprintf("%s %s (declared at %s)", analysis.KindOf(o), n, x.ws.Position(o.Pos()))})
+		names = append(names, decl{n, fmt.Sprintf("%s %s (declared at %s)", analysis.KindOf(o), n, x.WS.Position(o.Pos()))})
 	}
 	if len(names) > 0 && x.callerHasGoto() {
 		return refactor.Refusef("the calling function uses goto, and the inlined code declares %s; a goto must not jump over declarations, so this is not supported", names[0].what)
 	}
-	outer := x.pkg.Types.Scope().Innermost(x.stmt.Pos())
+	outer := x.Pkg.Types.Scope().Innermost(x.stmt.Pos())
 	for _, d := range names {
 		if o := x.blockScope.Lookup(d.name); o != nil {
 			return refactor.Refusef("the inlined code declares %s in the calling block, which already declares %s at %s; rename one of them first",
-				d.what, d.name, x.ws.Position(o.Pos()))
+				d.what, d.name, x.WS.Position(o.Pos()))
 		}
 		_, o := outer.LookupParent(d.name, x.stmt.Pos())
 		if o == nil {
@@ -998,7 +997,7 @@ func (x *inliner) checkDeclaredNames() error {
 		}
 		if u := x.usedLater(o); u != nil {
 			return refactor.Refusef("the inlined code declares %s in the calling block, which would hide the %s %s used later at %s; rename one of them first",
-				d.what, analysis.KindOf(o), d.name, x.ws.Position(u.Pos()))
+				d.what, analysis.KindOf(o), d.name, x.WS.Position(u.Pos()))
 		}
 	}
 	return nil
@@ -1012,7 +1011,7 @@ func (x *inliner) usedLater(o types.Object) *ast.Ident {
 		if n == nil || found != nil || n.End() <= x.stmt.Pos() || n == ast.Node(x.call) {
 			return false
 		}
-		if id, ok := n.(*ast.Ident); ok && x.info.Uses[id] == o {
+		if id, ok := n.(*ast.Ident); ok && x.Info.Uses[id] == o {
 			found = id
 		}
 		return true
@@ -1037,19 +1036,9 @@ func (x *inliner) callerHasGoto() bool {
 // ---------------------------------------------------------------------------
 // Helpers
 
-func (x *inliner) off(p token.Pos) int  { return x.tf.Offset(p) }
 func (x *inliner) doff(p token.Pos) int { return x.dtf.Offset(p) }
 
-func (x *inliner) text(n ast.Node) string  { return string(x.src[x.off(n.Pos()):x.off(n.End())]) }
 func (x *inliner) dtext(n ast.Node) string { return string(x.dsrc[x.doff(n.Pos()):x.doff(n.End())]) }
-
-func (x *inliner) quote(n ast.Node) string {
-	s := strings.Join(strings.Fields(x.text(n)), " ")
-	if len(s) > 60 {
-		s = s[:57] + "..."
-	}
-	return "`" + s + "`"
-}
 
 // indentOf returns the leading white space of the line holding p in src.
 func indentOf(src []byte, tf *token.File, p token.Pos) string {
@@ -1109,13 +1098,6 @@ func walkNamed(t types.Type, seen map[types.Type]bool, f func(*types.TypeName)) 
 			walkNamed(t.ExplicitMethod(i).Type(), seen, f)
 		}
 	}
-}
-
-func declaredAt(ws *workspace.Workspace, o types.Object) string {
-	if o.Pkg() == nil || !o.Pos().IsValid() {
-		return "universe scope (predeclared)"
-	}
-	return ws.Position(o.Pos())
 }
 
 func quoteAll(ss []string) []string {

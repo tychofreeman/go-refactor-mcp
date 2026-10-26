@@ -26,17 +26,15 @@ import (
 	"go/parser"
 	"go/token"
 	"go/types"
-	"os"
 	"slices"
 	"sort"
 	"strings"
-
-	"golang.org/x/tools/go/packages"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/site"
 	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
@@ -82,13 +80,8 @@ type args struct {
 }
 
 type inliner struct {
-	ws   *workspace.Workspace
-	pkg  *packages.Package
-	info *types.Info
-	file *ast.File
-	tf   *token.File
-	src  []byte
-	fa   *analysis.Func
+	site.Site
+	fa *analysis.Func
 
 	obj      types.Object
 	init     ast.Expr
@@ -113,13 +106,11 @@ func (*InlineVariable) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refa
 	if obj == nil {
 		return nil, refactor.Refusef("%q at %s:%d is not a variable or constant that can be inlined", a.Name, a.File, a.Line)
 	}
-	path := ws.Fset.Position(id.Pos()).Filename
-	_, file := ws.FileSyntax(path)
-	src, err := os.ReadFile(path)
+	s, err := site.At(ws, ws.Fset.Position(id.Pos()).Filename)
 	if err != nil {
 		return nil, err
 	}
-	x := &inliner{ws: ws, pkg: pkg, info: pkg.TypesInfo, file: file, tf: ws.Fset.File(file.Pos()), src: src, obj: obj}
+	x := &inliner{Site: *s, obj: obj}
 	return x.plan()
 }
 
@@ -148,7 +139,7 @@ func (x *inliner) plan() (*refactor.Plan, error) {
 			return nil, err
 		}
 		converted = converted || conv
-		edits = append(edits, edit.TextEdit{Start: x.off(n.Pos()), End: x.off(n.End()), NewText: text})
+		edits = append(edits, edit.TextEdit{Start: x.Off(n.Pos()), End: x.Off(n.End()), NewText: text})
 	}
 	edits = append(edits, x.deletion())
 
@@ -165,8 +156,8 @@ func (x *inliner) plan() (*refactor.Plan, error) {
 	}
 	return &refactor.Plan{
 		Summary: fmt.Sprintf("inlined %s %q as %s (%d use%s replaced, declaration removed)",
-			kind, x.obj.Name(), x.quote(x.init), len(x.uses), textutil.Plural(len(x.uses))),
-		Edits: []edit.FileEdit{{Path: x.tf.Name(), Edits: edits}},
+			kind, x.obj.Name(), x.Quote(x.init), len(x.uses), textutil.Plural(len(x.uses))),
+		Edits: []edit.FileEdit{{Path: x.TF.Name(), Edits: edits}},
 		Notes: notes,
 	}, nil
 }
@@ -192,7 +183,7 @@ func (x *inliner) findDeclaration() error {
 		return refactor.Refusef("%q has no declaring scope (it may be a type switch variable) and cannot be inlined", name)
 	}
 	var declID *ast.Ident
-	ast.Inspect(x.file, func(n ast.Node) bool {
+	ast.Inspect(x.File, func(n ast.Node) bool {
 		if id, ok := n.(*ast.Ident); ok && id.Pos() == x.obj.Pos() {
 			declID = id
 		}
@@ -201,7 +192,7 @@ func (x *inliner) findDeclaration() error {
 	if declID == nil {
 		return refactor.Refusef("the declaration of %q is not in this file", name)
 	}
-	path := analysis.PathTo(x.file, declID)
+	path := analysis.PathTo(x.File, declID)
 	if _, ok := path[1].(*ast.Field); ok {
 		return refactor.Refusef("%q is a parameter or result name; only local variables with an initializer can be inlined", name)
 	}
@@ -209,7 +200,7 @@ func (x *inliner) findDeclaration() error {
 	if fn == nil {
 		return refactor.Refusef("%q is not declared inside a function", name)
 	}
-	x.fa = analysis.AnalyzeFunc(x.info, fn)
+	x.fa = analysis.AnalyzeFunc(x.Info, fn)
 
 	together := fmt.Sprintf("%q is declared together with other names; only a variable declared on its own (x := expr) can be inlined", name)
 	stmtIndex := -1
@@ -272,12 +263,12 @@ func (x *inliner) findDeclaration() error {
 		x.block = path[stmtIndex+2]
 	}
 
-	tv := x.info.Types[x.init]
+	tv := x.Info.Types[x.init]
 	if _, ok := tv.Type.(*types.Tuple); ok {
 		return refactor.Refusef("the initializer of %q returns several values", name)
 	}
 
-	for id, o := range x.info.Uses {
+	for id, o := range x.Info.Uses {
 		if o == x.obj {
 			x.uses = append(x.uses, id)
 		}
@@ -298,7 +289,7 @@ func (x *inliner) checkVariable() error {
 	}
 	if mods := x.fa.Modified[v]; len(mods) > 0 {
 		return refactor.Refusef("%q is assigned at %s; only variables that are never changed after their declaration can be inlined",
-			v.Name(), x.ws.Position(mods[0].Pos()))
+			v.Name(), x.WS.Position(mods[0].Pos()))
 	}
 	if x.fa.Addressed[v] {
 		return refactor.Refusef("%q must stay a variable: its address is taken, it is sliced, or a pointer-receiver method is called on it", v.Name())
@@ -322,10 +313,10 @@ func (x *inliner) checkEvaluation() error {
 	if len(x.uses) > 1 {
 		if o.Kind == analysis.Panics {
 			return refactor.Refusef("%q is used %d times, and its initializer %s can panic (%s), which inlining would move to the first use; inlining requires a single use",
-				x.obj.Name(), len(x.uses), x.quote(x.init), x.quote(o.In))
+				x.obj.Name(), len(x.uses), x.Quote(x.init), x.Quote(o.In))
 		}
 		return refactor.Refusef("%q is used %d times, and its initializer %s could give a different value or do something each time it is evaluated (because of %s); inlining requires a single use",
-			x.obj.Name(), len(x.uses), x.quote(x.init), x.quote(o.In))
+			x.obj.Name(), len(x.uses), x.Quote(x.init), x.Quote(o.In))
 	}
 	use := x.uses[0]
 	stmt, err := x.evaluatedOnce(use)
@@ -345,11 +336,11 @@ func (x *inliner) checkEvaluation() error {
 	for _, s := range m.Past[:between] {
 		if s.Pos() <= o.Past.Pos() && o.Past.End() <= s.End() {
 			return refactor.Refusef("%s (at %s) runs between the declaration of %q and its use; inlining would move %s after it, which could change behavior (%s)",
-				x.quote(o.Past), x.ws.Position(o.Past.Pos()), x.obj.Name(), x.quote(x.init), o.Why)
+				x.Quote(o.Past), x.WS.Position(o.Past.Pos()), x.obj.Name(), x.Quote(x.init), o.Why)
 		}
 	}
 	return refactor.Refusef("inlining would evaluate %s after %s (at %s), which comes first in the statement that uses %q; that could change behavior (%s)",
-		x.quote(x.init), x.quote(o.Past), x.ws.Position(o.Past.Pos()), x.obj.Name(), o.Why)
+		x.Quote(x.init), x.Quote(o.Past), x.WS.Position(o.Past.Pos()), x.obj.Name(), o.Why)
 }
 
 // move is the initializer's move from the declaration to its use: of
@@ -359,7 +350,7 @@ func (x *inliner) move() analysis.Move {
 	if e := x.aliased(); e != nil {
 		moved = &ast.UnaryExpr{Op: token.AND, X: e}
 	}
-	return analysis.Move{Effects: x.ws.Effects(), Func: x.fa, Expr: moved, Dereferenced: moved != x.init}
+	return analysis.Move{Effects: x.WS.Effects(), Func: x.fa, Expr: moved, Dereferenced: moved != x.init}
 }
 
 // between returns the statements of the block between the declaration
@@ -392,15 +383,15 @@ func (x *inliner) evaluatedOnce(use *ast.Ident) (ast.Stmt, error) {
 	if x.owner != nil {
 		scope = x.owner
 	}
-	path := analysis.PathTo(x.file, use)
+	path := analysis.PathTo(x.File, use)
 	end := slices.Index(path, scope)
 	if end < 0 {
 		return nil, refactor.Refusef("the use of %q at %s is not directly in the statement after its declaration, so the initializer %s would no longer run exactly once there",
-			x.obj.Name(), x.ws.Position(use.Pos()), x.quote(x.init))
+			x.obj.Name(), x.WS.Position(use.Pos()), x.Quote(x.init))
 	}
 	if times, why := analysis.Reach(path[:end+1]); times != analysis.Once {
 		return nil, refactor.Refusef("the use of %q at %s is %s, so the initializer %s would no longer run exactly once, right after the declaration",
-			x.obj.Name(), x.ws.Position(use.Pos()), why, x.quote(x.init))
+			x.obj.Name(), x.WS.Position(use.Pos()), why, x.Quote(x.init))
 	}
 	child := path[end-1]
 	switch o := x.owner.(type) {
@@ -423,10 +414,10 @@ func (x *inliner) evaluatedOnce(use *ast.Ident) (ast.Stmt, error) {
 	}
 	if x.owner != nil {
 		return nil, refactor.Refusef("the use of %q at %s is not in the condition of the statement that declares it, so the initializer %s would no longer run exactly once",
-			x.obj.Name(), x.ws.Position(use.Pos()), x.quote(x.init))
+			x.obj.Name(), x.WS.Position(use.Pos()), x.Quote(x.init))
 	}
 	return nil, refactor.Refusef("the use of %q at %s is not directly in the statement after its declaration, so the initializer %s would no longer run exactly once there",
-		x.obj.Name(), x.ws.Position(use.Pos()), x.quote(x.init))
+		x.obj.Name(), x.WS.Position(use.Pos()), x.Quote(x.init))
 }
 
 // checkReadsUnchanged refuses if a local the initializer reads is modified
@@ -442,12 +433,12 @@ func (x *inliner) checkReadsUnchanged() error {
 			}
 			if x.writtenAt(m) < last {
 				return refactor.Refusef("%q, which the initializer of %q reads, is modified at %s before a use; the inlined expression would see the new value",
-					v.Name(), x.obj.Name(), x.ws.Position(m.Pos()))
+					v.Name(), x.obj.Name(), x.WS.Position(m.Pos()))
 			}
 			for _, u := range x.uses {
 				if loop := x.repeatingAncestor(u); loop != nil && loop.Pos() <= m.Pos() && m.Pos() < loop.End() {
 					return refactor.Refusef("%q, which the initializer of %q reads, is modified at %s inside the loop or function literal that uses it at %s; the inlined expression could see the new value",
-						v.Name(), x.obj.Name(), x.ws.Position(m.Pos()), x.ws.Position(u.Pos()))
+						v.Name(), x.obj.Name(), x.WS.Position(m.Pos()), x.WS.Position(u.Pos()))
 				}
 			}
 		}
@@ -459,7 +450,7 @@ func (x *inliner) checkReadsUnchanged() error {
 // left side of an assignment is written after the whole right side has
 // been evaluated, so "out = append(out, v)" reads out before writing it.
 func (x *inliner) writtenAt(m ast.Node) token.Pos {
-	path := analysis.PathTo(x.file, m)
+	path := analysis.PathTo(x.File, m)
 	if len(path) > 1 {
 		switch s := path[1].(type) {
 		case *ast.AssignStmt:
@@ -479,7 +470,7 @@ func (x *inliner) writtenAt(m ast.Node) token.Pos {
 // contains u but not the declaration, or nil.
 func (x *inliner) repeatingAncestor(u ast.Node) ast.Node {
 	var out ast.Node
-	for _, n := range analysis.PathTo(x.file, u) {
+	for _, n := range analysis.PathTo(x.File, u) {
 		if n.Pos() <= x.declStmt.Pos() && x.declStmt.End() <= n.End() {
 			break
 		}
@@ -494,24 +485,24 @@ func (x *inliner) repeatingAncestor(u ast.Node) ast.Node {
 // checkScopes ensures every name in the initializer refers to the same
 // thing at each use.
 func (x *inliner) checkScopes() error {
-	pkgScope := x.pkg.Types.Scope()
+	pkgScope := x.Pkg.Types.Scope()
 	for _, u := range x.uses {
 		inner := pkgScope.Innermost(u.Pos())
 		if inner == nil {
 			continue
 		}
-		for _, id := range analysis.ScopeRefs(x.info, x.init) {
-			want := x.info.Uses[id]
+		for _, id := range analysis.ScopeRefs(x.Info, x.init) {
+			want := x.Info.Uses[id]
 			if want == nil || (want.Pos() >= x.init.Pos() && want.Pos() < x.init.End()) {
 				continue // declared inside the initializer (function literal)
 			}
 			if _, got := inner.LookupParent(id.Name, u.Pos()); got != want {
 				where := "is not visible there"
 				if got != nil {
-					where = fmt.Sprintf("refers to the %s declared at %s instead", analysis.KindOf(got), declaredAt(x.ws, got))
+					where = fmt.Sprintf("refers to the %s declared at %s instead", analysis.KindOf(got), site.DeclaredAt(x.WS, got))
 				}
 				return refactor.Refusef("at the use of %q at %s, %q (used by its initializer %s) %s",
-					x.obj.Name(), x.ws.Position(u.Pos()), id.Name, x.quote(x.init), where)
+					x.obj.Name(), x.WS.Position(u.Pos()), id.Name, x.Quote(x.init), where)
 			}
 		}
 	}
@@ -526,14 +517,14 @@ func (x *inliner) checkScopes() error {
 // parenthesized if the context requires it; or, where a pointer alias is
 // dereferenced, what it points to.
 func (x *inliner) replacement(use *ast.Ident) (ast.Node, string, bool, error) {
-	path := analysis.PathTo(x.file, use)
+	path := analysis.PathTo(x.File, use)
 	parent := path[1]
 	if e := x.aliased(); e != nil {
 		if n, text, ok := x.dereference(path, e); ok {
 			return n, text, false, nil
 		}
 	}
-	text := string(x.text(x.init))
+	text := x.Text(x.init)
 	if err := x.checkConstantContext(use, parent); err != nil {
 		return nil, "", false, err
 	}
@@ -542,10 +533,10 @@ func (x *inliner) replacement(use *ast.Ident) (ast.Node, string, bool, error) {
 		if strings.HasPrefix(t, "*") || strings.HasPrefix(t, "<-") || strings.HasPrefix(t, "func") || strings.HasPrefix(t, "chan") {
 			t = "(" + t + ")"
 		}
-		if _, missing := analysis.TypeString(x.obj.Type(), x.file, x.pkg.Types, analysis.ImportMap(x.pkg.Types)); missing != "" {
+		if _, missing := analysis.TypeString(x.obj.Type(), x.File, x.Pkg.Types, analysis.ImportMap(x.Pkg.Types)); missing != "" {
 			return nil, "", false, refactor.Refusef("the inlined expression needs a conversion to %s, but this file does not import %q", x.typeName(), missing)
 		}
-		return use, t + "(" + strings.TrimSpace(string(x.text(ast.Unparen(x.init)))) + ")", true, nil
+		return use, t + "(" + strings.TrimSpace(x.Text(ast.Unparen(x.init))) + ")", true, nil
 	}
 	if analysis.NeedsParens(ast.Unparen(x.init), parent, use) || analysis.InControlHeader(x.init, path) {
 		return use, "(" + text + ")", false, nil
@@ -558,7 +549,7 @@ func (x *inliner) replacement(use *ast.Ident) (ast.Node, string, bool, error) {
 // nil.
 func (x *inliner) aliased() ast.Expr {
 	u, ok := ast.Unparen(x.init).(*ast.UnaryExpr)
-	if !ok || u.Op != token.AND || !x.info.Types[u.X].Addressable() {
+	if !ok || u.Op != token.AND || !x.Info.Types[u.X].Addressable() {
 		return nil
 	}
 	return u.X
@@ -568,7 +559,7 @@ func (x *inliner) aliased() ast.Expr {
 // pointer (*p, p.f, p[i]), the node to replace and the expression it
 // points to, written for that place.
 func (x *inliner) dereference(path []ast.Node, target ast.Expr) (ast.Node, string, bool) {
-	text := string(x.text(target))
+	text := x.Text(target)
 	n, parent := path[0].(ast.Expr), path[1]
 	switch p := parent.(type) {
 	case *ast.StarExpr:
@@ -609,7 +600,7 @@ func (x *inliner) reads() []*types.Var {
 }
 
 func (x *inliner) typeName() string {
-	s, _ := analysis.TypeString(x.obj.Type(), x.file, x.pkg.Types, analysis.ImportMap(x.pkg.Types))
+	s, _ := analysis.TypeString(x.obj.Type(), x.File, x.Pkg.Types, analysis.ImportMap(x.Pkg.Types))
 	return s
 }
 
@@ -646,7 +637,7 @@ func (x *inliner) needsConversion(use *ast.Ident, parent ast.Node) bool {
 // ownType is the type the initializer has on its own, before any context
 // converts it (untyped constants and comparisons stay untyped).
 func (x *inliner) ownType() types.Type {
-	return analysis.OwnType(x.ws.Fset, x.pkg.Types, x.info, x.init)
+	return analysis.OwnType(x.WS.Fset, x.Pkg.Types, x.Info, x.init)
 }
 
 // contextType returns the type a value at use is converted to by its
@@ -655,10 +646,10 @@ func (x *inliner) ownType() types.Type {
 func (x *inliner) contextType(use *ast.Ident, parent ast.Node) types.Type {
 	switch p := parent.(type) {
 	case *ast.CallExpr:
-		if tv, ok := x.info.Types[p.Fun]; ok && tv.IsType() {
+		if tv, ok := x.Info.Types[p.Fun]; ok && tv.IsType() {
 			return nil
 		}
-		sig, ok := under(x.info.TypeOf(p.Fun)).(*types.Signature)
+		sig, ok := under(x.Info.TypeOf(p.Fun)).(*types.Signature)
 		if !ok {
 			return nil
 		}
@@ -684,13 +675,13 @@ func (x *inliner) contextType(use *ast.Ident, parent ast.Node) types.Type {
 		if len(p.Lhs) == len(p.Rhs) {
 			for i, r := range p.Rhs {
 				if r == ast.Expr(use) {
-					return x.info.TypeOf(p.Lhs[i])
+					return x.Info.TypeOf(p.Lhs[i])
 				}
 			}
 		}
 	case *ast.ValueSpec:
 		if p.Type != nil {
-			return x.info.TypeOf(p.Type)
+			return x.Info.TypeOf(p.Type)
 		}
 	case *ast.ReturnStmt:
 		sig := x.enclosingSignature(use)
@@ -709,7 +700,7 @@ func (x *inliner) contextType(use *ast.Ident, parent ast.Node) types.Type {
 		if other == ast.Expr(use) {
 			other = p.Y
 		}
-		if t := x.info.TypeOf(other); t != nil && !x.maybeUntyped(other) {
+		if t := x.Info.TypeOf(other); t != nil && !x.maybeUntyped(other) {
 			return t
 		}
 	case *ast.IndexExpr:
@@ -717,13 +708,13 @@ func (x *inliner) contextType(use *ast.Ident, parent ast.Node) types.Type {
 		// string index does not: an untyped value there becomes int, which
 		// can change the arithmetic, e.g. 1 << n no longer wraps at 8 bits.)
 		if p.Index == ast.Expr(use) {
-			if m, ok := under(x.info.TypeOf(p.X)).(*types.Map); ok {
+			if m, ok := under(x.Info.TypeOf(p.X)).(*types.Map); ok {
 				return m.Key()
 			}
 		}
 	case *ast.SendStmt:
 		if p.Value == ast.Expr(use) {
-			if ch, ok := under(x.info.TypeOf(p.Chan)).(*types.Chan); ok {
+			if ch, ok := under(x.Info.TypeOf(p.Chan)).(*types.Chan); ok {
 				return ch.Elem()
 			}
 		}
@@ -735,7 +726,7 @@ func (x *inliner) contextType(use *ast.Ident, parent ast.Node) types.Type {
 }
 
 func (x *inliner) compositeElemType(use *ast.Ident) types.Type {
-	path := analysis.PathTo(x.file, use)
+	path := analysis.PathTo(x.File, use)
 	for i := 1; i < len(path) && i <= 2; i++ {
 		cl, ok := path[i].(*ast.CompositeLit)
 		if !ok {
@@ -745,7 +736,7 @@ func (x *inliner) compositeElemType(use *ast.Ident) types.Type {
 		if kv, ok := path[1].(*ast.KeyValueExpr); ok && kv.Key == ast.Expr(use) {
 			isKey = true
 		}
-		switch t := under(x.info.TypeOf(cl)).(type) {
+		switch t := under(x.Info.TypeOf(cl)).(type) {
 		case *types.Slice:
 			if !isKey {
 				return t.Elem()
@@ -762,7 +753,7 @@ func (x *inliner) compositeElemType(use *ast.Ident) types.Type {
 		case *types.Struct:
 			if kv, ok := path[1].(*ast.KeyValueExpr); ok && !isKey {
 				if id, ok := kv.Key.(*ast.Ident); ok {
-					if f, ok := x.info.Uses[id].(*types.Var); ok {
+					if f, ok := x.Info.Uses[id].(*types.Var); ok {
 						return f.Type()
 					}
 				}
@@ -773,13 +764,13 @@ func (x *inliner) compositeElemType(use *ast.Ident) types.Type {
 }
 
 func (x *inliner) enclosingSignature(n ast.Node) *types.Signature {
-	for _, p := range analysis.PathTo(x.file, n) {
+	for _, p := range analysis.PathTo(x.File, n) {
 		switch f := p.(type) {
 		case *ast.FuncLit:
-			s, _ := x.info.TypeOf(f).(*types.Signature)
+			s, _ := x.Info.TypeOf(f).(*types.Signature)
 			return s
 		case *ast.FuncDecl:
-			if o, ok := x.info.Defs[f.Name].(*types.Func); ok {
+			if o, ok := x.Info.Defs[f.Name].(*types.Func); ok {
 				return o.Signature()
 			}
 			return nil
@@ -793,7 +784,7 @@ func (x *inliner) enclosingSignature(n ast.Node) *types.Signature {
 // fit (int8(x) with x = 200 wraps at run time but is a compile error for a
 // constant) or a division by a constant zero.
 func (x *inliner) checkConstantContext(use *ast.Ident, parent ast.Node) error {
-	tv := x.info.Types[x.init]
+	tv := x.Info.Types[x.init]
 	if tv.Value == nil {
 		return nil
 	}
@@ -804,19 +795,19 @@ func (x *inliner) checkConstantContext(use *ast.Ident, parent ast.Node) error {
 	case *ast.BinaryExpr:
 		if (p.Op == token.QUO || p.Op == token.REM) && p.Y == ast.Expr(use) && isZero(tv.Value) {
 			return refactor.Refusef("%q is zero and divides at %s; dividing by the constant 0 is a compile error, unlike dividing by a variable that is 0",
-				x.obj.Name(), x.ws.Position(p.Pos()))
+				x.obj.Name(), x.WS.Position(p.Pos()))
 		}
 	case *ast.CallExpr:
-		if ftv, ok := x.info.Types[p.Fun]; ok && ftv.IsType() {
-			text := string(x.text(p.Fun)) + "(" + string(x.text(x.init)) + ")"
+		if ftv, ok := x.Info.Types[p.Fun]; ok && ftv.IsType() {
+			text := x.Text(p.Fun) + "(" + x.Text(x.init) + ")"
 			e, err := parser.ParseExpr(text)
 			if err != nil {
 				return nil
 			}
 			info := &types.Info{Types: map[ast.Expr]types.TypeAndValue{}}
-			if err := types.CheckExpr(token.NewFileSet(), x.pkg.Types, p.Pos(), e, info); err != nil {
+			if err := types.CheckExpr(token.NewFileSet(), x.Pkg.Types, p.Pos(), e, info); err != nil {
 				return refactor.Refusef("inlining %q into the conversion at %s would make it a constant conversion, which Go rejects: %v",
-					x.obj.Name(), x.ws.Position(p.Pos()), err)
+					x.obj.Name(), x.WS.Position(p.Pos()), err)
 			}
 		}
 	}
@@ -837,13 +828,13 @@ func isZero(v constant.Value) bool {
 func (x *inliner) deletion() edit.TextEdit {
 	if x.owner != nil {
 		// "if x := f(); cond" -> "if cond": remove through the semicolon.
-		start := x.off(x.declStmt.Pos())
-		end := x.off(x.declStmt.End())
-		for end < len(x.src) && x.src[end] != ';' {
+		start := x.Off(x.declStmt.Pos())
+		end := x.Off(x.declStmt.End())
+		for end < len(x.Src) && x.Src[end] != ';' {
 			end++
 		}
 		end++
-		for end < len(x.src) && (x.src[end] == ' ' || x.src[end] == '\t') {
+		for end < len(x.Src) && (x.Src[end] == ' ' || x.Src[end] == '\t') {
 			end++
 		}
 		return edit.TextEdit{Start: start, End: end}
@@ -852,27 +843,27 @@ func (x *inliner) deletion() edit.TextEdit {
 	if x.spec != nil {
 		n = x.spec
 	}
-	start, end := x.off(n.Pos()), x.off(n.End())
+	start, end := x.Off(n.Pos()), x.Off(n.End())
 	lineStart := start
-	for lineStart > 0 && (x.src[lineStart-1] == ' ' || x.src[lineStart-1] == '\t') {
+	for lineStart > 0 && (x.Src[lineStart-1] == ' ' || x.Src[lineStart-1] == '\t') {
 		lineStart--
 	}
-	atLineStart := lineStart == 0 || x.src[lineStart-1] == '\n'
+	atLineStart := lineStart == 0 || x.Src[lineStart-1] == '\n'
 	// Take a trailing comment on the same line with it.
 	rest := end
-	for rest < len(x.src) && (x.src[rest] == ' ' || x.src[rest] == '\t') {
+	for rest < len(x.Src) && (x.Src[rest] == ' ' || x.Src[rest] == '\t') {
 		rest++
 	}
-	if strings.HasPrefix(string(x.src[rest:]), "//") {
-		for rest < len(x.src) && x.src[rest] != '\n' {
+	if strings.HasPrefix(string(x.Src[rest:]), "//") {
+		for rest < len(x.Src) && x.Src[rest] != '\n' {
 			rest++
 		}
 	}
 	switch {
-	case rest < len(x.src) && x.src[rest] == ';':
+	case rest < len(x.Src) && x.Src[rest] == ';':
 		end = rest + 1
-	case atLineStart && (rest == len(x.src) || x.src[rest] == '\n'):
-		start, end = lineStart, min(rest+1, len(x.src))
+	case atLineStart && (rest == len(x.Src) || x.Src[rest] == '\n'):
+		start, end = lineStart, min(rest+1, len(x.Src))
 	}
 	return edit.TextEdit{Start: start, End: end}
 }
@@ -887,14 +878,14 @@ func (x *inliner) commentAbove() string {
 	if x.owner != nil {
 		return ""
 	}
-	line := x.tf.Line(n.Pos())
-	for _, cg := range x.file.Comments {
-		if x.tf.Line(cg.End()) != line-1 {
+	line := x.TF.Line(n.Pos())
+	for _, cg := range x.File.Comments {
+		if x.TF.Line(cg.End()) != line-1 {
 			continue
 		}
-		start := x.off(x.tf.LineStart(x.tf.Line(cg.Pos())))
-		if strings.TrimSpace(string(x.src[start:x.off(cg.Pos())])) == "" { // a comment on its own line(s)
-			return x.ws.Position(cg.Pos())
+		start := x.Off(x.TF.LineStart(x.TF.Line(cg.Pos())))
+		if strings.TrimSpace(string(x.Src[start:x.Off(cg.Pos())])) == "" { // a comment on its own line(s)
+			return x.WS.Position(cg.Pos())
 		}
 	}
 	return ""
@@ -903,23 +894,11 @@ func (x *inliner) commentAbove() string {
 // ---------------------------------------------------------------------------
 // Helpers
 
-func (x *inliner) off(p token.Pos) int { return x.tf.Offset(p) }
-
-func (x *inliner) text(n ast.Node) []byte { return x.src[x.off(n.Pos()):x.off(n.End())] }
-
-func (x *inliner) quote(n ast.Node) string {
-	s := strings.Join(strings.Fields(string(x.text(n))), " ")
-	if len(s) > 60 {
-		s = s[:57] + "..."
-	}
-	return "`" + s + "`"
-}
-
 // maybeUntyped reports whether e may have been untyped before its context
 // converted it. go/types records the converted type for untyped constants
 // (the 2.0 in n / 2.0 is recorded as int), so any constant counts.
 func (x *inliner) maybeUntyped(e ast.Expr) bool {
-	tv := x.info.Types[e]
+	tv := x.Info.Types[e]
 	return tv.Value != nil || isUntyped(tv.Type)
 }
 
@@ -933,11 +912,4 @@ func under(t types.Type) types.Type {
 		return nil
 	}
 	return t.Underlying()
-}
-
-func declaredAt(ws *workspace.Workspace, o types.Object) string {
-	if o.Pkg() == nil || !o.Pos().IsValid() {
-		return "universe scope (predeclared)"
-	}
-	return ws.Position(o.Pos())
 }

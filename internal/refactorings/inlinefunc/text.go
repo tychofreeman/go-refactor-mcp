@@ -19,9 +19,9 @@ func (x *inliner) replacement() ([]edit.TextEdit, error) {
 		if err != nil {
 			return nil, err
 		}
-		return []edit.TextEdit{{Start: x.off(x.call.Pos()), End: x.off(x.call.End()), NewText: text}}, nil
+		return []edit.TextEdit{{Start: x.Off(x.call.Pos()), End: x.Off(x.call.End()), NewText: text}}, nil
 	}
-	ind := indentOf(x.src, x.tf, x.stmt.Pos())
+	ind := indentOf(x.Src, x.TF, x.stmt.Pos())
 	var lines []string
 	if b, err := x.bindingLine(); err != nil {
 		return nil, err
@@ -39,10 +39,10 @@ func (x *inliner) replacement() ([]edit.TextEdit, error) {
 		lines = append(lines, ind+r)
 	}
 	if len(lines) == 0 {
-		return []edit.TextEdit{x.deleteLine(x.src, x.tf, x.stmt)}, nil
+		return []edit.TextEdit{x.deleteLine(x.Src, x.TF, x.stmt)}, nil
 	}
 	text := strings.TrimPrefix(strings.Join(lines, "\n"), ind)
-	return []edit.TextEdit{{Start: x.off(x.stmt.Pos()), End: x.off(x.stmt.End()), NewText: text}}, nil
+	return []edit.TextEdit{{Start: x.Off(x.stmt.Pos()), End: x.Off(x.stmt.End()), NewText: text}}, nil
 }
 
 // exprText is the result expression, with parameters replaced, that takes
@@ -51,10 +51,10 @@ func (x *inliner) exprText() (string, error) {
 	r := x.results[0]
 	text := x.rewrite(x.doff(r.Pos()), x.doff(r.End()))
 	if strings.Contains(text, "\n") {
-		text = reindentTail(text, indentOf(x.dsrc, x.dtf, r.Pos()), indentOf(x.src, x.tf, x.call.Pos()))
+		text = reindentTail(text, indentOf(x.dsrc, x.dtf, r.Pos()), indentOf(x.Src, x.TF, x.call.Pos()))
 	}
 	want := x.sig.Results().At(0).Type()
-	if !x.sameType(r, want) && !x.contextConverts(want, analysis.OwnType(x.ws.Fset, x.pkg.Types, x.info, r)) {
+	if !x.sameType(r, want) && !x.contextConverts(want, analysis.OwnType(x.WS.Fset, x.Pkg.Types, x.Info, r)) {
 		t, err := x.typeString(want)
 		if err != nil {
 			return "", err
@@ -65,7 +65,7 @@ func (x *inliner) exprText() (string, error) {
 	// is just a parameter.
 	var shape ast.Expr = ast.Unparen(r)
 	if id, ok := shape.(*ast.Ident); ok {
-		if p := x.paramOf(x.info.Uses[id]); p != nil && p.subst {
+		if p := x.paramOf(x.Info.Uses[id]); p != nil && p.subst {
 			shape = ast.Unparen(p.arg)
 			if p.conv != "" || p.addr != nil {
 				shape = &ast.CallExpr{}
@@ -87,10 +87,10 @@ func (x *inliner) contextConverts(want, own types.Type) bool {
 	is := func(t types.Type) bool { return t != nil && types.Identical(t, want) }
 	switch p := x.path[1].(type) {
 	case *ast.CallExpr:
-		if tv, ok := x.info.Types[p.Fun]; ok && tv.IsType() {
+		if tv, ok := x.Info.Types[p.Fun]; ok && tv.IsType() {
 			return false
 		}
-		sig, ok := x.info.TypeOf(p.Fun).Underlying().(*types.Signature)
+		sig, ok := x.Info.TypeOf(p.Fun).Underlying().(*types.Signature)
 		if !ok {
 			return false
 		}
@@ -103,21 +103,21 @@ func (x *inliner) contextConverts(want, own types.Type) bool {
 		if p.Tok == token.ASSIGN && len(p.Lhs) == len(p.Rhs) {
 			for i, r := range p.Rhs {
 				if r == ast.Expr(x.call) {
-					return is(x.info.TypeOf(p.Lhs[i]))
+					return is(x.Info.TypeOf(p.Lhs[i]))
 				}
 			}
 		}
 	case *ast.ValueSpec:
-		return p.Type != nil && is(x.info.TypeOf(p.Type))
+		return p.Type != nil && is(x.Info.TypeOf(p.Type))
 	case *ast.ReturnStmt:
 		var sig *types.Signature
 		for _, n := range x.path[1:] {
 			if f, ok := n.(*ast.FuncLit); ok {
-				sig, _ = x.info.TypeOf(f).(*types.Signature)
+				sig, _ = x.Info.TypeOf(f).(*types.Signature)
 				break
 			}
 			if f, ok := n.(*ast.FuncDecl); ok {
-				if o, ok := x.info.Defs[f.Name].(*types.Func); ok {
+				if o, ok := x.Info.Defs[f.Name].(*types.Func); ok {
 					sig = o.Signature()
 				}
 				break
@@ -145,7 +145,7 @@ func (x *inliner) inCallerHeader() bool {
 // sameType reports whether the callee's expression e has type want on its
 // own (so no conversion is needed where its context is not want).
 func (x *inliner) sameType(e ast.Expr, want types.Type) bool {
-	own := analysis.OwnType(x.ws.Fset, x.pkg.Types, x.info, e)
+	own := analysis.OwnType(x.WS.Fset, x.Pkg.Types, x.Info, e)
 	if types.Identical(own, want) {
 		return true
 	}
@@ -175,12 +175,12 @@ func (x *inliner) bindingLine() (string, error) {
 		}
 		v := p.text
 		if p.conv != "" {
-			v = convText(p.conv, x.text(ast.Unparen(p.arg)))
+			v = convText(p.conv, x.Text(ast.Unparen(p.arg)))
 		}
 		vals = append(vals, v)
 	}
 	if tuple {
-		vals = append(vals, x.text(x.call.Args[0]))
+		vals = append(vals, x.Text(x.call.Args[0]))
 	}
 	if len(names) == 0 {
 		return "", nil
@@ -257,13 +257,13 @@ func (x *inliner) resultLines() ([]string, error) {
 			}
 			vals = append(vals, t)
 		}
-		head := string(x.src[x.off(ds.Pos()):x.off(x.call.Pos())])
-		tail := string(x.src[x.off(x.call.End()):x.off(ds.End())])
+		head := string(x.Src[x.Off(ds.Pos()):x.Off(x.call.Pos())])
+		tail := string(x.Src[x.Off(x.call.End()):x.Off(ds.End())])
 		return []string{head + strings.Join(vals, ", ") + tail}, nil
 	}
 	as := x.stmt.(*ast.AssignStmt)
 	if tuple {
-		lhs := string(x.src[x.off(as.Lhs[0].Pos()):x.off(as.Lhs[len(as.Lhs)-1].End())])
+		lhs := string(x.Src[x.Off(as.Lhs[0].Pos()):x.Off(as.Lhs[len(as.Lhs)-1].End())])
 		r := x.results[0]
 		return []string{lhs + " " + as.Tok.String() + " " + x.rewrite(x.doff(r.Pos()), x.doff(r.End()))}, nil
 	}
@@ -280,10 +280,10 @@ func (x *inliner) resultLines() ([]string, error) {
 		t := x.rewrite(x.doff(r.Pos()), x.doff(r.End()))
 		want := x.sig.Results().At(i).Type()
 		newVar := false
-		if id, ok := l.(*ast.Ident); ok && as.Tok == token.DEFINE && x.info.Defs[id] != nil {
+		if id, ok := l.(*ast.Ident); ok && as.Tok == token.DEFINE && x.Info.Defs[id] != nil {
 			newVar = true
 		}
-		if !x.sameType(r, want) && (newVar || !types.Identical(x.info.TypeOf(l), want)) {
+		if !x.sameType(r, want) && (newVar || !types.Identical(x.Info.TypeOf(l), want)) {
 			s, err := x.typeString(want)
 			if err != nil {
 				return nil, err
@@ -291,7 +291,7 @@ func (x *inliner) resultLines() ([]string, error) {
 			t = convText(s, t)
 		}
 		isNew = isNew || newVar
-		lhs = append(lhs, x.text(l))
+		lhs = append(lhs, x.Text(l))
 		rhs = append(rhs, t)
 	}
 	if len(lhs) == 0 {
@@ -308,11 +308,11 @@ func (x *inliner) resultLines() ([]string, error) {
 // has no effects, and every variable of the inlined code it reads is used
 // elsewhere too (else that variable would be declared and not used).
 func (x *inliner) droppable(r ast.Expr) bool {
-	if m := (analysis.Move{Effects: x.ws.Effects(), Func: x.calleeFA, Expr: r, Times: analysis.Unused}); m.Check() != nil {
+	if m := (analysis.Move{Effects: x.WS.Effects(), Func: x.calleeFA, Expr: r, Times: analysis.Unused}); m.Check() != nil {
 		return false
 	}
-	for _, id := range analysis.ScopeRefs(x.info, r) {
-		v, ok := x.info.Uses[id].(*types.Var)
+	for _, id := range analysis.ScopeRefs(x.Info, r) {
+		v, ok := x.Info.Uses[id].(*types.Var)
 		if !ok || !x.inDecl(v.Pos()) {
 			continue
 		}
@@ -320,7 +320,7 @@ func (x *inliner) droppable(r ast.Expr) bool {
 			continue // replaced by its argument: nothing is declared
 		}
 		used := false
-		for u, o := range x.info.Uses {
+		for u, o := range x.Info.Uses {
 			if o == v && x.inDecl(u.Pos()) && (u.Pos() < x.ret.Pos() || u.Pos() >= x.ret.End()) {
 				used = true
 				break
@@ -340,13 +340,13 @@ func (x *inliner) selfAssign(l, r ast.Expr) bool {
 	if !ok {
 		return false
 	}
-	p := x.paramOf(x.info.Uses[rid])
+	p := x.paramOf(x.Info.Uses[rid])
 	if p == nil || !p.subst || p.addr != nil || p.conv != "" {
 		return false
 	}
 	aid, ok := ast.Unparen(p.arg).(*ast.Ident)
 	lid, ok2 := l.(*ast.Ident)
-	return ok && ok2 && x.info.ObjectOf(aid) != nil && x.info.ObjectOf(aid) == x.info.ObjectOf(lid)
+	return ok && ok2 && x.Info.ObjectOf(aid) != nil && x.Info.ObjectOf(aid) == x.Info.ObjectOf(lid)
 }
 
 // rewrite returns the callee's source in [start, end) (byte offsets) with
@@ -378,10 +378,10 @@ func (x *inliner) rewrite(start, end int, extra ...edit.TextEdit) string {
 		if !ok || !in(id) {
 			return true
 		}
-		if v, ok := x.info.ObjectOf(id).(*types.Var); ok && x.merged[v] != nil && x.merged[v].Name != id.Name {
+		if v, ok := x.Info.ObjectOf(id).(*types.Var); ok && x.merged[v] != nil && x.merged[v].Name != id.Name {
 			edits = append(edits, edit.TextEdit{Start: x.doff(id.Pos()), End: x.doff(id.End()), NewText: x.merged[v].Name})
 		}
-		if pn, ok := x.info.Uses[id].(*types.PkgName); ok {
+		if pn, ok := x.Info.Uses[id].(*types.PkgName); ok {
 			if n, err := x.qualifier(pn.Imported()); err == nil && n != id.Name && n != "" {
 				edits = append(edits, edit.TextEdit{Start: x.doff(id.Pos()), End: x.doff(id.End()), NewText: n})
 			}
@@ -408,7 +408,7 @@ func (x *inliner) useEdit(p *param, u *ast.Ident) edit.TextEdit {
 		return edit.TextEdit{Start: x.doff(n.Pos()), End: x.doff(n.End()), NewText: s}
 	}
 	if p.addr != nil {
-		v := x.text(p.addr)
+		v := x.Text(p.addr)
 		switch par := parent.(type) {
 		case *ast.SelectorExpr, *ast.IndexExpr, *ast.SliceExpr:
 			return at(u, v) // p.f, p[i], p[:] work on the variable itself
@@ -430,7 +430,7 @@ func (x *inliner) useEdit(p *param, u *ast.Ident) edit.TextEdit {
 		return at(u, s)
 	}
 	if p.conv != "" {
-		return at(u, convText(p.conv, x.text(ast.Unparen(p.arg))))
+		return at(u, convText(p.conv, x.Text(ast.Unparen(p.arg))))
 	}
 	s := p.text
 	if analysis.NeedsParens(ast.Unparen(p.arg), parent, u) || analysis.InControlHeader(p.arg, path) {
@@ -444,21 +444,21 @@ func (x *inliner) useEdit(p *param, u *ast.Ident) edit.TextEdit {
 // (fmt.Sprintf, errors.New, ...) and String or Error methods. Those keep
 // "_ =".
 func (x *inliner) resultMatters(c *ast.CallExpr) bool {
-	f, ok := x.info.Uses[analysis.IdentOf(c.Fun)].(*types.Func)
+	f, ok := x.Info.Uses[analysis.IdentOf(c.Fun)].(*types.Func)
 	if !ok || f.Pkg() == nil {
 		return false
 	}
 	if f.Name() == "String" || f.Name() == "Error" {
 		return true
 	}
-	return !strings.Contains(f.Pkg().Path(), ".") && f.Pkg() != x.pkg.Types
+	return !strings.Contains(f.Pkg().Path(), ".") && f.Pkg() != x.Pkg.Types
 }
 
 func (x *inliner) isConversionOrBuiltin(c *ast.CallExpr) bool {
-	if tv, ok := x.info.Types[c.Fun]; ok && tv.IsType() {
+	if tv, ok := x.Info.Types[c.Fun]; ok && tv.IsType() {
 		return true
 	}
-	_, builtin := x.info.Uses[analysis.IdentOf(c.Fun)].(*types.Builtin)
+	_, builtin := x.Info.Uses[analysis.IdentOf(c.Fun)].(*types.Builtin)
 	return builtin
 }
 
@@ -510,7 +510,7 @@ func (x *inliner) dquote(n ast.Node) string {
 
 func (x *inliner) parenText(e ast.Expr) string {
 	if analysis.NeedsParens(ast.Unparen(e), &ast.StarExpr{}, e) {
-		return "(" + x.text(e) + ")"
+		return "(" + x.Text(e) + ")"
 	}
-	return x.text(e)
+	return x.Text(e)
 }

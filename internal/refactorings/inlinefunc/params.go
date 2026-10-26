@@ -43,10 +43,10 @@ func (x *inliner) decideParams() error {
 	if r := x.sig.Recv(); r != nil {
 		p := &param{v: r, name: paramName(r)}
 		sel := x.call.Fun.(*ast.SelectorExpr)
-		recvPtr, xPtr := analysis.IsPointer(r.Type()), analysis.IsPointer(x.info.TypeOf(sel.X))
+		recvPtr, xPtr := analysis.IsPointer(r.Type()), analysis.IsPointer(x.Info.TypeOf(sel.X))
 		switch {
 		case recvPtr == xPtr:
-			p.arg, p.text = sel.X, x.text(sel.X)
+			p.arg, p.text = sel.X, x.Text(sel.X)
 			if u, ok := ast.Unparen(sel.X).(*ast.UnaryExpr); ok && u.Op == token.AND && x.isVarPath(u.X) {
 				p.addr = u.X
 			}
@@ -63,13 +63,13 @@ func (x *inliner) decideParams() error {
 	params := x.sig.Params()
 	if len(x.call.Args) == 1 && params.Len() > 1 {
 		tuple = true
-		tup, _ := x.info.TypeOf(x.call.Args[0]).(*types.Tuple)
+		tup, _ := x.Info.TypeOf(x.call.Args[0]).(*types.Tuple)
 		if x.shape == expr || tup == nil {
-			return refactor.Refusef("the call to %q passes the results of %s as its arguments; this can only be inlined as a statement", name, x.quote(x.call.Args[0]))
+			return refactor.Refusef("the call to %q passes the results of %s as its arguments; this can only be inlined as a statement", name, x.Quote(x.call.Args[0]))
 		}
 		for i := 0; i < params.Len(); i++ {
 			if !types.Identical(tup.At(i).Type(), params.At(i).Type()) {
-				return refactor.Refusef("the call to %q passes the results of %s, whose types differ from the parameters'; this is not supported", name, x.quote(x.call.Args[0]))
+				return refactor.Refusef("the call to %q passes the results of %s, whose types differ from the parameters'; this is not supported", name, x.Quote(x.call.Args[0]))
 			}
 		}
 	}
@@ -78,7 +78,7 @@ func (x *inliner) decideParams() error {
 		p := &param{v: v, name: paramName(v)}
 		if !tuple {
 			a := x.call.Args[i]
-			p.arg, p.text = a, x.text(a)
+			p.arg, p.text = a, x.Text(a)
 			if u, ok := ast.Unparen(a).(*ast.UnaryExpr); ok && u.Op == token.AND && x.isVarPath(u.X) {
 				p.addr = u.X
 			}
@@ -89,7 +89,7 @@ func (x *inliner) decideParams() error {
 		if p.name == "_" {
 			continue
 		}
-		for id, o := range x.info.Uses {
+		for id, o := range x.Info.Uses {
 			if o == p.v && x.inDecl(id.Pos()) {
 				p.uses = append(p.uses, id)
 			}
@@ -135,7 +135,7 @@ func (x *inliner) decideParams() error {
 			}
 			if c := x.capture(p); c != "" {
 				if x.shape == expr {
-					return refactor.Refusef("the argument %s for %s would be captured by %s in the body of %q; rename it first", x.quote(p.arg), p.name, c, name)
+					return refactor.Refusef("the argument %s for %s would be captured by %s in the body of %q; rename it first", x.Quote(p.arg), p.name, c, name)
 				}
 				p.subst, p.bind, changed = false, true, true
 			}
@@ -144,7 +144,7 @@ func (x *inliner) decideParams() error {
 	for p := x.vetClash(); p != nil; p = x.vetClash() {
 		if x.shape == expr {
 			return refactor.Refusef("%q gets the same argument %s for two parameters, and inlining would write expressions that go vet rejects (identical operands of && or ||, or a self-assignment); assign the argument to a variable first",
-				x.fn.Name(), x.quote(p.arg))
+				x.fn.Name(), x.Quote(p.arg))
 		}
 		p.subst, p.bind = false, true
 	}
@@ -209,13 +209,13 @@ func (x *inliner) vetClash() *param {
 					continue
 				}
 				e, c := b.X, b.Y
-				if x.info.Types[e].Value != nil {
+				if x.Info.Types[e].Value != nil {
 					e, c = c, e
 				}
-				if x.info.Types[c].Value == nil {
+				if x.Info.Types[c].Value == nil {
 					continue
 				}
-				t, ot, ct := norm(e), orig(e), x.info.Types[c].Value.ExactString()
+				t, ot, ct := norm(e), orig(e), x.Info.Types[c].Value.ExactString()
 				if prev, ok := consts[t]; ok && prev != ct && constsOrig[ot] == "" {
 					bad = true
 				}
@@ -254,13 +254,13 @@ func (x *inliner) decideParam(p *param) error {
 		case p.addr != nil || class == stableArg || class == readArg || class == constArg:
 			p.drop = true
 		case x.shape == expr:
-			return refactor.Refusef("the argument %s has effects but %q never uses parameter %s; inlined in an expression it would be dropped", x.quote(p.arg), x.fn.Name(), p.name)
+			return refactor.Refusef("the argument %s has effects but %q never uses parameter %s; inlined in an expression it would be dropped", x.Quote(p.arg), x.fn.Name(), p.name)
 		default:
 			p.bind, p.name = true, "_"
 		}
 		return nil
 	}
-	if p.addr == nil && p.text == x.text(p.arg) && !x.sameType(p.arg, p.v.Type()) {
+	if p.addr == nil && p.text == x.Text(p.arg) && !x.sameType(p.arg, p.v.Type()) {
 		t, err := x.typeString(p.v.Type())
 		if err != nil {
 			return err
@@ -298,7 +298,7 @@ func (x *inliner) decideParam(p *param) error {
 		if x.neverChanges(p.arg) || x.effectBefore(p) == nil {
 			p.subst = true
 		} else if x.shape == expr {
-			return refactor.Refusef("the argument %s could change before %q uses it (it reads a variable other code can change, and the body has calls); assign it to a variable first", x.quote(p.arg), x.fn.Name())
+			return refactor.Refusef("the argument %s could change before %q uses it (it reads a variable other code can change, and the body has calls); assign it to a variable first", x.Quote(p.arg), x.fn.Name())
 		} else {
 			p.bind = true
 		}
@@ -310,7 +310,7 @@ func (x *inliner) decideParam(p *param) error {
 					return nil
 				}
 				return refactor.Refusef("the argument %s is a constant, and %q uses %s in arithmetic at %s, where a constant can behave differently from a variable (overflow, division by zero); assign it to a variable first",
-					x.quote(p.arg), x.fn.Name(), p.name, x.ws.Position(u.Pos()))
+					x.Quote(p.arg), x.fn.Name(), p.name, x.WS.Position(u.Pos()))
 			}
 		}
 		p.subst = true
@@ -318,7 +318,7 @@ func (x *inliner) decideParam(p *param) error {
 		if x.effectBefore(p) == nil && x.firstUseUnconditional(p) {
 			p.subst = true
 		} else if x.shape == expr {
-			return refactor.Refusef("the argument %s could change or fail differently once moved into %q (the body has calls before using it, or uses it conditionally); assign it to a variable first", x.quote(p.arg), x.fn.Name())
+			return refactor.Refusef("the argument %s could change or fail differently once moved into %q (the body has calls before using it, or uses it conditionally); assign it to a variable first", x.Quote(p.arg), x.fn.Name())
 		} else {
 			p.bind = true
 		}
@@ -329,11 +329,11 @@ func (x *inliner) decideParam(p *param) error {
 		}
 		if len(p.uses) != 1 {
 			return refactor.Refusef("the argument %s has effects (because of calls or channel operations) but %q uses %s %d times; inlined in an expression it would run %d times",
-				x.quote(p.arg), x.fn.Name(), p.name, len(p.uses), len(p.uses))
+				x.Quote(p.arg), x.fn.Name(), p.name, len(p.uses), len(p.uses))
 		}
 		if times, why := analysis.Reach(analysis.PathTo(x.decl.Body, p.uses[0])); times != analysis.Once {
 			return refactor.Refusef("the argument %s has effects, and %q uses %s %s; inlined, the argument would not run exactly once",
-				x.quote(p.arg), x.fn.Name(), p.name, why)
+				x.Quote(p.arg), x.fn.Name(), p.name, why)
 		}
 		p.subst = true
 	}
@@ -354,18 +354,18 @@ func (x *inliner) updatedInPlace(p *param) bool {
 	if !ok {
 		return false
 	}
-	v, ok := x.info.Uses[aid].(*types.Var)
+	v, ok := x.Info.Uses[aid].(*types.Var)
 	if !ok || !x.callerFA.IsLocal(v) || x.callerFA.Escapes(v) {
 		return false
 	}
 	back := false
 	for i, l := range as.Lhs {
 		lid, ok := l.(*ast.Ident)
-		if !ok || x.info.ObjectOf(lid) != v {
+		if !ok || x.Info.ObjectOf(lid) != v {
 			continue
 		}
 		rid, ok := ast.Unparen(x.results[i]).(*ast.Ident)
-		if !ok || x.info.Uses[rid] != p.v || back {
+		if !ok || x.Info.Uses[rid] != p.v || back {
 			return false
 		}
 		back = true
@@ -377,8 +377,8 @@ func (x *inliner) updatedInPlace(p *param) bool {
 		if q == p || q.arg == nil {
 			continue
 		}
-		for _, id := range analysis.ScopeRefs(x.info, q.arg) {
-			if x.info.Uses[id] == v {
+		for _, id := range analysis.ScopeRefs(x.Info, q.arg) {
+			if x.Info.Uses[id] == v {
 				return false
 			}
 		}
@@ -395,14 +395,14 @@ func (x *inliner) deadArg(p *param) bool {
 	if !ok || id.Name != p.name {
 		return false
 	}
-	v, ok := x.info.Uses[id].(*types.Var)
+	v, ok := x.Info.Uses[id].(*types.Var)
 	if !ok || !x.deadAfter(v) {
 		return false
 	}
 	for _, q := range x.params {
 		if q != p && q.arg != nil {
-			for _, r := range analysis.ScopeRefs(x.info, q.arg) {
-				if x.info.Uses[r] == v {
+			for _, r := range analysis.ScopeRefs(x.Info, q.arg) {
+				if x.Info.Uses[r] == v {
 					return false
 				}
 			}
@@ -418,7 +418,7 @@ func (x *inliner) neverChanges(e ast.Expr) bool {
 	if !ok {
 		return false
 	}
-	v, ok := x.info.Uses[id].(*types.Var)
+	v, ok := x.Info.Uses[id].(*types.Var)
 	return ok && x.callerFA.IsLocal(v) && len(x.callerFA.Modified[v]) == 0 && !x.callerFA.Addressed[v]
 }
 
@@ -436,16 +436,16 @@ func (x *inliner) classify(p *param) int {
 	if p.arg == nil {
 		return effectArg
 	}
-	if p.text != x.text(p.arg) { // an implicit & or *
+	if p.text != x.Text(p.arg) { // an implicit & or *
 		if p.addr != nil {
 			return stableArg
 		}
 		return effectArg
 	}
-	if tv := x.info.Types[p.arg]; tv.Value != nil {
+	if tv := x.Info.Types[p.arg]; tv.Value != nil {
 		return constArg
 	}
-	s := x.ws.Effects().Of(x.callerFA, p.arg)
+	s := x.WS.Effects().Of(x.callerFA, p.arg)
 	switch {
 	case s.Effect != "", s.Makes != "" && len(p.uses) > 1: // one new value would stand for several
 		return effectArg
@@ -471,11 +471,11 @@ func (x *inliner) firstUseUnconditional(p *param) bool {
 func (x *inliner) isVarPath(e ast.Expr) bool {
 	switch e := ast.Unparen(e).(type) {
 	case *ast.Ident:
-		_, ok := x.info.Uses[e].(*types.Var)
+		_, ok := x.Info.Uses[e].(*types.Var)
 		return ok
 	case *ast.SelectorExpr:
-		s := x.info.Selections[e]
-		return s != nil && s.Kind() == types.FieldVal && !s.Indirect() && !analysis.IsPointer(x.info.TypeOf(e.X)) && x.isVarPath(e.X)
+		s := x.Info.Selections[e]
+		return s != nil && s.Kind() == types.FieldVal && !s.Indirect() && !analysis.IsPointer(x.Info.TypeOf(e.X)) && x.isVarPath(e.X)
 	}
 	return false
 }
@@ -507,7 +507,7 @@ func (x *inliner) effectBefore(p *param) ast.Node {
 		last = max(last, end)
 	}
 	past = append(analysis.EvaluatedBefore(x.decl.Body, last, nil), past...)
-	m := analysis.Move{Effects: x.ws.Effects(), Func: x.callerFA, Expr: p.arg, Past: past, PastFunc: x.calleeFA}
+	m := analysis.Move{Effects: x.WS.Effects(), Func: x.callerFA, Expr: p.arg, Past: past, PastFunc: x.calleeFA}
 	if o := m.Check(); o != nil {
 		return o.Past
 	}
@@ -522,9 +522,9 @@ func (x *inliner) capture(p *param) string {
 	if p.addr != nil {
 		e = p.addr
 	}
-	refs := analysis.ScopeRefs(x.info, e)
+	refs := analysis.ScopeRefs(x.Info, e)
 	for _, u := range p.uses {
-		scope := x.pkg.Types.Scope().Innermost(u.Pos())
+		scope := x.Pkg.Types.Scope().Innermost(u.Pos())
 		if scope == nil {
 			continue
 		}
@@ -533,7 +533,7 @@ func (x *inliner) capture(p *param) string {
 				if q := x.paramOf(o); q != nil && q.subst {
 					continue // replaced too
 				}
-				return fmt.Sprintf("the %s %s declared at %s", analysis.KindOf(o), id.Name, x.ws.Position(o.Pos()))
+				return fmt.Sprintf("the %s %s declared at %s", analysis.KindOf(o), id.Name, x.WS.Position(o.Pos()))
 			}
 			for v, to := range x.merged {
 				if to.Name == id.Name && v.Pos() < u.Pos() {
@@ -570,18 +570,18 @@ func (x *inliner) checkExprOrder() error {
 	for _, p := range x.params {
 		if c := x.classify(p); p.subst && (c == readArg || c == panicArg) {
 			return refactor.Refusef("the argument %s reads a variable that the argument %s could change; inlining would change the order. Assign the call to a variable first",
-				x.quote(p.arg), x.quote(effectful[0].arg))
+				x.Quote(p.arg), x.Quote(effectful[0].arg))
 		}
 	}
 	for i := 1; i < len(effectful); i++ {
 		if effectful[i].uses[0].Pos() < effectful[i-1].uses[0].Pos() {
 			return refactor.Refusef("the arguments %s and %s have effects, and %q uses them in the opposite order; inlining would run them in a different order",
-				x.quote(effectful[i-1].arg), x.quote(effectful[i].arg), x.fn.Name())
+				x.Quote(effectful[i-1].arg), x.Quote(effectful[i].arg), x.fn.Name())
 		}
 	}
-	if own := x.ws.Effects().Of(x.calleeFA, x.results[0]).At.Effect; own != nil {
+	if own := x.WS.Effects().Of(x.calleeFA, x.results[0]).At.Effect; own != nil {
 		return refactor.Refusef("%q's result %s has calls of its own, and the argument %s has effects; inlining could change their order. Assign the call to a variable first",
-			x.fn.Name(), x.dquote(own), x.quote(effectful[0].arg))
+			x.fn.Name(), x.dquote(own), x.Quote(effectful[0].arg))
 	}
 	return nil
 }
@@ -595,8 +595,8 @@ func (x *inliner) wholeOperand(path []ast.Node) bool {
 		return false
 	}
 	if id, ok := path[0].(*ast.Ident); ok {
-		if p := x.paramOf(x.info.Uses[id]); p != nil {
-			if v := x.info.Types[p.arg].Value; v != nil && (v.Kind() == constant.String || v.Kind() == constant.Bool) {
+		if p := x.paramOf(x.Info.Uses[id]); p != nil {
+			if v := x.Info.Types[p.arg].Value; v != nil && (v.Kind() == constant.String || v.Kind() == constant.Bool) {
 				// No overflow or division for strings and booleans; only a
 				// constant index into a constant string is checked at
 				// compile time.
@@ -617,10 +617,10 @@ func (x *inliner) wholeOperand(path []ast.Node) bool {
 		if p.Fun == path[0] {
 			return false
 		}
-		if tv, ok := x.info.Types[p.Fun]; ok && tv.IsType() {
+		if tv, ok := x.Info.Types[p.Fun]; ok && tv.IsType() {
 			return false
 		}
-		if b, ok := x.info.Uses[analysis.IdentOf(p.Fun)].(*types.Builtin); ok {
+		if b, ok := x.Info.Uses[analysis.IdentOf(p.Fun)].(*types.Builtin); ok {
 			switch b.Name() {
 			case "append", "copy", "delete", "print", "println", "panic", "clear", "close", "len", "cap":
 				return true // no constant folding of a whole argument there
