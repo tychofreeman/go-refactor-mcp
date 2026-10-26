@@ -565,7 +565,11 @@ results are in `docs/cost-history.md`.
   in the same loop (`-arm manual`: reads, then text edits) passed
   kinds 8/8 at $0.0146 (Haiku) and $0.186 (Sonnet), cheaper than
   deriving, mostly by not sending the tools reference (12K tokens);
-  it wrote twice the lines. Not yet compared: tasks a move names.
+  it wrote twice the lines. On freight-xl the refactor arm won:
+  Sonnet 33% cheaper, Haiku 23% (14/16 against 16/16), a fifth to a
+  third of the lines. Writing wins on local changes (dispatch, tail,
+  kinds), deriving where one step carries a change to many uses
+  (routes, run); the tools reference is the derivation's fixed cost.
 - Where a session's cost goes (cost-history 12,
   `eval-tasks/learning/cost.py`): cache writes 69%, output 18%, cache
   reads 13%, though cache reads are 88% of input tokens. About 38% of
