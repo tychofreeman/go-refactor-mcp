@@ -26,7 +26,8 @@ func New() *AddCase { return &AddCase{} }
 func (*AddCase) Name() string { return "add_case" }
 
 func (*AddCase) Description() string {
-	return `Add case clauses to a switch or type switch: an edit, to handle a new value or type. At the line of switch kind {, content case "sms": return sendSMS(to) adds that clause at the end of the switch; at the line of one of its case clauses, where "before" or "after" (the default) puts them next to it. content is one or more clauses, each "case x:" or "default:" with its statements, re-indented; packages it names are imported. A duplicate case is refused with the compiler's error. For the statements inside a clause, use insert_statements or replace_statements.`
+	return `Add case clauses to a switch or type switch: an edit, to handle a new value or type. At the line of switch kind {, content case "sms": return sendSMS(to) adds that clause at the end of the switch; at the line of one of its case clauses, where "before" or "after" (the default) puts them next to it. content is one or more clauses, each "case x:" or "default:" with its statements, re-indented; packages it names are imported. A duplicate case is refused with the compiler's error. For the statements inside a clause, use insert_statements or replace_statements.
+Branches of an if, likewise: at the line of if p.Height > 10 {, content else if p.Height > 5 { return 2 } goes at the end of its chain (before its else); at the line of an else if or else, before or after it. else { ... } goes last, once.`
 }
 
 func (*AddCase) InputSchema() json.RawMessage {
@@ -34,9 +35,9 @@ func (*AddCase) InputSchema() json.RawMessage {
   "type": "object",
   "properties": {
     "file":    {"type": "string",  "description": "Path of the file, relative to the workspace root."},
-    "line":    {"type": "integer", "description": "1-based line of the switch (the clauses go at its end), or of one of its case clauses."},
-    "where":   {"type": "string",  "enum": ["before", "after"], "description": "For the line of a case clause: before or after it (default after)."},
-    "content": {"type": "string",  "description": "One or more clauses, each \"case x:\" or \"default:\" with its statements."},
+    "line":    {"type": "integer", "description": "1-based line of the switch or if (they go at its end), or of one of its case clauses or branches."},
+    "where":   {"type": "string",  "enum": ["before", "after"], "description": "For the line of a case clause or branch: before or after it (default after)."},
+    "content": {"type": "string",  "description": "One or more clauses, each \"case x:\" or \"default:\" with its statements; or branches, else if c { ... } or else { ... }."},
     "imports": {"type": "array", "items": {"type": "string"}, "description": "Optional: import paths to use for package names the content uses, when the name alone is ambiguous."}
   },
   "required": ["file", "line", "content"],
@@ -99,7 +100,10 @@ func (*AddCase) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Pl
 		return true
 	})
 	if sw == nil {
-		return nil, refactor.Refusef("no switch statement or case clause starts on line %d of %s", a.Line, a.File)
+		if c, k, ok := findIfChain(tf, file, a.Line); ok {
+			return addBranches(ws, pkg, file, tf, a.File, c, k, a.Where, a.Content, a.Imports)
+		}
+		return nil, refactor.Refusef("no switch statement, case clause or branch of an if starts on line %d of %s", a.Line, a.File)
 	}
 
 	lineStart := func(line int) int { return tf.Offset(tf.LineStart(line)) }

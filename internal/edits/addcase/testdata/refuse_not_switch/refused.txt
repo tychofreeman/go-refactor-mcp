@@ -1,1 +1,1 @@
-no switch statement or case clause starts on line 11
+no switch statement, case clause or branch of an if starts on line 11
