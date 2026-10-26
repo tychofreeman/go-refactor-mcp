@@ -2782,3 +2782,13 @@ replace_text (check "end"; the first try reused the name
 `missingMethod`, which batchdeclare.go has, and was refused), the
 roadmap with replace_text. Nothing by hand. This entry appended with a
 heredoc.
+
+## 2026-10-26: changesig onto Move
+
+`checkEvaluation`, `unsafeValue`, `checkArgEffects` and `checkOrder`
+with replace_declaration, `funcAround` with add_declaration, the
+twelve helpers they made dead with three remove_dead_code calls,
+goldens' wording and the walker's `partial` with replace_text. By
+hand: `Move.Check` and `Obstacle` rewritten as whole declarations
+(the obstacle's `Does` and `PastDoes`), sent through
+replace_declaration. This entry appended with a heredoc.

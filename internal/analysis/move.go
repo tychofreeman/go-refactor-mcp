@@ -15,6 +15,7 @@ const (
 	Maybe                // once or not at all (it moves under a condition)
 	Several              // once for each of several uses, each evaluating it again
 	Shared               // once, with the one value standing for several uses
+	Unused               // once more or once less, where nothing uses the value (an argument added or dropped)
 )
 
 // Move is a change to where, or how often, an expression is evaluated:
@@ -32,12 +33,16 @@ type Move struct {
 }
 
 // Obstacle is why a Move would change behavior: Kind, what the
-// expression does that cannot move; In, the part of it that does so;
-// Past, what it cannot move past (nil when the number of evaluations
-// alone is the problem); and Why, a sentence.
+// expression does that cannot move, and In, the part of it that does
+// so, with Does saying what ("reads p.n through a pointer"); Past, what
+// it cannot move past, with PastDoes saying what that does ("has side
+// effects", "leaves"), or nil when the number of evaluations alone is
+// the problem; and Why, the whole as a sentence.
 type Obstacle struct {
 	Kind     Problem
 	In, Past ast.Node
+	Does     string
+	PastDoes string
 	Why      string
 }
 
@@ -63,69 +68,100 @@ func (m Move) Check() *Obstacle {
 	} else if m.Dereferenced {
 		panicAt = s.At.OtherPanic
 	}
-	text := func(n ast.Node) string {
-		if x, ok := n.(ast.Expr); ok {
-			return types.ExprString(x)
-		}
-		return "the code"
-	}
+	q := nodeText(m.Expr)
+	acts := Obstacle{Kind: Acts, In: s.At.Effect, Does: "has side effects (" + s.Effect + ")"}
+	panicking := Obstacle{Kind: Panics, In: panicAt, Does: "could panic: it " + s.Unsafe}
+	reads := Obstacle{Kind: Reads, In: s.At.Reads, Does: s.Reads}
 	switch m.Times {
-	case Maybe:
+	case Maybe, Unused:
+		then := ", which would then not always happen"
+		if m.Times == Unused {
+			then = ", which would then happen another number of times"
+		}
 		if s.Effect != "" {
-			return &Obstacle{Kind: Acts, In: s.At.Effect, Why: text(m.Expr) + " " + s.Effect + ", which would then not always happen"}
+			return acts.why(q + " " + acts.Does + then)
 		}
 		if panics != NoPanic {
-			return &Obstacle{Kind: Panics, In: panicAt, Why: text(m.Expr) + " can panic (" + s.Unsafe + "), which would then not always happen"}
+			return panicking.why(q + " " + panicking.Does + then)
 		}
 	case Several, Shared:
+		then := ", which would then happen another number of times"
 		if s.Effect != "" {
-			return &Obstacle{Kind: Acts, In: s.At.Effect, Why: text(m.Expr) + " " + s.Effect + ", which would then happen another number of times"}
+			return acts.why(q + " " + acts.Does + then)
 		}
 		if s.Reads != "" {
-			return &Obstacle{Kind: Reads, In: s.At.Reads, Why: text(m.Expr) + " " + s.Reads + ", which could change between evaluations"}
+			return reads.why(q + " " + s.Reads + ", which could change between evaluations")
 		}
 		if panics != NoPanic {
-			return &Obstacle{Kind: Panics, In: panicAt, Why: text(m.Expr) + " can panic (" + s.Unsafe + "), which would then happen another number of times"}
+			return panicking.why(q + " " + panicking.Does + then)
 		}
 		if m.Times == Shared && s.Makes != "" {
-			return &Obstacle{Kind: Makes, In: s.At.Makes, Why: text(m.Expr) + " " + s.Makes + ", and one value would stand for several"}
+			return (&Obstacle{Kind: Makes, In: s.At.Makes, Does: s.Makes}).why(q + " " + s.Makes + ", and one value would stand for several")
 		}
 	}
 	if len(m.Past) == 0 {
 		return nil
 	}
 	p := m.Effects.OfNodes(m.Func, m.Past)
-	reads := m.Func.LocalsRead(m.Expr)
-	written, where := writtenLocal(m.Func, m.Past, reads)
-	switch {
-	case s.Effect != "":
-		if first := p.first(); first != nil || where != nil {
-			if first == nil {
-				first = where
-			}
-			return &Obstacle{Kind: Acts, In: s.At.Effect, Past: first, Why: text(m.Expr) + " " + s.Effect + ", and moving it past " + text(first) + " changes the order of what happens"}
+	written, where := writtenLocal(m.Func, m.Past, m.Func.LocalsRead(m.Expr))
+	before := func(o Obstacle, past ast.Node, does string) *Obstacle {
+		o.Past, o.PastDoes = past, does
+		return o.why(q + " " + o.Does + ", and " + nodeText(past) + " " + does + " before it")
+	}
+	if s.Effect != "" {
+		if first := p.first(); first != nil {
+			return before(acts, first, "runs")
+		}
+		if where != nil {
+			return before(acts, where, "assigns "+written.Name())
 		}
 	}
 	if written != nil {
-		return &Obstacle{Kind: Reads, In: useOf(m.Func.Info, m.Expr, written), Past: where, Why: text(m.Expr) + " reads " + written.Name() + ", which " + text(where) + " changes"}
+		reads.In, reads.Does = useOf(m.Func.Info, m.Expr, written), "reads "+written.Name()
+		return before(reads, where, "assigns "+written.Name())
 	}
 	if s.Reads != "" && p.Effect != "" {
-		return &Obstacle{Kind: Reads, In: s.At.Reads, Past: p.At.Effect, Why: text(m.Expr) + " " + s.Reads + ", which " + text(p.At.Effect) + " could change (it " + p.Effect + ")"}
+		return before(reads, p.At.Effect, p.Effect)
 	}
 	if panics != NoPanic {
 		switch {
 		case p.Stops != "":
-			return &Obstacle{Kind: Panics, In: panicAt, Past: p.At.Stops, Why: text(m.Expr) + " can panic (" + s.Unsafe + "), and " + text(p.At.Stops) + " " + p.Stops}
+			return before(panicking, p.At.Stops, p.Stops)
 		case transfers(m.Past) != nil:
-			t := transfers(m.Past)
-			return &Obstacle{Kind: Panics, In: panicAt, Past: t, Why: text(m.Expr) + " can panic (" + s.Unsafe + "), and would no longer before " + text(t)}
-		case p.Effect != "" && (panics == OtherPanic || p.Panics != NoPanic):
-			return &Obstacle{Kind: Panics, In: panicAt, Past: p.At.Effect, Why: text(m.Expr) + " can panic (" + s.Unsafe + "), and " + text(p.At.Effect) + " " + p.Effect + ", which would then happen in another order"}
+			return before(panicking, transfers(m.Past), "leaves")
+		case p.Effect != "" && panics == OtherPanic:
+			return before(panicking, p.At.Effect, p.Effect)
 		case p.Panics != NoPanic && (panics == OtherPanic || p.Panics == OtherPanic):
-			return &Obstacle{Kind: Panics, In: panicAt, Past: p.At.Panic, Why: text(m.Expr) + " can panic (" + s.Unsafe + "), and so can " + text(p.At.Panic) + " (it " + p.Unsafe + "); which panics first would change"}
+			return before(panicking, p.At.Panic, "could panic")
 		}
 	}
 	return nil
+}
+
+// why returns o with its sentence.
+func (o Obstacle) why(sentence string) *Obstacle {
+	o.Why = sentence
+	return &o
+}
+
+// nodeText is the source-like text of an expression, or a word for a
+// statement.
+func nodeText(n ast.Node) string {
+	switch n := n.(type) {
+	case ast.Expr:
+		return types.ExprString(n)
+	case *ast.ReturnStmt:
+		return "return"
+	case *ast.BranchStmt:
+		return n.Tok.String()
+	case *ast.ExprStmt:
+		return types.ExprString(n.X)
+	case *ast.AssignStmt:
+		return types.ExprString(n.Lhs[0]) + " " + n.Tok.String() + " " + types.ExprString(n.Rhs[0])
+	case *ast.IncDecStmt:
+		return types.ExprString(n.X) + n.Tok.String()
+	}
+	return "the code"
 }
 
 // EvaluatedBefore returns the code inside root that is evaluated before
