@@ -386,6 +386,16 @@ is cheaper than deriving, mostly by the tools reference in every
 request. What is left to compare: tasks where a move names the change
 (freight-xl's fold and inline), where the derivation writes least.
 
+Run on freight-xl (cost-history 19, both arms): the refactor arm cost
+less, Sonnet 33% ($0.106 against $0.159, 16/16 each) and Haiku 23%
+($0.0113, 14/16, against $0.0146, 16/16), writing a fifth to a third
+of the lines. The arms split by how far the change reaches: on local
+changes (dispatch, tail) writing was cheaper; on changes with many uses
+(routes, run) the derivation cost a third to two thirds of reading
+and rewriting each one. So the loop's answer to the project's
+question: deriving pays when a step carries a change to many places,
+and the tools reference is its fixed cost.
+
 ## Recording
 
 Each step in its own PR: the results in `docs/cost-history.md`, the

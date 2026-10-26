@@ -1396,6 +1396,36 @@ repairs on test files it had not read: `go vet` names the first
 those and meets the rest. `values` is what saves the refactor arm the
 same repairs. No manual attempt failed on Import: it read it.
 
+**Both arms on freight-xl** (dispatch, routes, tail, run; the same
+loop, `-patch`, four repairs, three stages; the refactor arm without
+reads, the manual arm with them; 4 attempts a task and model;
+`eval-runs/loop-{haiku,sonnet}-freight-{refactor,manual}`, $4.64):
+
+| | refactor arm | manual arm |
+|---|---|---|
+| Sonnet passed, cost a task | 16/16, $0.106 | 16/16, $0.159 |
+| Haiku passed, cost a task | 14/16, $0.0113 | 16/16, $0.0146 |
+
+| Sonnet, cost a task (lines written) | refactor | manual |
+|---|---|---|
+| dispatch (fold) | $0.095 (5) | $0.070 (15) |
+| routes (a field into a type, many uses) | $0.114 (21-27) | $0.323 (72-143) |
+| tail (a function into a method) | $0.110 (4-7) | $0.066 (17-19) |
+| run (inline and fold) | $0.103 (8-9) | $0.176 (40-44) |
+
+Here deriving cost less: Sonnet 33% less, Haiku 23% less (but 14/16,
+routes 2/4), writing a fifth to a third of the lines. By task the arms
+split by how many places the change reaches. Where it is local
+(dispatch, tail: the manual arm read 10-12 declarations) writing was
+cheaper, the tools reference outweighing the few lines. Where it
+reaches many uses (routes: 55-72 declarations read; run: 31) the
+manual arm read and rewrote each, and the derivation, one step for
+all of them, cost a third to two thirds as much. The refactor arm's
+passes used fold on every task, and remove_dead_code, inline_function
+and function_to_method where the task named them. Against kinds, where
+the manual arm won: there the change was one new shape (types from a
+type code) in five switches, which the plans read whole either way.
+
 ## What made the difference
 
 - **Smaller results** (#75, rename locations): the largest single win when
