@@ -1737,16 +1737,22 @@ hand or a tool got in the way.
     `stopsFuncs` and `syncCalls` into `stdFuncs`, then fold's remaining
     hole judgments and inline_function's `lhsEvaluatedFirst` once a
     function's summary can stand as `Past`.
-36. **Ownership of memory**: "whose memory is this" exists in six shapes
-    (`body.private`, `body.pointsPrivate`, `freshLocals`, the `private`
-    callback threaded through `call`, `stdCall`, `fmtCall` and
-    `syncCallSummary`, slide's `escapes`, inline_function's
-    `neverChanges`, `Func.Escapes` with its three sets), and the walker
-    answers differently out of context (`partial`, `Outside`). The
-    concept is three-valued: memory only this evaluation can reach, only
-    this function's own code can reach, or anyone can reach. One
-    `Func.Owner(expr)`, computed once per function, replaces them and
-    removes `partial`, `Outside` and the callback.
+36. **Ownership of memory** (2026-10-26). *Done* in its first form:
+    `analysis.Owner` is three-valued (`Anyone`, `ThisFunc`, `ThisCode`),
+    and `Func.Owns(v)`, `Func.Owner(x)` and `Func.Pointee(x)` answer it
+    for a variable, an assignable expression and what a pointer, slice
+    or map points to, with the fresh locals computed once per `Func` on
+    first use. The walker's `private` and `pointsPrivate` are one
+    comparison each against `body.own`, the owner whose memory counts as
+    the summarized code's: `ThisFunc` for a whole function, `ThisCode`
+    for part of one out of its context, which replaces the `partial`
+    flag; slide's `escapes` is `Owns(v) != ThisCode`. Left: the
+    `private` callback through `call`, `stdCall`, `fmtCall` and
+    `syncCallSummary` (one implementation, `writesPrivate`, but still
+    threaded), `Outside(info)` for code in no function, `Func.Escapes`
+    (which counts a closure that runs during its statement, where
+    `Owns` does not; its callers in inline_function and extract_function
+    mean the stricter test) and inline_function's `neverChanges`.
 37. **A site**: fifteen refactorings carry `ws, pkg, info, file, src`
     and a target, with six copies each of `quote` and `declaredAt`, nine
     of `text`, ten of `off`, and seven `find` functions from a

@@ -128,8 +128,10 @@ results are in `docs/cost-history.md`.
   as a Move; where a use sits on its path decides `Times` through
   `analysis.Reach`. All five steps are done; fold's own hole judgments
   and inline_function's `lhsEvaluatedFirst` remain (README item 35).
-  Next: one notion of memory ownership (item 36), then a `Site` type
-  for the refactorings' context structs (item 37).
+  Ownership is `analysis.Owner` (item 36): a summary's notion of its
+  own memory is `body.own`, `ThisFunc` for a function and `ThisCode`
+  for an expression judged out of context. Next: a `Site` type for the
+  refactorings' context structs (item 37).
 
 - **Tool descriptions: an example per use, the rules in refusals**
   (2026-10-21): cutting `fold`'s description from 668 to about 260
