@@ -402,15 +402,14 @@ func (st *stubber) implement(s stub) ([]decl, error) {
 func (st *stubber) extend(s stub) ([]decl, error) {
 	obj := s.recv.Obj()
 	pos := st.WS.Fset.Position(obj.Pos())
-	_, f := st.WS.FileSyntax(pos.Filename)
+	opened, err := site.At(st.WS, pos.Filename)
+	if err != nil {
+		return nil, err
+	}
+	f, tf, src := opened.File, opened.TF, opened.Src
 	it := interfaceType(st.WS, f, pos.Offset)
 	if it == nil {
 		return nil, refactor.Refusef("cannot find the declaration of interface %s", obj.Name())
-	}
-	tf := st.WS.Fset.File(f.Pos())
-	src, err := os.ReadFile(pos.Filename)
-	if err != nil {
-		return nil, err
 	}
 	sig, err := st.signature(s, st.writer(pos.Filename, obj.Pkg().Path(), s.recv), map[string]bool{})
 	if err != nil {

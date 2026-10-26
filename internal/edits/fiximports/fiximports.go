@@ -7,12 +7,12 @@ import (
 	"encoding/json"
 	"go/ast"
 	"go/types"
-	"os"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/gocode"
 	"github.com/tychofreeman/go-refactor-mcp/internal/imports"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/site"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
 
@@ -52,14 +52,11 @@ func (*FixImports) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor
 		return nil, err
 	}
 	path := ws.Abs(a.File)
-	pkg, file := ws.FileSyntax(path)
-	if file == nil {
-		return nil, refactor.Refusef("file %s is not part of the loaded packages", a.File)
-	}
-	src, err := os.ReadFile(path)
+	opened, err := site.At(ws, path)
 	if err != nil {
 		return nil, err
 	}
+	pkg, file, src := opened.Pkg, opened.File, opened.Src
 	info := pkg.TypesInfo
 	adder := imports.New(ws, pkg, file, src)
 

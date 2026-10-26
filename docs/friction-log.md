@@ -2959,3 +2959,14 @@ three judgments' parameter with replace_text (`all_occurrences` for
 create_file, from a case written first in a scratch module and run with
 both branches' CLIs. Nothing by hand. This entry appended with
 replace_text.
+
+## 2026-10-26: the file openings onto site.At (item 37)
+
+Each opening found by a pattern in a script and replaced with
+replace_text in one batch (the imports followed). Refused twice on the
+way, with nothing changed: the local `at` clashed with an `at` already
+in four functions, and the `ws.Fset.File(file.Pos())` replaced with
+`all_occurrences` also stood in other functions of two files; renamed
+to `opened` and those two replacements dropped. inline_function's and
+create_from_usage's openings, of other shapes, with replace_text.
+Nothing by hand. This entry appended with replace_text.

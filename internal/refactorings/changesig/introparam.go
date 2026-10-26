@@ -17,6 +17,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
 	"github.com/tychofreeman/go-refactor-mcp/internal/pattern"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/site"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
 
@@ -70,14 +71,11 @@ func (*IntroduceParameter) Plan(ws *workspace.Workspace, raw json.RawMessage) (*
 		return nil, refactor.Refusef("parameter %q is not a valid Go identifier", a.Parameter)
 	}
 	path := ws.Abs(a.File)
-	pkg, file := ws.FileSyntax(path)
-	if file == nil {
-		return nil, refactor.Refusef("file %s is not part of the module's packages", a.File)
-	}
-	src, err := os.ReadFile(path)
+	opened, err := site.At(ws, path)
 	if err != nil {
 		return nil, err
 	}
+	pkg, file, src := opened.Pkg, opened.File, opened.Src
 	want, err := locate.ExprTokens(a.Expression)
 	if err != nil {
 		return nil, err

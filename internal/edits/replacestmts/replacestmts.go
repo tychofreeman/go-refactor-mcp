@@ -9,7 +9,6 @@ import (
 	"go/scanner"
 	"go/token"
 	"go/types"
-	"os"
 	"slices"
 	"strings"
 
@@ -19,6 +18,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/imports"
 	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/site"
 	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 	"golang.org/x/tools/go/packages"
@@ -75,14 +75,11 @@ func (*ReplaceStatements) Plan(ws *workspace.Workspace, raw json.RawMessage) (*r
 		return nil, err
 	}
 	path := ws.Abs(a.File)
-	pkg, file := ws.FileSyntax(path)
-	if file == nil {
-		return nil, refactor.Refusef("file %s is not part of the loaded packages", a.File)
-	}
-	src, err := os.ReadFile(path)
+	opened, err := site.At(ws, path)
 	if err != nil {
 		return nil, err
 	}
+	pkg, file, src := opened.Pkg, opened.File, opened.Src
 	if a.Function != "" && (a.StartLine != 0 || a.EndLine != 0) {
 		return nil, refactor.Refusef("give either function or start_line and end_line, not both")
 	}

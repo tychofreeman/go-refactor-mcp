@@ -132,20 +132,19 @@ func (*InlineFunction) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refa
 		return nil, err
 	}
 	path := ws.Fset.Position(id.Pos()).Filename
-	_, file := ws.FileSyntax(path)
-	src, err := os.ReadFile(path)
+	opened, err := site.At(ws, path)
 	if err != nil {
 		return nil, err
 	}
 	x := &inliner{
-		Site:    site.Site{WS: ws, Pkg: pkg, Info: pkg.TypesInfo, File: file, TF: ws.Fset.File(file.Pos()), Src: src},
+		Site:    site.Site{WS: ws, Pkg: pkg, Info: pkg.TypesInfo, File: opened.File, TF: opened.TF, Src: opened.Src},
 		keep:    a.KeepFunction,
 		id:      id,
 		merged:  map[*types.Var]*ast.Ident{},
 		dropped: map[int]bool{},
 		usedQ:   map[string]bool{},
 	}
-	x.imp = imports.New(ws, pkg, file, src)
+	x.imp = imports.New(ws, pkg, x.File, x.Src)
 	return x.plan()
 }
 
