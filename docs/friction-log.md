@@ -2673,3 +2673,11 @@ The five functions with remove_dead_code (one call, with also), the
 differential test with delete_file, TestMayPanic ported and the walker's
 division fixed with replace_text, the package comment and the roadmap
 with replace_text. Nothing by hand. This entry appended with a heredoc.
+
+## 2026-10-26: emptying a case the field may still reach is refused
+
+The goldens with create_file in one batch, `analysis.FieldWrites` with
+create_file, the check and its message with replace_text and
+add_declaration (check "end"), the refusals' expected text and the
+roadmap with replace_text. Nothing by hand. This entry appended with a
+heredoc.

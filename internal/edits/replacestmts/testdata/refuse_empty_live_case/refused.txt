@@ -1,0 +1,5 @@
+the case "fern" on line 12 may still run: Plant.Species is given values that can equal it, so emptying or deleting it changes what they do:
+  m.go:22:36: species, of type string
+  m.go:26:35: "fern"
+  m.go:29:41: v, of type any
+Give each

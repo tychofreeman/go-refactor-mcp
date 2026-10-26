@@ -1,0 +1,3 @@
+the case "fern" on line 12 may still run: Plant.Species is given values that can equal it, so emptying or deleting it changes what they do:
+  m.go:21:26: "fern"
+

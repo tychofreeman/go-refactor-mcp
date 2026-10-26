@@ -8,6 +8,7 @@ import (
 	"go/ast"
 	"go/scanner"
 	"go/token"
+	"go/types"
 	"os"
 	"slices"
 	"strings"
@@ -104,6 +105,9 @@ func (*ReplaceStatements) Plan(ws *workspace.Workspace, raw json.RawMessage) (*r
 		return nil, refactor.Refusef("lines %d-%d are not a range of lines of %s, which has %d", a.StartLine, a.EndLine, a.File, tf.LineCount())
 	}
 	if strings.TrimSpace(a.Content) == "" {
+		if err := checkLive(ws, pkg, file, a.StartLine, a.EndLine); err != nil {
+			return nil, err
+		}
 		if clauses, list := caseClauses(tf, file, src, a.StartLine, a.EndLine); clauses != nil {
 			return deleteClauses(ws, pkg, file, src, a, clauses, list)
 		}
@@ -234,6 +238,72 @@ func caseClauses(tf *token.File, file *ast.File, src []byte, first, last int) (c
 		return nil, nil
 	}
 	return clauses, list
+}
+
+// checkLive refuses emptying or deleting, with lines first-last, a case
+// of a switch on a struct field that the field may still be given a
+// value of: the case is then not dead, and what it does would change.
+func checkLive(ws *workspace.Workspace, pkg *packages.Package, file *ast.File, first, last int) error {
+	tf := ws.Fset.File(file.Pos())
+	line := func(p token.Pos) int { return tf.Line(p) }
+	var err error
+	ast.Inspect(file, func(n ast.Node) bool {
+		sw, ok := n.(*ast.SwitchStmt)
+		if !ok || err != nil {
+			return err == nil
+		}
+		sel, ok := ast.Unparen(sw.Tag).(*ast.SelectorExpr)
+		if !ok {
+			return true
+		}
+		s := pkg.TypesInfo.Selections[sel]
+		if s == nil || s.Kind() != types.FieldVal {
+			return true
+		}
+		var writes []analysis.Write
+		for _, st := range sw.Body.List {
+			cc := st.(*ast.CaseClause)
+			whole := line(cc.Pos()) >= first && line(cc.End()) <= last
+			body := len(cc.Body) > 0 && line(cc.Body[0].Pos()) >= first && line(cc.Body[len(cc.Body)-1].End()) <= last
+			if !whole && !body {
+				continue
+			}
+			if writes == nil {
+				writes = analysis.FieldWrites(ws.Fset, ws.Pkgs, s.Obj().(*types.Var))
+			}
+			for _, v := range cc.List {
+				tv := pkg.TypesInfo.Types[v]
+				if tv.Value == nil {
+					continue
+				}
+				var may []string
+				for _, w := range writes {
+					if w.MayEqual(tv.Value, tv.Type) {
+						may = append(may, ws.Position(w.Pos)+": "+describeWrite(w))
+					}
+				}
+				if len(may) > 0 {
+					field := types.TypeString(s.Recv(), types.RelativeTo(pkg.Types))
+					err = refactor.Refusef("the case %s on line %d may still run: %s.%s is given values that can equal it, so emptying or deleting it changes what they do:\n  %s\nGive each of them another value first (narrowing the field then deletes the cases no value can match), or give the statements the case should run instead.", types.ExprString(v), line(cc.Pos()), strings.TrimPrefix(field, "*"), sel.Sel.Name, strings.Join(may, "\n  "))
+					return false
+				}
+			}
+		}
+		return true
+	})
+	return err
+}
+
+// describeWrite says what w writes: the value, with its type unless it
+// is a constant, or how it is written.
+func describeWrite(w analysis.Write) string {
+	if w.Value == nil {
+		return w.Why
+	}
+	if tv := w.Info.Types[w.Value]; tv.Value == nil {
+		return types.ExprString(w.Value) + ", of type " + types.TypeString(tv.Type, nil)
+	}
+	return types.ExprString(w.Value)
 }
 
 // deleteClauses deletes lines a.StartLine-a.EndLine, which hold clauses,
