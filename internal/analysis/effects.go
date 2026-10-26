@@ -92,9 +92,16 @@ func (e *Effects) Call(info *types.Info, call *ast.CallExpr) Summary {
 // a pointer or closure can change. x is taken out of its context: a type
 // assertion x itself is not one with a comma, ok.
 func (e *Effects) Of(f *Func, x ast.Expr) Summary {
-	b := &body{e: e, f: f, fresh: map[*types.Var]bool{}, sync: map[*ast.FuncLit]bool{}, callees: map[ast.Expr]bool{}, root: x}
+	b := e.walker(f, x)
 	ast.Inspect(x, b.visit)
 	return b.s
+}
+
+// walker returns a body that summarizes code of f evaluated out of its
+// context (root, for the part summarized): memory f made itself is not
+// its own, since the rest of f can change it.
+func (e *Effects) walker(f *Func, root ast.Expr) *body {
+	return &body{e: e, f: f, fresh: map[*types.Var]bool{}, sync: map[*ast.FuncLit]bool{}, callees: map[ast.Expr]bool{}, root: root, addressed: map[ast.Expr]ast.Expr{}}
 }
 
 // StableAddress is Stable for the address of x, an expression in the
@@ -510,8 +517,9 @@ type body struct {
 	sync  map[*ast.FuncLit]bool // literals whose bodies run during the call
 	s     Summary
 
-	callees map[ast.Expr]bool // the functions of the calls seen
-	root    ast.Expr          // for Of, the expression summarized, evaluated out of its context
+	callees   map[ast.Expr]bool     // the functions of the calls seen
+	root      ast.Expr              // for Of, the expression summarized, evaluated out of its context
+	addressed map[ast.Expr]ast.Expr // operands whose address is taken: reads of the pointer they go through only (addressedIn)
 }
 
 // summarize computes what calling the function declared by src can do,
@@ -520,7 +528,7 @@ type body struct {
 // memory it made itself, are not side effects.
 func (e *Effects) summarize(src funcSource) *Summary {
 	f := AnalyzeFunc(src.info, src.decl)
-	b := &body{e: e, f: f, fresh: freshLocals(f, src.decl.Body), sync: map[*ast.FuncLit]bool{}, callees: map[ast.Expr]bool{}}
+	b := &body{e: e, f: f, fresh: freshLocals(f, src.decl.Body), sync: map[*ast.FuncLit]bool{}, callees: map[ast.Expr]bool{}, addressed: addressedIn(src.info, src.decl.Body)}
 	ast.Inspect(src.decl.Body, b.visit)
 	return &b.s
 }
@@ -573,12 +581,14 @@ func (b *body) stops(n ast.Node, kind PanicKind, what string) {
 
 func (b *body) makes(n ast.Node, what string) { b.s.add(Summary{Makes: what}.at(n)) }
 
-func (b *body) assigns(x ast.Expr) {
+// assigns records the write to x by the statement at, when other code
+// could see it.
+func (b *body) assigns(x ast.Expr, at ast.Node) {
 	if id, ok := x.(*ast.Ident); ok && id.Name == "_" {
 		return
 	}
 	if !b.private(x) {
-		b.effect(x, "assigns to "+types.ExprString(x))
+		b.effect(at, "assigns to "+types.ExprString(x))
 	}
 }
 
@@ -604,7 +614,12 @@ func (b *body) visit(n ast.Node) bool {
 			b.effect(n, "receives from a channel")
 			b.stops(n, NoPanic, "receives from a channel, which might block")
 		case token.AND:
-			b.makes(n, "takes the address of "+types.ExprString(n.X))
+			for x, p := range addressedIn(info, n) {
+				b.addressed[x] = p
+			}
+			if _, lit := ast.Unparen(n.X).(*ast.CompositeLit); lit { // &v is the same pointer each time
+				b.makes(n, "allocates "+types.ExprString(n.X))
+			}
 		}
 	case *ast.ForStmt:
 		b.stops(n, NoPanic, "has a loop that might not finish")
@@ -624,7 +639,7 @@ func (b *body) visit(n ast.Node) bool {
 		if n.Tok == token.ASSIGN {
 			for _, x := range []ast.Expr{n.Key, n.Value} {
 				if x != nil {
-					b.assigns(x)
+					b.assigns(x, n)
 				}
 			}
 		}
@@ -633,13 +648,13 @@ func (b *body) visit(n ast.Node) bool {
 			if id, ok := l.(*ast.Ident); ok && n.Tok == token.DEFINE && Defines(info, id) {
 				continue
 			}
-			b.assigns(l)
+			b.assigns(l, n)
 		}
 		if (n.Tok == token.QUO_ASSIGN || n.Tok == token.REM_ASSIGN) && !isFloatOrComplex(info.TypeOf(n.Lhs[0])) && info.Types[n.Rhs[0]].Value == nil {
 			b.unsafe(n, OtherPanic, "divides by "+types.ExprString(n.Rhs[0]))
 		}
 	case *ast.IncDecStmt:
-		b.assigns(n.X)
+		b.assigns(n.X, n)
 	case *ast.CallExpr:
 		b.callees[ast.Unparen(n.Fun)] = true
 		if tv := info.Types[n.Fun]; tv.IsType() && len(n.Args) == 1 && toArray(tv.Type, info.TypeOf(n.Args[0])) {
@@ -662,6 +677,12 @@ func (b *body) visit(n ast.Node) bool {
 		if sel == nil {
 			break
 		}
+		if p, ok := b.addressed[n]; ok { // &x.f reads only the pointer it goes through
+			if p != nil && !b.pointsPrivate(p) {
+				b.unsafe(n, NilPanic, "dereferences "+types.ExprString(p))
+			}
+			break
+		}
 		if sel.Indirect() && !(IsPointer(info.TypeOf(n.X)) && b.pointsPrivate(n.X)) && (sel.Kind() == types.FieldVal || valueReceiver(sel)) {
 			b.read(n, "reads "+types.ExprString(n)+" through a pointer")
 			b.unsafe(n, NilPanic, "reads "+types.ExprString(n)+" through a pointer")
@@ -677,7 +698,7 @@ func (b *body) visit(n ast.Node) bool {
 		switch tv.Type.Underlying().(type) {
 		case *types.Signature: // instantiating a generic function
 		case *types.Map:
-			if !b.pointsPrivate(n.X) {
+			if _, addressed := b.addressed[n]; !addressed && !b.pointsPrivate(n.X) {
 				b.read(n, "reads the map element "+types.ExprString(n))
 			}
 		case *types.Array:
@@ -689,7 +710,7 @@ func (b *body) visit(n ast.Node) bool {
 				b.unsafe(n, OtherPanic, "indexes "+types.ExprString(n.X))
 			}
 		default:
-			if !b.pointsPrivate(n.X) {
+			if _, addressed := b.addressed[n]; !addressed && !b.pointsPrivate(n.X) {
 				b.read(n, "reads the element "+types.ExprString(n))
 			}
 			b.unsafe(n, OtherPanic, "indexes "+types.ExprString(n.X))

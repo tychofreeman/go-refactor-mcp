@@ -287,6 +287,26 @@ func Addressed(info *types.Info, n ast.Node) map[*ast.SelectorExpr]ast.Expr {
 	return out
 }
 
+// addressedIn returns the operands in n whose address an & takes rather
+// than reading them: the field selections of Addressed, and indexed
+// elements (&xs[i] reads xs and i, not the element). Each maps to the
+// pointer the address goes through, or nil.
+func addressedIn(info *types.Info, n ast.Node) map[ast.Expr]ast.Expr {
+	out := map[ast.Expr]ast.Expr{}
+	for sel, p := range Addressed(info, n) {
+		out[sel] = p
+	}
+	ast.Inspect(n, func(n ast.Node) bool {
+		if u, ok := n.(*ast.UnaryExpr); ok && u.Op == token.AND {
+			if ix, ok := ast.Unparen(u.X).(*ast.IndexExpr); ok {
+				out[ix] = nil
+			}
+		}
+		return true
+	})
+	return out
+}
+
 // DependsOnPosition reports whether the value of vs, a spec of a const
 // group, depends on where it stands in the group: it uses iota, the
 // spec's index, or it has no values and repeats an earlier spec's

@@ -1636,6 +1636,45 @@ hand or a tool got in the way.
        the differential test that compared them; TestMayPanic became
        TestEffectsPanic, which found that the walker missed a division
        of a type parameter.
+35. **Moving an evaluation** (2026-10-26): nearly every refactoring asks
+    whether an expression can be evaluated somewhere else, some other
+    number of times, and mean the same; each answered it with its own
+    machinery (inline_variable's checkEvaluation and firstEffectBetween,
+    extract_variable's checkOrder and checkWritesBefore,
+    inline_function's movable and lhsEvaluatedFirst, changesig's
+    checkEvaluation, riskOf and unsafeValue, fold's first, risky and
+    impure, move_parameter's checkOrder, slide's checkIndependent). One
+    abstraction consumes the summaries of item 34: `analysis.Move`, an
+    expression of a function, the code it would move past (`Past`), how
+    often it would then be evaluated (`Times`: Once, Maybe, Several,
+    Shared), and whether every use dereferences it (`Dereferenced`, for
+    a pointer alias). `Check` returns an `Obstacle` (what kind of thing
+    the expression does, where in it, what it cannot pass, a sentence)
+    or nil, by one set of rules: evaluated another number of times, an
+    effect, a panic or a read of shared memory changes behavior (and
+    with Shared, a new reference value); past code that writes what it
+    reads (a local too) or acts, it may not read; past an effect, a
+    panic or something that might not return, it may not panic, except
+    that a nil dereference may pass an effect that returns (item 23).
+    `EvaluatedBefore` gives the code of a statement evaluated before a
+    position. One PR each:
+    1. *Done.* `Move`, with extract_variable and inline_variable on it
+       (their stable, panics, checkOrder, checkWritesBefore and
+       firstEffectBetween deleted). Verdicts loosened with a reason: a
+       read may now move past a call that only reads (`read(p)`), and
+       `&v` of a variable or field is the same pointer each time, so it
+       may be shared; stricter: a write to a local the expression reads,
+       between declaration and use, is found by the move as well.
+    2. changesig: `checkEvaluation`, `riskOf`, `unsafeValue` and
+       move_parameter's `checkOrder` (item 34's step 7 falls out).
+    3. inline_function's `movable`, `droppable`, `lhsEvaluatedFirst`
+       and its effect walks.
+    4. fold's `first`, `risky` and `impure`; slide's `checkIndependent`
+       (two statements swapping is each moving past the other).
+    5. The path conditions (inline_variable's `evaluatedOnce`,
+       changesig's `notOnEveryCall`, inline_function's
+       `conditionalOrRepeated`), which decide `Times` from where a use
+       is: one function.
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the

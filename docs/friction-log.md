@@ -2750,3 +2750,16 @@ and add_declaration (check "end"), the hint, description, golden and
 roadmap with replace_text. By script: the kinds reference's eight
 replace_text steps removed and `values` added with Python's json, at
 the file's own indent this time. This entry appended with a heredoc.
+
+## 2026-10-26: analysis.Move, with extract_variable and inline_variable
+
+`move.go` and its test with create_file; `walker`, `addressedIn`, the
+callers' `move`, `checkMove` and `between` with add_declaration; the
+old checks with remove_dead_code; `body.assigns` given its statement
+with add_parameter (value `n`, right at all three calls); the rest with
+replace_text. By hand: `Move.Check` rewritten twice (the obstacle's
+kind, then the rule order) as a whole declaration through
+replace_declaration, with a Python script editing the text; and a
+replace_declaration that renamed a function was refused ("to rename
+it, use rename"), so add_declaration then remove_dead_code. This entry
+appended with a heredoc.
