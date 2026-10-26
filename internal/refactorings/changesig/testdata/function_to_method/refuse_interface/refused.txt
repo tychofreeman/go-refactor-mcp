@@ -1,1 +1,1 @@
-the interface sizer (at a.go:3:6) has a method size
+with a method size, type *mover would implement interface sizer, which it does not now; that could change what a type assertion or interface conversion does: m at a.go:11:

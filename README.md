@@ -1473,6 +1473,13 @@ hand or a tool got in the way.
     or writing it where it goes. In the rerun 5 of 8 attempts asked for
     Renewable's `atlas`. *Done.*
 
+    function_to_method takes an interface's method name when, as
+    rename proves, no value of the type becomes an interface value:
+    the type's new interfaces are noted, not refused (and so for an
+    interface checked at run time, String or Error). A type embedding
+    the receiver type still refuses any such name. The kinds reference
+    drops its renames: 60 steps. *Done.*
+
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
 candidates and the evidence for each, gathered from the friction log.

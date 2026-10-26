@@ -1,0 +1,1 @@
+type *mover now implements interface sizer; no value of it becomes an interface value
