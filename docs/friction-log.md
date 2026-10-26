@@ -2606,3 +2606,16 @@ literals: no tool moves the elements of one composite literal into
 another. Lookups with replace_statements and replace_text, the old
 tables with remove_dead_code; tests, the golden and the roadmap with
 replace_text. This entry appended with a heredoc.
+
+## 2026-10-25: a summary's findings say where and how it panics
+
+`Where`, `Summary.at` and the body's four recorders with
+add_declaration, `Summary` and `Summary.add` with replace_declaration,
+the test with add_declaration, the panic kinds where summaries are
+built with replace_text, `body.set` with remove_dead_code. By hand:
+`body.visit`'s 34 calls of set rewritten to the recorders by a Python
+script, sent as replace_statements: no tool replaces each call of a
+function with a call of another chosen by its arguments (here, which
+field the pointer names). A first try sent several declarations in one
+replace_declaration, which takes one. This entry appended with a
+heredoc.

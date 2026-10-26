@@ -14,6 +14,16 @@ type Summary struct {
 	Reads  string // a read of what other code can change: a package variable, memory through a pointer
 	Unsafe string // something that could panic or not finish
 	Stops  string // of Unsafe, something that might not finish or return: a loop, a channel operation, os.Exit, unknown code
+
+	At     Where     // where each of the above was found
+	Panics PanicKind // how it can panic: NilPanic when only by dereferencing nil
+}
+
+// Where says where, in the code summarized, each finding of a Summary
+// is: the node that does it, or the call through which it happens.
+type Where struct {
+	Effect, Reads, Unsafe, Stops ast.Node
+	Panic                        ast.Node // the first that can panic other than by dereferencing nil
 }
 
 // Effects summarizes calls: of functions known to have no side effects,
@@ -84,7 +94,7 @@ func (e *Effects) call(info *types.Info, call *ast.CallExpr, private func(target
 	}
 	if fn, ok := info.Uses[IdentOf(call.Fun)].(*types.Func); ok {
 		if stopsFuncs[fn.FullName()] {
-			return Summary{Effect: "calls " + name, Unsafe: "calls " + name + ", which does not return", Stops: "calls " + name + ", which does not return"}
+			return Summary{Effect: "calls " + name, Unsafe: "calls " + name + ", which does not return", Stops: "calls " + name + ", which does not return", Panics: OtherPanic}
 		}
 		if s, ok := stdCall(info, fn, call, private); ok {
 			return s
@@ -95,7 +105,7 @@ func (e *Effects) call(info *types.Info, call *ast.CallExpr, private func(target
 	}
 	fn := staticCallee(info, call)
 	if fn == nil {
-		return Summary{Effect: "calls " + name, Unsafe: "calls " + name + ", which could be any function", Stops: "calls " + name + ", which could be any function"}
+		return Summary{Effect: "calls " + name, Unsafe: "calls " + name + ", which could be any function", Stops: "calls " + name + ", which could be any function", Panics: OtherPanic}
 	}
 	var s Summary
 	if call.Ellipsis.IsValid() {
@@ -111,24 +121,45 @@ func (e *Effects) call(info *types.Info, call *ast.CallExpr, private func(target
 		}
 		return "calls " + name + ", which " + what
 	}
-	s.add(Summary{Effect: which(fs.Effect), Reads: which(fs.Reads), Unsafe: which(fs.Unsafe), Stops: which(fs.Stops)})
+	s.add(Summary{Effect: which(fs.Effect), Reads: which(fs.Reads), Unsafe: which(fs.Unsafe), Stops: which(fs.Stops), Panics: fs.Panics})
 	return s
 }
 
-// add fills in the fields of s that are still empty from o.
+// add fills in the fields of s that are still empty from o, with where
+// o found them, and keeps the worse of the two ways to panic.
 func (s *Summary) add(o Summary) {
 	if s.Effect == "" {
-		s.Effect = o.Effect
+		s.Effect, s.At.Effect = o.Effect, o.At.Effect
 	}
 	if s.Reads == "" {
-		s.Reads = o.Reads
+		s.Reads, s.At.Reads = o.Reads, o.At.Reads
 	}
 	if s.Unsafe == "" {
-		s.Unsafe = o.Unsafe
+		s.Unsafe, s.At.Unsafe = o.Unsafe, o.At.Unsafe
 	}
 	if s.Stops == "" {
-		s.Stops = o.Stops
+		s.Stops, s.At.Stops = o.Stops, o.At.Stops
 	}
+	if s.At.Panic == nil {
+		s.At.Panic = o.At.Panic
+	}
+	s.Panics = max(s.Panics, o.Panics)
+}
+
+// at returns s with n as where each of its findings is: for a call, the
+// call, through which the callee's findings happen.
+func (s Summary) at(n ast.Node) Summary {
+	where := func(what string) ast.Node {
+		if what == "" {
+			return nil
+		}
+		return n
+	}
+	s.At = Where{Effect: where(s.Effect), Reads: where(s.Reads), Unsafe: where(s.Unsafe), Stops: where(s.Stops)}
+	if s.Panics == OtherPanic {
+		s.At.Panic = n
+	}
+	return s
 }
 
 // stopsFuncs are functions that end the program or the goroutine rather
@@ -213,6 +244,9 @@ func syncCallSummary(info *types.Info, fn *types.Func, call *ast.CallExpr, priva
 		return Summary{}, false
 	}
 	s := Summary{Effect: sc.effect, Unsafe: sc.unsafe}
+	if sc.unsafe != "" {
+		s.Panics = OtherPanic
+	}
 	for i, a := range call.Args {
 		_, isLit := ast.Unparen(a).(*ast.FuncLit)
 		_, isFunc := info.TypeOf(a).Underlying().(*types.Signature)
@@ -221,6 +255,7 @@ func syncCallSummary(info *types.Info, fn *types.Func, call *ast.CallExpr, priva
 		case isFunc:
 			s.Effect = "passes " + types.ExprString(a) + " to " + types.ExprString(call.Fun)
 			s.Stops = s.Effect + ", which could be any function"
+			s.Panics = OtherPanic
 		case (i == 0 || sc.readsAll) && (private == nil || !private(a, false)):
 			if sc.writes && s.Effect == "" {
 				s.Effect = "changes " + types.ExprString(a)
@@ -256,7 +291,7 @@ func builtinCall(info *types.Info, call *ast.CallExpr, name string) Summary {
 		if _, isMap := under(info.TypeOf(call)).(*types.Map); !isMap {
 			for _, a := range call.Args[1:] {
 				if !nonNegative(info, a) {
-					return Summary{Unsafe: "makes " + types.ExprString(call.Args[0]) + " of a size that may be out of range"}
+					return Summary{Unsafe: "makes " + types.ExprString(call.Args[0]) + " of a size that may be out of range", Panics: OtherPanic}
 				}
 			}
 		}
@@ -264,7 +299,7 @@ func builtinCall(info *types.Info, call *ast.CallExpr, name string) Summary {
 	case "len", "cap", "min", "max", "real", "imag", "complex", "new":
 		return Summary{}
 	case "panic":
-		return Summary{Unsafe: "panics"}
+		return Summary{Unsafe: "panics", Panics: OtherPanic}
 	}
 	return Summary{Effect: "calls " + name}
 }
@@ -419,10 +454,20 @@ func (b *body) private(x ast.Expr) bool {
 	return false
 }
 
-func (b *body) set(field *string, what string) {
-	if *field == "" {
-		*field = what
-	}
+// effect, read, unsafe and stops record what n does, where it is the
+// first of its kind: a side effect, a read of what other code can change,
+// something that can panic (how, kind says), and something that might
+// not finish (and can also panic as kind says).
+func (b *body) effect(n ast.Node, what string) { b.s.add(Summary{Effect: what}.at(n)) }
+
+func (b *body) read(n ast.Node, what string) { b.s.add(Summary{Reads: what}.at(n)) }
+
+func (b *body) unsafe(n ast.Node, kind PanicKind, what string) {
+	b.s.add(Summary{Unsafe: what, Panics: kind}.at(n))
+}
+
+func (b *body) stops(n ast.Node, kind PanicKind, what string) {
+	b.s.add(Summary{Unsafe: what, Stops: what, Panics: kind}.at(n))
 }
 
 func (b *body) assigns(x ast.Expr) {
@@ -430,7 +475,7 @@ func (b *body) assigns(x ast.Expr) {
 		return
 	}
 	if !b.private(x) {
-		b.set(&b.s.Effect, "assigns to "+types.ExprString(x))
+		b.effect(x, "assigns to "+types.ExprString(x))
 	}
 }
 
@@ -442,37 +487,31 @@ func (b *body) visit(n ast.Node) bool {
 	case *ast.FuncLit:
 		return b.sync[n] // defining a closure runs nothing
 	case *ast.GoStmt:
-		b.set(&s.Effect, "starts a goroutine")
+		b.effect(n, "starts a goroutine")
 	case *ast.SendStmt:
-		b.set(&s.Effect, "sends on a channel")
-		b.set(&s.Unsafe, "sends on a channel, which might block")
-		b.set(&s.Stops, "sends on a channel, which might block")
+		b.effect(n, "sends on a channel")
+		b.stops(n, OtherPanic, "sends on a channel, which might block")
 	case *ast.SelectStmt:
-		b.set(&s.Effect, "selects on channels")
-		b.set(&s.Unsafe, "selects on channels, which might block")
-		b.set(&s.Stops, "selects on channels, which might block")
+		b.effect(n, "selects on channels")
+		b.stops(n, OtherPanic, "selects on channels, which might block")
 	case *ast.UnaryExpr:
 		if n.Op == token.ARROW {
-			b.set(&s.Effect, "receives from a channel")
-			b.set(&s.Unsafe, "receives from a channel, which might block")
-			b.set(&s.Stops, "receives from a channel, which might block")
+			b.effect(n, "receives from a channel")
+			b.stops(n, NoPanic, "receives from a channel, which might block")
 		}
 	case *ast.ForStmt:
-		b.set(&s.Unsafe, "has a loop that might not finish")
-		b.set(&s.Stops, "has a loop that might not finish")
+		b.stops(n, NoPanic, "has a loop that might not finish")
 	case *ast.RangeStmt:
 		switch info.TypeOf(n.X).Underlying().(type) {
 		case *types.Chan:
-			b.set(&s.Effect, "receives from a channel")
-			b.set(&s.Unsafe, "receives from a channel, which might block")
-			b.set(&s.Stops, "receives from a channel, which might block")
+			b.effect(n, "receives from a channel")
+			b.stops(n, NoPanic, "receives from a channel, which might block")
 		case *types.Signature:
-			b.set(&s.Effect, "ranges over a function")
-			b.set(&s.Unsafe, "ranges over a function, which could be any function")
-			b.set(&s.Stops, "ranges over a function, which could be any function")
+			b.effect(n, "ranges over a function")
+			b.stops(n, OtherPanic, "ranges over a function, which could be any function")
 		case *types.Slice, *types.Map, *types.Pointer:
 			if !b.pointsPrivate(n.X) {
-				b.set(&s.Reads, "reads the elements of "+types.ExprString(n.X))
+				b.read(n, "reads the elements of "+types.ExprString(n.X))
 			}
 		}
 		if n.Tok == token.ASSIGN {
@@ -490,22 +529,22 @@ func (b *body) visit(n ast.Node) bool {
 			b.assigns(l)
 		}
 		if (n.Tok == token.QUO_ASSIGN || n.Tok == token.REM_ASSIGN) && isInteger(info.TypeOf(n.Lhs[0])) && info.Types[n.Rhs[0]].Value == nil {
-			b.set(&s.Unsafe, "divides by "+types.ExprString(n.Rhs[0]))
+			b.unsafe(n, OtherPanic, "divides by "+types.ExprString(n.Rhs[0]))
 		}
 	case *ast.IncDecStmt:
 		b.assigns(n.X)
 	case *ast.CallExpr:
-		s.add(b.call(n))
+		s.add(b.call(n).at(n))
 	case *ast.StarExpr:
 		if !info.Types[n].IsType() && !b.pointsPrivate(n.X) {
-			b.set(&s.Reads, "reads through the pointer "+types.ExprString(n.X))
-			b.set(&s.Unsafe, "dereferences "+types.ExprString(n.X))
+			b.read(n, "reads through the pointer "+types.ExprString(n.X))
+			b.unsafe(n, NilPanic, "dereferences "+types.ExprString(n.X))
 		}
 	case *ast.SelectorExpr:
 		sel := info.Selections[n]
 		if sel != nil && sel.Kind() == types.FieldVal && sel.Indirect() && !(IsPointer(info.TypeOf(n.X)) && b.pointsPrivate(n.X)) {
-			b.set(&s.Reads, "reads "+types.ExprString(n)+" through a pointer")
-			b.set(&s.Unsafe, "reads "+types.ExprString(n)+" through a pointer")
+			b.read(n, "reads "+types.ExprString(n)+" through a pointer")
+			b.unsafe(n, NilPanic, "reads "+types.ExprString(n)+" through a pointer")
 		}
 	case *ast.IndexExpr:
 		tv := info.Types[n.X]
@@ -516,33 +555,33 @@ func (b *body) visit(n ast.Node) bool {
 		case *types.Signature: // instantiating a generic function
 		case *types.Map:
 			if !b.pointsPrivate(n.X) {
-				b.set(&s.Reads, "reads the map element "+types.ExprString(n))
+				b.read(n, "reads the map element "+types.ExprString(n))
 			}
 		case *types.Array:
 			if info.Types[n.Index].Value == nil {
-				b.set(&s.Unsafe, "indexes "+types.ExprString(n.X))
+				b.unsafe(n, OtherPanic, "indexes "+types.ExprString(n.X))
 			}
 		case *types.Basic: // a string
-			b.set(&s.Unsafe, "indexes "+types.ExprString(n.X))
+			b.unsafe(n, OtherPanic, "indexes "+types.ExprString(n.X))
 		default:
 			if !b.pointsPrivate(n.X) {
-				b.set(&s.Reads, "reads the element "+types.ExprString(n))
+				b.read(n, "reads the element "+types.ExprString(n))
 			}
-			b.set(&s.Unsafe, "indexes "+types.ExprString(n.X))
+			b.unsafe(n, OtherPanic, "indexes "+types.ExprString(n.X))
 		}
 	case *ast.SliceExpr:
-		b.set(&s.Unsafe, "slices "+types.ExprString(n.X))
+		b.unsafe(n, OtherPanic, "slices "+types.ExprString(n.X))
 	case *ast.TypeAssertExpr:
 		if n.Type != nil && !commaOK(n, b.f.Node) {
-			b.set(&s.Unsafe, "asserts the type of "+types.ExprString(n.X))
+			b.unsafe(n, OtherPanic, "asserts the type of "+types.ExprString(n.X))
 		}
 	case *ast.BinaryExpr:
 		if (n.Op == token.QUO || n.Op == token.REM) && isInteger(info.TypeOf(n)) && info.Types[n.Y].Value == nil {
-			b.set(&s.Unsafe, "divides by "+types.ExprString(n.Y))
+			b.unsafe(n, OtherPanic, "divides by "+types.ExprString(n.Y))
 		}
 	case *ast.Ident:
 		if v, ok := info.Uses[n].(*types.Var); ok && !v.IsField() && v.Pkg() != nil && v.Parent() == v.Pkg().Scope() {
-			b.set(&s.Reads, "reads the package variable "+v.Name())
+			b.read(n, "reads the package variable "+v.Name())
 		}
 	}
 	return true

@@ -1556,9 +1556,12 @@ hand or a tool got in the way.
        Effects knew are now known to Stable; `os.Getenv` and the other
        functions that only read can be deleted; `strings.Join` can
        panic (a result too long), as ReadOnlyCall already said.
-    2. A summary's findings carry the node and the panic kind (none, a
-       nil dereference, other), so that callers can ask what Stable and
-       MayPanic ask.
+    2. *Done.* A summary's findings carry the node (`Summary.At`: the
+       node, or the call through which it happens, and the first that
+       can panic other than by a nil dereference) and the panic kind
+       (`Summary.Panics`), so that callers can ask what Stable and
+       MayPanic ask. Sends and selects count as able to panic (a
+       closed channel).
     3. A summary of one expression (`Effects.Of`), the body walker
        applied to it, private memory from the function's facts.
     4. The callers of MayPanic, Stable, HasEffect and FirstEffectBefore
