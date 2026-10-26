@@ -543,6 +543,8 @@ func TestEffectsWhere(t *testing.T) {
 			return types.ExprString(n)
 		case *ast.ForStmt:
 			return "for"
+		case *ast.AssignStmt:
+			return types.ExprString(n.Lhs[0]) + " = " + types.ExprString(n.Rhs[0])
 		}
 		return "?"
 	}
@@ -556,7 +558,7 @@ func TestEffectsWhere(t *testing.T) {
 		"both":    {reads: "p.n", unsafe: "p.n", panic: "x / y", panics: OtherPanic},
 		"viaCall": {reads: "field(p)", unsafe: "field(p)", panics: NilPanic},
 		"spin":    {unsafe: "for"},
-		"set":     {effect: "p.n", reads: "p.n", unsafe: "p.n", panics: NilPanic},
+		"set":     {effect: "p.n = 1", reads: "p.n", unsafe: "p.n", panics: NilPanic}, // a write is at its statement
 		"first":   {reads: "xs[0]", unsafe: "xs[0]", panic: "xs[0]", panics: OtherPanic},
 	}
 	for name, w := range want {

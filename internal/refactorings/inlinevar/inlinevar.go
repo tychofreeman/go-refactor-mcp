@@ -129,10 +129,10 @@ func (x *inliner) plan() (*refactor.Plan, error) {
 	if err := x.checkVariable(); err != nil {
 		return nil, err
 	}
-	if err := x.checkEvaluation(); err != nil {
+	if err := x.checkReadsUnchanged(); err != nil {
 		return nil, err
 	}
-	if err := x.checkReadsUnchanged(); err != nil {
+	if err := x.checkEvaluation(); err != nil {
 		return nil, err
 	}
 	if err := x.checkScopes(); err != nil {
@@ -309,42 +309,77 @@ func (x *inliner) checkVariable() error {
 // Evaluation count and order
 
 // checkEvaluation ensures the initializer is evaluated as often and in the
-// same order relative to other effects after inlining.
+// same order relative to other effects after inlining: a move of the
+// initializer to its use, or, for several uses, one value shared by all.
 func (x *inliner) checkEvaluation() error {
-	culprit, ok := x.stable(true)
-	if ok {
-		culprit = x.panics()
-		if culprit == nil {
-			return nil // same value and no effects however often and wherever it is evaluated
-		}
-		if len(x.uses) > 1 {
-			return refactor.Refusef("%q is used %d times, and its initializer %s can panic (%s), which inlining would move to the first use; inlining requires a single use",
-				x.obj.Name(), len(x.uses), x.quote(x.init), x.quote(culprit))
-		}
+	m := x.move()
+	m.Times = analysis.Shared
+	o := m.Check()
+	if o == nil {
+		return nil // same value and no effects however often and wherever it is evaluated
 	}
 	if len(x.uses) > 1 {
+		if o.Kind == analysis.Panics {
+			return refactor.Refusef("%q is used %d times, and its initializer %s can panic (%s), which inlining would move to the first use; inlining requires a single use",
+				x.obj.Name(), len(x.uses), x.quote(x.init), x.quote(o.In))
+		}
 		return refactor.Refusef("%q is used %d times, and its initializer %s could give a different value or do something each time it is evaluated (because of %s); inlining requires a single use",
-			x.obj.Name(), len(x.uses), x.quote(x.init), x.quote(culprit))
+			x.obj.Name(), len(x.uses), x.quote(x.init), x.quote(o.In))
 	}
 	use := x.uses[0]
 	stmt, err := x.evaluatedOnce(use)
 	if err != nil {
 		return err
 	}
-	if _, ok := x.stable(false); ok && x.panics() == nil {
-		return nil // no effects and nothing else can change it: only the count mattered
-	}
+	m.Times = analysis.Once
 	if x.owner == nil {
-		if bad := x.firstEffectBetween(stmt); bad != nil {
-			return refactor.Refusef("%s (at %s) runs between the declaration of %q and its use; inlining would move %s after it, which could change behavior",
-				x.quote(bad), x.ws.Position(bad.Pos()), x.obj.Name(), x.quote(x.init))
+		m.Past = x.between(stmt)
+	}
+	between := len(m.Past)
+	m.Past = append(m.Past, analysis.EvaluatedBefore(stmt, use.Pos(), x.declStmt)...)
+	o = m.Check()
+	if o == nil {
+		return nil
+	}
+	for _, s := range m.Past[:between] {
+		if s.Pos() <= o.Past.Pos() && o.Past.End() <= s.End() {
+			return refactor.Refusef("%s (at %s) runs between the declaration of %q and its use; inlining would move %s after it, which could change behavior (%s)",
+				x.quote(o.Past), x.ws.Position(o.Past.Pos()), x.obj.Name(), x.quote(x.init), o.Why)
 		}
 	}
-	if first := x.ws.Effects().FirstActBefore(x.info, stmt, use.Pos(), x.declStmt); first != nil {
-		return refactor.Refusef("inlining would evaluate %s after %s (at %s), which comes first in the statement that uses %q; that could change behavior",
-			x.quote(x.init), x.quote(first), x.ws.Position(first.Pos()), x.obj.Name())
+	return refactor.Refusef("inlining would evaluate %s after %s (at %s), which comes first in the statement that uses %q; that could change behavior (%s)",
+		x.quote(x.init), x.quote(o.Past), x.ws.Position(o.Past.Pos()), x.obj.Name(), o.Why)
+}
+
+// move is the initializer's move from the declaration to its use: of
+// the initializer, or, for a pointer alias, of the address it holds.
+func (x *inliner) move() analysis.Move {
+	moved := x.init
+	if e := x.aliased(); e != nil {
+		moved = &ast.UnaryExpr{Op: token.AND, X: e}
 	}
-	return nil
+	return analysis.Move{Effects: x.ws.Effects(), Func: x.fa, Expr: moved, Dereferenced: moved != x.init}
+}
+
+// between returns the statements of the block between the declaration
+// and stmt.
+func (x *inliner) between(stmt ast.Stmt) []ast.Node {
+	var list []ast.Stmt
+	switch b := x.block.(type) {
+	case *ast.BlockStmt:
+		list = b.List
+	case *ast.CaseClause:
+		list = b.Body
+	case *ast.CommClause:
+		list = b.Body
+	}
+	var out []ast.Node
+	for _, s := range list {
+		if s.Pos() > x.declStmt.Pos() && s.Pos() < stmt.Pos() {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // evaluatedOnce checks that use is evaluated exactly once each time the
@@ -417,60 +452,6 @@ func conditionalOrRepeated(n, child ast.Node) string {
 		}
 	}
 	return ""
-}
-
-// firstEffectBetween returns the first statement part between the
-// declaration and stmt (in the same block) that has side effects, writes
-// anything but an unshared local, or can transfer control.
-func (x *inliner) firstEffectBetween(stmt ast.Stmt) ast.Node {
-	var list []ast.Stmt
-	switch b := x.block.(type) {
-	case *ast.BlockStmt:
-		list = b.List
-	case *ast.CaseClause:
-		list = b.Body
-	case *ast.CommClause:
-		list = b.Body
-	}
-	var bad ast.Node
-	for _, s := range list {
-		if s.Pos() <= x.declStmt.Pos() || s.Pos() >= stmt.Pos() {
-			continue
-		}
-		ast.Inspect(s, func(n ast.Node) bool {
-			if bad != nil || n == nil {
-				return false
-			}
-			switch n := n.(type) {
-			case *ast.FuncLit:
-				return false
-			case *ast.SendStmt, *ast.GoStmt, *ast.DeferStmt, *ast.ReturnStmt, *ast.BranchStmt, *ast.LabeledStmt, *ast.SelectStmt:
-				bad = n
-			case *ast.AssignStmt:
-				for _, l := range n.Lhs {
-					if id, ok := l.(*ast.Ident); ok && n.Tok == token.DEFINE && x.info.Defs[id] != nil {
-						continue
-					}
-					if v := x.fa.RootVar(l); v == nil || x.fa.Escapes(v) {
-						bad = n
-					}
-				}
-			case *ast.IncDecStmt:
-				if v := x.fa.RootVar(n.X); v == nil || x.fa.Escapes(v) {
-					bad = n
-				}
-			default:
-				if x.ws.Effects().Acts(x.info, n) {
-					bad = n
-				}
-			}
-			return bad == nil
-		})
-		if bad != nil {
-			return bad
-		}
-	}
-	return nil
 }
 
 // checkReadsUnchanged refuses if a local the initializer reads is modified
@@ -635,26 +616,6 @@ func (x *inliner) dereference(path []ast.Node, target ast.Expr) (ast.Node, strin
 		text = "(" + text + ")"
 	}
 	return n, text, true
-}
-
-// stable is Summary.Stable for the initializer, or, for a pointer alias,
-// Effects.StableAddress for what it points to.
-func (x *inliner) stable(sharing bool) (ast.Node, bool) {
-	if e := x.aliased(); e != nil {
-		return x.ws.Effects().StableAddress(x.fa, e)
-	}
-	return x.ws.Effects().Of(x.fa, x.init).Stable(sharing)
-}
-
-// panics returns where evaluating the initializer can panic, or nil. For
-// a pointer alias a nil dereference only moves to the use, so it counts
-// only other panics.
-func (x *inliner) panics() ast.Node {
-	s := x.ws.Effects().Of(x.fa, x.init)
-	if x.aliased() != nil {
-		return s.At.OtherPanic
-	}
-	return s.At.Panic
 }
 
 // reads returns the locals the initializer's value depends on: for a
