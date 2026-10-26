@@ -1480,6 +1480,14 @@ hand or a tool got in the way.
     the receiver type still refuses any such name. The kinds reference
     drops its renames: 60 steps. *Done.*
 
+    The receiver need not be first: function_to_method's `receiver`
+    names any parameter, and each call's argument for it moves to the
+    operand, refused where move_parameter would refuse the move (order
+    of evaluation). When the first parameter's type already has the
+    name, the refusal names a parameter whose type could take it
+    (`give receiver "k" to make it a method of Book`). The kinds
+    reference adds the receiver last and names it. *Done.*
+
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
 candidates and the evidence for each, gathered from the friction log.

@@ -85,7 +85,8 @@
    "args": {
     "file": "lending/lending.go",
     "name": "bookLoanDays",
-    "new_name": "LoanDays"
+    "new_name": "LoanDays",
+    "receiver": "k"
    }
   },
   {
@@ -112,7 +113,8 @@
    "args": {
     "file": "lending/lending.go",
     "name": "bookDailyFee",
-    "new_name": "DailyFee"
+    "new_name": "DailyFee",
+    "receiver": "k"
    }
   },
   {
@@ -131,8 +133,7 @@
     "name": "bookLabel",
     "parameter": "k",
     "type": "Book",
-    "value": "Book{}",
-    "before": "it"
+    "value": "Book{}"
    }
   },
   {
@@ -140,7 +141,8 @@
    "args": {
     "file": "lending/lending.go",
     "name": "bookLabel",
-    "new_name": "Label"
+    "new_name": "Label",
+    "receiver": "k"
    }
   },
   {
@@ -167,7 +169,8 @@
    "args": {
     "file": "lending/lending.go",
     "name": "bookShelf",
-    "new_name": "Shelf"
+    "new_name": "Shelf",
+    "receiver": "k"
    }
   },
   {
@@ -194,7 +197,8 @@
    "args": {
     "file": "lending/lending.go",
     "name": "bookRenewable",
-    "new_name": "Renewable"
+    "new_name": "Renewable",
+    "receiver": "k"
    }
   },
   {
@@ -221,7 +225,8 @@
    "args": {
     "file": "lending/lending.go",
     "name": "dvdLoanDays",
-    "new_name": "LoanDays"
+    "new_name": "LoanDays",
+    "receiver": "k"
    }
   },
   {
@@ -248,7 +253,8 @@
    "args": {
     "file": "lending/lending.go",
     "name": "dvdDailyFee",
-    "new_name": "DailyFee"
+    "new_name": "DailyFee",
+    "receiver": "k"
    }
   },
   {
@@ -267,8 +273,7 @@
     "name": "dvdLabel",
     "parameter": "k",
     "type": "DVD",
-    "value": "DVD{}",
-    "before": "it"
+    "value": "DVD{}"
    }
   },
   {
@@ -276,7 +281,8 @@
    "args": {
     "file": "lending/lending.go",
     "name": "dvdLabel",
-    "new_name": "Label"
+    "new_name": "Label",
+    "receiver": "k"
    }
   },
   {
@@ -303,7 +309,8 @@
    "args": {
     "file": "lending/lending.go",
     "name": "dvdShelf",
-    "new_name": "Shelf"
+    "new_name": "Shelf",
+    "receiver": "k"
    }
   },
   {
@@ -330,7 +337,8 @@
    "args": {
     "file": "lending/lending.go",
     "name": "dvdRenewable",
-    "new_name": "Renewable"
+    "new_name": "Renewable",
+    "receiver": "k"
    }
   },
   {
@@ -357,7 +365,8 @@
    "args": {
     "file": "lending/lending.go",
     "name": "atlasLoanDays",
-    "new_name": "LoanDays"
+    "new_name": "LoanDays",
+    "receiver": "k"
    }
   },
   {
@@ -384,7 +393,8 @@
    "args": {
     "file": "lending/lending.go",
     "name": "atlasDailyFee",
-    "new_name": "DailyFee"
+    "new_name": "DailyFee",
+    "receiver": "k"
    }
   },
   {
@@ -403,8 +413,7 @@
     "name": "atlasLabel",
     "parameter": "k",
     "type": "Atlas",
-    "value": "Atlas{}",
-    "before": "it"
+    "value": "Atlas{}"
    }
   },
   {
@@ -412,7 +421,8 @@
    "args": {
     "file": "lending/lending.go",
     "name": "atlasLabel",
-    "new_name": "Label"
+    "new_name": "Label",
+    "receiver": "k"
    }
   },
   {
@@ -439,7 +449,8 @@
    "args": {
     "file": "lending/lending.go",
     "name": "atlasShelf",
-    "new_name": "Shelf"
+    "new_name": "Shelf",
+    "receiver": "k"
    }
   },
   {
