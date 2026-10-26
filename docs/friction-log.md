@@ -2829,3 +2829,10 @@ This entry appended with a heredoc.
 
 The run's results in cost-history and the session notes with
 replace_text. Nothing by hand. This entry appended with a heredoc.
+
+## 2026-10-26: loop.py repairs may patch the failed batch
+
+`-patch`, its prompt and helpers with replace_text in batches, then
+the fix that a patch is taken only in reply to a failure (a scripted
+check had patched a kept batch) the same way, the docs with
+replace_text. Nothing by hand. This entry appended with a heredoc.
