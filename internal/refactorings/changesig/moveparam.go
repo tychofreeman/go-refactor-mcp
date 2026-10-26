@@ -93,9 +93,9 @@ func (*MoveParameter) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refac
 			return nil, err
 		}
 		p := m.params[from]
-		fes = append(fes, m.paramCut(p).fileEdit(), edit.FileEdit{Path: m.declFile(), Edits: []edit.TextEdit{m.paramEdit(to, p.name, m.text(p.field.Type))}})
+		fes = append(fes, m.paramCut(p).fileEdit(), edit.FileEdit{Path: m.declFile(), Edits: []edit.TextEdit{m.paramEdit(to, p.name, m.Text(p.field.Type))}})
 		for _, c := range m.calls {
-			if err := checkNoSpread(c, m.ws.Position(c.expr.Pos())); err != nil {
+			if err := checkNoSpread(c, m.WS.Position(c.expr.Pos())); err != nil {
 				return nil, err
 			}
 			moved := c.expr.Args[from]
@@ -105,13 +105,13 @@ func (*MoveParameter) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refac
 			if err := m.checkNoCallIn(moved); err != nil {
 				return nil, err
 			}
-			path := m.ws.Fset.Position(moved.Pos()).Filename
+			path := m.WS.Fset.Position(moved.Pos()).Filename
 			if srcs[path] == nil {
 				if srcs[path], err = os.ReadFile(path); err != nil {
 					return nil, err
 				}
 			}
-			text := string(srcs[path][m.off(moved.Pos()):m.off(moved.End())])
+			text := string(srcs[path][m.Off(moved.Pos()):m.Off(moved.End())])
 			fes = append(fes, m.argCut(c.expr, from, false).fileEdit(), edit.FileEdit{Path: path, Edits: []edit.TextEdit{m.argEdit(c.expr, to, text)}})
 		}
 	}
@@ -134,10 +134,10 @@ func (t *target) checkOrder(c call, from, to int) error {
 	moved := args[from]
 	for _, b := range passed {
 		for _, pair := range [][2]ast.Expr{{moved, b}, {b, moved}} {
-			m := analysis.Move{Effects: t.ws.Effects(), Func: fa, Expr: pair[0], Past: []ast.Node{pair[1]}}
+			m := analysis.Move{Effects: t.WS.Effects(), Func: fa, Expr: pair[0], Past: []ast.Node{pair[1]}}
 			if o := m.Check(); o != nil {
 				return refactor.Refusef("at %s, moving %s past %s would change the order in which they are evaluated: %s; assign one of them to a variable before the call first",
-					t.ws.Position(c.expr.Pos()), types.ExprString(moved), types.ExprString(b), o.Why)
+					t.WS.Position(c.expr.Pos()), types.ExprString(moved), types.ExprString(b), o.Why)
 			}
 		}
 	}
@@ -160,12 +160,12 @@ func funcAround(c call) *analysis.Func {
 // checkNoCallIn refuses an argument that contains another call of the
 // target, whose own edit would have to move with it.
 func (t *target) checkNoCallIn(arg ast.Expr) error {
-	a := t.ws.Fset.Position(arg.Pos())
-	end := t.off(arg.End())
+	a := t.WS.Fset.Position(arg.Pos())
+	end := t.Off(arg.End())
 	for _, d := range t.calls {
-		if p := t.ws.Fset.Position(d.expr.Pos()); p.Filename == a.Filename && a.Offset <= p.Offset && p.Offset < end {
+		if p := t.WS.Fset.Position(d.expr.Pos()); p.Filename == a.Filename && a.Offset <= p.Offset && p.Offset < end {
 			return refactor.Refusef("the argument %s at %s contains another call of %s, which is not supported yet; assign it to a variable before the call first",
-				types.ExprString(arg), t.ws.Position(arg.Pos()), t.obj.Name())
+				types.ExprString(arg), t.WS.Position(arg.Pos()), t.obj.Name())
 		}
 	}
 	return nil

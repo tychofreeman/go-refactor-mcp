@@ -43,7 +43,7 @@ type place struct {
 // placeOf finds where s sits, or explains why it is not directly in a
 // block (an else-if, say).
 func (x *inversion) placeOf(s *ast.IfStmt) (*place, error) {
-	path := analysis.PathTo(x.file, s)
+	path := analysis.PathTo(x.File, s)
 	if len(path) < 2 {
 		return nil, fmt.Errorf("internal error: if statement not found in file syntax")
 	}
@@ -56,9 +56,9 @@ func (x *inversion) placeOf(s *ast.IfStmt) (*place, error) {
 	case *ast.CommClause:
 		p.list = o.Body
 	case *ast.IfStmt:
-		return nil, refactor.Refusef("the if at line %d is an else-if, so its branches cannot move out of the if/else chain", x.tf.Line(s.If))
+		return nil, refactor.Refusef("the if at line %d is an else-if, so its branches cannot move out of the if/else chain", x.TF.Line(s.If))
 	default:
-		return nil, refactor.Refusef("the if at line %d is not directly inside a block (it is labeled, say), so its branches cannot move after it", x.tf.Line(s.If))
+		return nil, refactor.Refusef("the if at line %d is not directly inside a block (it is labeled, say), so its branches cannot move after it", x.TF.Line(s.If))
 	}
 	for i, st := range p.list {
 		if st == s {
@@ -73,23 +73,23 @@ func (x *inversion) placeOf(s *ast.IfStmt) (*place, error) {
 			}
 		}
 	}
-	p.scope = x.info.Scopes[p.owner]
+	p.scope = x.Info.Scopes[p.owner]
 	if p.scope == nil { // a function body shares the function's scope
 		switch f := p.fn.(type) {
 		case *ast.FuncDecl:
-			p.scope = x.info.Scopes[f.Type]
+			p.scope = x.Info.Scopes[f.Type]
 		case *ast.FuncLit:
-			p.scope = x.info.Scopes[f.Type]
+			p.scope = x.Info.Scopes[f.Type]
 		}
 	}
 	if p.scope == nil {
-		return nil, fmt.Errorf("internal error: no scope for the block containing line %d", x.tf.Line(s.If))
+		return nil, fmt.Errorf("internal error: no scope for the block containing line %d", x.TF.Line(s.If))
 	}
 	// The moved text is re-indented relative to the if, which must start
 	// its own line.
-	ls := x.off(x.tf.LineStart(x.tf.Line(s.Pos())))
-	if strings.TrimSpace(string(x.src[ls:x.off(s.Pos())])) != "" {
-		return nil, refactor.Refusef("the if at line %d does not start its own line; format the file first", x.tf.Line(s.If))
+	ls := x.Off(x.TF.LineStart(x.TF.Line(s.Pos())))
+	if strings.TrimSpace(string(x.Src[ls:x.Off(s.Pos())])) != "" {
+		return nil, refactor.Refusef("the if at line %d does not start its own line; format the file first", x.TF.Line(s.If))
 	}
 	return p, nil
 }
@@ -112,12 +112,12 @@ func (p *place) last() bool {
 // whether s's init statement must move before s, because the moved
 // statements use its variables (see prepareInit).
 func (x *inversion) checkMove(s *ast.IfStmt, block *ast.BlockStmt, p *place) (hoist bool, err error) {
-	line := x.tf.Line(s.If)
+	line := x.TF.Line(s.If)
 	if hoist, err = x.prepareInit(s, p, block, block); err != nil {
 		return false, err
 	}
 	// The branch's own declarations move to the enclosing block.
-	inner := x.info.Scopes[block]
+	inner := x.Info.Scopes[block]
 	if inner == nil {
 		return hoist, nil // declares nothing
 	}
@@ -128,7 +128,7 @@ func (x *inversion) checkMove(s *ast.IfStmt, block *ast.BlockStmt, p *place) (ho
 		}
 		if other := p.scope.Lookup(name); other != nil {
 			return false, refactor.Refusef("the statements that would move out of the if at line %d declare %s, which the enclosing block already declares (line %d); rename one first",
-				line, name, x.tf.Line(other.Pos()))
+				line, name, x.TF.Line(other.Pos()))
 		}
 		if err := x.laterUse(name, p, fmt.Sprintf("the statements that would move out of the if at line %d declare %s", line, name)); err != nil {
 			return false, err
@@ -153,14 +153,14 @@ func (x *inversion) prepareInit(s *ast.IfStmt, p *place, moved ast.Node, movedBl
 	if s.Init == nil || !x.usesInit(s, moved) {
 		return false, nil
 	}
-	line := x.tf.Line(s.If)
-	sc := x.info.Scopes[s]
+	line := x.TF.Line(s.If)
+	sc := x.Info.Scopes[s]
 	if sc == nil {
 		return false, fmt.Errorf("internal error: no scope for the if at line %d", line)
 	}
 	var inner *types.Scope
 	if movedBlock != nil {
-		inner = x.info.Scopes[movedBlock]
+		inner = x.Info.Scopes[movedBlock]
 	}
 	declaresVar := false
 	for _, name := range sc.Names() {
@@ -171,7 +171,7 @@ func (x *inversion) prepareInit(s *ast.IfStmt, p *place, moved ast.Node, movedBl
 		declaresVar = true
 		what := fmt.Sprintf("the code moving out of the if at line %d uses %s from its init statement, so the init statement has to move before the if", line, name)
 		if other := p.scope.Lookup(name); other != nil {
-			return false, refactor.Refusef("%s, but the enclosing block already declares %s (line %d): a := there would assign that variable instead of declaring a new one. Rename one first", what, name, x.tf.Line(other.Pos()))
+			return false, refactor.Refusef("%s, but the enclosing block already declares %s (line %d): a := there would assign that variable instead of declaring a new one. Rename one first", what, name, x.TF.Line(other.Pos()))
 		}
 		if inner != nil && inner.Lookup(name) != nil {
 			return false, refactor.Refusef("%s, but the moved statements declare another %s; rename one first", what, name)
@@ -199,9 +199,9 @@ func (x *inversion) laterUse(name string, p *place, what string) error {
 			if !ok || err != nil || id.Name != name {
 				return err == nil
 			}
-			if u := x.info.Uses[id]; u != nil && (u.Pos() < st.Pos() || u.Pos() >= st.End()) {
+			if u := x.Info.Uses[id]; u != nil && (u.Pos() < st.Pos() || u.Pos() >= st.End()) {
 				err = refactor.Refusef("%s, and the code after the if uses another %s (line %d), which the moved declaration would hide; rename one first",
-					what, name, x.tf.Line(id.Pos()))
+					what, name, x.TF.Line(id.Pos()))
 			}
 			return err == nil
 		})
@@ -224,7 +224,7 @@ func (x *inversion) gotoOver(s *ast.IfStmt, p *place, doing string) error {
 	ast.Inspect(p.fn, func(n ast.Node) bool {
 		switch n := n.(type) {
 		case *ast.LabeledStmt:
-			labels[x.info.Defs[n.Label]] = n.Pos()
+			labels[x.Info.Defs[n.Label]] = n.Pos()
 		case *ast.BranchStmt:
 			if n.Tok == token.GOTO {
 				gotos = append(gotos, n)
@@ -233,8 +233,8 @@ func (x *inversion) gotoOver(s *ast.IfStmt, p *place, doing string) error {
 		return true
 	})
 	for _, g := range gotos {
-		if at, ok := labels[x.info.Uses[g.Label]]; ok && g.Pos() < s.Pos() && at > s.End() {
-			return refactor.Refusef("the goto at line %d jumps over the if at line %d; %s would make it jump over variable declarations, which Go does not allow", x.tf.Line(g.Pos()), x.tf.Line(s.If), doing)
+		if at, ok := labels[x.Info.Uses[g.Label]]; ok && g.Pos() < s.Pos() && at > s.End() {
+			return refactor.Refusef("the goto at line %d jumps over the if at line %d; %s would make it jump over variable declarations, which Go does not allow", x.TF.Line(g.Pos()), x.TF.Line(s.If), doing)
 		}
 	}
 	return nil
@@ -249,7 +249,7 @@ func (x *inversion) usesInit(s *ast.IfStmt, n ast.Node) bool {
 	found := false
 	ast.Inspect(n, func(c ast.Node) bool {
 		if id, ok := c.(*ast.Ident); ok && !found {
-			if o := x.info.Uses[id]; o != nil && o.Pos() >= s.Init.Pos() && o.Pos() < s.Init.End() {
+			if o := x.Info.Uses[id]; o != nil && o.Pos() >= s.Init.Pos() && o.Pos() < s.Init.End() {
 				found = true
 			}
 		}
@@ -265,19 +265,19 @@ func (x *inversion) head(s *ast.IfStmt, hoist bool, indent string) string {
 	if !hoist {
 		return x.header(s)
 	}
-	return x.text(s.Init) + "\n" + indent + "if "
+	return x.Text(s.Init) + "\n" + indent + "if "
 }
 
 // noCommentsBetween refuses when comments sit between the end of the if
 // branch and the start of the else branch, which the edit would drop.
 func (x *inversion) noCommentsBetween(s *ast.IfStmt) error {
-	from, to := x.off(s.Body.Rbrace), x.off(s.Else.Pos())
+	from, to := x.Off(s.Body.Rbrace), x.Off(s.Else.Pos())
 	if b, ok := s.Else.(*ast.BlockStmt); ok {
-		to = x.off(b.Lbrace)
+		to = x.Off(b.Lbrace)
 	}
-	for _, t := range textutil.Scan(x.src[from:to]) {
+	for _, t := range textutil.Scan(x.Src[from:to]) {
 		if t.Tok == token.COMMENT {
-			return refactor.Refusef("there is a comment between the if branch and the else at line %d; move it first", x.tf.Line(s.Body.Rbrace))
+			return refactor.Refusef("there is a comment between the if branch and the else at line %d; move it first", x.TF.Line(s.Body.Rbrace))
 		}
 	}
 	return nil
@@ -285,8 +285,8 @@ func (x *inversion) noCommentsBetween(s *ast.IfStmt) error {
 
 // indentOf returns the indentation of the line containing p.
 func (x *inversion) indentOf(p token.Pos) string {
-	start := x.off(x.tf.LineStart(x.tf.Line(p)))
-	ws := x.src[start:x.off(p)]
+	start := x.Off(x.TF.LineStart(x.TF.Line(p)))
+	ws := x.Src[start:x.Off(p)]
 	for i, c := range ws {
 		if c != ' ' && c != '\t' {
 			return string(ws[:i])
@@ -299,7 +299,7 @@ func (x *inversion) indentOf(p token.Pos) string {
 // at indent (one level less than inside the block), or "" if it is empty.
 // A comment on the line of the opening brace is kept, on its own line.
 func (x *inversion) dedented(block *ast.BlockStmt, indent string) string {
-	inner := string(x.src[x.off(block.Lbrace)+1 : x.off(block.Rbrace)])
+	inner := string(x.Src[x.Off(block.Lbrace)+1 : x.Off(block.Rbrace)])
 	nl := strings.IndexByte(inner, '\n')
 	if nl < 0 { // a one-line block
 		if t := strings.TrimSpace(inner); t != "" {
@@ -330,13 +330,13 @@ func (x *inversion) dedented(block *ast.BlockStmt, indent string) string {
 
 // blockText returns the text between a block's braces, unchanged.
 func (x *inversion) blockText(b *ast.BlockStmt) string {
-	return string(x.src[x.off(b.Lbrace)+1 : x.off(b.Rbrace)])
+	return string(x.Src[x.Off(b.Lbrace)+1 : x.Off(b.Rbrace)])
 }
 
 // header returns the if statement's text up to its condition: "if " or
 // "if init; ".
 func (x *inversion) header(s *ast.IfStmt) string {
-	return string(x.src[x.off(s.Pos()):x.off(s.Cond.Pos())])
+	return string(x.Src[x.Off(s.Pos()):x.Off(s.Cond.Pos())])
 }
 
 // then joins the if statement's new text and the moved lines.

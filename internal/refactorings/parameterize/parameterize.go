@@ -18,9 +18,9 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
 	"github.com/tychofreeman/go-refactor-mcp/internal/pattern"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/site"
 	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
-	"golang.org/x/tools/go/packages"
 )
 
 // Parameterize is the "parameterize" refactoring.
@@ -60,15 +60,13 @@ type args struct {
 
 // fun is one of the functions.
 type fun struct {
-	ws     *workspace.Workspace
+	site.Site
 	name   string
-	pkg    *packages.Package
 	obj    *types.Func
 	decl   *ast.FuncDecl
 	params []types.Object
 	recv   types.Object // nil for a function
 	path   string
-	src    []byte
 }
 
 // findFun finds the function name (Name or Type.Method) of file's package.
@@ -81,7 +79,7 @@ func findFun(ws *workspace.Workspace, file, name string) (*fun, error) {
 	if !ok {
 		return nil, refactor.Refusef("%s is not a function or method", name)
 	}
-	f := &fun{ws: ws, name: name, pkg: pkg, obj: obj}
+	f := &fun{Site: site.Site{WS: ws, Pkg: pkg}, name: name, obj: obj}
 	for _, file := range pkg.Syntax {
 		for _, d := range file.Decls {
 			if fd, ok := d.(*ast.FuncDecl); ok && fd.Name == id {
@@ -110,21 +108,19 @@ func findFun(ws *workspace.Workspace, file, name string) (*fun, error) {
 		f.recv = pkg.TypesInfo.Defs[r.List[0].Names[0]]
 	}
 	f.path = ws.Fset.Position(f.decl.Pos()).Filename
-	if f.src, err = os.ReadFile(f.path); err != nil {
+	if f.Src, err = os.ReadFile(f.path); err != nil {
 		return nil, err
 	}
 	return f, nil
 }
 
-func (f *fun) off(p token.Pos) int { return f.ws.Fset.Position(p).Offset }
-
-func (f *fun) text(from, to token.Pos) string { return string(f.src[f.off(from):f.off(to)]) }
+func (f *fun) text(from, to token.Pos) string { return string(f.Src[f.Off(from):f.Off(to)]) }
 
 // sameShape refuses g unless it has f's package, signature and receiver
 // type.
 func (f *fun) sameShape(g *fun) error {
 	switch {
-	case g.pkg.PkgPath != f.pkg.PkgPath:
+	case g.Pkg.PkgPath != f.Pkg.PkgPath:
 		return refactor.Refusef("%s and %s are in different packages", f.name, g.name)
 	case !types.Identical(f.obj.Type(), g.obj.Type()):
 		return refactor.Refusef("%s and %s have different signatures", f.name, g.name)
@@ -147,18 +143,18 @@ func (g *fun) where(miss *pattern.Miss) (string, string) {
 	if okP && okX {
 		return types.ExprString(pe), types.ExprString(xe)
 	}
-	return fmt.Sprintf("%s (line %d)", reflect.TypeOf(p).Elem().Name(), g.ws.Fset.Position(p.Pos()).Line), fmt.Sprintf("line %d", g.ws.Fset.Position(x.Pos()).Line)
+	return fmt.Sprintf("%s (line %d)", reflect.TypeOf(p).Elem().Name(), g.WS.Fset.Position(p.Pos()).Line), fmt.Sprintf("line %d", g.WS.Fset.Position(x.Pos()).Line)
 }
 
 // checkNames refuses a new function name taken in the package (or by a
 // method of the receiver's type), or parameter names the body uses.
 func (f *fun) checkNames(name string, params []string) error {
 	if f.recv != nil {
-		if obj, _, _ := types.LookupFieldOrMethod(f.recv.Type(), true, f.pkg.Types, name); obj != nil {
-			return refactor.Refusef("%s already has a field or method %s", types.TypeString(f.recv.Type(), types.RelativeTo(f.pkg.Types)), name)
+		if obj, _, _ := types.LookupFieldOrMethod(f.recv.Type(), true, f.Pkg.Types, name); obj != nil {
+			return refactor.Refusef("%s already has a field or method %s", types.TypeString(f.recv.Type(), types.RelativeTo(f.Pkg.Types)), name)
 		}
-	} else if f.pkg.Types.Scope().Lookup(name) != nil {
-		return refactor.Refusef("package %s already declares %s", f.pkg.Name, name)
+	} else if f.Pkg.Types.Scope().Lookup(name) != nil {
+		return refactor.Refusef("package %s already declares %s", f.Pkg.Name, name)
 	}
 	used := map[string]bool{}
 	ast.Inspect(f.decl, func(n ast.Node) bool {
@@ -211,13 +207,13 @@ func (*Parameterize) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refact
 	for i, g := range fs[1:] {
 		found := map[*ast.BasicLit]*ast.BasicLit{}
 		m := &pattern.Matcher{
-			Pkg: first.pkg,
+			Pkg: first.Pkg,
 			Compare: pattern.Exactly{Literal: func(p, x *ast.BasicLit) bool {
 				found[p] = x
 				return true
 			}},
 		}
-		a := m.At(g.pkg.TypesInfo)
+		a := m.At(g.Pkg.TypesInfo)
 		a.Locals = map[types.Object]types.Object{}
 		for j, p := range first.params {
 			a.Locals[p] = g.params[j]
@@ -252,25 +248,25 @@ func (*Parameterize) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refact
 	}
 
 	// The new function: the first one, its constants made parameters.
-	info := first.pkg.TypesInfo
+	info := first.Pkg.TypesInfo
 	text := first.text(first.decl.Pos(), first.decl.End())
-	base := first.off(first.decl.Pos())
+	base := first.Off(first.decl.Pos())
 	type rep struct {
 		at   int
 		end  int
 		text string
 	}
-	reps := []rep{{first.off(first.decl.Name.Pos()) - base, first.off(first.decl.Name.End()) - base, a.Name}}
+	reps := []rep{{first.Off(first.decl.Name.Pos()) - base, first.Off(first.decl.Name.End()) - base, a.Name}}
 	var added []string
 	for i, p := range at {
-		reps = append(reps, rep{first.off(p.Pos()) - base, first.off(p.End()) - base, a.Parameters[i]})
+		reps = append(reps, rep{first.Off(p.Pos()) - base, first.Off(p.End()) - base, a.Parameters[i]})
 		t := info.Types[p].Type
 		if b, ok := t.(*types.Basic); ok && b.Info()&types.IsUntyped != 0 {
 			t = types.Default(t)
 		}
-		added = append(added, a.Parameters[i]+" "+types.TypeString(t, types.RelativeTo(first.pkg.Types)))
+		added = append(added, a.Parameters[i]+" "+types.TypeString(t, types.RelativeTo(first.Pkg.Types)))
 	}
-	closing := first.off(first.decl.Type.Params.Closing) - base
+	closing := first.Off(first.decl.Type.Params.Closing) - base
 	sep := ", "
 	if first.decl.Type.Params.NumFields() == 0 {
 		sep = ""
@@ -307,9 +303,9 @@ func (*Parameterize) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refact
 		if ws.Fset.Position(body.Lbrace).Line != ws.Fset.Position(body.Rbrace).Line {
 			stmt = "\n\t" + call + "\n"
 		}
-		es := []edit.TextEdit{{Start: g.off(body.Lbrace) + 1, End: g.off(body.Rbrace), NewText: stmt}}
+		es := []edit.TextEdit{{Start: g.Off(body.Lbrace) + 1, End: g.Off(body.Rbrace), NewText: stmt}}
 		if i == 0 {
-			es = append(es, edit.TextEdit{Start: g.off(g.decl.End()), End: g.off(g.decl.End()), NewText: "\n\n" + text})
+			es = append(es, edit.TextEdit{Start: g.Off(g.decl.End()), End: g.Off(g.decl.End()), NewText: "\n\n" + text})
 		}
 		edits = append(edits, edit.FileEdit{Path: g.path, Edits: es})
 	}

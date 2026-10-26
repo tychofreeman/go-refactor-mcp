@@ -198,12 +198,12 @@ func (t *target) hides(name string, replace bool) (*types.Var, error) {
 	if t.decl == nil {
 		return nil, nil // an interface method: a parameter's name there is only documentation
 	}
-	info := t.pkg.TypesInfo
+	info := t.Pkg.TypesInfo
 	if fs := info.Scopes[t.decl.Type]; fs != nil {
 		if o := fs.Lookup(name); o != nil {
 			if t.decl.Body.Pos() <= o.Pos() && o.Pos() < t.decl.Body.End() {
 				return nil, refactor.Refusef("the body of %s declares %q at its top level (at %s), which a parameter of that name would clash with",
-					t.obj.Name(), name, t.ws.Position(o.Pos()))
+					t.obj.Name(), name, t.WS.Position(o.Pos()))
 			}
 			return nil, refactor.Refusef("%s already has a parameter or result named %q", t.obj.Name(), name)
 		}
@@ -220,14 +220,14 @@ func (t *target) hides(name string, replace bool) (*types.Var, error) {
 			continue // declared inside the function, in a nested scope
 		}
 		v, isVar := o.(*types.Var)
-		pkgVar := isVar && o.Parent() == t.pkg.Types.Scope()
+		pkgVar := isVar && o.Parent() == t.Pkg.Types.Scope()
 		if replace && pkgVar {
 			hidden = v
 			continue
 		}
 		where := "the universe"
 		if o.Pos().IsValid() {
-			where = t.ws.Position(o.Pos())
+			where = t.WS.Position(o.Pos())
 		}
 		hint := ""
 		if pkgVar {
@@ -249,11 +249,11 @@ func (t *target) checkReplaced(v *types.Var, replace bool, typ types.Type) error
 		return nil
 	case !types.Identical(v.Type(), typ):
 		return refactor.Refusef("the parameter's type %s is not the type %s of the variable %s it would replace",
-			types.TypeString(typ, types.RelativeTo(t.pkg.Types)), types.TypeString(v.Type(), types.RelativeTo(t.pkg.Types)), v.Name())
+			types.TypeString(typ, types.RelativeTo(t.Pkg.Types)), types.TypeString(v.Type(), types.RelativeTo(t.Pkg.Types)), v.Name())
 	}
-	if pos := writeTo(t.pkg.TypesInfo, t.decl.Body, v); pos.IsValid() {
+	if pos := writeTo(t.Pkg.TypesInfo, t.decl.Body, v); pos.IsValid() {
 		return refactor.Refusef("the body of %s assigns %s (at %s); a parameter would take that write from the variable",
-			t.obj.Name(), v.Name(), t.ws.Position(pos))
+			t.obj.Name(), v.Name(), t.WS.Position(pos))
 	}
 	return nil
 }
@@ -363,13 +363,13 @@ func writeTo(info *types.Info, n ast.Node, v *types.Var) token.Pos {
 // evalType checks the type expression in the declaring file, where the
 // parameter list is (so type parameters are visible).
 func (t *target) evalType(src string) (types.Type, error) {
-	tv, err := types.Eval(t.ws.Fset, t.pkg.Types, t.ftype.Params.Closing, src)
+	tv, err := types.Eval(t.WS.Fset, t.Pkg.Types, t.ftype.Params.Closing, src)
 	if err != nil || !tv.IsType() {
 		reason := "it is not a type"
 		if err != nil {
 			reason = err.Error()
 		}
-		return nil, refactor.Refusef("the type %q is not valid in %s: %s", src, t.ws.Rel(t.declFile()), reason)
+		return nil, refactor.Refusef("the type %q is not valid in %s: %s", src, t.WS.Rel(t.declFile()), reason)
 	}
 	return tv.Type, nil
 }
@@ -379,7 +379,7 @@ func (t *target) evalType(src string) (types.Type, error) {
 // effects or panics: the body ignores the parameter, so evaluating it must
 // change nothing.
 func (t *target) checkValue(c call, value string, typ types.Type) error {
-	where := t.ws.Position(c.expr.Pos())
+	where := t.WS.Position(c.expr.Pos())
 	if err := checkNoSpread(c, where); err != nil {
 		return err
 	}
@@ -392,14 +392,14 @@ func (t *target) checkValue(c call, value string, typ types.Type) error {
 		Uses:       map[*ast.Ident]types.Object{},
 		Selections: map[*ast.SelectorExpr]*types.Selection{},
 	}
-	if err := types.CheckExpr(t.ws.Fset, c.pkg.Types, c.expr.Lparen, e, info); err != nil {
+	if err := types.CheckExpr(t.WS.Fset, c.pkg.Types, c.expr.Lparen, e, info); err != nil {
 		msg := err.Error()
 		if te, ok := err.(types.Error); ok {
 			msg = te.Msg // its position is in the parsed value, not the file
 		}
 		return refactor.Refusef("the value %s does not work at the call at %s: %s", value, where, msg)
 	}
-	if bad, why := unsafeValue(info, e, t.ws.Effects()); bad != nil {
+	if bad, why := unsafeValue(info, e, t.WS.Effects()); bad != nil {
 		return refactor.Refusef("the value %s %s (%s), and the body would not use it, so passing it would change behavior; use a value without calls (other than known ones, like strings.ToUpper), dereferences, indexing or division",
 			value, why, types.ExprString(bad.(ast.Expr)))
 	}
@@ -471,7 +471,7 @@ func (t *target) valueAt(c call, value string, adders map[string]*imports.Adder)
 // importName is the name c's file imports pkg as, importing it if it
 // does not.
 func (t *target) importName(c call, pkg *types.Package, adders map[string]*imports.Adder) (string, error) {
-	path := t.ws.Fset.Position(c.expr.Pos()).Filename
+	path := t.WS.Fset.Position(c.expr.Pos()).Filename
 	a := adders[path]
 	if a == nil {
 		src, err := os.ReadFile(path)
@@ -484,7 +484,7 @@ func (t *target) importName(c call, pkg *types.Package, adders map[string]*impor
 				file = f
 			}
 		}
-		a = imports.New(t.ws, c.pkg, file, src)
+		a = imports.New(t.WS, c.pkg, file, src)
 		adders[path] = a
 	}
 	return a.Name(pkg)
@@ -547,7 +547,7 @@ func containsTypeParam(t types.Type) bool {
 // (`a int, s string, b int`).
 func (t *target) paramEdit(at int, name, typ string) edit.TextEdit {
 	insert := func(p token.Pos, text string) edit.TextEdit {
-		o := t.off(p)
+		o := t.Off(p)
 		return edit.TextEdit{Start: o, End: o, NewText: text}
 	}
 	if len(t.params) == 0 {
@@ -562,13 +562,13 @@ func (t *target) paramEdit(at int, name, typ string) edit.TextEdit {
 	}
 	if at == len(t.params) {
 		last := t.params[at-1].field
-		if t.text(last.Type) == typ {
+		if t.Text(last.Type) == typ {
 			return insert(last.Names[len(last.Names)-1].End(), ", "+name)
 		}
 		return insert(last.End(), ", "+name+" "+typ)
 	}
 	p := t.params[at]
-	same := t.text(p.field.Type) == typ
+	same := t.Text(p.field.Type) == typ
 	switch {
 	case p.index == 0 && same:
 		return insert(p.field.Pos(), name+", ")
@@ -577,20 +577,20 @@ func (t *target) paramEdit(at int, name, typ string) edit.TextEdit {
 	case same:
 		return insert(p.field.Names[p.index-1].End(), ", "+name)
 	}
-	return insert(p.field.Names[p.index-1].End(), " "+t.text(p.field.Type)+", "+name+" "+typ)
+	return insert(p.field.Names[p.index-1].End(), " "+t.Text(p.field.Type)+", "+name+" "+typ)
 }
 
 // argEdit inserts value into the call's arguments at index at.
 func (t *target) argEdit(ce *ast.CallExpr, at int, value string) edit.TextEdit {
 	if at < len(ce.Args) {
-		o := t.off(ce.Args[at].Pos())
+		o := t.Off(ce.Args[at].Pos())
 		return edit.TextEdit{Start: o, End: o, NewText: value + ", "}
 	}
 	if len(ce.Args) == 0 {
-		o := t.off(ce.Lparen) + 1
+		o := t.Off(ce.Lparen) + 1
 		return edit.TextEdit{Start: o, End: o, NewText: value}
 	}
-	o := t.off(ce.Args[len(ce.Args)-1].End())
+	o := t.Off(ce.Args[len(ce.Args)-1].End())
 	return edit.TextEdit{Start: o, End: o, NewText: ", " + value}
 }
 

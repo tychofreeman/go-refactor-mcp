@@ -109,8 +109,8 @@ func (g *preparer) checkTag() error {
 		return refactor.Refusef("the switch at %s has no tag, so there is no value whose cases could move into types", g.at(sw))
 	}
 	g.subject = sw.Tag
-	if t := g.info.TypeOf(sw.Tag); !types.IsInterface(t) {
-		return refactor.Refusef("%s is a %s, not an interface, so no value of it can implement %s; widen it first (change_field_type to any)", g.text(sw.Tag), g.typeName(t), g.name)
+	if t := g.Info.TypeOf(sw.Tag); !types.IsInterface(t) {
+		return refactor.Refusef("%s is a %s, not an interface, so no value of it can implement %s; widen it first (change_field_type to any)", g.Text(sw.Tag), g.typeName(t), g.name)
 	}
 	return g.checkStable()
 }
@@ -159,14 +159,14 @@ func (g *preparer) checkSplit() error {
 
 // values is the source of a case's values.
 func (g *preparer) values(cc *ast.CaseClause) string {
-	return string(g.src[g.off(cc.List[0].Pos()):g.off(cc.List[len(cc.List)-1].End())])
+	return string(g.Src[g.Off(cc.List[0].Pos()):g.Off(cc.List[len(cc.List)-1].End())])
 }
 
 // split returns the switch's source with each case of several values
 // split into a case for each, with a copy of the body, so that each
 // value's code can move into its type alone; and the cases it split.
 func (g *preparer) split() (string, []string) {
-	at := g.off(g.stmt.Pos())
+	at := g.Off(g.stmt.Pos())
 	ind := g.indent()
 	var edits []edit.TextEdit
 	var split []string
@@ -178,13 +178,13 @@ func (g *preparer) split() (string, []string) {
 		body := g.body(cc, ind+"\t")
 		var b strings.Builder
 		for _, v := range cc.List[:len(cc.List)-1] {
-			b.WriteString("case " + g.text(v) + ":\n" + body + ind)
+			b.WriteString("case " + g.Text(v) + ":\n" + body + ind)
 		}
-		b.WriteString("case " + g.text(cc.List[len(cc.List)-1]) + ":")
-		edits = append(edits, edit.TextEdit{Start: g.off(cc.Case) - at, End: g.off(cc.Colon) + 1 - at, NewText: b.String()})
+		b.WriteString("case " + g.Text(cc.List[len(cc.List)-1]) + ":")
+		edits = append(edits, edit.TextEdit{Start: g.Off(cc.Case) - at, End: g.Off(cc.Colon) + 1 - at, NewText: b.String()})
 		split = append(split, g.values(cc))
 	}
-	src := g.src[at:g.off(g.stmt.End())]
+	src := g.Src[at:g.Off(g.stmt.End())]
 	out, err := edit.Apply(src, edits)
 	if err != nil {
 		return string(src), nil
@@ -194,14 +194,14 @@ func (g *preparer) split() (string, []string) {
 
 // checkInterface finds the interface, or checks that its name is free.
 func (g *preparer) checkInterface() error {
-	o := g.pkg.Types.Scope().Lookup(g.name)
+	o := g.Pkg.Types.Scope().Lookup(g.name)
 	if o == nil {
 		if types.Universe.Lookup(g.name) != nil {
 			return refactor.Refusef("%s is predeclared; choose another name for the interface", g.name)
 		}
-		for _, f := range g.pkg.Syntax {
-			if s := g.info.Scopes[f]; s != nil && s.Lookup(g.name) != nil {
-				return refactor.Refusef("%s is an import's name in %s; choose another name for the interface", g.name, g.ws.Rel(g.ws.Fset.Position(f.Pos()).Filename))
+		for _, f := range g.Pkg.Syntax {
+			if s := g.Info.Scopes[f]; s != nil && s.Lookup(g.name) != nil {
+				return refactor.Refusef("%s is an import's name in %s; choose another name for the interface", g.name, g.WS.Rel(g.WS.Fset.Position(f.Pos()).Filename))
 			}
 		}
 		return nil
@@ -209,7 +209,7 @@ func (g *preparer) checkInterface() error {
 	tn, _ := o.(*types.TypeName)
 	named, _ := o.Type().(*types.Named)
 	if tn == nil || tn.IsAlias() || named == nil || !types.IsInterface(named) || named.TypeParams().Len() > 0 {
-		return refactor.Refusef("%s is declared at %s, and is not an interface the types could implement; choose another name", g.name, g.ws.Position(o.Pos()))
+		return refactor.Refusef("%s is declared at %s, and is not an interface the types could implement; choose another name", g.name, g.WS.Position(o.Pos()))
 	}
 	it := named.Underlying().(*types.Interface)
 	for i := range it.NumMethods() {
@@ -231,7 +231,7 @@ func (g *preparer) checkDeclared() error {
 	if g.supplied = g.supplies(); g.supplied != nil {
 		return nil
 	}
-	q := types.RelativeTo(g.pkg.Types)
+	q := types.RelativeTo(g.Pkg.Types)
 	return refactor.Refusef("interface %s has a method %s%s, but the switch needs %s; give the method another name, or change its signature first",
 		g.name, g.method, strings.TrimPrefix(types.TypeString(g.declared.Type(), q), "func"), g.signature(q))
 }
@@ -245,7 +245,7 @@ func (g *preparer) checkDeclared() error {
 // case has several values or one that is not a constant.
 func (g *preparer) supplies() []supply {
 	sig := g.declared.Signature()
-	if !types.Identical(sig.Results(), g.info.Defs[g.fd.Name].(*types.Func).Signature().Results()) {
+	if !types.Identical(sig.Results(), g.Info.Defs[g.fd.Name].(*types.Func).Signature().Results()) {
 		return nil
 	}
 	vars := map[types.Object]bool{}
@@ -259,7 +259,7 @@ func (g *preparer) supplies() []supply {
 		if len(c.clause.List) != 1 {
 			return nil
 		}
-		if tv, has := g.info.Types[c.clause.List[0]]; !has || tv.Value == nil {
+		if tv, has := g.Info.Types[c.clause.List[0]]; !has || tv.Value == nil {
 			return nil
 		}
 		for _, st := range c.clause.Body {
@@ -267,17 +267,17 @@ func (g *preparer) supplies() []supply {
 				switch n := n.(type) {
 				case *ast.UnaryExpr:
 					if se, isSel := ast.Unparen(n.X).(*ast.SelectorExpr); isSel && n.Op == token.AND {
-						if id, isID := se.X.(*ast.Ident); isID && vars[g.info.Uses[id]] {
+						if id, isID := se.X.(*ast.Ident); isID && vars[g.Info.Uses[id]] {
 							ok = false // its address: a local would be another variable
 						}
 					}
 				case *ast.SelectorExpr:
 					id, isID := n.X.(*ast.Ident)
-					sel := g.info.Selections[n]
-					if !isID || !vars[g.info.Uses[id]] || sel == nil || sel.Kind() != types.FieldVal || sel.Indirect() {
+					sel := g.Info.Selections[n]
+					if !isID || !vars[g.Info.Uses[id]] || sel == nil || sel.Kind() != types.FieldVal || sel.Indirect() {
 						return true
 					}
-					text := g.text(n)
+					text := g.Text(n)
 					i, seen := index[text]
 					if !seen {
 						i = len(out)
@@ -287,7 +287,7 @@ func (g *preparer) supplies() []supply {
 					out[i].uses = append(out[i].uses, n)
 					return false
 				case *ast.Ident:
-					if vars[g.info.Uses[n]] {
+					if vars[g.Info.Uses[n]] {
 						ok = false // the variable itself, not a field of it
 					}
 				}
@@ -333,13 +333,13 @@ func (g *preparer) checkUnimplemented() error {
 	if g.iface != nil {
 		embeds = append(embeds, g.iface)
 	}
-	it := types.NewInterfaceType([]*types.Func{types.NewFunc(token.NoPos, g.pkg.Types, g.method, sig)}, embeds).Complete()
+	it := types.NewInterfaceType([]*types.Func{types.NewFunc(token.NoPos, g.Pkg.Types, g.method, sig)}, embeds).Complete()
 	if g.declared != nil {
 		it = g.iface.Underlying().(*types.Interface)
 	}
 	named := g.namedTypes()
 	if token.IsExported(g.method) {
-		for _, d := range analysis.Dependencies(g.ws.Pkgs...) {
+		for _, d := range analysis.Dependencies(g.WS.Pkgs...) {
 			for _, n := range d.Types.Scope().Names() {
 				if tn, ok := d.Types.Scope().Lookup(n).(*types.TypeName); ok && !tn.IsAlias() {
 					if nt, ok := tn.Type().(*types.Named); ok && !types.IsInterface(nt) {
@@ -352,7 +352,7 @@ func (g *preparer) checkUnimplemented() error {
 	for _, n := range named {
 		if types.Implements(n, it) || types.Implements(types.NewPointer(n), it) {
 			return refactor.Refusef("type %s already implements %s with a method %s; a %s in %s would call it instead of running the switch",
-				types.TypeString(n, types.RelativeTo(g.pkg.Types)), g.name, g.method, n.Obj().Name(), g.text(g.subject))
+				types.TypeString(n, types.RelativeTo(g.Pkg.Types)), g.name, g.method, n.Obj().Name(), g.Text(g.subject))
 		}
 	}
 	return nil
@@ -363,9 +363,9 @@ func (g *preparer) checkUnimplemented() error {
 func (g *preparer) methodSig() *types.Signature {
 	var params []*types.Var
 	for _, v := range g.params {
-		params = append(params, types.NewParam(token.NoPos, g.pkg.Types, v.Name(), v.Type()))
+		params = append(params, types.NewParam(token.NoPos, g.Pkg.Types, v.Name(), v.Type()))
 	}
-	results := g.info.Defs[g.fd.Name].(*types.Func).Signature().Results()
+	results := g.Info.Defs[g.fd.Name].(*types.Func).Signature().Results()
 	sig := types.NewSignatureType(nil, nil, nil, types.NewTuple(params...), results, false)
 	return sig
 }
@@ -397,8 +397,8 @@ func (g *preparer) fresh(base string) string {
 // its else, and
 // declares the interface or adds the method to it.
 func (g *preparer) plan() (*refactor.Plan, error) {
-	path := g.ws.Fset.Position(g.fd.Pos()).Filename
-	adder := imports.New(g.ws, g.pkg, g.file, g.src)
+	path := g.WS.Fset.Position(g.fd.Pos()).Filename
+	adder := imports.New(g.WS, g.Pkg, g.File, g.Src)
 	q := func(p *types.Package) string {
 		n, _ := adder.Name(p)
 		return n
@@ -420,17 +420,17 @@ func (g *preparer) plan() (*refactor.Plan, error) {
 			strings.Join(reads, ", "), g.name, g.method, strings.TrimPrefix(types.TypeString(g.declared.Type(), q), "func")))
 	}
 	call := v + "." + g.method + "(" + args + ")"
-	head := locals + fmt.Sprintf("if %s, %s := %s.(%s); %s {\n", v, ok, g.text(g.subject), g.name, ok)
-	at, end := g.off(g.stmt.Pos()), g.off(g.stmt.End())
+	head := locals + fmt.Sprintf("if %s, %s := %s.(%s); %s {\n", v, ok, g.Text(g.subject), g.name, ok)
+	at, end := g.Off(g.stmt.Pos()), g.Off(g.stmt.End())
 	sw, split := g.split()
 	if g.supplied != nil {
 		var es []edit.TextEdit
 		for _, s := range g.supplied {
 			for _, u := range s.uses {
-				es = append(es, edit.TextEdit{Start: g.off(u.Pos()) - at, End: g.off(u.End()) - at, NewText: s.name})
+				es = append(es, edit.TextEdit{Start: g.Off(u.Pos()) - at, End: g.Off(u.End()) - at, NewText: s.name})
 			}
 		}
-		out, err := edit.Apply(g.src[at:end], es)
+		out, err := edit.Apply(g.Src[at:end], es)
 		if err != nil {
 			return nil, err
 		}
@@ -454,7 +454,7 @@ func (g *preparer) plan() (*refactor.Plan, error) {
 		if g.fd.Doc != nil {
 			start = g.fd.Doc.Pos()
 		}
-		edits = append(edits, edit.TextEdit{Start: g.off(start), End: g.off(start), NewText: "type " + g.name + " interface {\n\t" + g.signature(q) + "\n}\n\n"})
+		edits = append(edits, edit.TextEdit{Start: g.Off(start), End: g.Off(start), NewText: "type " + g.name + " interface {\n\t" + g.signature(q) + "\n}\n\n"})
 		summary = fmt.Sprintf("%s declared, with method %s", g.name, g.method)
 	} else if g.declared != nil {
 		summary = fmt.Sprintf("%s already has method %s", g.name, g.method)
@@ -468,14 +468,14 @@ func (g *preparer) plan() (*refactor.Plan, error) {
 		} else {
 			fes = append(fes, edit.FileEdit{Path: ifacePath, Edits: ifaceEdits})
 		}
-		if analysis.PublicAPI(g.iface.Obj(), g.ws.Pkgs) {
+		if analysis.PublicAPI(g.iface.Obj(), g.WS.Pkgs) {
 			notes = append(notes, refactor.APINote(g.name, "adding a method to it"))
 		}
 	}
 	fes = append(fes, edit.FileEdit{Path: path, Edits: append(edits, adder.Edits()...)})
 	return &refactor.Plan{
 		Summary: fmt.Sprintf("prepared the switch of %s for its cases to move into types: a value of %s that implements %s runs its %s method, the switch the rest (%s); no type implements it yet",
-			locate.FuncName(g.fd), g.text(g.subject), g.name, g.method, summary),
+			locate.FuncName(g.fd), g.Text(g.subject), g.name, g.method, summary),
 		Edits: edit.Merge(fes),
 		Notes: notes,
 	}, nil

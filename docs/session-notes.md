@@ -130,8 +130,9 @@ results are in `docs/cost-history.md`.
   and inline_function's `lhsEvaluatedFirst` remain (README item 35).
   Ownership is `analysis.Owner` (item 36): a summary's notion of its
   own memory is `body.own`, `ThisFunc` for a function and `ThisCode`
-  for an expression judged out of context. Next: a `Site` type for the
-  refactorings' context structs (item 37).
+  for an expression judged out of context. `site.Site` (item 37) is
+  the file a refactoring works in; a new refactoring embeds it and
+  opens its file with `site.At`.
 
 - **Tool descriptions: an example per use, the rules in refusals**
   (2026-10-21): cutting `fold`'s description from 668 to about 260

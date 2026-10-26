@@ -84,7 +84,7 @@ func (*RemoveParameter) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 		variadic := m.obj.Signature().Variadic() && at == len(m.params)-1
 		cuts = append(cuts, m.paramCut(m.params[at]))
 		for _, c := range m.calls {
-			if err := checkNoSpread(c, m.ws.Position(c.expr.Pos())); err != nil {
+			if err := checkNoSpread(c, m.WS.Position(c.expr.Pos())); err != nil {
 				return nil, err
 			}
 			args := c.expr.Args
@@ -96,9 +96,9 @@ func (*RemoveParameter) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 				dropped = args[at:]
 			}
 			for _, arg := range dropped {
-				if bad, why := unsafeValue(c.pkg.TypesInfo, arg, m.ws.Effects()); bad != nil {
+				if bad, why := unsafeValue(c.pkg.TypesInfo, arg, m.WS.Effects()); bad != nil {
 					return nil, refactor.Refusef("the argument %s at %s %s (%s), so not passing it would change behavior; move it out of the call first (for example `_ = %s`)",
-						types.ExprString(arg), m.ws.Position(arg.Pos()), why, types.ExprString(bad.(ast.Expr)), types.ExprString(arg))
+						types.ExprString(arg), m.WS.Position(arg.Pos()), why, types.ExprString(bad.(ast.Expr)), types.ExprString(arg))
 				}
 			}
 			cuts = append(cuts, m.argCut(c.expr, at, variadic))
@@ -145,7 +145,7 @@ func (t *target) checkUnused(p param) error {
 	if t.decl == nil {
 		return nil // an interface method has no body
 	}
-	info := t.pkg.TypesInfo
+	info := t.Pkg.TypesInfo
 	v := info.Defs[p.field.Names[p.index]]
 	for id, o := range info.Uses {
 		if v != nil && o == v {
@@ -153,7 +153,7 @@ func (t *target) checkUnused(p param) error {
 				t.fixes = append(t.fixes, fix...)
 				break
 			}
-			return refactor.Refusef("the body of %s uses %s (at %s); remove that use first", t.obj.Name(), p.name, t.ws.Position(id.Pos()))
+			return refactor.Refusef("the body of %s uses %s (at %s); remove that use first", t.obj.Name(), p.name, t.WS.Position(id.Pos()))
 		}
 	}
 	if t.obj.Signature().TypeParams().Len() > 0 && containsTypeParam(info.TypeOf(p.field.Type)) {
@@ -167,7 +167,7 @@ func (t *target) checkUnused(p param) error {
 // assigns it a value of its own type without reading it. Then v can go,
 // and fix turns that statement's "=" into ":=" so that it declares v.
 func (t *target) deadOnEntry(v types.Object) (fix []edit.FileEdit, ok bool) {
-	info := t.pkg.TypesInfo
+	info := t.Pkg.TypesInfo
 	mentions := func(n ast.Node) bool {
 		found := false
 		ast.Inspect(n, func(m ast.Node) bool {
@@ -215,8 +215,8 @@ func (t *target) deadOnEntry(v types.Object) (fix []edit.FileEdit, ok bool) {
 		if len(as.Lhs) != 1 {
 			return nil, false // ":=" would declare the others anew too
 		}
-		path := t.ws.Fset.Position(as.TokPos).Filename
-		return []edit.FileEdit{{Path: path, Edits: []edit.TextEdit{{Start: t.off(as.TokPos), End: t.off(as.TokPos) + 1, NewText: ":="}}}}, true
+		path := t.WS.Fset.Position(as.TokPos).Filename
+		return []edit.FileEdit{{Path: path, Edits: []edit.TextEdit{{Start: t.Off(as.TokPos), End: t.Off(as.TokPos) + 1, NewText: ":="}}}}, true
 	}
 	return nil, false
 }
@@ -267,7 +267,7 @@ func (t *target) argCut(ce *ast.CallExpr, at int, variadic bool) cut {
 }
 
 func (t *target) cut(from, to token.Pos) cut {
-	return cut{path: t.ws.Fset.Position(from).Filename, start: t.off(from), end: t.off(to)}
+	return cut{path: t.WS.Fset.Position(from).Filename, start: t.Off(from), end: t.Off(to)}
 }
 
 func (c cut) fileEdit() edit.FileEdit {
@@ -278,7 +278,7 @@ func (c cut) fileEdit() edit.FileEdit {
 // variable or of an import, which would no longer compile.
 func (t *target) checkNothingLeftUnused(cuts []cut) error {
 	inCut := func(pos token.Pos) bool {
-		p := t.ws.Fset.Position(pos)
+		p := t.WS.Fset.Position(pos)
 		for _, c := range cuts {
 			if p.Filename == c.path && c.start <= p.Offset && p.Offset < c.end {
 				return true
@@ -286,7 +286,7 @@ func (t *target) checkNothingLeftUnused(cuts []cut) error {
 		}
 		return false
 	}
-	for _, p := range t.ws.Pkgs {
+	for _, p := range t.WS.Pkgs {
 		if p.TypesInfo == nil {
 			continue
 		}
@@ -307,7 +307,7 @@ func (t *target) checkNothingLeftUnused(cuts []cut) error {
 			if kept[o] {
 				continue
 			}
-			where := t.ws.Position(id.Pos())
+			where := t.WS.Position(id.Pos())
 			if pn, ok := o.(*types.PkgName); ok {
 				return refactor.Refusef("the code removed at %s is the only use of the import %q in its file, which would then be unused; this is not supported yet",
 					where, pn.Imported().Path())

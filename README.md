@@ -1772,9 +1772,19 @@ hand or a tool got in the way.
     exists). Found: move_declaration with `new_name` on an embedded
     type does not rename the field in keyed literals (`inliner{site:
     site{...}}` stays; it rolled back as a bug in its checks).
-    Next: the twelve others (some lack `info`, `tf` or `file`, which
-    `site.At` fills), inline_function's second site (the declaring
-    file: `dfile`, `dtf`, `dsrc`), then one `find`.
+    Part 2: extract_function, invert_if (with flatten and remove_else),
+    the switch refactorings, the signature changes' `target`,
+    extract_struct, parameterize and create_from_usage embed it too;
+    inline_function's declaring file is a second, named `Site`
+    (`callee`), and rename uses `site.DeclaredAt`. `Site.Off` now
+    goes through the file set, so it holds for a position in any
+    file (`target` reads other files). `site.At` refuses a file
+    outside the module's packages, and extract_function, invert_if
+    and extract_variable open their file with it. Left: move_declaration's
+    `mover` and `source` (two files at once), the other copies of
+    the opening (`ws.FileSyntax` then `os.ReadFile`, about twenty),
+    and the seven `find`s, which look for different kinds of thing
+    and so are not one function.
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the

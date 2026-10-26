@@ -25,6 +25,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/imports"
 	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/site"
 	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
@@ -70,14 +71,12 @@ type args struct {
 
 // extraction is one planning run.
 type extraction struct {
-	ws      *workspace.Workspace
-	pkg     *packages.Package
+	site.Site
 	tn      *types.TypeName
 	gen     *ast.GenDecl
 	spec    *ast.TypeSpec
 	st      *ast.StructType
 	path    string // the declaring file
-	src     []byte
 	newType string
 	adders  map[string]*imports.Adder // by file, for literals outside the struct's package
 
@@ -175,8 +174,16 @@ func find(ws *workspace.Workspace, q locate.IdentQuery) (*extraction, error) {
 				if err != nil {
 					return nil, err
 				}
-				return &extraction{ws: ws, pkg: pkg, tn: tn, gen: g, spec: ts, st: st, path: path, src: src,
-					srcs: map[string][]byte{path: src}, litEdit: map[string][]edit.TextEdit{}}, nil
+				return &extraction{
+					Site:    site.Site{WS: ws, Pkg: pkg, Src: src},
+					tn:      tn,
+					gen:     g,
+					spec:    ts,
+					st:      st,
+					path:    path,
+					srcs:    map[string][]byte{path: src},
+					litEdit: map[string][]edit.TextEdit{},
+				}, nil
 			}
 		}
 	}
@@ -248,15 +255,15 @@ func embeddedName(e ast.Expr) string {
 // that another embedded field also has: one level deeper, it would tie
 // with that one, and the selector would be ambiguous.
 func (x *extraction) checkNames() error {
-	for _, p := range x.ws.Pkgs {
-		if p.Types == nil || p.PkgPath != x.pkg.PkgPath {
+	for _, p := range x.WS.Pkgs {
+		if p.Types == nil || p.PkgPath != x.Pkg.PkgPath {
 			continue
 		}
 		if o := p.Types.Scope().Lookup(x.newType); o != nil {
-			return refactor.Refusef("the package already declares %s (at %s)", x.newType, x.ws.Position(o.Pos()))
+			return refactor.Refusef("the package already declares %s (at %s)", x.newType, x.WS.Position(o.Pos()))
 		}
 	}
-	if o, idx, _ := types.LookupFieldOrMethod(types.NewPointer(x.tn.Type()), true, x.pkg.Types, x.newType); o != nil || idx != nil {
+	if o, idx, _ := types.LookupFieldOrMethod(types.NewPointer(x.tn.Type()), true, x.Pkg.Types, x.newType); o != nil || idx != nil {
 		return refactor.Refusef("%s already has a field or method %s, the name the embedded field would have", x.tn.Name(), x.newType)
 	}
 	st := x.tn.Type().Underlying().(*types.Struct)
@@ -266,7 +273,7 @@ func (x *extraction) checkNames() error {
 			continue
 		}
 		for n := range x.moving {
-			if o, idx, _ := types.LookupFieldOrMethod(f.Type(), true, x.pkg.Types, n); o != nil || idx != nil {
+			if o, idx, _ := types.LookupFieldOrMethod(f.Type(), true, x.Pkg.Types, n); o != nil || idx != nil {
 				return refactor.Refusef("the embedded %s also has %s, which would then be ambiguous (both one level down)", f.Name(), n)
 			}
 		}
@@ -281,7 +288,7 @@ func (x *extraction) isT(t types.Type) bool {
 		t = p.Elem()
 	}
 	n, ok := t.(*types.Named)
-	return ok && sameObj(x.ws.Fset, n.Obj(), x.tn)
+	return ok && sameObj(x.WS.Fset, n.Obj(), x.tn)
 }
 
 func sameObj(fset *token.FileSet, a, b types.Object) bool {
@@ -295,9 +302,9 @@ func sameObj(fset *token.FileSet, a, b types.Object) bool {
 func (x *extraction) checkNotPassedAsInterface() error {
 	match := func(t types.Type) bool {
 		n, ok := t.(*types.Named)
-		return ok && sameObj(x.ws.Fset, n.Obj(), x.tn)
+		return ok && sameObj(x.WS.Fset, n.Obj(), x.tn)
 	}
-	for _, p := range x.ws.Pkgs {
+	for _, p := range x.WS.Pkgs {
 		if p.TypesInfo == nil {
 			continue
 		}
@@ -309,7 +316,7 @@ func (x *extraction) checkNotPassedAsInterface() error {
 		if x.isT(p.TypesInfo.TypeOf(arg)) {
 			what = "a " + x.tn.Name()
 		}
-		return refactor.Refusef("%s is passed as an interface at %s; reflection there (fmt's %%+v, encoding/json, reflect) sees the struct's fields, and would see the new embedded one", what, x.ws.Position(arg.Pos()))
+		return refactor.Refusef("%s is passed as an interface at %s; reflection there (fmt's %%+v, encoding/json, reflect) sees the struct's fields, and would see the new embedded one", what, x.WS.Position(arg.Pos()))
 	}
 	return nil
 }
@@ -327,12 +334,12 @@ type lit struct {
 func (x *extraction) rewriteLiterals() (int, error) {
 	var lits []lit
 	seen := map[string]bool{}
-	for _, p := range x.ws.Pkgs {
+	for _, p := range x.WS.Pkgs {
 		if p.TypesInfo == nil {
 			continue
 		}
 		for _, f := range p.Syntax {
-			path := x.ws.Fset.File(f.Pos()).Name()
+			path := x.WS.Fset.File(f.Pos()).Name()
 			ast.Inspect(f, func(n ast.Node) bool {
 				cl, ok := n.(*ast.CompositeLit)
 				if !ok || len(cl.Elts) == 0 {
@@ -341,7 +348,7 @@ func (x *extraction) rewriteLiterals() (int, error) {
 				if t := p.TypesInfo.TypeOf(cl); t == nil || !x.isT(t) || analysis.IsPointer(t) {
 					return true
 				}
-				k := fmt.Sprintf("%s:%d", path, x.ws.Fset.Position(cl.Pos()).Offset)
+				k := fmt.Sprintf("%s:%d", path, x.WS.Fset.Position(cl.Pos()).Offset)
 				if !seen[k] {
 					seen[k] = true
 					lits = append(lits, lit{path: path, pkg: p, expr: cl})
@@ -408,7 +415,7 @@ func (x *extraction) rewrite(l lit) (bool, error) {
 				}
 			}
 			return false, refactor.Refusef("the unkeyed literal at %s lists the fields in order, and %s are not next to each other; give it keys first, or move fields that are",
-				x.ws.Position(cl.Pos()), joinAnd(names))
+				x.WS.Position(cl.Pos()), joinAnd(names))
 		}
 		var group []string
 		for i, e := range cl.Elts {
@@ -425,14 +432,14 @@ func (x *extraction) rewrite(l lit) (bool, error) {
 		elts[x.lo] = typ + "{" + strings.Join(group, ", ") + "}"
 	}
 
-	tf := x.ws.Fset.File(cl.Pos())
+	tf := x.WS.Fset.File(cl.Pos())
 	if tf.Line(cl.Lbrace) == tf.Line(cl.Rbrace) {
 		x.replace(l.path, src, cl.Lbrace, cl.Rbrace+1, "{"+strings.Join(elts, ", ")+"}")
 		return true, nil
 	}
 	for _, cg := range fileOf(l.pkg, l.path).Comments {
 		if cg.Pos() > cl.Lbrace && cg.End() < cl.Rbrace && !insideAny(cg, cl.Elts) {
-			return false, refactor.Refusef("the literal at %s has comments between its elements, which rewriting it would lose; this is not supported yet", x.ws.Position(cl.Pos()))
+			return false, refactor.Refusef("the literal at %s has comments between its elements, which rewriting it would lose; this is not supported yet", x.WS.Position(cl.Pos()))
 		}
 	}
 	indent := lineIndent(src, tf.Offset(tf.LineStart(tf.Line(cl.Elts[0].Pos()))))
@@ -456,14 +463,14 @@ func (x *extraction) typeText(l lit, src []byte) (string, error) {
 	}
 	if !token.IsExported(x.newType) {
 		return "", refactor.Refusef("the literal at %s is in package %s, and package %s cannot name the unexported %s; give new_type an exported name",
-			x.ws.Position(l.expr.Pos()), l.pkg.Name, l.pkg.Name, x.newType)
+			x.WS.Position(l.expr.Pos()), l.pkg.Name, l.pkg.Name, x.newType)
 	}
 	if x.adders == nil {
 		x.adders = map[string]*imports.Adder{}
 	}
 	a := x.adders[l.path]
 	if a == nil {
-		a = imports.New(x.ws, l.pkg, fileOf(l.pkg, l.path), src)
+		a = imports.New(x.WS, l.pkg, fileOf(l.pkg, l.path), src)
 		x.adders[l.path] = a
 	}
 	name, err := a.Name(x.tn.Pkg())
@@ -476,7 +483,7 @@ func (x *extraction) typeText(l lit, src []byte) (string, error) {
 // textWithEdits returns n's source with the literal rewrites inside it
 // applied, and drops those rewrites, which n's replacement now carries.
 func (x *extraction) textWithEdits(path string, src []byte, n ast.Node) string {
-	start, end := x.off(n.Pos()), x.off(n.End())
+	start, end := x.Off(n.Pos()), x.Off(n.End())
 	var inner, rest []edit.TextEdit
 	for _, e := range x.litEdit[path] {
 		if start <= e.Start && e.End <= end {
@@ -491,7 +498,7 @@ func (x *extraction) textWithEdits(path string, src []byte, n ast.Node) string {
 }
 
 func (x *extraction) replace(path string, src []byte, from, to token.Pos, text string) {
-	x.litEdit[path] = append(x.litEdit[path], edit.TextEdit{Start: x.off(from), End: x.off(to), NewText: text})
+	x.litEdit[path] = append(x.litEdit[path], edit.TextEdit{Start: x.Off(from), End: x.Off(to), NewText: text})
 }
 
 func (x *extraction) source(path string) ([]byte, error) {
@@ -509,7 +516,7 @@ func (x *extraction) source(path string) ([]byte, error) {
 // declEdits move the fields out of the struct into the new type, declared
 // just before the struct's declaration, and embed it in their place.
 func (x *extraction) declEdits() []edit.TextEdit {
-	tf := x.ws.Fset.File(x.st.Pos())
+	tf := x.WS.Fset.File(x.st.Pos())
 	declStart := x.gen.Pos()
 	if x.gen.Lparen.IsValid() {
 		declStart = x.spec.Pos()
@@ -519,8 +526,8 @@ func (x *extraction) declEdits() []edit.TextEdit {
 	} else if x.gen.Doc != nil {
 		declStart = x.gen.Doc.Pos()
 	}
-	at := x.off(tf.LineStart(tf.Line(declStart)))
-	declIndent := lineIndent(x.src, at)
+	at := x.Off(tf.LineStart(tf.Line(declStart)))
+	declIndent := lineIndent(x.Src, at)
 	kw := "type " // not inside a type ( ... ) group
 	if x.gen.Lparen.IsValid() {
 		kw = ""
@@ -530,7 +537,7 @@ func (x *extraction) declEdits() []edit.TextEdit {
 		// type point struct{ x, y int }: rebuild both on one line.
 		var kept, moved []string
 		for _, f := range x.st.Fields.List {
-			t := string(x.src[x.off(f.Pos()):x.off(f.End())])
+			t := string(x.Src[x.Off(f.Pos()):x.Off(f.End())])
 			if x.isMoving(f) {
 				if len(moved) == 0 {
 					kept = append(kept, x.newType)
@@ -542,7 +549,7 @@ func (x *extraction) declEdits() []edit.TextEdit {
 		}
 		return []edit.TextEdit{
 			{Start: at, End: at, NewText: declIndent + kw + x.newType + " struct{ " + strings.Join(moved, "; ") + " }\n\n"},
-			{Start: x.off(x.st.Fields.Opening), End: x.off(x.st.Fields.Closing) + 1, NewText: "{ " + strings.Join(kept, "; ") + " }"},
+			{Start: x.Off(x.st.Fields.Opening), End: x.Off(x.st.Fields.Closing) + 1, NewText: "{ " + strings.Join(kept, "; ") + " }"},
 		}
 	}
 
@@ -553,12 +560,12 @@ func (x *extraction) declEdits() []edit.TextEdit {
 		if f.Doc != nil {
 			start = f.Doc.Pos()
 		}
-		from := x.off(tf.LineStart(tf.Line(start)))
-		to := nextLine(x.src, x.off(f.End()))
-		lines.Write(x.src[from:to])
+		from := x.Off(tf.LineStart(tf.Line(start)))
+		to := nextLine(x.Src, x.Off(f.End()))
+		lines.Write(x.Src[from:to])
 		text := ""
 		if i == 0 {
-			text = lineIndent(x.src, x.off(tf.LineStart(tf.Line(f.Pos())))) + x.newType + "\n"
+			text = lineIndent(x.Src, x.Off(tf.LineStart(tf.Line(f.Pos())))) + x.newType + "\n"
 		}
 		es = append(es, edit.TextEdit{Start: from, End: to, NewText: text})
 	}
@@ -574,8 +581,6 @@ func (x *extraction) isMoving(f *ast.Field) bool {
 	}
 	return false
 }
-
-func (x *extraction) off(p token.Pos) int { return x.ws.Fset.Position(p).Offset }
 
 func fileOf(p *packages.Package, path string) *ast.File {
 	for _, f := range p.Syntax {

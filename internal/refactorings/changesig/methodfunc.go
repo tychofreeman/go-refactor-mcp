@@ -94,7 +94,7 @@ func (*MethodToFunction) Plan(ws *workspace.Workspace, raw json.RawMessage) (*re
 
 	path := ws.Fset.Position(t.decl.Pos()).Filename
 	fes := []edit.FileEdit{{Path: path, Edits: t.funcDeclEdits(name, recvParam)}}
-	srcs := map[string][]byte{path: t.src}
+	srcs := map[string][]byte{path: t.Src}
 	for _, c := range t.calls {
 		where := ws.Position(c.expr.Pos())
 		if err := checkNoSpread(c, where); err != nil {
@@ -134,16 +134,16 @@ func (t *target) checkFuncName(name string) error {
 	if types.Universe.Lookup(name) != nil {
 		return refactor.Refusef("%s is predeclared; a function of that name would hide it; pass new_name", name)
 	}
-	for _, p := range t.ws.Pkgs {
-		if p.Types == nil || p.PkgPath != t.pkg.PkgPath {
+	for _, p := range t.WS.Pkgs {
+		if p.Types == nil || p.PkgPath != t.Pkg.PkgPath {
 			continue
 		}
 		if o := p.Types.Scope().Lookup(name); o != nil {
-			return refactor.Refusef("the package already declares %s (at %s); pass new_name", name, t.ws.Position(o.Pos()))
+			return refactor.Refusef("the package already declares %s (at %s); pass new_name", name, t.WS.Position(o.Pos()))
 		}
 		for _, f := range p.Syntax {
 			if s := p.TypesInfo.Scopes[f]; s != nil && s.Lookup(name) != nil {
-				return refactor.Refusef("%s imports a package as %s; pass new_name", t.ws.Rel(t.ws.Fset.Position(f.Pos()).Filename), name)
+				return refactor.Refusef("%s imports a package as %s; pass new_name", t.WS.Rel(t.WS.Fset.Position(f.Pos()).Filename), name)
 			}
 		}
 	}
@@ -155,21 +155,21 @@ func (t *target) checkFuncName(name string) error {
 // through a method of that name (directly or through embedding), and would
 // stop or start to.
 func (t *target) checkNoInterface(name string) error {
-	iface, at, found := analysis.InterfaceWithMethod(t.ws.TypesInfos(), t.obj.Pkg().Path(), name)
+	iface, at, found := analysis.InterfaceWithMethod(t.WS.TypesInfos(), t.obj.Pkg().Path(), name)
 	switch {
 	case !found:
 		return nil
 	case iface != nil:
-		return refactor.Refusef("the interface %s (at %s) has a method %s, which a type could implement through it; that is not supported", iface.Name(), t.ws.Position(at), name)
+		return refactor.Refusef("the interface %s (at %s) has a method %s, which a type could implement through it; that is not supported", iface.Name(), t.WS.Position(at), name)
 	}
-	return refactor.Refusef("the interface at %s has a method %s, which a type could implement through it; that is not supported", t.ws.Position(at), name)
+	return refactor.Refusef("the interface at %s has a method %s, which a type could implement through it; that is not supported", t.WS.Position(at), name)
 }
 
 // recvParam returns the receiver written as a parameter, naming it if the
 // method does not.
 func (t *target) recvParam(named *types.Named) (string, error) {
 	field := t.decl.Recv.List[0]
-	typ := t.text(field.Type)
+	typ := t.Text(field.Type)
 	if len(field.Names) > 0 {
 		return field.Names[0].Name + " " + typ, nil
 	}
@@ -190,11 +190,11 @@ func (t *target) recvParam(named *types.Named) (string, error) {
 // funcDeclEdits drop the receiver, rename the method if asked, and make
 // the receiver the first parameter.
 func (t *target) funcDeclEdits(name, recvParam string) []edit.TextEdit {
-	es := []edit.TextEdit{{Start: t.off(t.decl.Recv.Pos()), End: t.off(t.decl.Name.Pos())}}
+	es := []edit.TextEdit{{Start: t.Off(t.decl.Recv.Pos()), End: t.Off(t.decl.Name.Pos())}}
 	if name != t.obj.Name() {
-		es = append(es, edit.TextEdit{Start: t.off(t.decl.Name.Pos()), End: t.off(t.decl.Name.End()), NewText: name})
+		es = append(es, edit.TextEdit{Start: t.Off(t.decl.Name.Pos()), End: t.Off(t.decl.Name.End()), NewText: name})
 	}
-	at := t.off(t.decl.Type.Params.Opening) + 1
+	at := t.Off(t.decl.Type.Params.Opening) + 1
 	text := recvParam
 	if len(t.decl.Type.Params.List) > 0 {
 		text += ", "
@@ -211,7 +211,7 @@ func (t *target) checkNameAtCall(c call, name string) error {
 	}
 	if _, o := scope.LookupParent(name, c.expr.Pos()); o != nil && o.Parent() != o.Pkg().Scope() {
 		return refactor.Refusef("at the call at %s, %s is the %s declared at %s; pass new_name, or rename it first",
-			t.ws.Position(c.expr.Pos()), name, kind(o), t.ws.Position(o.Pos()))
+			t.WS.Position(c.expr.Pos()), name, kind(o), t.WS.Position(o.Pos()))
 	}
 	return nil
 }
@@ -226,10 +226,10 @@ func (t *target) funcCallEdits(c call, name string, csrc []byte) ([]edit.TextEdi
 	for _, other := range t.calls {
 		if other.expr != c.expr && se.X.Pos() <= other.expr.Pos() && other.expr.End() <= se.X.End() {
 			return nil, refactor.Refusef("the receiver of the call at %s contains another call of %s, at %s; assign it to a variable first",
-				t.ws.Position(c.expr.Pos()), t.obj.Name(), t.ws.Position(other.expr.Pos()))
+				t.WS.Position(c.expr.Pos()), t.obj.Name(), t.WS.Position(other.expr.Pos()))
 		}
 	}
-	x := string(csrc[t.off(se.X.Pos()):t.off(se.X.End())])
+	x := string(csrc[t.Off(se.X.Pos()):t.Off(se.X.End())])
 	if !simpleOperand(se.X) {
 		x = "(" + x + ")"
 	}
@@ -251,12 +251,12 @@ func (t *target) funcCallEdits(c call, name string, csrc []byte) ([]edit.TextEdi
 	case !recvPtr && isPtr:
 		x = "*" + x
 	}
-	at := t.off(c.expr.Lparen) + 1
+	at := t.Off(c.expr.Lparen) + 1
 	if len(c.expr.Args) > 0 {
 		x += ", "
 	}
 	return []edit.TextEdit{
-		{Start: t.off(c.expr.Fun.Pos()), End: t.off(c.expr.Fun.End()), NewText: name},
+		{Start: t.Off(c.expr.Fun.Pos()), End: t.Off(c.expr.Fun.End()), NewText: name},
 		{Start: at, End: at, NewText: x},
 	}, nil
 }

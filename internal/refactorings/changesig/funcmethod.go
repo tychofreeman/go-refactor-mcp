@@ -128,10 +128,10 @@ func (*FunctionToMethod) Plan(ws *workspace.Workspace, raw json.RawMessage) (*re
 
 	path := ws.Fset.Position(t.decl.Pos()).Filename
 	fes := []edit.FileEdit{{Path: path, Edits: t.methodDeclEdits(name, r)}}
-	srcs := map[string][]byte{path: t.src}
+	srcs := map[string][]byte{path: t.Src}
 	for _, c := range t.calls {
 		where := ws.Position(c.expr.Pos())
-		if c.pkg.PkgPath != t.pkg.PkgPath && !token.IsExported(name) {
+		if c.pkg.PkgPath != t.Pkg.PkgPath && !token.IsExported(name) {
 			return nil, refactor.Refusef("the call at %s is in another package, which cannot call the unexported method %s", where, name)
 		}
 		if err := checkNoSpread(c, where); err != nil {
@@ -162,7 +162,7 @@ func (t *target) checkNoSelector(named *types.Named, name string) error {
 	if obj, idx, _ := types.LookupFieldOrMethod(types.NewPointer(named), true, pkg, name); obj != nil || idx != nil {
 		return refactor.Refusef("%s already has a field or method %s", named.Obj().Name(), name)
 	}
-	for _, p := range t.ws.Pkgs {
+	for _, p := range t.WS.Pkgs {
 		if p.TypesInfo == nil {
 			continue
 		}
@@ -206,11 +206,11 @@ func (t *target) receiverHint(err error, name string, r int) error {
 // type that embeds named would get the method too, so then any such
 // interface is refused.
 func (t *target) checkImplements(named *types.Named, name string, r int, ptr bool) ([]string, error) {
-	ifaces := analysis.InterfacesWithMethod(t.ws.TypesInfos(), t.obj.Pkg().Path(), name)
+	ifaces := analysis.InterfacesWithMethod(t.WS.TypesInfos(), t.obj.Pkg().Path(), name)
 	if len(ifaces) == 0 {
 		return nil, nil
 	}
-	for _, p := range t.ws.Pkgs {
+	for _, p := range t.WS.Pkgs {
 		if p.TypesInfo == nil {
 			continue
 		}
@@ -233,7 +233,7 @@ func (t *target) checkImplements(named *types.Named, name string, r int, ptr boo
 	for _, it := range ifaces {
 		iname := it.Name
 		if iname == "" {
-			iname = "at " + t.ws.Position(it.At)
+			iname = "at " + t.WS.Position(it.At)
 		}
 		for _, T := range []types.Type{named, types.NewPointer(named)} {
 			_, isPtr := T.(*types.Pointer)
@@ -275,12 +275,12 @@ func implementsWith(T types.Type, I *types.Interface, name string, method *types
 // interface value in the workspace, or "".
 func (t *target) becomesInterface(named *types.Named) string {
 	match := func(T types.Type) bool { return types.Identical(T, named) }
-	for _, p := range t.ws.Pkgs {
+	for _, p := range t.WS.Pkgs {
 		if p.TypesInfo == nil {
 			continue
 		}
 		if e := analysis.BecomesInterface(p.TypesInfo, p.Syntax, match); e != nil {
-			return fmt.Sprintf("%s at %s", types.ExprString(e), t.ws.Position(e.Pos()))
+			return fmt.Sprintf("%s at %s", types.ExprString(e), t.WS.Position(e.Pos()))
 		}
 	}
 	return ""
@@ -313,10 +313,10 @@ func embeds(t types.Type, named *types.Named, seen map[types.Type]bool) bool {
 // if asked.
 func (t *target) methodDeclEdits(name string, r int) []edit.TextEdit {
 	p := t.params[r]
-	recv := "(" + p.name + " " + t.text(p.field.Type) + ") "
+	recv := "(" + p.name + " " + t.Text(p.field.Type) + ") "
 	cut := t.paramCut(p)
 	return []edit.TextEdit{
-		{Start: t.off(t.decl.Name.Pos()), End: t.off(t.decl.Name.End()), NewText: recv + name},
+		{Start: t.Off(t.decl.Name.Pos()), End: t.Off(t.decl.Name.End()), NewText: recv + name},
 		{Start: cut.start, End: cut.end},
 	}
 }
@@ -336,10 +336,10 @@ func (t *target) methodCallEdits(c call, name string, csrc []byte, r int) ([]edi
 	for _, other := range t.calls {
 		if other.expr != c.expr && arg.Pos() <= other.expr.Pos() && other.expr.End() <= arg.End() {
 			return nil, refactor.Refusef("the receiver argument of the call at %s contains another call of %s, at %s; assign it to a variable first",
-				t.ws.Position(c.expr.Pos()), t.obj.Name(), t.ws.Position(other.expr.Pos()))
+				t.WS.Position(c.expr.Pos()), t.obj.Name(), t.WS.Position(other.expr.Pos()))
 		}
 	}
-	src := func(n ast.Node) string { return string(csrc[t.off(n.Pos()):t.off(n.End())]) }
+	src := func(n ast.Node) string { return string(csrc[t.Off(n.Pos()):t.Off(n.End())]) }
 	recvType := t.obj.Signature().Params().At(r).Type()
 	var x string
 	operand := ast.Unparen(arg)
@@ -355,13 +355,13 @@ func (t *target) methodCallEdits(c call, name string, csrc []byte, r int) ([]edi
 	}
 	x = src(operand)
 	if typeKey(info.TypeOf(arg)) != typeKey(recvType) { // by name: a test variant has its own types
-		x = "(" + t.text(t.params[r].field.Type) + ")(" + src(arg) + ")"
+		x = "(" + t.Text(t.params[r].field.Type) + ")(" + src(arg) + ")"
 	} else if !simpleOperand(operand) || isCompositeLit(operand) {
 		x = "(" + x + ")"
 	}
 	cut := t.argCut(c.expr, r, false)
 	return []edit.TextEdit{
-		{Start: t.off(c.expr.Fun.Pos()), End: t.off(c.expr.Fun.End()), NewText: x + "." + name},
+		{Start: t.Off(c.expr.Fun.Pos()), End: t.Off(c.expr.Fun.End()), NewText: x + "." + name},
 		{Start: cut.start, End: cut.end},
 	}, nil
 }

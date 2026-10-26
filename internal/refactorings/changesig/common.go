@@ -25,19 +25,18 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/site"
 	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
 
 // target is the function whose signature changes.
 type target struct {
-	ws    *workspace.Workspace
+	site.Site
 	obj   *types.Func
 	key   string
-	pkg   *packages.Package // a variant of the declaring package
-	decl  *ast.FuncDecl     // the declaration in pkg
-	ftype *ast.FuncType     // the signature: decl's, or for an interface method (decl nil) the one in the interface
-	src   []byte            // the declaring file's contents
+	decl  *ast.FuncDecl // the declaration in pkg
+	ftype *ast.FuncType // the signature: decl's, or for an interface method (decl nil) the one in the interface
 	// params flattens the parameter list: one entry per name.
 	params []param
 	calls  []call
@@ -136,7 +135,7 @@ func locateFunc(ws *workspace.Workspace, q locate.IdentQuery) (*types.Func, erro
 // newTarget finds fn's declaration (for an interface method, its line in
 // the interface), its parameters and every call of it.
 func newTarget(ws *workspace.Workspace, fn *types.Func) (*target, error) {
-	t := &target{ws: ws, obj: fn, key: keyOf(ws.Fset, fn)}
+	t := &target{Site: site.Site{WS: ws}, obj: fn, key: keyOf(ws.Fset, fn)}
 	iface := false
 	if recv := fn.Signature().Recv(); recv != nil && types.IsInterface(recv.Type()) {
 		iface = true
@@ -151,14 +150,14 @@ func newTarget(ws *workspace.Workspace, fn *types.Func) (*target, error) {
 				switch n := n.(type) {
 				case *ast.FuncDecl:
 					if !iface && keyOf(ws.Fset, p.TypesInfo.Defs[n.Name]) == t.key {
-						t.pkg, t.decl, t.ftype, declFile = p, n, n.Type, f
+						t.Pkg, t.decl, t.ftype, declFile = p, n, n.Type, f
 					}
 					return false
 				case *ast.InterfaceType:
 					for _, m := range n.Methods.List {
 						ft, ok := m.Type.(*ast.FuncType)
 						if iface && ok && len(m.Names) == 1 && keyOf(ws.Fset, p.TypesInfo.Defs[m.Names[0]]) == t.key {
-							t.pkg, t.ftype, declFile = p, ft, f
+							t.Pkg, t.ftype, declFile = p, ft, f
 						}
 					}
 				}
@@ -170,9 +169,10 @@ func newTarget(ws *workspace.Workspace, fn *types.Func) (*target, error) {
 		return nil, refactor.Refusef("%s has no body in Go source (it may be implemented in assembly)", fn.Name())
 	}
 	var err error
-	if t.src, err = os.ReadFile(ws.Fset.Position(declFile.Pos()).Filename); err != nil {
+	if t.Src, err = os.ReadFile(ws.Fset.Position(declFile.Pos()).Filename); err != nil {
 		return nil, err
 	}
+	t.File, t.TF, t.Info = declFile, ws.Fset.File(declFile.Pos()), t.Pkg.TypesInfo
 	for _, f := range t.ftype.Params.List {
 		if len(f.Names) == 0 {
 			if !iface {
@@ -218,7 +218,7 @@ func (t *target) declPos() token.Pos {
 	return t.ftype.Pos()
 }
 
-func (t *target) declFile() string { return t.ws.Fset.Position(t.declPos()).Filename }
+func (t *target) declFile() string { return t.WS.Fset.Position(t.declPos()).Filename }
 
 // groupName names the methods that change: "Area", or for a family
 // "Shape.Area, Square.Area and Rect.Area".
@@ -338,7 +338,7 @@ func familyOf(ws *workspace.Workspace, fn *types.Func) []*types.Func {
 // and refuses any other reference.
 func (t *target) collectCalls() error {
 	seen := map[string]bool{}
-	for _, p := range t.ws.Pkgs {
+	for _, p := range t.WS.Pkgs {
 		if p.TypesInfo == nil {
 			continue
 		}
@@ -365,7 +365,7 @@ func (t *target) collectCalls() error {
 				case *ast.SelectorExpr:
 					id = x.Sel
 					if sel := info.Selections[x]; sel != nil && sel.Kind() == types.MethodExpr && t.is(info.Uses[id]) {
-						err = refactor.Refusef("%s is called as a method expression at %s, which is not supported yet", t.obj.Name(), t.ws.Position(id.Pos()))
+						err = refactor.Refusef("%s is called as a method expression at %s, which is not supported yet", t.obj.Name(), t.WS.Position(id.Pos()))
 					}
 				}
 				if id != nil {
@@ -384,11 +384,11 @@ func (t *target) collectCalls() error {
 			ce, isCall := callFuns[id]
 			if !isCall {
 				return refactor.Refusef("%s is used as a value at %s, not called; its type would change, so this is not supported",
-					t.obj.Name(), t.ws.Position(id.Pos()))
+					t.obj.Name(), t.WS.Position(id.Pos()))
 			}
-			pos := t.ws.Fset.Position(ce.Pos())
+			pos := t.WS.Fset.Position(ce.Pos())
 			// By range: in x.m().m() both calls start at the same offset.
-			k := fmt.Sprintf("%s:%d-%d", pos.Filename, pos.Offset, t.off(ce.End()))
+			k := fmt.Sprintf("%s:%d-%d", pos.Filename, pos.Offset, t.Off(ce.End()))
 			if seen[k] {
 				continue // the same call, seen through another package variant
 			}
@@ -397,7 +397,7 @@ func (t *target) collectCalls() error {
 		}
 	}
 	sort.Slice(t.calls, func(i, j int) bool {
-		a, b := t.ws.Fset.Position(t.calls[i].expr.Pos()), t.ws.Fset.Position(t.calls[j].expr.Pos())
+		a, b := t.WS.Fset.Position(t.calls[i].expr.Pos()), t.WS.Fset.Position(t.calls[j].expr.Pos())
 		if a.Filename != b.Filename {
 			return a.Filename < b.Filename
 		}
@@ -436,7 +436,7 @@ func (t *target) newPlan(what string, fes []edit.FileEdit) *refactor.Plan {
 		// result lists where.
 		Locations: true,
 	}
-	if analysis.PublicAPI(t.obj, t.ws.Pkgs) {
+	if analysis.PublicAPI(t.obj, t.WS.Pkgs) {
 		plan.Notes = append(plan.Notes, refactor.APINote(t.obj.Name(), "changing its signature"))
 		if t.obj.Signature().Recv() != nil {
 			plan.Notes = append(plan.Notes, "interfaces declared inside functions outside this module (such as the ones errors.Is and errors.As look for) cannot be checked")
@@ -446,7 +446,7 @@ func (t *target) newPlan(what string, fes []edit.FileEdit) *refactor.Plan {
 }
 
 func (t *target) is(o types.Object) bool {
-	return o != nil && keyOf(t.ws.Fset, o) == t.key
+	return o != nil && keyOf(t.WS.Fset, o) == t.key
 }
 
 // keyOf identifies an object by its declaration position, which is what a
@@ -461,10 +461,6 @@ func keyOf(fset *token.FileSet, obj types.Object) string {
 	p := fset.Position(obj.Pos())
 	return fmt.Sprintf("%s:%d:%d:%s", p.Filename, p.Line, p.Column, obj.Name())
 }
-
-func (t *target) off(p token.Pos) int { return t.ws.Fset.Position(p).Offset }
-
-func (t *target) text(n ast.Node) string { return string(t.src[t.off(n.Pos()):t.off(n.End())]) }
 
 // unsafeValue returns what in e, evaluated once more or once less where
 // nothing uses its value, would change behavior (a side effect, or a

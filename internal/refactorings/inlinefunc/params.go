@@ -175,9 +175,9 @@ func (x *inliner) vetClash() *param {
 		return nil
 	}
 	norm := func(n ast.Node) string {
-		return strings.Join(strings.Fields(x.rewrite(x.doff(n.Pos()), x.doff(n.End()))), "")
+		return strings.Join(strings.Fields(x.rewrite(x.callee.Off(n.Pos()), x.callee.Off(n.End()))), "")
 	}
-	orig := func(n ast.Node) string { return strings.Join(strings.Fields(x.dtext(n)), "") }
+	orig := func(n ast.Node) string { return strings.Join(strings.Fields(x.callee.Text(n)), "") }
 	bad := false
 	ast.Inspect(x.decl.Body, func(n ast.Node) bool {
 		if bad {
@@ -581,7 +581,7 @@ func (x *inliner) checkExprOrder() error {
 	}
 	if own := x.WS.Effects().Of(x.calleeFA, x.results[0]).At.Effect; own != nil {
 		return refactor.Refusef("%q's result %s has calls of its own, and the argument %s has effects; inlining could change their order. Assign the call to a variable first",
-			x.fn.Name(), x.dquote(own), x.Quote(effectful[0].arg))
+			x.fn.Name(), x.callee.Quote(own), x.Quote(effectful[0].arg))
 	}
 	return nil
 }

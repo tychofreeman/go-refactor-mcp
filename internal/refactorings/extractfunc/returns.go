@@ -52,12 +52,12 @@ const (
 // enclosingFunc returns the innermost function containing the selection:
 // the one its return statements return from.
 func (x *extraction) enclosingFunc() (ft *ast.FuncType, body *ast.BlockStmt, sig *types.Signature) {
-	for _, n := range analysis.PathTo(x.file, x.stmts[0]) {
+	for _, n := range analysis.PathTo(x.File, x.stmts[0]) {
 		switch n := n.(type) {
 		case *ast.FuncLit:
-			return n.Type, n.Body, typeOf[*types.Signature](x.info.TypeOf(n))
+			return n.Type, n.Body, typeOf[*types.Signature](x.Info.TypeOf(n))
 		case *ast.FuncDecl:
-			if obj, ok := x.info.Defs[n.Name].(*types.Func); ok {
+			if obj, ok := x.Info.Defs[n.Name].(*types.Func); ok {
 				return n.Type, n.Body, obj.Signature()
 			}
 			return n.Type, n.Body, nil
@@ -73,7 +73,7 @@ func (x *extraction) decideReturns() error {
 	if sig == nil {
 		return fmt.Errorf("internal error: no signature for the function containing line %d", x.line(x.stmts[0].Pos()))
 	}
-	term := analysis.TerminatingList(x.info, x.stmts, nil)
+	term := analysis.TerminatingList(x.Info, x.stmts, nil)
 	needed := sig.Results().Len() > 0 && x.checkTermination() != nil
 	switch {
 	case len(x.returns) == 0 && !needed:
@@ -109,7 +109,7 @@ func (x *extraction) checkNamedResults(sig *types.Signature) error {
 		if v.Name() == "" || v.Name() == "_" {
 			continue
 		}
-		for id, obj := range x.info.Uses {
+		for id, obj := range x.Info.Uses {
 			if obj == v && x.inSelection(id) {
 				return refactor.Refusef("the selected lines return from %s and use its named result %s (line %d); the new function would have its own results, so returning through %s is not supported",
 					x.enclosingName(), v.Name(), x.line(id.Pos()), v.Name())
@@ -158,7 +158,7 @@ func (x *extraction) checkErrorExits(sig *types.Signature) error {
 	x.mode = errorExit
 	var parts []string
 	for _, e := range first.Results[:n-1] {
-		parts = append(parts, string(x.src[x.off(e.Pos()):x.off(e.End())]))
+		parts = append(parts, string(x.Src[x.Off(e.Pos()):x.Off(e.End())]))
 	}
 	x.exitValues = parts
 	return nil
@@ -177,7 +177,7 @@ func (x *extraction) notConstantLike(e ast.Expr) string {
 		case *ast.FuncLit:
 			why = "a function literal"
 		case *ast.CallExpr:
-			if tv, ok := x.info.Types[n.Fun]; !ok || !tv.IsType() {
+			if tv, ok := x.Info.Types[n.Fun]; !ok || !tv.IsType() {
 				why = "a function call"
 			}
 		case *ast.UnaryExpr:
@@ -185,7 +185,7 @@ func (x *extraction) notConstantLike(e ast.Expr) string {
 				why = "a channel receive"
 			}
 		case *ast.Ident:
-			if o := x.info.Uses[n]; o != nil && isLocal(o) {
+			if o := x.Info.Uses[n]; o != nil && isLocal(o) {
 				why = fmt.Sprintf("a local %s, %s", kindOf(o), n.Name)
 			}
 		}
@@ -203,11 +203,11 @@ func (x *extraction) notConstantLike(e ast.Expr) string {
 func (x *extraction) nonNilError(e ast.Expr, r *ast.ReturnStmt) bool {
 	e = ast.Unparen(e)
 	if id, ok := e.(*ast.Ident); ok {
-		if v, ok := x.info.Uses[id].(*types.Var); ok && types.IsInterface(v.Type()) && x.checkedNonNil(v, r) {
+		if v, ok := x.Info.Uses[id].(*types.Var); ok && types.IsInterface(v.Type()) && x.checkedNonNil(v, r) {
 			return true
 		}
 	}
-	return x.nonNilValue(x.info, e)
+	return x.nonNilValue(x.Info, e)
 }
 
 // nonNilValue reports whether e (type-checked in info), converted to an
@@ -302,21 +302,21 @@ func (x *extraction) alwaysNonNil(fn *types.Func) bool {
 // funcDecl finds fn's declaration in the loaded source, and the type
 // information for the package that declares it.
 func (x *extraction) funcDecl(fn *types.Func) (*types.Info, *ast.FuncDecl) {
-	posn := x.ws.Fset.Position(fn.Pos())
+	posn := x.WS.Fset.Position(fn.Pos())
 	if !posn.IsValid() {
 		return nil, nil
 	}
-	for _, p := range x.ws.Pkgs {
+	for _, p := range x.WS.Pkgs {
 		if p.PkgPath != fn.Pkg().Path() || p.TypesInfo == nil {
 			continue
 		}
 		for _, f := range p.Syntax {
-			if x.ws.Fset.File(f.Pos()).Name() != posn.Filename {
+			if x.WS.Fset.File(f.Pos()).Name() != posn.Filename {
 				continue
 			}
 			for _, d := range f.Decls {
 				fd, ok := d.(*ast.FuncDecl)
-				if ok && fd.Name.Name == fn.Name() && x.ws.Fset.Position(fd.Name.Pos()).Line == posn.Line {
+				if ok && fd.Name.Name == fn.Name() && x.WS.Fset.Position(fd.Name.Pos()).Line == posn.Line {
 					return p.TypesInfo, fd
 				}
 			}
@@ -334,7 +334,7 @@ func (x *extraction) checkedNonNil(v *types.Var, r *ast.ReturnStmt) bool {
 		return false
 	}
 	again := false // r can run again after code later in the if body
-	for _, n := range analysis.PathTo(x.file, r) {
+	for _, n := range analysis.PathTo(x.File, r) {
 		switch n := n.(type) {
 		case *ast.FuncLit, *ast.FuncDecl:
 			return false
@@ -384,10 +384,10 @@ func (x *extraction) requiresNonNil(cond ast.Expr, v *types.Var) bool {
 	case token.NEQ:
 		isV := func(e ast.Expr) bool {
 			id, ok := ast.Unparen(e).(*ast.Ident)
-			return ok && x.info.Uses[id] == v
+			return ok && x.Info.Uses[id] == v
 		}
 		isNil := func(e ast.Expr) bool {
-			return x.info.Types[e].IsNil()
+			return x.Info.Types[e].IsNil()
 		}
 		return isV(b.X) && isNil(b.Y) || isNil(b.X) && isV(b.Y)
 	}
@@ -460,7 +460,7 @@ func (x *extraction) rewriteExits(zeros []string) []edit.TextEdit {
 		if text != "" {
 			text += ", "
 		}
-		start, end := x.off(r.Results[0].Pos()), x.off(r.Results[n-1].Pos())
+		start, end := x.Off(r.Results[0].Pos()), x.Off(r.Results[n-1].Pos())
 		if start == end && text == "" {
 			continue
 		}
@@ -475,8 +475,8 @@ func (x *extraction) tokenText(es []ast.Expr) []string {
 	var out []string
 	for _, e := range es {
 		for _, t := range x.tokens() {
-			if t.off >= x.off(e.Pos()) && t.end <= x.off(e.End()) && t.tok != token.COMMENT {
-				out = append(out, string(x.src[t.off:t.end]))
+			if t.off >= x.Off(e.Pos()) && t.end <= x.Off(e.End()) && t.tok != token.COMMENT {
+				out = append(out, string(x.Src[t.off:t.end]))
 			}
 		}
 		out = append(out, ",")
@@ -485,7 +485,7 @@ func (x *extraction) tokenText(es []ast.Expr) []string {
 }
 
 func (x *extraction) quoteNode(n ast.Node) string {
-	return quoteText(string(x.src[x.off(n.Pos()):x.off(n.End())]))
+	return quoteText(string(x.Src[x.Off(n.Pos()):x.Off(n.End())]))
 }
 
 // finalReturn returns the statement after the selection when the call
@@ -506,17 +506,17 @@ func (x *extraction) finalReturn(f *flow) *ast.ReturnStmt {
 	if !ok || len(r.Results) != len(x.exitValues)+1 {
 		return nil
 	}
-	if id, ok := r.Results[len(r.Results)-1].(*ast.Ident); !ok || x.info.Uses[id] != types.Universe.Lookup("nil") {
+	if id, ok := r.Results[len(r.Results)-1].(*ast.Ident); !ok || x.Info.Uses[id] != types.Universe.Lookup("nil") {
 		return nil
 	}
 	for j, v := range x.exitValues {
-		got, err1 := locate.Tokens(x.src[x.off(r.Results[j].Pos()):x.off(r.Results[j].End())])
+		got, err1 := locate.Tokens(x.Src[x.Off(r.Results[j].Pos()):x.Off(r.Results[j].End())])
 		want, err2 := locate.Tokens([]byte(v))
 		if err1 != nil || err2 != nil || !locate.EqualTokens(got, want) {
 			return nil
 		}
 	}
-	for _, cg := range x.file.Comments {
+	for _, cg := range x.File.Comments {
 		if cg.Pos() >= last.End() && cg.Pos() < r.End() {
 			return nil
 		}

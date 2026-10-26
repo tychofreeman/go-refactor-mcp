@@ -53,11 +53,11 @@ func (*RemoveElse) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor
 	if err != nil {
 		return nil, err
 	}
-	line := x.tf.Line(s.If)
+	line := x.TF.Line(s.If)
 	if s.Else == nil {
 		return nil, refactor.Refusef("the if at line %d has no else", line)
 	}
-	if !analysis.EndsFlow(x.info, s.Body.List) {
+	if !analysis.EndsFlow(x.Info, s.Body.List) {
 		return nil, refactor.Refusef("the if branch at line %d can fall through to the code after the if, so removing the else would run the else branch in that case too. (If the else branch is the one that exits, use invert_if.)", line)
 	}
 	p, err := x.placeOf(s)
@@ -83,9 +83,9 @@ func (*RemoveElse) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor
 		if hoist, err = x.prepareInit(s, p, e, nil); err != nil {
 			return nil, err
 		}
-		moved, what = indent+x.text(e), "the else-if is now a separate if statement"
+		moved, what = indent+x.Text(e), "the else-if is now a separate if statement"
 	}
-	ifText := string(x.src[x.off(s.Cond.Pos()):x.off(s.Body.End())])
+	ifText := string(x.Src[x.Off(s.Cond.Pos()):x.Off(s.Body.End())])
 	text := then(x.head(s, hoist, indent)+ifText, moved)
 	var notes []string
 	if hoist {
@@ -93,7 +93,7 @@ func (*RemoveElse) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor
 	}
 	return &refactor.Plan{
 		Summary: fmt.Sprintf("removed the else of the if at line %d: its branch always exits, so %s", line, what),
-		Edits:   []edit.FileEdit{{Path: x.path, Edits: []edit.TextEdit{{Start: x.off(s.Pos()), End: x.off(s.End()), NewText: text}}}},
+		Edits:   []edit.FileEdit{{Path: x.path, Edits: []edit.TextEdit{{Start: x.Off(s.Pos()), End: x.Off(s.End()), NewText: text}}}},
 		Notes:   notes,
 	}, nil
 }

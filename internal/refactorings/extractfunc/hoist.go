@@ -74,7 +74,7 @@ func (x *extraction) planHoists(objs []types.Object) error {
 			if !ok || err != nil {
 				return err == nil
 			}
-			u := x.info.Uses[id]
+			u := x.Info.Uses[id]
 			if u == nil || u == o || !isLocal(u) {
 				return true
 			}
@@ -126,12 +126,12 @@ func (x *extraction) declOf(fn ast.Node, o types.Object) (*ast.DeclStmt, ast.Spe
 			switch sp := sp.(type) {
 			case *ast.ValueSpec:
 				for _, name := range sp.Names {
-					if x.info.Defs[name] == o {
+					if x.Info.Defs[name] == o {
 						decl, spec = ds, sp
 					}
 				}
 			case *ast.TypeSpec:
-				if x.info.Defs[sp.Name] == o {
+				if x.Info.Defs[sp.Name] == o {
 					decl, spec = ds, sp
 				}
 			}
@@ -149,28 +149,28 @@ func (x *extraction) checkHoistName(o types.Object, what string) error {
 	if u := types.Universe.Lookup(name); u != nil {
 		return refactor.Refusef("the selected lines need %s moved to package level, but there it would hide the predeclared %s in the whole package; rename it first", what, name)
 	}
-	for _, p := range x.ws.Pkgs {
-		if p.PkgPath != x.pkg.PkgPath || p.Types == nil {
+	for _, p := range x.WS.Pkgs {
+		if p.PkgPath != x.Pkg.PkgPath || p.Types == nil {
 			continue
 		}
 		if other := p.Types.Scope().Lookup(name); other != nil {
 			return refactor.Refusef("the selected lines need %s moved to package level, but the package already declares %s (%s at %s); rename it first",
-				what, name, kindOf(other), x.ws.Position(other.Pos()))
+				what, name, kindOf(other), x.WS.Position(other.Pos()))
 		}
 		for _, f := range p.Syntax {
 			if s := p.TypesInfo.Scopes[f]; s != nil && s.Lookup(name) != nil {
 				return refactor.Refusef("the selected lines need %s moved to package level, but %s is imported as %s; rename it first",
-					what, x.ws.Rel(x.ws.Fset.File(f.Pos()).Name()), name)
+					what, x.WS.Rel(x.WS.Fset.File(f.Pos()).Name()), name)
 			}
 		}
 	}
 	// Each use must still find o once its local declaration is gone: no
 	// other declaration of the name between the use and package level.
-	for id, u := range x.info.Uses {
+	for id, u := range x.Info.Uses {
 		if u != o {
 			continue
 		}
-		for s := x.innermostScope(id.Pos()); s != nil && s != x.pkg.Types.Scope(); s = s.Parent() {
+		for s := x.innermostScope(id.Pos()); s != nil && s != x.Pkg.Types.Scope(); s = s.Parent() {
 			if s == o.Parent() {
 				continue
 			}
@@ -192,17 +192,17 @@ func (x *extraction) hoistEdits(decl ast.Decl) (file, body []edit.TextEdit) {
 	}
 	var texts []string
 	for _, h := range x.hoists {
-		start, end := x.off(h.decl.Pos()), x.off(h.decl.End())
-		texts = append(texts, reindent(string(x.src[start:end]), x.indentOf(h.decl.Pos()), ""))
+		start, end := x.Off(h.decl.Pos()), x.Off(h.decl.End())
+		texts = append(texts, reindent(string(x.Src[start:end]), x.indentOf(h.decl.Pos()), ""))
 
 		// Remove the statement, with its line if nothing else is on it.
-		ls := x.off(x.tf.LineStart(x.line(h.decl.Pos())))
-		le := len(x.src)
-		if l := x.line(h.decl.End()); l < x.tf.LineCount() {
-			le = x.off(x.tf.LineStart(l+1)) - 1
+		ls := x.Off(x.TF.LineStart(x.line(h.decl.Pos())))
+		le := len(x.Src)
+		if l := x.line(h.decl.End()); l < x.TF.LineCount() {
+			le = x.Off(x.TF.LineStart(l+1)) - 1
 		}
 		del := edit.TextEdit{Start: start, End: end}
-		if strings.TrimSpace(string(x.src[ls:start])) == "" && strings.TrimSpace(string(x.src[end:le])) == "" {
+		if strings.TrimSpace(string(x.Src[ls:start])) == "" && strings.TrimSpace(string(x.Src[end:le])) == "" {
 			del = edit.TextEdit{Start: ls, End: le + 1} // the whole line(s) and the newline
 		}
 		if x.inSelectionPos(h.decl.Pos()) {
@@ -230,7 +230,7 @@ func (x *extraction) hoistEdits(decl ast.Decl) (file, body []edit.TextEdit) {
 			at = d.Doc.Pos()
 		}
 	}
-	file = append(file, edit.TextEdit{Start: x.off(at), End: x.off(at), NewText: strings.Join(texts, "\n\n") + "\n\n"})
+	file = append(file, edit.TextEdit{Start: x.Off(at), End: x.Off(at), NewText: strings.Join(texts, "\n\n") + "\n\n"})
 	return file, body
 }
 
