@@ -517,7 +517,9 @@ results are in `docs/cost-history.md`.
   With those fixed, still 0/8: every attempt stopped at Renewable's
   `atlas`, which has no case. A batch's refusal gives lines of the
   module at the refused step; a repair resends the batch from the
-  start, so those lines point at other code.
+  start, so those lines point at other code. With both fixed (#356,
+  #358): still 0/8, but the cases' derivation goes through; what fails
+  is Import's edit, which needs its body, and the stages run out.
 - Where a session's cost goes (cost-history 12,
   `eval-tasks/learning/cost.py`): cache writes 69%, output 18%, cache
   reads 13%, though cache reads are 88% of input tokens. About 38% of
