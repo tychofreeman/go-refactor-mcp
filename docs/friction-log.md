@@ -2859,3 +2859,10 @@ replace_text. Nothing by hand. This entry appended with a heredoc.
 
 The run's results in cost-history and plan-and-execute with
 replace_text. Nothing by hand. This entry appended with a heredoc.
+
+## 2026-10-26: loop.py's manual arm
+
+The arm's texts, `run_edits`, `Arm` and the rewiring of `attempt` and
+`main` with replace_text in batches, then two wording fixes the
+scripted check showed; the docs with replace_text. Nothing by hand.
+This entry appended with a heredoc.
