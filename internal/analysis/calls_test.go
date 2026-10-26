@@ -14,6 +14,8 @@ func TestKnownCall(t *testing.T) {
 
 import (
 	"bytes"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"go/types"
 	"path/filepath"
@@ -35,6 +37,9 @@ func f(s string, xs []string, b []byte, o types.Object, pkg *types.Package) {
 	_ = strings.Join(xs, ",")
 	_ = mine(s)
 	_ = reflect.TypeOf(s)
+	_ = o.Type()
+	_ = errors.New(s)
+	_ = json.Valid(b)
 }
 `
 	fset := token.NewFileSet()
@@ -62,6 +67,9 @@ func f(s string, xs []string, b []byte, o types.Object, pkg *types.Package) {
 		`strings.Join(xs, ",")`: {false, 0},
 		"mine(s)":               {false, 0}, // not on the list
 		"reflect.TypeOf(s)":     {true, NoPanic},
+		"o.Type()":              {true, NilPanic}, // fixed once type checking is done
+		"errors.New(s)":         {false, 0},       // a new error each call
+		"json.Valid(b)":         {false, 0},       // reads the slice
 	}
 	seen := 0
 	ast.Inspect(f, func(n ast.Node) bool {
@@ -92,6 +100,7 @@ func TestReadOnlyCall(t *testing.T) {
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"os"
 	"strings"
 )
@@ -102,6 +111,7 @@ func f(s string, xs []string, b []byte) {
 	_ = strings.Join(xs, ",")
 	_ = os.Getenv(s)
 	_ = strings.Repeat(s, 2)
+	_ = errors.New(s)
 }
 `
 	fset := token.NewFileSet()
@@ -118,7 +128,8 @@ func f(s string, xs []string, b []byte) {
 		"json.Valid(b)":         true,
 		"bytes.Equal(b, b)":     true,
 		`strings.Join(xs, ",")`: false, // can panic when the result is too long
-		"os.Getenv(s)":          false, // reads the environment, which others can set
+		"os.Getenv(s)":          true,  // reads the environment, which others can set, but changes nothing
+		"errors.New(s)":         true,  // a new error each call, but changes nothing
 		"strings.Repeat(s, 2)":  false, // can panic
 	}
 	seen := 0

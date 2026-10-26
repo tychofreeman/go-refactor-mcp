@@ -15,6 +15,7 @@ type stdEffect struct {
 	reads  string    // what it reads that other code can change
 	writes int       // the argument (1, 2, ...) whose memory it writes, -1 for the receiver, 0 for none
 	panics PanicKind // how it can panic
+	fresh  bool      // its result is new each call (an error, a pointer), so two calls give unequal results
 }
 
 var (
@@ -26,22 +27,101 @@ var (
 	contents    = stdEffect{reads: "%r", panics: NilPanic}
 	positions   = stdEffect{reads: "%r", panics: OtherPanic}
 	getter      = stdEffect{panics: NilPanic}
+	pure        = stdEffect{}
+	badArgument = stdEffect{panics: OtherPanic}
+	newValue    = stdEffect{fresh: true}
 )
 
 // stdFuncs lists standard library functions by types.Func.FullName.
+// A function with no reads, no writes and a result that is not new each
+// call depends only on its arguments, which are values, and on its
+// receiver's state that never changes: two calls give equal results.
 // The file system and the environment count as state other code can
 // change: a side effect could. The go/types getters read state that is
 // complete once type checking is done, and go/token line tables grow only
 // while a file is parsed, so they are reads of their receiver at most.
+// The methods of go/ast nodes read their fields, which can be assigned.
 var stdFuncs = map[string]stdEffect{
+	// strings, on strings.
+	"strings.Compare": pure, "strings.Contains": pure, "strings.ContainsAny": pure,
+	"strings.ContainsRune": pure, "strings.Count": pure, "strings.Cut": pure,
+	"strings.CutPrefix": pure, "strings.CutSuffix": pure, "strings.EqualFold": pure,
+	"strings.Fields": pure, "strings.HasPrefix": pure, "strings.HasSuffix": pure,
+	"strings.Index": pure, "strings.IndexAny": pure, "strings.IndexByte": pure,
+	"strings.IndexRune": pure, "strings.LastIndex": pure, "strings.LastIndexAny": pure,
+	"strings.LastIndexByte": pure, "strings.Replace": pure, "strings.ReplaceAll": pure,
+	"strings.Split": pure, "strings.SplitAfter": pure, "strings.SplitAfterN": pure,
+	"strings.SplitN": pure, "strings.ToLower": pure, "strings.ToTitle": pure,
+	"strings.ToUpper": pure, "strings.Trim": pure, "strings.TrimLeft": pure,
+	"strings.TrimPrefix": pure, "strings.TrimRight": pure, "strings.TrimSpace": pure,
+	"strings.TrimSuffix": pure,
+	"strings.Repeat":     badArgument, // a negative count
+
+	// unicode and unicode/utf8.
+	"unicode.IsControl": pure, "unicode.IsDigit": pure, "unicode.IsGraphic": pure,
+	"unicode.IsLetter": pure, "unicode.IsLower": pure, "unicode.IsNumber": pure,
+	"unicode.IsPrint": pure, "unicode.IsPunct": pure, "unicode.IsSpace": pure,
+	"unicode.IsUpper": pure, "unicode.ToLower": pure, "unicode.ToTitle": pure,
+	"unicode.ToUpper":                     pure,
+	"unicode/utf8.DecodeLastRuneInString": pure, "unicode/utf8.DecodeRuneInString": pure,
+	"unicode/utf8.RuneCountInString": pure, "unicode/utf8.RuneLen": pure,
+	"unicode/utf8.ValidRune": pure, "unicode/utf8.ValidString": pure,
+
+	// strconv, formatting only.
+	"strconv.FormatBool": pure, "strconv.FormatFloat": pure, "strconv.Itoa": pure,
+	"strconv.Quote": pure, "strconv.QuoteRune": pure, "strconv.QuoteToASCII": pure,
+	"strconv.FormatInt": badArgument, "strconv.FormatUint": badArgument, // a bad base
+
+	// math.
+	"math.Abs": pure, "math.Ceil": pure, "math.Exp": pure, "math.Floor": pure,
+	"math.Inf": pure, "math.IsInf": pure, "math.IsNaN": pure, "math.Log": pure,
+	"math.Max": pure, "math.Min": pure, "math.Mod": pure, "math.NaN": pure,
+	"math.Pow": pure, "math.Round": pure, "math.Signbit": pure, "math.Sqrt": pure,
+	"math.Trunc": pure,
+
+	// path and path/filepath, lexical only (not Abs, which reads the
+	// working directory, nor Rel, which returns new errors).
+	"path.Base": pure, "path.Clean": pure, "path.Dir": pure, "path.Ext": pure,
+	"path.IsAbs": pure, "path.Join": pure,
+	"path/filepath.Base": pure, "path/filepath.Clean": pure, "path/filepath.Dir": pure,
+	"path/filepath.Ext": pure, "path/filepath.FromSlash": pure, "path/filepath.IsAbs": pure,
+	"path/filepath.Join": pure, "path/filepath.ToSlash": pure,
+
+	// go/token.
+	"go/token.IsExported": pure, "go/token.IsIdentifier": pure, "go/token.IsKeyword": pure,
+	"(go/token.Pos).IsValid": pure, "(go/token.Token).IsKeyword": pure,
+	"(go/token.Token).IsLiteral": pure, "(go/token.Token).IsOperator": pure,
+	"(go/token.Token).Precedence": pure, "(go/token.Token).String": pure,
+
+	// reflect: a value's dynamic type, which never changes.
+	"reflect.TypeOf": pure,
+
+	// go/types: getters of state that never changes once an object exists.
+	"(go/types.Object).Exported": getter, "(go/types.Object).Id": getter,
+	"(go/types.Object).Name": getter, "(go/types.Object).Pkg": getter,
+	"(go/types.Object).Pos": getter, "(*go/types.Package).Path": getter,
+	"(*go/types.Var).Anonymous": getter, "(*go/types.Var).Embedded": getter,
+	"(*go/types.Var).IsField": getter,
+
+	// Results that are new each call.
+	"errors.New": newValue, "strconv.Atoi": newValue,
+	"strconv.ParseInt": newValue, "strconv.ParseUint": newValue,
+	"strconv.ParseFloat": newValue, "strconv.ParseBool": newValue,
+
+	// Reads of memory the arguments point to.
+	"bytes.Compare": {reads: "the elements of %1 and %2"}, "bytes.Contains": {reads: "the elements of %1 and %2"},
+	"bytes.Equal": {reads: "the elements of %1 and %2"}, "bytes.HasPrefix": {reads: "the elements of %1 and %2"},
+	"bytes.HasSuffix": {reads: "the elements of %1 and %2"}, "bytes.Index": {reads: "the elements of %1 and %2"},
+	"encoding/json.Valid": elements, "reflect.DeepEqual": {reads: "what %1 and %2 hold"},
+
 	"os.ReadFile": fileSystem, "os.Stat": fileSystem, "os.Lstat": fileSystem,
 	"os.ReadDir": fileSystem, "os.Getwd": fileSystem, "path/filepath.Abs": fileSystem,
 	"path/filepath.Glob": fileSystem, "path/filepath.EvalSymlinks": fileSystem,
 	"os.Getenv": environment, "os.LookupEnv": environment,
-	"path/filepath.Rel": {},
+	"path/filepath.Rel": newValue,
 
-	"strings.Join": elements, "slices.Contains": elements, "slices.Index": elements,
-	"slices.Clone": elements, "slices.Equal": {reads: "the elements of %1 and %2"},
+	"strings.Join": {reads: "the elements of %1", panics: OtherPanic}, // a result too long "slices.Contains": elements, "slices.Index": elements,
+	"slices.Clone": {reads: "the elements of %1", fresh: true}, "slices.Equal": {reads: "the elements of %1 and %2"},
 	"sort.Strings": sorts, "sort.Ints": sorts, "sort.Float64s": sorts,
 	"slices.Sort": sorts, "slices.Reverse": sorts,
 
@@ -61,9 +141,9 @@ var stdFuncs = map[string]stdEffect{
 	"(*go/token.File).Name":      getter, "(*go/token.File).Base": getter, "(*go/token.File).Size": getter,
 	"(*go/token.FileSet).Position": contents, "(*go/token.FileSet).PositionFor": contents,
 	"(*go/token.FileSet).File": contents,
-	"go/token.NewFileSet":      {}, "(go/token.Position).String": {}, "(go/token.Position).IsValid": {},
+	"go/token.NewFileSet":      newValue, "(go/token.Position).String": {}, "(go/token.Position).IsValid": {},
 
-	"go/ast.Unparen": {reads: "%1"}, "go/ast.NewIdent": {}, "go/types.ExprString": {reads: "%1"},
+	"go/ast.Unparen": {reads: "%1"}, "go/ast.NewIdent": newValue, "go/types.ExprString": {reads: "%1"},
 
 	"(*go/types.object).Name": getter, "(*go/types.object).Pkg": getter,
 	"(*go/types.object).Pos": getter, "(*go/types.object).Type": getter,
@@ -104,13 +184,7 @@ var stdFuncs = map[string]stdEffect{
 // function Effects knows; call is a call of it.
 func stdEffectOf(info *types.Info, fn *types.Func, call *ast.CallExpr) (stdEffect, bool) {
 	if se, ok := stdFuncs[fn.FullName()]; ok {
-		return se, true
-	}
-	if p, ok := knownFuncs[fn.FullName()]; ok {
-		return stdEffect{panics: p}, true // interface methods too (Object.Name)
-	}
-	if p, ok := effectFreeFuncs[fn.FullName()]; ok {
-		return stdEffect{panics: p}, true
+		return se, true // interface methods too (Object.Name)
 	}
 	if fn.Pkg() != nil && fn.Pkg().Path() == "go/ast" && (fn.Name() == "Pos" || fn.Name() == "End") {
 		return contents, true // every node's Pos and End read its fields

@@ -2,4 +2,4 @@ package m
 
 import "os"
 
-var home = os.Getenv("HOME")
+var home = os.Setenv("HOME", "/")

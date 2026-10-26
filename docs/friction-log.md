@@ -2601,3 +2601,13 @@ kept). This entry appended with a heredoc.
 
 Docs with replace_text. This entry appended with a heredoc. Nothing
 else by hand.
+
+## 2026-10-25: one table of standard-library facts
+
+The four tables merged into `stdFuncs` with replace_declaration, whose
+content (the elements of knownFuncs, effectFreeFuncs and readOnlyFuncs
+with their values rewritten) a Python script made from the old
+literals: no tool moves the elements of one composite literal into
+another. Lookups with replace_statements and replace_text, the old
+tables with remove_dead_code; tests, the golden and the roadmap with
+replace_text. This entry appended with a heredoc.

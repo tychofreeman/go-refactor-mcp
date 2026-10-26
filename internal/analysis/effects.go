@@ -131,16 +131,6 @@ func (s *Summary) add(o Summary) {
 	}
 }
 
-// effectFreeFuncs lists functions without side effects that knownFuncs
-// leaves out, because their results are new values that do not compare
-// equal (errors), with how each can panic.
-var effectFreeFuncs = map[string]PanicKind{
-	"errors.New":       NoPanic,
-	"strconv.Atoi":     NoPanic,
-	"strconv.ParseInt": NoPanic, "strconv.ParseUint": NoPanic,
-	"strconv.ParseFloat": NoPanic, "strconv.ParseBool": NoPanic,
-}
-
 // stopsFuncs are functions that end the program or the goroutine rather
 // than return.
 var stopsFuncs = map[string]bool{
