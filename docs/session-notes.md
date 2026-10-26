@@ -524,6 +524,9 @@ results are in `docs/cost-history.md`.
   start, so those lines point at other code. With both fixed (#356,
   #358): still 0/8, but the cases' derivation goes through; what fails
   is Import's edit, which needs its body, and the stages run out.
+  Reads make the model default to edits (the user, 2026-10-26), so
+  `-read-after` opens them only once a batch has applied: derive
+  first, read for the edit that remains.
 - Where a session's cost goes (cost-history 12,
   `eval-tasks/learning/cost.py`): cache writes 69%, output 18%, cache
   reads 13%, though cache reads are 88% of input tokens. About 38% of

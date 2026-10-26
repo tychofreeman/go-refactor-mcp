@@ -251,6 +251,18 @@ without a read, and the stages run out. The next test is reads and
 the case address together: reads where an edit needs the code, the
 address where code moves.
 
+But reads in the first answer turned every earlier plan into rewrites
+(the user, 2026-10-26: reads make the model default to edits). The
+case bodies and Import are needed at different times: the cases move by
+name, and Import's edit needs its body only once they have moved, when
+the switches hold one-line calls and nothing is left to rewrite. So
+`-read-after`: the first batch must derive without reading and leave the
+module's tests passing; once a batch applies, the model may read for
+the edits that remain. A read asked for before then is answered that
+source comes after a batch (and counts against the three reads). The
+reference's first 52 steps, the cases moved and the string cases kept,
+pass the module's tests, so such a first batch exists.
+
 ## Recording
 
 Each step in its own PR: the results in `docs/cost-history.md`, the

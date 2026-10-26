@@ -2681,3 +2681,9 @@ create_file, the check and its message with replace_text and
 add_declaration (check "end"), the refusals' expected text and the
 roadmap with replace_text. Nothing by hand. This entry appended with a
 heredoc.
+
+## 2026-10-26: loop.py reads only after a batch applied
+
+`-read-after` and its two prompts with replace_text in one batch, then
+the reply to a read asked for too early the same way. Nothing by hand.
+This entry appended with a heredoc.
