@@ -1769,10 +1769,17 @@ hand or a tool got in the way.
     comparison each against `body.own`, the owner whose memory counts as
     the summarized code's: `ThisFunc` for a whole function, `ThisCode`
     for part of one out of its context, which replaces the `partial`
-    flag; slide's `escapes` is `Owns(v) != ThisCode`. Left: the
-    `private` callback through `call`, `stdCall`, `fmtCall` and
-    `syncCallSummary` (one implementation, `writesPrivate`, but still
-    threaded), `Outside(info)` for code in no function, `Func.Escapes`
+    flag; slide's `escapes` is `Owns(v) != ThisCode`. Then (2026-10-26) the
+    `private` callback became a value: `owned`, the `Func` and `Owner`
+    of a body, which `body` embeds and `call`, `stdCall`, `fmtCall` and
+    `syncCallSummary` take (the zero `owned`, for `Effects.Call`, owns
+    nothing). And `Outside(info)` is now only for code in no function
+    or parsed apart (a value given for a new argument): fold and the
+    signature changes' call sites take the function they are in,
+    `analysis.FuncAround`. That fixed a fold that read a local after a
+    write through a pointer to it (`refuse_stale_read_of_escaped_local`:
+    out of its function, nothing showed the local escaped). Left:
+    `Func.Escapes`
     (which counts a closure that runs during its statement, where
     `Owns` does not; its callers in inline_function and extract_function
     mean the stricter test) and inline_function's `neverChanges`.

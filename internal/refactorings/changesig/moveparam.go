@@ -149,9 +149,7 @@ func (t *target) checkOrder(c call, from, to int) error {
 func funcAround(c call) *analysis.Func {
 	for _, f := range c.pkg.Syntax {
 		if f.FileStart <= c.expr.Pos() && c.expr.Pos() < f.FileEnd {
-			if fn := analysis.OutermostFunc(analysis.PathTo(f, c.expr)); fn != nil {
-				return analysis.AnalyzeFunc(c.pkg.TypesInfo, fn)
-			}
+			return analysis.FuncAround(c.pkg.TypesInfo, analysis.PathTo(f, c.expr))
 		}
 	}
 	return analysis.Outside(c.pkg.TypesInfo)

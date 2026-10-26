@@ -2947,3 +2947,15 @@ judged on its own, field holes in order, a refusal's wording). New
 goldens with create_file, each with its go.mod in a second batch (the
 first ran without them: a golden's module needs its own). Nothing by
 hand. This entry appended with replace_text.
+
+## 2026-10-26: owned, and the function around fold's code (item 36)
+
+`owned` with extract_struct of body's `f` and `own`; its three methods
+by replace_text of their receivers (the embedding promotes them, so
+every call kept working), the callback's parameters and uses with
+replace_text over both files; `FuncAround` with add_declaration; fold's
+three judgments' parameter with replace_text (`all_occurrences` for
+`analysis.Outside(info)` and the calls). The new golden with
+create_file, from a case written first in a scratch module and run with
+both branches' CLIs. Nothing by hand. This entry appended with
+replace_text.

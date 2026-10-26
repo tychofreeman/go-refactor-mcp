@@ -462,11 +462,11 @@ func keyOf(fset *token.FileSet, obj types.Object) string {
 	return fmt.Sprintf("%s:%d:%d:%s", p.Filename, p.Line, p.Column, obj.Name())
 }
 
-// unsafeValue returns what in e, evaluated once more or once less where
-// nothing uses its value, would change behavior (a side effect, or a
-// panic), and why, or nil.
-func unsafeValue(info *types.Info, e ast.Expr, eff *analysis.Effects) (ast.Node, string) {
-	m := analysis.Move{Effects: eff, Func: analysis.Outside(info), Expr: e, Times: analysis.Unused}
+// unsafeValue returns what in e, an expression of fa, evaluated once more
+// or once less where nothing uses its value, would change behavior (a
+// side effect, or a panic), and why, or nil.
+func unsafeValue(fa *analysis.Func, e ast.Expr, eff *analysis.Effects) (ast.Node, string) {
+	m := analysis.Move{Effects: eff, Func: fa, Expr: e, Times: analysis.Unused}
 	if o := m.Check(); o != nil {
 		return o.In, o.Does
 	}
