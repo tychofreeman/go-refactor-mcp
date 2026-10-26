@@ -239,6 +239,11 @@ five refusals each plan meets: a case of several values not yet split,
 a kind with no case, the receiver not first, function_to_method on an
 interface's method name, and a bug in the bare word's retry.
 
+With those fixed (cost-history 19, again): 0/8, every attempt stopped
+at a kind with no case. A refusal inside a batch gives lines of the
+module at the refused step, and a repair resends the batch from the
+start, so a line it copies from the refusal points at other code.
+
 ## Recording
 
 Each step in its own PR: the results in `docs/cost-history.md`, the

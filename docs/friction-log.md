@@ -2580,3 +2580,8 @@ heredoc. Nothing else by hand.
 plan's case edit with replace_text; goldens with create_file and
 delete_file. By hand: the kinds reference (atlas's Renewable by case),
 by a Python script. This entry appended with a heredoc.
+
+## 2026-10-25: kinds with the refusals fixed (cost-history 19)
+
+Docs with replace_text. This entry appended with a heredoc. Nothing
+else by hand.
