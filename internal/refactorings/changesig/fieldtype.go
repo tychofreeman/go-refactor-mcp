@@ -499,11 +499,38 @@ func parseValues(ws *workspace.Workspace, pkg *packages.Package, pos token.Pos, 
 			return nil, refactor.Refusef("the value for %s, %s: %v", old, text, err)
 		}
 		if !types.AssignableTo(tv.Type, newT) {
-			return nil, refactor.Refusef("the value for %s, %s, is not a %s", old, text, name)
+			why := ""
+			if it, ok := newT.Underlying().(*types.Interface); ok {
+				why = notImplements(tv.Type, it, name, pkg.Types)
+			}
+			return nil, refactor.Refusef("the value for %s, %s, is not a %s%s", old, text, name, why)
 		}
 		out = append(out, fieldValue{old: old, text: text, expr: e})
 	}
 	return out, nil
+}
+
+// notImplements says why a value of type v is not one of iface, named
+// name: ": " and the method v lacks or has with another signature, or "".
+func notImplements(v types.Type, iface *types.Interface, name string, pkg *types.Package) string {
+	m, wrong := types.MissingMethod(v, iface, true)
+	if m == nil {
+		return ""
+	}
+	q := types.RelativeTo(pkg)
+	vn := types.TypeString(v, q)
+	if !wrong {
+		return fmt.Sprintf(": %s has no method %s; move each kind's cases into its type's methods first, and narrow last", vn, m.Name())
+	}
+	have, _, _ := types.LookupFieldOrMethod(v, true, m.Pkg(), m.Name())
+	f, ok := have.(*types.Func)
+	switch {
+	case !ok:
+		return fmt.Sprintf(": %s has %s, which is not a method", vn, m.Name())
+	case types.Identical(f.Type(), m.Type()):
+		return fmt.Sprintf(": its method %s has a pointer receiver, so only *%s is a %s", m.Name(), vn, name)
+	}
+	return fmt.Sprintf(": its method %s is %s, where %s has %s", m.Name(), types.TypeString(f.Type(), q), name, types.TypeString(m.Type(), q))
 }
 
 // oldConstant is the constant k names: a literal ("fern", 3), or else the
