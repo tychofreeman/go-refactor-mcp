@@ -1,1 +1,1 @@
-could panic or not finish
+line 10 has side effects (calls fmt.Println), and line 7 has a loop that might not finish, so swapping them would change what happens

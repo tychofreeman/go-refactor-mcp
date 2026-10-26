@@ -1,1 +1,1 @@
-both could panic or not finish
+line 4 could panic: it indexes xs, and line 5 could panic (it dereferences p), so swapping them would change what happens

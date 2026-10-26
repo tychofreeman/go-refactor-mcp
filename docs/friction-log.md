@@ -2799,3 +2799,18 @@ replace_declaration. This entry appended with a heredoc.
 with add_declaration, `PastFunc` with add_field, the two other sites
 with replace_text, `pureRead` with remove_dead_code. Nothing by hand.
 This entry appended with a heredoc.
+
+## 2026-10-26: slide and fold onto Move
+
+slide's `checkIndependent` and `checkJumps` with replace_declaration,
+its `stmt` field with add_field, the four path helpers to
+`analysis/paths.go` with move_declaration (`new_name` to export them,
+`with_dependencies` brought `isFieldOfValue` along as
+`IsFieldOfValue`), the dead walker and fields with remove_dead_code
+(eight declarations in two calls); fold's `effectful` with
+replace_declaration and `evaluatedFirst`'s loop with replace_text;
+`LocalsRead` and `useOf` widened to `ast.Node` with
+change_parameter_type; eight slide goldens' wording with replace_text
+from a script that read the test's `got:` lines. By hand:
+`writtenLocal` rewritten whole through replace_declaration. This entry
+appended with a heredoc.

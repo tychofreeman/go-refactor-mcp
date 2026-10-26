@@ -1,1 +1,1 @@
-line 10 has side effects
+line 9 reads c, and line 10 assigns c, so swapping them would change what happens
