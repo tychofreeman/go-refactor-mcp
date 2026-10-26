@@ -269,6 +269,11 @@ the switches and stopped; every second answer read all five switches
 and Import, then wrote the methods out. Deferring the reads deferred
 the move with them.
 
+With reads not mentioned until the "done?" turn (cost-history 19,
+unannounced): 8/8, and two Sonnet attempts moved every case by name
+in their first batch, then read Import and little else; the other six
+prepared only and rewrote the switches after reading them.
+
 ## Recording
 
 Each step in its own PR: the results in `docs/cost-history.md`, the

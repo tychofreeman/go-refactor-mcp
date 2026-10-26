@@ -529,7 +529,10 @@ results are in `docs/cost-history.md`.
   first, read for the edit that remains. Run: 7/8, but every first
   batch only prepared, and every attempt then read the five switches
   and wrote the methods out: a plan that can read later defers the
-  move to after the read.
+  move to after the read. With reads unannounced until they open,
+  8/8, and 2 of 8 (Sonnet) derived first and then read only Import
+  and a few uses; the six that only prepared still read the switches
+  and wrote them out.
 - Where a session's cost goes (cost-history 12,
   `eval-tasks/learning/cost.py`): cache writes 69%, output 18%, cache
   reads 13%, though cache reads are 88% of input tokens. About 38% of
