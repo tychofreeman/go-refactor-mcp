@@ -1,0 +1,1 @@
+the type of name, string, is not a type declared in package m, so it cannot have methods here; give receiver "f" to make it a method of Fern

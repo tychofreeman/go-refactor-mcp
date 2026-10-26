@@ -1505,7 +1505,11 @@ hand or a tool got in the way.
     of evaluation). When the first parameter's type already has the
     name, the refusal names a parameter whose type could take it
     (`give receiver "k" to make it a method of Book`). The kinds
-    reference adds the receiver last and names it. *Done.*
+    reference adds the receiver last and names it. *Done.* The same
+    hint ends the refusal of a first parameter whose type is not
+    declared in the package (`title string` before `b Book`, after
+    add_parameter appended the receiver): Haiku's derived kinds attempt
+    stopped there and dropped `Label`. *Done.*
 
     A value with no case (Renewable's `atlas`, which stopped 7 of 8
     attempts in the next rerun): extract_function by case adds the

@@ -93,7 +93,11 @@ func (*FunctionToMethod) Plan(ws *workspace.Workspace, raw json.RawMessage) (*re
 	recvVar := sig.Params().At(r)
 	named := recvNamed(recvVar.Type())
 	if named == nil || named.Obj().Pkg() != t.obj.Pkg() {
-		return nil, refactor.Refusef("the type of %s, %s, is not a type declared in package %s, so it cannot have methods here", recvVar.Name(), t.typeName(recvVar.Type()), t.obj.Pkg().Name())
+		err := refactor.Refusef("the type of %s, %s, is not a type declared in package %s, so it cannot have methods here", recvVar.Name(), t.typeName(recvVar.Type()), t.obj.Pkg().Name())
+		if a.Receiver == "" {
+			return nil, t.receiverHint(err, name, r)
+		}
+		return nil, err
 	}
 	switch named.Underlying().(type) {
 	case *types.Pointer, *types.Interface:
