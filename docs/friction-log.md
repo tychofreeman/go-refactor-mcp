@@ -2722,3 +2722,9 @@ heredoc.
 The new sentence and the run's results in cost-history,
 plan-and-execute and the session notes with replace_text. Nothing by
 hand. This entry appended with a heredoc.
+
+## 2026-10-26: cost-history 19, kinds after #367, #371 and #372
+
+The two runs' results in cost-history, plan-and-execute and the
+session notes with replace_text in one batch. Nothing by hand. This
+entry appended with a heredoc.

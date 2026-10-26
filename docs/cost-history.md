@@ -1251,6 +1251,43 @@ deriving at no gain in passes; a refusal at a function_to_method whose
 first parameter is not the receiver, naming `receiver`, is the next
 fix it shows.
 
+**Again, after #367, #371 and #372** (the refusal for emptying a live
+case, the receiver hint, introduce_parameter through an interface
+method and by `function`). Two runs on main, Haiku and Sonnet, 4
+each, `-stages 3` ($2.49 in all):
+
+- With reads after the first batch
+  (`eval-runs/loop-{haiku,sonnet}-kinds-fixes`): 7/8. Haiku 3/4 at
+  $0.025 a task in 5.5 requests, Sonnet 4/4 at $0.278 in 6. Two
+  Sonnet attempts derived (15 extractions in the first batch, then
+  add_parameter, function_to_method and introduce_parameter by
+  `function` on the three Label helpers, then remove_parameter) and
+  wrote 41 and 57 lines; the other two Sonnet attempts and three
+  Haiku ones prepared only and rewrote the switches (66-106 lines).
+  Haiku's derived attempt moved every case and reached `Label(title
+  string)` with the new introduce_parameter on `Book.Label`, then
+  failed at narrowing (13 lines written).
+- Without reads (`eval-runs/loop-{haiku,sonnet}-kinds-noread`): 2/8,
+  the first passes of kinds without a read. Haiku 0/4 at $0.025 in 4
+  requests, Sonnet 2/4 at $0.297 in 3.75. One Sonnet attempt
+  declared `Kind` with `Label(title string)` first (so prepare
+  supplied `title`), moved every case by `case`, add_parameter and
+  function_to_method, and found Import's write from the narrowing
+  refusal: `Kind: kindOf(strings.TrimSpace(f[2]))`, with an
+  `unknownKind string` type implementing Kind so the error still
+  names the kind (49 lines, none of them a case body). The other
+  extracted by case, declared methods that call the helpers and
+  inlined them (56 lines). The failures were refusals of detail
+  (a case shared by two values without `split`, introduce_parameter
+  on a helper that already read `title`, function_to_method on a
+  helper with no parameter) more than repairs could clear.
+
+So with the tools fixed, the derivation carries the task: without
+any read Sonnet passes half its attempts by moving code, and with
+reads half its attempts still derive first; Haiku derives as often
+but does not finish. Reading still turns most plans into rewrites
+(5 of 8 here).
+
 ## What made the difference
 
 - **Smaller results** (#75, rename locations): the largest single win when

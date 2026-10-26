@@ -535,6 +535,10 @@ results are in `docs/cost-history.md`.
   and wrote them out. Worded as "every line is existing code in a new
   place or new code; the first batch places the existing code" (the
   user, replacing "make it easy"): 6/8, 3 of 8 derived first.
+  After #367, #371 and #372: with reads after the first batch 7/8
+  (2 Sonnet derived, 41-57 lines); without reads 2/8, the first
+  passes without a read (Sonnet, Import found through the narrowing
+  refusal). Haiku derives but does not finish.
 - Where a session's cost goes (cost-history 12,
   `eval-tasks/learning/cost.py`): cache writes 69%, output 18%, cache
   reads 13%, though cache reads are 88% of input tokens. About 38% of
