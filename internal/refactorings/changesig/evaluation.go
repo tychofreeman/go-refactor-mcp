@@ -5,6 +5,7 @@ import (
 	"go/ast"
 	"go/token"
 	"go/types"
+	"slices"
 	"strings"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
@@ -68,34 +69,14 @@ func usesGoto(body *ast.BlockStmt) bool {
 // the expression is evaluated conditionally, or "" if it is evaluated on
 // every call; repeated means it can be evaluated more than once.
 func (t *target) notOnEveryCall(path []ast.Node) (where string, repeated bool) {
-	for i := 1; i < len(path) && path[i] != t.decl.Body; i++ {
-		child := path[i-1]
-		switch p := path[i].(type) {
-		case *ast.FuncLit:
-			return "it is inside a function literal", true
-		case *ast.ForStmt:
-			if child != p.Init {
-				return "it is inside a for loop", true
-			}
-		case *ast.RangeStmt:
-			if child == p.Body {
-				return "it is inside a range loop", true
-			}
-		case *ast.IfStmt:
-			if child == p.Body || child == p.Else {
-				where = "it is inside an if"
-			}
-		case *ast.CaseClause:
-			where = "it is inside a case"
-		case *ast.CommClause:
-			where = "it is inside a select case"
-		case *ast.BinaryExpr:
-			if (p.Op == token.LAND || p.Op == token.LOR) && child == p.Y {
-				where = fmt.Sprintf("it is the right operand of %s", p.Op)
-			}
-		}
+	if end := slices.Index(path, ast.Node(t.decl.Body)); end >= 0 {
+		path = path[:end+1]
 	}
-	return where, false
+	times, why := analysis.Reach(path)
+	if times == analysis.Once {
+		return "", false
+	}
+	return "it is " + why, times == analysis.Several
 }
 
 // brief returns n's source for a message, shortened to its start if long.

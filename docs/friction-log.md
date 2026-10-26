@@ -2829,3 +2829,13 @@ This entry appended with a heredoc.
 
 The run's results in cost-history and the session notes with
 replace_text. Nothing by hand. This entry appended with a heredoc.
+
+## 2026-10-26: Reach, the path conditions
+
+`Reach` and its test with add_declaration, `evaluatedOnce`,
+`firstUseUnconditional` and `notOnEveryCall` with replace_declaration,
+the two `conditionalOrRepeated` with remove_dead_code, the condition
+cut out of extract_variable's `place` with replace_text (five edits,
+one with all_occurrences for the result's removed value), two goldens'
+wording with replace_text. Nothing by hand. This entry appended with a
+heredoc.

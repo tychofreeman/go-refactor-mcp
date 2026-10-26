@@ -1719,10 +1719,39 @@ hand or a tool got in the way.
        `nilAddress`, which judge a hole's argument against the call's
        evaluation order; a later step once a body's summary can stand
        as `Past`.
-    5. The path conditions (inline_variable's `evaluatedOnce`,
-       changesig's `notOnEveryCall`, inline_function's
-       `conditionalOrRepeated`), which decide `Times` from where a use
-       is: one function.
+    5. *Done.* `analysis.Reach(path)`: how often code is evaluated for
+       each time the body at the path's end runs (Once, Maybe, Several)
+       and why, as a phrase. It replaces six walks: inline_variable's
+       `evaluatedOnce` and `conditionalOrRepeated`, inline_function's
+       `firstUseUnconditional` and its own `conditionalOrRepeated`,
+       changesig's `notOnEveryCall` (now a one-line wrapper) and the
+       condition extract_variable's `place` computed on the way to the
+       container. One wording per position (the right operand of &&,
+       "which is only evaluated when the left operand is true"; an
+       else-if; a case expression; a select case; a loop's condition,
+       post and body; a function literal). Left as they are:
+       inline_variable's `repeatingAncestor`, which needs the loop node,
+       not the count.
+    Next, in order (2026-10-26): one notion of memory ownership (item
+    36), a `Site` type for the refactorings' context structs (item 37),
+    `stopsFuncs` and `syncCalls` into `stdFuncs`, then fold's remaining
+    hole judgments and inline_function's `lhsEvaluatedFirst` once a
+    function's summary can stand as `Past`.
+36. **Ownership of memory**: "whose memory is this" exists in six shapes
+    (`body.private`, `body.pointsPrivate`, `freshLocals`, the `private`
+    callback threaded through `call`, `stdCall`, `fmtCall` and
+    `syncCallSummary`, slide's `escapes`, inline_function's
+    `neverChanges`, `Func.Escapes` with its three sets), and the walker
+    answers differently out of context (`partial`, `Outside`). The
+    concept is three-valued: memory only this evaluation can reach, only
+    this function's own code can reach, or anyone can reach. One
+    `Func.Owner(expr)`, computed once per function, replaces them and
+    removes `partial`, `Outside` and the callback.
+37. **A site**: fifteen refactorings carry `ws, pkg, info, file, src`
+    and a target, with six copies each of `quote` and `declaredAt`, nine
+    of `text`, ten of `off`, and seven `find` functions from a
+    `locate.IdentQuery`. One `Site` type with those as methods, and one
+    `find`; `extract_struct` and `move_declaration` can do most of it.
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the

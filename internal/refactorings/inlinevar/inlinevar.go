@@ -27,6 +27,7 @@ import (
 	"go/token"
 	"go/types"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 
@@ -387,71 +388,45 @@ func (x *inliner) between(stmt ast.Stmt) []ast.Node {
 // the if/switch header that declares the variable), and returns that
 // statement.
 func (x *inliner) evaluatedOnce(use *ast.Ident) (ast.Stmt, error) {
+	scope := x.block
+	if x.owner != nil {
+		scope = x.owner
+	}
 	path := analysis.PathTo(x.file, use)
-	for i := 1; i < len(path); i++ {
-		n, child := path[i], path[i-1]
-		if _, isBody := n.(*ast.BlockStmt); isBody && i+1 < len(path) {
-			if _, ok := path[i+1].(*ast.FuncLit); ok {
-				n, child = path[i+1], n // report the function literal, not its body
-			}
+	end := slices.Index(path, scope)
+	if end < 0 {
+		return nil, refactor.Refusef("the use of %q at %s is not directly in the statement after its declaration, so the initializer %s would no longer run exactly once there",
+			x.obj.Name(), x.ws.Position(use.Pos()), x.quote(x.init))
+	}
+	if times, why := analysis.Reach(path[:end+1]); times != analysis.Once {
+		return nil, refactor.Refusef("the use of %q at %s is %s, so the initializer %s would no longer run exactly once, right after the declaration",
+			x.obj.Name(), x.ws.Position(use.Pos()), why, x.quote(x.init))
+	}
+	child := path[end-1]
+	switch o := x.owner.(type) {
+	case nil:
+		if s, ok := child.(ast.Stmt); ok {
+			return s, nil
 		}
-		if why := conditionalOrRepeated(n, child); why != "" {
-			return nil, refactor.Refusef("the use of %q at %s is %s, so the initializer %s would no longer run exactly once, right after the declaration",
-				x.obj.Name(), x.ws.Position(use.Pos()), why, x.quote(x.init))
+	case *ast.IfStmt:
+		if child == o.Cond {
+			return o, nil
 		}
-		if x.owner != nil && n == x.owner {
-			switch o := x.owner.(type) {
-			case *ast.IfStmt:
-				if child == o.Cond {
-					return o, nil
-				}
-			case *ast.SwitchStmt:
-				if child == o.Tag {
-					return o, nil
-				}
-			case *ast.TypeSwitchStmt:
-				if child == o.Assign {
-					return o, nil
-				}
-			}
-			return nil, refactor.Refusef("the use of %q at %s is not in the condition of the statement that declares it, so the initializer %s would no longer run exactly once",
-				x.obj.Name(), x.ws.Position(use.Pos()), x.quote(x.init))
+	case *ast.SwitchStmt:
+		if child == o.Tag {
+			return o, nil
 		}
-		if x.owner == nil && i+1 < len(path) && path[i+1] == x.block {
-			if s, ok := n.(ast.Stmt); ok {
-				return s, nil
-			}
+	case *ast.TypeSwitchStmt:
+		if child == o.Assign {
+			return o, nil
 		}
+	}
+	if x.owner != nil {
+		return nil, refactor.Refusef("the use of %q at %s is not in the condition of the statement that declares it, so the initializer %s would no longer run exactly once",
+			x.obj.Name(), x.ws.Position(use.Pos()), x.quote(x.init))
 	}
 	return nil, refactor.Refusef("the use of %q at %s is not directly in the statement after its declaration, so the initializer %s would no longer run exactly once there",
 		x.obj.Name(), x.ws.Position(use.Pos()), x.quote(x.init))
-}
-
-// conditionalOrRepeated says why code at child is not evaluated exactly
-// once each time n is, or "".
-func conditionalOrRepeated(n, child ast.Node) string {
-	switch n := n.(type) {
-	case *ast.BinaryExpr:
-		if (n.Op == token.LAND || n.Op == token.LOR) && child == n.Y {
-			return fmt.Sprintf("the right operand of %s, which is only evaluated sometimes", n.Op)
-		}
-	case *ast.FuncLit:
-		return "inside a function literal, which may run later, several times, or not at all"
-	case *ast.BlockStmt, *ast.CaseClause, *ast.CommClause:
-		return "inside a nested block (an if, loop or case body), which may run zero or several times"
-	case *ast.ForStmt:
-		if child == n.Cond {
-			return "in a loop condition, which is evaluated before every iteration"
-		}
-		if child == n.Post {
-			return "in a loop's post statement, which runs after every iteration"
-		}
-	case *ast.IfStmt:
-		if child == n.Else {
-			return "in an else-if, which is only evaluated when the preceding conditions are false"
-		}
-	}
-	return ""
 }
 
 // checkReadsUnchanged refuses if a local the initializer reads is modified
