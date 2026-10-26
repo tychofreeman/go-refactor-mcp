@@ -2479,3 +2479,8 @@ Golden cases with create_file and replace_text; the hint and
 `narrowHint` with replace_text and add_declaration in one batch; the plan
 doc with replace_text. This entry appended with a heredoc. Nothing else
 by hand.
+
+## 2026-10-25: the kinds rerun (cost-history 19)
+
+Docs with replace_text. This entry appended with a heredoc. Nothing
+else by hand.

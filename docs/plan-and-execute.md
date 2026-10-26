@@ -192,6 +192,11 @@ narrow." Section 10 found that a refusal naming the right steps did not
 change what the model did next in a session; a rerun of kinds would
 show whether it does in a repair.
 
+It did not pass (cost-history 19, kinds again: 0/8): both refusals
+fired, and the attempts then stopped on code they could not see. Kinds
+needs the cases' bodies; a run without `-no-read`, where the plan and
+the "done?" turn can ask for them, is the test of that.
+
 ## Recording
 
 Each step in its own PR: the results in `docs/cost-history.md`, the

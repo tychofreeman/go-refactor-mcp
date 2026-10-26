@@ -484,7 +484,10 @@ results are in `docs/cost-history.md`.
   passed routes 3/4. On lending-xl the loop passed Haiku 11/20 ($0.012)
   and Sonnet 15/20 ($0.146, against $0.176 and 20/20 for Sonnet in a
   session with the tools); kinds failed every attempt on
-  prepare_switch_for_types and narrowing refusals.
+  prepare_switch_for_types and narrowing refusals. With both fixed
+  (#338, #339) kinds still failed 0/8: the refusals fired, and the
+  attempts stopped on case bodies the no-read plan cannot see (Haiku
+  said so and sent no batch). Kinds needs reads.
 - Where a session's cost goes (cost-history 12,
   `eval-tasks/learning/cost.py`): cache writes 69%, output 18%, cache
   reads 13%, though cache reads are 88% of input tokens. About 38% of
