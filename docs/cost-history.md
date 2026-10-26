@@ -1449,7 +1449,8 @@ with the reference used for the 60 uses; they asked for the tools the
 task's words name (change_field_type, extract_struct, rename) and
 rewrote the uses, refused by remove_dead_code until the repairs ran
 out. Kinds plans asked for extract_function only in a later ask, after
-preparing. As cost-history 9 found for fold's description, a model
+preparing. As the session notes record for fold's description (2/4
+runs used it with its examples, 0/4 without), a model
 chooses a derivation from the tools' examples; a first sentence does
 not show it which tool fits a shape. Asking took 1-3 more requests an
 attempt.
