@@ -1468,6 +1468,11 @@ hand or a tool got in the way.
     or the body declares a label or a type. In the rerun 5 of 8
     attempts met the shared case of Renewable. *Done.*
 
+    A value no case has: the refusal says what runs for it, the default
+    case, or the code after the switch, with add_case to make it a case
+    or writing it where it goes. In the rerun 5 of 8 attempts asked for
+    Renewable's `atlas`. *Done.*
+
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
 candidates and the evidence for each, gathered from the friction log.
