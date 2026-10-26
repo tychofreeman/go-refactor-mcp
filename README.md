@@ -1562,8 +1562,9 @@ hand or a tool got in the way.
        (`Summary.Panics`), so that callers can ask what Stable and
        MayPanic ask. Sends and selects count as able to panic (a
        closed channel).
-    3. A summary of one expression (`Effects.Of`), the body walker
-       applied to it, private memory from the function's facts.
+    3. *Done.* A summary of one expression (`Effects.Of(f, x)`), the
+       body walker applied to it, with the memory f made itself as
+       f's own.
     4. The callers of MayPanic, Stable, HasEffect and FirstEffectBefore
        moved to it, with verdicts kept, checked by a differential test
        over the goldens, the stress tests and the module.

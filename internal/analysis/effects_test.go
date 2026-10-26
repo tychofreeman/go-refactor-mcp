@@ -567,3 +567,80 @@ func TestEffectsWhere(t *testing.T) {
 		}
 	}
 }
+
+const ofSrc = `package p
+
+type T struct{ n int }
+
+var counter int
+
+func bump() int {
+	counter++
+	return counter
+}
+
+func field(p *T) int { return p.n }
+
+func g(p *T, x, y int) {
+	local := &T{}
+	_ = p.n
+	_ = x / y
+	_ = x + y
+	_ = local.n
+	_ = field(p)
+	_ = bump()
+}
+`
+
+// TestEffectsOf checks the summaries of single expressions of a function.
+func TestEffectsOf(t *testing.T) {
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "p.go", ofSrc, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	info := &types.Info{
+		Defs: map[*ast.Ident]types.Object{}, Uses: map[*ast.Ident]types.Object{},
+		Types: map[ast.Expr]types.TypeAndValue{}, Selections: map[*ast.SelectorExpr]*types.Selection{},
+	}
+	if _, err := (&types.Config{}).Check("example.com/p", fset, []*ast.File{f}, info); err != nil {
+		t.Fatal(err)
+	}
+	e := NewEffects()
+	e.AddPackage([]*ast.File{f}, info)
+	type verdict struct {
+		effect, reads, unsafe bool
+		panics                PanicKind
+	}
+	want := map[string]verdict{
+		"p.n":      {reads: true, unsafe: true, panics: NilPanic},
+		"x / y":    {unsafe: true, panics: OtherPanic},
+		"x + y":    {},
+		"local.n":  {}, // memory g made
+		"field(p)": {reads: true, unsafe: true, panics: NilPanic},
+		"bump()":   {effect: true, reads: true},
+	}
+	g := f.Decls[len(f.Decls)-1].(*ast.FuncDecl)
+	fa := AnalyzeFunc(info, g)
+	seen := 0
+	for _, st := range g.Body.List {
+		as, ok := st.(*ast.AssignStmt)
+		if !ok || len(as.Lhs) != 1 || types.ExprString(as.Lhs[0]) != "_" {
+			continue
+		}
+		x := as.Rhs[0]
+		w, ok := want[types.ExprString(x)]
+		if !ok {
+			t.Fatalf("no verdict for %s", types.ExprString(x))
+		}
+		seen++
+		s := e.Of(fa, x)
+		got := verdict{s.Effect != "", s.Reads != "", s.Unsafe != "", s.Panics}
+		if got != w {
+			t.Errorf("%s: got %+v, want %+v (summary %+v)", types.ExprString(x), got, w, s)
+		}
+	}
+	if seen != len(want) {
+		t.Errorf("checked %d expressions, want %d", seen, len(want))
+	}
+}
