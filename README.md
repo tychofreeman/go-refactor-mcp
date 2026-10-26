@@ -1115,7 +1115,13 @@ hand or a tool got in the way.
         clauses deletes them, refused when the case before falls
         through into them. An edit (whether the case is dead is the
         argument from `uses`), an option of an existing tool, no new
-        tool. *Done.*
+        tool. *Done.* Emptying or deleting a case of a switch on a
+        field (by lines or by `case`) is refused while some write may
+        still give the field a value equal to it, listing those writes
+        (`analysis.FieldWrites`): on lending-xl, Haiku emptied the
+        string cases while `Import` still wrote strings, and the
+        failing tests that came back named the tests' literals, not
+        Import. *Done.*
       - The whole task end to end with the CLI: 74 derived steps,
         about 30 lines by hand, hidden test passing
         (`docs/derivations.md` section 6). Gaps it met: parentheses
