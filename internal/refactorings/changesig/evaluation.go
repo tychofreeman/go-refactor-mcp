@@ -165,7 +165,7 @@ func (t *target) checkEvaluation(info *types.Info, file *ast.File, expr ast.Expr
 	// canPanic is the first way expr could panic other than a nil
 	// dereference, or else the first nil dereference.
 	var shared, canPanic *risk
-	for _, r := range risks(info, expr, t.effects()) {
+	for _, r := range risks(info, expr, t.ws.Effects()) {
 		switch {
 		case r.effect:
 			return refactor.Refusef("%s has side effects (%s); evaluated at each call instead, they would happen where the body would not", q, t.brief(r.node))
@@ -203,7 +203,7 @@ func (t *target) checkEvaluation(info *types.Info, file *ast.File, expr ast.Expr
 		if n.End() > expr.Pos() {
 			return true // it encloses expr, and finishes after it
 		}
-		r, risky := riskOf(info, n, t.effects())
+		r, risky := riskOf(info, n, t.ws.Effects())
 		write := t.writes(fa, n)
 		_, isReturn := n.(*ast.ReturnStmt)
 		switch {

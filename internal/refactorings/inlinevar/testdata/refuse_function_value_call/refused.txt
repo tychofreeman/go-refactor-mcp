@@ -1,0 +1,1 @@
+"x" is used 2 times, and its initializer `op(a)` could give a different value

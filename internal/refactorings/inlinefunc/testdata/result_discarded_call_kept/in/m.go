@@ -11,4 +11,7 @@ func logged(s string) bool {
 	return fmt.Sprint(s) == "" && len(s) > 0 || count(s) > 0
 }
 
-func count(s string) int { return len(s) }
+func count(s string) int {
+	println(s)
+	return len(s)
+}

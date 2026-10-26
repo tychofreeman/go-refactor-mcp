@@ -21,7 +21,6 @@ import (
 
 	"golang.org/x/tools/go/packages"
 
-	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
@@ -517,10 +516,7 @@ func Outline(fset *token.FileSet, f *ast.File) []Decl {
 // of file, from the summaries of what calling each can do (see
 // analysis.Effects).
 func addEffects(ws *workspace.Workspace, pkg *packages.Package, file *ast.File, decls []Decl) {
-	effects := analysis.NewEffects()
-	for _, p := range ws.Pkgs {
-		effects.AddPackage(p.Syntax, p.TypesInfo)
-	}
+	effects := ws.Effects()
 	i := 0
 	for _, d := range file.Decls {
 		fd, ok := d.(*ast.FuncDecl)

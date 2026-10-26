@@ -41,8 +41,7 @@ type target struct {
 	// params flattens the parameter list: one entry per name.
 	params []param
 	calls  []call
-	effs   *analysis.Effects // what calls do, built on first use by effects
-	fixes  []edit.FileEdit   // further edits the change needs, beyond the signature and the calls
+	fixes  []edit.FileEdit // further edits the change needs, beyond the signature and the calls
 	// members is, for the target the model named, every method that
 	// changes with it: an interface method of the module, the methods of
 	// the module's types that implement it, and so on (see familyOf). Nil
@@ -50,20 +49,6 @@ type target struct {
 	members []*target
 	// familyKeys are the members' keys, in each member.
 	familyKeys map[string]bool
-}
-
-// effects summarizes what calls do: the module's own functions from their
-// bodies, and known ones of the standard library (fmt.Sprintf of values
-// without methods, for one), so that a call without side effects is not
-// refused as one.
-func (t *target) effects() *analysis.Effects {
-	if t.effs == nil {
-		t.effs = analysis.NewEffects()
-		for _, p := range t.ws.Pkgs {
-			t.effs.AddPackage(p.Syntax, p.TypesInfo)
-		}
-	}
-	return t.effs
 }
 
 type param struct {

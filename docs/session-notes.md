@@ -110,8 +110,12 @@ results are in `docs/cost-history.md`.
   table, `stdFuncs`, and verdicts derive from the facts; a function
   added there is known to every analysis. When the module's own
   functions are judged by their summaries (step 5), a call that may
-  dereference nil can move with the call, as above; the user waived
+  dereference can move with the call, as above; the user waived
   that question for now.
+  Since step 5 a call of a module function counts by its body, so a
+  golden that needs an effect must have one (`println`), not a
+  function returning a constant; and verdicts change only with a
+  reason `TestDifferential` accepts.
 
 - **Tool descriptions: an example per use, the rules in refusals**
   (2026-10-21): cutting `fold`'s description from 668 to about 260

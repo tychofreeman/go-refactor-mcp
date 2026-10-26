@@ -1,0 +1,1 @@
+"v" is used 2 times, and its initializer `c.Get()` could give a different value
