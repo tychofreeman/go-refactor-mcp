@@ -4,8 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"go/ast"
+	"go/constant"
+	"go/parser"
 	"go/token"
 	"go/types"
+	"maps"
 	"slices"
 	"strings"
 
@@ -28,7 +31,7 @@ func NewChangeFieldType() *ChangeFieldType { return &ChangeFieldType{} }
 func (*ChangeFieldType) Name() string { return "change_field_type" }
 
 func (*ChangeFieldType) Description() string {
-	return `Change a struct field's type so that every value keeps its meaning, converting where the field is written and, where its type matters, where it is read: ID string to ID PlantID turns Plant{ID: s} into Plant{ID: PlantID(s)} and strings.ToUpper(p.ID) into strings.ToUpper(string(p.ID)). The new type must hold every old value: the same underlying type, a number type that holds every old value, or an interface the old type implements. Widened to an interface (Species string to any), a switch on it, == with it and passing it as an interface stay; an untyped constant compared with or written to it becomes the old type where that is not its default (species("cactus")). Narrowed to an interface (Species any to Species), every value written to it must already be one, and a switch on it loses the cases no such value matches (case "fern" once every fern is a Fern{}).
+	return `Change a struct field's type so that every value keeps its meaning, converting where the field is written and, where its type matters, where it is read: ID string to ID PlantID turns Plant{ID: s} into Plant{ID: PlantID(s)} and strings.ToUpper(p.ID) into strings.ToUpper(string(p.ID)). The new type must hold every old value: the same underlying type, a number type that holds every old value, or an interface the old type implements. Widened to an interface (Species string to any), a switch on it, == with it and passing it as an interface stay; an untyped constant compared with or written to it becomes the old type where that is not its default (species("cactus")). Narrowed to an interface (Species any to Species), every value written to it must already be one, and a switch on it loses the cases no such value matches (case "fern" once every fern is a Fern{}); with values {"fern": "Fern{}"}, Plant{Species: "fern"} becomes Plant{Species: Fern{}} and p.Species == "fern" p.Species == (Fern{}) as it narrows.
 Identify the field by file and Type.Field.
 A use that cannot follow (its address taken, ++ on an interface) is listed in the refusal, and nothing changes; an embedded field and a field of a generic type are refused.`
 }
@@ -41,7 +44,8 @@ func (*ChangeFieldType) InputSchema() json.RawMessage {
     "line":   {"type": "integer", "description": "1-based line of that occurrence. Omit it to find name as Type.Field in the package of file."},
     "name":   {"type": "string",  "description": "Type.Field without line; with line, the field's name."},
     "column": {"type": "integer", "description": "Optional 1-based column, only needed to disambiguate."},
-    "type":   {"type": "string",  "description": "The new type, as Go source valid in the declaring file, e.g. UserID or int64."}
+    "type":   {"type": "string",  "description": "The new type, as Go source valid in the declaring file, e.g. UserID or int64."},
+    "values": {"type": "object",  "additionalProperties": {"type": "string"}, "description": "Only narrowing to an interface: for each old constant (\"fern\" or fern), the value of the new type, as the declaring file writes it, put wherever the field is given or compared with that constant, e.g. {\"fern\": \"Fern{}\"}."}
   },
   "required": ["file", "name", "type"],
   "additionalProperties": false
@@ -49,11 +53,12 @@ func (*ChangeFieldType) InputSchema() json.RawMessage {
 }
 
 type fieldArgs struct {
-	File   string `json:"file"`
-	Line   int    `json:"line"`
-	Column int    `json:"column,omitempty"`
-	Name   string `json:"name"`
-	Type   string `json:"type"`
+	File   string            `json:"file"`
+	Line   int               `json:"line"`
+	Column int               `json:"column,omitempty"`
+	Name   string            `json:"name"`
+	Type   string            `json:"type"`
+	Values map[string]string `json:"values,omitempty"`
 }
 
 // fieldChange is a field whose type changes, and what its uses need.
@@ -66,7 +71,16 @@ type fieldChange struct {
 	name     string    // new, as the declaring file writes it
 	dropped  []string  // the case values a switch on the field lost, "file:line:col value"
 	files    *fileSet
-	cannot   []string // uses that cannot follow, "file:line:col: why"
+	cannot   []string     // uses that cannot follow, "file:line:col: why"
+	values   []fieldValue // narrowing: the values given for old constants
+	mapped   int          // the uses given one of them
+}
+
+// fieldValue is a value of the new type given for an old constant.
+type fieldValue struct {
+	old  constant.Value
+	text string   // as the declaring package writes it
+	expr ast.Expr // text, parsed
 }
 
 // narrowHint says what comes before narrowing a field to iface: a type
@@ -92,7 +106,8 @@ func narrowHint(ws *workspace.Workspace, iface types.Type, name string) string {
 		return fmt.Sprintf("No type implements %s yet: make a type for each kind first, its cases becoming the type's methods, then write the types where these uses have the old values, and narrow last.", name)
 	}
 	slices.Sort(impl)
-	return fmt.Sprintf("Write each kind's type (%s) where these uses have its old value, then narrow.", strings.Join(slices.Compact(impl), ", "))
+	impl = slices.Compact(impl)
+	return fmt.Sprintf("Write each kind's type (%s) where these uses have its old value, then narrow; or narrow with values for the constants listed (values {\"<constant>\": \"%s{}\"}, one for each), which writes them there.", strings.Join(impl, ", "), impl[0])
 }
 
 // fieldMode is how the uses of a field follow its new type.
@@ -164,6 +179,14 @@ func (*ChangeFieldType) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 		mode = widening{}
 	}
 	c := &fieldChange{ws: ws, field: field, key: keyOf(ws.Fset, field), old: field.Type(), new: newT, mode: mode, name: t.typeName(newT), files: newFileEdits(ws)}
+	if len(a.Values) > 0 {
+		if !narrow {
+			return nil, refactor.Refusef("values is for narrowing a field to an interface; %s to %s is not", t.typeName(field.Type()), c.name)
+		}
+		if c.values, err = parseValues(ws, declPkg, decl.Pos(), a.Values, newT, c.name); err != nil {
+			return nil, err
+		}
+	}
 	if err := c.declEdit(declPkg, decl); err != nil {
 		return nil, err
 	}
@@ -181,6 +204,9 @@ func (*ChangeFieldType) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 	plan := &refactor.Plan{
 		Summary: fmt.Sprintf("changed field %s from %s to %s (%d use%s)", field.Name(), t.typeName(field.Type()), t.typeName(newT), uses, map[bool]string{true: "", false: "s"}[uses == 1]),
 		Edits:   edit.Merge(c.files.all()),
+	}
+	if c.mapped > 0 {
+		plan.Notes = append(plan.Notes, fmt.Sprintf("wrote the values given for the field's old constants in %d places: an edit, which keeps behavior if each value's methods do what the cases of its constant did", c.mapped))
 	}
 	if len(c.dropped) > 0 {
 		plan.Notes = append(plan.Notes, fmt.Sprintf("removed the cases no %s matches: %s", c.name, strings.Join(c.dropped, ", ")))
@@ -397,6 +423,9 @@ func (c *fieldChange) write(p *packages.Package, v ast.Expr) error {
 
 // write notes v unless it is already of the new type, or nil.
 func (m narrowing) write(c *fieldChange, p *packages.Package, v ast.Expr) error {
+	if fv := c.valueFor(p, v); fv != nil {
+		return c.replaceValue(p, v, fv, false)
+	}
 	c.hold(p, v)
 	return nil
 }
@@ -444,6 +473,127 @@ func (c *fieldChange) hold(p *packages.Package, v ast.Expr) {
 	}
 }
 
+// parseValues checks the values given for old constants: each a value of
+// newT, in the scope of pkg at pos, that calls nothing.
+func parseValues(ws *workspace.Workspace, pkg *packages.Package, pos token.Pos, given map[string]string, newT types.Type, name string) ([]fieldValue, error) {
+	keys := slices.Sorted(maps.Keys(given))
+	var out []fieldValue
+	for _, k := range keys {
+		old := oldConstant(k)
+		text := strings.TrimSpace(given[k])
+		e, err := parser.ParseExpr(text)
+		if err != nil {
+			return nil, refactor.Refusef("the value for %s, %q, is not a Go expression: %v", old, text, err)
+		}
+		calls := false
+		ast.Inspect(e, func(n ast.Node) bool {
+			_, ok := n.(*ast.CallExpr)
+			calls = calls || ok
+			return !calls
+		})
+		if calls {
+			return nil, refactor.Refusef("the value for %s, %s, calls a function, which each use would then do; give a literal, a constant or a variable", old, text)
+		}
+		tv, err := types.Eval(ws.Fset, pkg.Types, pos, text)
+		if err != nil {
+			return nil, refactor.Refusef("the value for %s, %s: %v", old, text, err)
+		}
+		if !types.AssignableTo(tv.Type, newT) {
+			return nil, refactor.Refusef("the value for %s, %s, is not a %s", old, text, name)
+		}
+		out = append(out, fieldValue{old: old, text: text, expr: e})
+	}
+	return out, nil
+}
+
+// oldConstant is the constant k names: a literal ("fern", 3), or else the
+// string k itself (fern).
+func oldConstant(k string) constant.Value {
+	if bl, ok := mustParse(k).(*ast.BasicLit); ok {
+		if v := constant.MakeFromLiteral(bl.Value, bl.Kind, 0); v.Kind() != constant.Unknown {
+			return v
+		}
+	}
+	return constant.MakeString(k)
+}
+
+// mustParse parses s as an expression, or returns nil.
+func mustParse(s string) ast.Expr {
+	e, _ := parser.ParseExpr(s)
+	return e
+}
+
+// valueFor returns the value given for v, a constant of package p, or nil.
+func (c *fieldChange) valueFor(p *packages.Package, v ast.Expr) *fieldValue {
+	cv := p.TypesInfo.Types[v].Value
+	if cv == nil {
+		return nil
+	}
+	for i, fv := range c.values {
+		if fv.old.Kind() == cv.Kind() && constant.Compare(fv.old, token.EQL, cv) {
+			return &c.values[i]
+		}
+	}
+	return nil
+}
+
+// replaceValue writes fv in place of v, a use of its old constant in
+// package p, compared with the field when compared (a composite literal
+// then in parentheses, which an if's condition needs).
+func (c *fieldChange) replaceValue(p *packages.Package, v ast.Expr, fv *fieldValue, compared bool) error {
+	fe, err := c.files.of(p, v.Pos())
+	if err != nil {
+		return err
+	}
+	text, err := fe.writeValue(fv, c.field.Pkg(), p.Types)
+	if err != nil {
+		return err
+	}
+	if _, lit := ast.Unparen(fv.expr).(*ast.CompositeLit); lit && compared {
+		text = "(" + text + ")"
+	}
+	fe.edits = append(fe.edits, edit.TextEdit{Start: c.ws.Fset.Position(v.Pos()).Offset, End: c.ws.Fset.Position(v.End()).Offset, NewText: text})
+	c.mapped++
+	return nil
+}
+
+// writeValue writes fv, of package home, for this file of package p:
+// in another package, home's names in it qualified.
+func (fe *fileEdits) writeValue(fv *fieldValue, home, p *types.Package) (string, error) {
+	if p.Path() == home.Path() {
+		return fv.text, nil
+	}
+	var at []int // offsets in fv.text of names to qualify
+	skip := map[*ast.Ident]bool{}
+	ast.Inspect(fv.expr, func(n ast.Node) bool {
+		switch n := n.(type) {
+		case *ast.SelectorExpr:
+			skip[n.Sel] = true
+		case *ast.KeyValueExpr:
+			if id, ok := n.Key.(*ast.Ident); ok {
+				skip[id] = true
+			}
+		case *ast.Ident:
+			if !skip[n] && home.Scope().Lookup(n.Name) != nil {
+				at = append(at, int(n.Pos())-1)
+			}
+		}
+		return true
+	})
+	if len(at) == 0 {
+		return fv.text, nil
+	}
+	q, err := fe.adder.Name(home)
+	if err != nil {
+		return "", err
+	}
+	s := fv.text
+	for i := len(at) - 1; i >= 0; i-- {
+		s = s[:at[i]] + q + "." + s[at[i]:]
+	}
+	return s, nil
+}
+
 // read checks path[0], a read of the field, once the field holds
 // only values of the new type: a switch on it loses the cases none of
 // them matches, and a comparison with such a value, or passing it to a
@@ -461,6 +611,9 @@ func (m narrowing) read(c *fieldChange, p *packages.Package, path []ast.Node, _ 
 		other := u.X
 		if other == e {
 			other = u.Y
+		}
+		if fv := c.valueFor(p, other); fv != nil && (u.Op == token.EQL || u.Op == token.NEQ) {
+			return c.replaceValue(p, other, fv, true)
 		}
 		if (u.Op == token.EQL || u.Op == token.NEQ) && !c.canMatch(p, other) {
 			c.cannot = append(c.cannot, fmt.Sprintf("%s: compared with %s, which no %s equals", c.ws.Position(other.Pos()), types.ExprString(other), c.name))
