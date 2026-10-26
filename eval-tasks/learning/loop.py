@@ -98,9 +98,12 @@ batch, now or after any later message, at most three times in all."""
 # leaves the tests passing, without saying that reads come after it
 # (said, the plans left the move for after reading the code).
 READ_AFTER = """
-Your first batch must leave the module's tests passing. If the whole
-change cannot pass them in one batch, make it easy first, moving code by
-name; once the batch applies, you are asked for the next."""
+Every line of the finished change is either code already in the module,
+in a new place, or code that is new. Your first batch puts the existing
+code in its new place with steps that address it by name (they carry
+code you cannot see), and leaves the module's tests passing. Write no
+code in it that the module already has somewhere. Once it applies, you
+are asked for the next batch, for what is new."""
 
 # READ_OPEN ends the later prompts with -read-after: the first word of
 # reads, so the first batch is planned without knowing they come.
