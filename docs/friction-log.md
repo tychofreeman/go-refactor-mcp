@@ -2923,3 +2923,10 @@ hand. This entry appended with replace_text.
 
 The analysis in the session notes with replace_text. Nothing by hand.
 This entry appended with a heredoc.
+
+## 2026-10-26: loop.py's tool index
+
+`-index`, the index and entries split out of `compact`, the asks in
+`attempt` and the flag with replace_text in batches; the docs and this
+entry with replace_text, anchored on the log's last lines. Nothing by
+hand.
