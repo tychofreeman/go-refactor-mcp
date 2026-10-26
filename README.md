@@ -1109,7 +1109,14 @@ hand or a tool got in the way.
         written, an `==` with a constant, a case reached by
         fallthrough or a generic call is refused, each listed, so on
         lending-xl after `"book"` the refusal lists what is left for
-        `"dvd"` and `"atlas"` (9 uses). *Done.*
+        `"dvd"` and `"atlas"` (9 uses). *Done.* With `values`
+        (`{"book": "Book{}"}`), narrowing writes each value where the
+        field is given or compared with its constant, qualified in
+        other packages, so a plan need not see those uses: the
+        refusal listing them cost one of two repairs in 13 of 16
+        kinds attempts (cost-history 19), and the kinds reference
+        drops its eight replace_text steps for it. An edit, said in a
+        note; values that call a function are refused. *Done.*
       - Deleting one kind's dead case before the end:
         `replace_statements` with empty content over whole case
         clauses deletes them, refused when the case before falls

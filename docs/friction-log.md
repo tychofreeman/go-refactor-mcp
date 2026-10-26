@@ -2728,3 +2728,11 @@ hand. This entry appended with a heredoc.
 The two runs' results in cost-history, plan-and-execute and the
 session notes with replace_text in one batch. Nothing by hand. This
 entry appended with a heredoc.
+
+## 2026-10-26: narrowing writes the values given for old constants
+
+The goldens with create_file in one batch, `values` with replace_text
+and add_declaration (check "end"), the hint, description, golden and
+roadmap with replace_text. By script: the kinds reference's eight
+replace_text steps removed and `values` added with Python's json, at
+the file's own indent this time. This entry appended with a heredoc.

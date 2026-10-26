@@ -1,2 +1,2 @@
 m.go:16:44: compared with "atlas", which no Kind equals
-Write each kind's type (Book) where these uses have its old value, then narrow.
+Write each kind's type (Book) where these uses have its old value, then narrow; or narrow with values for the constants listed (values {"<constant>": "Book{}"}, one for each), which writes them there.
