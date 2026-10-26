@@ -3,9 +3,13 @@
 // preserves behavior.
 //
 // The central question is "can this expression's value change, or does
-// evaluating it do anything?". Stable answers it conservatively: an
-// expression is stable when its value depends only on constants, functions
-// and local variables that no other code can reach.
+// evaluating it do anything?". Effects answers it with a Summary of what
+// evaluating code can do: its side effects, what it reads that other
+// code can change, how it can panic and what new values it makes, from
+// one walk of the code and one table of standard-library facts, with the
+// module's own functions known by their bodies. Summary.Stable says
+// whether an expression's value depends only on constants, functions and
+// local variables that no other code can reach.
 package analysis
 
 import (
@@ -215,135 +219,6 @@ func (f *Func) LocalsRead(e ast.Expr) []*types.Var {
 	return out
 }
 
-// Stable reports whether e's value depends only on constants, functions and
-// local variables that no other code can reach (no calls, no pointer or
-// slice/map element reads, no globals, no escaping locals). Evaluating a
-// stable expression has no side effects, and its value can only change if
-// one of its local variables is assigned.
-//
-// With sharing, e must also not create a new reference value (a slice or
-// map literal, say), so that one shared value is equivalent to evaluating
-// e repeatedly.
-//
-// A stable expression can still panic (a / b, s[i]): moving its
-// evaluation also needs MayPanic.
-//
-// It returns the first offending sub-expression.
-func (f *Func) Stable(e ast.Expr, sharing bool) (ast.Node, bool) {
-	info := f.Info
-	ok := func(es ...ast.Expr) (ast.Node, bool) {
-		for _, s := range es {
-			if s == nil {
-				continue
-			}
-			if c, good := f.Stable(s, sharing); !good {
-				return c, false
-			}
-		}
-		return nil, true
-	}
-	switch e := e.(type) {
-	case *ast.BasicLit:
-		return nil, true
-	case *ast.Ident:
-		switch o := info.Uses[e].(type) {
-		case *types.Const, *types.Nil, *types.Func:
-			return nil, true
-		case *types.Var:
-			if f.IsLocal(o) && !f.Escapes(o) {
-				return nil, true
-			}
-		}
-		return e, false
-	case *ast.ParenExpr:
-		return ok(e.X)
-	case *ast.UnaryExpr:
-		switch e.Op {
-		case token.ADD, token.SUB, token.NOT, token.XOR:
-			return ok(e.X)
-		}
-		return e, false
-	case *ast.BinaryExpr:
-		return ok(e.X, e.Y)
-	case *ast.SelectorExpr:
-		sel := info.Selections[e]
-		if sel == nil { // qualified identifier
-			switch info.Uses[e.Sel].(type) {
-			case *types.Const, *types.Func:
-				return nil, true
-			}
-			return e, false
-		}
-		if sel.Kind() == types.FieldVal && !sel.Indirect() && !IsPointer(info.TypeOf(e.X)) {
-			return ok(e.X)
-		}
-		return e, false
-	case *ast.IndexExpr:
-		if t := info.TypeOf(e.X); IsArray(t) || IsString(t) {
-			return ok(e.X, e.Index)
-		}
-		return e, false
-	case *ast.SliceExpr:
-		if t := info.TypeOf(e.X); IsString(t) || IsSlice(t) {
-			return ok(e.X, e.Low, e.High, e.Max)
-		}
-		return e, false
-	case *ast.TypeAssertExpr:
-		if e.Type != nil {
-			return ok(e.X)
-		}
-		return e, false
-	case *ast.CallExpr:
-		if tv, isConv := info.Types[e.Fun]; isConv && tv.IsType() {
-			if sharing && IsReference(info.TypeOf(e)) {
-				return e, false
-			}
-			return ok(e.Args...)
-		}
-		if b, isBuiltin := info.Uses[IdentOf(e.Fun)].(*types.Builtin); isBuiltin {
-			switch b.Name() {
-			case "len", "cap":
-				if len(e.Args) == 1 && !IsMapOrChan(info.TypeOf(e.Args[0])) {
-					return ok(e.Args...)
-				}
-			case "min", "max", "real", "imag", "complex":
-				return ok(e.Args...)
-			}
-		}
-		if known, panics := KnownCall(info, e); known && panics == NoPanic {
-			if sharing && IsReference(info.TypeOf(e)) {
-				return e, false // a new slice each time, say
-			}
-			args := e.Args
-			if sel, isSel := ast.Unparen(e.Fun).(*ast.SelectorExpr); isSel && info.Selections[sel] != nil {
-				args = append([]ast.Expr{sel.X}, args...) // a method's receiver
-			}
-			return ok(args...)
-		}
-		return e, false
-	case *ast.CompositeLit:
-		t := info.TypeOf(e)
-		if sharing && !IsStruct(t) && !IsArray(t) {
-			return e, false
-		}
-		for _, el := range e.Elts {
-			if kv, isKV := el.(*ast.KeyValueExpr); isKV {
-				if !IsStruct(t) {
-					if c, good := ok(kv.Key); !good {
-						return c, false
-					}
-				}
-				el = kv.Value
-			}
-			if c, good := ok(el); !good {
-				return c, false
-			}
-		}
-		return nil, true
-	}
-	return e, false
-}
-
 // AddressOperands returns the operands whose values e's address depends
 // on (a pointer it goes through, a slice and the index into it), or, if
 // its address is not made of variables and such operands, the
@@ -374,86 +249,6 @@ func (f *Func) AddressOperands(e ast.Expr) ([]ast.Expr, ast.Node) {
 		return []ast.Expr{e.X}, nil
 	}
 	return nil, e
-}
-
-// StableAddress is Stable for e's address rather than its value: it
-// depends only on operands that are stable.
-func (f *Func) StableAddress(e ast.Expr) (ast.Node, bool) {
-	ops, culprit := f.AddressOperands(e)
-	if culprit != nil {
-		return culprit, false
-	}
-	for _, op := range ops {
-		if c, ok := f.Stable(op, false); !ok {
-			return c, false
-		}
-	}
-	return nil, true
-}
-
-// MayPanic returns the first sub-expression of e whose evaluation can panic,
-// or nil: an integer division or remainder by a divisor that is not
-// constant, a shift by a signed count that is not constant, an index that
-// can be out of range or of a nil pointer, a slice expression with bounds,
-// a type assertion, or a conversion of a slice to an array. It does not
-// look into calls or function literals; it is meant for expressions Stable
-// accepts, whose known calls cannot panic.
-func MayPanic(info *types.Info, e ast.Expr) ast.Node {
-	var found ast.Node
-	ast.Inspect(e, func(n ast.Node) bool {
-		if found != nil {
-			return false
-		}
-		switch n := n.(type) {
-		case *ast.FuncLit:
-			return false
-		case *ast.BinaryExpr:
-			switch n.Op {
-			case token.QUO, token.REM:
-				if !isFloatOrComplex(info.TypeOf(n)) && info.Types[n.Y].Value == nil {
-					found = n
-				}
-			case token.SHL, token.SHR:
-				if !isUnsigned(info.TypeOf(n.Y)) && info.Types[n.Y].Value == nil {
-					found = n
-				}
-			}
-		case *ast.IndexExpr:
-			switch t := info.TypeOf(n.X); {
-			case IsArray(t):
-				if info.Types[n.Index].Value == nil {
-					found = n
-				}
-			case IsString(t):
-				if info.Types[n.X].Value == nil || info.Types[n.Index].Value == nil {
-					found = n
-				}
-			case IsSlice(t), IsPointer(t):
-				found = n
-			}
-		case *ast.SliceExpr:
-			if n.Low != nil || n.High != nil || n.Max != nil || IsPointer(info.TypeOf(n.X)) {
-				found = n
-			}
-		case *ast.TypeAssertExpr:
-			if n.Type != nil {
-				found = n
-			}
-		case *ast.CallExpr:
-			if tv, isConv := info.Types[n.Fun]; isConv && tv.IsType() && len(n.Args) == 1 && IsSlice(info.TypeOf(n.Args[0])) {
-				switch u := tv.Type.Underlying().(type) {
-				case *types.Array:
-					found = n
-				case *types.Pointer:
-					if _, ok := u.Elem().Underlying().(*types.Array); ok {
-						found = n
-					}
-				}
-			}
-		}
-		return found == nil
-	})
-	return found
 }
 
 // Addressed returns the field selections in n whose address an & takes
@@ -520,51 +315,6 @@ func isFloatOrComplex(t types.Type) bool {
 func isUnsigned(t types.Type) bool {
 	b, ok := under(t).(*types.Basic)
 	return ok && b.Info()&types.IsUnsigned != 0
-}
-
-// HasEffect reports whether n itself (not its children) is a call with
-// possible side effects or a channel receive.
-func HasEffect(info *types.Info, n ast.Node) bool {
-	switch n := n.(type) {
-	case *ast.CallExpr:
-		if tv, ok := info.Types[n.Fun]; ok && tv.IsType() {
-			return false
-		}
-		if b, ok := info.Uses[IdentOf(n.Fun)].(*types.Builtin); ok {
-			switch b.Name() {
-			case "len", "cap", "min", "max", "real", "imag", "complex", "new", "make":
-				return false
-			}
-		}
-		if known, panics := KnownCall(info, n); known && panics == NoPanic {
-			return false
-		}
-		return true
-	case *ast.UnaryExpr:
-		return n.Op == token.ARROW
-	}
-	return false
-}
-
-// FirstEffectBefore returns the first node with side effects inside root
-// that is evaluated before pos (it ends before pos and does not enclose
-// it), ignoring the bodies of function literals and any node in skip.
-func FirstEffectBefore(info *types.Info, root ast.Node, pos token.Pos, skip ast.Node) ast.Node {
-	var first ast.Node
-	ast.Inspect(root, func(n ast.Node) bool {
-		if n == nil || first != nil || n.Pos() >= pos || (skip != nil && n == skip) {
-			return false
-		}
-		if _, ok := n.(*ast.FuncLit); ok {
-			return false // defining a closure runs nothing
-		}
-		if n.End() <= pos && HasEffect(info, n) {
-			first = n
-			return false
-		}
-		return true
-	})
-	return first
 }
 
 // ScopeRefs lists the identifiers in e that are resolved through lexical

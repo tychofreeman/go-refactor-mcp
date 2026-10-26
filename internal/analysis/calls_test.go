@@ -154,7 +154,9 @@ func f(s string, xs []string, b []byte) {
 	}
 }
 
-func TestMayPanic(t *testing.T) {
+// TestEffectsPanic checks where a summary says an expression can panic
+// other than by a nil dereference.
+func TestEffectsPanic(t *testing.T) {
 	src := `package p
 
 const k = "abc"
@@ -216,11 +218,11 @@ func f[N int | float64](a, b int, u uint, x, y float64, s string, arr [4]int, xs
 		}
 		seen++
 		got := ""
-		if p := MayPanic(info, e); p != nil {
+		if p := NewEffects().Of(Outside(info), e).At.OtherPanic; p != nil {
 			got = types.ExprString(p.(ast.Expr))
 		}
 		if got != w {
-			t.Errorf("MayPanic(%s) = %q, want %q", types.ExprString(e), got, w)
+			t.Errorf("panic in %s = %q, want %q", types.ExprString(e), got, w)
 		}
 		return true
 	})
