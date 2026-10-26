@@ -1,0 +1,1 @@
+no case "atlas": the code after the switch runs for it, so the new case "atlas" calls atlasRenewable, a copy of that code, which stays
