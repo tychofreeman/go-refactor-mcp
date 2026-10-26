@@ -1,6 +1,9 @@
 package m
 
-func f(a, b int) int { return a - b }
+func f(a, b int) int {
+	println(a)
+	return a - b
+}
 
 var x int
 

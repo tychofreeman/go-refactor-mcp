@@ -1590,10 +1590,19 @@ hand or a tool got in the way.
        now use a call of `Error` and `os.Getenv`.
     7. Changesig's `riskOf` and `unsafeValue` hold a fourth and fifth
        copy of the panic rules; move them onto the summaries too.
-    5. Calls of the module's own functions judged by their summaries
-       (computed once a load): by value, as stable as the arguments;
-       reading through a pointer, not stable; an effect, not stable;
-       a panic, by the panic rules; unknown, a wall. The user waived
+    5. *Done.* Calls of the module's own functions judged by their
+       summaries, made once for each state of the workspace
+       (`Workspace.Effects()`, which changesig, fold, slide and inspect
+       now share): by value, as stable as the arguments; reading
+       through a pointer, a package variable, or caching into a field,
+       not stable; an effect (logging), not stable; a panic, by the
+       panic rules; a function value, a wall. A callee that makes a new
+       reference value makes its call one. inline_variable's goldens
+       hold a case of each (`module_call_by_value`, `refuse_module_*`,
+       `refuse_function_value_call`). Fourteen goldens had pure
+       functions stand in for effects (`func load() int { return 3 }`);
+       they now print. A loop in a callee still counts as something
+       that might not finish, so such calls stay walls. The user waived
        the question of a nil dereference moving with a call (2026-10-25).
     6. The old analyses deleted.
 

@@ -2655,3 +2655,14 @@ create_file and replace_declaration. By hand:
   replace_text. Step 5, which sees into the module's functions, would
   still refuse it: the lazy assignment is an effect.
 This entry appended with a heredoc.
+
+## 2026-10-25: summaries see into the module's functions
+
+Seven goldens with create_file, the workspace's packages added with
+replace_text, changesig's and fold's own Effects replaced by the
+workspace's with replace_statements, remove_dead_code and
+inline_function (all_calls), slide's and inspect's with replace_text.
+By hand, by script through replace_text: fourteen goldens whose stand-in
+functions were pure (`func load() int { return 3 }`) given a `println`,
+and their `line` arguments and one refusal's position moved with the
+lines that grew. This entry appended with a heredoc.

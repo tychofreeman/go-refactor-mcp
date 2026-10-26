@@ -1,0 +1,1 @@
+"v" is used 2 times, and its initializer `c.Value()` could give a different value

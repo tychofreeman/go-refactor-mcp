@@ -2,8 +2,14 @@ package m
 
 import "fmt"
 
-func load() int  { return 3 }
-func other() int { return 4 }
+func load() int {
+	println("load")
+	return 3
+}
+func other() int {
+	println("other")
+	return 4
+}
 
 func F() int {
 	v := load()

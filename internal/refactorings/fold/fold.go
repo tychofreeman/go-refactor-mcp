@@ -107,7 +107,6 @@ type folder struct {
 	self types.Object
 	sets []set
 	rest map[ast.Expr]rest // literals folded through the setter, by what to write for them
-	effs *analysis.Effects // what calls do, built when needed
 
 	n       int           // occurrences folded
 	skipped []string      // why matches were left, "file:line: reason"
@@ -1066,17 +1065,6 @@ func concatOperands(info *types.Info, e ast.Expr) []ast.Expr {
 	return []ast.Expr{e}
 }
 
-// effects is what calls in the workspace do.
-func (f *folder) effects() *analysis.Effects {
-	if f.effs == nil {
-		f.effs = analysis.NewEffects()
-		for _, p := range f.ws.Pkgs {
-			f.effs.AddPackage(p.Syntax, p.TypesInfo)
-		}
-	}
-	return f.effs
-}
-
 // impure reports whether evaluating e could do more than compute a
 // value: a call in it has side effects, reads what other code can
 // change, or could panic or not finish; or e could panic itself.
@@ -1090,7 +1078,7 @@ func (f *folder) impure(info *types.Info, e ast.Expr) bool {
 		case *ast.FuncLit:
 			return false
 		case *ast.CallExpr:
-			s := f.effects().Call(info, n)
+			s := f.ws.Effects().Call(info, n)
 			found = s.Effect != "" || s.Reads != "" || s.Unsafe != ""
 		case *ast.UnaryExpr:
 			found = n.Op == token.ARROW
@@ -1167,7 +1155,7 @@ func (f *folder) effectful(info *types.Info, e ast.Expr, shared bool) bool {
 		case *ast.FuncLit:
 			return false
 		case *ast.CallExpr:
-			s := f.effects().Call(info, n)
+			s := f.ws.Effects().Call(info, n)
 			found = s.Effect != "" || shared && s.Reads != ""
 		case *ast.UnaryExpr:
 			found = n.Op == token.ARROW
@@ -1208,7 +1196,7 @@ func (f *folder) matters(info *types.Info, s ast.Stmt, pos token.Pos) bool {
 		case *ast.AssignStmt, *ast.IncDecStmt, *ast.SendStmt, *ast.GoStmt, *ast.DeferStmt:
 			found = true
 		case *ast.CallExpr:
-			s := f.effects().Call(info, n)
+			s := f.ws.Effects().Call(info, n)
 			found = s.Effect != "" || s.Unsafe != ""
 		case *ast.UnaryExpr:
 			found = n.Op == token.ARROW
@@ -1261,7 +1249,7 @@ func (f *folder) staleRead(info *types.Info, roots []ast.Node, e ast.Expr) strin
 			case *ast.IncDecStmt:
 				why = "changes " + types.ExprString(n.X)
 			case *ast.CallExpr:
-				why = f.effects().Call(info, n).Effect
+				why = f.ws.Effects().Call(info, n).Effect
 			}
 			at = n.Pos()
 			return why == ""
@@ -1438,7 +1426,7 @@ func (f *folder) mayStop(info *types.Info, s ast.Stmt, pos token.Pos) string {
 			return why == ""
 		}
 		if c, ok := e.(*ast.CallExpr); ok {
-			why = f.effects().Call(info, c).Stops
+			why = f.ws.Effects().Call(info, c).Stops
 		}
 		return why == ""
 	})

@@ -353,12 +353,14 @@ func (w *Workspace) TypesInfos() []*types.Info {
 }
 
 // Effects returns the summaries of what the workspace's code can do, made
-// once for each state of the packages. It knows the standard library's
-// functions; the module's own functions are not known yet, so a call of
-// one could do anything.
+// once for each state of the packages: the standard library's functions
+// it knows, and the module's own from their bodies.
 func (w *Workspace) Effects() *analysis.Effects {
 	if w.effects == nil {
 		w.effects = analysis.NewEffects()
+		for _, p := range w.Pkgs {
+			w.effects.AddPackage(p.Syntax, p.TypesInfo)
+		}
 	}
 	return w.effects
 }

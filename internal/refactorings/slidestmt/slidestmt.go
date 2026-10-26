@@ -100,10 +100,7 @@ func (m *MoveStatement) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 		return nil, err
 	}
 	f := analysis.AnalyzeFunc(pkg.TypesInfo, analysis.OutermostFunc(analysis.PathTo(file, first)))
-	effects := analysis.NewEffects()
-	for _, p := range ws.Pkgs {
-		effects.AddPackage(p.Syntax, p.TypesInfo)
-	}
+	effects := ws.Effects()
 	if err := checkIndependent(factsOf(f, tf, first, effects), factsOf(f, tf, second, effects)); err != nil {
 		return nil, err
 	}

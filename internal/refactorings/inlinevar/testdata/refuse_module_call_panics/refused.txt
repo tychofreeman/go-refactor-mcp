@@ -1,0 +1,1 @@
+"x" is used 2 times, and its initializer `half(a, b)` can panic

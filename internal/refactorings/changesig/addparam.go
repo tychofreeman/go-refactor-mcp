@@ -399,7 +399,7 @@ func (t *target) checkValue(c call, value string, typ types.Type) error {
 		}
 		return refactor.Refusef("the value %s does not work at the call at %s: %s", value, where, msg)
 	}
-	if bad, why := unsafeValue(info, e, t.effects()); bad != nil {
+	if bad, why := unsafeValue(info, e, t.ws.Effects()); bad != nil {
 		return refactor.Refusef("the value %s %s (%s), and the body would not use it, so passing it would change behavior; use a value without calls (other than known ones, like strings.ToUpper), dereferences, indexing or division",
 			value, why, types.ExprString(bad.(ast.Expr)))
 	}

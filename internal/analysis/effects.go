@@ -185,7 +185,7 @@ func (e *Effects) call(info *types.Info, call *ast.CallExpr, private func(target
 		}
 		return "calls " + name + ", which " + what
 	}
-	s.add(Summary{Effect: which(fs.Effect), Reads: which(fs.Reads), Unsafe: which(fs.Unsafe), Stops: which(fs.Stops), Panics: fs.Panics})
+	s.add(Summary{Effect: which(fs.Effect), Reads: which(fs.Reads), Unsafe: which(fs.Unsafe), Stops: which(fs.Stops), Makes: which(fs.Makes), Panics: fs.Panics})
 	return s
 }
 
