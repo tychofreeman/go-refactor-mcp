@@ -1,1 +1,1 @@
-m.decl could panic: it reads a field through a pointer, and it can be evaluated more than once per call (size uses goto)
+m.decl reads m.decl through a pointer, and it can be evaluated more than once per call (size uses goto)

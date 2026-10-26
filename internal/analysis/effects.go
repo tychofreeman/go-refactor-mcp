@@ -101,7 +101,7 @@ func (e *Effects) Of(f *Func, x ast.Expr) Summary {
 // context (root, for the part summarized): memory f made itself is not
 // its own, since the rest of f can change it.
 func (e *Effects) walker(f *Func, root ast.Expr) *body {
-	return &body{e: e, f: f, fresh: map[*types.Var]bool{}, sync: map[*ast.FuncLit]bool{}, callees: map[ast.Expr]bool{}, root: root, addressed: map[ast.Expr]ast.Expr{}}
+	return &body{e: e, f: f, fresh: map[*types.Var]bool{}, sync: map[*ast.FuncLit]bool{}, callees: map[ast.Expr]bool{}, root: root, addressed: map[ast.Expr]ast.Expr{}, partial: true}
 }
 
 // StableAddress is Stable for the address of x, an expression in the
@@ -520,6 +520,7 @@ type body struct {
 	callees   map[ast.Expr]bool     // the functions of the calls seen
 	root      ast.Expr              // for Of, the expression summarized, evaluated out of its context
 	addressed map[ast.Expr]ast.Expr // operands whose address is taken: reads of the pointer they go through only (addressedIn)
+	partial   bool                  // part of f is summarized, out of its context: what escapes f's own code is not private
 }
 
 // summarize computes what calling the function declared by src can do,
@@ -549,7 +550,7 @@ func (b *body) pointsPrivate(x ast.Expr) bool {
 // fresh local points to.
 func (b *body) private(x ast.Expr) bool {
 	if v := b.f.RootVar(x); v != nil {
-		return true
+		return !b.partial || !b.f.Escapes(v) // out of context, a pointer or closure could read it
 	}
 	info := b.f.Info
 	switch x := ast.Unparen(x).(type) {

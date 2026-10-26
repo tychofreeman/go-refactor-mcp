@@ -120,7 +120,8 @@ func (*MoveParameter) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refac
 
 // checkOrder refuses a call where moving the argument at index from to
 // index to could change what the call does: the arguments it passes over
-// are then evaluated in a different order relative to it.
+// are then evaluated in a different order relative to it, so each is a
+// move of one past the other.
 func (t *target) checkOrder(c call, from, to int) error {
 	args := c.expr.Args
 	var passed []ast.Expr
@@ -129,23 +130,31 @@ func (t *target) checkOrder(c call, from, to int) error {
 	} else {
 		passed = args[from+1 : min(to, len(args))]
 	}
-	info := c.pkg.TypesInfo
-	private := privateLocals(c)
+	fa := funcAround(c)
 	moved := args[from]
 	for _, b := range passed {
-		why := ""
-		switch {
-		case hasEffect(info, moved, t.ws.Effects()) && readsVar(info, b, private), hasEffect(info, b, t.ws.Effects()) && readsVar(info, moved, private):
-			why = "one has side effects the other could observe"
-		case unsafeArg(info, moved, t.ws.Effects()) && unsafeArg(info, b, t.ws.Effects()):
-			why = "both could have side effects or panic"
-		}
-		if why != "" {
-			return refactor.Refusef("at %s, moving %s past %s would change the order in which they are evaluated, and %s; assign one of them to a variable before the call first",
-				t.ws.Position(c.expr.Pos()), types.ExprString(moved), types.ExprString(b), why)
+		for _, pair := range [][2]ast.Expr{{moved, b}, {b, moved}} {
+			m := analysis.Move{Effects: t.ws.Effects(), Func: fa, Expr: pair[0], Past: []ast.Node{pair[1]}}
+			if o := m.Check(); o != nil {
+				return refactor.Refusef("at %s, moving %s past %s would change the order in which they are evaluated: %s; assign one of them to a variable before the call first",
+					t.ws.Position(c.expr.Pos()), types.ExprString(moved), types.ExprString(b), o.Why)
+			}
 		}
 	}
 	return nil
+}
+
+// funcAround returns the facts of the function around the call c, or
+// those of no function when it is not in one.
+func funcAround(c call) *analysis.Func {
+	for _, f := range c.pkg.Syntax {
+		if f.FileStart <= c.expr.Pos() && c.expr.Pos() < f.FileEnd {
+			if fn := analysis.OutermostFunc(analysis.PathTo(f, c.expr)); fn != nil {
+				return analysis.AnalyzeFunc(c.pkg.TypesInfo, fn)
+			}
+		}
+	}
+	return analysis.Outside(c.pkg.TypesInfo)
 }
 
 // checkNoCallIn refuses an argument that contains another call of the
@@ -160,59 +169,6 @@ func (t *target) checkNoCallIn(arg ast.Expr) error {
 		}
 	}
 	return nil
-}
-
-func unsafeArg(info *types.Info, e ast.Expr, effs *analysis.Effects) bool {
-	bad, _ := unsafeValue(info, e, effs)
-	return bad != nil
-}
-
-// hasEffect reports whether evaluating e could have a side effect.
-// (Defining a function literal runs nothing.)
-func hasEffect(info *types.Info, e ast.Expr, effs *analysis.Effects) bool {
-	found := false
-	ast.Inspect(e, func(n ast.Node) bool {
-		if _, ok := n.(*ast.FuncLit); ok || found {
-			return false
-		}
-		found = effs.Acts(info, n)
-		return !found
-	})
-	return found
-}
-
-// readsVar reports whether evaluating e reads a variable, whose value a
-// side effect could change, other than one private says no other code can
-// reach. (A function literal captures variables rather than reading them.)
-func readsVar(info *types.Info, e ast.Expr, private func(*types.Var) bool) bool {
-	found := false
-	ast.Inspect(e, func(n ast.Node) bool {
-		if _, ok := n.(*ast.FuncLit); ok || found {
-			return false
-		}
-		if id, ok := n.(*ast.Ident); ok {
-			v, isVar := info.Uses[id].(*types.Var)
-			found = isVar && !private(v)
-		}
-		return !found
-	})
-	return found
-}
-
-// privateLocals returns a test for the variables of the function around c
-// that only its own reads and writes reach (no pointer to them, no closure
-// capturing them) and whose values hold no pointers: no call can change
-// or observe them.
-func privateLocals(c call) func(*types.Var) bool {
-	for _, f := range c.pkg.Syntax {
-		if f.FileStart <= c.expr.Pos() && c.expr.Pos() < f.FileEnd {
-			if fn := analysis.OutermostFunc(analysis.PathTo(f, c.expr)); fn != nil {
-				fa := analysis.AnalyzeFunc(c.pkg.TypesInfo, fn)
-				return func(v *types.Var) bool { return fa.IsLocal(v) && !fa.Escapes(v) && plainValue(v.Type()) }
-			}
-		}
-	}
-	return func(*types.Var) bool { return false }
 }
 
 // plainValue reports whether values of t hold no pointers, so that a copy

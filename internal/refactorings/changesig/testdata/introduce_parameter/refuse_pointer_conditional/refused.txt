@@ -1,1 +1,1 @@
-m.decl could panic: it reads a field through a pointer, and it is not evaluated on every call (it is inside an if)
+m.decl could panic: it reads m.decl through a pointer, and it is not evaluated on every call (it is inside an if)

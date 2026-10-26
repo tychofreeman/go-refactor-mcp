@@ -466,111 +466,13 @@ func (t *target) off(p token.Pos) int { return t.ws.Fset.Position(p).Offset }
 
 func (t *target) text(n ast.Node) string { return string(t.src[t.off(n.Pos()):t.off(n.End())]) }
 
-// unsafeValue returns the first part of e whose evaluation could have a
-// side effect or panic, and what it could do.
+// unsafeValue returns what in e, evaluated once more or once less where
+// nothing uses its value, would change behavior (a side effect, or a
+// panic), and why, or nil.
 func unsafeValue(info *types.Info, e ast.Expr, eff *analysis.Effects) (ast.Node, string) {
-	if tv := info.Types[e]; tv.Value != nil {
-		return nil, "" // a constant
+	m := analysis.Move{Effects: eff, Func: analysis.Outside(info), Expr: e, Times: analysis.Unused}
+	if o := m.Check(); o != nil {
+		return o.In, o.Does
 	}
-	var bad ast.Node
-	var why string
-	ast.Inspect(e, syncWalk(info, func(n ast.Node) bool {
-		if bad != nil {
-			return false
-		}
-		if l := assignsOutside(info, n, e); l != nil {
-			bad, why = n, "has side effects: it assigns "+types.ExprString(l)
-			return false
-		}
-		if ex, ok := n.(ast.Expr); ok && info.Types[ex].Value != nil {
-			return false
-		}
-		switch n := n.(type) {
-		case *ast.StarExpr:
-			if !info.Types[n].IsType() {
-				bad, why = n, "could panic: it dereferences a pointer"
-			}
-		case *ast.SelectorExpr:
-			if sel := info.Selections[n]; sel != nil && sel.Kind() == types.FieldVal && sel.Indirect() {
-				bad, why = n, "could panic: it reads a field through a pointer"
-			}
-		case *ast.IndexExpr:
-			if tv := info.Types[n.X]; !tv.IsType() {
-				if _, isMap := tv.Type.Underlying().(*types.Map); !isMap {
-					bad, why = n, "could panic: it indexes"
-				}
-			}
-		case *ast.SliceExpr:
-			bad, why = n, "could panic: it slices"
-		case *ast.TypeAssertExpr:
-			bad, why = n, "could panic: it is a type assertion"
-		case *ast.BinaryExpr:
-			if (n.Op == token.QUO || n.Op == token.REM) && info.Types[n.Y].Value == nil {
-				bad, why = n, "could panic: it divides by a value that could be zero"
-			}
-		case *ast.CallExpr:
-			if known, panics := analysis.KnownCall(info, n); known {
-				if panics != analysis.NoPanic {
-					bad, why = n, "could panic: it calls "+types.ExprString(n.Fun)
-				}
-			} else {
-				switch s := eff.Call(info, n); {
-				case s.Effect != "":
-					bad, why = n, "has side effects"
-				case s.Unsafe != "":
-					bad, why = n, "could panic: it "+s.Unsafe
-				}
-			}
-		default:
-			if eff.Acts(info, n) {
-				bad, why = n, "has side effects"
-			}
-		}
-		return bad == nil
-	}))
-	return bad, why
-}
-
-// syncWalk adapts an ast.Inspect visitor so that it walks into the
-// function literals a call runs before it returns (analysis.SyncLits,
-// such as the one strings.FieldsFunc calls), whose bodies are part of
-// what the call does, and skips every other literal, since defining one
-// runs nothing.
-func syncWalk(info *types.Info, visit func(ast.Node) bool) func(ast.Node) bool {
-	sync := map[*ast.FuncLit]bool{}
-	return func(n ast.Node) bool {
-		switch n := n.(type) {
-		case *ast.FuncLit:
-			if !sync[n] {
-				return false
-			}
-		case *ast.CallExpr:
-			for _, lit := range analysis.SyncLits(info, n) {
-				sync[lit] = true
-			}
-		}
-		return visit(n)
-	}
-}
-
-// assignsOutside returns the first thing the assignment or ++/-- n writes
-// that is not a variable declared inside e, or nil. Within an expression,
-// only a function literal that runs during it can assign.
-func assignsOutside(info *types.Info, n, e ast.Node) ast.Expr {
-	var lhs []ast.Expr
-	switch n := n.(type) {
-	case *ast.AssignStmt:
-		lhs = n.Lhs
-	case *ast.IncDecStmt:
-		lhs = []ast.Expr{n.X}
-	}
-	for _, l := range lhs {
-		if id, ok := ast.Unparen(l).(*ast.Ident); ok {
-			if o := info.ObjectOf(id); id.Name == "_" || o != nil && e.Pos() <= o.Pos() && o.Pos() < e.End() {
-				continue
-			}
-		}
-		return l
-	}
-	return nil
+	return nil, ""
 }

@@ -11,177 +11,15 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 )
 
-// risk is something that evaluating one node could do, or depend on.
-type risk struct {
-	node ast.Node
-	why  string
-	// effect: a call or channel operation.
-	effect bool
-	// stops: for an effect, how it might not return ("calls os.Exit,
-	// which does not return"), or "".
-	stops string
-	// shared: it reads memory that other code can change (through a
-	// pointer, a slice or map element, a package variable).
-	shared bool
-	// nilDeref: it could panic, only by dereferencing a nil pointer.
-	// Every such panic is the same runtime error.
-	nilDeref bool
-	// panics: it could panic some other way.
-	panics bool
-}
-
-// riskOf classifies the node n itself, not its children; ok is false when
-// evaluating it is harmless.
-func riskOf(info *types.Info, n ast.Node, eff *analysis.Effects) (r risk, ok bool) {
-	r.node = n
-	switch n := n.(type) {
-	case *ast.StarExpr:
-		if !info.Types[n].IsType() {
-			r.why, r.shared, r.nilDeref = "could panic: it dereferences a pointer", true, true
-		}
-	case *ast.SelectorExpr:
-		if sel := info.Selections[n]; sel != nil && sel.Kind() == types.FieldVal && sel.Indirect() {
-			r.why, r.shared, r.nilDeref = "could panic: it reads a field through a pointer", true, true
-		}
-	case *ast.IndexExpr:
-		tv := info.Types[n.X]
-		if tv.IsType() {
-			break
-		}
-		switch tv.Type.Underlying().(type) {
-		case *types.Map:
-			r.why, r.shared = "reads a map", true
-		case *types.Slice, *types.Pointer: // a pointer to an array
-			r.why, r.shared, r.panics = "could panic: it indexes", true, true
-		default: // an array, or a string, which is only checked when it is constant too
-			if info.Types[n.Index].Value == nil || analysis.IsString(tv.Type) && tv.Value == nil {
-				r.why, r.panics = "could panic: it indexes", true
-			}
-		}
-	case *ast.SliceExpr:
-		r.why, r.panics = "could panic: it slices", true
-	case *ast.TypeAssertExpr:
-		if n.Type != nil { // x.(type) in a type switch cannot panic
-			r.why, r.panics = "could panic: it is a type assertion", true
-		}
-	case *ast.BinaryExpr:
-		if (n.Op == token.QUO || n.Op == token.REM) && info.Types[n.Y].Value == nil {
-			r.why, r.panics = "could panic: it divides by a value that could be zero", true
-		}
-	case *ast.CallExpr:
-		if b, isBuiltin := info.Uses[analysis.IdentOf(n.Fun)].(*types.Builtin); isBuiltin && (b.Name() == "len" || b.Name() == "cap") && len(n.Args) == 1 {
-			if analysis.IsMapOrChan(info.TypeOf(n.Args[0])) {
-				r.why, r.shared = "reads the length of a map or channel", true
-			}
-			break
-		}
-		if known, panics := analysis.KnownCall(info, n); known {
-			switch panics {
-			case analysis.NilPanic:
-				r.why, r.nilDeref = "could panic: it calls "+types.ExprString(n.Fun)+" on what could be nil", true
-			case analysis.OtherPanic:
-				r.why, r.panics = "could panic: it calls "+types.ExprString(n.Fun), true
-			}
-			break
-		}
-		if eff != nil {
-			switch s := eff.Call(info, n); {
-			case s.Effect != "":
-				r.why, r.effect, r.stops = "has side effects", true, s.Unsafe
-			case s.Unsafe != "":
-				r.why, r.panics = "could panic: it "+s.Unsafe, true
-			case s.Reads != "":
-				r.why, r.shared = s.Reads, true
-			}
-			break
-		}
-		if eff.Acts(info, n) {
-			r.why, r.effect, r.stops = "has side effects", true, "calls "+types.ExprString(n.Fun)+", which might not return"
-		}
-	case *ast.UnaryExpr:
-		if eff.Acts(info, n) {
-			r.why, r.effect, r.stops = "has side effects", true, "receives from a channel, which might not finish"
-		}
-	case *ast.Ident:
-		if v, isVar := info.Uses[n].(*types.Var); isVar && v.Pkg() != nil && v.Parent() == v.Pkg().Scope() {
-			r.why, r.shared = fmt.Sprintf("reads the package variable %s", v.Name()), true
-		}
-	}
-	return r, r.why != ""
-}
-
-// risks lists what evaluating e could do or depend on, in source order.
-// Function literals are not evaluated (defining one runs nothing), except
-// those a call in e runs before it returns; nor are constant expressions.
-func risks(info *types.Info, e ast.Node, eff *analysis.Effects) []risk {
-	var out []risk
-	addressed := analysis.Addressed(info, e)
-	ast.Inspect(e, syncWalk(info, func(n ast.Node) bool {
-		if ex, ok := n.(ast.Expr); ok && info.Types[ex].Value != nil {
-			return false
-		}
-		if l := assignsOutside(info, n, e); l != nil {
-			out = append(out, risk{node: n, why: "has side effects: it assigns " + types.ExprString(l), effect: true})
-		}
-		sel, _ := n.(*ast.SelectorExpr)
-		if p, ok := addressed[sel]; ok {
-			if p != nil {
-				out = append(out, risk{node: n, why: "could panic: it dereferences " + types.ExprString(p), nilDeref: true})
-			}
-		} else if r, ok := riskOf(info, n, eff); ok {
-			out = append(out, r)
-		}
-		return true
-	}))
-	return out
-}
-
-// stopsNote is how a side effect might not finish, for a refusal, or "".
-func stopsNote(stops string) string {
-	if stops == "" {
-		return ""
-	}
-	return " that might not finish (it " + stops + ")"
-}
-
-// firstRisk returns the first risk of e that matches, or nil.
-func firstRisk(info *types.Info, e ast.Node, match func(risk) bool, eff *analysis.Effects) *risk {
-	for _, r := range risks(info, e, eff) {
-		if match(r) {
-			return &r
-		}
-	}
-	return nil
-}
-
 // checkEvaluation checks that evaluating expr at the call gives what the
-// body got, and does what the body did. expr must have no side effects.
-// If it can panic or reads memory that other code can change, it must be
-// evaluated at entry: on every call (no return before it), once, and after
-// nothing that could change that memory or make the outcome differ. A panic before it is
-// allowed only when both could only be nil dereferences, which panic
-// alike.
+// body got, and does what the body did: a move of expr from where the
+// body evaluates it to the call, before everything the body does first,
+// evaluated once on every call. The value may not have side effects at
+// all: they belong to the body, not to every call.
 func (t *target) checkEvaluation(info *types.Info, file *ast.File, expr ast.Expr, q string) error {
-	// canPanic is the first way expr could panic other than a nil
-	// dereference, or else the first nil dereference.
-	var shared, canPanic *risk
-	for _, r := range risks(info, expr, t.ws.Effects()) {
-		switch {
-		case r.effect:
-			return refactor.Refusef("%s has side effects (%s); evaluated at each call instead, they would happen where the body would not", q, t.brief(r.node))
-		case r.shared && shared == nil:
-			shared = &r
-		}
-		if r.panics && (canPanic == nil || canPanic.nilDeref) || r.nilDeref && canPanic == nil {
-			canPanic = &r
-		}
-	}
-	if shared == nil && canPanic == nil {
-		return nil
-	}
-	first := canPanic
-	if first == nil {
-		first = shared
+	m := analysis.Move{Effects: t.ws.Effects(), Func: analysis.AnalyzeFunc(info, t.decl), Expr: expr}
+	if s := m.Effects.Of(m.Func, expr); s.Effect != "" { // the value is evaluated at the call, where the body's effects do not belong
+		return refactor.Refusef("%s has side effects (%s); evaluated at each call instead, they would happen where the body would not", q, t.brief(s.At.Effect))
 	}
 	where, repeated := t.notOnEveryCall(analysis.PathTo(file, expr))
 	if usesGoto(t.decl.Body) {
@@ -189,69 +27,28 @@ func (t *target) checkEvaluation(info *types.Info, file *ast.File, expr ast.Expr
 	}
 	switch {
 	case repeated:
-		return refactor.Refusef("%s %s, and it can be evaluated more than once per call (%s)", q, first.why, where)
-	case where != "" && canPanic != nil:
-		return refactor.Refusef("%s %s, and it is not evaluated on every call (%s)", q, canPanic.why, where)
+		m.Times = analysis.Several
+	case where != "":
+		m.Times = analysis.Maybe
 	}
-
-	fa := analysis.AnalyzeFunc(info, t.decl)
-	var err error
-	ast.Inspect(t.decl.Body, syncWalk(info, func(n ast.Node) bool {
-		if n == nil || err != nil || n.Pos() >= expr.Pos() {
-			return false
-		}
-		if n.End() > expr.Pos() {
-			return true // it encloses expr, and finishes after it
-		}
-		r, risky := riskOf(info, n, t.ws.Effects())
-		write := t.writes(fa, n)
-		_, isReturn := n.(*ast.ReturnStmt)
-		switch {
-		case isReturn && canPanic != nil:
-			err = refactor.Refusef("%s %s, and it is not evaluated on every call (%s (at %s) returns before it)", q, canPanic.why, t.brief(n), t.ws.Position(n.Pos()))
-		case (r.effect || write) && shared != nil:
-			err = refactor.Refusef("%s reads memory that %s (at %s) could change before it", q, t.brief(n), t.ws.Position(n.Pos()))
-		case r.effect && canPanic != nil:
-			if !canPanic.nilDeref || r.stops != "" {
-				err = refactor.Refusef("%s %s, and %s (at %s) has side effects before it%s", q, canPanic.why, t.brief(n), t.ws.Position(n.Pos()), stopsNote(r.stops))
-			}
-		case risky && canPanic != nil && (r.panics || r.nilDeref && canPanic.panics):
-			err = refactor.Refusef("%s %s, and %s (at %s) could panic before it", q, canPanic.why, t.brief(n), t.ws.Position(n.Pos()))
-		}
-		return err == nil
-	}))
-	return err
-}
-
-// writes reports whether the statement n assigns anything other than a
-// local variable whose address is never taken nor captured.
-func (t *target) writes(fa *analysis.Func, n ast.Node) bool {
-	harmless := func(e ast.Expr) bool {
-		id, ok := ast.Unparen(e).(*ast.Ident)
-		if !ok {
-			return false
-		}
-		if obj, defined := fa.Info.Defs[id]; id.Name == "_" || defined && obj == nil {
-			return true // nothing, or the name a type switch declares in each case
-		}
-		v, ok := fa.Info.ObjectOf(id).(*types.Var)
-		return ok && fa.IsLocal(v) && !fa.Escapes(v)
+	m.Past = analysis.EvaluatedBefore(t.decl.Body, expr.Pos(), nil)
+	o := m.Check()
+	switch {
+	case o == nil:
+		return nil
+	case o.Past == nil && repeated:
+		return refactor.Refusef("%s %s, and it can be evaluated more than once per call (%s)", q, o.Does, where)
+	case o.Past == nil:
+		return refactor.Refusef("%s %s, and it is not evaluated on every call (%s)", q, o.Does, where)
+	case o.PastDoes == "leaves":
+		return refactor.Refusef("%s %s, and it is not evaluated on every call (%s (at %s) returns before it)", q, o.Does, t.brief(o.Past), t.ws.Position(o.Past.Pos()))
+	case o.Kind == analysis.Reads:
+		return refactor.Refusef("%s reads memory that %s (at %s) could change before it", q, t.brief(o.Past), t.ws.Position(o.Past.Pos()))
+	case o.Kind == analysis.Panics && o.PastDoes == "could panic":
+		return refactor.Refusef("%s %s, and %s (at %s) could panic before it", q, o.Does, t.brief(o.Past), t.ws.Position(o.Past.Pos()))
+	default:
+		return refactor.Refusef("%s %s, and %s (at %s) has side effects before it (it %s)", q, o.Does, t.brief(o.Past), t.ws.Position(o.Past.Pos()), o.PastDoes)
 	}
-	switch n := n.(type) {
-	case *ast.AssignStmt:
-		for _, l := range n.Lhs {
-			if !harmless(l) {
-				return true
-			}
-		}
-	case *ast.IncDecStmt:
-		return !harmless(n.X)
-	case *ast.RangeStmt:
-		if n.Tok == token.ASSIGN {
-			return n.Key != nil && !harmless(n.Key) || n.Value != nil && !harmless(n.Value)
-		}
-	}
-	return false
 }
 
 // usesGoto reports whether body has a goto, which could jump back and

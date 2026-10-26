@@ -1615,8 +1615,8 @@ hand or a tool got in the way.
        reference value when an expression is evaluated another number
        of times. Two goldens used fmt as their example of an effect and
        now use a call of `Error` and `os.Getenv`.
-    7. Changesig's `riskOf` and `unsafeValue` hold a fourth and fifth
-       copy of the panic rules; move them onto the summaries too.
+    7. *Done* in item 35, step 2: changesig's `riskOf` and
+       `unsafeValue`, the last copies of the panic rules, became moves.
     5. *Done.* Calls of the module's own functions judged by their
        summaries, made once for each state of the workspace
        (`Workspace.Effects()`, which changesig, fold, slide and inspect
@@ -1665,8 +1665,19 @@ hand or a tool got in the way.
        `&v` of a variable or field is the same pointer each time, so it
        may be shared; stricter: a write to a local the expression reads,
        between declaration and use, is found by the move as well.
-    2. changesig: `checkEvaluation`, `riskOf`, `unsafeValue` and
-       move_parameter's `checkOrder` (item 34's step 7 falls out).
+    2. *Done.* changesig: `checkEvaluation` is one move (to the call,
+       past everything the body does first, Several or Maybe by the
+       path), `unsafeValue` a move with `Unused` times, `checkOrder` two
+       moves of each argument past the other, and `checkArgEffects` a
+       summary; `risk`, `riskOf`, `risks`, `firstRisk`, `syncWalk`,
+       `assignsOutside`, `readsVar` and `privateLocals` are deleted,
+       and item 34's step 7 with them. introduce_parameter keeps its
+       own policy that the value has no side effects at all (its own
+       check, not a move rule). Verdicts loosened with a reason: two
+       nil dereferences may swap as arguments; a local that holds a
+       reference, passed as an argument, is not a read of what it
+       points to. Out of its context, a write to a local a pointer or
+       closure can reach is an effect (the walker's `partial`).
     3. inline_function's `movable`, `droppable`, `lhsEvaluatedFirst`
        and its effect walks.
     4. fold's `first`, `risky` and `impure`; slide's `checkIndependent`
