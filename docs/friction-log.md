@@ -2918,3 +2918,8 @@ inline_function's declaring file was extracted to a struct and
 renamed to the named field `callee`. The openings moved onto
 `site.At` with replace_text, the imports with fix_imports. Nothing by
 hand. This entry appended with replace_text.
+
+## 2026-10-26: how this session used the tools
+
+The analysis in the session notes with replace_text. Nothing by hand.
+This entry appended with a heredoc.
