@@ -1,0 +1,3 @@
+these uses of Species cannot follow its new type Species, so nothing changed:
+  m.go:15:55: writes name, which is not a Species
+  m.go:21:27: writes "moss", which is not a Species
