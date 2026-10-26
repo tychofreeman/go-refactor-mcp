@@ -232,6 +232,13 @@ name move code the plan does not see; more stages; prepare taking a
 method whose parameters are what the cases read (`it.Title` as
 `title`).
 
+With the first two (cost-history 19, again): still 0/8, but 5 of 8
+plans now derived by case, none asked for bodies. One refusal rolls
+back a batch of 40-69 steps, and two repairs clear two of the four or
+five refusals each plan meets: a case of several values not yet split,
+a kind with no case, the receiver not first, function_to_method on an
+interface's method name, and a bug in the bare word's retry.
+
 ## Recording
 
 Each step in its own PR: the results in `docs/cost-history.md`, the

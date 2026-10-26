@@ -2517,3 +2517,8 @@ else by hand.
 The retry in `locate.CaseBody` and the roadmap with replace_text; the
 golden cases with create_file. This entry appended with a heredoc.
 Nothing else by hand.
+
+## 2026-10-25: name-addressed steps in the plan prompt (cost-history 19)
+
+The prompt line in `loop.py` and the docs with replace_text. This entry
+appended with a heredoc. Nothing else by hand.

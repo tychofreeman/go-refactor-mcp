@@ -57,7 +57,11 @@ Answer with one JSON object and nothing else:
 {{"batch": {{"steps": [the whole change as gorefactor steps, in order]}}}}{read}
 Prefer refactorings that derive the change
 (fold, inline_function, rename, extract_struct, ...) to edits that rewrite
-code. Address declarations by name where a tool allows it; a batch with
+code. Code you cannot see here need not be written: steps that address
+it by name carry it with them (extract_function of a case by function
+and case, function_to_method, move_declaration, inline_function), so
+move code rather than ask for it or call back into what you move.
+Address declarations by name where a tool allows it; a batch with
 check "end" may pass through code that does not compile yet. After it
 runs, the module's own tests run; you get one message back with what
 failed, if anything."""
