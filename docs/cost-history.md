@@ -1320,6 +1320,22 @@ written without seeing Import (2); introduce_parameter on a helper
 that already read `title`, since the plan's own `Kind` had made
 prepare supply it (1).
 
+**Again, with both refusals saying why** (#378, #381;
+`eval-runs/loop-{haiku,sonnet}-kinds-noread3`, $1.24): 2/8, Haiku 0/4
+at $0.033 in 3 requests, Sonnet 2/4 at $0.276 in 3.5 (53 and 46
+lines); at four attempts a model, the same as 3/8. The hints were
+followed: all four Sonnet attempts met the narrowing refusal naming
+Import's write, added `kindOf` at the start of the next batch, met
+the new missing-methods hint, and in the repair after moved `kindOf`
+after the methods, so their batches applied. Then two failed on
+Import itself: `kindOf` returns nil for an unknown kind and Import
+calls `LoanDays(it)` to detect one, which a plan without Import's
+body cannot know, so TestImport panicked. Haiku met the signature
+refusal (`Label(it Item)` against `Label(title string)`, now saying
+so) and still failed its repairs, and twice ran introduce_parameter
+on a helper that already read `title`. What remains is the edit in
+Import: the derivation's refusals are no longer what stops the plans.
+
 ## What made the difference
 
 - **Smaller results** (#75, rename locations): the largest single win when
