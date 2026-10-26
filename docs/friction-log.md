@@ -2947,3 +2947,8 @@ judged on its own, field holes in order, a refusal's wording). New
 goldens with create_file, each with its go.mod in a second batch (the
 first ran without them: a golden's module needs its own). Nothing by
 hand. This entry appended with replace_text.
+
+## 2026-10-26: loop.py gives the carrying tools in full with the index
+
+`-full-tools`, `FULL`, `CARRIERS` and index's skip with replace_text in
+one batch; the docs and this entry with replace_text. Nothing by hand.
