@@ -1460,6 +1460,14 @@ hand or a tool got in the way.
     the string case of that text (`book` for `"book"`) when no case is
     written so: one of Sonnet's repairs went to that refusal. *Done.*
 
+    `split` on extract_function (the user: a case of several values
+    split on request, except with fallthrough): the value gets a case
+    of its own and each other value a case before it with a copy of
+    the body. Refused when a value is not a constant (the order of
+    comparison would change), the case before falls through into it,
+    or the body declares a label or a type. In the rerun 5 of 8
+    attempts met the shared case of Renewable. *Done.*
+
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
 candidates and the evidence for each, gathered from the friction log.

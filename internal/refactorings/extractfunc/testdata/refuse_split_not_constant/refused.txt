@@ -1,0 +1,1 @@
+the case on line 7 has short(), which is not a constant; splitting the case would change the order its values are compared in
