@@ -2596,3 +2596,8 @@ else by hand.
 add_declaration, the three call sites and the roadmap with replace_text.
 By hand: the merge conflict in this file (main's entries and this one
 kept). This entry appended with a heredoc.
+
+## 2026-10-25: kinds with a missing case extracted (cost-history 19)
+
+Docs with replace_text. This entry appended with a heredoc. Nothing
+else by hand.
