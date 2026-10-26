@@ -2527,3 +2527,9 @@ appended with a heredoc. Nothing else by hand.
 
 The fix with replace_text, the golden case with create_file. This entry
 appended with a heredoc. Nothing else by hand.
+
+## 2026-10-25: extract_function splits a case of several values
+
+`split` with add_parameter (on `locate.CaseBody`), add_field,
+add_declaration (`splitCase`) and replace_text; golden cases with
+create_file. This entry appended with a heredoc. Nothing else by hand.

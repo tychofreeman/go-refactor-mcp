@@ -75,6 +75,7 @@ func (*ExtractFunction) InputSchema() json.RawMessage {
     "end_line":   {"type": "integer", "description": "1-based last line of the statements to extract (inclusive)."},
     "function":   {"type": "string",  "description": "Instead of the lines, with case: the function (Name or Type.Method) with the switch."},
     "case":       {"type": "string",  "description": "Instead of the lines: the case whose body to extract, its value as written (\"\\\"fern\\\"\", Red) or default."},
+    "split":      {"type": "boolean", "description": "With case, of several values (case \"fern\", \"moss\":): the value gets a case of its own, the others a copy of the body."},
     "name":       {"type": "string",  "description": "Name for the new function."},
     "doc":        {"type": "string",  "description": "Optional doc comment for the new function, without or with the leading //; start it with the function's name."}
   },
@@ -89,6 +90,7 @@ type args struct {
 	EndLine   int    `json:"end_line"`
 	Function  string `json:"function,omitempty"`
 	Case      string `json:"case,omitempty"`
+	Split     bool   `json:"split,omitempty"`
 	Name      string `json:"name"`
 	Doc       string `json:"doc,omitempty"`
 }
@@ -109,6 +111,9 @@ type extraction struct {
 	stmts []ast.Stmt // the selected statements, in order
 	list  []ast.Stmt // the statement list they belong to
 	block ast.Node   // the node owning list: *ast.BlockStmt, *ast.CaseClause or *ast.CommClause
+	// split gives the extracted case's value a case of its own, when
+	// the statements are the body of a case of several values.
+	split []edit.TextEdit
 
 	start, end int // byte range of the selected text: whole lines, from the first to the last token
 
@@ -186,6 +191,11 @@ func (*ExtractFunction) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 	if err := x.selectStatements(a.StartLine, a.EndLine); err != nil {
 		return nil, err
 	}
+	if a.Split {
+		if err := x.splitCase(a.Case); err != nil {
+			return nil, err
+		}
+	}
 	x.fa = analysis.AnalyzeFunc(x.info, x.outermostFunc())
 	// What the new function can name: before any check spells a type.
 	x.nameable = map[*types.TypeName]bool{}
@@ -220,8 +230,84 @@ func (a *args) caseLines(tf *token.File, file *ast.File, src []byte) error {
 		return refactor.Refusef("no function %s in %s; give Name, or Type.Method for a method", a.Function, a.File)
 	}
 	var err error
-	a.StartLine, a.EndLine, err = locate.CaseBody(tf, src, fd, a.Case)
+	a.StartLine, a.EndLine, err = locate.CaseBody(tf, src, fd, a.Case, a.Split)
 	return err
+}
+
+// splitCase sets x.split when the statements are the body of a case of
+// several values: value, as the model gave it, gets a case of its own
+// with the body, and each other value one before it with a copy.
+func (x *extraction) splitCase(value string) error {
+	cc, ok := x.block.(*ast.CaseClause)
+	if !ok || len(cc.List) < 2 {
+		return nil
+	}
+	line := x.line(cc.Pos())
+	text := func(n ast.Node) string { return string(x.src[x.tf.Offset(n.Pos()):x.tf.Offset(n.End())]) }
+	k := -1
+	for _, v := range []string{value, strconv.Quote(value)} {
+		want, err := locate.ExprTokens(v)
+		if err != nil {
+			continue
+		}
+		for i, e := range cc.List {
+			if k < 0 && locate.TokensMatch(x.tf, x.src, e, want) {
+				k = i
+			}
+		}
+	}
+	if k < 0 {
+		return fmt.Errorf("internal error: no value %s in the case on line %d", value, line)
+	}
+	for _, e := range cc.List {
+		if tv, ok := x.info.Types[e]; !ok || tv.Value == nil {
+			return refactor.Refusef("the case on line %d has %s, which is not a constant; splitting the case would change the order its values are compared in", line, text(e))
+		}
+	}
+	var what string
+	for _, st := range cc.Body {
+		ast.Inspect(st, func(n ast.Node) bool {
+			switch n := n.(type) {
+			case *ast.LabeledStmt:
+				what = "label " + n.Label.Name + ", which a function cannot declare twice"
+			case *ast.TypeSpec:
+				what = "type " + n.Name.Name + ", which would be a different type in each copy"
+			}
+			return what == ""
+		})
+	}
+	if what != "" {
+		return refactor.Refusef("the case on line %d declares %s; splitting it copies its body", line, what)
+	}
+	path, _ := astutil.PathEnclosingInterval(x.file, cc.Pos(), cc.End())
+	if len(path) > 1 {
+		if block, ok := path[1].(*ast.BlockStmt); ok {
+			if i := slices.Index(block.List, ast.Stmt(cc)); i > 0 {
+				prev := block.List[i-1].(*ast.CaseClause)
+				if n := len(prev.Body); n > 0 {
+					if br, ok := prev.Body[n-1].(*ast.BranchStmt); ok && br.Tok == token.FALLTHROUGH {
+						return refactor.Refusef("the case before the one on line %d falls through into it; split it by hand, or give start_line and end_line for the shared body", line)
+					}
+				}
+			}
+		}
+	}
+	indent := string(x.src[x.tf.Offset(x.tf.LineStart(line)):x.tf.Offset(cc.Case)])
+	bodyStart := x.tf.Offset(x.tf.LineStart(x.line(cc.Colon) + 1))
+	bodyEnd := len(x.src)
+	if end := x.line(cc.End()); end < x.tf.LineCount() {
+		bodyEnd = x.tf.Offset(x.tf.LineStart(end + 1))
+	}
+	body := string(x.src[bodyStart:bodyEnd])
+	var b strings.Builder
+	for i, e := range cc.List {
+		if i != k {
+			b.WriteString("case " + text(e) + ":\n" + body + indent)
+		}
+	}
+	b.WriteString("case " + text(cc.List[k]) + ":")
+	x.split = []edit.TextEdit{{Start: x.tf.Offset(cc.Case), End: x.tf.Offset(cc.Colon) + 1, NewText: b.String()}}
+	return nil
 }
 
 func checkName(name string) error {
@@ -1746,6 +1832,7 @@ func (x *extraction) plan() (*refactor.Plan, error) {
 	}
 	edits = append(edits, x.importEdits()...)
 	edits = append(edits, hoistFile...)
+	edits = append(edits, x.split...)
 
 	notes := x.notes(f, names)
 	if final != nil {

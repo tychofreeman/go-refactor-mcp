@@ -94,7 +94,7 @@ func (*ReplaceStatements) Plan(ws *workspace.Workspace, raw json.RawMessage) (*r
 		if fd == nil || fd.Body == nil {
 			return nil, refactor.Refusef("no function %s in %s; give Name, or Type.Method for a method", a.Function, a.File)
 		}
-		if a.StartLine, a.EndLine, err = locate.CaseBody(tf, src, fd, a.Case); err != nil {
+		if a.StartLine, a.EndLine, err = locate.CaseBody(tf, src, fd, a.Case, false); err != nil {
 			return nil, err
 		}
 	case a.Function != "":

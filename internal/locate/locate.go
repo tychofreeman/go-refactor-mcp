@@ -243,8 +243,9 @@ func FuncName(fd *ast.FuncDecl) string {
 
 // CaseBody returns the lines of the statements of the case of a switch
 // in fd whose value is value as written ("\"book\""), or "default" for the
-// default case, for a tool that addresses a range of lines.
-func CaseBody(tf *token.File, src []byte, fd *ast.FuncDecl, value string) (first, last int, err error) {
+// default case, for a tool that addresses a range of lines. With split,
+// a case of several values is not refused: the caller splits it.
+func CaseBody(tf *token.File, src []byte, fd *ast.FuncDecl, value string, split bool) (first, last int, err error) {
 	var want []string
 	if value != "default" {
 		if want, err = ExprTokens(value); err != nil {
@@ -281,7 +282,7 @@ func CaseBody(tf *token.File, src []byte, fd *ast.FuncDecl, value string) (first
 		// A bare word names the string case of that text: book for "book".
 		if token.IsIdentifier(value) {
 			// Its own refusal, unless it found no case either.
-			if first, last, err := CaseBody(tf, src, fd, strconv.Quote(value)); err == nil || !strings.HasPrefix(err.Error(), "no case ") {
+			if first, last, err := CaseBody(tf, src, fd, strconv.Quote(value), split); err == nil || !strings.HasPrefix(err.Error(), "no case ") {
 				return first, last, err
 			}
 		}
@@ -295,14 +296,14 @@ func CaseBody(tf *token.File, src []byte, fd *ast.FuncDecl, value string) (first
 	}
 	cc := found[0]
 	line := tf.Line(cc.Pos())
-	if len(cc.List) > 1 {
+	if len(cc.List) > 1 && !split {
 		var others []string
 		for _, e := range cc.List {
 			if !TokensMatch(tf, src, e, want) {
 				others = append(others, string(src[tf.Offset(e.Pos()):tf.Offset(e.End())]))
 			}
 		}
-		return 0, 0, refactor.Refusef("case %s on line %d shares its body with %s; give each value a case of its own first (prepare_switch_for_types splits them), or give start_line and end_line for the shared body", value, line, strings.Join(others, ", "))
+		return 0, 0, refactor.Refusef("case %s on line %d shares its body with %s; extract_function with split true gives it a case of its own; or give start_line and end_line for the shared body", value, line, strings.Join(others, ", "))
 	}
 	if len(cc.Body) == 0 {
 		return 0, 0, refactor.Refusef("case %s on line %d of %s has no statements", value, line, name)
