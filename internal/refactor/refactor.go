@@ -197,8 +197,8 @@ func Run(ws *workspace.Workspace, r Refactoring, args json.RawMessage, opts Opti
 		res.Refused = fmt.Sprintf("the code does not type-check, so refactorings cannot be verified. Fix these first (an edit, such as add_field for a field a test already uses, may run on code that does not type-check if it fixes some of the errors):\n  %s",
 			strings.Join(limit(before, 10), "\n  "))
 		if opts.Unchecked {
-			res.Refused = fmt.Sprintf("the code does not type-check here, after an earlier edit of this batch, and a refactoring runs only on code that type-checks; put it before that edit, or after the step that completes it. Errors were:\n  %s",
-				strings.Join(limit(before, 10), "\n  "))
+			res.Refused = fmt.Sprintf("the code does not type-check here, after an earlier edit of this batch, and a refactoring runs only on code that type-checks; put it before that edit, or after the step that completes it. Errors were:\n  %s%s",
+				strings.Join(limit(before, 10), "\n  "), missingMethodsHint(before))
 		}
 		return res, nil
 	}
@@ -338,8 +338,8 @@ func afterRefusal(r Refactoring, isEdit, isFix, unchecked bool, before, after []
 	case isFix, isEdit && len(before) > 0:
 		return fixRefusal(before, after)
 	case isEdit:
-		return fmt.Sprintf("the result does not type-check, so it was not applied; change the code you gave so that it compiles. Errors were:\n  %s",
-			strings.Join(limit(after, 10), "\n  "))
+		return fmt.Sprintf("the result does not type-check, so it was not applied; change the code you gave so that it compiles. Errors were:\n  %s%s",
+			strings.Join(limit(after, 10), "\n  "), missingMethodsHint(after))
 	}
 	if compiles {
 		return fmt.Sprintf("the change would not compile, so it was not applied. Errors were:\n  %s", strings.Join(limit(after, 10), "\n  "))
@@ -545,6 +545,48 @@ func fixRefusal(before, after []string) string {
 		return fmt.Sprintf("the change fixes none of the errors, so it was not applied. Errors are:\n  %s", strings.Join(limit(after, 10), "\n  "))
 	}
 	return ""
+}
+
+// unimplemented matches a type error for a type used as an interface
+// it does not have a method of.
+var unimplemented = regexp.MustCompile(`(\w+) does not implement (\w+) \(missing method (\w+)\)`)
+
+// missingMethodsHint is, for errors that use types as an interface
+// before they have its methods, "\n" and how to order the steps: the
+// methods first. It is "" for other errors.
+func missingMethodsHint(errs []string) string {
+	types, methods := map[string][]string{}, map[string][]string{}
+	var ifaces []string
+	for _, e := range errs {
+		m := unimplemented.FindStringSubmatch(e)
+		if m == nil {
+			continue
+		}
+		if _, ok := types[m[2]]; !ok {
+			ifaces = append(ifaces, m[2])
+		}
+		if !slices.Contains(types[m[2]], m[1]) {
+			types[m[2]] = append(types[m[2]], m[1])
+		}
+		if !slices.Contains(methods[m[2]], m[3]) {
+			methods[m[2]] = append(methods[m[2]], m[3])
+		}
+	}
+	var out []string
+	for _, i := range ifaces {
+		ts, ms := types[i], methods[i]
+		slices.Sort(ts)
+		slices.Sort(ms)
+		lack, them := "lack", "them"
+		if len(ts) == 1 {
+			lack, them = "lacks", "it"
+		}
+		out = append(out, fmt.Sprintf("%s %s methods of %s yet (%s first); give %s the methods in earlier steps (function_to_method of the functions a case's body became, or add_declaration), and use %s as a %s only after them", orList(ts, "and"), lack, i, orList(ms, "and"), them, them, i))
+	}
+	if len(out) == 0 {
+		return ""
+	}
+	return "\n" + strings.Join(out, "\n")
 }
 
 // position is the file:line:col: prefix of an error, which an edit above
@@ -781,8 +823,8 @@ func runBatch(ws *workspace.Workspace, steps []Step, opts Options) (*BatchResult
 		}
 		errs := ws.Errors()
 		if len(errs) > 0 {
-			b.Refused = startLines(fmt.Sprintf("after all %d step%s the code does not type-check, so the batch was rolled back. Errors were:\n  %s",
-				len(steps), textutil.Plural(len(steps)), strings.Join(limit(errs, 10), "\n  ")), "", lines)
+			b.Refused = startLines(fmt.Sprintf("after all %d step%s the code does not type-check, so the batch was rolled back. Errors were:\n  %s%s",
+				len(steps), textutil.Plural(len(steps)), strings.Join(limit(errs, 10), "\n  "), missingMethodsHint(errs)), "", lines)
 			for _, s := range skipped {
 				b.Refused += "\n" + s
 			}

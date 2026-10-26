@@ -761,6 +761,16 @@ func TestSignatureEditInBatch(t *testing.T) {
 	}
 }
 
+// An edit that uses a type as an interface before the type has the
+// interface's methods is refused with how to order the steps.
+func TestMissingMethodsHint(t *testing.T) {
+	cs, _ := setup(t)
+	out, _ := call(t, cs, "batch", map[string]any{"steps": []any{
+		map[string]any{"tool": "add_declaration", "args": map[string]any{"file": "calc/calc.go", "content": "type Shape interface{ Area() int }\n\ntype Sq struct{}\n\ntype Tri struct{}\n\nfunc pick(n int) Shape {\n\tif n == 3 {\n\t\treturn Tri{}\n\t}\n\treturn Sq{}\n}"}},
+	}})
+	mustContain(t, "batch", out, "REFUSED", "Sq and Tri lack methods of Shape yet (Area first); give them the methods in earlier steps")
+}
+
 // A refactoring may run while the only errors are in tests written first,
 // if it fixes some of them and adds none.
 func TestRefactoringTowardATest(t *testing.T) {
