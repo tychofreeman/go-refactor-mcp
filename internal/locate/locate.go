@@ -255,7 +255,11 @@ func CaseBody(tf *token.File, src []byte, fd *ast.FuncDecl, value string, split 
 	name := FuncName(fd)
 	var found []*ast.CaseClause
 	var cases []string
+	var switches []*ast.SwitchStmt
 	ast.Inspect(fd.Body, func(n ast.Node) bool {
+		if sw, ok := n.(*ast.SwitchStmt); ok {
+			switches = append(switches, sw)
+		}
 		cc, ok := n.(*ast.CaseClause)
 		if !ok {
 			return true
@@ -286,7 +290,7 @@ func CaseBody(tf *token.File, src []byte, fd *ast.FuncDecl, value string, split 
 				return first, last, err
 			}
 		}
-		return 0, 0, refactor.Refusef("no case %s in a switch of %s; its cases are %s", value, name, strings.Join(cases, ", "))
+		return 0, 0, refactor.Refusef("no case %s in a switch of %s; its cases are %s%s", value, name, strings.Join(cases, ", "), instead(tf, switches))
 	case len(found) > 1:
 		var lines []string
 		for _, cc := range found {
@@ -313,6 +317,21 @@ func CaseBody(tf *token.File, src []byte, fd *ast.FuncDecl, value string, split 
 		return 0, 0, refactor.Refusef("case %s on line %d has its statements on the case's own line; give start_line and end_line once they have lines of their own", value, line)
 	}
 	return first, last, nil
+}
+
+// instead says what runs for a value that no case of the function's one
+// switch has, for a refusal; "" if it has several.
+func instead(tf *token.File, switches []*ast.SwitchStmt) string {
+	if len(switches) != 1 {
+		return ""
+	}
+	sw := switches[0]
+	for _, s := range sw.Body.List {
+		if cc := s.(*ast.CaseClause); cc.List == nil {
+			return fmt.Sprintf("; for it the default case (line %d) runs", tf.Line(cc.Pos()))
+		}
+	}
+	return fmt.Sprintf("; for it no case runs, and the code after the switch does (line %d on): add_case a case with that code to move it as a case, or write it where it goes", tf.Line(sw.End())+1)
 }
 
 // Signature is a function whose signature a line range starts on: the

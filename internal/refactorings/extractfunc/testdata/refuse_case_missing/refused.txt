@@ -1,1 +1,1 @@
-no case "vinyl" in a switch of days; its cases are "book" (line 5), "dvd" (line 7), "cd" (line 7), default (line 9)
+no case "vinyl" in a switch of days; its cases are "book" (line 5), "dvd" (line 7), "cd" (line 7), default (line 9); for it the default case (line 9) runs

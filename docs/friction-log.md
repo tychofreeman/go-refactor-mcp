@@ -2533,3 +2533,9 @@ appended with a heredoc. Nothing else by hand.
 `split` with add_parameter (on `locate.CaseBody`), add_field,
 add_declaration (`splitCase`) and replace_text; golden cases with
 create_file. This entry appended with a heredoc. Nothing else by hand.
+
+## 2026-10-25: a missing case's refusal says what runs instead
+
+`instead` with add_declaration, the refusal and goldens with
+replace_text and create_file. This entry appended with a heredoc.
+Nothing else by hand.
