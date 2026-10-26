@@ -1214,6 +1214,22 @@ plans counted moving the cases as that. So when reads come does not
 matter: a plan that knows it can read later defers the move and
 reads; reads, whenever they open, make the model write the code out.
 
+**Reads not announced until they open** (the first prompt says only
+that the first batch must leave the tests passing, and that the next is
+asked for once it applies; the "done?" turn is the first word of
+reads; `eval-runs/loop-{haiku,sonnet}-kinds-unannounced`, $1.14): 8/8.
+Haiku 4/4 at $0.028 a task in 6.75 requests, Sonnet 4/4 at $0.259 in
+6. Two Sonnet attempts derived in their first batch: one the
+reference's way (extract each case by `case`, add_parameter,
+function_to_method: 15 of each), then read Import, LoanDays and two
+functions of notices, and wrote 41 lines; the other its own way
+(extract each case, declare a method that calls it, inline the
+function into it: 15 of each), 55 lines. The other six prepared only,
+then read the five switches and wrote them out (65-124 lines). So not
+announcing reads let a derivation happen, where announcing them
+stopped every one, but the plans that stop at preparing still read
+the switches when they can. Haiku never derived with reads possible.
+
 ## What made the difference
 
 - **Smaller results** (#75, rename locations): the largest single win when

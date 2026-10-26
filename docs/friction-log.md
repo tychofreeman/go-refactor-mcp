@@ -2693,3 +2693,11 @@ This entry appended with a heredoc.
 The results in cost-history, plan-and-execute and the session notes
 with replace_text in one batch. Nothing by hand. This entry appended
 with a heredoc.
+
+## 2026-10-26: loop.py says nothing of reads before they open
+
+The first prompt's sentence and the prompt that opens reads with
+replace_text in one batch. Nothing by hand. This entry appended with a
+heredoc.
+The run's results in cost-history, plan-and-execute and the session
+notes with replace_text in one batch, by hand none.

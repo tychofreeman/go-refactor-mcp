@@ -6,8 +6,8 @@ answers with the whole change as one gorefactor batch; or first asks to
 read declarations, which it may also do in place of any later batch, at
 most three times; it gets them as inspect shows them, with line numbers,
 from the module as the kept batches left it. With -read-after it may read
-only once a batch has applied: the first batch derives what moves by name,
-and reads come for the edits that remain. The batch runs on a
+only once a batch has applied, and is told so only then: the first batch
+derives what moves by name, and reads come for the edits that remain. The batch runs on a
 fresh copy of the module, then the module's own tests. A refusal or a
 failing test goes back in the same conversation (claude -p --resume, so
 the prefix stays cached) with the numbered source of each place it names,
@@ -95,13 +95,18 @@ variables, tests included. You may answer with a read in place of a
 batch, now or after any later message, at most three times in all."""
 
 # READ_AFTER, in PLAN with -read-after, asks for a first batch that
-# derives without reading, and says source comes once it applies.
+# leaves the tests passing, without saying that reads come after it
+# (said, the plans left the move for after reading the code).
 READ_AFTER = """
-Your first batch must leave the module's tests passing: make the change
-easy with steps that move code by name, and leave for later what needs
-code you cannot see. Once it applies, you may ask for the source of what
-is left to change, {"read": ["Name", "Type.Method" or "pkg.Name", ...]},
-with line numbers, at most three times in all."""
+Your first batch must leave the module's tests passing. If the whole
+change cannot pass them in one batch, make it easy first, moving code by
+name; once the batch applies, you are asked for the next."""
+
+# READ_OPEN ends the later prompts with -read-after: the first word of
+# reads, so the first batch is planned without knowing they come.
+READ_OPEN = """
+You may now also ask for source, with line numbers, at most three times:
+{"read": ["Name", "Type.Method" or "pkg.Name", ...]}."""
 
 # NOT_YET answers a read asked for before a batch applied, with -read-after.
 NOT_YET = """Source comes once a batch has applied. Answer first with a batch
@@ -321,7 +326,7 @@ def attempt(task, model, tools, binary, repairs, log, may_read=True, stages=2, r
             if row["stages"] > stages:
                 break
             if read_after:
-                may_read, hint = True, READ_HINT
+                may_read, hint = True, READ_OPEN
             ask(DONE + hint)
             continue
         row["refusals"].append(what.splitlines()[0][:200])
