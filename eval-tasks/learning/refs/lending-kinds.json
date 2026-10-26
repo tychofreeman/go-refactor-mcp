@@ -58,7 +58,7 @@
    "args": {
     "file": "lending/lending.go",
     "after": "Item",
-    "content": "// Book is a book.\ntype Book struct{}\n\n// DVD is a film on a disc.\ntype DVD struct{}\n\n// Atlas is a reference atlas.\ntype Atlas struct{}\n\n// Renewable reports that loans of an atlas are not renewed.\nfunc (Atlas) Renewable() bool { return false }"
+    "content": "// Book is a book.\ntype Book struct{}\n\n// DVD is a film on a disc.\ntype DVD struct{}\n\n// Atlas is a reference atlas.\ntype Atlas struct{}"
    }
   },
   {
@@ -451,6 +451,34 @@
     "name": "atlasShelf",
     "new_name": "Shelf",
     "receiver": "k"
+   }
+  },
+  {
+   "tool": "extract_function",
+   "args": {
+    "file": "lending/lending.go",
+    "function": "Renewable",
+    "case": "atlas",
+    "name": "atlasRenewable"
+   }
+  },
+  {
+   "tool": "add_parameter",
+   "args": {
+    "file": "lending/lending.go",
+    "name": "atlasRenewable",
+    "parameter": "k",
+    "type": "Atlas",
+    "value": "Atlas{}"
+   }
+  },
+  {
+   "tool": "function_to_method",
+   "args": {
+    "file": "lending/lending.go",
+    "name": "atlasRenewable",
+    "receiver": "k",
+    "new_name": "Renewable"
    }
   },
   {
