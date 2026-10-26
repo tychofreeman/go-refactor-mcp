@@ -2562,3 +2562,8 @@ heredoc.
 checkDeclared with replace_statements; the plan's changes, description
 and roadmap with replace_text; goldens with create_file. This entry
 appended with a heredoc. Nothing else by hand.
+
+## 2026-10-25: one note per interface a type starts to implement
+
+The fix with replace_text, the golden's no_notes.txt with create_file.
+This entry appended with a heredoc. Nothing else by hand.

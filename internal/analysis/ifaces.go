@@ -58,18 +58,22 @@ func InterfacesWithMethod(infos []*types.Info, pkgPath, name string) []Iface {
 		return false
 	}
 	seen := map[token.Pos]bool{}
+	named := map[*types.Interface]bool{} // a named interface's type literal is not another
 	var out []Iface
 	for _, info := range infos {
 		for id, o := range info.Defs {
-			if tn, ok := o.(*types.TypeName); ok && !seen[id.Pos()] {
+			if tn, ok := o.(*types.TypeName); ok {
 				if it, ok := tn.Type().Underlying().(*types.Interface); ok && has(it) {
-					seen[id.Pos()] = true
-					out = append(out, Iface{tn.Name(), it, id.Pos()})
+					named[it] = true
+					if !seen[id.Pos()] {
+						seen[id.Pos()] = true
+						out = append(out, Iface{tn.Name(), it, id.Pos()})
+					}
 				}
 			}
 		}
 		for e, tv := range info.Types {
-			if it, ok := tv.Type.(*types.Interface); ok && tv.IsType() && has(it) && !seen[e.Pos()] {
+			if it, ok := tv.Type.(*types.Interface); ok && tv.IsType() && has(it) && !named[it] && !seen[e.Pos()] {
 				seen[e.Pos()] = true
 				out = append(out, Iface{"", it, e.Pos()})
 			}
