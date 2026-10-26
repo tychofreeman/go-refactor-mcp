@@ -146,9 +146,10 @@ which `Book{}` passes.
 - Narrowing the field from `any` to `Kind` is now `change_field_type`,
   which deletes the cases no `Kind` matches; before the last kind it
   refuses, listing the writes and comparisons still of other kinds:
-  the recipe can leave step 4 to it. Not reached yet: the task's `Label(title string)` where the switch gave
-  `Label(it Item)` (introduce_parameter and remove_parameter on the
-  interface method).
+  the recipe can leave step 4 to it. The task's `Label(title string)` where the switch gave
+  `Label(it Item)`: introduce_parameter of `it.Title` in `Book.Label`
+  (the whole interface's methods change) and remove_parameter of `it`
+  on `Kind.Label`, both by name.
 - `uses` of a type lists receivers and literals as reads: noise.
 
 **The whole task** (`lending-kinds`, on the same copy, after
