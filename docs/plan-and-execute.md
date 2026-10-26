@@ -361,6 +361,12 @@ batch began, so line numbers stay as they were. The refusal's step is
 suggested as N; a failing test suggests N past the last step. A whole
 batch is still accepted, and a patch only in reply to a failure.
 
+Run (cost-history 19, patch repairs): Sonnet patched every repair, its
+repairs' output fell 68% and its cost 25%, to $0.261 a task, 4/4,
+about a session's cost on kinds. Haiku never patched. The second
+change, a manual arm in the loop, is what is left of the
+recommendation.
+
 ## Recording
 
 Each step in its own PR: the results in `docs/cost-history.md`, the

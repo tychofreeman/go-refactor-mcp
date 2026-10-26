@@ -2836,3 +2836,8 @@ replace_text. Nothing by hand. This entry appended with a heredoc.
 the fix that a patch is taken only in reply to a failure (a scripted
 check had patched a kept batch) the same way, the docs with
 replace_text. Nothing by hand. This entry appended with a heredoc.
+
+## 2026-10-26: cost-history 19, kinds with patch repairs
+
+The run's results in cost-history and plan-and-execute with
+replace_text. Nothing by hand. This entry appended with a heredoc.
