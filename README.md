@@ -1432,6 +1432,30 @@ hand or a tool got in the way.
     the user chose. Without a variable to hide, the option does nothing.
     The six plans, replayed with it: five pass the hidden tests.
 
+32. **A case addressed by its value** (the user, 2026-10-25, from
+    cost-history 19): kinds failed without reads because moving a
+    case into a type starts with extract_function of its body, by
+    lines the call-tree plan cannot see. *Done:* `function` and `case`
+    (the value as written, or `default`) in place of the lines, on
+    extract_function and replace_statements; a case of several values
+    is refused, pointing to prepare_switch_for_types, which splits
+    them. The kinds reference is now that derivation, 74 steps without
+    a line number or a case body (widen, prepare each switch, then per
+    case extract, add the receiver, function_to_method, rename;
+    narrow), and passes the loop's free dry run. Open, found on the
+    way:
+    - a case of several values: split them on request (an option),
+      except a case that falls through (the user: an extension for
+      later);
+    - function_to_method refuses a method named like one of an
+      interface's ("a type could implement through it"), where rename
+      proves no value of the type becomes an interface value: the
+      reference makes `bookLoanDays` a method and renames it;
+    - the receiver goes first: add_parameter needs `before` naming the
+      first parameter, which a plan knows only from the signature;
+    - narrowing leaves `switch it.Kind {}` once every case is gone; it
+      could remove the empty switch.
+
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
 candidates and the evidence for each, gathered from the friction log.

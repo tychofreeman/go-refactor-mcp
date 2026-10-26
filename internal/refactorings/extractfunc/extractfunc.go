@@ -61,7 +61,7 @@ func (*ExtractFunction) Name() string { return "extract_function" }
 
 func (*ExtractFunction) Description() string {
 	return `Move a run of whole statements into a new function, declared after the one they are in, and call it in their place: in func report(plants []Plant) string, extracting total := 0 and the loop that adds each p.Height to it, as sum, gives total := sum(plants) there and func sum(plants []Plant) int { total := 0; for ...; return total }. Locals the statements use become parameters, and those they set that are used afterwards become results; the result lists both. Statements that use the receiver become a method of its type.
-Identify the statements by file, start_line and end_line: whole statements of one block, as inspect numbers them. doc becomes the new function's doc comment.
+Identify the statements by file, start_line and end_line: whole statements of one block, as inspect numbers them; or a case's body by function and case ("fern" in function Water, or default), which stays valid after earlier steps. doc becomes the new function's doc comment.
 Returns: when every path returns, the call becomes return sum(...); early error returns (if err != nil { return err }) make the new function return an error, which the call checks.
 Refuses, saying why: other returns, defer, recover, fallthrough, a break, continue or goto out of the lines, a variable they declare that a pointer or closure keeps and that is used after them.`
 }
@@ -73,10 +73,12 @@ func (*ExtractFunction) InputSchema() json.RawMessage {
     "file":       {"type": "string",  "description": "Path of the file, relative to the module root."},
     "start_line": {"type": "integer", "description": "1-based first line of the statements to extract."},
     "end_line":   {"type": "integer", "description": "1-based last line of the statements to extract (inclusive)."},
+    "function":   {"type": "string",  "description": "Instead of the lines, with case: the function (Name or Type.Method) with the switch."},
+    "case":       {"type": "string",  "description": "Instead of the lines: the case whose body to extract, its value as written (\"\\\"fern\\\"\", Red) or default."},
     "name":       {"type": "string",  "description": "Name for the new function."},
     "doc":        {"type": "string",  "description": "Optional doc comment for the new function, without or with the leading //; start it with the function's name."}
   },
-  "required": ["file", "start_line", "end_line", "name"],
+  "required": ["file", "name"],
   "additionalProperties": false
 }`)
 }
@@ -85,6 +87,8 @@ type args struct {
 	File      string `json:"file"`
 	StartLine int    `json:"start_line"`
 	EndLine   int    `json:"end_line"`
+	Function  string `json:"function,omitempty"`
+	Case      string `json:"case,omitempty"`
 	Name      string `json:"name"`
 	Doc       string `json:"doc,omitempty"`
 }
@@ -146,15 +150,8 @@ func (*ExtractFunction) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
-	switch {
-	case a.File == "":
+	if a.File == "" {
 		return nil, refactor.Refusef("file is required")
-	case a.StartLine < 1:
-		return nil, refactor.Refusef("start_line is required (1-based)")
-	case a.EndLine < 1:
-		return nil, refactor.Refusef("end_line is required (1-based)")
-	case a.EndLine < a.StartLine:
-		return nil, refactor.Refusef("end_line (%d) is before start_line (%d)", a.EndLine, a.StartLine)
 	}
 	if err := checkName(a.Name); err != nil {
 		return nil, err
@@ -173,7 +170,17 @@ func (*ExtractFunction) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 		path: path, rel: a.File, name: a.Name, doc: a.Doc,
 		tf: ws.Fset.File(file.Pos()),
 	}
-	if a.EndLine > x.tf.LineCount() {
+	if err := a.caseLines(x.tf, file, src); err != nil {
+		return nil, err
+	}
+	switch {
+	case a.StartLine < 1:
+		return nil, refactor.Refusef("start_line is required (1-based), or function and case")
+	case a.EndLine < 1:
+		return nil, refactor.Refusef("end_line is required (1-based)")
+	case a.EndLine < a.StartLine:
+		return nil, refactor.Refusef("end_line (%d) is before start_line (%d)", a.EndLine, a.StartLine)
+	case a.EndLine > x.tf.LineCount():
 		return nil, refactor.Refusef("end_line %d is past the end of %s, which has %d lines", a.EndLine, a.File, x.tf.LineCount())
 	}
 	if err := x.selectStatements(a.StartLine, a.EndLine); err != nil {
@@ -194,6 +201,27 @@ func (*ExtractFunction) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 		return nil, err
 	}
 	return x.plan()
+}
+
+// caseLines sets the lines to those of the case a.Case of a switch in
+// a.Function, when the statements are given so.
+func (a *args) caseLines(tf *token.File, file *ast.File, src []byte) error {
+	if a.Case == "" && a.Function == "" {
+		return nil
+	}
+	if a.StartLine != 0 || a.EndLine != 0 {
+		return refactor.Refusef("give either function and case or start_line and end_line, not both")
+	}
+	if a.Case == "" || a.Function == "" {
+		return refactor.Refusef("give function and case together: the case of a switch in that function whose body to extract")
+	}
+	fd := locate.Func(file, a.Function)
+	if fd == nil || fd.Body == nil {
+		return refactor.Refusef("no function %s in %s; give Name, or Type.Method for a method", a.Function, a.File)
+	}
+	var err error
+	a.StartLine, a.EndLine, err = locate.CaseBody(tf, src, fd, a.Case)
+	return err
 }
 
 func checkName(name string) error {

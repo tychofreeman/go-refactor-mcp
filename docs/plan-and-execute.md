@@ -214,6 +214,12 @@ not the cause: with the bodies in view, the models write the types out.
 A derivation here would need a step addressed by name that moves a case
 into a type's method, so the plan has no reason to see the body.
 
+The user proposed an address in place of a tool: "the body of the X
+case", for extract_function (and replace_statements). Built (README,
+roadmap item 32); the kinds reference is now the derivation with it,
+without a line number or a case body, and passes the dry run. A run
+without reads would show whether the plans take it.
+
 ## Recording
 
 Each step in its own PR: the results in `docs/cost-history.md`, the

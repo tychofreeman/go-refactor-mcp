@@ -241,6 +241,72 @@ func FuncName(fd *ast.FuncDecl) string {
 	return n
 }
 
+// CaseBody returns the lines of the statements of the case of a switch
+// in fd whose value is value as written ("\"book\""), or "default" for the
+// default case, for a tool that addresses a range of lines.
+func CaseBody(tf *token.File, src []byte, fd *ast.FuncDecl, value string) (first, last int, err error) {
+	var want []string
+	if value != "default" {
+		if want, err = ExprTokens(value); err != nil {
+			return 0, 0, err
+		}
+	}
+	name := FuncName(fd)
+	var found []*ast.CaseClause
+	var cases []string
+	ast.Inspect(fd.Body, func(n ast.Node) bool {
+		cc, ok := n.(*ast.CaseClause)
+		if !ok {
+			return true
+		}
+		line := tf.Line(cc.Pos())
+		if cc.List == nil {
+			cases = append(cases, fmt.Sprintf("default (line %d)", line))
+			if want == nil {
+				found = append(found, cc)
+			}
+		}
+		for _, e := range cc.List {
+			cases = append(cases, fmt.Sprintf("%s (line %d)", src[tf.Offset(e.Pos()):tf.Offset(e.End())], line))
+			if want != nil && TokensMatch(tf, src, e, want) {
+				found = append(found, cc)
+			}
+		}
+		return true
+	})
+	switch {
+	case len(found) == 0 && len(cases) == 0:
+		return 0, 0, refactor.Refusef("%s has no switch", name)
+	case len(found) == 0:
+		return 0, 0, refactor.Refusef("no case %s in a switch of %s; its cases are %s", value, name, strings.Join(cases, ", "))
+	case len(found) > 1:
+		var lines []string
+		for _, cc := range found {
+			lines = append(lines, strconv.Itoa(tf.Line(cc.Pos())))
+		}
+		return 0, 0, refactor.Refusef("%s has a case %s on lines %s; give start_line and end_line of the one you mean", name, value, strings.Join(lines, ", "))
+	}
+	cc := found[0]
+	line := tf.Line(cc.Pos())
+	if len(cc.List) > 1 {
+		var others []string
+		for _, e := range cc.List {
+			if !TokensMatch(tf, src, e, want) {
+				others = append(others, string(src[tf.Offset(e.Pos()):tf.Offset(e.End())]))
+			}
+		}
+		return 0, 0, refactor.Refusef("case %s on line %d shares its body with %s; give each value a case of its own first (prepare_switch_for_types splits them), or give start_line and end_line for the shared body", value, line, strings.Join(others, ", "))
+	}
+	if len(cc.Body) == 0 {
+		return 0, 0, refactor.Refusef("case %s on line %d of %s has no statements", value, line, name)
+	}
+	first, last = tf.Line(cc.Body[0].Pos()), tf.Line(cc.Body[len(cc.Body)-1].End())
+	if first == tf.Line(cc.Colon) {
+		return 0, 0, refactor.Refusef("case %s on line %d has its statements on the case's own line; give start_line and end_line once they have lines of their own", value, line)
+	}
+	return first, last, nil
+}
+
 // Signature is a function whose signature a line range starts on: the
 // range selects the function, not the statements of its body.
 type Signature struct {
