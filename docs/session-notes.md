@@ -495,7 +495,10 @@ results are in `docs/cost-history.md`.
   any turn: 7/8, same cost, same edits, every read at the start. The
   read's form was not the cause; with bodies in view the models write
   the code out. Only a name-addressed step that moves a case into a
-  type would remove the reason to read.
+  type would remove the reason to read. The user chose an address
+  over a tool: `case` with `function` on extract_function and
+  replace_statements (roadmap item 32); splitting a case of several
+  values on request is for later.
 - Where a session's cost goes (cost-history 12,
   `eval-tasks/learning/cost.py`): cache writes 69%, output 18%, cache
   reads 13%, though cache reads are 88% of input tokens. About 38% of

@@ -1,1 +1,648 @@
-{"check": "end", "steps": [{"tool": "add_declaration", "args": {"file": "lending/lending.go", "before": "Item", "content": "// Kind is what kind of item something is, and what that means for a loan.\ntype Kind interface {\n\tLoanDays() int\n\tDailyFee() int\n\tLabel(title string) string\n\tShelf() string\n\tRenewable() bool\n}\n\n// Book is a book.\ntype Book struct{}\n\nfunc (Book) LoanDays() int             { return 21 }\nfunc (Book) DailyFee() int             { return 10 }\nfunc (Book) Label(title string) string { return title }\nfunc (Book) Shelf() string             { return \"stacks\" }\nfunc (Book) Renewable() bool           { return true }\n\n// DVD is a film on a disc.\ntype DVD struct{}\n\nfunc (DVD) LoanDays() int             { return 7 }\nfunc (DVD) DailyFee() int             { return 50 }\nfunc (DVD) Label(title string) string { return \"DVD: \" + title }\nfunc (DVD) Shelf() string             { return \"media\" }\nfunc (DVD) Renewable() bool           { return true }\n\n// Atlas is a reference atlas.\ntype Atlas struct{}\n\nfunc (Atlas) LoanDays() int             { return 3 }\nfunc (Atlas) DailyFee() int             { return 100 }\nfunc (Atlas) Label(title string) string { return strings.ToUpper(title) + \" (reference)\" }\nfunc (Atlas) Shelf() string             { return \"reference\" }\nfunc (Atlas) Renewable() bool           { return false }\n\n// kindOf is the kind named name, or nil.\nfunc kindOf(name string) Kind {\n\tswitch name {\n\tcase \"book\":\n\t\treturn Book{}\n\tcase \"dvd\":\n\t\treturn DVD{}\n\tcase \"atlas\":\n\t\treturn Atlas{}\n\t}\n\treturn nil\n}"}}, {"tool": "replace_text", "args": {"file": "lending/lending.go", "old": "\tKind   string // \"book\", \"dvd\" or \"atlas\"\n", "new": "\tKind   Kind\n"}}, {"tool": "replace_statements", "args": {"file": "lending/lending.go", "function": "LoanDays", "content": "if it.Kind == nil {\n\treturn 0\n}\nreturn it.Kind.LoanDays()"}}, {"tool": "replace_statements", "args": {"file": "lending/lending.go", "function": "DailyFee", "content": "if it.Kind == nil {\n\treturn 0\n}\nreturn it.Kind.DailyFee()"}}, {"tool": "replace_statements", "args": {"file": "lending/lending.go", "function": "Label", "content": "if it.Kind == nil {\n\treturn it.Title\n}\nreturn it.Kind.Label(it.Title)"}}, {"tool": "replace_statements", "args": {"file": "lending/lending.go", "function": "Shelf", "content": "if it.Kind == nil {\n\treturn \"returns\"\n}\nreturn it.Kind.Shelf()"}}, {"tool": "replace_statements", "args": {"file": "lending/lending.go", "function": "Renewable", "content": "return it.Kind != nil && it.Kind.Renewable()"}}, {"tool": "replace_statements", "args": {"file": "lending/lending.go", "function": "Import", "content": "var items []Item\nvar lines []int\nvar names []string\nfor i, line := range strings.Split(text, \"\\n\") {\n\tline = strings.TrimSpace(line)\n\tif line == \"\" || strings.HasPrefix(line, \"#\") {\n\t\tcontinue\n\t}\n\tf := strings.Split(line, \"|\")\n\tif len(f) != 4 {\n\t\treturn fmt.Errorf(\"line %d: want 4 fields, got %d\", i+1, len(f))\n\t}\n\tn, err := strconv.Atoi(strings.TrimSpace(f[3]))\n\tif err != nil {\n\t\treturn fmt.Errorf(\"line %d: copies: %v\", i+1, err)\n\t}\n\tname := strings.TrimSpace(f[2])\n\titems = append(items, Item{ID: strings.TrimSpace(f[0]), Title: strings.TrimSpace(f[1]), Kind: kindOf(name), Copies: n})\n\tlines = append(lines, i+1)\n\tnames = append(names, name)\n}\nseen := map[string]bool{}\nfor k, it := range items {\n\tif it.ID == \"\" {\n\t\treturn fmt.Errorf(\"line %d: no id\", lines[k])\n\t}\n\tif LoanDays(it) == 0 {\n\t\treturn fmt.Errorf(\"line %d: unknown kind %q\", lines[k], names[k])\n\t}\n\tif it.Copies <= 0 {\n\t\treturn fmt.Errorf(\"line %d: no copies\", lines[k])\n\t}\n\tif _, there := c.Items[it.ID]; there || seen[it.ID] {\n\t\treturn fmt.Errorf(\"line %d: %s is already there\", lines[k], it.ID)\n\t}\n\tseen[it.ID] = true\n}\nif c.Items == nil {\n\tc.Items = map[string]Item{}\n}\nfor _, it := range items {\n\tc.Items[it.ID] = it\n}\nreturn nil"}}, {"tool": "replace_text", "args": {"files": ["desk/desk.go", "notices/notices.go"], "old": "Kind == \"atlas\"", "new": "Kind == (lending.Atlas{})", "all_occurrences": true}}, {"tool": "replace_text", "args": {"file": "notices/notices.go", "old": "Kind == \"dvd\"", "new": "Kind == (lending.DVD{})"}}, {"tool": "replace_text", "args": {"file": "lending/lending_test.go", "old": "Kind: \"book\"", "new": "Kind: Book{}", "all_occurrences": true}}, {"tool": "replace_text", "args": {"file": "lending/lending_test.go", "old": "Kind: \"dvd\"", "new": "Kind: DVD{}", "all_occurrences": true}}, {"tool": "replace_text", "args": {"file": "lending/lending_test.go", "old": "Kind: \"atlas\"", "new": "Kind: Atlas{}", "all_occurrences": true}}, {"tool": "replace_text", "args": {"files": ["desk/desk_test.go"], "old": "Kind: \"atlas\"", "new": "Kind: lending.Atlas{}", "all_occurrences": true}}, {"tool": "replace_text", "args": {"files": ["desk/desk_test.go"], "old": "Kind: \"book\"", "new": "Kind: lending.Book{}", "all_occurrences": true}}, {"tool": "replace_text", "args": {"files": ["notices/notices_test.go"], "old": "Kind: \"dvd\"", "new": "Kind: lending.DVD{}", "all_occurrences": true}}]}
+{
+ "steps": [
+  {
+   "tool": "change_field_type",
+   "args": {
+    "file": "lending/lending.go",
+    "name": "Item.Kind",
+    "type": "any"
+   }
+  },
+  {
+   "tool": "prepare_switch_for_types",
+   "args": {
+    "file": "lending/lending.go",
+    "function": "LoanDays",
+    "interface": "Kind",
+    "method": "LoanDays"
+   }
+  },
+  {
+   "tool": "prepare_switch_for_types",
+   "args": {
+    "file": "lending/lending.go",
+    "function": "DailyFee",
+    "interface": "Kind",
+    "method": "DailyFee"
+   }
+  },
+  {
+   "tool": "prepare_switch_for_types",
+   "args": {
+    "file": "lending/lending.go",
+    "function": "Label",
+    "interface": "Kind",
+    "method": "Label"
+   }
+  },
+  {
+   "tool": "prepare_switch_for_types",
+   "args": {
+    "file": "lending/lending.go",
+    "function": "Shelf",
+    "interface": "Kind",
+    "method": "Shelf"
+   }
+  },
+  {
+   "tool": "prepare_switch_for_types",
+   "args": {
+    "file": "lending/lending.go",
+    "function": "Renewable",
+    "interface": "Kind",
+    "method": "Renewable"
+   }
+  },
+  {
+   "tool": "add_declaration",
+   "args": {
+    "file": "lending/lending.go",
+    "after": "Item",
+    "content": "// Book is a book.\ntype Book struct{}\n\n// DVD is a film on a disc.\ntype DVD struct{}\n\n// Atlas is a reference atlas.\ntype Atlas struct{}\n\n// Renewable reports that loans of an atlas are not renewed.\nfunc (Atlas) Renewable() bool { return false }"
+   }
+  },
+  {
+   "tool": "extract_function",
+   "args": {
+    "file": "lending/lending.go",
+    "function": "LoanDays",
+    "case": "\"book\"",
+    "name": "bookLoanDays"
+   }
+  },
+  {
+   "tool": "add_parameter",
+   "args": {
+    "file": "lending/lending.go",
+    "name": "bookLoanDays",
+    "parameter": "k",
+    "type": "Book",
+    "value": "Book{}"
+   }
+  },
+  {
+   "tool": "function_to_method",
+   "args": {
+    "file": "lending/lending.go",
+    "name": "bookLoanDays"
+   }
+  },
+  {
+   "tool": "rename",
+   "args": {
+    "file": "lending/lending.go",
+    "name": "Book.bookLoanDays",
+    "new_name": "LoanDays"
+   }
+  },
+  {
+   "tool": "extract_function",
+   "args": {
+    "file": "lending/lending.go",
+    "function": "DailyFee",
+    "case": "\"book\"",
+    "name": "bookDailyFee"
+   }
+  },
+  {
+   "tool": "add_parameter",
+   "args": {
+    "file": "lending/lending.go",
+    "name": "bookDailyFee",
+    "parameter": "k",
+    "type": "Book",
+    "value": "Book{}"
+   }
+  },
+  {
+   "tool": "function_to_method",
+   "args": {
+    "file": "lending/lending.go",
+    "name": "bookDailyFee"
+   }
+  },
+  {
+   "tool": "rename",
+   "args": {
+    "file": "lending/lending.go",
+    "name": "Book.bookDailyFee",
+    "new_name": "DailyFee"
+   }
+  },
+  {
+   "tool": "extract_function",
+   "args": {
+    "file": "lending/lending.go",
+    "function": "Label",
+    "case": "\"book\"",
+    "name": "bookLabel"
+   }
+  },
+  {
+   "tool": "add_parameter",
+   "args": {
+    "file": "lending/lending.go",
+    "name": "bookLabel",
+    "parameter": "k",
+    "type": "Book",
+    "value": "Book{}",
+    "before": "it"
+   }
+  },
+  {
+   "tool": "function_to_method",
+   "args": {
+    "file": "lending/lending.go",
+    "name": "bookLabel"
+   }
+  },
+  {
+   "tool": "rename",
+   "args": {
+    "file": "lending/lending.go",
+    "name": "Book.bookLabel",
+    "new_name": "Label"
+   }
+  },
+  {
+   "tool": "extract_function",
+   "args": {
+    "file": "lending/lending.go",
+    "function": "Shelf",
+    "case": "\"book\"",
+    "name": "bookShelf"
+   }
+  },
+  {
+   "tool": "add_parameter",
+   "args": {
+    "file": "lending/lending.go",
+    "name": "bookShelf",
+    "parameter": "k",
+    "type": "Book",
+    "value": "Book{}"
+   }
+  },
+  {
+   "tool": "function_to_method",
+   "args": {
+    "file": "lending/lending.go",
+    "name": "bookShelf"
+   }
+  },
+  {
+   "tool": "rename",
+   "args": {
+    "file": "lending/lending.go",
+    "name": "Book.bookShelf",
+    "new_name": "Shelf"
+   }
+  },
+  {
+   "tool": "extract_function",
+   "args": {
+    "file": "lending/lending.go",
+    "function": "Renewable",
+    "case": "\"book\"",
+    "name": "bookRenewable"
+   }
+  },
+  {
+   "tool": "add_parameter",
+   "args": {
+    "file": "lending/lending.go",
+    "name": "bookRenewable",
+    "parameter": "k",
+    "type": "Book",
+    "value": "Book{}"
+   }
+  },
+  {
+   "tool": "function_to_method",
+   "args": {
+    "file": "lending/lending.go",
+    "name": "bookRenewable"
+   }
+  },
+  {
+   "tool": "rename",
+   "args": {
+    "file": "lending/lending.go",
+    "name": "Book.bookRenewable",
+    "new_name": "Renewable"
+   }
+  },
+  {
+   "tool": "extract_function",
+   "args": {
+    "file": "lending/lending.go",
+    "function": "LoanDays",
+    "case": "\"dvd\"",
+    "name": "dvdLoanDays"
+   }
+  },
+  {
+   "tool": "add_parameter",
+   "args": {
+    "file": "lending/lending.go",
+    "name": "dvdLoanDays",
+    "parameter": "k",
+    "type": "DVD",
+    "value": "DVD{}"
+   }
+  },
+  {
+   "tool": "function_to_method",
+   "args": {
+    "file": "lending/lending.go",
+    "name": "dvdLoanDays"
+   }
+  },
+  {
+   "tool": "rename",
+   "args": {
+    "file": "lending/lending.go",
+    "name": "DVD.dvdLoanDays",
+    "new_name": "LoanDays"
+   }
+  },
+  {
+   "tool": "extract_function",
+   "args": {
+    "file": "lending/lending.go",
+    "function": "DailyFee",
+    "case": "\"dvd\"",
+    "name": "dvdDailyFee"
+   }
+  },
+  {
+   "tool": "add_parameter",
+   "args": {
+    "file": "lending/lending.go",
+    "name": "dvdDailyFee",
+    "parameter": "k",
+    "type": "DVD",
+    "value": "DVD{}"
+   }
+  },
+  {
+   "tool": "function_to_method",
+   "args": {
+    "file": "lending/lending.go",
+    "name": "dvdDailyFee"
+   }
+  },
+  {
+   "tool": "rename",
+   "args": {
+    "file": "lending/lending.go",
+    "name": "DVD.dvdDailyFee",
+    "new_name": "DailyFee"
+   }
+  },
+  {
+   "tool": "extract_function",
+   "args": {
+    "file": "lending/lending.go",
+    "function": "Label",
+    "case": "\"dvd\"",
+    "name": "dvdLabel"
+   }
+  },
+  {
+   "tool": "add_parameter",
+   "args": {
+    "file": "lending/lending.go",
+    "name": "dvdLabel",
+    "parameter": "k",
+    "type": "DVD",
+    "value": "DVD{}",
+    "before": "it"
+   }
+  },
+  {
+   "tool": "function_to_method",
+   "args": {
+    "file": "lending/lending.go",
+    "name": "dvdLabel"
+   }
+  },
+  {
+   "tool": "rename",
+   "args": {
+    "file": "lending/lending.go",
+    "name": "DVD.dvdLabel",
+    "new_name": "Label"
+   }
+  },
+  {
+   "tool": "extract_function",
+   "args": {
+    "file": "lending/lending.go",
+    "function": "Shelf",
+    "case": "\"dvd\"",
+    "name": "dvdShelf"
+   }
+  },
+  {
+   "tool": "add_parameter",
+   "args": {
+    "file": "lending/lending.go",
+    "name": "dvdShelf",
+    "parameter": "k",
+    "type": "DVD",
+    "value": "DVD{}"
+   }
+  },
+  {
+   "tool": "function_to_method",
+   "args": {
+    "file": "lending/lending.go",
+    "name": "dvdShelf"
+   }
+  },
+  {
+   "tool": "rename",
+   "args": {
+    "file": "lending/lending.go",
+    "name": "DVD.dvdShelf",
+    "new_name": "Shelf"
+   }
+  },
+  {
+   "tool": "extract_function",
+   "args": {
+    "file": "lending/lending.go",
+    "function": "Renewable",
+    "case": "\"dvd\"",
+    "name": "dvdRenewable"
+   }
+  },
+  {
+   "tool": "add_parameter",
+   "args": {
+    "file": "lending/lending.go",
+    "name": "dvdRenewable",
+    "parameter": "k",
+    "type": "DVD",
+    "value": "DVD{}"
+   }
+  },
+  {
+   "tool": "function_to_method",
+   "args": {
+    "file": "lending/lending.go",
+    "name": "dvdRenewable"
+   }
+  },
+  {
+   "tool": "rename",
+   "args": {
+    "file": "lending/lending.go",
+    "name": "DVD.dvdRenewable",
+    "new_name": "Renewable"
+   }
+  },
+  {
+   "tool": "extract_function",
+   "args": {
+    "file": "lending/lending.go",
+    "function": "LoanDays",
+    "case": "\"atlas\"",
+    "name": "atlasLoanDays"
+   }
+  },
+  {
+   "tool": "add_parameter",
+   "args": {
+    "file": "lending/lending.go",
+    "name": "atlasLoanDays",
+    "parameter": "k",
+    "type": "Atlas",
+    "value": "Atlas{}"
+   }
+  },
+  {
+   "tool": "function_to_method",
+   "args": {
+    "file": "lending/lending.go",
+    "name": "atlasLoanDays"
+   }
+  },
+  {
+   "tool": "rename",
+   "args": {
+    "file": "lending/lending.go",
+    "name": "Atlas.atlasLoanDays",
+    "new_name": "LoanDays"
+   }
+  },
+  {
+   "tool": "extract_function",
+   "args": {
+    "file": "lending/lending.go",
+    "function": "DailyFee",
+    "case": "\"atlas\"",
+    "name": "atlasDailyFee"
+   }
+  },
+  {
+   "tool": "add_parameter",
+   "args": {
+    "file": "lending/lending.go",
+    "name": "atlasDailyFee",
+    "parameter": "k",
+    "type": "Atlas",
+    "value": "Atlas{}"
+   }
+  },
+  {
+   "tool": "function_to_method",
+   "args": {
+    "file": "lending/lending.go",
+    "name": "atlasDailyFee"
+   }
+  },
+  {
+   "tool": "rename",
+   "args": {
+    "file": "lending/lending.go",
+    "name": "Atlas.atlasDailyFee",
+    "new_name": "DailyFee"
+   }
+  },
+  {
+   "tool": "extract_function",
+   "args": {
+    "file": "lending/lending.go",
+    "function": "Label",
+    "case": "\"atlas\"",
+    "name": "atlasLabel"
+   }
+  },
+  {
+   "tool": "add_parameter",
+   "args": {
+    "file": "lending/lending.go",
+    "name": "atlasLabel",
+    "parameter": "k",
+    "type": "Atlas",
+    "value": "Atlas{}",
+    "before": "it"
+   }
+  },
+  {
+   "tool": "function_to_method",
+   "args": {
+    "file": "lending/lending.go",
+    "name": "atlasLabel"
+   }
+  },
+  {
+   "tool": "rename",
+   "args": {
+    "file": "lending/lending.go",
+    "name": "Atlas.atlasLabel",
+    "new_name": "Label"
+   }
+  },
+  {
+   "tool": "extract_function",
+   "args": {
+    "file": "lending/lending.go",
+    "function": "Shelf",
+    "case": "\"atlas\"",
+    "name": "atlasShelf"
+   }
+  },
+  {
+   "tool": "add_parameter",
+   "args": {
+    "file": "lending/lending.go",
+    "name": "atlasShelf",
+    "parameter": "k",
+    "type": "Atlas",
+    "value": "Atlas{}"
+   }
+  },
+  {
+   "tool": "function_to_method",
+   "args": {
+    "file": "lending/lending.go",
+    "name": "atlasShelf"
+   }
+  },
+  {
+   "tool": "rename",
+   "args": {
+    "file": "lending/lending.go",
+    "name": "Atlas.atlasShelf",
+    "new_name": "Shelf"
+   }
+  },
+  {
+   "tool": "add_declaration",
+   "args": {
+    "file": "lending/lending.go",
+    "after": "Item",
+    "content": "// kindOf is the kind named name, or nil.\nfunc kindOf(name string) Kind {\n\tswitch name {\n\tcase \"book\":\n\t\treturn Book{}\n\tcase \"dvd\":\n\t\treturn DVD{}\n\tcase \"atlas\":\n\t\treturn Atlas{}\n\t}\n\treturn nil\n}"
+   }
+  },
+  {
+   "tool": "replace_statements",
+   "args": {
+    "file": "lending/lending.go",
+    "function": "Import",
+    "content": "var items []Item\nvar lines []int\nvar names []string\nfor i, line := range strings.Split(text, \"\\n\") {\n\tline = strings.TrimSpace(line)\n\tif line == \"\" || strings.HasPrefix(line, \"#\") {\n\t\tcontinue\n\t}\n\tf := strings.Split(line, \"|\")\n\tif len(f) != 4 {\n\t\treturn fmt.Errorf(\"line %d: want 4 fields, got %d\", i+1, len(f))\n\t}\n\tn, err := strconv.Atoi(strings.TrimSpace(f[3]))\n\tif err != nil {\n\t\treturn fmt.Errorf(\"line %d: copies: %v\", i+1, err)\n\t}\n\tname := strings.TrimSpace(f[2])\n\titems = append(items, Item{ID: strings.TrimSpace(f[0]), Title: strings.TrimSpace(f[1]), Kind: kindOf(name), Copies: n})\n\tlines = append(lines, i+1)\n\tnames = append(names, name)\n}\nseen := map[string]bool{}\nfor k, it := range items {\n\tif it.ID == \"\" {\n\t\treturn fmt.Errorf(\"line %d: no id\", lines[k])\n\t}\n\tif LoanDays(it) == 0 {\n\t\treturn fmt.Errorf(\"line %d: unknown kind %q\", lines[k], names[k])\n\t}\n\tif it.Copies <= 0 {\n\t\treturn fmt.Errorf(\"line %d: no copies\", lines[k])\n\t}\n\tif _, there := c.Items[it.ID]; there || seen[it.ID] {\n\t\treturn fmt.Errorf(\"line %d: %s is already there\", lines[k], it.ID)\n\t}\n\tseen[it.ID] = true\n}\nif c.Items == nil {\n\tc.Items = map[string]Item{}\n}\nfor _, it := range items {\n\tc.Items[it.ID] = it\n}\nreturn nil"
+   }
+  },
+  {
+   "tool": "replace_text",
+   "args": {
+    "files": [
+     "desk/desk.go",
+     "notices/notices.go"
+    ],
+    "old": "Kind == \"atlas\"",
+    "new": "Kind == (lending.Atlas{})",
+    "all_occurrences": true
+   }
+  },
+  {
+   "tool": "replace_text",
+   "args": {
+    "file": "notices/notices.go",
+    "old": "Kind == \"dvd\"",
+    "new": "Kind == (lending.DVD{})"
+   }
+  },
+  {
+   "tool": "replace_text",
+   "args": {
+    "file": "lending/lending_test.go",
+    "old": "Kind: \"book\"",
+    "new": "Kind: Book{}",
+    "all_occurrences": true
+   }
+  },
+  {
+   "tool": "replace_text",
+   "args": {
+    "file": "lending/lending_test.go",
+    "old": "Kind: \"dvd\"",
+    "new": "Kind: DVD{}",
+    "all_occurrences": true
+   }
+  },
+  {
+   "tool": "replace_text",
+   "args": {
+    "file": "lending/lending_test.go",
+    "old": "Kind: \"atlas\"",
+    "new": "Kind: Atlas{}",
+    "all_occurrences": true
+   }
+  },
+  {
+   "tool": "replace_text",
+   "args": {
+    "files": [
+     "desk/desk_test.go"
+    ],
+    "old": "Kind: \"atlas\"",
+    "new": "Kind: lending.Atlas{}",
+    "all_occurrences": true
+   }
+  },
+  {
+   "tool": "replace_text",
+   "args": {
+    "files": [
+     "desk/desk_test.go"
+    ],
+    "old": "Kind: \"book\"",
+    "new": "Kind: lending.Book{}",
+    "all_occurrences": true
+   }
+  },
+  {
+   "tool": "replace_text",
+   "args": {
+    "files": [
+     "notices/notices_test.go"
+    ],
+    "old": "Kind: \"dvd\"",
+    "new": "Kind: lending.DVD{}",
+    "all_occurrences": true
+   }
+  },
+  {
+   "tool": "change_field_type",
+   "args": {
+    "file": "lending/lending.go",
+    "name": "Item.Kind",
+    "type": "Kind"
+   }
+  }
+ ]
+}

@@ -1,0 +1,1 @@
+case "dvd" on line 7 shares its body with "cd"; give each value a case of its own first (prepare_switch_for_types splits them), or give start_line and end_line for the shared body

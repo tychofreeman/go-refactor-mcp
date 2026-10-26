@@ -33,7 +33,7 @@ func (*ReplaceStatements) Name() string { return "replace_statements" }
 
 func (*ReplaceStatements) Description() string {
 	return `Replace whole statements of one block with new Go statements: an edit, to write a function's body (a stub becomes the implementation) or change what statements do. With function "Cart.Total" and content return len(c.Items), Total's whole body becomes that statement.
-Give start_line and end_line (inclusive, as inspect numbers them) covering whole statements of one block, comments and blank lines included; or function ("Name" or "Type.Method") to replace the whole body, which also works for a body on the signature's line and stays valid after earlier steps of a batch. content is re-indented to the block. Empty content over whole case clauses deletes them.
+Give start_line and end_line (inclusive, as inspect numbers them) covering whole statements of one block, comments and blank lines included; or function for the whole body (even one on the signature's line), which stays valid after earlier steps. content is re-indented to the block. Empty content over whole case clauses deletes them.
 Packages content names are imported (imports picks one when several fit, such as rand); imports only the replaced statements used are removed.`
 }
 
@@ -42,11 +42,12 @@ func (*ReplaceStatements) InputSchema() json.RawMessage {
   "type": "object",
   "properties": {
     "file":       {"type": "string",  "description": "Relative to the workspace root."},
-    "function":   {"type": "string",  "description": "Instead of the lines: the function (\"Name\") or method (\"Type.Method\") whose whole body to replace."},
+    "function":   {"type": "string",  "description": "Instead of the lines: the function (Name or Type.Method) whose body to replace."},
+    "case":       {"type": "string",  "description": "With function: that case's body, by value (\"\\\"fern\\\"\") or default."},
     "start_line": {"type": "integer", "description": "First line (1-based)."},
     "end_line":   {"type": "integer", "description": "Last line (inclusive)."},
-    "content":    {"type": "string",  "description": "The new statements, without braces."},
-    "imports":    {"type": "array", "items": {"type": "string"}, "description": "Optional: import paths for ambiguous package names (e.g. math/rand)."}
+    "content":    {"type": "string",  "description": "The new statements."},
+    "imports":    {"type": "array", "items": {"type": "string"}, "description": "Optional: import paths for ambiguous names (math/rand)."}
   },
   "required": ["file", "content"],
   "additionalProperties": false
@@ -59,6 +60,7 @@ func (*ReplaceStatements) ChangesBehavior() {}
 type args struct {
 	File      string   `json:"file"`
 	Function  string   `json:"function,omitempty"`
+	Case      string   `json:"case,omitempty"`
 	StartLine int      `json:"start_line"`
 	EndLine   int      `json:"end_line"`
 	Content   string   `json:"content"`
@@ -80,13 +82,24 @@ func (*ReplaceStatements) Plan(ws *workspace.Workspace, raw json.RawMessage) (*r
 	if err != nil {
 		return nil, err
 	}
-	if a.Function != "" {
-		if a.StartLine != 0 || a.EndLine != 0 {
-			return nil, refactor.Refusef("give either function or start_line and end_line, not both")
-		}
-		return replaceBody(ws, pkg, file, src, a)
+	if a.Function != "" && (a.StartLine != 0 || a.EndLine != 0) {
+		return nil, refactor.Refusef("give either function or start_line and end_line, not both")
 	}
 	tf := ws.Fset.File(file.Pos())
+	switch {
+	case a.Case != "" && a.Function == "":
+		return nil, refactor.Refusef("give function with case: the function with the switch")
+	case a.Case != "":
+		fd := locate.Func(file, a.Function)
+		if fd == nil || fd.Body == nil {
+			return nil, refactor.Refusef("no function %s in %s; give Name, or Type.Method for a method", a.Function, a.File)
+		}
+		if a.StartLine, a.EndLine, err = locate.CaseBody(tf, src, fd, a.Case); err != nil {
+			return nil, err
+		}
+	case a.Function != "":
+		return replaceBody(ws, pkg, file, src, a)
+	}
 	if a.StartLine < 1 || a.EndLine < a.StartLine || a.EndLine > tf.LineCount() {
 		return nil, refactor.Refusef("lines %d-%d are not a range of lines of %s, which has %d", a.StartLine, a.EndLine, a.File, tf.LineCount())
 	}

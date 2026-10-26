@@ -2495,3 +2495,14 @@ else by hand.
 `eval-tasks/learning/loop.py` edited by hand (Python, outside what the
 tools check). Docs with replace_text. This entry appended with a
 heredoc. Nothing else by hand.
+
+## 2026-10-25: a case addressed by its value
+
+Golden cases with create_file in batches; `locate.CaseBody` with
+add_declaration; extract_function's args and Plan, `caseLines`, and
+replace_statements' case branch with add_field, replace_statements and
+add_declaration; schemas, descriptions and docs with replace_text. By
+hand: the kinds reference batch (`refs/lending-kinds.json`), generated
+by a Python script and tried with the CLI, since no tool writes a
+whole non-Go file over an existing one. This entry appended with a
+heredoc.
