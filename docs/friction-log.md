@@ -2774,3 +2774,11 @@ replace_text. Nothing by hand. This entry appended with a heredoc.
 
 The run's results in cost-history with replace_text. Nothing by hand.
 This entry appended with a heredoc.
+
+## 2026-10-26: refusals say which types lack an interface's methods
+
+The test with add_declaration, the hint with add_declaration and
+replace_text (check "end"; the first try reused the name
+`missingMethod`, which batchdeclare.go has, and was refused), the
+roadmap with replace_text. Nothing by hand. This entry appended with a
+heredoc.
