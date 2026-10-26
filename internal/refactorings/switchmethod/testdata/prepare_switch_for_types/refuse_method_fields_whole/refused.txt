@@ -1,0 +1,1 @@
+interface Species has a method Water(height int) int, but the switch needs Water(p Plant) int

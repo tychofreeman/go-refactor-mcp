@@ -31,7 +31,7 @@ func (*PrepareForTypes) Description() string {
 becomes
   type Species interface { Water() int }
   func Water(p Plant) int { if s, ok := p.Species.(Species); ok { return s.Water() }; switch p.Species { ... }; return 0 }
-The switch's tag must be an interface (change_field_type to any first). The interface is declared before the function, or gets the method when it exists; a method it already has is used if its signature is the one the cases need. The variables the cases use become the method's parameters. Every case must return, or none (then the switch goes in the else). A case of several values (case "fern", "cactus":) is split into a case for each, with a copy of the body, so that each moves alone.
+The switch's tag must be an interface (change_field_type to any first). The interface is declared before the function, or gets the method when it exists; a method it already has is used if its signature is the one the cases need, or if fields the cases read can be its parameters (p.Height for height, declared before the switch). The variables the cases use become the method's parameters. Every case must return, or none (then the switch goes in the else). A case of several values (case "fern", "cactus":) is split into a case for each, with a copy of the body, so that each moves alone.
 Identify the switch by file and line, or by function when it is that function's only switch.
 Refuses, saying why: a type that already implements the interface with the method, a case that leaves other than by return or assigns a variable it uses (it could not become a method), a case of several values that declares a label or a type (its body is copied), a tag that would be evaluated again with another value.`
 }
@@ -62,6 +62,16 @@ type preparer struct {
 	*switcher
 	name     string      // the interface's
 	declared *types.Func // the interface's method of that name, when it has one
+	supplied []supply    // the declared method's parameters, from fields the cases read
+}
+
+// A supply is a parameter of the method the interface declares, given by
+// a field the cases read: height for p.Height.
+type supply struct {
+	name string              // the local declared before the switch
+	expr string              // the field as the cases read it
+	typ  types.Type          // its type
+	uses []*ast.SelectorExpr // where the cases read it
 }
 
 // Plan checks preconditions and computes the edits.
@@ -213,14 +223,105 @@ func (g *preparer) checkInterface() error {
 
 // checkDeclared accepts a method the interface already has when its
 // signature is the one the cases become, as when a plan declared the
-// interface first.
+// interface first, or when fields the cases read can be its parameters.
 func (g *preparer) checkDeclared() error {
 	if g.declared == nil || types.Identical(g.declared.Signature(), g.methodSig()) {
+		return nil
+	}
+	if g.supplied = g.supplies(); g.supplied != nil {
 		return nil
 	}
 	q := types.RelativeTo(g.pkg.Types)
 	return refactor.Refusef("interface %s has a method %s%s, but the switch needs %s; give the method another name, or change its signature first",
 		g.name, g.method, strings.TrimPrefix(types.TypeString(g.declared.Type(), q), "func"), g.signature(q))
+}
+
+// supplies matches the parameters of the method the interface declares
+// to what the cases read of their variables, when they read each only as
+// a field of a value (p.Height): the fields, in the order the cases first
+// read them, must have the parameters' types, and the results must be the
+// function's. Each field is then declared before the switch, named as its
+// parameter, and the cases read that. Nil when they do not match, or a
+// case has several values or one that is not a constant.
+func (g *preparer) supplies() []supply {
+	sig := g.declared.Signature()
+	if !types.Identical(sig.Results(), g.info.Defs[g.fd.Name].(*types.Func).Signature().Results()) {
+		return nil
+	}
+	vars := map[types.Object]bool{}
+	for _, v := range g.params {
+		vars[v] = true
+	}
+	var out []supply
+	index := map[string]int{} // a field's supply, by its text
+	ok := true
+	for _, c := range g.cases {
+		if len(c.clause.List) != 1 {
+			return nil
+		}
+		if tv, has := g.info.Types[c.clause.List[0]]; !has || tv.Value == nil {
+			return nil
+		}
+		for _, st := range c.clause.Body {
+			ast.Inspect(st, func(n ast.Node) bool {
+				switch n := n.(type) {
+				case *ast.UnaryExpr:
+					if se, isSel := ast.Unparen(n.X).(*ast.SelectorExpr); isSel && n.Op == token.AND {
+						if id, isID := se.X.(*ast.Ident); isID && vars[g.info.Uses[id]] {
+							ok = false // its address: a local would be another variable
+						}
+					}
+				case *ast.SelectorExpr:
+					id, isID := n.X.(*ast.Ident)
+					sel := g.info.Selections[n]
+					if !isID || !vars[g.info.Uses[id]] || sel == nil || sel.Kind() != types.FieldVal || sel.Indirect() {
+						return true
+					}
+					text := g.text(n)
+					i, seen := index[text]
+					if !seen {
+						i = len(out)
+						index[text] = i
+						out = append(out, supply{expr: text, typ: sel.Type()})
+					}
+					out[i].uses = append(out[i].uses, n)
+					return false
+				case *ast.Ident:
+					if vars[g.info.Uses[n]] {
+						ok = false // the variable itself, not a field of it
+					}
+				}
+				return true
+			})
+		}
+	}
+	if !ok || len(out) != sig.Params().Len() {
+		return nil
+	}
+	taken := map[string]bool{}
+	ast.Inspect(g.fd, func(n ast.Node) bool {
+		if id, isID := n.(*ast.Ident); isID {
+			taken[id.Name] = true
+		}
+		return true
+	})
+	for i := range out {
+		p := sig.Params().At(i)
+		if !types.Identical(out[i].typ, p.Type()) {
+			return nil
+		}
+		base := p.Name()
+		if base == "" || base == "_" {
+			base = "v"
+		}
+		name := base
+		for k := 2; taken[name]; k++ {
+			name = fmt.Sprintf("%s%d", base, k)
+		}
+		taken[name] = true
+		out[i].name = name
+	}
+	return out
 }
 
 // checkUnimplemented refuses when a type already implements the
@@ -282,6 +383,9 @@ func (g *preparer) fresh(base string) string {
 	for _, v := range g.params {
 		used[v.Name()] = true
 	}
+	for _, s := range g.supplied {
+		used[s.name] = true
+	}
 	name := base
 	for i := 2; used[name]; i++ {
 		name = fmt.Sprintf("%s%d", base, i)
@@ -301,10 +405,37 @@ func (g *preparer) plan() (*refactor.Plan, error) {
 	}
 	v, ok := g.fresh(strings.ToLower(g.name[:1])), g.fresh("ok")
 	ind := g.indent()
-	call := v + "." + g.method + "(" + g.args() + ")"
-	head := fmt.Sprintf("if %s, %s := %s.(%s); %s {\n", v, ok, g.text(g.subject), g.name, ok)
+	args := g.args()
+	var locals string
+	var notes []string
+	if g.supplied != nil {
+		var names, reads []string
+		for _, s := range g.supplied {
+			names = append(names, s.name)
+			reads = append(reads, s.expr+" as "+s.name)
+			locals += s.name + " := " + s.expr + "\n" + ind
+		}
+		args = strings.Join(names, ", ")
+		notes = append(notes, fmt.Sprintf("the cases read %s, declared before the switch, to fit %s's %s%s",
+			strings.Join(reads, ", "), g.name, g.method, strings.TrimPrefix(types.TypeString(g.declared.Type(), q), "func")))
+	}
+	call := v + "." + g.method + "(" + args + ")"
+	head := locals + fmt.Sprintf("if %s, %s := %s.(%s); %s {\n", v, ok, g.text(g.subject), g.name, ok)
 	at, end := g.off(g.stmt.Pos()), g.off(g.stmt.End())
 	sw, split := g.split()
+	if g.supplied != nil {
+		var es []edit.TextEdit
+		for _, s := range g.supplied {
+			for _, u := range s.uses {
+				es = append(es, edit.TextEdit{Start: g.off(u.Pos()) - at, End: g.off(u.End()) - at, NewText: s.name})
+			}
+		}
+		out, err := edit.Apply(g.src[at:end], es)
+		if err != nil {
+			return nil, err
+		}
+		sw = string(out)
+	}
 	var e edit.TextEdit
 	if returning, _ := g.returns(g.cases[0].clause); returning {
 		e = edit.TextEdit{Start: at, End: end, NewText: head + ind + "\treturn " + call + "\n" + ind + "}\n" + ind + sw}
@@ -315,7 +446,6 @@ func (g *preparer) plan() (*refactor.Plan, error) {
 	edits := []edit.TextEdit{e}
 	var fes []edit.FileEdit
 	summary := fmt.Sprintf("method %s added to %s", g.method, g.name)
-	var notes []string
 	if len(split) > 0 {
 		notes = append(notes, "split into a case for each value, to move into its type alone: "+strings.Join(split, "; "))
 	}
