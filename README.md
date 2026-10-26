@@ -1509,6 +1509,31 @@ hand or a tool got in the way.
     differs, move them to the top". The kinds reference with the
     interface declared first, as Haiku planned it, passes. *Done.*
 
+33. **Output holes in the pattern** (the user, 2026-10-25): `fold`, and so
+    `pattern`, takes a function whose body returns one value, sets
+    fields of a struct parameter and returns it, or has no results.
+    Most code worth extracting is statements whose outputs are used
+    after them (`x, err := ...`, then `x`), so a copy of such a run
+    cannot be folded. An output hole is a variable the pattern's
+    statements assign and the code after the call uses, bound to the
+    site's own variable, so that the run becomes `x, err := f(...)`, or
+    `x, err = f(...)` where the site's variables already exist. The
+    rules mirror extract_function's flow analysis: the site's run
+    produces the same outputs, of the same types, used after it; and it
+    assigns nothing else that the code after it reads. The outputs of
+    a run could be computed in one place, for extract_function at the
+    selection and for the matcher at each site. What it would buy:
+    - `fold` of statement runs with results: the mcpserver tests'
+      `connect` helper, which fold refused (friction log, "reads by
+      name only", 2026-10-23), and the near-duplicates the design-step
+      runs wrote by hand (item 26).
+    - `extract_function` with `all_occurrences`, as extract_variable
+      has: a composite, extract then fold what it made, so the other
+      copies become calls in the same step, with the nearest miss when
+      a copy differs.
+    One PR each: output holes in `pattern`, and fold taking such
+    functions; then the extract_function option.
+
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
 candidates and the evidence for each, gathered from the friction log.

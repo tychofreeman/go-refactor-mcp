@@ -2574,6 +2574,10 @@ This entry appended with a heredoc. Nothing else by hand.
 replace_text; goldens with create_file. This entry appended with a
 heredoc. Nothing else by hand.
 
+## 2026-10-25: roadmap item 33, output holes in the pattern
+
+Nothing by hand: the item and this entry with replace_text.
+
 ## 2026-10-25: extract_function adds the case for a value with none
 
 `missingCase` with add_field and add_declaration, the hook and the
