@@ -1,0 +1,1 @@
+moving pick() past next() would change the order in which they are evaluated

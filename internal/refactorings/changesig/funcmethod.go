@@ -24,7 +24,7 @@ func NewFunctionToMethod() *FunctionToMethod { return &FunctionToMethod{} }
 func (*FunctionToMethod) Name() string { return "function_to_method" }
 
 func (*FunctionToMethod) Description() string {
-	return `Turn a function into a method of its first parameter's type, and change every call: func total(c *Cart) int becomes func (c *Cart) total() int, total(cart) becomes cart.total(), and total(&v) becomes v.total(). The reverse of method_to_function. The first parameter becomes the receiver (move_parameter first to choose another); its type must be T or *T for a type T of the function's package.
+	return `Turn a function into a method of its first parameter's type, and change every call: func total(c *Cart) int becomes func (c *Cart) total() int, total(cart) becomes cart.total(), and total(&v) becomes v.total(). The reverse of method_to_function. The first parameter becomes the receiver, or the one receiver names (its argument moves first at each call); its type must be T or *T for a type T of the function's package.
 Identify the function by file and name, or by line at its declaration or any call; new_name gives the method another name.
 Refuses, saying why: a name that makes T implement an interface while a value of T becomes an interface value (String, Error, or a module's interface), or that T or a type embedding it already has as a field or method; a function used as a value, or generic.`
 }
@@ -37,7 +37,7 @@ func (*FunctionToMethod) InputSchema() json.RawMessage {
     "line":     {"type": "integer", "description": "1-based line of that occurrence. Omit it to find name as a symbol of the package of file."},
     "name":     {"type": "string",  "description": "The function's name; without line, it is found among the package-level names."},
     "column":   {"type": "integer", "description": "Optional 1-based column, only needed to disambiguate."},
-    "receiver": {"type": "string",  "description": "Optional: the parameter that becomes the receiver; it must be the first (the default)."},
+    "receiver": {"type": "string",  "description": "Optional: the parameter that becomes the receiver (default: the first)."},
     "new_name": {"type": "string",  "description": "Optional name for the method (default: the function's name)."}
   },
   "required": ["file", "name"],
@@ -72,10 +72,15 @@ func (*FunctionToMethod) Plan(ws *workspace.Workspace, raw json.RawMessage) (*re
 		return nil, refactor.Refusef("%s has type parameters; a method cannot declare its own", t.obj.Name())
 	case len(t.params) == 0:
 		return nil, refactor.Refusef("%s has no parameters; the first one becomes the receiver", t.obj.Name())
-	case a.Receiver != "" && a.Receiver != t.params[0].name:
-		return nil, refactor.Refusef("%s is not the first parameter of %s; move it there first with move_parameter", a.Receiver, t.obj.Name())
-	case sig.Variadic() && len(t.params) == 1:
-		return nil, refactor.Refusef("the only parameter of %s is variadic, so it cannot be the receiver", t.obj.Name())
+	}
+	r := 0 // the receiver's index among the parameters
+	if a.Receiver != "" {
+		if r, err = t.paramIndex(a.Receiver); err != nil {
+			return nil, err
+		}
+	}
+	if sig.Variadic() && r == len(t.params)-1 {
+		return nil, refactor.Refusef("%s is variadic, so it cannot be the receiver", t.params[r].name)
 	}
 	name := a.NewName
 	if name == "" {
@@ -85,7 +90,7 @@ func (*FunctionToMethod) Plan(ws *workspace.Workspace, raw json.RawMessage) (*re
 	case !token.IsIdentifier(name):
 		return nil, refactor.Refusef("new_name %q is not a valid Go identifier", name)
 	}
-	recvVar := sig.Params().At(0)
+	recvVar := sig.Params().At(r)
 	named := recvNamed(recvVar.Type())
 	if named == nil || named.Obj().Pkg() != t.obj.Pkg() {
 		return nil, refactor.Refusef("the type of %s, %s, is not a type declared in package %s, so it cannot have methods here", recvVar.Name(), t.typeName(recvVar.Type()), t.obj.Pkg().Name())
@@ -97,7 +102,7 @@ func (*FunctionToMethod) Plan(ws *workspace.Workspace, raw json.RawMessage) (*re
 	if named.TypeParams().Len() > 0 {
 		return nil, refactor.Refusef("the type %s has type parameters; this is not supported yet", named.Obj().Name())
 	}
-	implements, err := t.checkImplements(named, name, recvVar.Type() != types.Type(named))
+	implements, err := t.checkImplements(named, name, r, recvVar.Type() != types.Type(named))
 	if err != nil {
 		return nil, err
 	}
@@ -111,11 +116,14 @@ func (*FunctionToMethod) Plan(ws *workspace.Workspace, raw json.RawMessage) (*re
 		}
 	}
 	if err := t.checkNoSelector(named, name); err != nil {
+		if a.Receiver == "" {
+			return nil, t.receiverHint(err, name, r)
+		}
 		return nil, err
 	}
 
 	path := ws.Fset.Position(t.decl.Pos()).Filename
-	fes := []edit.FileEdit{{Path: path, Edits: t.methodDeclEdits(name)}}
+	fes := []edit.FileEdit{{Path: path, Edits: t.methodDeclEdits(name, r)}}
 	srcs := map[string][]byte{path: t.src}
 	for _, c := range t.calls {
 		where := ws.Position(c.expr.Pos())
@@ -131,7 +139,7 @@ func (*FunctionToMethod) Plan(ws *workspace.Workspace, raw json.RawMessage) (*re
 				return nil, err
 			}
 		}
-		es, err := t.methodCallEdits(c, name, srcs[cpath])
+		es, err := t.methodCallEdits(c, name, srcs[cpath], r)
 		if err != nil {
 			return nil, err
 		}
@@ -167,14 +175,33 @@ func (t *target) checkNoSelector(named *types.Named, name string) error {
 	return nil
 }
 
+// receiverHint adds to err, the refusal of a name the receiver's type
+// already has, another parameter whose type could take the method.
+func (t *target) receiverHint(err error, name string, r int) error {
+	sig := t.obj.Signature()
+	for i, p := range t.params {
+		n := recvNamed(sig.Params().At(i).Type())
+		if i == r || n == nil || n.Obj().Pkg() != t.obj.Pkg() || types.IsInterface(n) {
+			continue
+		}
+		if _, isPtr := n.Underlying().(*types.Pointer); isPtr {
+			continue
+		}
+		if obj, _, _ := types.LookupFieldOrMethod(types.NewPointer(n), true, n.Obj().Pkg(), name); obj == nil {
+			return refactor.Refusef("%s; give receiver %q to make it a method of %s", err.Error(), p.name, n.Obj().Name())
+		}
+	}
+	return err
+}
+
 // checkImplements refuses a method name that an interface of the module
-// has, if with the method named (through *named only, with ptr) would
+// has, if with the method (parameter r its receiver) named (through *named only, with ptr) would
 // implement the interface while one of its values becomes an interface
 // value, where a type assertion or reflection could see the difference.
 // It returns a note for each interface it starts to implement unseen. A
 // type that embeds named would get the method too, so then any such
 // interface is refused.
-func (t *target) checkImplements(named *types.Named, name string, ptr bool) ([]string, error) {
+func (t *target) checkImplements(named *types.Named, name string, r int, ptr bool) ([]string, error) {
 	ifaces := analysis.InterfacesWithMethod(t.ws.TypesInfos(), t.obj.Pkg().Path(), name)
 	if len(ifaces) == 0 {
 		return nil, nil
@@ -191,8 +218,10 @@ func (t *target) checkImplements(named *types.Named, name string, ptr bool) ([]s
 	}
 	sig := t.obj.Signature()
 	var rest []*types.Var
-	for i := 1; i < sig.Params().Len(); i++ {
-		rest = append(rest, sig.Params().At(i))
+	for i := 0; i < sig.Params().Len(); i++ {
+		if i != r {
+			rest = append(rest, sig.Params().At(i))
+		}
 	}
 	method := types.NewSignatureType(nil, nil, nil, types.NewTuple(rest...), sig.Results(), sig.Variadic())
 	noQualifier := func(*types.Package) string { return "" }
@@ -276,32 +305,30 @@ func embeds(t types.Type, named *types.Named, seen map[types.Type]bool) bool {
 	return false
 }
 
-// methodDeclEdits move the first parameter to a receiver, and rename the
-// function if asked.
-func (t *target) methodDeclEdits(name string) []edit.TextEdit {
-	p := t.params[0]
-	f := p.field
-	recv := "(" + p.name + " " + t.text(f.Type) + ") "
-	es := []edit.TextEdit{{Start: t.off(t.decl.Name.Pos()), End: t.off(t.decl.Name.End()), NewText: recv + name}}
-	list := t.decl.Type.Params.List
-	switch {
-	case len(f.Names) > 1: // a, b *T: drop "a, "
-		es = append(es, edit.TextEdit{Start: t.off(f.Names[0].Pos()), End: t.off(f.Names[1].Pos())})
-	case len(list) > 1:
-		es = append(es, edit.TextEdit{Start: t.off(f.Pos()), End: t.off(list[1].Pos())})
-	default:
-		es = append(es, edit.TextEdit{Start: t.off(f.Pos()), End: t.off(f.End())})
+// methodDeclEdits move parameter r to a receiver, and rename the function
+// if asked.
+func (t *target) methodDeclEdits(name string, r int) []edit.TextEdit {
+	p := t.params[r]
+	recv := "(" + p.name + " " + t.text(p.field.Type) + ") "
+	cut := t.paramCut(p)
+	return []edit.TextEdit{
+		{Start: t.off(t.decl.Name.Pos()), End: t.off(t.decl.Name.End()), NewText: recv + name},
+		{Start: cut.start, End: cut.end},
 	}
-	return es
 }
 
-// methodCallEdits turn the call m(x, args) into x'.name(args), where x' is
-// x written as a method's operand: &v becomes v and *p becomes p, since the
-// call takes the address or dereferences itself, and a value of another
-// type (nil, say) is converted to the receiver type.
-func (t *target) methodCallEdits(c call, name string, csrc []byte) ([]edit.TextEdit, error) {
+// methodCallEdits turn the call m(x, args) into x'.name(args), where x,
+// argument r, is written as a method's operand: &v becomes v and *p
+// becomes p, since the call takes the address or dereferences itself, and
+// a value of another type (nil, say) is converted to the receiver type.
+func (t *target) methodCallEdits(c call, name string, csrc []byte, r int) ([]edit.TextEdit, error) {
 	info := c.pkg.TypesInfo
-	arg := c.expr.Args[0]
+	arg := c.expr.Args[r]
+	if r > 0 {
+		if err := t.checkOrder(c, r, 0); err != nil {
+			return nil, err
+		}
+	}
 	for _, other := range t.calls {
 		if other.expr != c.expr && arg.Pos() <= other.expr.Pos() && other.expr.End() <= arg.End() {
 			return nil, refactor.Refusef("the receiver argument of the call at %s contains another call of %s, at %s; assign it to a variable first",
@@ -309,7 +336,7 @@ func (t *target) methodCallEdits(c call, name string, csrc []byte) ([]edit.TextE
 		}
 	}
 	src := func(n ast.Node) string { return string(csrc[t.off(n.Pos()):t.off(n.End())]) }
-	recvType := t.obj.Signature().Params().At(0).Type()
+	recvType := t.obj.Signature().Params().At(r).Type()
 	var x string
 	operand := ast.Unparen(arg)
 	switch e := operand.(type) {
@@ -324,17 +351,15 @@ func (t *target) methodCallEdits(c call, name string, csrc []byte) ([]edit.TextE
 	}
 	x = src(operand)
 	if typeKey(info.TypeOf(arg)) != typeKey(recvType) { // by name: a test variant has its own types
-		x = "(" + t.text(t.params[0].field.Type) + ")(" + src(arg) + ")"
+		x = "(" + t.text(t.params[r].field.Type) + ")(" + src(arg) + ")"
 	} else if !simpleOperand(operand) || isCompositeLit(operand) {
 		x = "(" + x + ")"
 	}
-	es := []edit.TextEdit{{Start: t.off(c.expr.Fun.Pos()), End: t.off(c.expr.Fun.End()), NewText: x + "." + name}}
-	if len(c.expr.Args) > 1 {
-		es = append(es, edit.TextEdit{Start: t.off(arg.Pos()), End: t.off(c.expr.Args[1].Pos())})
-	} else {
-		es = append(es, edit.TextEdit{Start: t.off(arg.Pos()), End: t.off(c.expr.Rparen)})
-	}
-	return es, nil
+	cut := t.argCut(c.expr, r, false)
+	return []edit.TextEdit{
+		{Start: t.off(c.expr.Fun.Pos()), End: t.off(c.expr.Fun.End()), NewText: x + "." + name},
+		{Start: cut.start, End: cut.end},
+	}, nil
 }
 
 // isCompositeLit reports whether e is a composite literal, which as a
