@@ -1086,7 +1086,8 @@ string literals and guessed replace_text targets in code it had not
 seen. Moving each case into its type needs the cases, which `-no-read`
 withholds from the plan and the "done?" turn.
 
-**Kinds with reads** (the plan and the "done?" turn may ask for source;
+**Kinds with reads** (the first answer may ask for functions' source, once,
+without line numbers; not the "done?" turn, as first written here;
 `eval-runs/loop-{haiku,sonnet}-kinds-read`, $0.87): 8/8. Haiku $0.020 a
 task in 4.5 requests (8.5 reads), Sonnet $0.197 in 4.5 (11), against
 Sonnet in a session with today's tools (section 10) at $0.25 and 19
@@ -1096,6 +1097,23 @@ after a narrowing refusal) and wrote the types and the writes with
 replace_statements and replace_text; Sonnet wrote all of it with edits.
 As in sections 16 and 17, with the bodies in view both models rewrite;
 the tools still check each step and the tests decide.
+
+**Kinds with numbered reads** (reads show `inspect`'s numbered source,
+of types and variables too, and may come in place of any batch, the
+"done?" turn and repairs included, at most three; repair excerpts are
+numbered; `eval-runs/loop-{haiku,sonnet}-kinds-numbered`, $0.85): 7/8.
+Haiku 4/4 at $0.021 in 5 requests (old reads: $0.020, 4.5), Sonnet 3/4
+at $0.192 in 4.25 ($0.197, 4.5). Nothing else moved: again no
+prepare_switch_for_types, extract_function or introduce_parameter; the
+same tools (add_declaration, replace_declaration, replace_statements,
+replace_text; Haiku also change_field_type), 102 and 66 lines written
+per passing attempt (101 and 68 before). Every attempt read once, at
+the start, the six switching functions and their callers; no read came
+later. The Sonnet failure spent its first repair on an answer with two
+JSON objects, read the same names twice, and ran out of repairs on
+type errors. So the read's form was not what kept the models from the
+derivation: with the cases' bodies in view, writing the types out is
+what both models choose, at the same cost as before.
 
 ## What made the difference
 

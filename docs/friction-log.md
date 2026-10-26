@@ -2489,3 +2489,9 @@ else by hand.
 
 Docs with replace_text. This entry appended with a heredoc. Nothing
 else by hand.
+
+## 2026-10-25: numbered reads in the loop (cost-history 19)
+
+`eval-tasks/learning/loop.py` edited by hand (Python, outside what the
+tools check). Docs with replace_text. This entry appended with a
+heredoc. Nothing else by hand.
