@@ -244,6 +244,13 @@ at a kind with no case. A refusal inside a batch gives lines of the
 module at the refused step, and a repair resends the batch from the
 start, so a line it copies from the refusal points at other code.
 
+With that and a missing case fixed (cost-history 19, again): 0/8, but
+the derivation of the cases goes through in every attempt that got
+that far; what fails is the edit in Import, which no plan can see
+without a read, and the stages run out. The next test is reads and
+the case address together: reads where an edit needs the code, the
+address where code moves.
+
 ## Recording
 
 Each step in its own PR: the results in `docs/cost-history.md`, the
