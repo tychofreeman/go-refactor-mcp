@@ -2945,3 +2945,9 @@ one batch; the docs and this entry with replace_text. Nothing by hand.
 
 The results in cost-history 19, plan-and-execute, the session notes
 and this entry with replace_text in one batch. Nothing by hand.
+
+## 2026-10-26: seven tools in full beside the index
+
+`CARRIERS` in loop.py, the results in cost-history 19,
+plan-and-execute, the session notes and this entry with replace_text
+in one batch. Nothing by hand.

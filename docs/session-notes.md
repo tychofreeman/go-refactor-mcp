@@ -591,7 +591,9 @@ results are in `docs/cost-history.md`.
   reference), freight-xl came back to 16/16 for Sonnet at 23% below
   the reference, Haiku 13/16 at 19% below; kinds cost 15% more, in
   asks for the other tools its derivation uses. A plan chooses a
-  derivation from the examples it sees.
+  derivation from the examples it sees. With prepare_switch_for_types
+  and function_to_method in full too (seven), kinds cost 20% below the
+  reference (Sonnet 3/4, Haiku 2/4), within 11% of writing it by hand.
 - Where a session's cost goes (cost-history 12,
   `eval-tasks/learning/cost.py`): cache writes 69%, output 18%, cache
   reads 13%, though cache reads are 88% of input tokens. About 38% of
