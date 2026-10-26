@@ -2750,3 +2750,9 @@ and add_declaration (check "end"), the hint, description, golden and
 roadmap with replace_text. By script: the kinds reference's eight
 replace_text steps removed and `values` added with Python's json, at
 the file's own indent this time. This entry appended with a heredoc.
+
+## 2026-10-26: a value not of the narrowed type is refused with why
+
+The goldens with replace_text and create_file, `notImplements` with
+add_declaration and replace_text (check "end"), the roadmap with
+replace_text. Nothing by hand. This entry appended with a heredoc.

@@ -1,0 +1,1 @@
+the value for "fern", Fern{}, is not a Species: its method Water is func(days int) int, where Species has func(p Plant) int
