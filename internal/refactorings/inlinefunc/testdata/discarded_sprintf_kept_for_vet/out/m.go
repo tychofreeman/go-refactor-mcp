@@ -2,7 +2,7 @@ package m
 
 import "fmt"
 
-func run(n int) {
+func run(err error) {
 	fmt.Println("describing")
-	_ = fmt.Sprintf("%d", n)
+	_ = fmt.Sprintf("%v", err)
 }

@@ -528,18 +528,16 @@ func unsafeValue(info *types.Info, e ast.Expr, eff *analysis.Effects) (ast.Node,
 				if panics != analysis.NoPanic {
 					bad, why = n, "could panic: it calls "+types.ExprString(n.Fun)
 				}
-			} else if eff != nil {
+			} else {
 				switch s := eff.Call(info, n); {
 				case s.Effect != "":
 					bad, why = n, "has side effects"
 				case s.Unsafe != "":
 					bad, why = n, "could panic: it "+s.Unsafe
 				}
-			} else if analysis.HasEffect(info, n) {
-				bad, why = n, "has side effects"
 			}
 		default:
-			if analysis.HasEffect(info, n) {
+			if eff.Acts(info, n) {
 				bad, why = n, "has side effects"
 			}
 		}

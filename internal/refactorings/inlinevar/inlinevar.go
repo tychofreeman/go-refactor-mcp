@@ -313,7 +313,7 @@ func (x *inliner) checkVariable() error {
 func (x *inliner) checkEvaluation() error {
 	culprit, ok := x.stable(true)
 	if ok {
-		culprit = analysis.MayPanic(x.info, x.init)
+		culprit = x.panics()
 		if culprit == nil {
 			return nil // same value and no effects however often and wherever it is evaluated
 		}
@@ -331,7 +331,7 @@ func (x *inliner) checkEvaluation() error {
 	if err != nil {
 		return err
 	}
-	if _, ok := x.stable(false); ok && analysis.MayPanic(x.info, x.init) == nil {
+	if _, ok := x.stable(false); ok && x.panics() == nil {
 		return nil // no effects and nothing else can change it: only the count mattered
 	}
 	if x.owner == nil {
@@ -340,7 +340,7 @@ func (x *inliner) checkEvaluation() error {
 				x.quote(bad), x.ws.Position(bad.Pos()), x.obj.Name(), x.quote(x.init))
 		}
 	}
-	if first := analysis.FirstEffectBefore(x.info, stmt, use.Pos(), x.declStmt); first != nil {
+	if first := x.ws.Effects().FirstActBefore(x.info, stmt, use.Pos(), x.declStmt); first != nil {
 		return refactor.Refusef("inlining would evaluate %s after %s (at %s), which comes first in the statement that uses %q; that could change behavior",
 			x.quote(x.init), x.quote(first), x.ws.Position(first.Pos()), x.obj.Name())
 	}
@@ -460,7 +460,7 @@ func (x *inliner) firstEffectBetween(stmt ast.Stmt) ast.Node {
 					bad = n
 				}
 			default:
-				if analysis.HasEffect(x.info, n) {
+				if x.ws.Effects().Acts(x.info, n) {
 					bad = n
 				}
 			}
@@ -637,13 +637,24 @@ func (x *inliner) dereference(path []ast.Node, target ast.Expr) (ast.Node, strin
 	return n, text, true
 }
 
-// stable is Func.Stable for the initializer, or, for a pointer alias,
-// Func.StableAddress for what it points to.
+// stable is Summary.Stable for the initializer, or, for a pointer alias,
+// Effects.StableAddress for what it points to.
 func (x *inliner) stable(sharing bool) (ast.Node, bool) {
 	if e := x.aliased(); e != nil {
-		return x.fa.StableAddress(e)
+		return x.ws.Effects().StableAddress(x.fa, e)
 	}
-	return x.fa.Stable(x.init, sharing)
+	return x.ws.Effects().Of(x.fa, x.init).Stable(sharing)
+}
+
+// panics returns where evaluating the initializer can panic, or nil. For
+// a pointer alias a nil dereference only moves to the use, so it counts
+// only other panics.
+func (x *inliner) panics() ast.Node {
+	s := x.ws.Effects().Of(x.fa, x.init)
+	if x.aliased() != nil {
+		return s.At.OtherPanic
+	}
+	return s.At.Panic
 }
 
 // reads returns the locals the initializer's value depends on: for a

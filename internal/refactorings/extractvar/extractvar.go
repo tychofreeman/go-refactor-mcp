@@ -266,13 +266,24 @@ func (x *extraction) replacement(site ast.Expr) (ast.Node, string) {
 	return w, "*" + x.name
 }
 
-// stable is Func.Stable for what the new variable holds: with pointer,
+// stable is Summary.Stable for what the new variable holds: with pointer,
 // the expression's address rather than its value.
 func (x *extraction) stable(expr ast.Expr, sharing bool) (ast.Node, bool) {
 	if !x.pointer {
-		return x.fa.Stable(expr, sharing)
+		return x.ws.Effects().Of(x.fa, expr).Stable(sharing)
 	}
-	return x.fa.StableAddress(expr)
+	return x.ws.Effects().StableAddress(x.fa, expr)
+}
+
+// panics returns where evaluating expr can panic, or nil. With pointer a
+// nil dereference only moves to the uses, so it counts only other
+// panics.
+func (x *extraction) panics(expr ast.Expr) ast.Node {
+	s := x.ws.Effects().Of(x.fa, expr)
+	if x.pointer {
+		return s.At.OtherPanic
+	}
+	return s.At.Panic
 }
 
 // ---------------------------------------------------------------------------
@@ -503,7 +514,7 @@ func (x *extraction) checkReferences(expr ast.Expr, stmt ast.Stmt, scope *types.
 // a call (or channel receive) that precedes it in the same statement,
 // unless the expression's value cannot depend on such calls.
 func (x *extraction) checkOrder(expr ast.Expr, stmt ast.Stmt) error {
-	first := analysis.FirstEffectBefore(x.info, stmt, expr.Pos(), nil)
+	first := x.ws.Effects().FirstActBefore(x.info, stmt, expr.Pos(), nil)
 	if first == nil {
 		return nil
 	}
@@ -511,7 +522,7 @@ func (x *extraction) checkOrder(expr ast.Expr, stmt ast.Stmt) error {
 		return refactor.Refusef("extracting %s would evaluate it before %s (at %s), which comes first in the statement and could change what %s computes; extract %s first, or choose another expression",
 			x.quote(expr), x.quote(first), x.ws.Position(first.Pos()), x.quote(culprit), x.quote(first))
 	}
-	if p := analysis.MayPanic(x.info, expr); p != nil {
+	if p := x.panics(expr); p != nil {
 		return refactor.Refusef("extracting %s would evaluate it before %s (at %s), which comes first in the statement, and %s can panic, which would then happen first; extract %s first, or choose another expression",
 			x.quote(expr), x.quote(first), x.ws.Position(first.Pos()), x.quote(p), x.quote(first))
 	}

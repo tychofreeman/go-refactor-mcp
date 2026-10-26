@@ -44,6 +44,7 @@ var errNeedReload = errors.New("package metadata may have changed")
 // update brings the workspace up to date after the given files (absolute
 // paths) were modified, incrementally when possible.
 func (w *Workspace) update(changed []string) error {
+	w.effects = nil
 	err := w.updateIncrementally(changed)
 	if errors.Is(err, errNeedReload) {
 		return w.Reload()

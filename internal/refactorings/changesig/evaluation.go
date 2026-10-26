@@ -95,11 +95,11 @@ func riskOf(info *types.Info, n ast.Node, eff *analysis.Effects) (r risk, ok boo
 			}
 			break
 		}
-		if analysis.HasEffect(info, n) {
+		if eff.Acts(info, n) {
 			r.why, r.effect, r.stops = "has side effects", true, "calls "+types.ExprString(n.Fun)+", which might not return"
 		}
 	case *ast.UnaryExpr:
-		if analysis.HasEffect(info, n) {
+		if eff.Acts(info, n) {
 			r.why, r.effect, r.stops = "has side effects", true, "receives from a channel, which might not finish"
 		}
 	case *ast.Ident:

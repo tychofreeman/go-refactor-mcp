@@ -447,7 +447,7 @@ func (x *inliner) classify(p *param) int {
 	if tv := x.info.Types[p.arg]; tv.Value != nil {
 		return constArg
 	}
-	if _, ok := x.callerFA.Stable(p.arg, len(p.uses) > 1); ok && analysis.MayPanic(x.info, p.arg) == nil {
+	if x.movable(x.callerFA, p.arg, len(p.uses) > 1) {
 		return stableArg
 	}
 	if x.isVarPath(p.arg) {
@@ -579,7 +579,7 @@ func (x *inliner) effectBefore(p *param) ast.Node {
 			if _, ok := n.(*ast.FuncLit); ok {
 				return false
 			}
-			if analysis.HasEffect(x.info, n) && !encloses(n) {
+			if x.ws.Effects().Acts(x.info, n) && !encloses(n) {
 				bad = n
 			}
 			return bad == nil
@@ -620,7 +620,7 @@ func (x *inliner) effectBefore(p *param) ast.Node {
 				}
 			}
 		default:
-			if analysis.HasEffect(x.info, n) && !encloses(n) {
+			if x.ws.Effects().Acts(x.info, n) && !encloses(n) {
 				bad = n
 			}
 		}
@@ -702,7 +702,7 @@ func (x *inliner) checkExprOrder() error {
 		if _, ok := n.(*ast.FuncLit); ok {
 			return false
 		}
-		if analysis.HasEffect(x.info, n) {
+		if x.ws.Effects().Acts(x.info, n) {
 			own = n
 		}
 		return own == nil

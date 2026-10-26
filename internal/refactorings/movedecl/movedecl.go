@@ -490,7 +490,7 @@ func (m *mover) checkDecl(d *moved) error {
 			if !ok {
 				continue
 			}
-			if decl.Tok == token.VAR && hasEffect(m.pkg.TypesInfo, vs) {
+			if decl.Tok == token.VAR && hasEffect(m.pkg.TypesInfo, vs, m.ws.Effects()) {
 				return refactor.Refusef("the initializer of %s has side effects, and variables are initialized in the order of their files, so moving it could change the initialization order; this is not supported", vs.Names[0].Name)
 			}
 			if hasDirective(decl.Doc, "//go:embed") || hasDirective(vs.Doc, "//go:embed") {
@@ -991,14 +991,14 @@ func (s *source) nextLine(off int) int {
 
 // hasEffect reports whether evaluating the spec's values could have a
 // side effect. (Defining a function literal runs nothing.)
-func hasEffect(info *types.Info, vs *ast.ValueSpec) bool {
+func hasEffect(info *types.Info, vs *ast.ValueSpec, effs *analysis.Effects) bool {
 	found := false
 	for _, v := range vs.Values {
 		ast.Inspect(v, func(n ast.Node) bool {
 			if _, ok := n.(*ast.FuncLit); ok || found {
 				return false
 			}
-			found = analysis.HasEffect(info, n)
+			found = effs.Acts(info, n)
 			return !found
 		})
 	}

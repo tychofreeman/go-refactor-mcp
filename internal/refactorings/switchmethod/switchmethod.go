@@ -243,7 +243,7 @@ func (s *switcher) checkPlace(init ast.Stmt) error {
 // checkStable refuses a subject that the new code evaluates again, when
 // it could have another value then.
 func (s *switcher) checkStable() error {
-	if culprit, ok := analysis.AnalyzeFunc(s.info, s.fd).Stable(s.subject, false); !ok {
+	if culprit, ok := s.ws.Effects().Of(analysis.AnalyzeFunc(s.info, s.fd), s.subject).Stable(false); !ok {
 		return refactor.Refusef("%s is evaluated again by the call, and %s could change it; assign it to a variable first (extract_variable)", s.text(s.subject), s.text(culprit))
 	}
 	return nil
