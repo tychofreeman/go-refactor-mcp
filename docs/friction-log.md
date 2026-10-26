@@ -2824,3 +2824,8 @@ appended with a heredoc.
 
 The section in plan-and-execute with replace_text. Nothing by hand.
 This entry appended with a heredoc.
+
+## 2026-10-26: cost-history 19, kinds without reads with four repairs
+
+The run's results in cost-history and the session notes with
+replace_text. Nothing by hand. This entry appended with a heredoc.
