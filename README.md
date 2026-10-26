@@ -1805,11 +1805,23 @@ hand or a tool got in the way.
     goes through the file set, so it holds for a position in any
     file (`target` reads other files). `site.At` refuses a file
     outside the module's packages, and extract_function, invert_if
-    and extract_variable open their file with it. Left: move_declaration's
-    `mover` and `source` (two files at once), the other copies of
-    the opening (`ws.FileSyntax` then `os.ReadFile`, about twenty),
-    and the seven `find`s, which look for different kinds of thing
-    and so are not one function.
+    and extract_variable open their file with it. Then (2026-10-26)
+    eleven more openings: the edits add_declaration, replace_expression,
+    insert_statements, fix_imports, add_case, replace_statements and
+    add_element, slide, introduce_parameter, inline_function's caller
+    file and create_from_usage's interface file, each now one call of
+    `site.At` (an edit's refusal for a file outside the packages now
+    reads "module's packages", as the refactorings' did). Left as they
+    are, because they are not the same opening: locate and the switch
+    refactorings need no source and name the patterns in their refusal;
+    replace_text's imports skip files that are not Go quietly;
+    merge_duplicate_function and create_from_usage's destinations pick
+    the file among a package's syntax or write files that may not be
+    loaded; the declaration edits (replace_declaration, change_type,
+    add_field) open the file a declaration is in, by name. Also left:
+    move_declaration's `mover` and `source` (two files at once), and
+    the seven `find`s, which look for different kinds of thing and so
+    are not one function.
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the

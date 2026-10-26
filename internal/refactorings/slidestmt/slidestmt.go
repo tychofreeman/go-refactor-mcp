@@ -9,12 +9,12 @@ import (
 	"fmt"
 	"go/ast"
 	"go/token"
-	"os"
 	"strings"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/site"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
 
@@ -69,15 +69,12 @@ func (m *MoveStatement) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 		return nil, err
 	}
 	path := ws.Abs(a.File)
-	pkg, file := ws.FileSyntax(path)
-	if file == nil {
-		return nil, refactor.Refusef("file %s is not part of the loaded packages", a.File)
-	}
-	src, err := os.ReadFile(path)
+	opened, err := site.At(ws, path)
 	if err != nil {
 		return nil, err
 	}
-	tf := ws.Fset.File(file.Pos())
+	pkg, file, src := opened.Pkg, opened.File, opened.Src
+	tf := opened.TF
 	list, i := stmtAt(tf, file, a.Line)
 	if i < 0 {
 		return nil, refactor.Refusef("no statement starts on line %d", a.Line)
