@@ -2506,3 +2506,8 @@ hand: the kinds reference batch (`refs/lending-kinds.json`), generated
 by a Python script and tried with the CLI, since no tool writes a
 whole non-Go file over an existing one. This entry appended with a
 heredoc.
+
+## 2026-10-25: kinds with the case address (cost-history 19)
+
+Docs with replace_text. This entry appended with a heredoc. Nothing
+else by hand.

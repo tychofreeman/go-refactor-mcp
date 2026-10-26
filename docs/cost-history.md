@@ -1115,6 +1115,31 @@ type errors. So the read's form was not what kept the models from the
 derivation: with the cases' bodies in view, writing the types out is
 what both models choose, at the same cost as before.
 
+**Kinds with the case address, without reads** (extract_function by
+`function` and `case`, roadmap item 32;
+`eval-runs/loop-{haiku,sonnet}-kinds-case`, $0.92): 0/8. Haiku $0.014
+a task in 4.75 requests, Sonnet $0.217 in 3.5. One attempt in eight
+used the address: Sonnet's first extracted every case (29 calls), wrote
+the types' methods by hand as one-line calls of the extracted
+functions, a route that needs no body, and ran out of stages before
+Import, the comparisons and narrowing. On the way two refusals cost it
+repairs: `"case": "book"` for the string case `"book"`, and Renewable's
+`"atlas"`, which has no case. The others did not take it:
+
+- Haiku (3 of 4) declared Kind with `Label(title string)`, as the
+  prompt gives it, and prepare_switch_for_types refused: the cases need
+  `Label(it Item)`. No repair got past that; no Haiku attempt
+  extracted.
+- Sonnet (2 of 4) did not see that a step addressed by name moves code
+  it cannot see: one sent the steps it could and asked for the five
+  functions' source, one wrote each method as a call back into the
+  switch (`func (Book) LoanDays() int { return LoanDays(Item{Kind:
+  Book{}}) }`), which recurses once the guard dispatches.
+
+So the address works where it is used, but a plan has to know that it
+moves code unseen, and the task's own signature for Label is one
+prepare_switch_for_types cannot reach from `it`.
+
 ## What made the difference
 
 - **Smaller results** (#75, rename locations): the largest single win when
