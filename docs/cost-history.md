@@ -1140,6 +1140,33 @@ So the address works where it is used, but a plan has to know that it
 moves code unseen, and the task's own signature for Label is one
 prepare_switch_for_types cannot reach from `it`.
 
+**Again, with a bare word for a string case and a line in the plan
+prompt** ("Code you cannot see here need not be written: steps that
+address it by name carry it with them ..., so move code rather than ask
+for it or call back into what you move";
+`eval-runs/loop-{haiku,sonnet}-kinds-case2`, $1.06): 0/8 still, but
+the plans changed. Every Sonnet attempt and one Haiku attempt planned
+the derivation by case (39-45 extract_function steps, 40-69 steps a
+batch); none asked for bodies or wrote a method that calls back into
+the switch. Haiku $0.031 a task, Sonnet $0.233, 3 requests each: no
+batch applied, each repair cleared one refusal and met the next. The
+refusals, by what a fix would be:
+
+- a case of several values (Renewable's `case "book", "dvd":`),
+  extracted before prepare_switch_for_types split it (5 attempts);
+- `atlas` in Renewable, which has no case: atlas runs the code after
+  the switch (5);
+- the bare word's retry hid the real refusal: `book` found the shared
+  case, whose refusal was dropped for "no case book" (3); a bug of the
+  last PR;
+- function_to_method making a method on `Item` (the first parameter)
+  where the receiver was not added before `it` (2), and refusing an
+  interface's method name (1);
+- Haiku's `Label(title string)` from the prompt (1).
+
+The prompt line is what moved the plans; what fails now is batches of
+40-69 steps rolled back whole by one refusal, with two repairs.
+
 ## What made the difference
 
 - **Smaller results** (#75, rename locations): the largest single win when
