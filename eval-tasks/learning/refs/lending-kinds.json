@@ -84,14 +84,7 @@
    "tool": "function_to_method",
    "args": {
     "file": "lending/lending.go",
-    "name": "bookLoanDays"
-   }
-  },
-  {
-   "tool": "rename",
-   "args": {
-    "file": "lending/lending.go",
-    "name": "Book.bookLoanDays",
+    "name": "bookLoanDays",
     "new_name": "LoanDays"
    }
   },
@@ -118,14 +111,7 @@
    "tool": "function_to_method",
    "args": {
     "file": "lending/lending.go",
-    "name": "bookDailyFee"
-   }
-  },
-  {
-   "tool": "rename",
-   "args": {
-    "file": "lending/lending.go",
-    "name": "Book.bookDailyFee",
+    "name": "bookDailyFee",
     "new_name": "DailyFee"
    }
   },
@@ -153,14 +139,7 @@
    "tool": "function_to_method",
    "args": {
     "file": "lending/lending.go",
-    "name": "bookLabel"
-   }
-  },
-  {
-   "tool": "rename",
-   "args": {
-    "file": "lending/lending.go",
-    "name": "Book.bookLabel",
+    "name": "bookLabel",
     "new_name": "Label"
    }
   },
@@ -187,14 +166,7 @@
    "tool": "function_to_method",
    "args": {
     "file": "lending/lending.go",
-    "name": "bookShelf"
-   }
-  },
-  {
-   "tool": "rename",
-   "args": {
-    "file": "lending/lending.go",
-    "name": "Book.bookShelf",
+    "name": "bookShelf",
     "new_name": "Shelf"
    }
   },
@@ -221,14 +193,7 @@
    "tool": "function_to_method",
    "args": {
     "file": "lending/lending.go",
-    "name": "bookRenewable"
-   }
-  },
-  {
-   "tool": "rename",
-   "args": {
-    "file": "lending/lending.go",
-    "name": "Book.bookRenewable",
+    "name": "bookRenewable",
     "new_name": "Renewable"
    }
   },
@@ -255,14 +220,7 @@
    "tool": "function_to_method",
    "args": {
     "file": "lending/lending.go",
-    "name": "dvdLoanDays"
-   }
-  },
-  {
-   "tool": "rename",
-   "args": {
-    "file": "lending/lending.go",
-    "name": "DVD.dvdLoanDays",
+    "name": "dvdLoanDays",
     "new_name": "LoanDays"
    }
   },
@@ -289,14 +247,7 @@
    "tool": "function_to_method",
    "args": {
     "file": "lending/lending.go",
-    "name": "dvdDailyFee"
-   }
-  },
-  {
-   "tool": "rename",
-   "args": {
-    "file": "lending/lending.go",
-    "name": "DVD.dvdDailyFee",
+    "name": "dvdDailyFee",
     "new_name": "DailyFee"
    }
   },
@@ -324,14 +275,7 @@
    "tool": "function_to_method",
    "args": {
     "file": "lending/lending.go",
-    "name": "dvdLabel"
-   }
-  },
-  {
-   "tool": "rename",
-   "args": {
-    "file": "lending/lending.go",
-    "name": "DVD.dvdLabel",
+    "name": "dvdLabel",
     "new_name": "Label"
    }
   },
@@ -358,14 +302,7 @@
    "tool": "function_to_method",
    "args": {
     "file": "lending/lending.go",
-    "name": "dvdShelf"
-   }
-  },
-  {
-   "tool": "rename",
-   "args": {
-    "file": "lending/lending.go",
-    "name": "DVD.dvdShelf",
+    "name": "dvdShelf",
     "new_name": "Shelf"
    }
   },
@@ -392,14 +329,7 @@
    "tool": "function_to_method",
    "args": {
     "file": "lending/lending.go",
-    "name": "dvdRenewable"
-   }
-  },
-  {
-   "tool": "rename",
-   "args": {
-    "file": "lending/lending.go",
-    "name": "DVD.dvdRenewable",
+    "name": "dvdRenewable",
     "new_name": "Renewable"
    }
   },
@@ -426,14 +356,7 @@
    "tool": "function_to_method",
    "args": {
     "file": "lending/lending.go",
-    "name": "atlasLoanDays"
-   }
-  },
-  {
-   "tool": "rename",
-   "args": {
-    "file": "lending/lending.go",
-    "name": "Atlas.atlasLoanDays",
+    "name": "atlasLoanDays",
     "new_name": "LoanDays"
    }
   },
@@ -460,14 +383,7 @@
    "tool": "function_to_method",
    "args": {
     "file": "lending/lending.go",
-    "name": "atlasDailyFee"
-   }
-  },
-  {
-   "tool": "rename",
-   "args": {
-    "file": "lending/lending.go",
-    "name": "Atlas.atlasDailyFee",
+    "name": "atlasDailyFee",
     "new_name": "DailyFee"
    }
   },
@@ -495,14 +411,7 @@
    "tool": "function_to_method",
    "args": {
     "file": "lending/lending.go",
-    "name": "atlasLabel"
-   }
-  },
-  {
-   "tool": "rename",
-   "args": {
-    "file": "lending/lending.go",
-    "name": "Atlas.atlasLabel",
+    "name": "atlasLabel",
     "new_name": "Label"
    }
   },
@@ -529,14 +438,7 @@
    "tool": "function_to_method",
    "args": {
     "file": "lending/lending.go",
-    "name": "atlasShelf"
-   }
-  },
-  {
-   "tool": "rename",
-   "args": {
-    "file": "lending/lending.go",
-    "name": "Atlas.atlasShelf",
+    "name": "atlasShelf",
     "new_name": "Shelf"
    }
   },

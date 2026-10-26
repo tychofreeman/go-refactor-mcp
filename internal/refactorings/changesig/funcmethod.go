@@ -26,7 +26,7 @@ func (*FunctionToMethod) Name() string { return "function_to_method" }
 func (*FunctionToMethod) Description() string {
 	return `Turn a function into a method of its first parameter's type, and change every call: func total(c *Cart) int becomes func (c *Cart) total() int, total(cart) becomes cart.total(), and total(&v) becomes v.total(). The reverse of method_to_function. The first parameter becomes the receiver (move_parameter first to choose another); its type must be T or *T for a type T of the function's package.
 Identify the function by file and name, or by line at its declaration or any call; new_name gives the method another name.
-Refuses, saying why: a name that some interface in the workspace has, or that T or a type embedding it already has as a field or method; a function used as a value, or generic; an exported name that could make T implement an interface checked at run time (String, Error, MarshalJSON).`
+Refuses, saying why: a name that makes T implement an interface while a value of T becomes an interface value (String, Error, or a module's interface), or that T or a type embedding it already has as a field or method; a function used as a value, or generic.`
 }
 
 func (*FunctionToMethod) InputSchema() json.RawMessage {
@@ -97,12 +97,17 @@ func (*FunctionToMethod) Plan(ws *workspace.Workspace, raw json.RawMessage) (*re
 	if named.TypeParams().Len() > 0 {
 		return nil, refactor.Refusef("the type %s has type parameters; this is not supported yet", named.Obj().Name())
 	}
-	if err := t.checkNoInterface(name); err != nil {
+	implements, err := t.checkImplements(named, name, recvVar.Type() != types.Type(named))
+	if err != nil {
 		return nil, err
 	}
 	if token.IsExported(name) {
+		// Only through a value that becomes an interface value can a check
+		// at run time see the method.
 		if iface := analysis.MethodInterface(ws.Pkgs, named, name, true); iface != "" {
-			return nil, refactor.Refusef("a method %s could make %s implement %s, which code checks for at run time, and change behavior with no compile error; pass another new_name", name, named.Obj().Name(), iface)
+			if at := t.becomesInterface(named); at != "" {
+				return nil, refactor.Refusef("a method %s could make %s implement %s, which code checks for at run time, and change behavior with no compile error (%s becomes an interface value); pass another new_name", name, named.Obj().Name(), iface, at)
+			}
 		}
 	}
 	if err := t.checkNoSelector(named, name); err != nil {
@@ -132,7 +137,9 @@ func (*FunctionToMethod) Plan(ws *workspace.Workspace, raw json.RawMessage) (*re
 		}
 		fes = append(fes, edit.FileEdit{Path: cpath, Edits: es})
 	}
-	return t.newPlan(fmt.Sprintf("turned function %s into method %s of %s", t.obj.Name(), name, t.typeName(recvVar.Type())), fes), nil
+	plan := t.newPlan(fmt.Sprintf("turned function %s into method %s of %s", t.obj.Name(), name, t.typeName(recvVar.Type())), fes)
+	plan.Notes = append(plan.Notes, implements...)
+	return plan, nil
 }
 
 // checkNoSelector refuses if T, *T or a type that embeds T already has a
@@ -158,6 +165,92 @@ func (t *target) checkNoSelector(named *types.Named, name string) error {
 		}
 	}
 	return nil
+}
+
+// checkImplements refuses a method name that an interface of the module
+// has, if with the method named (through *named only, with ptr) would
+// implement the interface while one of its values becomes an interface
+// value, where a type assertion or reflection could see the difference.
+// It returns a note for each interface it starts to implement unseen. A
+// type that embeds named would get the method too, so then any such
+// interface is refused.
+func (t *target) checkImplements(named *types.Named, name string, ptr bool) ([]string, error) {
+	ifaces := analysis.InterfacesWithMethod(t.ws.TypesInfos(), t.obj.Pkg().Path(), name)
+	if len(ifaces) == 0 {
+		return nil, nil
+	}
+	for _, p := range t.ws.Pkgs {
+		if p.TypesInfo == nil {
+			continue
+		}
+		for _, o := range p.TypesInfo.Defs {
+			if tn, ok := o.(*types.TypeName); ok && !tn.IsAlias() && typeKey(tn.Type()) != typeKey(named) && embeds(tn.Type(), named, map[types.Type]bool{}) {
+				return nil, t.checkNoInterface(name)
+			}
+		}
+	}
+	sig := t.obj.Signature()
+	var rest []*types.Var
+	for i := 1; i < sig.Params().Len(); i++ {
+		rest = append(rest, sig.Params().At(i))
+	}
+	method := types.NewSignatureType(nil, nil, nil, types.NewTuple(rest...), sig.Results(), sig.Variadic())
+	noQualifier := func(*types.Package) string { return "" }
+	var notes []string
+	for _, it := range ifaces {
+		iname := it.Name
+		if iname == "" {
+			iname = "at " + t.ws.Position(it.At)
+		}
+		for _, T := range []types.Type{named, types.NewPointer(named)} {
+			_, isPtr := T.(*types.Pointer)
+			if !implementsWith(T, it.Type, name, method, isPtr || !ptr) {
+				continue
+			}
+			if at := t.becomesInterface(named); at != "" {
+				return nil, refactor.Refusef("with a method %s, type %s would implement interface %s, which it does not now; that could change what a type assertion or interface conversion does: %s becomes an interface value", name, types.TypeString(T, noQualifier), iname, at)
+			}
+			notes = append(notes, fmt.Sprintf("type %s now implements interface %s; no value of it becomes an interface value, so no type assertion or reflection sees the difference", types.TypeString(T, noQualifier), iname))
+			break // *T implements what T does: one note for both
+		}
+	}
+	return notes, nil
+}
+
+// implementsWith reports whether T implements I once it has a method
+// name of signature method (if has; a method on *T only is not in T's
+// method set).
+func implementsWith(T types.Type, I *types.Interface, name string, method *types.Signature, has bool) bool {
+	ms := types.NewMethodSet(T)
+	for i := 0; i < I.NumMethods(); i++ {
+		im := I.Method(i)
+		if im.Name() == name {
+			if !has || !types.Identical(method, im.Type()) {
+				return false
+			}
+			continue
+		}
+		sel := ms.Lookup(im.Pkg(), im.Name())
+		if sel == nil || !types.Identical(sel.Obj().Type(), im.Type()) {
+			return false
+		}
+	}
+	return true
+}
+
+// becomesInterface returns where a value that holds named may become an
+// interface value in the workspace, or "".
+func (t *target) becomesInterface(named *types.Named) string {
+	match := func(T types.Type) bool { return types.Identical(T, named) }
+	for _, p := range t.ws.Pkgs {
+		if p.TypesInfo == nil {
+			continue
+		}
+		if e := analysis.BecomesInterface(p.TypesInfo, p.Syntax, match); e != nil {
+			return fmt.Sprintf("%s at %s", types.ExprString(e), t.ws.Position(e.Pos()))
+		}
+	}
+	return ""
 }
 
 // embeds reports whether the struct underlying t embeds named, directly or
