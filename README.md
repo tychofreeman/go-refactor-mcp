@@ -1541,6 +1541,35 @@ hand or a tool got in the way.
       a copy differs.
     One PR each: output holes in `pattern`, and fold taking such
     functions; then the extract_function option.
+34. **One analysis of what code does** (the user, 2026-10-25): three
+    analyses answer overlapping questions about an expression:
+    `Func.Stable` (is its value the same if computed again or
+    elsewhere), `MayPanic` (can it panic), and `Effects`' summaries
+    (what a call or body writes, reads, can panic on, or stops), each
+    with its own facts about the standard library, which drifted apart
+    (`json.Valid` known to one, `reflect.TypeOf` to another). The
+    merge, one PR each:
+    1. *Done.* One table of standard-library facts, `stdFuncs`: what a
+       function reads, writes, how it panics, and whether its result is
+       new each call. `KnownCall` and `ReadOnlyCall` derive from it.
+       Verdicts that changed with it: the go/types and io/fs getters
+       Effects knew are now known to Stable; `os.Getenv` and the other
+       functions that only read can be deleted; `strings.Join` can
+       panic (a result too long), as ReadOnlyCall already said.
+    2. A summary's findings carry the node and the panic kind (none, a
+       nil dereference, other), so that callers can ask what Stable and
+       MayPanic ask.
+    3. A summary of one expression (`Effects.Of`), the body walker
+       applied to it, private memory from the function's facts.
+    4. The callers of MayPanic, Stable, HasEffect and FirstEffectBefore
+       moved to it, with verdicts kept, checked by a differential test
+       over the goldens, the stress tests and the module.
+    5. Calls of the module's own functions judged by their summaries
+       (computed once a load): by value, as stable as the arguments;
+       reading through a pointer, not stable; an effect, not stable;
+       a panic, by the panic rules; unknown, a wall. The user waived
+       the question of a nil dereference moving with a call (2026-10-25).
+    6. The old analyses deleted.
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the

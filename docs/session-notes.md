@@ -104,6 +104,15 @@ results are in `docs/cost-history.md`.
   needs; never before code that might not finish or return
   (`Summary.Stops`).
 
+- **One analysis of what code does** (2026-10-25, the user): Stable,
+  MayPanic and Effects' summaries merge into one, in six PRs (README,
+  roadmap item 34). Facts about the standard library live in one
+  table, `stdFuncs`, and verdicts derive from the facts; a function
+  added there is known to every analysis. When the module's own
+  functions are judged by their summaries (step 5), a call that may
+  dereference nil can move with the call, as above; the user waived
+  that question for now.
+
 - **Tool descriptions: an example per use, the rules in refusals**
   (2026-10-21): cutting `fold`'s description from 668 to about 260
   words lost its use on near-duplicates (2/4 runs to 0/4) when the

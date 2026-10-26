@@ -302,7 +302,7 @@ func TestEffectsCallStandardLibrary(t *testing.T) {
 	// Which of effect, reads and unsafe each call itself has.
 	want := map[string][3]bool{
 		"os.ReadFile(path)":             {false, true, false},
-		`strings.Join(xs, ",")`:         {false, true, false},
+		`strings.Join(xs, ",")`:         {false, true, true}, // a result too long
 		"sort.Strings(xs)":              {true, true, false},
 		"n.Pos()":                       {false, true, true},
 		"tf.Offset(n.Pos())":            {false, true, true},
