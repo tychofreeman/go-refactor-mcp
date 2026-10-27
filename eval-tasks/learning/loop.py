@@ -238,7 +238,7 @@ every place it reaches:
 
 {entries}"""
 
-CARRIERS = "fold,extract_function,change_field_type,introduce_parameter,remove_dead_code"
+CARRIERS = "fold,extract_function,change_field_type,introduce_parameter,remove_dead_code,prepare_switch_for_types,function_to_method"
 
 # TOOLS_HINT ends the later prompts with -index.
 TOOLS_HINT = """
@@ -639,7 +639,7 @@ def main():
     p.add_argument("-read-after", action="store_true", help="the plan may ask for source only once a batch has applied")
     p.add_argument("-patch", action="store_true", help="a repair may answer with the failed batch's steps from one on, the ones before kept")
     p.add_argument("-index", action="store_true", help="the plan gets a line a tool, and asks for the full entries of those it will use")
-    p.add_argument("-full-tools", default="", help=f"with -index, tools given in full from the start, comma-separated (the ones that carry a change to many places: {CARRIERS})")
+    p.add_argument("-full-tools", default="", help=f"with -index, tools given in full from the start, comma-separated (the ones that carry a change to many places, and the two a type code into types needs: {CARRIERS})")
     p.add_argument("-arm", default="refactor", choices=sorted(ARMS),
                    help="what the model answers with: gorefactor steps, or text edits the loop applies")
     p.add_argument("-reference", default="compact", choices=["compact", "full"],

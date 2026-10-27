@@ -1487,6 +1487,18 @@ tools that carry a change are what a plan needs to choose a
 derivation; the rest can be a line. Where the derivation needs other
 tools too (kinds), the asks cost what the index saved.
 
+With those two added (prepare_switch_for_types and function_to_method,
+seven in full; `eval-runs/loop-{haiku,sonnet}-kinds-indexfull7`,
+$0.92): Sonnet 3/4 at $0.208 an attempt, 31% below five in full and
+20% below the full reference ($0.261, 4/4), in 6.25 requests (7.5);
+Haiku 2/4 at $0.0207 (0/4 with five, 1/4 with the reference). Every
+attempt derived (prepare, then extract_function by case). The asks
+did not go: 1.75 an attempt, now for edits (add_declaration,
+replace_declaration, move_declaration, replace_text, check). Sonnet's
+failure ran out of stages with every batch applied. By hand it is
+still $0.186 (4/4), 11% below, with half again the lines (69 against
+43).
+
 ## What made the difference
 
 - **Smaller results** (#75, rename locations): the largest single win when

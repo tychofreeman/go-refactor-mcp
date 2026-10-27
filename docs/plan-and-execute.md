@@ -422,9 +422,9 @@ reference and half of writing by hand, Haiku 13/16 at 19% below; the
 folds came back (routes 3 of 4, run 4 of 4). On kinds Sonnet 4/4 at
 15% more than with the reference, from asks for the tools the
 derivation needs beyond the five (prepare_switch_for_types,
-function_to_method). Next, if wanted: add prepare_switch_for_types and
-function_to_method to the list, or give in full the tools a task's
-shape calls for.
+function_to_method). With those two in the list (`CARRIERS`, now
+seven): kinds Sonnet 3/4 at 20% below the reference, Haiku 2/4, every
+attempt derived; the plans still asked for the edit tools.
 
 ## Recording
 

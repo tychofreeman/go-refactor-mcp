@@ -2979,3 +2979,10 @@ in four functions, and the `ws.Fset.File(file.Pos())` replaced with
 to `opened` and those two replacements dropped. inline_function's and
 create_from_usage's openings, of other shapes, with replace_text.
 Nothing by hand. This entry appended with replace_text.
+
+
+## 2026-10-26: seven tools in full beside the index
+
+`CARRIERS` in loop.py, the results in cost-history 19,
+plan-and-execute, the session notes and this entry with replace_text
+in one batch. Nothing by hand.
