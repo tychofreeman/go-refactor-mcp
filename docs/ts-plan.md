@@ -172,19 +172,26 @@ baselines stay valid; one Go A/B run confirms it.
 
 ## 3. The engine for TypeScript
 
-**Workspace.** Root is the directory of a `tsconfig.json` (or a solution
-config with project references). Load with `tsoptions` and build a
-`compiler.Program` over a `vfs` overlay, so a plan can be type-checked
-before anything is written to disk. Refresh on every call when any
-`.ts/.tsx/.mts/.cts` file, tsconfig or package.json changed (stamps, as
-now). Edit only files under the root that the program owns; never
-`node_modules` or `.d.ts` from packages.
+**Workspace.** Root is the directory of a `tsconfig.json`, and when it
+is a solution (project references), every project it references is
+loaded: a file's default project can leave its tests out, and a rename
+there misses them (spike, finding 1). Load with `tsoptions` and build a
+`compiler.Program` over a `vfs` overlay (`wrapvfs` replacing
+`ReadFile`), so a plan can be type-checked before anything is written
+to disk; a changed file goes in with `Program.UpdateProgram`. Refresh
+on every call when any `.ts/.tsx/.mts/.cts` file, tsconfig or
+package.json changed (stamps, as now). Edit only files under the root
+that the program owns; never `node_modules` or `.d.ts` from packages.
 
 **Safety rule.** Same as gorefactor: semantic and syntactic diagnostics
 before and after; a refactoring must add none; an edit marked `Fix` must
-remove some and add none. Compare diagnostics by code, file and message,
-not position. Only re-check files that import, directly or not, a file
-the step changed (the program's file dependency graph).
+remove some and add none. Compare diagnostics by file, code, message key
+and arguments, not position. Re-check through the incremental builder
+(`execute/incremental`, `tsc --watch`'s): it keeps each file's
+diagnostics and re-checks importers only when a file's declaration
+output changed, 27 ms for a body edit against seconds for a plain
+re-check of importers. Record every file's signature at load, in the
+background, or the first edit pays for them (spike, findings 2-3).
 
 **Formatting.** There is no gofmt. Format only the text a step inserts,
 with `pkg/format` and the project's settings (tsconfig / `.editorconfig`;
@@ -287,14 +294,14 @@ eval tasks transfer.
 TDD throughout, one item per branch and PR, the friction log kept as for
 Go. Steps 1 and 2 change shared code and come before any TypeScript.
 
-0. **Spike (a branch, throwaway code allowed).** On a real TypeScript
-   repo: load a tsconfig, build a Program over a vfs overlay, apply a
-   byte edit in memory, re-check only affected files, diff diagnostics;
-   call LS rename and file_rename through `tsapi`. Measure load time,
-   re-check time per step and the binary's growth. Exit criteria:
-   re-check under about 1 s on a 50k-line project, and rename giving the
-   same edits as `tsc` 7's LSP. If it fails, decide between options B
-   and C (section 1); with B the shared server is off (section 2).
+0. **Spike.** *Done* (`docs/ts-spike.md`, `cmd/ts-spike`): on Hono
+   (82k lines with tests), loading takes 0.33 s, an edit's program
+   update 1-2 ms, a re-check after a body edit 27 ms and after an
+   exported change 1.4-3.4 s on 1-2 cores; rename through the language
+   server's session is correct and takes 10 ms. Option A holds. It
+   added three requirements to step 3: load every project of the
+   solution, re-check through the incremental builder, record
+   signatures at load.
 1. **Split CLAUDE.md and the session notes** by language, and add CI
    path filters.
 2. **Make the engine language-neutral:** the undo stack out of the Go

@@ -3071,3 +3071,12 @@ these edits.
 
 The Test workflow's triggers with replace_text. Nothing by hand. This
 entry appended with replace_text.
+
+## 2026-10-27: TypeScript spike
+
+`cmd/ts-spike` (throwaway code, step 0 of `docs/ts-plan.md`) and
+`docs/ts-spike.md`, with the plan, README item 40 and a session note
+updated, all by hand with plain file edits from a claude.ai session
+without the gorefactor tools; the spike was rewritten often while
+measuring, which no tool would have shortened. Not evidence for a
+tool.

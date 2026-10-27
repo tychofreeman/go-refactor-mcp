@@ -1959,6 +1959,12 @@ hand or a tool got in the way.
     language), and only then TypeScript itself. A workspace per root
     (a Go workspace per `go.mod`, a program per `tsconfig.json`) also
     answers item 39's "one server, one module" for Go.
+    Step 0, the spike, is *done* (`docs/ts-spike.md`): on Hono (82k
+    lines with tests) loading takes 0.33 s, a body edit re-checks in
+    27 ms through the incremental builder, an exported change in 1.4-3.4
+    s on 1-2 cores, and rename through the language server's session is
+    correct in 10 ms; it found that every project of a solution must be
+    loaded (a file's default project left its tests out of a rename).
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
