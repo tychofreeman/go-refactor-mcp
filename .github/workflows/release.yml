@@ -1,0 +1,53 @@
+name: Release
+
+# A release follows a change of version: when the Test workflow passes on
+# a push to main and no tag yet names mcpserver.Version, this tags that
+# commit v<Version> and creates its GitHub release, with the notes in
+# docs/releases/v<Version>.md if there are any, else notes made from the
+# merged pull requests. Run it by hand (workflow_dispatch) to release the
+# head of main.
+on:
+  workflow_run:
+    workflows: [Test]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    env:
+      SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SHA }}
+
+      - name: Release the version if it has no tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(sed -n 's/^const Version = "\(.*\)"$/\1/p' internal/mcpserver/server.go)
+          if [ -z "$version" ]; then
+            echo "::error title=No version::internal/mcpserver/server.go has no const Version"
+            exit 1
+          fi
+          tag="v$version"
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null; then
+            echo "$tag is already tagged; nothing to release"
+            exit 0
+          fi
+          notes="docs/releases/$tag.md"
+          if [ -f "$notes" ]; then
+            gh release create "$tag" --target "$SHA" --title "$tag" --notes-file "$notes"
+          else
+            gh release create "$tag" --target "$SHA" --title "$tag" --generate-notes
+          fi
