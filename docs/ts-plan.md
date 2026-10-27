@@ -409,8 +409,17 @@ Go. Steps 1 and 2 change shared code and come before any TypeScript.
    `replace_text` (any file under the root, `files`, `all_occurrences`),
    in `internal/ts/edits`, with Go's arguments. Test first works in a
    batch checked at its end: the test and what it calls go together.
-   Left: `replace_statements`, `insert_statements`, `replace_expression`,
-   `add_property`, `organize_imports`, and stubs for what a test calls.
+   Second part *done*: `replace_statements` (lines of whole statements
+   of one block, or `function` for a whole body, an empty one or an
+   arrow function's too), `insert_statements` (before, after, into) and
+   `replace_expression` (parenthesized where needed; `all_occurrences`
+   by tokens and symbols). The syntax is in `tsapi/stmts.go` and
+   `expr.go`. Without Go's `imports` and `case` arguments yet; checked
+   on Hono (a body, a block, an expression in 25-170 ms after the
+   first step, which pays 4.6 s for the declaration signatures, as
+   the spike found).
+   Left: `add_property`, `organize_imports` (and with it imports for
+   names content uses), and stubs for what a test calls.
 6. **Signatures** (Go's most common by-hand step): add / remove / move /
    introduce parameter, change_return_type, convert_params_to_object.
 7. **Effects analysis** (section 4) as one `analysis` package with a

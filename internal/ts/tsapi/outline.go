@@ -20,6 +20,9 @@ type Decl struct {
 	// BodyStart and BodyEnd are a function's or method's lines inside the
 	// braces; 0 when there are fewer than 2.
 	BodyStart, BodyEnd int
+	// BlockStart and BlockEnd are the offsets of its body's opening brace
+	// and just past its closing one; 0 when its body is not in braces.
+	BlockStart, BlockEnd int
 }
 
 // Outline returns the declarations of the file at path, in order, or nil
@@ -37,6 +40,7 @@ func (p *Project) Outline(path string) []Decl {
 		head := n.End()
 		if body != nil && ast.IsBlock(body) {
 			head = scanner.GetTokenPosOfNode(body, f, false)
+			d.BlockStart, d.BlockEnd = head, body.End()
 			open, close := line(head), line(max(body.End()-1, head))
 			if close-open-1 >= 2 {
 				d.BodyStart, d.BodyEnd = open+1, close-1
