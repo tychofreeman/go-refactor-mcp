@@ -3016,3 +3016,14 @@ its own `tail` and `testTimeout` with remove_dead_code (its go test is
 now `refactor.GoTest`, the checkpoint's), `runCheck` with
 add_declaration, its dispatch and the usage with replace_text. Nothing
 by hand. This entry appended with replace_text.
+
+## 2026-10-27: undo in the CLI
+
+The tests first with add_declaration (the batch declared `LoadUndo` and
+`SaveUndo` as stubs), then the two with add_declaration (refused once:
+`json` could be `encoding/json` or `encoding/json/v2`, so `imports`
+named it), `undoFile`, `keepUndo` and `runUndo` with add_declaration,
+their calls, the dispatch and the usage with replace_text; `TestMain`
+with add_declaration, keeping the tests' stacks out of the user's
+cache and go test on its build cache. Nothing by hand. This entry
+appended with replace_text.

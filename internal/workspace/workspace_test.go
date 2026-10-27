@@ -61,6 +61,44 @@ func TestApplyAndUndo(t *testing.T) {
 	}
 }
 
+func TestUndoKeptInAFile(t *testing.T) {
+	src := "package m\n\nfunc F() int { return 1 }\n"
+	dir := writeModule(t, map[string]string{"m.go": src})
+	path := filepath.Join(dir, "m.go")
+	stack := filepath.Join(t.TempDir(), "undo.json")
+	w, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := w.LoadUndo(stack); err != nil || w.CanUndo() {
+		t.Fatalf("LoadUndo of a missing file: %v, CanUndo %v", err, w.CanUndo())
+	}
+	i := strings.Index(src, "1")
+	if _, err := w.Apply("change literal", []edit.FileEdit{{Path: path, Edits: []edit.TextEdit{{Start: i, End: i + 1, NewText: "2"}}}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.SaveUndo(stack); err != nil {
+		t.Fatal(err)
+	}
+	later, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := later.LoadUndo(stack); err != nil {
+		t.Fatal(err)
+	}
+	c, err := later.Undo()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Label != "undo change literal" {
+		t.Errorf("label %q", c.Label)
+	}
+	if got, _ := os.ReadFile(path); string(got) != src {
+		t.Errorf("undo did not restore the file: %s", got)
+	}
+}
+
 func TestApplyCreatesFileAndUndoRemovesIt(t *testing.T) {
 	dir := writeModule(t, map[string]string{"m.go": "package m\n\nfunc F() int { return G() }\n\nfunc G() int { return 1 }\n"})
 	w, err := Load(dir)

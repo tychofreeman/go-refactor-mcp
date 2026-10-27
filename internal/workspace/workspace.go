@@ -10,6 +10,7 @@ package workspace
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"go/ast"
@@ -692,4 +693,49 @@ func rel(root, p string) string {
 		return filepath.ToSlash(r)
 	}
 	return p
+}
+
+// maxSavedUndo bounds the changes SaveUndo keeps, the oldest dropped
+// first: each holds the whole contents of the files it touched.
+const maxSavedUndo = 50
+
+// SaveUndo writes the undo stack to path, its last maxSavedUndo changes,
+// so that another process working on the same files can undo them after
+// LoadUndo.
+func (w *Workspace) SaveUndo(path string) error {
+	stack := w.undo
+	if len(stack) > maxSavedUndo {
+		stack = stack[len(stack)-maxSavedUndo:]
+	}
+	b, err := json.Marshal(stack)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, b, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
+}
+
+// LoadUndo replaces the undo stack with the one SaveUndo wrote to path;
+// a missing file is an empty stack.
+func (w *Workspace) LoadUndo(path string) error {
+	b, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		w.undo = nil
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	var stack []Change
+	if err := json.Unmarshal(b, &stack); err != nil {
+		return fmt.Errorf("the undo stack in %s: %v", path, err)
+	}
+	w.undo = stack
+	return nil
 }

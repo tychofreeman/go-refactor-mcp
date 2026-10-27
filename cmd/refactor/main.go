@@ -10,17 +10,24 @@
 //	refactor batch @steps.json      (the JSON from a file; - reads stdin)
 //	refactor inspect '{"names":["Settle","Ledger.Post"]}'   (or file=a.go, ...)
 //	refactor check run_tests=true    (type-checks, then go test ./...)
+//	refactor undo                    (reverts the last step or batch applied)
+//
+// The undo stack is kept between invocations, a file per module in the
+// user's cache directory.
 //
 // Exit status: 0 applied (or previewed, or the check passed), 2 refused
 // (or the check failed), 1 error.
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -41,7 +48,7 @@ func run(argv []string) int {
 	dryRun := fs.Bool("n", false, "dry run: print the diff without writing")
 	asJSON := fs.Bool("json", false, "print the result as JSON (without declaring what an edit calls)")
 	fs.Usage = func() {
-		fmt.Fprintf(fs.Output(), "usage: refactor [flags] list\n       refactor [flags] <refactoring> key=value... | '<json>' | @file | -\n       refactor [flags] batch '<json>' | @file | -\n       refactor [flags] inspect key=value... | '<json>' | @file | -\n       refactor [flags] check [run_tests=true] [packages=./...]\n\n@file reads the JSON from a file, - from stdin.\n\nflags:\n")
+		fmt.Fprintf(fs.Output(), "usage: refactor [flags] list\n       refactor [flags] <refactoring> key=value... | '<json>' | @file | -\n       refactor [flags] batch '<json>' | @file | -\n       refactor [flags] inspect key=value... | '<json>' | @file | -\n       refactor [flags] check [run_tests=true] [packages=./...]\n       refactor [flags] undo\n\n@file reads the JSON from a file, - from stdin.\n\nflags:\n")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(argv); err != nil {
@@ -73,6 +80,9 @@ func run(argv []string) int {
 	if name == "check" {
 		return runCheck(rest, *dir, *pattern)
 	}
+	if name == "undo" {
+		return runUndo(*dir, *pattern)
+	}
 	r, ok := refactorings.Lookup(name)
 	if !ok {
 		fmt.Fprintf(os.Stderr, "unknown refactoring %q (try: refactor list)\n", name)
@@ -89,6 +99,12 @@ func run(argv []string) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
+	save, err := keepUndo(ws)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	defer save()
 	if *asJSON {
 		// The result of the step alone, without the retry that declares
 		// what an edit calls.
@@ -137,6 +153,12 @@ func runBatch(argv []string, dir, pattern string, dryRun bool) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
+	save, err := keepUndo(ws)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	defer save()
 	b, err := refactor.RunBatch(ws, batch.Steps, refactor.Options{Unchecked: batch.Unchecked, Declare: refactorings.Declarer(), Imports: refactorings.Importer()})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
@@ -206,6 +228,68 @@ func runCheck(argv []string, dir, pattern string) int {
 	fmt.Fprint(stdout, report)
 	if !passed {
 		return 2
+	}
+	return 0
+}
+
+// undoFile is where the CLI keeps the undo stack of the module at root,
+// so that undo reverts what an earlier invocation applied: a file per
+// module, in the user's cache directory.
+func undoFile(root string) (string, error) {
+	cache, err := os.UserCacheDir()
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256([]byte(root))
+	return filepath.Join(cache, "gorefactor", "undo", hex.EncodeToString(sum[:8])+".json"), nil
+}
+
+// keepUndo loads the undo stack earlier invocations left for ws's module,
+// and returns the function that saves it once this invocation's changes
+// are made.
+func keepUndo(ws *workspace.Workspace) (func(), error) {
+	path, err := undoFile(ws.Root)
+	if err != nil {
+		return nil, err
+	}
+	if err := ws.LoadUndo(path); err != nil {
+		return nil, err
+	}
+	return func() {
+		if err := ws.SaveUndo(path); err != nil {
+			fmt.Fprintln(os.Stderr, "the undo stack was not saved:", err)
+		}
+	}, nil
+}
+
+// runUndo reverts the last step or batch an invocation applied to the
+// module, as the undo tool does for a session. It exits with status 2
+// when there is none, or it cannot be undone.
+func runUndo(dir, pattern string) int {
+	ws, err := workspace.Load(dir, pattern)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	save, err := keepUndo(ws)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	defer save()
+	if !ws.CanUndo() {
+		fmt.Fprintln(stdout, "Nothing to undo: no step or batch applied to this module with the CLI is left to revert.")
+		return 2
+	}
+	c, err := ws.Undo()
+	if c.Label == "" { // not undone
+		fmt.Fprintln(stdout, "Cannot undo: "+err.Error())
+		return 2
+	}
+	fmt.Fprintf(stdout, "UNDONE %s\n\n%s", strings.TrimPrefix(c.Label, "undo "), c.Diff)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
+		return 1
 	}
 	return 0
 }
