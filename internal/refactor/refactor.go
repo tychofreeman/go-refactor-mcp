@@ -46,6 +46,29 @@ type Workspace interface {
 	LastChange() (history.Change, bool)
 }
 
+// ToleratesErrors marks a workspace whose code may have errors before a
+// step (TypeScript, where code written for an older compiler has some):
+// a refactoring or edit there must add none, rather than start from
+// none, and a batch must end with none it did not start with.
+type ToleratesErrors interface {
+	ToleratesErrors()
+}
+
+// tolerates reports whether ws tolerates errors already in its code.
+func tolerates(ws Workspace) bool {
+	_, ok := ws.(ToleratesErrors)
+	return ok
+}
+
+// addedRefusal says why a step that left the errors after, from before,
+// is refused in a workspace that tolerates errors, or "" if it is not.
+func addedRefusal(before, after []string) string {
+	if added := addedErrors(before, after); len(added) > 0 {
+		return fmt.Sprintf("the change adds errors the code did not have, so it was not applied. New errors:\n  %s", strings.Join(limit(added, 10), "\n  "))
+	}
+	return ""
+}
+
 // Refactoring is a refactoring of Go code.
 type Refactoring = RefactoringOf[*workspace.Workspace]
 
@@ -216,7 +239,8 @@ func Run[W Workspace](ws W, r RefactoringOf[W], args json.RawMessage, opts Optio
 	// first against what it makes (a test calling the name a rename
 	// gives): like a fix, it must then fix some of them and add none.
 	towardTests := len(before) > 0 && !isFix && !isEdit && inTestsOnly(before)
-	if len(before) > 0 && !isFix && !isEdit && !towardTests {
+	tolerant := tolerates(ws)
+	if len(before) > 0 && !isFix && !isEdit && !towardTests && !tolerant {
 		res.Refused = fmt.Sprintf("the code does not type-check, so refactorings cannot be verified. Fix these first (an edit, such as add_field for a field a test already uses, may run on code that does not type-check if it fixes some of the errors):\n  %s",
 			strings.Join(limit(before, 10), "\n  "))
 		if opts.Unchecked {
@@ -279,7 +303,12 @@ func Run[W Workspace](ws W, r RefactoringOf[W], args json.RawMessage, opts Optio
 	if err != nil {
 		return nil, err
 	}
-	if reason := afterRefusal(r, isEdit, isFix || towardTests, opts.Unchecked, before, ws.Errors()); reason != "" {
+	after := ws.Errors()
+	reason := afterRefusal(r, isEdit, isFix || towardTests, opts.Unchecked, before, after)
+	if tolerant && !isFix && !(opts.Unchecked && isEdit) {
+		reason = addedRefusal(before, after)
+	}
+	if reason != "" {
 		if _, uerr := ws.Undo(); uerr != nil {
 			return nil, fmt.Errorf("the step broke the build and undo failed: %v (%s)", uerr, reason)
 		}
@@ -548,6 +577,20 @@ func paramSteps(name string, old, new *ast.FuncType) []string {
 // fixRefusal says why a fix that left the errors after, from before, is
 // refused, or "" if it is not: it must fix some and add none.
 func fixRefusal(before, after []string) string {
+	added := addedErrors(before, after)
+	switch {
+	case len(added) > 0:
+		return fmt.Sprintf("the change adds errors the code did not have, so it was not applied. New errors:\n  %s", strings.Join(limit(added, 10), "\n  "))
+	case len(after) >= len(before):
+		return fmt.Sprintf("the change fixes none of the errors, so it was not applied. Errors are:\n  %s", strings.Join(limit(after, 10), "\n  "))
+	}
+	return ""
+}
+
+// addedErrors are the errors of after that before does not have, compared
+// without their positions and counting each: an error that only moved is not
+// added.
+func addedErrors(before []string, after []string) []string {
 	had := map[string]int{}
 	for _, e := range before {
 		had[withoutPosition(e)]++
@@ -561,13 +604,7 @@ func fixRefusal(before, after []string) string {
 		}
 		had[k]--
 	}
-	switch {
-	case len(added) > 0:
-		return fmt.Sprintf("the change adds errors the code did not have, so it was not applied. New errors:\n  %s", strings.Join(limit(added, 10), "\n  "))
-	case len(after) >= len(before):
-		return fmt.Sprintf("the change fixes none of the errors, so it was not applied. Errors are:\n  %s", strings.Join(limit(after, 10), "\n  "))
-	}
-	return ""
+	return added
 }
 
 // unimplemented matches a type error for a type used as an interface
@@ -717,7 +754,11 @@ func runBatch[W Workspace](ws W, steps []StepOf[W], opts OptionsOf[W]) (*BatchRe
 		b.Refused = err.Error()
 		return b, nil
 	}
-	before := declaredNames(ws)                       // by file: what its package declared when the batch began (Go)
+	before := declaredNames(ws) // by file: what its package declared when the batch began (Go)
+	var baseline []string       // the errors the batch began with, where they are tolerated
+	if tolerates(ws) {
+		baseline = ws.Errors()
+	}
 	lines := map[string]*lineMap{}                    // by file, relative to the root: its lines through the batch
 	made := make([]map[string]*stepLines, len(steps)) // by step, then file: the lines it made
 	applied := 0
@@ -784,7 +825,7 @@ func runBatch[W Workspace](ws W, steps []StepOf[W], opts OptionsOf[W]) (*BatchRe
 	}
 	for i, s := range steps {
 		if _, ok := s.Refactoring.(*CheckpointOf[W]); ok {
-			res, err := checkpoint(ws, s.Args, opts, func() error { _, err := complete(i); return err })
+			res, err := checkpoint(ws, s.Args, opts, baseline, func() error { _, err := complete(i); return err })
 			if err != nil {
 				if rerr := rollback(); rerr != nil {
 					return nil, fmt.Errorf("step %d (check): %v; %v", i+1, err, rerr)
@@ -848,6 +889,9 @@ func runBatch[W Workspace](ws W, steps []StepOf[W], opts OptionsOf[W]) (*BatchRe
 			return nil, err
 		}
 		errs := ws.Errors()
+		if tolerates(ws) {
+			errs = addedErrors(baseline, errs)
+		}
 		if len(errs) > 0 {
 			b.Refused = startLines(fmt.Sprintf("after all %d step%s the code does not type-check, so the batch was rolled back. Errors were:\n  %s%s",
 				len(steps), textutil.Plural(len(steps)), strings.Join(limit(errs, 10), "\n  "), missingMethodsHint(errs)), "", lines)

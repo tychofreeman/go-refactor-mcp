@@ -271,6 +271,11 @@ func (w *Workspace) LastChange() (history.Change, bool) { return w.History.Last(
 // CanUndo reports whether there is a change to undo.
 func (w *Workspace) CanUndo() bool { return w.History.Len() > 0 }
 
+// ToleratesErrors marks the workspace as one whose code may have errors
+// before a step, as code written for TypeScript 6 has under 7: a step
+// must add none (the user's choice, 2026-10-27, to revisit).
+func (*Workspace) ToleratesErrors() {}
+
 func paths(files map[string][]byte) []string {
 	out := make([]string, 0, len(files))
 	for p := range files {

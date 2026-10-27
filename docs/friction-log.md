@@ -3155,3 +3155,11 @@ right. `cmd/ts-spike` deleted with delete_file. A test that expected a
 TypeScript-only server to refuse a Go tool was wrong (the tool is not
 published there) and moved to the mixed test. This entry appended with a
 heredoc.
+
+## 2026-10-27: errors already in TypeScript code
+
+The user's choice to relax "every step must type-check" for TypeScript.
+The test first with add_declaration; `addedErrors` out of `fixRefusal`
+with extract_function, the rest with add_declaration and replace_text,
+in one batch checked at its end; the docs with replace_text. Nothing by
+hand. This entry appended with a heredoc.
