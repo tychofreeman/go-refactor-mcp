@@ -1,6 +1,7 @@
 // Package typescript is the TypeScript language of the server: its
-// refactorings on the solution's workspace. It has rename so far
-// (docs/ts-plan.md, step 3); the other tools refuse its files, saying so.
+// refactorings and edits on the solution's workspace: so far rename,
+// create_file, add_declaration and replace_text (docs/ts-plan.md); the
+// other tools refuse its files, saying so.
 package typescript
 
 import (
@@ -13,6 +14,9 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/history"
 	"github.com/tychofreeman/go-refactor-mcp/internal/lang"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/adddecl"
+	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/createfile"
+	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/replacetext"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/inspect"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/refactorings/rename"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/workspace"
@@ -42,7 +46,7 @@ func New(dir string, h *history.Stack) *Language {
 
 // all is TypeScript's refactorings and edits.
 func all() []refactor.RefactoringOf[*workspace.Workspace] {
-	return []refactor.RefactoringOf[*workspace.Workspace]{rename.New()}
+	return []refactor.RefactoringOf[*workspace.Workspace]{rename.New(), createfile.New(), adddecl.New(), replacetext.New()}
 }
 
 func lookup(name string) (refactor.RefactoringOf[*workspace.Workspace], bool) {

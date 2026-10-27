@@ -404,6 +404,13 @@ Go. Steps 1 and 2 change shared code and come before any TypeScript.
    `replace_statements`, `insert_statements`, `replace_expression`,
    `add_property`, `organize_imports`, with stubs from usage. These made
    the "test first through the tools" workflow possible for Go.
+   First part *done*: `create_file`, `add_declaration` (at the end, or
+   after or before a declaration by name, a class member included) and
+   `replace_text` (any file under the root, `files`, `all_occurrences`),
+   in `internal/ts/edits`, with Go's arguments. Test first works in a
+   batch checked at its end: the test and what it calls go together.
+   Left: `replace_statements`, `insert_statements`, `replace_expression`,
+   `add_property`, `organize_imports`, and stubs for what a test calls.
 6. **Signatures** (Go's most common by-hand step): add / remove / move /
    introduce parameter, change_return_type, convert_params_to_object.
 7. **Effects analysis** (section 4) as one `analysis` package with a

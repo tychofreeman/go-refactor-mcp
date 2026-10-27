@@ -1003,18 +1003,25 @@ func TestTypeScriptOnly(t *testing.T) {
 	if _, ok := tools["extract_function"]; ok {
 		t.Error("a TypeScript-only repo is offered Go's extract_function")
 	}
+	for name, own := range map[string]string{"create_file": "TypeScript or not", "add_declaration": "inside Bed", "replace_text": "files that are not source"} {
+		if d := tools[name]; !strings.Contains(d, own) {
+			t.Errorf("%s is not offered with TypeScript's description: %q", name, d)
+		}
+	}
+	out, _ := call(t, cs, "add_declaration", map[string]any{"file": "src/bed.ts", "content": "export const noon = water(1);"})
+	mustContain(t, "add_declaration", out, "added 1 line to src/bed.ts")
 	if d := tools["rename"]; !strings.Contains(d, "renaming water in src/plant.ts to irrigate") || strings.Contains(d, "In TypeScript files") {
 		t.Errorf("rename's description is not TypeScript's alone:\n%s", d)
 	}
-	out, _ := call(t, cs, "rename", map[string]any{"file": "src/plant.ts", "name": "water", "new_name": "irrigate"})
-	mustContain(t, "rename", out, `renamed "water" to "irrigate" (5 occurrences in 3 files)`)
+	out, _ = call(t, cs, "rename", map[string]any{"file": "src/plant.ts", "name": "water", "new_name": "irrigate"})
+	mustContain(t, "rename", out, `renamed "water" to "irrigate" (6 occurrences in 3 files)`)
 	if src, _ := os.ReadFile(filepath.Join(dir, "src/plant.test.ts")); !strings.Contains(string(src), "irrigate(3)") {
 		t.Errorf("the test file was not renamed:\n%s", src)
 	}
 	out, _ = call(t, cs, "undo", map[string]any{})
 	mustContain(t, "undo", out, "UNDONE")
 	out, _ = call(t, cs, "inspect", map[string]any{"file": "src/bed.ts"})
-	mustContain(t, "inspect", out, "src/bed.ts  (TypeScript, 3 lines)", "3  export const morning = water(2);")
+	mustContain(t, "inspect", out, "src/bed.ts  (TypeScript, 5 lines)", "3  export const morning = water(2);", "5  export const noon = water(1);")
 	if d := tools["inspect"]; !strings.HasPrefix(d, "Read TypeScript code") {
 		t.Errorf("inspect's description does not name TypeScript: %.60s", d)
 	}
