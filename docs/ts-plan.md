@@ -303,11 +303,21 @@ Go. Steps 1 and 2 change shared code and come before any TypeScript.
    solution, re-check through the incremental builder, record
    signatures at load.
 1. **Split CLAUDE.md and the session notes** by language, and add CI
-   path filters.
+   path filters. *Folded into step 3* (2026-10-27, the user): with no
+   TypeScript code yet there is nothing to filter, and the root
+   CLAUDE.md is the one Claude Code always loads, while the Go code has
+   no directory of its own for a nested one. So the root stays as it
+   is, and step 3 adds `internal/ts/CLAUDE.md` (loaded when a session
+   reads files there) and the CI filters with the first TypeScript
+   code.
 2. **Make the engine language-neutral:** the undo stack out of the Go
    workspace, a workspace interface the engine and batch use, the
    dispatcher in `internal/lang` with Go as its only language. No
    behavior change; the Go golden tests and one Go A/B run are the gate.
+   First part *done*: `internal/history` holds `Change` (moved with
+   move_declaration) and `Stack`, the undo stack, which a workspace
+   reaches through its `History` field; the workspace's undo methods
+   delegate to it.
 3. **TypeScript engine:** `tsapi`, workspace, edits, diffs, safety rule,
    formatting of inserted text, `rename`, golden tests (`testdata/*.ts`
    in and out), wired into the dispatcher.

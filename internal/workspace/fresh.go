@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/tychofreeman/go-refactor-mcp/internal/history"
 	"golang.org/x/tools/go/packages"
 )
 
@@ -61,7 +62,7 @@ func (m *Metadata) Load() (*Workspace, error) {
 	if err != nil {
 		return nil, err
 	}
-	w := &Workspace{Root: m.root, Base: m.base, Patterns: m.patterns, Fset: m.fset, stamps: stamps}
+	w := &Workspace{Root: m.root, Base: m.base, Patterns: m.patterns, Fset: m.fset, stamps: stamps, History: &history.Stack{}}
 	pkgs := metadataOf(m.pkgs)
 	w.Pkgs = pkgs[:m.roots]
 
@@ -148,7 +149,7 @@ func Fingerprint(root string) (string, error) {
 		if strings.HasSuffix(p, ".go") {
 			src = header(src)
 		}
-		fmt.Fprintf(h, "%s\x00%d\x00%s", rel(root, p), len(src), src)
+		fmt.Fprintf(h, "%s\x00%d\x00%s", history.Rel(root, p), len(src), src)
 		return nil
 	})
 	if err != nil {

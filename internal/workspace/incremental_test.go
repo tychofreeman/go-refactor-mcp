@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
+	"github.com/tychofreeman/go-refactor-mcp/internal/history"
 )
 
 // incModule is a small module with an import chain a <- b <- b_test and an
@@ -66,7 +67,7 @@ func mustMatchFresh(t *testing.T, w *Workspace) {
 }
 
 // replace edits path by replacing old with new (once) through Apply.
-func replace(t *testing.T, w *Workspace, rel, old, new string) Change {
+func replace(t *testing.T, w *Workspace, rel, old, new string) history.Change {
 	t.Helper()
 	path := filepath.Join(w.Root, rel)
 	src, err := os.ReadFile(path)

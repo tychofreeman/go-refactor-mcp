@@ -3080,3 +3080,20 @@ updated, all by hand with plain file edits from a claude.ai session
 without the gorefactor tools; the spike was rewritten often while
 measuring, which no tool would have shortened. Not evidence for a
 tool.
+
+## 2026-10-27: the undo stack into internal/history
+
+TypeScript plan step 2, first part. `Change` and its file operations
+moved with rename (three methods exported, as move_declaration's
+refusal said) and move_declaration with_dependencies, one batch; the
+workspace's wiring with replace_text and replace_statements; the docs
+with replace_text. By hand: `history.Stack` (`internal/history/stack.go`,
+153 lines, sent with create_file), the bodies of the workspace's undo
+methods moved onto a type held in its field. No tool moves a method's
+body to the type of a field it uses (Fowler's Move Function); by the
+tools it is method_to_function, introduce_parameter, remove_parameter
+and function_to_method for each of seven methods, and the callers in
+other packages cannot name the unexported field the parameter needs.
+A candidate operation: move a method to the type of one of its
+receiver's fields, leaving a delegating method behind.
+This entry appended with a heredoc.

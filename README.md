@@ -1995,6 +1995,7 @@ internal/
   inspect/                    module overview, files without bodies + complexity + side effects, numbered source
   mcpserver/                  MCP tools: one per refactoring, plus inspect, undo, check
   workspace/                  go/packages loading (incl. tests), apply, undo, errors
+  history/                    a change to files (write, restore) and the undo stack, for any language
   locate/                     file+line+name (+column) → *ast.Ident
   pattern/                    matching code against a pattern with holes (fold's matcher), with where it failed
   refactor/                   Refactoring interface, Refusal, Run (the safety engine)
