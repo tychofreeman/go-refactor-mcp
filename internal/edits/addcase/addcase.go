@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"go/ast"
+	"go/token"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -26,7 +28,7 @@ func New() *AddCase { return &AddCase{} }
 func (*AddCase) Name() string { return "add_case" }
 
 func (*AddCase) Description() string {
-	return `Add case clauses to a switch or type switch: an edit, to handle a new value or type. At the line of switch kind {, content case "sms": return sendSMS(to) adds that clause at the end of the switch (before a default clause that ends it); at the line of one of its case clauses, where "before" or "after" (the default) puts them next to it. content is one or more clauses, each "case x:" or "default:" with its statements, re-indented; packages it names are imported. A duplicate case is refused with the compiler's error. For the statements inside a clause, use insert_statements or replace_statements.
+	return `Add case clauses to a switch or type switch: an edit, to handle a new value or type. At the line of switch kind {, content case "sms": return sendSMS(to) adds that clause at the end of the switch (before a default clause that ends it, and the clauses that fall through into it); at the line of one of its case clauses, where "before" or "after" (the default) puts them next to it. content is one or more clauses, each "case x:" or "default:" with its statements, re-indented; packages it names are imported. A duplicate case is refused with the compiler's error. For the statements inside a clause, use insert_statements or replace_statements.
 Branches of an if, likewise: at the line of if p.Height > 10 {, content else if p.Height > 5 { return 2 } goes at the end of its chain (before its else); at the line of an else if or else, before or after it. else { ... } goes last, once.`
 }
 
@@ -112,6 +114,22 @@ func (*AddCase) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Pl
 		}
 		return lineStart(line)
 	}
+	if clause != nil {
+		// Clauses put between a clause that ends with fallthrough and the
+		// next one would be what it falls into.
+		ci := slices.Index(body.List, ast.Stmt(clause))
+		var from, into ast.Stmt
+		switch {
+		case a.Where == "before" && ci > 0 && fallsThrough(body.List[ci-1]):
+			from, into = body.List[ci-1], clause
+		case a.Where != "before" && ci+1 < len(body.List) && fallsThrough(clause):
+			from, into = clause, body.List[ci+1]
+		}
+		if from != nil {
+			f, t := tf.Line(from.Pos()), tf.Line(into.Pos())
+			return nil, refactor.Refusef("the clause on line %d ends with fallthrough into the clause on line %d; clauses put between them would be what it falls into, which changes what the switch does. Put them before line %d or after the clause on line %d", f, t, f, t)
+		}
+	}
 	var at int
 	what := "at the end of"
 	switch {
@@ -123,9 +141,17 @@ func (*AddCase) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Pl
 			return nil, refactor.Refusef("the switch on line %d is written on one line; add a clause to it with replace_statements", a.Line)
 		}
 		at = lineStart(tf.Line(body.Rbrace))
-		if d := trailingDefault(body); d != nil {
-			// A default clause stays last, as it is usually written.
-			at, what = above(tf.Line(d.Pos())), "before the default clause of"
+		if trailingDefault(body) != nil {
+			// A default clause stays last, as it is usually written, and the
+			// clauses that fall through into it stay just before it.
+			i := len(body.List) - 1
+			for i > 0 && fallsThrough(body.List[i-1]) {
+				i--
+			}
+			at, what = above(tf.Line(body.List[i].Pos())), "before the default clause of"
+			if i < len(body.List)-1 {
+				what = "before the clauses that fall through into the default clause of"
+			}
 		}
 	case a.Where == "before":
 		at, what = above(a.Line), "before the clause on line "+strconv.Itoa(a.Line)+" of"
@@ -176,4 +202,15 @@ func trailingDefault(body *ast.BlockStmt) *ast.CaseClause {
 		return c
 	}
 	return nil
+}
+
+// fallsThrough reports whether s is a case clause that ends with a
+// fallthrough statement, which runs the clause after it.
+func fallsThrough(s ast.Stmt) bool {
+	c, ok := s.(*ast.CaseClause)
+	if !ok || len(c.Body) == 0 {
+		return false
+	}
+	b, ok := c.Body[len(c.Body)-1].(*ast.BranchStmt)
+	return ok && b.Tok == token.FALLTHROUGH
 }

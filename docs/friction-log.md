@@ -3047,5 +3047,8 @@ clause after the `default:` that ended the switch. The golden first
 with create_file (it failed as reported), then the fix with replace_text
 (the comment lines above a clause, now `above`, shared by "before" and
 the default) and add_declaration (`trailingDefault`), the description
-with replace_text. Nothing by hand. This entry appended with
-replace_text.
+with replace_text. Then, asked by the user, fallthrough: three goldens
+with create_file (each failed first), `fallsThrough` with
+add_declaration, the placement and the refusal with replace_text, the
+version 0.3.1 and its notes with replace_text and create_file. Nothing
+by hand. This entry appended with replace_text.
