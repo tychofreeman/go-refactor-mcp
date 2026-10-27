@@ -347,6 +347,18 @@ Go. Steps 1 and 2 change shared code and come before any TypeScript.
 3. **TypeScript engine:** `tsapi`, workspace, edits, diffs, safety rule,
    formatting of inserted text, `rename`, golden tests (`testdata/*.ts`
    in and out), wired into the dispatcher.
+   First part *done*: `internal/ts/tsapi` (projects from a tsconfig,
+   updated in place or rebuilt for a created or deleted file, their
+   diagnostics as "file:line:col: message") and `internal/ts/workspace`,
+   the engine's `Workspace` for a solution: every project the root
+   tsconfig.json references, errors once each, preview, apply, undo,
+   refresh from disk. Tested on a solution fixture whose test file only
+   the spec project has, and through `refactor.Run`: a step that breaks
+   a test file's types is refused and undone. `internal/ts/CLAUDE.md`
+   is step 1's nested instructions. Open for the engine: its "errors
+   only in tests" rule knows `_test.go` only, so a TypeScript test
+   written first needs the workspace to say which files are tests;
+   signatures are not yet recorded at load.
 4. **Read and check:** `inspect`, `check`, `undo`, `batch` across
    languages, `replace_text`; descriptions chosen by what the root holds.
 5. **Edits first:** `create_file`, `add_declaration`,

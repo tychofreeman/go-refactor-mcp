@@ -3131,3 +3131,11 @@ stay until after it, and go last. By hand: `internal/lang/golang`
 type, the same missing operation as the undo stack's (move a method to
 another type, leaving a delegating one).
 This entry appended with a heredoc.
+
+## 2026-10-27: the TypeScript workspace
+
+TypeScript plan step 3, first part. The fixture, `tsapi`, the
+workspace and its tests with create_file in one batch checked at its
+end, written in full before it (new packages: nothing to derive them
+from); the docs with replace_text and create_file. Nothing else by
+hand. This entry appended with a heredoc.

@@ -1996,6 +1996,9 @@ internal/
   mcpserver/                  MCP tools: one per refactoring, plus inspect, undo, check
   lang/                       the languages the server serves; routes each call by the files it names
     golang/                   Go: its tools on the module's workspace
+  ts/                         TypeScript (see internal/ts/CLAUDE.md)
+    tsapi/                    the one door to the TypeScript 7 compiler: projects, updates, diagnostics
+    workspace/                a solution's projects as the engine's workspace: apply, undo, errors
   workspace/                  go/packages loading (incl. tests), apply, undo, errors
   history/                    a change to files (write, restore) and the undo stack, for any language
   locate/                     file+line+name (+column) → *ast.Ident
