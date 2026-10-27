@@ -26,6 +26,7 @@ import (
 	"strings"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
+	"github.com/tychofreeman/go-refactor-mcp/internal/history"
 	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
@@ -596,7 +597,7 @@ var position = regexp.MustCompile(`^\S*:\d+:\d+: `)
 func withoutPosition(e string) string { return position.ReplaceAllString(e, "") }
 
 // diffOf is c's diff as the result shows it.
-func diffOf(ws *workspace.Workspace, c workspace.Change, opts Options, plan *Plan) string {
+func diffOf(ws *workspace.Workspace, c history.Change, opts Options, plan *Plan) string {
 	if opts.Compact && plan.Locations {
 		return edit.Locations(c.DiffContext(ws.Root, 0))
 	}

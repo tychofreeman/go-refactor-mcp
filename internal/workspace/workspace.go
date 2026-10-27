@@ -10,7 +10,6 @@ package workspace
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"go/ast"
@@ -20,7 +19,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"slices"
 	"sort"
 	"strings"
 
@@ -28,6 +26,7 @@ import (
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
+	"github.com/tychofreeman/go-refactor-mcp/internal/history"
 )
 
 const loadMode = packages.NeedName |
@@ -57,7 +56,10 @@ type Workspace struct {
 	// brought up to date, for tests and benchmarks.
 	FullLoads, IncrementalUpdates int
 
-	undo    []Change
+	// History holds the changes applied, for undo; workspaces of
+	// several languages may share one.
+	History *history.Stack
+
 	stamps  map[string]stamp  // size and mtime of each relevant file at the last update
 	effects *analysis.Effects // made on first use after each update
 }
@@ -143,44 +145,6 @@ func walkLoadFiles(root string, visit func(path string, d fs.DirEntry) error) er
 	})
 }
 
-// Change records one applied set of edits, enough to show it and undo it.
-type Change struct {
-	Label  string
-	Diff   string            // unified diff, paths relative to Root
-	Before map[string][]byte // absolute path -> contents before the change
-	After  map[string][]byte // absolute path -> contents after the change
-	// Created holds the files the change creates: their Before is nil,
-	// and undoing the change removes them.
-	Created map[string]bool
-	// Deleted holds the files the change deletes: their After is nil, and
-	// undoing the change writes them back.
-	Deleted map[string]bool
-	// Dirs holds the directories the change creates for them, each
-	// before the ones inside it; undoing the change removes them.
-	Dirs []string
-}
-
-// Files returns the changed paths, relative to root, sorted.
-func (c Change) Files(root string) []string {
-	var out []string
-	for p := range c.After {
-		out = append(out, rel(root, p))
-	}
-	sort.Strings(out)
-	return out
-}
-
-// DiffContext is the change's diff, paths relative to root, with n lines
-// of context instead of Diff's three.
-func (c Change) DiffContext(root string, n int) string {
-	var diffs []string
-	for p := range c.Before {
-		diffs = append(diffs, edit.UnifiedContext(rel(root, p), c.Before[p], c.After[p], n))
-	}
-	sort.Strings(diffs)
-	return strings.Join(diffs, "")
-}
-
 // Load loads and type-checks the module containing dir, including tests.
 //
 // The root is always the enclosing module (the nearest directory with a
@@ -199,7 +163,7 @@ func Load(dir string, patterns ...string) (*Workspace, error) {
 	if len(patterns) == 0 {
 		patterns = []string{"./..."}
 	}
-	w := &Workspace{Root: root, Base: base, Patterns: patterns}
+	w := &Workspace{Root: root, Base: base, Patterns: patterns, History: &history.Stack{}}
 	if err := w.Reload(); err != nil {
 		return nil, err
 	}
@@ -330,7 +294,7 @@ func fileExists(p string) bool {
 }
 
 // Rel returns path relative to the workspace root, for display.
-func (w *Workspace) Rel(path string) string { return rel(w.Root, path) }
+func (w *Workspace) Rel(path string) string { return history.Rel(w.Root, path) }
 
 // Position formats pos as root-relative "file:line:col".
 func (w *Workspace) Position(pos token.Pos) string {
@@ -380,26 +344,26 @@ func (w *Workspace) FileSyntax(path string) (*packages.Package, *ast.File) {
 }
 
 // Preview computes the change the edits would make without writing it.
-func (w *Workspace) Preview(label string, fes []edit.FileEdit) (Change, error) {
-	c := Change{Label: label, Before: map[string][]byte{}, After: map[string][]byte{}, Created: map[string]bool{}, Deleted: map[string]bool{}}
+func (w *Workspace) Preview(label string, fes []edit.FileEdit) (history.Change, error) {
+	c := history.Change{Label: label, Before: map[string][]byte{}, After: map[string][]byte{}, Created: map[string]bool{}, Deleted: map[string]bool{}}
 	var diffs []string
 	for _, fe := range edit.Merge(fes) {
 		if !w.Contains(fe.Path) {
-			return Change{}, fmt.Errorf("refusing to edit %s: outside workspace %s", fe.Path, w.Root)
+			return history.Change{}, fmt.Errorf("refusing to edit %s: outside workspace %s", fe.Path, w.Root)
 		}
 		before, err := os.ReadFile(fe.Path)
 		created := os.IsNotExist(err)
 		if created {
 			// A new file, in a directory that may have to be created too.
-			if err := c.addDirs(filepath.Dir(fe.Path)); err != nil {
-				return Change{}, fmt.Errorf("cannot create %s: %w", w.Rel(fe.Path), err)
+			if err := c.AddDirs(filepath.Dir(fe.Path)); err != nil {
+				return history.Change{}, fmt.Errorf("cannot create %s: %w", w.Rel(fe.Path), err)
 			}
 		} else if err != nil {
-			return Change{}, err
+			return history.Change{}, err
 		}
 		if fe.Delete {
 			if created {
-				return Change{}, fmt.Errorf("cannot delete %s: it does not exist", w.Rel(fe.Path))
+				return history.Change{}, fmt.Errorf("cannot delete %s: it does not exist", w.Rel(fe.Path))
 			}
 			c.Deleted[fe.Path] = true
 			c.Before[fe.Path], c.After[fe.Path] = before, nil
@@ -408,7 +372,7 @@ func (w *Workspace) Preview(label string, fes []edit.FileEdit) (Change, error) {
 		}
 		after, err := edit.Apply(before, fe.Edits)
 		if err != nil {
-			return Change{}, fmt.Errorf("%s: %w", w.Rel(fe.Path), err)
+			return history.Change{}, fmt.Errorf("%s: %w", w.Rel(fe.Path), err)
 		}
 		if created {
 			c.Created[fe.Path] = true
@@ -438,122 +402,66 @@ var ErrBreaksLoading = errors.New("the module would no longer load, so the chang
 // Apply writes the edits to disk, reloads the workspace and pushes the
 // change on the undo stack. If the module no longer loads with the change,
 // it puts the files back and returns ErrBreaksLoading.
-func (w *Workspace) Apply(label string, fes []edit.FileEdit) (Change, error) {
+func (w *Workspace) Apply(label string, fes []edit.FileEdit) (history.Change, error) {
 	c, err := w.Preview(label, fes)
 	if err != nil {
-		return Change{}, err
+		return history.Change{}, err
 	}
 	for _, d := range c.Dirs {
 		if err := os.Mkdir(d, 0o755); err != nil && !os.IsExist(err) {
-			_ = c.restore()
-			return Change{}, err
+			_ = c.Restore()
+			return history.Change{}, err
 		}
 	}
-	if err := c.write(); err != nil {
+	if err := c.Write(); err != nil {
 		// Best effort to restore what was already written.
-		_ = c.restore()
-		return Change{}, err
+		_ = c.Restore()
+		return history.Change{}, err
 	}
 	if err := w.update(paths(c.After)); err != nil {
 		// The module does not load with the change: put the files back, and
 		// the workspace as it was with them.
-		if rerr := c.restore(); rerr != nil {
-			w.undo = append(w.undo, c) // still on disk: undo can try again
-			return Change{}, fmt.Errorf("%w: %v; putting the files back failed too: %v", ErrBreaksLoading, err, rerr)
+		if rerr := c.Restore(); rerr != nil {
+			w.History.Push(c) // still on disk: undo can try again
+			return history.Change{}, fmt.Errorf("%w: %v; putting the files back failed too: %v", ErrBreaksLoading, err, rerr)
 		}
 		if uerr := w.update(paths(c.Before)); uerr != nil {
-			return Change{}, fmt.Errorf("%w: %v; the files are back, but reloading them failed: %v", ErrBreaksLoading, err, uerr)
+			return history.Change{}, fmt.Errorf("%w: %v; the files are back, but reloading them failed: %v", ErrBreaksLoading, err, uerr)
 		}
-		return Change{}, fmt.Errorf("%w: %v", ErrBreaksLoading, err)
+		return history.Change{}, fmt.Errorf("%w: %v", ErrBreaksLoading, err)
 	}
-	w.undo = append(w.undo, c)
+	w.History.Push(c)
 	return c, nil
 }
 
 // CanUndo reports whether there is a change to undo.
-func (w *Workspace) CanUndo() bool { return len(w.undo) > 0 }
+func (w *Workspace) CanUndo() bool {
+	return w.History.Len() > 0
+}
 
 // LastChange returns the change on top of the undo stack: the one applied
 // last.
-func (w *Workspace) LastChange() (Change, bool) {
-	if len(w.undo) == 0 {
-		return Change{}, false
-	}
-	return w.undo[len(w.undo)-1], true
+func (w *Workspace) LastChange() (history.Change, bool) {
+	return w.History.Last()
 }
 
 // Squash replaces the last n changes on the undo stack with one, labelled
 // label, that undoes them all, and returns it; its Diff goes from before
 // the first to after the last.
-func (w *Workspace) Squash(n int, label string) (Change, error) {
-	if n < 1 || n > len(w.undo) {
-		return Change{}, fmt.Errorf("cannot squash %d changes: the undo stack holds %d", n, len(w.undo))
-	}
-	c := Change{Label: label, Before: map[string][]byte{}, After: map[string][]byte{}, Created: map[string]bool{}, Deleted: map[string]bool{}}
-	for _, part := range w.undo[len(w.undo)-n:] {
-		for p, before := range part.Before {
-			if _, seen := c.Before[p]; !seen {
-				c.Before[p], c.Created[p] = before, part.Created[p]
-			}
-		}
-		for p, after := range part.After {
-			c.After[p], c.Deleted[p] = after, part.Deleted[p]
-		}
-		for _, d := range part.Dirs {
-			if !slices.Contains(c.Dirs, d) {
-				c.Dirs = append(c.Dirs, d)
-			}
-		}
-	}
-	// A file a later step put back as it was is not part of the change.
-	for p := range c.Before {
-		if bytes.Equal(c.Before[p], c.After[p]) && c.Created[p] == c.Deleted[p] {
-			delete(c.Before, p)
-			delete(c.After, p)
-			delete(c.Created, p)
-			delete(c.Deleted, p)
-		}
-	}
-	c.Diff = c.DiffContext(w.Root, 3)
-	w.undo = append(w.undo[:len(w.undo)-n], c)
-	return c, nil
+func (w *Workspace) Squash(n int, label string) (history.Change, error) {
+	return w.History.Squash(n, label, w.Root)
 }
 
 // Undo reverts the most recent change and reloads. It refuses if a file
 // was modified on disk since the change was applied, and then returns no
 // change. If the files are restored but reloading them fails, it returns
 // the inverse change with the error.
-func (w *Workspace) Undo() (Change, error) {
-	if len(w.undo) == 0 {
-		return Change{}, fmt.Errorf("nothing to undo")
+func (w *Workspace) Undo() (history.Change, error) {
+	inverse, err := w.History.Undo(w.Root)
+	if err != nil {
+		return history.Change{}, err
 	}
-	c := w.undo[len(w.undo)-1]
-	for p, want := range c.After {
-		if c.Deleted[p] {
-			if fileExists(p) {
-				return Change{}, fmt.Errorf("cannot undo %q: %s was created again since", c.Label, w.Rel(p))
-			}
-			continue
-		}
-		got, err := os.ReadFile(p)
-		if err != nil {
-			return Change{}, err
-		}
-		if !bytes.Equal(got, want) {
-			return Change{}, fmt.Errorf("cannot undo %q: %s was modified since", c.Label, w.Rel(p))
-		}
-	}
-	if err := c.restore(); err != nil {
-		return Change{}, err
-	}
-	w.undo = w.undo[:len(w.undo)-1]
-	var diffs []string
-	for p := range c.Before {
-		diffs = append(diffs, edit.Unified(w.Rel(p), c.After[p], c.Before[p]))
-	}
-	sort.Strings(diffs)
-	inverse := Change{Label: "undo " + c.Label, Diff: strings.Join(diffs, ""), Before: c.After, After: c.Before, Created: c.Deleted, Deleted: c.Created}
-	return inverse, w.update(paths(c.Before))
+	return inverse, w.update(paths(inverse.After))
 }
 
 // gofmtIfClean formats the edited file, but only if the original was
@@ -582,160 +490,15 @@ func paths(files map[string][]byte) []string {
 	return out
 }
 
-// restore puts back the files as they were before the change, removing
-// the ones it created, and the directories it created if they are empty.
-func (c Change) restore() error {
-	before := map[string][]byte{}
-	for p, data := range c.Before {
-		if !c.Created[p] {
-			before[p] = data
-			// A deleted file's directory may have gone with it.
-			if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-				return err
-			}
-		} else if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
-			return err
-		}
-	}
-	if err := writeAll(before); err != nil {
-		return err
-	}
-	// The directories it created go last, and only if empty: one that has
-	// since gained another file stays, with that file.
-	for i := len(c.Dirs) - 1; i >= 0; i-- {
-		if entries, err := os.ReadDir(c.Dirs[i]); err == nil && len(entries) > 0 {
-			continue
-		}
-		if err := os.Remove(c.Dirs[i]); err != nil && !os.IsNotExist(err) {
-			return err
-		}
-	}
-	return nil
-}
-
-// addDirs records the directories from dir up that do not exist yet,
-// outermost first. A path in the way that is not a directory is an error.
-func (c *Change) addDirs(dir string) error {
-	var missing []string
-	for d := dir; ; d = filepath.Dir(d) {
-		fi, err := os.Stat(d)
-		if err == nil {
-			if !fi.IsDir() {
-				return fmt.Errorf("%s is not a directory", d)
-			}
-			break
-		}
-		if !os.IsNotExist(err) {
-			return err
-		}
-		missing = append(missing, d)
-	}
-	for i := len(missing) - 1; i >= 0; i-- {
-		if !slices.Contains(c.Dirs, missing[i]) {
-			c.Dirs = append(c.Dirs, missing[i])
-		}
-	}
-	return nil
-}
-
-// write writes the files the change leaves and deletes those it deletes,
-// with the directories that leaves empty.
-func (c Change) write() error {
-	after := map[string][]byte{}
-	for p, data := range c.After {
-		if !c.Deleted[p] {
-			after[p] = data
-		} else if err := os.Remove(p); err != nil {
-			return err
-		}
-	}
-	if err := writeAll(after); err != nil {
-		return err
-	}
-	for p := range c.Deleted {
-		if err := removeEmpty(filepath.Dir(p)); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// removeEmpty removes dir if it is empty, and then each directory above
-// it that this leaves empty.
-func removeEmpty(dir string) error {
-	for {
-		entries, err := os.ReadDir(dir)
-		if err != nil || len(entries) > 0 {
-			return nil // gone already, or still in use
-		}
-		if err := os.Remove(dir); err != nil {
-			return err
-		}
-		dir = filepath.Dir(dir)
-	}
-}
-
-func writeAll(files map[string][]byte) error {
-	for p, data := range files {
-		mode := os.FileMode(0o644)
-		if fi, err := os.Stat(p); err == nil {
-			mode = fi.Mode().Perm()
-		}
-		if err := os.WriteFile(p, data, mode); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func rel(root, p string) string {
-	if r, err := filepath.Rel(root, p); err == nil && !strings.HasPrefix(r, "..") {
-		return filepath.ToSlash(r)
-	}
-	return p
-}
-
-// maxSavedUndo bounds the changes SaveUndo keeps, the oldest dropped
-// first: each holds the whole contents of the files it touched.
-const maxSavedUndo = 50
-
-// SaveUndo writes the undo stack to path, its last maxSavedUndo changes,
+// SaveUndo writes the undo stack to path, its last 50 changes,
 // so that another process working on the same files can undo them after
 // LoadUndo.
 func (w *Workspace) SaveUndo(path string) error {
-	stack := w.undo
-	if len(stack) > maxSavedUndo {
-		stack = stack[len(stack)-maxSavedUndo:]
-	}
-	b, err := json.Marshal(stack)
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	return w.History.Save(path)
 }
 
 // LoadUndo replaces the undo stack with the one SaveUndo wrote to path;
 // a missing file is an empty stack.
 func (w *Workspace) LoadUndo(path string) error {
-	b, err := os.ReadFile(path)
-	if errors.Is(err, fs.ErrNotExist) {
-		w.undo = nil
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	var stack []Change
-	if err := json.Unmarshal(b, &stack); err != nil {
-		return fmt.Errorf("the undo stack in %s: %v", path, err)
-	}
-	w.undo = stack
-	return nil
+	return w.History.Load(path)
 }
