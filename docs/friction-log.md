@@ -3175,3 +3175,13 @@ TypeScript's) and asked for `imports`, which settled it. A fixture file
 replaced with replace_text, create_file refusing to overwrite. Trying it
 on Hono found a panic (a computed member name has no text), fixed with
 a test case. Nothing by hand. This entry appended with a heredoc.
+
+## 2026-10-27: TypeScript's first edits
+
+create_file, add_declaration and replace_text for TypeScript. The new
+packages and their tests with create_file, written before; registering
+them, and the server test, with replace_text in a batch checked at its
+end, refused once until `imports` named the TypeScript packages over
+Go's of the same names; a test of test-first in a batch with
+add_declaration; the plan with replace_text. Nothing by hand. This
+entry appended with a heredoc.
