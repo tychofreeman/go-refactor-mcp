@@ -3112,6 +3112,11 @@ replace_text. A candidate operation: make a type generic over one of
 the types its methods take, leaving the old name as the instance.
 This entry appended with a heredoc.
 
+## 2026-10-27: CI on the newest Go only, for now
+
+The matrix with replace_text. Nothing by hand. This entry appended
+with replace_text.
+
 ## 2026-10-27: the dispatcher, with Go its only language
 
 TypeScript plan step 2, third part. The dispatcher's test and code
