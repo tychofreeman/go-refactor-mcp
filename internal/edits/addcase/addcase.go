@@ -26,7 +26,7 @@ func New() *AddCase { return &AddCase{} }
 func (*AddCase) Name() string { return "add_case" }
 
 func (*AddCase) Description() string {
-	return `Add case clauses to a switch or type switch: an edit, to handle a new value or type. At the line of switch kind {, content case "sms": return sendSMS(to) adds that clause at the end of the switch; at the line of one of its case clauses, where "before" or "after" (the default) puts them next to it. content is one or more clauses, each "case x:" or "default:" with its statements, re-indented; packages it names are imported. A duplicate case is refused with the compiler's error. For the statements inside a clause, use insert_statements or replace_statements.
+	return `Add case clauses to a switch or type switch: an edit, to handle a new value or type. At the line of switch kind {, content case "sms": return sendSMS(to) adds that clause at the end of the switch (before a default clause that ends it); at the line of one of its case clauses, where "before" or "after" (the default) puts them next to it. content is one or more clauses, each "case x:" or "default:" with its statements, re-indented; packages it names are imported. A duplicate case is refused with the compiler's error. For the statements inside a clause, use insert_statements or replace_statements.
 Branches of an if, likewise: at the line of if p.Height > 10 {, content else if p.Height > 5 { return 2 } goes at the end of its chain (before its else); at the line of an else if or else, before or after it. else { ... } goes last, once.`
 }
 
@@ -104,6 +104,14 @@ func (*AddCase) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Pl
 	}
 
 	lineStart := func(line int) int { return tf.Offset(tf.LineStart(line)) }
+	// above is where clauses go to come before the clause starting on
+	// line: above the comment lines just over it too, which are about it.
+	above := func(line int) int {
+		for line > 1 && strings.HasPrefix(strings.TrimSpace(string(src[lineStart(line-1):lineStart(line)])), "//") {
+			line--
+		}
+		return lineStart(line)
+	}
 	var at int
 	what := "at the end of"
 	switch {
@@ -115,14 +123,12 @@ func (*AddCase) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Pl
 			return nil, refactor.Refusef("the switch on line %d is written on one line; add a clause to it with replace_statements", a.Line)
 		}
 		at = lineStart(tf.Line(body.Rbrace))
-	case a.Where == "before":
-		// Before the comment lines just above the clause too: they are
-		// about it.
-		first := a.Line
-		for first > 1 && strings.HasPrefix(strings.TrimSpace(string(src[lineStart(first-1):lineStart(first)])), "//") {
-			first--
+		if d := trailingDefault(body); d != nil {
+			// A default clause stays last, as it is usually written.
+			at, what = above(tf.Line(d.Pos())), "before the default clause of"
 		}
-		at, what = lineStart(first), "before the clause on line "+strconv.Itoa(a.Line)+" of"
+	case a.Where == "before":
+		at, what = above(a.Line), "before the clause on line "+strconv.Itoa(a.Line)+" of"
 	case a.Where == "after" || a.Where == "":
 		// Just after the clause's last line, so that a comment above the
 		// next clause stays with it.
@@ -158,4 +164,16 @@ func (*AddCase) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Pl
 		plan.Notes = append(plan.Notes, gocode.ImportNote("added", added))
 	}
 	return plan, nil
+}
+
+// trailingDefault is the default clause of the switch body when it is the
+// last clause, or nil.
+func trailingDefault(body *ast.BlockStmt) *ast.CaseClause {
+	if len(body.List) == 0 {
+		return nil
+	}
+	if c, ok := body.List[len(body.List)-1].(*ast.CaseClause); ok && c.List == nil {
+		return c
+	}
+	return nil
 }

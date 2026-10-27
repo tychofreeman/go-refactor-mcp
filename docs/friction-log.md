@@ -3039,3 +3039,13 @@ This session may not push tags or create releases (HTTP 403 for both),
 so a workflow does it: `.github/workflows/release.yml` and the notes of
 v0.3.0 with create_file, the docs with replace_text. Nothing by hand.
 This entry appended with replace_text.
+
+## 2026-10-27: add_case before a default clause
+
+Reported by the user: given the switch's line, add_case put the new
+clause after the `default:` that ended the switch. The golden first
+with create_file (it failed as reported), then the fix with replace_text
+(the comment lines above a clause, now `above`, shared by "before" and
+the default) and add_declaration (`trailingDefault`), the description
+with replace_text. Nothing by hand. This entry appended with
+replace_text.
