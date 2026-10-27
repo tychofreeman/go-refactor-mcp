@@ -31,10 +31,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # The minimum version in go.mod through the newest release. The
-        # newest matters most: golang.org/x/tools must be recent enough to
-        # read the package data of the Go version users have installed.
-        go: ["1.26.x", "stable"]
+        # The newest release only, for now (2026-10-27): the account has
+        # 5,000 Actions minutes a month, and each Go version costs about
+        # 5-8. The newest matters most: golang.org/x/tools must be recent
+        # enough to read the package data of the Go version users have
+        # installed. To test the minimum version in go.mod again, put
+        # "1.26.x" back before "stable".
+        go: ["stable"]
     env:
       # Use exactly the Go version from the matrix, not one go.mod asks for.
       GOTOOLCHAIN: local
