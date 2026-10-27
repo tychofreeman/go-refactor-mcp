@@ -16,17 +16,16 @@ package mcpserver
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"slices"
 	"strings"
-	"sync"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/tychofreeman/go-refactor-mcp/internal/inspect"
+	"github.com/tychofreeman/go-refactor-mcp/internal/history"
+	"github.com/tychofreeman/go-refactor-mcp/internal/lang"
+	"github.com/tychofreeman/go-refactor-mcp/internal/lang/golang"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings"
-	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
 
 // Version is reported to MCP clients.
@@ -79,11 +78,9 @@ type Server struct {
 	// the tool's description, schema and the instructions do not offer
 	// them.
 	ReadByName bool
-	dir        string
-	patterns   []string
 
-	mu sync.Mutex
-	ws *workspace.Workspace // loaded lazily, refreshed before each call
+	golang *golang.Language
+	langs  *lang.Dispatcher // chooses the language of each call
 }
 
 // byName removes what offers lines by number from the texts that
@@ -110,11 +107,14 @@ func (s *Server) reads(text string) string {
 
 // New returns a server for the module containing dir.
 func New(dir string, patterns ...string) *Server {
-	return &Server{dir: dir, patterns: patterns}
+	h := &history.Stack{}
+	g := golang.New(dir, patterns, h)
+	return &Server{golang: g, langs: &lang.Dispatcher{Languages: []lang.Language{g}, History: h}}
 }
 
 // MCP builds the MCP server with all tools registered.
 func (s *Server) MCP() *mcp.Server {
+	s.golang.FullDiffs, s.golang.ReadByName = s.FullDiffs, s.ReadByName
 	srv := mcp.NewServer(&mcp.Implementation{Name: "gorefactor", Version: Version}, &mcp.ServerOptions{
 		Instructions: s.reads(Instructions),
 	})
@@ -243,153 +243,72 @@ func symbolNote(r refactor.Refactoring) string {
 	return "\nWithout line, name alone identifies it as a package-level symbol of file's package (Name, or Type.Method or Type.Field); unlike a line number, a name stays valid after edits."
 }
 
-// workspace returns the session's workspace, loading it on first use and
-// refreshing it if files changed on disk. Callers hold s.mu.
-func (s *Server) workspace() (*workspace.Workspace, error) {
-	if s.ws == nil {
-		ws, err := workspace.Load(s.dir, s.patterns...)
-		if err != nil {
-			return nil, err
-		}
-		s.ws = ws
-		return ws, nil
-	}
-	if _, err := s.ws.Refresh(); err != nil {
-		return nil, err
-	}
-	return s.ws, nil
-}
-
 // Preload starts loading the workspace in the background, so that the
 // first call does not wait for all of it (minutes on a large module, the
 // first time); the channel closes when it is done. Calls meanwhile wait
 // for it, and a load that fails is tried again by the next call.
 func (s *Server) Preload() <-chan struct{} {
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		if s.ws == nil {
-			s.workspace()
-		}
-	}()
-	return done
+	return s.golang.Preload()
 }
 
 func (s *Server) refactor(r refactor.Refactoring, args json.RawMessage) *mcp.CallToolResult {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	ws, err := s.workspace()
+	l, refused := s.langs.For(args)
+	if refused != "" {
+		return textResult(refused)
+	}
+	text, wasRefused, err := l.Step(r.Name(), args)
 	if err != nil {
 		return toolError(err)
 	}
-	text, refused, err := refactorings.RunStep(ws, r, args, refactor.Options{Compact: !s.FullDiffs})
-	if err != nil {
-		return toolError(err)
-	}
-	if !refused {
+	if !wasRefused {
 		text += "\nRe-inspect the changed code before the next step; line numbers may have shifted.\n"
 	}
 	return textResult(text)
 }
 
 func (s *Server) inspect(args json.RawMessage) *mcp.CallToolResult {
-	var q inspect.Query
-	if err := refactor.DecodeArgs(args, &q); err != nil {
-		return textResult(err.Error())
+	l, refused := s.langs.For(args)
+	if refused != "" {
+		return textResult(refused)
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	ws, err := s.workspace()
+	text, err := l.Inspect(args)
 	if err != nil {
 		return toolError(err)
 	}
-	out, err := inspect.RunWith(ws, q, inspect.Options{ByName: s.ReadByName})
-	if err != nil {
-		if refactor.IsRefusal(err) {
-			return textResult(err.Error())
-		}
-		return toolError(err)
-	}
-	return textResult(out)
+	return textResult(text)
 }
 
 func (s *Server) undo() *mcp.CallToolResult {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	// Undoing only needs the files, so it goes ahead even when the module
-	// does not load (a go.mod broken by hand, say), and says so.
-	var loadErr error
-	ws := s.ws
-	if ws == nil {
-		var err error
-		if ws, err = s.workspace(); err != nil {
-			return toolError(err)
-		}
-	} else if _, err := ws.Refresh(); err != nil {
-		loadErr = err
+	text, err := s.langs.ForUndo().Undo()
+	if err != nil {
+		return toolError(err)
 	}
-	if !ws.CanUndo() {
-		return textResult("Nothing to undo: no refactoring has been applied in this session." + notLoading(loadErr))
-	}
-	c, err := ws.Undo()
-	if c.Label == "" { // not undone
-		return textResult("Cannot undo: " + err.Error() + notLoading(loadErr))
-	}
-	if err == nil {
-		err = loadErr
-	}
-	return textResult(fmt.Sprintf("UNDONE %s\n\n%s", strings.TrimPrefix(c.Label, "undo "), c.Diff) + notLoading(err))
-}
-
-// notLoading is the line undo adds when the module does not load, or "".
-func notLoading(err error) string {
-	if err == nil {
-		return ""
-	}
-	return "\nThe module does not load, so the other tools cannot run until it does: " + err.Error()
+	return textResult(text)
 }
 
 // batch runs the steps of one batch call; see the tool's description.
 func (s *Server) batch(args json.RawMessage) *mcp.CallToolResult {
-	batch, refused := refactorings.ParseBatch(args)
+	l, refused := s.langs.For(args)
 	if refused != "" {
 		return textResult(refused)
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	ws, err := s.workspace()
+	text, err := l.Batch(args)
 	if err != nil {
 		return toolError(err)
 	}
-	b, err := refactor.RunBatch(ws, batch.Steps, refactor.Options{Compact: !s.FullDiffs, Unchecked: batch.Unchecked, Declare: refactorings.Declarer(), Imports: refactorings.Importer()})
-	if err != nil {
-		return toolError(err)
-	}
-	if batch.Summary {
-		b.Diff = ""
-	}
-	return textResult(b.String())
+	return textResult(text)
 }
 
 func (s *Server) check(ctx context.Context, args json.RawMessage) *mcp.CallToolResult {
-	s.mu.Lock()
-	ws, err := s.workspace()
-	var errs []string
-	var root string
-	if err == nil {
-		errs, root = ws.Errors(), ws.Root
+	l, refused := s.langs.For(args)
+	if refused != "" {
+		return textResult(refused)
 	}
-	s.mu.Unlock()
+	text, err := l.Check(ctx, args)
 	if err != nil {
 		return toolError(err)
 	}
-	report, _, err := refactor.CheckReport(errs, root, args)
-	if err != nil {
-		return textResult(err.Error())
-	}
-	return textResult(report)
+	return textResult(text)
 }
 
 func textResult(s string) *mcp.CallToolResult {

@@ -80,9 +80,7 @@ func TestPreload(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "p.go"), []byte("package p\n\nvar X = 1\n"), 0o644)
 	s := New(dir)
 	<-s.Preload()
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.ws == nil {
+	if !s.golang.Loaded() {
 		t.Fatal("the workspace is not loaded after Preload")
 	}
 }
