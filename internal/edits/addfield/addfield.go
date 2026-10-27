@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"go/types"
-	"os"
 	"regexp"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
@@ -14,6 +13,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/imports"
 	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/site"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
 
@@ -92,10 +92,11 @@ func (*AddField) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.P
 		return nil, refactor.Refusef("%s at %s is not a type", a.Name, ws.Position(id.Pos()))
 	}
 	path := ws.Fset.Position(tn.Pos()).Filename
-	dpkg, file := ws.FileSyntax(path)
-	if file == nil {
-		return nil, refactor.Refusef("%s is declared outside the loaded packages", a.Name)
+	declaring, err := site.Declaring(ws, tn)
+	if err != nil {
+		return nil, err
 	}
+	dpkg, file := declaring.Pkg, declaring.File
 	st, found := structOf(file, tn.Pos())
 	switch {
 	case !found:
@@ -107,10 +108,7 @@ func (*AddField) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.P
 	if err != nil || len(decls) != 1 {
 		return nil, refactor.Refusef("field is not a list of struct fields: %v", err)
 	}
-	src, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
+	src := declaring.Src
 	e, err := insertEdit(ws.Fset.File(file.Pos()), st, src, a.Field, a.Name, a.After, a.Before)
 	if err != nil {
 		return nil, err

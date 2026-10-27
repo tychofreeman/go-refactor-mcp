@@ -1817,11 +1817,18 @@ hand or a tool got in the way.
     replace_text's imports skip files that are not Go quietly;
     merge_duplicate_function and create_from_usage's destinations pick
     the file among a package's syntax or write files that may not be
-    loaded; the declaration edits (replace_declaration, change_type,
-    add_field) open the file a declaration is in, by name. Also left:
-    move_declaration's `mover` and `source` (two files at once), and
-    the seven `find`s, which look for different kinds of thing and so
-    are not one function.
+    loaded. Then the last two shapes: the declaration edits
+    (replace_declaration, change_type, add_field) open the file a
+    declaration is in with `site.Declaring(ws, o)`, which refuses a
+    declaration outside the module's packages by its name and file; and
+    move_declaration's files are sites. A move has one package and
+    several files: each `source` embeds the `site.Site` of its file
+    (its package the variant whose syntax holds it), the mover reaches
+    the workspace, package and `Off` through the source it embeds (its
+    own `ws`, `pkg` and `off` are gone), and the file a move edits is
+    opened with `site.At`. Left: the seven `find`s, which look for
+    different kinds of thing and so are not one function. Item 37 is
+    *Done.*
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the

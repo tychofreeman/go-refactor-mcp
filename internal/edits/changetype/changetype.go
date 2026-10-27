@@ -9,7 +9,6 @@ import (
 	"go/ast"
 	"go/token"
 	"go/types"
-	"os"
 	"strings"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
@@ -17,6 +16,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/imports"
 	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/site"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
 
@@ -81,10 +81,11 @@ func (*ChangeType) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor
 		return nil, refactor.Refusef("%s is not a type", a.Name)
 	}
 	path := ws.Fset.Position(tn.Pos()).Filename
-	dpkg, file := ws.FileSyntax(path)
-	if file == nil {
-		return nil, refactor.Refusef("%s is declared outside the loaded packages", a.Name)
+	declaring, err := site.Declaring(ws, tn)
+	if err != nil {
+		return nil, err
 	}
+	dpkg, file := declaring.Pkg, declaring.File
 	spec := typeSpec(file, tn.Pos())
 	if spec == nil {
 		return nil, refactor.Refusef("%s is not declared at the top level of %s", a.Name, ws.Rel(path))
@@ -92,10 +93,7 @@ func (*ChangeType) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor
 	if spec.TypeParams != nil {
 		return nil, refactor.Refusef("%s has type parameters; changing a generic type is not supported", a.Name)
 	}
-	src, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
+	src := declaring.Src
 	tf := ws.Fset.File(file.Pos())
 	oldText := string(src[tf.Offset(spec.Type.Pos()):tf.Offset(spec.Type.End())])
 	newText := strings.TrimSpace(a.Type)

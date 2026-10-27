@@ -133,7 +133,10 @@ results are in `docs/cost-history.md`.
   own memory is `body.own`, `ThisFunc` for a function and `ThisCode`
   for an expression judged out of context. `site.Site` (item 37) is
   the file a refactoring works in; a new refactoring embeds it and
-  opens its file with `site.At`.
+  opens its file with `site.At` (`site.Declaring` for the file of a
+  declaration). rename refuses a field name that a field promoted
+  from an embedded struct already has; replace the uses as text
+  instead, then delete the field.
 
 - **Tool descriptions: an example per use, the rules in refusals**
   (2026-10-21): cutting `fold`'s description from 668 to about 260
