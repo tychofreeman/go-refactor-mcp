@@ -3097,3 +3097,8 @@ other packages cannot name the unexported field the parameter needs.
 A candidate operation: move a method to the type of one of its
 receiver's fields, leaving a delegating method behind.
 This entry appended with a heredoc.
+
+## 2026-10-27: CI on the newest Go only, for now
+
+The matrix with replace_text. Nothing by hand. This entry appended
+with replace_text.
