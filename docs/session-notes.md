@@ -48,6 +48,17 @@ results are in `docs/cost-history.md`.
 
 ## Decisions and their reasons
 
+- **TypeScript in this repo, from one server** (2026-10-27, the
+  user): asked how much would overlap, the user chose this repo and
+  then one server whose tools route by file extension, over a
+  separate repo or a second server. The language-neutral code
+  (diffs, MCP server, batch, A/B harness, about 4,500 lines) is what
+  A/B results keep tuning, so it should land once. To keep Go's cost
+  and baselines unchanged, descriptions follow what the repo holds
+  (Go only: today's text). The plan and its open decisions are
+  `docs/ts-plan.md` (README item 40); the user asked for the plan
+  before any code.
+
 - **Manual edits as small as possible** (2026-10-21, the user's
   principle): not every operation will exist; use the ones there are,
   keep manual edits to the smallest size, avoid them when possible.
