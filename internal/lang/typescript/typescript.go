@@ -13,6 +13,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/history"
 	"github.com/tychofreeman/go-refactor-mcp/internal/lang"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/ts/inspect"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/refactorings/rename"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/workspace"
 )
@@ -23,6 +24,8 @@ type Language struct {
 	// FullDiffs shows results with three lines of context around each
 	// change; by default they have none.
 	FullDiffs bool
+	// ReadByName makes inspect show source only for what a request names.
+	ReadByName bool
 
 	dir     string
 	history *history.Stack
@@ -162,9 +165,26 @@ func (l *Language) Batch(args json.RawMessage) (string, error) {
 	return b.String(), nil
 }
 
-// Inspect does not read TypeScript yet.
-func (l *Language) Inspect(json.RawMessage) (string, error) {
-	return "inspect does not read TypeScript files yet; read them as text.", nil
+// Inspect reads TypeScript code; a refusal is its text.
+func (l *Language) Inspect(args json.RawMessage) (string, error) {
+	var q inspect.Query
+	if err := refactor.DecodeArgs(args, &q); err != nil {
+		return err.Error(), nil
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	ws, err := l.workspace()
+	if err != nil {
+		return "", err
+	}
+	out, err := inspect.RunWith(ws, q, inspect.Options{ByName: l.ReadByName})
+	if err != nil {
+		if refactor.IsRefusal(err) {
+			return err.Error(), nil
+		}
+		return "", err
+	}
+	return out, nil
 }
 
 // Check reports whether the solution type-checks; it runs no tests yet.

@@ -389,6 +389,17 @@ Go. Steps 1 and 2 change shared code and come before any TypeScript.
    re-check on 2 cores).
 4. **Read and check:** `inspect`, `check`, `undo`, `batch` across
    languages, `replace_text`; descriptions chosen by what the root holds.
+   `check` (without tests), `undo` and `batch` came with step 3; a batch
+   over both languages is refused. `inspect` *done*: Go's query and
+   layout (a file with its function bodies elided, a function, lines,
+   targets, names across the solution, an overview by directory), from
+   `tsapi.Outline` (functions, classes and their members, interfaces,
+   types, enums, variables, arrow functions bound to a const). A body's
+   facts are its length only; `uses` is refused; a name several files
+   declare is qualified by file (`src/shed.ts:prune`). Its description
+   names TypeScript where the repo has it. On Hono: 324 files, 1,504
+   declarations; `hono-base.ts` shows 362 of its 564 lines without
+   bodies, its types and doc comments being much of it.
 5. **Edits first:** `create_file`, `add_declaration`,
    `replace_statements`, `insert_statements`, `replace_expression`,
    `add_property`, `organize_imports`, with stubs from usage. These made

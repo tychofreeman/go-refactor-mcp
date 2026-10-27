@@ -1013,6 +1013,11 @@ func TestTypeScriptOnly(t *testing.T) {
 	}
 	out, _ = call(t, cs, "undo", map[string]any{})
 	mustContain(t, "undo", out, "UNDONE")
+	out, _ = call(t, cs, "inspect", map[string]any{"file": "src/bed.ts"})
+	mustContain(t, "inspect", out, "src/bed.ts  (TypeScript, 3 lines)", "3  export const morning = water(2);")
+	if d := tools["inspect"]; !strings.HasPrefix(d, "Read TypeScript code") {
+		t.Errorf("inspect's description does not name TypeScript: %.60s", d)
+	}
 	if src, _ := os.ReadFile(filepath.Join(dir, "src/plant.test.ts")); !strings.Contains(string(src), "water(3)") {
 		t.Errorf("undo did not restore the test file:\n%s", src)
 	}
