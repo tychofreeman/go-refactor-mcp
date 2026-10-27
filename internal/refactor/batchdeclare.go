@@ -24,7 +24,11 @@ var (
 // the root), and "Type.Name" for each field and method of a named type. A
 // batch takes them when it begins, so that it does not declare again what
 // a step removed.
-func declaredNames(ws *workspace.Workspace) map[string]bool {
+func declaredNames(w Workspace) map[string]bool {
+	ws, ok := w.(*workspace.Workspace)
+	if !ok {
+		return nil
+	}
 	out := map[string]bool{}
 	for _, p := range ws.Pkgs {
 		if p.Types == nil {
@@ -65,7 +69,7 @@ func bareType(t string) string {
 // a name its package declared when the batch began (before), which a step
 // removed. It returns the steps it applied, and a note on each name it
 // left; it calls done on each step just after applying it.
-func declareMissing(ws *workspace.Workspace, errs []string, before map[string]bool, opts Options, done func(*Result)) ([]*Result, []string, error) {
+func declareMissing[W Workspace](ws W, errs []string, before map[string]bool, opts OptionsOf[W], done func(*Result)) ([]*Result, []string, error) {
 	byFile := map[string][]string{}
 	var files, skipped []string
 	for _, e := range errs {
@@ -129,7 +133,7 @@ var importError = regexp.MustCompile(`^(.+\.go):\d+:\d+: (".+" imported (as \w+ 
 // fixImports runs opts.Imports on each file whose errors errs may be
 // imports to add or remove, and returns the steps it applied; it calls
 // done on each step just after applying it.
-func fixImports(ws *workspace.Workspace, errs []string, opts Options, done func(*Result)) ([]*Result, error) {
+func fixImports[W Workspace](ws W, errs []string, opts OptionsOf[W], done func(*Result)) ([]*Result, error) {
 	var files []string
 	for _, e := range errs {
 		if m := importError.FindStringSubmatch(e); m != nil && !slices.Contains(files, m[1]) {
@@ -142,7 +146,7 @@ func fixImports(ws *workspace.Workspace, errs []string, opts Options, done func(
 		if err != nil {
 			return fixed, err
 		}
-		res, err := Run(ws, opts.Imports, args, Options{Compact: opts.Compact, Unchecked: true})
+		res, err := Run(ws, opts.Imports, args, OptionsOf[W]{Compact: opts.Compact, Unchecked: true})
 		if err != nil {
 			return fixed, err
 		}
@@ -166,7 +170,7 @@ var untypeable = regexp.MustCompile(`^cannot tell the (?:results of (\w+) from|t
 // declareIn runs opts.Declare on file for names, leaving out each name it
 // refuses as not called. It returns the step, if one applied, and the
 // names it declared; and why it declared none, or left some out.
-func declareIn(ws *workspace.Workspace, file string, names []string, opts Options) (*Result, []string, string, error) {
+func declareIn[W Workspace](ws W, file string, names []string, opts OptionsOf[W]) (*Result, []string, string, error) {
 	var dropped []string // names opts.Declare refused as not called
 	var untyped []string // why each name opts.Declare could not type has no stub
 	why := func() string {
@@ -181,7 +185,7 @@ func declareIn(ws *workspace.Workspace, file string, names []string, opts Option
 		if err != nil {
 			return nil, nil, "", err
 		}
-		res, err := Run(ws, opts.Declare, args, Options{Compact: opts.Compact, Unchecked: true})
+		res, err := Run(ws, opts.Declare, args, OptionsOf[W]{Compact: opts.Compact, Unchecked: true})
 		if err != nil {
 			return res, names, "", err
 		}
@@ -207,7 +211,11 @@ func declareIn(ws *workspace.Workspace, file string, names []string, opts Option
 
 // closeName returns a name file's package declares that name may be a
 // misspelling of, or "".
-func closeName(ws *workspace.Workspace, file, name string) string {
+func closeName(w Workspace, file, name string) string {
+	ws, ok := w.(*workspace.Workspace)
+	if !ok {
+		return ""
+	}
 	pkg, _ := ws.FileSyntax(ws.Abs(file))
 	if pkg == nil || pkg.Types == nil {
 		return ""

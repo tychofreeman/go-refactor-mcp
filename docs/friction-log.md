@@ -3097,3 +3097,17 @@ other packages cannot name the unexported field the parameter needs.
 A candidate operation: move a method to the type of one of its
 receiver's fields, leaving a delegating method behind.
 This entry appended with a heredoc.
+
+## 2026-10-27: the engine generic over its workspace
+
+TypeScript plan step 2, second part. The test first
+(`internal/refactor/anylang_test.go`, a workspace of text files) with
+create_file, in one batch checked at its end with 49 replace_text steps
+that made the engine generic: no tool adds a type parameter to a set of
+types and functions, or turns a type into an alias of an instance of a
+new generic one, so each signature was rewritten as text. The batch's
+end check named the one function missed (afterRefusal), added on the
+rerun. Two parameters named `any` renamed with rename. The docs with
+replace_text. A candidate operation: make a type generic over one of
+the types its methods take, leaving the old name as the instance.
+This entry appended with a heredoc.
