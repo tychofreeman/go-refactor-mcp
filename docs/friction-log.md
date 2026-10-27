@@ -3027,3 +3027,8 @@ their calls, the dispatch and the usage with replace_text; `TestMain`
 with add_declaration, keeping the tests' stacks out of the user's
 cache and go test on its build cache. Nothing by hand. This entry
 appended with replace_text.
+
+## 2026-10-27: version 0.3.0, the first release
+
+The version with replace_text, the roadmap with replace_text. Nothing
+by hand. This entry appended with replace_text.
