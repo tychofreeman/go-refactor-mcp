@@ -16,7 +16,8 @@ package mcpserver
 import (
 	"context"
 	"encoding/json"
-	"slices"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -24,8 +25,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/history"
 	"github.com/tychofreeman/go-refactor-mcp/internal/lang"
 	"github.com/tychofreeman/go-refactor-mcp/internal/lang/golang"
-	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
-	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings"
+	"github.com/tychofreeman/go-refactor-mcp/internal/lang/typescript"
 )
 
 // Version is reported to MCP clients.
@@ -79,8 +79,9 @@ type Server struct {
 	// them.
 	ReadByName bool
 
-	golang *golang.Language
-	langs  *lang.Dispatcher // chooses the language of each call
+	golang     *golang.Language     // nil when the root holds no Go
+	typescript *typescript.Language // nil when it holds no TypeScript
+	langs      *lang.Dispatcher     // chooses the language of each call
 }
 
 // byName removes what offers lines by number from the texts that
@@ -105,30 +106,64 @@ func (s *Server) reads(text string) string {
 	return byName.Replace(text)
 }
 
-// New returns a server for the module containing dir.
+// New returns a server for the code at dir: Go for the module containing
+// it (also when it holds neither language), TypeScript for the solution
+// of the nearest tsconfig.json at or above it.
 func New(dir string, patterns ...string) *Server {
 	h := &history.Stack{}
-	g := golang.New(dir, patterns, h)
-	return &Server{golang: g, langs: &lang.Dispatcher{Languages: []lang.Language{g}, History: h}}
+	s := &Server{langs: &lang.Dispatcher{History: h}}
+	goMod, tsconfig := above(dir, "go.mod"), above(dir, "tsconfig.json")
+	if goMod || !tsconfig {
+		s.golang = golang.New(dir, patterns, h)
+		s.langs.Languages = append(s.langs.Languages, s.golang)
+	}
+	if tsconfig {
+		s.typescript = typescript.New(dir, h)
+		s.langs.Languages = append(s.langs.Languages, s.typescript)
+	}
+	return s
+}
+
+// above reports whether a file name is at dir or a directory above it.
+func above(dir, name string) bool {
+	d, err := filepath.Abs(dir)
+	if err != nil {
+		return false
+	}
+	for {
+		if fi, err := os.Stat(filepath.Join(d, name)); err == nil && !fi.IsDir() {
+			return true
+		}
+		parent := filepath.Dir(d)
+		if parent == d {
+			return false
+		}
+		d = parent
+	}
 }
 
 // MCP builds the MCP server with all tools registered.
 func (s *Server) MCP() *mcp.Server {
-	s.golang.FullDiffs, s.golang.ReadByName = s.FullDiffs, s.ReadByName
+	if s.golang != nil {
+		s.golang.FullDiffs, s.golang.ReadByName = s.FullDiffs, s.ReadByName
+	}
+	if s.typescript != nil {
+		s.typescript.FullDiffs = s.FullDiffs
+	}
 	srv := mcp.NewServer(&mcp.Implementation{Name: "gorefactor", Version: Version}, &mcp.ServerOptions{
 		Instructions: s.reads(Instructions),
 	})
 
 	notDestructive := false
-	for _, r := range refactorings.All() {
-		r := r
+	for _, t := range s.langs.Tools() {
+		name := t.Name
 		srv.AddTool(&mcp.Tool{
-			Name:        r.Name(),
-			Description: r.Description() + symbolNote(r) + "\nApplies the change and returns what changed; undo reverts it.",
-			InputSchema: r.InputSchema(),
+			Name:        name,
+			Description: t.Description + "\nApplies the change and returns what changed; undo reverts it.",
+			InputSchema: t.Schema,
 			Annotations: &mcp.ToolAnnotations{DestructiveHint: &notDestructive},
 		}, func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			return s.refactor(r, req.Params.Arguments), nil
+			return s.refactor(name, req.Params.Arguments), nil
 		})
 	}
 
@@ -220,43 +255,34 @@ check "end" type-checks only after the last step, so edits may pass through code
 	return srv
 }
 
-// symbolNote tells, for a tool whose line is optional, how it finds a
-// declaration by name alone; the tools' own descriptions were written for
-// file, line and name. A tool for locals only has none.
-func symbolNote(r refactor.Refactoring) string {
-	if _, ok := r.(interface{ LocalsOnly() }); ok {
-		return ""
-	}
-	schema := r.InputSchema()
-	var s struct {
-		Properties map[string]json.RawMessage `json:"properties"`
-		Required   []string                   `json:"required"`
-	}
-	if json.Unmarshal(schema, &s) != nil {
-		return ""
-	}
-	_, line := s.Properties["line"]
-	_, name := s.Properties["name"]
-	if !line || !name || slices.Contains(s.Required, "line") {
-		return ""
-	}
-	return "\nWithout line, name alone identifies it as a package-level symbol of file's package (Name, or Type.Method or Type.Field); unlike a line number, a name stays valid after edits."
-}
-
 // Preload starts loading the workspace in the background, so that the
 // first call does not wait for all of it (minutes on a large module, the
 // first time); the channel closes when it is done. Calls meanwhile wait
 // for it, and a load that fails is tried again by the next call.
 func (s *Server) Preload() <-chan struct{} {
-	return s.golang.Preload()
+	var started []<-chan struct{}
+	if s.golang != nil {
+		started = append(started, s.golang.Preload())
+	}
+	if s.typescript != nil {
+		started = append(started, s.typescript.Preload())
+	}
+	done := make(chan struct{})
+	go func() {
+		for _, c := range started {
+			<-c
+		}
+		close(done)
+	}()
+	return done
 }
 
-func (s *Server) refactor(r refactor.Refactoring, args json.RawMessage) *mcp.CallToolResult {
+func (s *Server) refactor(tool string, args json.RawMessage) *mcp.CallToolResult {
 	l, refused := s.langs.For(args)
 	if refused != "" {
 		return textResult(refused)
 	}
-	text, wasRefused, err := l.Step(r.Name(), args)
+	text, wasRefused, err := l.Step(tool, args)
 	if err != nil {
 		return toolError(err)
 	}

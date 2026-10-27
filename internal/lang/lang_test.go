@@ -16,7 +16,10 @@ type fake struct {
 	hist      *history.Stack
 }
 
-func (f *fake) Name() string          { return f.name }
+func (f *fake) Name() string { return f.name }
+func (f *fake) Tools() []Tool {
+	return []Tool{{Name: "rename", Description: f.name + " rename"}, {Name: f.name + "_only", Description: "x"}}
+}
 func (f *fake) Owns(path string) bool { return strings.HasSuffix(path, f.ext) }
 func (f *fake) Step(tool string, args json.RawMessage) (string, bool, error) {
 	f.hist.Push(history.Change{Label: f.name + " " + tool, After: map[string][]byte{"x" + f.ext: nil}})
@@ -79,5 +82,21 @@ func TestForUndoFollowsTheLastChange(t *testing.T) {
 	g.Step("rename", nil)
 	if got := d.ForUndo(); got != g {
 		t.Errorf("after a Go step, undo goes to %s", got.Name())
+	}
+}
+
+// A tool two languages have is published once, its description the
+// first's and then the other's, introduced by the language.
+func TestToolsMerge(t *testing.T) {
+	d, _, _ := twoLanguages()
+	var names []string
+	for _, tool := range d.Tools() {
+		names = append(names, tool.Name)
+		if tool.Name == "rename" && tool.Description != "Go rename\n\nIn TypeScript files: TypeScript rename" {
+			t.Errorf("rename's description is %q", tool.Description)
+		}
+	}
+	if strings.Join(names, " ") != "rename Go_only TypeScript_only" {
+		t.Errorf("tools are %v", names)
 	}
 }

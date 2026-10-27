@@ -3139,3 +3139,19 @@ workspace and its tests with create_file in one batch checked at its
 end, written in full before it (new packages: nothing to derive them
 from); the docs with replace_text and create_file. Nothing else by
 hand. This entry appended with a heredoc.
+
+## 2026-10-27: rename for TypeScript, and its language
+
+TypeScript plan step 3, second part. New packages and tests with
+create_file, written before (`tsapi`'s rename and host, the workspace's
+rename across projects, the refactoring, the language), and the server's
+wiring with replace_text, replace_statements and add_declaration, in
+batches checked at their end. One batch declared a stub for symbolNote,
+which Go's language called before it had moved there: replace_declaration
+put the real body in from the server's copy and remove_dead_code took the
+server's out. A move between packages of a function the old package then
+no longer uses would have been move_declaration, had the order been
+right. `cmd/ts-spike` deleted with delete_file. A test that expected a
+TypeScript-only server to refuse a Go tool was wrong (the tool is not
+published there) and moved to the mixed test. This entry appended with a
+heredoc.
