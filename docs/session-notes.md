@@ -68,6 +68,13 @@ results are in `docs/cost-history.md`.
   plan's target named. Results in `docs/ts-spike.md`; `cmd/ts-spike`
   stays until step 3 replaces it. Measure timings again on the user's
   machine (more cores) before tuning the checker pool.
+  Errors already in TypeScript code (2026-10-27, the user: "relax the
+  rule for now; we might want to revisit"): Hono has 4 under TS 7, so
+  every step was refused. A workspace may now tolerate errors
+  (`refactor.ToleratesErrors`); TypeScript's does, Go's does not. There
+  a step must add no error, rather than start from none. The cost: an
+  error already in a file can hide what a step breaks there (an `any`
+  where a type was lost). Revisit with evidence from real repos.
 
 - **Manual edits as small as possible** (2026-10-21, the user's
   principle): not every operation will exist; use the ones there are,

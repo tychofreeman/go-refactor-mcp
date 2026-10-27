@@ -47,8 +47,10 @@ func (*CheckpointOf[W]) Plan(W, json.RawMessage) (*Plan, error) {
 
 // checkpoint runs a check step: complete adds what earlier edits need,
 // in a batch checked at its end; then the code must type-check, and the
-// tests pass if asked for. Its result is refused if not.
-func checkpoint[W Workspace](ws W, raw json.RawMessage, opts OptionsOf[W], complete func() error) (*Result, error) {
+// tests pass if asked for. Its result is refused if not. Where the
+// workspace tolerates errors, the code must have none that the batch did
+// not begin with (baseline).
+func checkpoint[W Workspace](ws W, raw json.RawMessage, opts OptionsOf[W], baseline []string, complete func() error) (*Result, error) {
 	res := &Result{Refactoring: "check"}
 	var a struct {
 		RunTests bool   `json:"run_tests"`
@@ -63,7 +65,11 @@ func checkpoint[W Workspace](ws W, raw json.RawMessage, opts OptionsOf[W], compl
 			return nil, err
 		}
 	}
-	if errs := ws.Errors(); len(errs) > 0 {
+	errs := ws.Errors()
+	if tolerates(ws) {
+		errs = addedErrors(baseline, errs)
+	}
+	if len(errs) > 0 {
 		res.Refused = fmt.Sprintf("the code does not type-check at this checkpoint. Errors were:\n  %s", strings.Join(limit(errs, 10), "\n  "))
 		return res, nil
 	}

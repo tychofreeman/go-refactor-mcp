@@ -378,9 +378,15 @@ Go. Steps 1 and 2 change shared code and come before any TypeScript.
    sources of the projects they reference (`UseSourceOfProjectReference`,
    as the language server does): without it, Hono's runtime-test
    projects reported 67 errors about output not built.
-   Open, for the user: Hono has 4 errors under TypeScript 7 (in tests,
-   code written for 6), so the engine refuses every step there, by the
-   rule that a refactoring runs only on code that type-checks.
+   Hono has 4 errors under TypeScript 7 (in tests, code written for
+   6), so the engine refused every step there. The user chose to relax
+   the rule for TypeScript, for now: a workspace may tolerate errors
+   (`refactor.ToleratesErrors`, which TypeScript's does), and a step
+   there must add none, compared by message without positions, so an
+   error that only moved is not new; a batch must end, and pass each
+   checkpoint, with none it did not begin with. Go keeps its rule. On
+   Hono the rename then applies (47 edits, 5 files, 5 s with the
+   re-check on 2 cores).
 4. **Read and check:** `inspect`, `check`, `undo`, `batch` across
    languages, `replace_text`; descriptions chosen by what the root holds.
 5. **Edits first:** `create_file`, `add_declaration`,

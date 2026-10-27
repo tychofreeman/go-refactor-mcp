@@ -164,3 +164,53 @@ func TestEngineRefusesABreakingStep(t *testing.T) {
 		t.Fatal("the refused step was not undone")
 	}
 }
+
+// With errors already in the code, a step may run if it adds none: an
+// error that only moved, because the step added a line above it, is not
+// new; one the step makes is, and is refused. So is a batch, at its end
+// and at a checkpoint.
+func TestEngineToleratesErrorsAlreadyThere(t *testing.T) {
+	ws, dir := solution(t)
+	if err := os.WriteFile(filepath.Join(dir, "src/soil.ts"), []byte("export const depth = 1;\nexport const ph: number = \"acid\";\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ws.Refresh(); err != nil {
+		t.Fatal(err)
+	}
+	run := func(old, new string) *refactor.Result {
+		t.Helper()
+		args, _ := json.Marshal(map[string]string{"file": "src/soil.ts", "old": old, "new": new})
+		res, err := refactor.Run(ws, replaceWord{}, args, refactor.OptionsOf[*Workspace]{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return res
+	}
+	if res := run("export const depth = 1;", "export const depth = 1;\nexport const width = 2;"); !res.Applied {
+		t.Fatalf("a step that moves an error already there was refused: %s", res)
+	}
+	res := run("export const width = 2;", "export const width: string = 2;")
+	if res.Applied || !strings.Contains(res.Refused, "src/soil.ts:2:14: Type 'number' is not assignable to type 'string'.") || strings.Contains(res.Refused, "'\"acid\"'") {
+		t.Fatalf("a step that adds an error was not refused, naming only it: %s", res)
+	}
+
+	step := func(old, new string) refactor.StepOf[*Workspace] {
+		args, _ := json.Marshal(map[string]string{"file": "src/soil.ts", "old": old, "new": new})
+		return refactor.StepOf[*Workspace]{Refactoring: replaceWord{}, Args: args}
+	}
+	check := refactor.StepOf[*Workspace]{Refactoring: &refactor.CheckpointOf[*Workspace]{}, Args: json.RawMessage(`{}`)}
+	b, err := refactor.RunBatch(ws, []refactor.StepOf[*Workspace]{step("width = 2", "width = 3"), check}, refactor.OptionsOf[*Workspace]{Unchecked: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !b.Applied {
+		t.Fatalf("a batch checked at its end, adding no error, was refused: %s", b)
+	}
+	b, err = refactor.RunBatch(ws, []refactor.StepOf[*Workspace]{step("width = 3", "width: string = 3")}, refactor.OptionsOf[*Workspace]{Unchecked: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.Applied {
+		t.Fatalf("a batch that adds an error was applied: %s", b)
+	}
+}
