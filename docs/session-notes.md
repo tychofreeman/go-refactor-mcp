@@ -45,6 +45,10 @@ results are in `docs/cost-history.md`.
   `docs/releases/v<version>.md`; once Test passes on main, the Release
   workflow tags the commit and creates the release. Sessions may not
   push tags or create releases themselves (HTTP 403).
+- CI minutes (2026-10-27, the user): the account has 5,000 Actions
+  minutes a month, so Test runs on the newest Go only (not the minimum
+  in go.mod too) and skips changes to docs alone. Keep CI runs few:
+  batch small fixes into one PR where they belong together.
 
 ## Decisions and their reasons
 
