@@ -16,6 +16,9 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/adddecl"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/createfile"
+	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/insertstmts"
+	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/replaceexpr"
+	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/replacestmts"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/replacetext"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/inspect"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/refactorings/rename"
@@ -46,7 +49,7 @@ func New(dir string, h *history.Stack) *Language {
 
 // all is TypeScript's refactorings and edits.
 func all() []refactor.RefactoringOf[*workspace.Workspace] {
-	return []refactor.RefactoringOf[*workspace.Workspace]{rename.New(), createfile.New(), adddecl.New(), replacetext.New()}
+	return []refactor.RefactoringOf[*workspace.Workspace]{rename.New(), createfile.New(), adddecl.New(), replacetext.New(), replacestmts.New(), insertstmts.New(), replaceexpr.New()}
 }
 
 func lookup(name string) (refactor.RefactoringOf[*workspace.Workspace], bool) {
