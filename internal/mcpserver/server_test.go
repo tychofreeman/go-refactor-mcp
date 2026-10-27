@@ -963,3 +963,85 @@ func TestInstructionsNameEveryTool(t *testing.T) {
 		}
 	}
 }
+
+// tsSetup copies the TypeScript solution fixture into a fresh directory,
+// with dir's other files (a Go module, for a mixed repo).
+func tsSetup(t *testing.T, files map[string]string) string {
+	t.Helper()
+	t.Setenv("GOWORK", "off")
+	dir := t.TempDir()
+	if err := os.CopyFS(dir, os.DirFS("../ts/workspace/testdata/solution")); err != nil {
+		t.Fatal(err)
+	}
+	for name, src := range files {
+		p := filepath.Join(dir, name)
+		os.MkdirAll(filepath.Dir(p), 0o755)
+		os.WriteFile(p, []byte(src), 0o644)
+	}
+	return dir
+}
+
+func toolDescriptions(t *testing.T, cs *mcp.ClientSession) map[string]string {
+	t.Helper()
+	res, err := cs.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := map[string]string{}
+	for _, tool := range res.Tools {
+		out[tool.Name] = tool.Description
+	}
+	return out
+}
+
+// A repo with a tsconfig.json and no go.mod gets TypeScript's tools, and
+// rename and undo work on its files.
+func TestTypeScriptOnly(t *testing.T) {
+	dir := tsSetup(t, nil)
+	cs := connect(t, New(dir))
+	tools := toolDescriptions(t, cs)
+	if _, ok := tools["extract_function"]; ok {
+		t.Error("a TypeScript-only repo is offered Go's extract_function")
+	}
+	if d := tools["rename"]; !strings.Contains(d, "renaming water in src/plant.ts to irrigate") || strings.Contains(d, "In TypeScript files") {
+		t.Errorf("rename's description is not TypeScript's alone:\n%s", d)
+	}
+	out, _ := call(t, cs, "rename", map[string]any{"file": "src/plant.ts", "name": "water", "new_name": "irrigate"})
+	mustContain(t, "rename", out, `renamed "water" to "irrigate" (5 occurrences in 3 files)`)
+	if src, _ := os.ReadFile(filepath.Join(dir, "src/plant.test.ts")); !strings.Contains(string(src), "irrigate(3)") {
+		t.Errorf("the test file was not renamed:\n%s", src)
+	}
+	out, _ = call(t, cs, "undo", map[string]any{})
+	mustContain(t, "undo", out, "UNDONE")
+	if src, _ := os.ReadFile(filepath.Join(dir, "src/plant.test.ts")); !strings.Contains(string(src), "water(3)") {
+		t.Errorf("undo did not restore the test file:\n%s", src)
+	}
+}
+
+// A repo with both offers Go's tools, rename's description adding
+// TypeScript's, and each call goes to the language of its file.
+func TestGoAndTypeScript(t *testing.T) {
+	dir := tsSetup(t, map[string]string{
+		"go.mod":       "module example.com/demo\n\ngo 1.22\n",
+		"calc/calc.go": calcSrc,
+	})
+	cs := connect(t, New(dir))
+	tools := toolDescriptions(t, cs)
+	if _, ok := tools["extract_function"]; !ok {
+		t.Error("Go's tools are missing")
+	}
+	if d := tools["rename"]; !strings.Contains(d, "In TypeScript files: Rename a function") {
+		t.Errorf("rename's description does not add TypeScript's:\n%s", d)
+	}
+	out, _ := call(t, cs, "rename", map[string]any{"file": "src/bed.ts", "name": "morning", "new_name": "dawn"})
+	mustContain(t, "rename in TypeScript", out, `renamed "morning" to "dawn"`)
+	out, _ = call(t, cs, "rename", map[string]any{"file": "calc/calc.go", "name": "Apply", "new_name": "Scale"})
+	mustContain(t, "rename in Go", out, `"Apply" to "Scale"`)
+	out, _ = call(t, cs, "extract_function", map[string]any{"file": "src/bed.ts", "start_line": 3, "end_line": 3, "name": "f"})
+	mustContain(t, "a tool TypeScript does not have yet", out, "does not work on TypeScript files yet")
+	out, _ = call(t, cs, "batch", map[string]any{"steps": []any{
+		map[string]any{"tool": "rename", "args": map[string]any{"file": "src/bed.ts", "name": "dawn", "new_name": "noon"}},
+		map[string]any{"tool": "rename", "args": map[string]any{"file": "calc/calc.go", "name": "Scale", "new_name": "Apply"}},
+	}})
+	mustContain(t, "a batch over both", out, "more than one language")
+}

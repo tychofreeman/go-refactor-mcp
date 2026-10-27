@@ -118,6 +118,9 @@ service, project system); today's `refactor-mcp` is 19.4 MB.
 
 ## Reproducing
 
+`cmd/ts-spike` was removed once `internal/ts` replaced it (plan step 3,
+rename); it is in the history at commit 094bff4. There:
+
 ```
 go build -o /tmp/ts-spike ./cmd/ts-spike        # from this repo
 git clone --depth 1 https://github.com/honojs/hono && cd hono

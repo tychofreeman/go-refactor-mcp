@@ -138,7 +138,7 @@ func (p *Project) Reload() error {
 		return err
 	}
 	host := p.host()
-	prog := compiler.NewProgram(compiler.ProgramOptions{Host: host, Config: parsed})
+	prog := compiler.NewProgram(compiler.ProgramOptions{Host: host, Config: parsed, UseSourceOfProjectReference: true})
 	p.parsed = parsed
 	p.prog = incremental.NewProgram(prog, p.prog, incremental.CreateHost(host), false)
 	return nil

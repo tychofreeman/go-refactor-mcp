@@ -137,47 +137,11 @@ func RunStep(ws *workspace.Workspace, r refactor.Refactoring, args json.RawMessa
 	return res.String(), res.Refused != "", nil
 }
 
-// Batch is a batch of steps as the batch tool takes it.
-type Batch struct {
-	Steps     []refactor.Step
-	Unchecked bool // type-check only at the end ("check": "end")
-	Summary   bool // report without the diff ("report": "summary")
-}
+// Batch is a batch of steps on Go code as the batch tool takes it.
+type Batch = refactor.BatchOf[*workspace.Workspace]
 
 // ParseBatch decodes the batch tool's arguments. When they are refused,
 // it returns the message to show instead.
 func ParseBatch(args json.RawMessage) (Batch, string) {
-	var a struct {
-		Steps []struct {
-			ID   string          `json:"id"`
-			Tool string          `json:"tool"`
-			Args json.RawMessage `json:"args"`
-		} `json:"steps"`
-		Report string `json:"report"`
-		Check  string `json:"check"`
-	}
-	if err := refactor.DecodeArgs(args, &a); err != nil {
-		return Batch{}, "REFUSED batch: " + err.Error() + "\nbatch takes:\n  steps (required): the steps, in order, each {\"tool\": ..., \"args\": {...}}; a tool's own arguments (file, name, line, ...) go in each step's args\n  report: diff (the default) or summary"
-	}
-	if a.Check != "" && a.Check != "each" && a.Check != "end" {
-		return Batch{}, fmt.Sprintf("REFUSED batch: check is %q; give each or end", a.Check)
-	}
-	if a.Report != "" && a.Report != "diff" && a.Report != "summary" {
-		return Batch{}, fmt.Sprintf("REFUSED batch: report is %q; give diff or summary", a.Report)
-	}
-	if len(a.Steps) == 0 {
-		return Batch{}, "REFUSED batch: steps is empty; give the refactorings and edits to run, in order"
-	}
-	b := Batch{Steps: make([]refactor.Step, len(a.Steps)), Unchecked: a.Check == "end", Summary: a.Report == "summary"}
-	for i, st := range a.Steps {
-		r, ok := Lookup(st.Tool)
-		if st.Tool == "check" {
-			r, ok = refactor.NewCheckpoint(), true
-		}
-		if !ok {
-			return Batch{}, fmt.Sprintf("REFUSED batch: step %d: %q is not a refactoring or edit; a batch runs tools such as rename, add_parameter or replace_statements, and check as a checkpoint, not inspect, undo or batch. Nothing changed.", i+1, st.Tool)
-		}
-		b.Steps[i] = refactor.Step{ID: st.ID, Refactoring: r, Args: st.Args}
-	}
-	return b, ""
+	return refactor.ParseBatch(args, Lookup)
 }

@@ -6,11 +6,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/history"
 	"github.com/tychofreeman/go-refactor-mcp/internal/inspect"
+	"github.com/tychofreeman/go-refactor-mcp/internal/lang"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
@@ -43,6 +45,16 @@ func (*Language) Name() string { return "Go" }
 
 // Owns reports whether path is a Go source file.
 func (*Language) Owns(path string) bool { return strings.HasSuffix(path, ".go") }
+
+// Tools are Go's refactorings and edits; a description says how a tool
+// whose line is optional finds a declaration by name.
+func (*Language) Tools() []lang.Tool {
+	var out []lang.Tool
+	for _, r := range refactorings.All() {
+		out = append(out, lang.Tool{Name: r.Name(), Description: r.Description() + symbolNote(r), Schema: r.InputSchema()})
+	}
+	return out
+}
 
 // Loaded reports whether the workspace has been loaded.
 func (l *Language) Loaded() bool {
@@ -201,4 +213,27 @@ func (l *Language) Check(ctx context.Context, args json.RawMessage) (string, err
 		return err.Error(), nil
 	}
 	return report, nil
+}
+
+// symbolNote tells, for a tool whose line is optional, how it finds a
+// declaration by name alone; the tools' own descriptions were written for
+// file, line and name. A tool for locals only has none.
+func symbolNote(r refactor.Refactoring) string {
+	if _, ok := r.(interface{ LocalsOnly() }); ok {
+		return ""
+	}
+	schema := r.InputSchema()
+	var s struct {
+		Properties map[string]json.RawMessage `json:"properties"`
+		Required   []string                   `json:"required"`
+	}
+	if json.Unmarshal(schema, &s) != nil {
+		return ""
+	}
+	_, line := s.Properties["line"]
+	_, name := s.Properties["name"]
+	if !line || !name || slices.Contains(s.Required, "line") {
+		return ""
+	}
+	return "\nWithout line, name alone identifies it as a package-level symbol of file's package (Name, or Type.Method or Type.Field); unlike a line number, a name stays valid after edits."
 }

@@ -20,7 +20,13 @@ still applies.
   the solution (a file's default project can leave its tests out);
   re-check through the incremental builder (a plain re-check of a
   file's importers costs seconds); a created or deleted file rebuilds
-  the projects that take it.
+  the projects that take it. A project reads the sources of the
+  projects it references, not their built output, as the language
+  server does.
+- Rename and the other language-service features run on the
+  workspace's own programs through `tsapi`'s small host, project by
+  project, merging the edits; not through the language server's
+  session, which would hold a second copy of every program.
 - Fixtures are small solutions under `testdata/` in the garden domain
   of the tool examples (`Plant`, `Bed`, `water`), not the eval tasks'.
   They need no `node_modules`: `"types": []` in the config.

@@ -359,6 +359,28 @@ Go. Steps 1 and 2 change shared code and come before any TypeScript.
    only in tests" rule knows `_test.go` only, so a TypeScript test
    written first needs the workspace to say which files are tests;
    signatures are not yet recorded at load.
+   Second part *done*: `rename` for TypeScript, and the TypeScript
+   language in the dispatcher. Rename runs the language service on the
+   workspace's own programs (a small host in `tsapi`, not the language
+   server's session, which would keep a second copy of every program),
+   in each project that has the file, and merges the edits: on Hono it
+   made the spike's 47 edits in 5 files in 40 ms, the `getPath` option
+   properties kept, no new error. It refuses a new name a changed file
+   already uses (conservative: a name in another scope refuses too).
+   The server detects its languages at start: `go.mod` at or above the
+   directory gives Go (also when neither is there), `tsconfig.json`
+   gives TypeScript. Tools are the union; a tool both have keeps Go's
+   schema and adds "In TypeScript files: ..." to its description. In a
+   Go-only repo the tools and instructions are byte for byte what they
+   were. A TypeScript file given to a tool TypeScript does not have yet
+   is refused, naming the ones it has. The engine's `ParseBatch` is
+   generic, so batches of TypeScript steps work. Projects now read the
+   sources of the projects they reference (`UseSourceOfProjectReference`,
+   as the language server does): without it, Hono's runtime-test
+   projects reported 67 errors about output not built.
+   Open, for the user: Hono has 4 errors under TypeScript 7 (in tests,
+   code written for 6), so the engine refuses every step there, by the
+   rule that a refactoring runs only on code that type-checks.
 4. **Read and check:** `inspect`, `check`, `undo`, `batch` across
    languages, `replace_text`; descriptions chosen by what the root holds.
 5. **Edits first:** `create_file`, `add_declaration`,

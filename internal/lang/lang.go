@@ -14,10 +14,20 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/history"
 )
 
+// Tool is a refactoring or edit a language offers, as the server
+// publishes it.
+type Tool struct {
+	Name        string
+	Description string
+	Schema      json.RawMessage
+}
+
 // Language is the tools for the source files of one language.
 type Language interface {
 	// Name is the language's name, as refusals give it ("Go").
 	Name() string
+	// Tools are its refactorings and edits.
+	Tools() []Tool
 	// Owns reports whether path is a source file of the language.
 	Owns(path string) bool
 	// Step runs one refactoring or edit; refused reports whether text is
@@ -75,6 +85,26 @@ func (d *Dispatcher) For(args json.RawMessage) (Language, string) {
 		parts = append(parts, fmt.Sprintf("%s (%s)", l.Name(), strings.Join(byLang[l], ", ")))
 	}
 	return nil, fmt.Sprintf("this call names files of more than one language: %s. A call or batch works on one language; send the steps for each as separate calls.", strings.Join(parts, "; "))
+}
+
+// Tools returns the refactorings and edits of every language, each name
+// once, in the order the languages and their tools come. A name that
+// several languages have keeps the first's schema, and its description
+// is the first's followed by each other's, introduced by the language.
+func (d *Dispatcher) Tools() []Tool {
+	var out []Tool
+	at := map[string]int{}
+	for _, l := range d.Languages {
+		for _, t := range l.Tools() {
+			if i, ok := at[t.Name]; ok {
+				out[i].Description += "\n\nIn " + l.Name() + " files: " + t.Description
+				continue
+			}
+			at[t.Name] = len(out)
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 // ForUndo returns the language of the change on top of the undo stack,
