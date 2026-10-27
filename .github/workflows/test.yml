@@ -1,9 +1,21 @@
 name: Test
 
+# Changes to documentation alone do not run the tests: Markdown files and
+# docs/, except under testdata, where Markdown can be a test's input.
 on:
   pull_request:
+    paths:
+      - "**"
+      - "!**.md"
+      - "!docs/**"
+      - "**/testdata/**"
   push:
     branches: [main]
+    paths:
+      - "**"
+      - "!**.md"
+      - "!docs/**"
+      - "**/testdata/**"
 
 permissions:
   contents: read
