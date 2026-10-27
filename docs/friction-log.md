@@ -3006,3 +3006,13 @@ Nothing by hand. This entry appended with replace_text.
 Docs only: roadmap item 38 with replace_text, from the friction log's
 entries and the session notes read for gaps no item held. Nothing by
 hand. This entry appended with replace_text.
+
+## 2026-10-27: check in the CLI
+
+The test first with add_declaration; the check tool's report moved
+into `refactor.CheckReport`, which the server and the CLI share, with
+add_declaration, the server's body with replace_statements (`function`),
+its own `tail` and `testTimeout` with remove_dead_code (its go test is
+now `refactor.GoTest`, the checkpoint's), `runCheck` with
+add_declaration, its dispatch and the usage with replace_text. Nothing
+by hand. This entry appended with replace_text.

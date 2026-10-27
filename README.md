@@ -1895,7 +1895,7 @@ through MCP is the priority.
 ## Layout
 
 ```
-cmd/refactor/                 CLI: one refactoring step per invocation
+cmd/refactor/                 CLI: a step, a batch, inspect or check per invocation
 cmd/refactor-mcp/             MCP server (stdio) for Claude Code and other MCP clients
 cmd/refactor-agent/           a local model (Ollama) refactoring a module with the same tools
 cmd/refactor-eval/            runs the agent on a module's most complex functions and measures the results

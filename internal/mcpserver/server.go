@@ -14,15 +14,12 @@
 package mcpserver
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"os/exec"
 	"slices"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -376,17 +373,7 @@ func (s *Server) batch(args json.RawMessage) *mcp.CallToolResult {
 	return textResult(b.String())
 }
 
-// testTimeout bounds `go test` so a hanging test cannot stall the session.
-var testTimeout = 10 * time.Minute
-
 func (s *Server) check(ctx context.Context, args json.RawMessage) *mcp.CallToolResult {
-	var a struct {
-		RunTests bool   `json:"run_tests"`
-		Packages string `json:"packages"`
-	}
-	if err := refactor.DecodeArgs(args, &a); err != nil {
-		return textResult(err.Error())
-	}
 	s.mu.Lock()
 	ws, err := s.workspace()
 	var errs []string
@@ -398,51 +385,11 @@ func (s *Server) check(ctx context.Context, args json.RawMessage) *mcp.CallToolR
 	if err != nil {
 		return toolError(err)
 	}
-
-	var sb strings.Builder
-	if len(errs) == 0 {
-		sb.WriteString("TYPE-CHECK OK: the module compiles.\n")
-	} else {
-		fmt.Fprintf(&sb, "TYPE-CHECK FAILED (%d errors):\n  %s\n", len(errs), strings.Join(errs, "\n  "))
+	report, _, err := refactor.CheckReport(errs, root, args)
+	if err != nil {
+		return textResult(err.Error())
 	}
-	if !a.RunTests {
-		return textResult(sb.String())
-	}
-
-	pattern := a.Packages
-	if pattern == "" {
-		pattern = "./..."
-	}
-	if strings.HasPrefix(pattern, "-") {
-		return textResult("packages must be a package pattern, not a flag")
-	}
-	ctx, cancel := context.WithTimeout(ctx, testTimeout)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, "go", "test", pattern)
-	cmd.Dir = root
-	var out bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &out, &out
-	err = cmd.Run()
-	switch {
-	case ctx.Err() == context.DeadlineExceeded:
-		fmt.Fprintf(&sb, "\nTESTS TIMED OUT after %s.\n", testTimeout)
-	case err != nil:
-		sb.WriteString("\nTESTS FAILED:\n")
-	default:
-		sb.WriteString("\nTESTS PASSED:\n")
-	}
-	sb.WriteString(tail(out.String(), 150))
-	return textResult(sb.String())
-}
-
-// tail keeps the last n lines of s, which is where go test puts failures
-// and the summary.
-func tail(s string, n int) string {
-	lines := strings.Split(strings.TrimRight(s, "\n"), "\n")
-	if len(lines) <= n {
-		return strings.Join(lines, "\n") + "\n"
-	}
-	return fmt.Sprintf("... (%d earlier lines omitted)\n%s\n", len(lines)-n, strings.Join(lines[len(lines)-n:], "\n"))
+	return textResult(report)
 }
 
 func textResult(s string) *mcp.CallToolResult {

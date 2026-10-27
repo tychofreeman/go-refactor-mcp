@@ -105,6 +105,46 @@ func GoTest(dir, pattern string) (string, error) {
 	return string(out), err
 }
 
+// CheckReport is the check tool's report on a module whose type errors
+// are errs and, with run_tests in raw, on the tests of packages, run in
+// root; passed says whether it type-checks and the tests pass. Arguments
+// it does not take are refused.
+func CheckReport(errs []string, root string, raw json.RawMessage) (report string, passed bool, err error) {
+	var a struct {
+		RunTests bool   `json:"run_tests"`
+		Packages string `json:"packages"`
+	}
+	if err := DecodeArgs(raw, &a); err != nil {
+		return "", false, err
+	}
+	var sb strings.Builder
+	passed = len(errs) == 0
+	if passed {
+		sb.WriteString("TYPE-CHECK OK: the module compiles.\n")
+	} else {
+		fmt.Fprintf(&sb, "TYPE-CHECK FAILED (%d errors):\n  %s\n", len(errs), strings.Join(errs, "\n  "))
+	}
+	if !a.RunTests {
+		return sb.String(), passed, nil
+	}
+	pattern := a.Packages
+	if pattern == "" {
+		pattern = "./..."
+	}
+	if strings.HasPrefix(pattern, "-") {
+		return "", false, Refusef("packages must be a package pattern, not a flag")
+	}
+	out, testErr := GoTest(root, pattern)
+	if testErr != nil {
+		fmt.Fprintf(&sb, "\nTESTS FAILED (%v):\n", testErr)
+		passed = false
+	} else {
+		sb.WriteString("\nTESTS PASSED:\n")
+	}
+	sb.WriteString(lastLines(out, 150) + "\n")
+	return sb.String(), passed, nil
+}
+
 // lastLines keeps the last n lines of s.
 func lastLines(s string, n int) string {
 	lines := strings.Split(strings.TrimRight(s, "\n"), "\n")
