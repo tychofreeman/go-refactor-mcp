@@ -40,6 +40,11 @@ results are in `docs/cost-history.md`.
   Project docs or memory: the user works in Claude Code, whose sessions
   read only the repo (2026-10-20, after review follow-ups had reached
   only these notes and the friction log, not the roadmap).
+- Releases (2026-10-27, the user): CI makes them. To release, raise
+  `mcpserver.Version` in a PR, with the notes in
+  `docs/releases/v<version>.md`; once Test passes on main, the Release
+  workflow tags the commit and creates the release. Sessions may not
+  push tags or create releases themselves (HTTP 403).
 
 ## Decisions and their reasons
 
