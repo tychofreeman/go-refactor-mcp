@@ -129,6 +129,9 @@ type host struct {
 	prog  *compiler.Program
 	conv  *lsconv.Converters
 	lines map[string]*lsconv.LSPLineMap
+	// semicolons is the file's style for what the service writes, when
+	// it is not the default.
+	semicolons lsutil.SemicolonPreference
 }
 
 func newHost(fs vfs.FS, prog *compiler.Program) *host {
@@ -184,7 +187,11 @@ func (h *host) ReadFile(path string) (string, bool) {
 }
 func (h *host) Converters() *lsconv.Converters { return h.conv }
 func (h *host) GetPreferences(string) lsutil.UserPreferences {
-	return lsutil.NewDefaultUserPreferences()
+	p := lsutil.NewDefaultUserPreferences()
+	if h.semicolons != "" {
+		p.FormatCodeSettings.Semicolons = h.semicolons
+	}
+	return p
 }
 func (h *host) GetECMALineInfo(fileName string) *sourcemap.ECMALineInfo {
 	text := h.text(fileName)

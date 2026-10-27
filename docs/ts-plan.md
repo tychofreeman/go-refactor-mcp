@@ -418,8 +418,18 @@ Go. Steps 1 and 2 change shared code and come before any TypeScript.
    on Hono (a body, a block, an expression in 25-170 ms after the
    first step, which pays 4.6 s for the declaration signatures, as
    the spike found).
-   Left: `add_property`, `organize_imports` (and with it imports for
-   names content uses), and stubs for what a test calls.
+   Imports *done*: as for Go, the engine fixes a step's imports, through
+   an internal `fix_imports` (`internal/ts/edits/fiximports`), not a
+   tool: a name that one file of the solution exports is imported, into
+   an import of its module or a new one in the file's quotes and
+   semicolons; with `noUnusedLocals`, imports left unused are removed
+   (the language service's organize imports). An edit refused for its
+   errors runs again as a batch, which adds them. The engine's importer
+   names the errors it clears (`refactor.ImportFixer`), gets only those
+   the steps added where errors are tolerated, and makes a second pass
+   for what the first left. Sorting imports, the rest of organize
+   imports, is not offered: no step needed it.
+   Left: `add_property`, and stubs for what a test calls.
 6. **Signatures** (Go's most common by-hand step): add / remove / move /
    introduce parameter, change_return_type, convert_params_to_object.
 7. **Effects analysis** (section 4) as one `analysis` package with a

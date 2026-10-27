@@ -126,18 +126,26 @@ func declareMissing[W Workspace](ws W, errs []string, before map[string]bool, op
 	return declared, skipped, nil
 }
 
-// importError is an error an import fix may clear: an import nothing
-// uses, or a name that may be a package not imported.
-var importError = regexp.MustCompile(`^(.+\.go):\d+:\d+: (".+" imported (as \w+ )?and not used|undefined: \w+)$`)
+// ImportFixer is what opts.Imports is: a fix of a file's imports, which
+// names the errors it may clear.
+type ImportFixer interface {
+	// Clears returns the file err is in, when adding or removing an
+	// import may clear it.
+	Clears(err string) (file string, ok bool)
+}
 
 // fixImports runs opts.Imports on each file whose errors errs may be
 // imports to add or remove, and returns the steps it applied; it calls
 // done on each step just after applying it.
 func fixImports[W Workspace](ws W, errs []string, opts OptionsOf[W], done func(*Result)) ([]*Result, error) {
+	fixer, ok := any(opts.Imports).(ImportFixer)
+	if !ok {
+		return nil, nil
+	}
 	var files []string
 	for _, e := range errs {
-		if m := importError.FindStringSubmatch(e); m != nil && !slices.Contains(files, m[1]) {
-			files = append(files, m[1])
+		if file, ok := fixer.Clears(e); ok && !slices.Contains(files, file) {
+			files = append(files, file)
 		}
 	}
 	var fixed []*Result
