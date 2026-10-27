@@ -11,22 +11,25 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
 
-// Checkpoint is the "check" step of a batch: the code must type-check
+// CheckpointOf is the "check" step of a batch: the code must type-check
 // there, and with run_tests its tests must pass. When a later step is
 // refused, the batch keeps the steps up to its last checkpoint that
 // passed and rolls back only those after it.
-type Checkpoint struct{}
+type CheckpointOf[W Workspace] struct{}
+
+// Checkpoint is the check step of a batch on Go code.
+type Checkpoint = CheckpointOf[*workspace.Workspace]
 
 // NewCheckpoint returns the check step of a batch.
 func NewCheckpoint() *Checkpoint { return &Checkpoint{} }
 
-func (*Checkpoint) Name() string { return "check" }
+func (*CheckpointOf[W]) Name() string { return "check" }
 
-func (*Checkpoint) Description() string {
+func (*CheckpointOf[W]) Description() string {
 	return `A checkpoint in a batch: the code must type-check here (after the stubs and imports earlier edits need), and with run_tests the tests of packages must pass. If a later step is refused, the steps up to the last checkpoint that passed are kept, and only those after it are rolled back.`
 }
 
-func (*Checkpoint) InputSchema() json.RawMessage {
+func (*CheckpointOf[W]) InputSchema() json.RawMessage {
 	return json.RawMessage(`{
   "type": "object",
   "properties": {
@@ -38,14 +41,14 @@ func (*Checkpoint) InputSchema() json.RawMessage {
 }
 
 // Plan refuses: a checkpoint is a step of a batch, which runs it itself.
-func (*Checkpoint) Plan(*workspace.Workspace, json.RawMessage) (*Plan, error) {
+func (*CheckpointOf[W]) Plan(W, json.RawMessage) (*Plan, error) {
 	return nil, Refusef("check is a checkpoint, a step of a batch; on its own, use the check tool")
 }
 
 // checkpoint runs a check step: complete adds what earlier edits need,
 // in a batch checked at its end; then the code must type-check, and the
 // tests pass if asked for. Its result is refused if not.
-func checkpoint(ws *workspace.Workspace, raw json.RawMessage, opts Options, complete func() error) (*Result, error) {
+func checkpoint[W Workspace](ws W, raw json.RawMessage, opts OptionsOf[W], complete func() error) (*Result, error) {
 	res := &Result{Refactoring: "check"}
 	var a struct {
 		RunTests bool   `json:"run_tests"`
@@ -76,7 +79,7 @@ func checkpoint(ws *workspace.Workspace, raw json.RawMessage, opts Options, comp
 		}
 		test := opts.Test
 		if test == nil {
-			test = func(p string) (string, error) { return GoTest(ws.Root, p) }
+			test = func(p string) (string, error) { return GoTest(ws.Dir(), p) }
 		}
 		if out, err := test(pattern); err != nil {
 			res.Refused = fmt.Sprintf("the tests of %s failed at this checkpoint (%v):\n%s", pattern, err, lastLines(out, 60))

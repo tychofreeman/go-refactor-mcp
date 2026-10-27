@@ -12,16 +12,16 @@ import (
 // checkArgs compares each step's argument names with its tool's input
 // schema before any step runs, so that a model that guessed several names
 // learns all of them, and what each tool takes, in one refusal.
-func checkArgs(steps []Step) error {
+func checkArgs[W Workspace](steps []StepOf[W]) error {
 	var problems []string
-	var tools []Refactoring
+	var tools []RefactoringOf[W]
 	for i, s := range steps {
 		problem := argsProblem(s.Refactoring.InputSchema(), s.Args)
 		if problem == "" {
 			continue
 		}
 		problems = append(problems, fmt.Sprintf("step %d (%s): %s", i+1, s.Refactoring.Name(), problem))
-		if !slices.ContainsFunc(tools, func(r Refactoring) bool { return r.Name() == s.Refactoring.Name() }) {
+		if !slices.ContainsFunc(tools, func(r RefactoringOf[W]) bool { return r.Name() == s.Refactoring.Name() }) {
 			tools = append(tools, s.Refactoring)
 		}
 	}

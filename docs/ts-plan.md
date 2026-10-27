@@ -317,7 +317,21 @@ Go. Steps 1 and 2 change shared code and come before any TypeScript.
    First part *done*: `internal/history` holds `Change` (moved with
    move_declaration) and `Stack`, the undo stack, which a workspace
    reaches through its `History` field; the workspace's undo methods
-   delegate to it.
+   delegate to it. Second part *done*: the engine is generic over a
+   `refactor.Workspace` (root, paths, errors, preview, apply, undo,
+   squash, last change). `RefactoringOf[W]`, `StepOf[W]`,
+   `OptionsOf[W]`, `ExpanderOf[W]`, `CheckpointOf[W]`, `Run[W]` and
+   `RunBatch[W]` take the workspace type; `Refactoring`, `Step`,
+   `Options`, `Expander` and `Checkpoint` are their instances for Go,
+   so no refactoring changed. A TypeScript refactoring is
+   `RefactoringOf[*ts.Workspace]`, and gets the safety rule, batches,
+   line tracking, `$ref`s, checkpoints and compact diffs as they are.
+   What stays Go's: the signature note after an edit and the stubs of a
+   batch run only when the workspace is `*workspace.Workspace`; a
+   checkpoint's tests are `go test` unless `Options.Test` says
+   otherwise, which the TypeScript side will set. A batch is one
+   workspace type, so a batch over Go and TypeScript files is the
+   dispatcher's to split (the third part).
 3. **TypeScript engine:** `tsapi`, workspace, edits, diffs, safety rule,
    formatting of inserted text, `rename`, golden tests (`testdata/*.ts`
    in and out), wired into the dispatcher.

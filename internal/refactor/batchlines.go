@@ -5,8 +5,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-
-	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
 
 var (
@@ -66,7 +64,7 @@ func startLines(msg, file string, lines map[string]*lineMap) string {
 
 // stepFile is the file a step's arguments name, relative to the root, or
 // "" if they name none.
-func stepFile(ws *workspace.Workspace, args json.RawMessage) string {
+func stepFile(ws Workspace, args json.RawMessage) string {
 	var a struct {
 		File string `json:"file"`
 	}
