@@ -111,3 +111,26 @@ func TestRunInspect(t *testing.T) {
 		t.Errorf("exit status %d, want 2", code)
 	}
 }
+
+func TestRunCheck(t *testing.T) {
+	var out strings.Builder
+	stdout = &out
+	defer func() { stdout = os.Stdout }()
+	dir := module(t, "package p\n\nfunc F() int { return 1 }\n")
+	if code := run([]string{"-C", dir, "check"}); code != 0 || !strings.Contains(out.String(), "TYPE-CHECK OK") {
+		t.Errorf("check: exit status %d, want 0:\n%s", code, out.String())
+	}
+	test := "package p\n\nimport \"testing\"\n\nfunc TestF(t *testing.T) {\n\tif F() != 2 {\n\t\tt.Fatal(\"F is not 2\")\n\t}\n}\n"
+	if err := os.WriteFile(filepath.Join(dir, "p_test.go"), []byte(test), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	if code := run([]string{"-C", dir, "check", "run_tests=true"}); code != 2 || !strings.Contains(out.String(), "TESTS FAILED") || !strings.Contains(out.String(), "F is not 2") {
+		t.Errorf("check run_tests=true: exit status %d, want 2:\n%s", code, out.String())
+	}
+	broken := module(t, "package p\n\nfunc F() int { return \"one\" }\n")
+	out.Reset()
+	if code := run([]string{"-C", broken, "check"}); code != 2 || !strings.Contains(out.String(), "TYPE-CHECK FAILED") {
+		t.Errorf("check of code that does not type-check: exit status %d, want 2:\n%s", code, out.String())
+	}
+}

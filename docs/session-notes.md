@@ -727,7 +727,8 @@ results are in `docs/cost-history.md`.
   `refactor inspect` (`'{"names":["F","T.M"]}'`, `file=a.go`), not
   sed, grep or Read: it is what the server's inspect shows, so a
   session reads as the tools intend and tries new read features as it
-  builds them (2026-10-22, the user). Write long JSON to a
+  builds them (2026-10-22, the user). `refactor check run_tests=true`
+  is the check tool (2026-10-27). Write long JSON to a
   file in the scratchpad and pass `@path` (or `-` for stdin, #205):
   Go escapes such as `\n` then survive, which an unquoted heredoc
   turned into newlines.

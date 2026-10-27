@@ -9,8 +9,10 @@
 //	refactor batch '{"steps":[{"tool":"rename","args":{...}}, ...]}'
 //	refactor batch @steps.json      (the JSON from a file; - reads stdin)
 //	refactor inspect '{"names":["Settle","Ledger.Post"]}'   (or file=a.go, ...)
+//	refactor check run_tests=true    (type-checks, then go test ./...)
 //
-// Exit status: 0 applied (or previewed), 2 refused, 1 error.
+// Exit status: 0 applied (or previewed, or the check passed), 2 refused
+// (or the check failed), 1 error.
 package main
 
 import (
@@ -39,7 +41,7 @@ func run(argv []string) int {
 	dryRun := fs.Bool("n", false, "dry run: print the diff without writing")
 	asJSON := fs.Bool("json", false, "print the result as JSON (without declaring what an edit calls)")
 	fs.Usage = func() {
-		fmt.Fprintf(fs.Output(), "usage: refactor [flags] list\n       refactor [flags] <refactoring> key=value... | '<json>' | @file | -\n       refactor [flags] batch '<json>' | @file | -\n       refactor [flags] inspect key=value... | '<json>' | @file | -\n\n@file reads the JSON from a file, - from stdin.\n\nflags:\n")
+		fmt.Fprintf(fs.Output(), "usage: refactor [flags] list\n       refactor [flags] <refactoring> key=value... | '<json>' | @file | -\n       refactor [flags] batch '<json>' | @file | -\n       refactor [flags] inspect key=value... | '<json>' | @file | -\n       refactor [flags] check [run_tests=true] [packages=./...]\n\n@file reads the JSON from a file, - from stdin.\n\nflags:\n")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(argv); err != nil {
@@ -67,6 +69,9 @@ func run(argv []string) int {
 	}
 	if name == "inspect" {
 		return runInspect(rest, *dir, *pattern)
+	}
+	if name == "check" {
+		return runCheck(rest, *dir, *pattern)
 	}
 	r, ok := refactorings.Lookup(name)
 	if !ok {
@@ -175,6 +180,33 @@ func runInspect(argv []string, dir, pattern string) int {
 		return 1
 	}
 	fmt.Fprint(stdout, out)
+	return 0
+}
+
+// runCheck reports, as the check tool does, whether the module
+// type-checks and, with run_tests, whether its tests pass: argv is its
+// arguments, one JSON object or key=value pairs. A failure exits with
+// status 2.
+func runCheck(argv []string, dir, pattern string) int {
+	args, err := parseArgs(argv)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	ws, err := workspace.Load(dir, pattern)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	report, passed, err := refactor.CheckReport(ws.Errors(), ws.Root, args)
+	if err != nil {
+		fmt.Fprintln(stdout, err)
+		return 2
+	}
+	fmt.Fprint(stdout, report)
+	if !passed {
+		return 2
+	}
 	return 0
 }
 
