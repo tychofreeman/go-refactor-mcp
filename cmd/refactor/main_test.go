@@ -7,6 +7,22 @@ import (
 	"testing"
 )
 
+// TestMain keeps the undo stacks the tests save out of the user's cache,
+// and go test, which check runs, on the build cache it had.
+func TestMain(m *testing.M) {
+	if orig, err := os.UserCacheDir(); err == nil && os.Getenv("GOCACHE") == "" {
+		os.Setenv("GOCACHE", filepath.Join(orig, "go-build"))
+	}
+	cache, err := os.MkdirTemp("", "refactor-cache")
+	if err != nil {
+		panic(err)
+	}
+	os.Setenv("XDG_CACHE_HOME", cache)
+	code := m.Run()
+	os.RemoveAll(cache)
+	os.Exit(code)
+}
+
 // module writes a module with one file, p.go, and returns its directory.
 func module(t *testing.T, src string) string {
 	t.Helper()
@@ -132,5 +148,37 @@ func TestRunCheck(t *testing.T) {
 	out.Reset()
 	if code := run([]string{"-C", broken, "check"}); code != 2 || !strings.Contains(out.String(), "TYPE-CHECK FAILED") {
 		t.Errorf("check of code that does not type-check: exit status %d, want 2:\n%s", code, out.String())
+	}
+}
+
+func TestRunUndo(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	var out strings.Builder
+	stdout = &out
+	defer func() { stdout = os.Stdout }()
+	src := "package p\n\nfunc f() {}\n\nfunc g() { f() }\n"
+	dir := module(t, src)
+	if code := run([]string{"-C", dir, "rename", "file=p.go", "name=f", "new_name=h"}); code != 0 {
+		t.Fatalf("rename: exit status %d", code)
+	}
+	steps := `{"steps":[{"tool":"rename","args":{"file":"p.go","name":"g","new_name":"k"}}]}`
+	if code := run([]string{"-C", dir, "batch", steps}); code != 0 {
+		t.Fatalf("batch: exit status %d", code)
+	}
+	if code := run([]string{"-C", dir, "undo"}); code != 0 || !strings.Contains(out.String(), "UNDONE") {
+		t.Fatalf("undo of the batch: exit status %d:\n%s", code, out.String())
+	}
+	if got := read(t, dir); got != "package p\n\nfunc h() {}\n\nfunc g() { h() }\n" {
+		t.Errorf("after the first undo:\n%s", got)
+	}
+	if code := run([]string{"-C", dir, "undo"}); code != 0 {
+		t.Fatalf("undo of the rename: exit status %d:\n%s", code, out.String())
+	}
+	if got := read(t, dir); got != src {
+		t.Errorf("after the second undo:\n%s", got)
+	}
+	out.Reset()
+	if code := run([]string{"-C", dir, "undo"}); code != 2 || !strings.Contains(out.String(), "Nothing to undo") {
+		t.Errorf("a third undo: exit status %d, want 2:\n%s", code, out.String())
 	}
 }
