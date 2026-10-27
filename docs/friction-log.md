@@ -3052,3 +3052,9 @@ with create_file (each failed first), `fallsThrough` with
 add_declaration, the placement and the refusal with replace_text, the
 version 0.3.1 and its notes with replace_text and create_file. Nothing
 by hand. This entry appended with replace_text.
+
+## 2026-10-27: glisp's friction log into the roadmap
+
+Docs only: roadmap item 39 with replace_text, from glisp's `FRICTION.md`
+read against main (each item checked to be still open). Nothing by hand.
+This entry appended with replace_text.
