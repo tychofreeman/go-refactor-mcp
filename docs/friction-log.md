@@ -3058,3 +3058,11 @@ by hand. This entry appended with replace_text.
 Docs only: roadmap item 39 with replace_text, from glisp's `FRICTION.md`
 read against main (each item checked to be still open). Nothing by hand.
 This entry appended with replace_text.
+
+## 2026-10-27: TypeScript plan
+
+Docs only: `docs/ts-plan.md`, roadmap item 40 and a session note, from a
+claude.ai session without the gorefactor tools (no checkout of its own to
+run them from), so all three by hand with plain file edits. No Go
+changed. Not evidence for a tool: replace_text and create_file cover
+these edits.

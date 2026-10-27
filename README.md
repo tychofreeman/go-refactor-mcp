@@ -1944,6 +1944,21 @@ hand or a tool got in the way.
       `mcp__gorefactor__` tools and "this checkout", which do not hold
       through the desktop bridge (`mcp__remote-devices__gorefactor__`) or
       with `go run ...@latest`.
+40. **TypeScript** (2026-10-27, the user): the same tools for TypeScript,
+    in this repo and from this server, under the same names; each tool
+    picks the language from its file's extension. Built on the Go port
+    of the TypeScript compiler (TypeScript 7), imported through
+    `buke/typescript-go-internal` until there is an official Go API; its
+    language service has rename, references and file moves but none of
+    the refactorings, so those are ours, as for Go. The plan, the tool
+    mapping, what TypeScript needs checked that Go did not, and the
+    steps are in `docs/ts-plan.md`: first a spike that proves in-memory
+    edits and re-checking are fast enough, then the CLAUDE.md split and
+    CI path filters, then making the engine language-neutral (the undo
+    stack out of the Go workspace, a dispatcher with Go as its only
+    language), and only then TypeScript itself. A workspace per root
+    (a Go workspace per `go.mod`, a program per `tsconfig.json`) also
+    answers item 39's "one server, one module" for Go.
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
