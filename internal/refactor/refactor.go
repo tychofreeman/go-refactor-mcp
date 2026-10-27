@@ -31,9 +31,27 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
 
-// Refactoring is one code transformation: behavior-preserving, unless it
-// is also an Edit.
-type Refactoring interface {
+// Workspace is what the engine needs of the code a step changes, in any
+// language: the files it holds, the errors a step is checked against, and
+// applying and undoing changes. *workspace.Workspace is Go's.
+type Workspace interface {
+	Dir() string // the root, against which results name files
+	Rel(path string) string
+	Abs(path string) string
+	Errors() []string // what does not compile or type-check, compared before and after each step
+	Preview(label string, fes []edit.FileEdit) (history.Change, error)
+	Apply(label string, fes []edit.FileEdit) (history.Change, error)
+	Undo() (history.Change, error)
+	Squash(n int, label string) (history.Change, error)
+	LastChange() (history.Change, bool)
+}
+
+// Refactoring is a refactoring of Go code.
+type Refactoring = RefactoringOf[*workspace.Workspace]
+
+// RefactoringOf is one code transformation of a workspace W:
+// behavior-preserving, unless it is also an Edit.
+type RefactoringOf[W Workspace] interface {
 	// Name is the tool name, e.g. "rename".
 	Name() string
 	// Description tells the model what the refactoring does and when to
@@ -43,7 +61,7 @@ type Refactoring interface {
 	InputSchema() json.RawMessage
 	// Plan checks preconditions and computes the edits. It must not write
 	// anything. A precondition failure is returned as a *Refusal.
-	Plan(ws *workspace.Workspace, args json.RawMessage) (*Plan, error)
+	Plan(ws W, args json.RawMessage) (*Plan, error)
 }
 
 // Edit marks a Refactoring that may change behavior, as the step that adds
@@ -51,7 +69,6 @@ type Refactoring interface {
 // type-checks; when it would not, the errors come from the code it was
 // given, so the refusal lists them rather than reporting a bug.
 type Edit interface {
-	Refactoring
 	ChangesBehavior()
 }
 
@@ -91,18 +108,20 @@ type BreakageNoter interface {
 // code compiles after it (for example, that a body still type-checks
 // with a parameter's new type): a compile error is a refusal, not a bug.
 type CompileChecked interface {
-	Refactoring
 	ChecksByCompiling()
 }
 
-// Expander is a refactoring that, for some arguments, is a sequence of
+// ExpanderOf is a refactoring that, for some arguments, is a sequence of
 // its own steps (inline_function with all_calls: one step per call).
 // Expand returns them, which Run runs as one batch, or nil to plan the
 // step as usual.
-type Expander interface {
-	Refactoring
-	Expand(ws *workspace.Workspace, args json.RawMessage) ([]Step, error)
+type ExpanderOf[W Workspace] interface {
+	RefactoringOf[W]
+	Expand(ws W, args json.RawMessage) ([]StepOf[W], error)
 }
+
+// Expander is an expander of Go code.
+type Expander = ExpanderOf[*workspace.Workspace]
 
 // Refusal is a precondition failure. Its message is written for the model:
 // it should say what is wrong and, where possible, what to do instead.
@@ -161,13 +180,16 @@ func (r *Result) String() string {
 	return sb.String()
 }
 
-// Options controls Run.
-type Options struct {
+// Options controls Run on Go code.
+type Options = OptionsOf[*workspace.Workspace]
+
+// OptionsOf controls Run on a workspace W.
+type OptionsOf[W Workspace] struct {
 	DryRun    bool                                            // compute and show the diff without writing
 	Compact   bool                                            // show the diff without context lines: what changed and where, at less cost to read
 	Unchecked bool                                            // an edit may start from and leave code that does not type-check: a batch checked at its end
-	Declare   Refactoring                                     // with Unchecked, in a batch: declares what the steps call but nothing declares (create_from_usage)
-	Imports   Refactoring                                     // with Unchecked, in a batch: adds the imports the steps' code needs and removes those it leaves unused (fix_imports)
+	Declare   RefactoringOf[W]                                // with Unchecked, in a batch: declares what the steps call but nothing declares (create_from_usage)
+	Imports   RefactoringOf[W]                                // with Unchecked, in a batch: adds the imports the steps' code needs and removes those it leaves unused (fix_imports)
 	Test      func(pattern string) (output string, err error) // a checkpoint's tests; GoTest if nil
 }
 
@@ -182,7 +204,7 @@ type Options struct {
 // A refusal is a normal outcome, not an error: it is returned in Result so
 // the model can read it and choose something else. The error return is for
 // internal failures (I/O, loader crashes).
-func Run(ws *workspace.Workspace, r Refactoring, args json.RawMessage, opts Options) (*Result, error) {
+func Run[W Workspace](ws W, r RefactoringOf[W], args json.RawMessage, opts OptionsOf[W]) (*Result, error) {
 	res := &Result{Refactoring: r.Name(), DryRun: opts.DryRun}
 
 	before := ws.Errors()
@@ -205,7 +227,7 @@ func Run(ws *workspace.Workspace, r Refactoring, args json.RawMessage, opts Opti
 	}
 
 	args, took := aliasArgs(r.InputSchema(), args)
-	if ex, ok := r.(Expander); ok {
+	if ex, ok := r.(ExpanderOf[W]); ok {
 		steps, err := ex.Expand(ws, args)
 		if err != nil && IsRefusal(err) {
 			res.Refused = err.Error()
@@ -241,13 +263,13 @@ func Run(ws *workspace.Workspace, r Refactoring, args json.RawMessage, opts Opti
 		if err != nil {
 			return nil, err
 		}
-		res.Diff, res.Files = edit.ElideSupplied(diffOf(ws, c, opts, plan), plan.Supplied), c.Files(ws.Root)
+		res.Diff, res.Files = edit.ElideSupplied(diffOf(ws, c, opts.Compact, plan), plan.Supplied), c.Files(ws.Dir())
 		return res, nil
 	}
 
 	sigNote := ""
-	if isEdit {
-		sigNote = signatureNote(ws, plan.Edits)
+	if gw, ok := any(ws).(*workspace.Workspace); ok && isEdit {
+		sigNote = signatureNote(gw, plan.Edits)
 	}
 	c, err := ws.Apply(r.Name()+": "+plan.Summary, plan.Edits)
 	if errors.Is(err, workspace.ErrBreaksLoading) {
@@ -268,7 +290,7 @@ func Run(ws *workspace.Workspace, r Refactoring, args json.RawMessage, opts Opti
 		return res, nil
 	}
 	res.Applied = true
-	res.Diff, res.Files = edit.ElideSupplied(diffOf(ws, c, opts, plan), plan.Supplied), c.Files(ws.Root)
+	res.Diff, res.Files = edit.ElideSupplied(diffOf(ws, c, opts.Compact, plan), plan.Supplied), c.Files(ws.Dir())
 	if _, notes := r.(BreakageNoter); notes && opts.Unchecked {
 		if left := newErrors(before, ws.Errors()); len(left) > 0 {
 			res.Notes = append(res.Notes, fmt.Sprintf("left %d type error%s for the next steps of this batch to fix (it is checked at its end):\n  %s",
@@ -280,8 +302,8 @@ func Run(ws *workspace.Workspace, r Refactoring, args json.RawMessage, opts Opti
 
 // runExpanded runs the steps a step expanded to as one batch, and reports
 // them in res as that step: applied as a whole, or refused as a whole.
-func runExpanded(ws *workspace.Workspace, steps []Step, opts Options, res *Result, took string) (*Result, error) {
-	b, err := RunBatch(ws, steps, Options{Compact: opts.Compact, Unchecked: opts.Unchecked})
+func runExpanded[W Workspace](ws W, steps []StepOf[W], opts OptionsOf[W], res *Result, took string) (*Result, error) {
+	b, err := RunBatch(ws, steps, OptionsOf[W]{Compact: opts.Compact, Unchecked: opts.Unchecked})
 	if err != nil {
 		return nil, err
 	}
@@ -331,7 +353,7 @@ func stepPlace(args json.RawMessage) string {
 
 // afterRefusal says why the step r, which left the errors after
 // from before, is refused, or "" if it is not.
-func afterRefusal(r Refactoring, isEdit, isFix, unchecked bool, before, after []string) string {
+func afterRefusal(r interface{ Name() string }, isEdit, isFix, unchecked bool, before, after []string) string {
 	_, compiles := r.(CompileChecked)
 	switch {
 	case len(after) == 0 || unchecked && isEdit:
@@ -597,20 +619,23 @@ var position = regexp.MustCompile(`^\S*:\d+:\d+: `)
 func withoutPosition(e string) string { return position.ReplaceAllString(e, "") }
 
 // diffOf is c's diff as the result shows it.
-func diffOf(ws *workspace.Workspace, c history.Change, opts Options, plan *Plan) string {
-	if opts.Compact && plan.Locations {
-		return edit.Locations(c.DiffContext(ws.Root, 0))
+func diffOf(ws Workspace, c history.Change, compact bool, plan *Plan) string {
+	if compact && plan.Locations {
+		return edit.Locations(c.DiffContext(ws.Dir(), 0))
 	}
-	if opts.Compact {
-		return c.DiffContext(ws.Root, 0)
+	if compact {
+		return c.DiffContext(ws.Dir(), 0)
 	}
 	return c.Diff
 }
 
-// Step is one refactoring or edit of a batch, with its arguments.
-type Step struct {
+// Step is one step of a batch on Go code.
+type Step = StepOf[*workspace.Workspace]
+
+// StepOf is one refactoring or edit of a batch, with its arguments.
+type StepOf[W Workspace] struct {
 	ID          string // optional: a name later steps can refer to it by
-	Refactoring Refactoring
+	Refactoring RefactoringOf[W]
 	Args        json.RawMessage
 }
 
@@ -644,12 +669,12 @@ type BatchResult struct {
 // checked at its end: a later step may complete that one, or, with
 // opts.Declare, the batch declares what the steps call. If that is refused
 // too, the first refusal stands, with the second's.
-func RunBatch(ws *workspace.Workspace, steps []Step, opts Options) (*BatchResult, error) {
+func RunBatch[W Workspace](ws W, steps []StepOf[W], opts OptionsOf[W]) (*BatchResult, error) {
 	b, err := runBatch(ws, steps, opts)
 	if err != nil || b.Applied || b.Kept > 0 || opts.Unchecked || !retriable(b, opts) {
 		return b, err
 	}
-	retry, err := runBatch(ws, steps, Options{Compact: opts.Compact, Unchecked: true, Declare: opts.Declare, Imports: opts.Imports})
+	retry, err := runBatch(ws, steps, OptionsOf[W]{Compact: opts.Compact, Unchecked: true, Declare: opts.Declare, Imports: opts.Imports})
 	if err != nil {
 		return nil, err
 	}
@@ -677,12 +702,12 @@ func RunBatch(ws *workspace.Workspace, steps []Step, opts Options) (*BatchResult
 // retriable reports whether b, refused when checked at each step, may
 // apply checked at its end: an edit that does not type-check, before the
 // last step or with something to declare what it calls.
-func retriable(b *BatchResult, opts Options) bool {
+func retriable[W Workspace](b *BatchResult, opts OptionsOf[W]) bool {
 	return b.FailedStep > 0 && strings.HasPrefix(b.Refused, "the result does not type-check") && (b.FailedStep < b.Total || opts.Declare != nil || opts.Imports != nil)
 }
 
 // runBatch runs steps once, type-checked as opts says.
-func runBatch(ws *workspace.Workspace, steps []Step, opts Options) (*BatchResult, error) {
+func runBatch[W Workspace](ws W, steps []StepOf[W], opts OptionsOf[W]) (*BatchResult, error) {
 	b := &BatchResult{Total: len(steps)}
 	if err := checkIDs(steps); err != nil {
 		b.Refused = err.Error()
@@ -692,7 +717,7 @@ func runBatch(ws *workspace.Workspace, steps []Step, opts Options) (*BatchResult
 		b.Refused = err.Error()
 		return b, nil
 	}
-	before := declaredNames(ws)                       // by file: what its package declared when the batch began
+	before := declaredNames(ws)                       // by file: what its package declared when the batch began (Go)
 	lines := map[string]*lineMap{}                    // by file, relative to the root: its lines through the batch
 	made := make([]map[string]*stepLines, len(steps)) // by step, then file: the lines it made
 	applied := 0
@@ -714,9 +739,9 @@ func runBatch(ws *workspace.Workspace, steps []Step, opts Options) (*BatchResult
 		if err != nil {
 			return err
 		}
-		b.Files, b.Diff = c.Files(ws.Root), c.Diff
+		b.Files, b.Diff = c.Files(ws.Dir()), c.Diff
 		if opts.Compact {
-			b.Diff = c.DiffContext(ws.Root, 0)
+			b.Diff = c.DiffContext(ws.Dir(), 0)
 		}
 		return nil
 	}
@@ -758,7 +783,7 @@ func runBatch(ws *workspace.Workspace, steps []Step, opts Options) (*BatchResult
 		return notDeclared, nil
 	}
 	for i, s := range steps {
-		if _, ok := s.Refactoring.(*Checkpoint); ok {
+		if _, ok := s.Refactoring.(*CheckpointOf[W]); ok {
 			res, err := checkpoint(ws, s.Args, opts, func() error { _, err := complete(i); return err })
 			if err != nil {
 				if rerr := rollback(); rerr != nil {
@@ -798,7 +823,7 @@ func runBatch(ws *workspace.Workspace, steps []Step, opts Options) (*BatchResult
 			}
 			args = resolvedArgs
 		}
-		res, err := Run(ws, s.Refactoring, args, Options{Compact: opts.Compact, Unchecked: opts.Unchecked})
+		res, err := Run(ws, s.Refactoring, args, OptionsOf[W]{Compact: opts.Compact, Unchecked: opts.Unchecked})
 		if err != nil {
 			if rerr := rollback(); rerr != nil {
 				return nil, fmt.Errorf("step %d (%s): %v; %v", i+1, name, err, rerr)
@@ -841,7 +866,7 @@ func runBatch(ws *workspace.Workspace, steps []Step, opts Options) (*BatchResult
 	if err != nil {
 		return nil, err
 	}
-	b.Files = c.Files(ws.Root)
+	b.Files = c.Files(ws.Dir())
 	b.Diff = c.Diff
 	locations := true
 	var supplied []string
@@ -852,7 +877,7 @@ func runBatch(ws *workspace.Workspace, steps []Step, opts Options) (*BatchResult
 		}
 	}
 	if opts.Compact {
-		b.Diff = c.DiffContext(ws.Root, 0)
+		b.Diff = c.DiffContext(ws.Dir(), 0)
 		if locations {
 			b.Diff = edit.Locations(b.Diff)
 		}
@@ -864,7 +889,7 @@ func runBatch(ws *workspace.Workspace, steps []Step, opts Options) (*BatchResult
 // followStep records where step i (0-based), which made res, changed each
 // file: it moves the batch's starting lines and the earlier steps' lines
 // past it, and keeps the lines it made.
-func followStep(ws *workspace.Workspace, made []map[string]*stepLines, i int, lines map[string]*lineMap, res *Result) {
+func followStep(ws Workspace, made []map[string]*stepLines, i int, lines map[string]*lineMap, res *Result) {
 	if c, ok := ws.LastChange(); ok {
 		made[i] = map[string]*stepLines{}
 		for p, before := range c.Before {

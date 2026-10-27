@@ -296,6 +296,9 @@ func fileExists(p string) bool {
 // Rel returns path relative to the workspace root, for display.
 func (w *Workspace) Rel(path string) string { return history.Rel(w.Root, path) }
 
+// Dir is the module root, Root.
+func (w *Workspace) Dir() string { return w.Root }
+
 // Position formats pos as root-relative "file:line:col".
 func (w *Workspace) Position(pos token.Pos) string {
 	p := w.Fset.Position(pos)

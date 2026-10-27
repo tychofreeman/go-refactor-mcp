@@ -167,7 +167,7 @@ var (
 )
 
 // checkIDs refuses ids that are not names, are prev, or repeat.
-func checkIDs(steps []Step) error {
+func checkIDs[W Workspace](steps []StepOf[W]) error {
 	seen := map[string]int{}
 	for i, s := range steps {
 		switch {
@@ -186,7 +186,7 @@ func checkIDs(steps []Step) error {
 // resolveRefs replaces references in step i's line arguments with the
 // lines they name in file rel, and returns the keys it resolved, which
 // are line numbers as they are now.
-func resolveRefs(args json.RawMessage, rel string, i int, steps []Step, made []map[string]*stepLines) (json.RawMessage, map[string]bool, error) {
+func resolveRefs[W Workspace](args json.RawMessage, rel string, i int, steps []StepOf[W], made []map[string]*stepLines) (json.RawMessage, map[string]bool, error) {
 	var a map[string]json.RawMessage
 	if err := json.Unmarshal(args, &a); err != nil {
 		return args, nil, nil
@@ -212,7 +212,7 @@ func resolveRefs(args json.RawMessage, rel string, i int, steps []Step, made []m
 }
 
 // resolveRef returns the line ref names in file rel, for step i.
-func resolveRef(ref, key, rel string, i int, steps []Step, made []map[string]*stepLines) (int, error) {
+func resolveRef[W Workspace](ref, key, rel string, i int, steps []StepOf[W], made []map[string]*stepLines) (int, error) {
 	m := stepRef.FindStringSubmatch(ref)
 	if m == nil {
 		return 0, fmt.Errorf("%s is %q: give a line number, or a reference to the lines an earlier step made, such as $prev.end, $2.start or $helper.end+1", key, ref)
