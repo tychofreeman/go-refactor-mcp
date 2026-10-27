@@ -58,6 +58,12 @@ results are in `docs/cost-history.md`.
   (Go only: today's text). The plan and its open decisions are
   `docs/ts-plan.md` (README item 40); the user asked for the plan
   before any code.
+  The spike (step 0) chose its own project when asked to "pick a
+  mid-sized open-source TS repo": Hono, for being TypeScript only,
+  strict, a solution of several tsconfigs, and about the 50k lines the
+  plan's target named. Results in `docs/ts-spike.md`; `cmd/ts-spike`
+  stays until step 3 replaces it. Measure timings again on the user's
+  machine (more cores) before tuning the checker pool.
 
 - **Manual edits as small as possible** (2026-10-21, the user's
   principle): not every operation will exist; use the ones there are,
