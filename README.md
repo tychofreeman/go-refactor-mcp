@@ -1944,6 +1944,39 @@ hand or a tool got in the way.
       `mcp__gorefactor__` tools and "this checkout", which do not hold
       through the desktop bridge (`mcp__remote-devices__gorefactor__`) or
       with `go run ...@latest`.
+    - **Later the same day** (glisp PRs #35-#49: a WebAssembly backend,
+      a garbage collector, strings, line numbers in errors; ~4,000 lines,
+      nearly all through the CLI's `batch`). What it added, by what it
+      cost:
+      - **`create_file` from a file.** Every new file (eleven, up to 900
+        lines) was written in a scratch directory and then put into a
+        batch's JSON by a script, since `create_file` takes its content
+        only inline. A `content_file` argument naming a local file would
+        remove the script; the same for `add_declaration`'s and
+        `replace_statements`' `content`.
+      - **`replace_declaration` takes exactly one declaration.** Twice the
+        replacement came with a new helper beside it; the refusal ("it has
+        2") rolled the batch back, and the fix was `replace_declaration`
+        plus `add_declaration` with `after`. Taking the extra declarations
+        and placing them after the replaced one would save the retry.
+      - **A new name's clash shows only at the end.** New files used names
+        the package already had (`str`, `field`); a batch with `check:
+        "end"` caught it, but only after all steps, rolling back eleven. A
+        way to ask whether a name is free in a package (an `inspect`
+        option) would let a new file be checked before it is sent.
+      - **Where a type is asserted.** Giving lambdas a type of their own
+        meant finding every `x.(Function)` and type switch on it; `inspect`
+        `uses` lists a type's every reference (conversions, signatures),
+        so this was a `grep`. A `uses` filter for type assertions and
+        switch cases would find exactly those.
+      - **Smaller:** `add_field` inside a batch with `check: "end"` let
+        unkeyed literals through until the last step, whose refusal then
+        named them; alone it refuses at once, which is clearer.
+        `create_from_usage`'s `to_file` must already exist ("is not a file
+        of package"); creating it would save a `create_file` with only a
+        package clause. Experiments (a constant changed for a timing
+        probe, then restored) went around the tools; `undo` covers them
+        only when the change went through a tool.
 40. **TypeScript** (2026-10-27, the user): the same tools for TypeScript,
     in this repo and from this server, under the same names; each tool
     picks the language from its file's extension. Built on the Go port

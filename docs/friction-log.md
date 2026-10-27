@@ -3195,3 +3195,10 @@ batch checked at its end. One fix to a file in the scratchpad before it
 was created, with sed and then Python (the sed mangled the line). A smoke
 test on Hono written with a heredoc and deleted, not committed. This
 entry appended with a heredoc.
+
+## 2026-10-27: Roadmap item 39, more from glisp
+
+What a second round of glisp work (its PRs #35-#49) added to item 39,
+in README.md with replace_text. By hand: this entry, appended with a
+heredoc, and the merge conflict with #426's entry beside it, resolved
+with Python (both entries kept, #426's first).
