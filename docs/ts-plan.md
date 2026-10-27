@@ -332,6 +332,18 @@ Go. Steps 1 and 2 change shared code and come before any TypeScript.
    otherwise, which the TypeScript side will set. A batch is one
    workspace type, so a batch over Go and TypeScript files is the
    dispatcher's to split (the third part).
+   Third part *done*, and with it step 2: `internal/lang` has the
+   `Language` interface (name, the files it owns, step, batch, inspect,
+   check, undo) and the `Dispatcher`, which gives a call to the
+   language of the source files it names (`file`, `files`, `to_file`,
+   in steps and targets too), to the first language when it names
+   none, and refuses a call that names files of two languages (send
+   them as separate calls; a batch over both is for later, if wanted).
+   Undo goes to the language of the change on top of the one stack all
+   languages share. `internal/lang/golang` is Go, with what the server
+   did before; the server registers the same tools and calls through
+   the dispatcher. The CLI (`cmd/refactor`) still uses the Go workspace
+   directly. Not yet run: the Go A/B gate.
 3. **TypeScript engine:** `tsapi`, workspace, edits, diffs, safety rule,
    formatting of inserted text, `rename`, golden tests (`testdata/*.ts`
    in and out), wired into the dispatcher.

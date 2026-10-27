@@ -3116,3 +3116,18 @@ This entry appended with a heredoc.
 
 The matrix with replace_text. Nothing by hand. This entry appended
 with replace_text.
+
+## 2026-10-27: the dispatcher, with Go its only language
+
+TypeScript plan step 2, third part. The dispatcher's test and code
+(`internal/lang`) with create_file, written before the server changed;
+the server's wiring in one batch: replace_statements for each method
+now calling through the dispatcher, remove_dead_code for the two
+helpers that left, replace_text for the struct and the test that read
+its fields. The batch was refused once: remove_dead_code is a
+refactoring and needs code that type-checks, so the old fields had to
+stay until after it, and go last. By hand: `internal/lang/golang`
+(sent with create_file), the server's method bodies moved onto a new
+type, the same missing operation as the undo stack's (move a method to
+another type, leaving a delegating one).
+This entry appended with a heredoc.

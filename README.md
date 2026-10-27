@@ -1994,6 +1994,8 @@ internal/
   imports/                    a file's import names; adding the imports moved code needs
   inspect/                    module overview, files without bodies + complexity + side effects, numbered source
   mcpserver/                  MCP tools: one per refactoring, plus inspect, undo, check
+  lang/                       the languages the server serves; routes each call by the files it names
+    golang/                   Go: its tools on the module's workspace
   workspace/                  go/packages loading (incl. tests), apply, undo, errors
   history/                    a change to files (write, restore) and the undo stack, for any language
   locate/                     file+line+name (+column) → *ast.Ident
