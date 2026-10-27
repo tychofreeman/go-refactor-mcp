@@ -3185,3 +3185,9 @@ end, refused once until `imports` named the TypeScript packages over
 Go's of the same names; a test of test-first in a batch with
 add_declaration; the plan with replace_text. Nothing by hand. This
 entry appended with a heredoc.
+
+## 2026-10-27: Roadmap item 39, more from glisp
+
+What a second round of glisp work (its PRs #35-#49) added to item 39,
+in README.md with replace_text. Nothing by hand. This entry appended
+with a heredoc.
