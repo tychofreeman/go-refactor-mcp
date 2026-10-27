@@ -86,14 +86,14 @@ func (m *mover) planOtherPackage(to string) (*refactor.Plan, error) {
 
 	plan := &refactor.Plan{
 		Summary: fmt.Sprintf("moved %s from %s to %s as %s.%s%s (%d reference%s updated)",
-			m.obj.Name(), m.fromFiles(), m.ws.Rel(to), m.dest.Name, m.newName, m.withAlso(), refs, textutil.Plural(refs)),
+			m.obj.Name(), m.fromFiles(), m.WS.Rel(to), m.dest.Name, m.newName, m.withAlso(), refs, textutil.Plural(refs)),
 		Edits: m.fileEdits(),
 	}
 	for _, d := range m.decls {
 		if by, ok := m.needed[d]; ok {
 			choice := fmt.Sprintf("also moved %s (used by %s)", d.obj.Name(), by)
 			if d.newName != d.obj.Name() {
-				choice += fmt.Sprintf(" as %s, since package %s still uses it", d.newName, m.pkg.Name)
+				choice += fmt.Sprintf(" as %s, since package %s still uses it", d.newName, m.Pkg.Name)
 			}
 			plan.Choices = append(plan.Choices, choice)
 		}
@@ -103,7 +103,7 @@ func (m *mover) planOtherPackage(to string) (*refactor.Plan, error) {
 	}
 	plan.Notes = append(plan.Notes, m.emptiedNotes()...)
 	for _, d := range m.decls {
-		if analysis.PublicAPI(d.obj, m.ws.Pkgs) {
+		if analysis.PublicAPI(d.obj, m.WS.Pkgs) {
 			plan.Notes = append(plan.Notes, refactor.APINote(d.obj.Name(), "moving it to package "+m.dest.Name))
 		}
 	}
@@ -120,12 +120,12 @@ func (m *mover) checkOtherPackage(to string) error {
 		if strings.HasSuffix(s.path, "_test.go") || strings.HasSuffix(to, "_test.go") {
 			return refactor.Refusef("moving to or from a test file in another package is not supported yet")
 		}
-		if err := s.checkBuiltEverywhere(m.ws.Rel(s.path)); err != nil {
+		if err := s.checkBuiltEverywhere(m.WS.Rel(s.path)); err != nil {
 			return err
 		}
 	}
 	dir := filepath.Dir(to)
-	m.dest = packageIn(m.ws.Pkgs, dir)
+	m.dest = packageIn(m.WS.Pkgs, dir)
 	if m.dest == nil {
 		dest, err := m.newPackage(dir)
 		if err != nil {
@@ -135,20 +135,20 @@ func (m *mover) checkOtherPackage(to string) error {
 	}
 	if _, err := os.Stat(to); os.IsNotExist(err) {
 		if !buildsEverywhere(to) {
-			return refactor.Refusef("%s would have build constraints (from its name), so it would not be built everywhere; choose another name", m.ws.Rel(to))
+			return refactor.Refusef("%s would have build constraints (from its name), so it would not be built everywhere; choose another name", m.WS.Rel(to))
 		}
 	} else {
-		_, dst := m.ws.FileSyntax(to)
+		_, dst := m.WS.FileSyntax(to)
 		if dst == nil || dst.Name.Name != m.dest.Name {
-			return refactor.Refusef("%s is not part of package %s", m.ws.Rel(to), m.dest.Name)
+			return refactor.Refusef("%s is not part of package %s", m.WS.Rel(to), m.dest.Name)
 		}
 		if constrained(to, dst) {
-			return refactor.Refusef("%s has build constraints, so it is not built everywhere; moving into it is not supported", m.ws.Rel(to))
+			return refactor.Refusef("%s has build constraints, so it is not built everywhere; moving into it is not supported", m.WS.Rel(to))
 		}
 		for _, imp := range dst.Imports {
 			for _, d := range m.decls {
 				if imp.Name != nil && imp.Name.Name == d.newName {
-					return refactor.Refusef("%s imports a package as %s, the declaration's name", m.ws.Rel(to), d.newName)
+					return refactor.Refusef("%s imports a package as %s, the declaration's name", m.WS.Rel(to), d.newName)
 				}
 			}
 		}
@@ -186,7 +186,7 @@ func (m *mover) checkCanLeave(md *moved) error {
 		return refactor.Refusef("new_name %q is not a valid Go identifier", md.newName)
 	}
 	if o := m.dest.Types.Scope().Lookup(md.newName); o != nil {
-		return refactor.Refusef("package %s already declares %s (at %s)", m.dest.Name, md.newName, m.ws.Position(o.Pos()))
+		return refactor.Refusef("package %s already declares %s (at %s)", m.dest.Name, md.newName, m.WS.Position(o.Pos()))
 	}
 	return nil
 }
@@ -195,8 +195,8 @@ func (m *mover) checkCanLeave(md *moved) error {
 // creates: named after the directory, with the import path of the module
 // it is in. Its scope is empty.
 func (m *mover) newPackage(dir string) (*packages.Package, error) {
-	rel := m.ws.Rel(dir)
-	if !m.ws.Contains(dir) {
+	rel := m.WS.Rel(dir)
+	if !m.WS.Contains(dir) {
 		return nil, refactor.Refusef("%s is outside the workspace", rel)
 	}
 	for _, elem := range strings.Split(filepath.ToSlash(rel), "/") {
@@ -218,9 +218,9 @@ func (m *mover) newPackage(dir string) (*packages.Package, error) {
 	case name == "main":
 		return nil, refactor.Refusef("a package named main is a command, which cannot be imported; choose another directory")
 	}
-	mod := m.pkg.Module
+	mod := m.Pkg.Module
 	if mod == nil {
-		return nil, refactor.Refusef("package %s is not in a module, so the new package's import path is unknown", m.pkg.Name)
+		return nil, refactor.Refusef("package %s is not in a module, so the new package's import path is unknown", m.Pkg.Name)
 	}
 	r, err := filepath.Rel(mod.Dir, dir)
 	if err != nil || strings.HasPrefix(r, "..") {
@@ -250,8 +250,8 @@ func packageIn(pkgs []*packages.Package, dir string) *packages.Package {
 // checkNoSourceRefs refuses code that uses other top-level declarations of
 // its package, which the destination would have to import.
 func (m *mover) checkNoSourceRefs() error {
-	info := m.pkg.TypesInfo
-	scope := m.pkg.Types.Scope()
+	info := m.Pkg.TypesInfo
+	scope := m.Pkg.Types.Scope()
 	var err error
 	for _, d := range m.decls {
 		ast.Inspect(d.node(), func(n ast.Node) bool {
@@ -261,7 +261,7 @@ func (m *mover) checkNoSourceRefs() error {
 			}
 			if o := info.Uses[id]; o != nil && o.Parent() == scope && !m.is(o) {
 				err = refactor.Refusef("%s refers to %s, declared in package %s at %s; move that first (or with it, in also, or with with_dependencies), since package %s cannot import %s back",
-					d.obj.Name(), o.Name(), m.pkg.Name, m.ws.Position(o.Pos()), m.dest.Name, m.pkg.Name)
+					d.obj.Name(), o.Name(), m.Pkg.Name, m.WS.Position(o.Pos()), m.dest.Name, m.Pkg.Name)
 			}
 			return true
 		})
@@ -276,14 +276,14 @@ func (m *mover) updateReferences() (map[string]bool, int, error) {
 	users := map[string]bool{}
 	refs := 0
 	seen := map[string]bool{}
-	for _, p := range m.ws.Pkgs {
+	for _, p := range m.WS.Pkgs {
 		if p.TypesInfo == nil {
 			continue
 		}
 		inDest := p.PkgPath == m.dest.PkgPath
 		for _, f := range p.Syntax {
-			path := m.ws.Fset.File(f.Pos()).Name()
-			if seen[path] || !m.ws.Contains(path) {
+			path := m.WS.Fset.File(f.Pos()).Name()
+			if seen[path] || !m.WS.Contains(path) {
 				continue
 			}
 			seen[path] = true
@@ -299,7 +299,7 @@ func (m *mover) updateReferences() (map[string]bool, int, error) {
 				if d == nil || recvTypeName(o) != nil || id.Pos() < f.FileStart || id.Pos() >= f.FileEnd {
 					continue // a method is used through a value, whose type it follows
 				}
-				if m.inMoved(path, m.off(id.Pos())) {
+				if m.inMoved(path, m.Off(id.Pos())) {
 					continue // inside the moved code
 				}
 				fe, err := m.fileFor(path)
@@ -315,13 +315,13 @@ func (m *mover) updateReferences() (map[string]bool, int, error) {
 				}
 				var from token.Pos
 				switch {
-				case sel == nil && p.PkgPath != m.pkg.PkgPath:
-					return nil, 0, refactor.Refusef("%s at %s comes from a dot import of package %s; moving it is not supported", id.Name, m.ws.Position(id.Pos()), m.pkg.Name)
+				case sel == nil && p.PkgPath != m.Pkg.PkgPath:
+					return nil, 0, refactor.Refusef("%s at %s comes from a dot import of package %s; moving it is not supported", id.Name, m.WS.Position(id.Pos()), m.Pkg.Name)
 				case sel == nil:
 					from = id.Pos()
 				default:
 					from = sel.Pos()
-					fe.cuts = append(fe.cuts, [2]int{m.off(sel.X.Pos()), m.off(sel.X.End())})
+					fe.cuts = append(fe.cuts, [2]int{m.Off(sel.X.Pos()), m.Off(sel.X.End())})
 				}
 				text := d.newName
 				if !inDest {
@@ -329,12 +329,12 @@ func (m *mover) updateReferences() (map[string]bool, int, error) {
 					d.usedOutside = true
 					q, err := fe.adder.Name(m.dest.Types)
 					if err != nil {
-						return nil, 0, refactor.Refusef("%s refers to %s, but cannot import package %s, %v", m.ws.Rel(path), d.obj.Name(), m.dest.PkgPath, err)
+						return nil, 0, refactor.Refusef("%s refers to %s, but cannot import package %s, %v", m.WS.Rel(path), d.obj.Name(), m.dest.PkgPath, err)
 					}
 					fe.needs[m.dest.PkgPath] = true
 					text = q + "." + d.newName
 				}
-				fe.edits = append(fe.edits, edit.TextEdit{Start: m.off(from), End: m.off(id.End()), NewText: text})
+				fe.edits = append(fe.edits, edit.TextEdit{Start: m.Off(from), End: m.Off(id.End()), NewText: text})
 			}
 		}
 	}
@@ -367,14 +367,14 @@ func (m *mover) checkNoCycle(users map[string]bool) error {
 			}
 		}
 	}
-	for _, p := range m.ws.Pkgs {
+	for _, p := range m.WS.Pkgs {
 		if p.PkgPath == m.dest.PkgPath {
 			walk(p, m.dest.PkgPath)
 		}
 	}
 	for _, imp := range m.allImports() {
-		path := pkgNameOf(m.pkg.TypesInfo, imp).Imported().Path()
-		if d := m.pkg.Imports[path]; d != nil && path != m.dest.PkgPath {
+		path := pkgNameOf(m.Pkg.TypesInfo, imp).Imported().Path()
+		if d := m.Pkg.Imports[path]; d != nil && path != m.dest.PkgPath {
 			deps[path] = m.obj.Name()
 			walk(d, m.obj.Name())
 		}
@@ -419,13 +419,13 @@ func (m *mover) addMethods() error {
 		}
 		for i := 0; i < n.NumMethods(); i++ {
 			fn := n.Method(i)
-			pos := m.ws.Fset.Position(fn.Pos())
+			pos := m.WS.Fset.Position(fn.Pos())
 			from, err := m.sourceFor(pos.Filename)
 			if err != nil {
 				return err
 			}
-			for _, fd := range from.file.Decls {
-				if declares(m.ws.Fset, fd, pos.Offset) && !m.moves(fd, nil) {
+			for _, fd := range from.File.Decls {
+				if declares(m.WS.Fset, fd, pos.Offset) && !m.moves(fd, nil) {
 					md := &moved{from: from, decl: fd, obj: fn, newName: fn.Name()}
 					if err := m.checkDecl(md); err != nil {
 						return err
@@ -444,7 +444,7 @@ func (m *mover) addMethods() error {
 // moved code uses no others, recording in needed what needed each.
 func (m *mover) addDependencies() error {
 	m.needed = map[*moved]string{}
-	info, scope := m.pkg.TypesInfo, m.pkg.Types.Scope()
+	info, scope := m.Pkg.TypesInfo, m.Pkg.Types.Scope()
 	for {
 		if err := m.addMethods(); err != nil {
 			return err
@@ -501,11 +501,11 @@ func (m *mover) exportStillUsed() error {
 		name := strings.ToUpper(d.newName[:1]) + d.newName[1:]
 		if o := m.dest.Types.Scope().Lookup(name); o != nil {
 			return refactor.Refusef("%s must become exported, since package %s still uses it, but package %s already declares %s (at %s); rename one first",
-				d.obj.Name(), m.pkg.Name, m.dest.Name, name, m.ws.Position(o.Pos()))
+				d.obj.Name(), m.Pkg.Name, m.dest.Name, name, m.WS.Position(o.Pos()))
 		}
 		for _, other := range m.decls {
 			if other.newName == name {
-				return refactor.Refusef("%s must become exported, since package %s still uses it, but %s also moves; rename one first", d.obj.Name(), m.pkg.Name, name)
+				return refactor.Refusef("%s must become exported, since package %s still uses it, but %s also moves; rename one first", d.obj.Name(), m.Pkg.Name, name)
 			}
 		}
 		d.newName = name
@@ -516,7 +516,7 @@ func (m *mover) exportStillUsed() error {
 // usedOutsideDest reports whether code outside the moved code and the
 // destination package uses d.
 func (m *mover) usedOutsideDest(d *moved) bool {
-	for _, p := range m.ws.Pkgs {
+	for _, p := range m.WS.Pkgs {
 		if p.TypesInfo == nil || p.PkgPath == m.dest.PkgPath {
 			continue
 		}
@@ -524,7 +524,7 @@ func (m *mover) usedOutsideDest(d *moved) bool {
 			if m.movedOf(o) != d {
 				continue
 			}
-			pos := m.ws.Fset.Position(id.Pos())
+			pos := m.WS.Fset.Position(id.Pos())
 			if !m.inMoved(pos.Filename, pos.Offset) {
 				return true
 			}
@@ -555,13 +555,13 @@ func (m *mover) checkMembers() error {
 		if st, ok := n.Underlying().(*types.Struct); ok {
 			for i := 0; i < st.NumFields(); i++ {
 				if f := st.Field(i); !f.Exported() {
-					unexported[analysis.ObjectKey(m.ws.Fset, f)] = member{"field", tn.Name()}
+					unexported[analysis.ObjectKey(m.WS.Fset, f)] = member{"field", tn.Name()}
 				}
 			}
 		}
 		for i := 0; i < n.NumMethods(); i++ {
 			if fn := n.Method(i); !fn.Exported() {
-				unexported[analysis.ObjectKey(m.ws.Fset, fn)] = member{"method", tn.Name()}
+				unexported[analysis.ObjectKey(m.WS.Fset, fn)] = member{"method", tn.Name()}
 				if err := m.checkNoInterface(fn); err != nil {
 					return err
 				}
@@ -572,18 +572,18 @@ func (m *mover) checkMembers() error {
 		return nil
 	}
 	inMoved := func(p token.Pos) bool {
-		return m.inMoved(m.ws.Fset.Position(p).Filename, m.off(p))
+		return m.inMoved(m.WS.Fset.Position(p).Filename, m.Off(p))
 	}
 	refuse := func(name string, mb member, at token.Pos) error {
 		return refactor.Refusef("%s, a %s of %s, is unexported, and %s uses it outside package %s; export it first (rename), or move that code too",
-			name, mb.what, mb.of, m.ws.Position(at), m.dest.Name)
+			name, mb.what, mb.of, m.WS.Position(at), m.dest.Name)
 	}
-	for _, p := range m.ws.Pkgs {
+	for _, p := range m.WS.Pkgs {
 		if p.TypesInfo == nil || p.PkgPath == m.dest.PkgPath {
 			continue
 		}
 		for id, o := range p.TypesInfo.Uses {
-			if mb, ok := unexported[analysis.ObjectKey(m.ws.Fset, o)]; ok && !inMoved(id.Pos()) {
+			if mb, ok := unexported[analysis.ObjectKey(m.WS.Fset, o)]; ok && !inMoved(id.Pos()) {
 				return refuse(o.Name(), mb, id.Pos())
 			}
 		}
@@ -622,7 +622,7 @@ func (m *mover) isMovedType(t types.Type, moved []*types.Named) bool {
 		return false
 	}
 	for _, mt := range moved {
-		if analysis.ObjectKey(m.ws.Fset, n.Obj()) == analysis.ObjectKey(m.ws.Fset, mt.Obj()) {
+		if analysis.ObjectKey(m.WS.Fset, n.Obj()) == analysis.ObjectKey(m.WS.Fset, mt.Obj()) {
 			return true
 		}
 	}
@@ -634,14 +634,14 @@ func (m *mover) isMovedType(t types.Type, moved []*types.Named) bool {
 // to the destination, so its type no longer implements that interface, and
 // a type assertion would quietly fail.
 func (m *mover) checkNoInterface(fn *types.Func) error {
-	iface, at, found := analysis.InterfaceWithMethod(m.ws.TypesInfos(), fn.Pkg().Path(), fn.Name())
+	iface, at, found := analysis.InterfaceWithMethod(m.WS.TypesInfos(), fn.Pkg().Path(), fn.Name())
 	switch {
 	case !found:
 		return nil
 	case iface != nil:
 		return refactor.Refusef("the interface %s (at %s) has the unexported method %s, which belongs to package %s; once moved, the type's %s would not implement it, and a type assertion would quietly fail",
-			iface.Name(), m.ws.Position(at), fn.Name(), m.pkg.Name, fn.Name())
+			iface.Name(), m.WS.Position(at), fn.Name(), m.Pkg.Name, fn.Name())
 	}
 	return refactor.Refusef("the interface at %s has the unexported method %s, which belongs to package %s; once moved, the type's %s would not implement it",
-		m.ws.Position(at), fn.Name(), m.pkg.Name, fn.Name())
+		m.WS.Position(at), fn.Name(), m.Pkg.Name, fn.Name())
 }

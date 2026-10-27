@@ -67,3 +67,13 @@ func At(ws *workspace.Workspace, path string) (*Site, error) {
 	}
 	return &Site{WS: ws, Pkg: pkg, Info: pkg.TypesInfo, File: file, TF: ws.Fset.File(file.Pos()), Src: src}, nil
 }
+
+// Declaring returns the site of the file that declares o, which must be
+// one the workspace has loaded.
+func Declaring(ws *workspace.Workspace, o types.Object) (*Site, error) {
+	path := ws.Fset.Position(o.Pos()).Filename
+	if _, file := ws.FileSyntax(path); file == nil {
+		return nil, refactor.Refusef("%s is declared in %s, outside the module's packages", o.Name(), ws.Rel(path))
+	}
+	return At(ws, path)
+}

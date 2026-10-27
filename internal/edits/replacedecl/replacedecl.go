@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"go/ast"
 	"go/token"
-	"os"
 	"slices"
 	"strings"
 
@@ -16,6 +15,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/imports"
 	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/site"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
 
@@ -78,10 +78,11 @@ func (*ReplaceDeclaration) Plan(ws *workspace.Workspace, raw json.RawMessage) (*
 		return nil, refactor.Refusef("%s at %s is not a declared name", a.Name, ws.Position(id.Pos()))
 	}
 	path := ws.Fset.Position(obj.Pos()).Filename
-	dpkg, file := ws.FileSyntax(path)
-	if file == nil {
-		return nil, refactor.Refusef("%s is declared outside the loaded packages", a.Name)
+	declaring, err := site.Declaring(ws, obj)
+	if err != nil {
+		return nil, err
 	}
+	dpkg, file := declaring.Pkg, declaring.File
 	decl, spec := declOf(file, obj.Pos())
 	if decl == nil {
 		return nil, refactor.Refusef("%s is not a top-level declaration", a.Name)
@@ -100,10 +101,7 @@ func (*ReplaceDeclaration) Plan(ws *workspace.Workspace, raw json.RawMessage) (*
 	if err := sameKind(decl, nd); err != nil {
 		return nil, err
 	}
-	src, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
+	src := declaring.Src
 	tf := ws.Fset.File(file.Pos())
 	text := strings.TrimSpace(a.Content)
 	start, end := decl.Pos(), decl.End()

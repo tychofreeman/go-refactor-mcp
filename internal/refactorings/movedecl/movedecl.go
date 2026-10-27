@@ -33,6 +33,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/imports"
 	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/site"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
 
@@ -86,8 +87,6 @@ type moveArgs struct {
 type mover struct {
 	*moved
 	decls []*moved
-	ws    *workspace.Workspace
-	pkg   *packages.Package // a variant containing the source file
 	// The embedded source is the file of the declaration the arguments
 	// name; sources holds it and the others declarations move from.
 	*source
@@ -110,9 +109,8 @@ type mover struct {
 
 // source is a file that declarations move from.
 type source struct {
-	path    string
-	file    *ast.File
-	src     []byte
+	path string
+	site.Site
 	imports []*ast.ImportSpec // those the moved code uses
 }
 
@@ -154,7 +152,7 @@ func (m *mover) empties(path string, edits []edit.TextEdit) bool {
 	if i < 0 {
 		return false
 	}
-	after, err := edit.Apply(m.sources[i].src, edits)
+	after, err := edit.Apply(m.sources[i].Src, edits)
 	if err != nil {
 		return false
 	}
@@ -166,7 +164,7 @@ func (m *mover) empties(path string, edits []edit.TextEdit) bool {
 func (m *mover) emptiedNotes() []string {
 	var notes []string
 	for _, path := range m.emptied {
-		notes = append(notes, fmt.Sprintf("deleted %s, which the move left empty", m.ws.Rel(path)))
+		notes = append(notes, fmt.Sprintf("deleted %s, which the move left empty", m.WS.Rel(path)))
 	}
 	return notes
 }
@@ -256,9 +254,9 @@ func find(ws *workspace.Workspace, q locate.IdentQuery) (*mover, error) {
 					if err != nil {
 						return nil, err
 					}
-					s := &source{path: pos.Filename, file: f, src: src}
+					s := &source{path: pos.Filename, Site: site.Site{WS: ws, Pkg: p, Info: p.TypesInfo, File: f, TF: ws.Fset.File(f.Pos()), Src: src}}
 					md := &moved{from: s, decl: d, obj: obj, spec: groupSpec(ws.Fset, d, pos.Offset)}
-					return &mover{moved: md, decls: []*moved{md}, ws: ws, pkg: p, source: s, sources: []*source{s}}, nil
+					return &mover{moved: md, decls: []*moved{md}, source: s, sources: []*source{s}}, nil
 				}
 			}
 			return nil, refactor.Refusef("%s (declared at %s) is not a top-level declaration", id.Name, ws.Position(obj.Pos()))
@@ -273,15 +271,15 @@ func (m *mover) addAlso(also []string) error {
 	for _, name := range also {
 		o := m.lookup(name)
 		if o == nil {
-			return refactor.Refusef("package %s declares no top-level %s (also names functions, types, variables and constants, not methods)", m.pkg.Name, name)
+			return refactor.Refusef("package %s declares no top-level %s (also names functions, types, variables and constants, not methods)", m.Pkg.Name, name)
 		}
-		pos := m.ws.Fset.Position(o.Pos())
+		pos := m.WS.Fset.Position(o.Pos())
 		from, err := m.sourceFor(pos.Filename)
 		if err != nil {
 			return err
 		}
-		for _, d := range from.file.Decls {
-			if spec := groupSpec(m.ws.Fset, d, pos.Offset); declares(m.ws.Fset, d, pos.Offset) && !m.moves(d, spec) {
+		for _, d := range from.File.Decls {
+			if spec := groupSpec(m.WS.Fset, d, pos.Offset); declares(m.WS.Fset, d, pos.Offset) && !m.moves(d, spec) {
 				m.decls = append(m.decls, &moved{from: from, decl: d, obj: o, spec: spec})
 			}
 		}
@@ -294,11 +292,11 @@ func (m *mover) addAlso(also []string) error {
 // lookup finds a top-level name of the package, in any of its variants
 // (a test file's declarations are only in the test variant).
 func (m *mover) lookup(name string) types.Object {
-	if o := m.pkg.Types.Scope().Lookup(name); o != nil {
+	if o := m.Pkg.Types.Scope().Lookup(name); o != nil {
 		return o
 	}
-	for _, p := range m.ws.Pkgs {
-		if p.Types != nil && p.PkgPath == m.pkg.PkgPath {
+	for _, p := range m.WS.Pkgs {
+		if p.Types != nil && p.PkgPath == m.Pkg.PkgPath {
 			if o := p.Types.Scope().Lookup(name); o != nil {
 				return o
 			}
@@ -316,24 +314,25 @@ func (m *mover) sourceFor(path string) (*source, error) {
 		}
 	}
 	var file *ast.File
-	for _, p := range append([]*packages.Package{m.pkg}, m.ws.Pkgs...) {
-		if p.PkgPath != m.pkg.PkgPath || file != nil {
+	var fp *packages.Package // the variant whose syntax holds it
+	for _, p := range append([]*packages.Package{m.Pkg}, m.WS.Pkgs...) {
+		if p.PkgPath != m.Pkg.PkgPath || file != nil {
 			continue
 		}
 		for _, f := range p.Syntax {
-			if m.ws.Fset.File(f.Pos()).Name() == path {
-				file = f
+			if m.WS.Fset.File(f.Pos()).Name() == path {
+				file, fp = f, p
 			}
 		}
 	}
 	if file == nil {
-		return nil, refactor.Refusef("%s is not a file of package %s", m.ws.Rel(path), m.pkg.Name)
+		return nil, refactor.Refusef("%s is not a file of package %s", m.WS.Rel(path), m.Pkg.Name)
 	}
 	src, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	s := &source{path: path, file: file, src: src}
+	s := &source{path: path, Site: site.Site{WS: m.WS, Pkg: fp, Info: fp.TypesInfo, File: file, TF: m.WS.Fset.File(file.Pos()), Src: src}}
 	m.sources = append(m.sources, s)
 	return s, nil
 }
@@ -358,7 +357,7 @@ func (m *mover) sortDecls() {
 func (m *mover) fromFiles() string {
 	var names []string
 	for _, s := range m.sources {
-		names = append(names, m.ws.Rel(s.path))
+		names = append(names, m.WS.Rel(s.path))
 	}
 	return strings.Join(names, ", ")
 }
@@ -490,7 +489,7 @@ func (m *mover) checkDecl(d *moved) error {
 			if !ok {
 				continue
 			}
-			if decl.Tok == token.VAR && hasEffect(m.pkg.TypesInfo, vs, m.ws.Effects()) {
+			if decl.Tok == token.VAR && hasEffect(m.Pkg.TypesInfo, vs, m.WS.Effects()) {
 				return refactor.Refusef("the initializer of %s has side effects, and variables are initialized in the order of their files, so moving it could change the initialization order; this is not supported", vs.Names[0].Name)
 			}
 			if hasDirective(decl.Doc, "//go:embed") || hasDirective(vs.Doc, "//go:embed") {
@@ -505,12 +504,12 @@ func (m *mover) checkDecl(d *moved) error {
 // setRange finds the moved text: the declaration (or spec) with its doc
 // comment and a comment ending its last line.
 func (m *mover) setRange(d *moved) {
-	d.start = m.off(d.node().Pos())
+	d.start = m.Off(d.node().Pos())
 	if doc := docOf(d.node()); doc != nil {
-		d.start = m.off(doc.Pos())
+		d.start = m.Off(doc.Pos())
 	}
-	d.end = m.off(d.node().End())
-	if rest := d.from.src[d.end:d.from.nextLine(d.end)]; strings.HasPrefix(strings.TrimSpace(string(rest)), "//") {
+	d.end = m.Off(d.node().End())
+	if rest := d.from.Src[d.end:d.from.nextLine(d.end)]; strings.HasPrefix(strings.TrimSpace(string(rest)), "//") {
 		d.end += len(strings.TrimRight(string(rest), "\n"))
 	}
 }
@@ -519,23 +518,23 @@ func (m *mover) setRange(d *moved) {
 // built differently, and returns its syntax if it exists.
 func (m *mover) checkDestination(to string) (*ast.File, error) {
 	if to == m.path {
-		return nil, refactor.Refusef("the declaration is already in %s", m.ws.Rel(to))
+		return nil, refactor.Refusef("the declaration is already in %s", m.WS.Rel(to))
 	}
 	for _, d := range m.decls {
 		if d.from.path == to {
-			return nil, refactor.Refusef("%s is already in %s", d.obj.Name(), m.ws.Rel(to))
+			return nil, refactor.Refusef("%s is already in %s", d.obj.Name(), m.WS.Rel(to))
 		}
 	}
 	switch {
 	case !strings.HasSuffix(to, ".go"):
 		return nil, refactor.Refusef("to_file must be a .go file")
 	case filepath.Dir(to) != filepath.Dir(m.path):
-		return nil, refactor.Refusef("%s is in another directory, so another package; moving to another package is not supported yet", m.ws.Rel(to))
+		return nil, refactor.Refusef("%s is in another directory, so another package; moving to another package is not supported yet", m.WS.Rel(to))
 	}
 	for _, s := range m.sources {
-		rel := m.ws.Rel(s.path)
+		rel := m.WS.Rel(s.path)
 		if strings.HasSuffix(to, "_test.go") != strings.HasSuffix(s.path, "_test.go") {
-			return nil, refactor.Refusef("only one of %s and %s is a test file, so they are built differently; moving between them is not supported", rel, m.ws.Rel(to))
+			return nil, refactor.Refusef("only one of %s and %s is a test file, so they are built differently; moving between them is not supported", rel, m.WS.Rel(to))
 		}
 		if err := s.checkBuiltEverywhere(rel); err != nil {
 			return nil, err
@@ -543,19 +542,19 @@ func (m *mover) checkDestination(to string) (*ast.File, error) {
 	}
 	if _, err := os.Stat(to); os.IsNotExist(err) {
 		if !buildsEverywhere(to) {
-			return nil, refactor.Refusef("%s would have build constraints (from its name), so it would not be built everywhere; choose another name", m.ws.Rel(to))
+			return nil, refactor.Refusef("%s would have build constraints (from its name), so it would not be built everywhere; choose another name", m.WS.Rel(to))
 		}
 		return nil, nil
 	}
-	_, dst := m.ws.FileSyntax(to)
+	_, dst := m.WS.FileSyntax(to)
 	if dst == nil {
-		return nil, refactor.Refusef("%s exists but is not part of any loaded package", m.ws.Rel(to))
+		return nil, refactor.Refusef("%s exists but is not part of any loaded package", m.WS.Rel(to))
 	}
-	if dst.Name.Name != m.file.Name.Name {
-		return nil, refactor.Refusef("%s is in package %s, not %s", m.ws.Rel(to), dst.Name.Name, m.file.Name.Name)
+	if dst.Name.Name != m.File.Name.Name {
+		return nil, refactor.Refusef("%s is in package %s, not %s", m.WS.Rel(to), dst.Name.Name, m.File.Name.Name)
 	}
 	if constrained(to, dst) {
-		return nil, refactor.Refusef("%s has build constraints, so it is not built everywhere; moving into it is not supported", m.ws.Rel(to))
+		return nil, refactor.Refusef("%s has build constraints, so it is not built everywhere; moving into it is not supported", m.WS.Rel(to))
 	}
 	return dst, nil
 }
@@ -563,7 +562,7 @@ func (m *mover) checkDestination(to string) (*ast.File, error) {
 // collectImports finds the imports the moved code uses, and refuses code
 // that uses a dot import.
 func (m *mover) collectImports() error {
-	info := m.pkg.TypesInfo
+	info := m.Pkg.TypesInfo
 	used := map[*types.PkgName]bool{}
 	sels := map[*ast.Ident]bool{}
 	var err error
@@ -581,16 +580,16 @@ func (m *mover) collectImports() error {
 				used[o] = true
 			case nil:
 			default:
-				if !sels[id] && o.Pkg() != nil && o.Pkg() != m.pkg.Types && o.Parent() == o.Pkg().Scope() {
-					err = refactor.Refusef("%s at %s comes from a dot import; moving code that uses dot imports is not supported", id.Name, m.ws.Position(id.Pos()))
+				if !sels[id] && o.Pkg() != nil && o.Pkg() != m.Pkg.Types && o.Parent() == o.Pkg().Scope() {
+					err = refactor.Refusef("%s at %s comes from a dot import; moving code that uses dot imports is not supported", id.Name, m.WS.Position(id.Pos()))
 				}
 			}
 			return true
 		})
 	}
 	for _, s := range m.sources {
-		for _, imp := range s.file.Imports {
-			if pn := pkgNameOf(m.pkg.TypesInfo, imp); pn != nil && used[pn] {
+		for _, imp := range s.File.Imports {
+			if pn := pkgNameOf(m.Pkg.TypesInfo, imp); pn != nil && used[pn] {
 				s.imports = append(s.imports, imp)
 			}
 		}
@@ -601,12 +600,12 @@ func (m *mover) collectImports() error {
 // checkBuiltEverywhere refuses a source file that is not built for every
 // platform: build constraints, or cgo.
 func (s *source) checkBuiltEverywhere(rel string) error {
-	for _, imp := range s.file.Imports {
+	for _, imp := range s.File.Imports {
 		if imp.Path.Value == `"C"` {
 			return refactor.Refusef("%s uses cgo; moving declarations out of cgo files is not supported", rel)
 		}
 	}
-	if constrained(s.path, s.file) {
+	if constrained(s.path, s.File) {
 		return refactor.Refusef("%s has build constraints, so it is not built everywhere; moving out of it is not supported", rel)
 	}
 	return nil
@@ -648,7 +647,7 @@ func (m *mover) movedOf(o types.Object) *moved {
 		return nil
 	}
 	for _, d := range m.decls {
-		if analysis.ObjectKey(m.ws.Fset, o) == analysis.ObjectKey(m.ws.Fset, d.obj) {
+		if analysis.ObjectKey(m.WS.Fset, o) == analysis.ObjectKey(m.WS.Fset, d.obj) {
 			return d
 		}
 	}
@@ -661,15 +660,11 @@ func (m *mover) fileFor(path string) (*fileEdits, error) {
 	if fe := m.files[path]; fe != nil {
 		return fe, nil
 	}
-	pkg, f := m.ws.FileSyntax(path)
-	if f == nil {
-		return nil, refactor.Refusef("%s is not part of any loaded package", m.ws.Rel(path))
-	}
-	src, err := os.ReadFile(path)
+	opened, err := site.At(m.WS, path)
 	if err != nil {
 		return nil, err
 	}
-	fe := &fileEdits{pkg: pkg, file: f, adder: imports.New(m.ws, pkg, f, src), needs: map[string]bool{}}
+	fe := &fileEdits{pkg: opened.Pkg, file: opened.File, adder: imports.New(m.WS, opened.Pkg, opened.File, opened.Src), needs: map[string]bool{}}
 	m.files[path] = fe
 	return fe, nil
 }
@@ -694,7 +689,7 @@ func (m *mover) fileEdits() []edit.FileEdit {
 	var fes []edit.FileEdit
 	for path, fe := range m.files {
 		if fe.adder != nil {
-			fe.dropUnused(m.ws)
+			fe.dropUnused(m.WS)
 			fe.edits = append(fe.edits, fe.adder.Edits()...)
 		}
 		if m.empties(path, fe.edits) {
@@ -749,9 +744,9 @@ func (fe *fileEdits) dropUnused(ws *workspace.Workspace) {
 // destination's own package, whose qualifier goes), and references to the
 // moved declarations use their new names.
 func (m *mover) code(d *moved, qual func(*types.PkgName) string) (string, error) {
-	info := m.pkg.TypesInfo
+	info := m.Pkg.TypesInfo
 	var edits []edit.TextEdit
-	rel := func(p token.Pos) int { return m.off(p) - d.start }
+	rel := func(p token.Pos) int { return m.Off(p) - d.start }
 	ast.Inspect(d.node(), func(n ast.Node) bool {
 		switch n := n.(type) {
 		case *ast.SelectorExpr:
@@ -795,7 +790,7 @@ func (m *mover) code(d *moved, qual func(*types.PkgName) string) (string, error)
 		at := rel(d.spec.Pos())
 		edits = append(edits, edit.TextEdit{Start: at, End: at, NewText: kw + " "})
 	}
-	out, err := edit.Apply(d.from.src[d.start:d.end], edits)
+	out, err := edit.Apply(d.from.Src[d.start:d.end], edits)
 	if err != nil {
 		return "", err
 	}
@@ -831,13 +826,13 @@ func (m *mover) checkLeavesGroup(decl *ast.GenDecl, spec ast.Spec) error {
 	switch {
 	case len(vs.Values) == 0:
 		return refactor.Refusef("%s has no value of its own: it repeats the expression of an earlier constant in the group, with its own iota; move the whole group (name the others in also)", name)
-	case analysis.DependsOnPosition(m.pkg.TypesInfo, vs):
+	case analysis.DependsOnPosition(m.Pkg.TypesInfo, vs):
 		return refactor.Refusef("%s uses iota, its position in the group; move the whole group (name the others in also)", name)
 	}
 	for _, later := range decl.Specs[i+1:] {
-		if lv := later.(*ast.ValueSpec); analysis.DependsOnPosition(m.pkg.TypesInfo, lv) {
+		if lv := later.(*ast.ValueSpec); analysis.DependsOnPosition(m.Pkg.TypesInfo, lv) {
 			return refactor.Refusef("%s (at %s) uses iota or repeats an earlier expression, so its value depends on the position of %s; move the whole group (name the others in also)",
-				lv.Names[0].Name, m.ws.Position(lv.Pos()), name)
+				lv.Names[0].Name, m.WS.Position(lv.Pos()), name)
 		}
 	}
 	return nil
@@ -876,7 +871,7 @@ func docOf(n ast.Node) *ast.CommentGroup {
 // and the code.
 func (m *mover) newFile(qual func(*types.PkgName) string) (string, error) {
 	var b strings.Builder
-	name := m.file.Name.Name
+	name := m.File.Name.Name
 	if m.dest != nil {
 		name = m.dest.Name
 	}
@@ -886,7 +881,7 @@ func (m *mover) newFile(qual func(*types.PkgName) string) (string, error) {
 	byPath := map[string]*source{} // which source first imports a path
 	for _, s := range m.sources {
 		for _, imp := range s.imports {
-			pn := pkgNameOf(m.pkg.TypesInfo, imp)
+			pn := pkgNameOf(m.Pkg.TypesInfo, imp)
 			if qual(pn) == "" {
 				continue
 			}
@@ -894,12 +889,12 @@ func (m *mover) newFile(qual func(*types.PkgName) string) (string, error) {
 			if first := byPath[path]; first != nil {
 				if other := m.importName(first, path); other != pn.Name() {
 					return "", refactor.Refusef("%s imports %q as %s, and %s as %s; the new file would need both names, so rename one first",
-						m.ws.Rel(first.path), path, other, m.ws.Rel(s.path), pn.Name())
+						m.WS.Rel(first.path), path, other, m.WS.Rel(s.path), pn.Name())
 				}
 				continue
 			}
 			byPath[path] = s
-			specs = append(specs, spec{path, string(s.src[m.off(imp.Pos()):m.off(imp.End())])})
+			specs = append(specs, spec{path, string(s.Src[m.Off(imp.Pos()):m.Off(imp.End())])})
 		}
 	}
 	// As goimports writes them: the standard library first, then the others,
@@ -934,7 +929,7 @@ func (m *mover) newFile(qual func(*types.PkgName) string) (string, error) {
 // importName returns the name the source s imports path as.
 func (m *mover) importName(s *source, path string) string {
 	for _, imp := range s.imports {
-		if pn := pkgNameOf(m.pkg.TypesInfo, imp); pn != nil && pn.Imported().Path() == path {
+		if pn := pkgNameOf(m.Pkg.TypesInfo, imp); pn != nil && pn.Imported().Path() == path {
 			return pn.Name()
 		}
 	}
@@ -952,14 +947,14 @@ func (m *mover) appendTo(to, destPath string) error {
 	}
 	names := map[*types.PkgName]string{}
 	for _, imp := range m.allImports() {
-		pn := pkgNameOf(m.pkg.TypesInfo, imp)
+		pn := pkgNameOf(m.Pkg.TypesInfo, imp)
 		if pn.Imported().Path() == destPath {
 			names[pn] = ""
 			continue
 		}
 		q, err := fe.adder.Name(pn.Imported())
 		if err != nil {
-			return refactor.Refusef("%s cannot import %s: %v", m.ws.Rel(to), pn.Imported().Path(), err)
+			return refactor.Refusef("%s cannot import %s: %v", m.WS.Rel(to), pn.Imported().Path(), err)
 		}
 		names[pn] = q
 	}
@@ -975,18 +970,16 @@ func (m *mover) appendTo(to, destPath string) error {
 	return nil
 }
 
-func (m *mover) off(p token.Pos) int { return m.ws.Fset.Position(p).Offset }
-
 func (s *source) lineStart(off int) int {
-	return strings.LastIndexByte(string(s.src[:off]), '\n') + 1
+	return strings.LastIndexByte(string(s.Src[:off]), '\n') + 1
 }
 
 // nextLine returns the offset just past the newline that ends off's line.
 func (s *source) nextLine(off int) int {
-	if i := strings.IndexByte(string(s.src[off:]), '\n'); i >= 0 {
+	if i := strings.IndexByte(string(s.Src[off:]), '\n'); i >= 0 {
 		return off + i + 1
 	}
-	return len(s.src)
+	return len(s.Src)
 }
 
 // hasEffect reports whether evaluating the spec's values could have a

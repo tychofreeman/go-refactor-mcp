@@ -2986,3 +2986,17 @@ Nothing by hand. This entry appended with replace_text.
 `CARRIERS` in loop.py, the results in cost-history 19,
 plan-and-execute, the session notes and this entry with replace_text
 in one batch. Nothing by hand.
+
+## 2026-10-26: move_declaration's files and the declaration edits on sites (item 37)
+
+source's `file` and `src` with extract_struct into a `Site`, renamed to
+`File` and `Src`, then the alias recipe (replace_declaration to `type
+Site = site.Site`, replace_text of the embedded field and the literals,
+remove_dead_code of the alias). rename of `mover.ws` to `WS` was
+refused, since the embedded source's Site now has a field `WS`; so the
+uses `m.ws`, `m.pkg` and `m.off(` were replaced with replace_text
+(`all_occurrences`, one step per character that follows, after a first
+batch missed `{m.pkg}` and was rolled back), the fields and their
+initializer with replace_text, `mover.off` with remove_dead_code.
+`site.Declaring` with add_declaration, its uses with replace_text.
+Nothing by hand. This entry appended with replace_text.
