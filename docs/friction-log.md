@@ -3000,3 +3000,9 @@ batch missed `{m.pkg}` and was rolled back), the fields and their
 initializer with replace_text, `mover.off` with remove_dead_code.
 `site.Declaring` with add_declaration, its uses with replace_text.
 Nothing by hand. This entry appended with replace_text.
+
+## 2026-10-26: a review of the gaps against the roadmap
+
+Docs only: roadmap item 38 with replace_text, from the friction log's
+entries and the session notes read for gaps no item held. Nothing by
+hand. This entry appended with replace_text.

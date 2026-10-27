@@ -1829,6 +1829,61 @@ hand or a tool got in the way.
     opened with `site.At`. Left: the seven `find`s, which look for
     different kinds of thing and so are not one function. Item 37 is
     *Done.*
+38. **Gaps the friction log and session notes record but no item held**
+    (a review, 2026-10-26). Dates are friction-log entries.
+    - **Elements of a composite literal.** `add_element` adds one;
+      nothing moves the elements of one literal into another or rewrites
+      each element, so tables were merged by a script and sent as
+      replace_declaration (Oct 18 twice, map entries; Oct 25, `stdFuncs`;
+      Oct 26, `stopsFuncs`).
+    - **Parameters into the receiver's state, and back.** Thirteen
+      methods' `info` and `b` parameters became fields of their receiver
+      as twenty-odd replace_text steps (Oct 24, `pattern.Attempt`). The
+      inverse of `introduce_parameter`, replacing a parameter with the
+      argument every call passes, is named only inside item 24 (Oct 22,
+      `change_field_type`'s modes).
+    - **A field between structs.** `relaxer` moved from the matcher to
+      `folder` by text (Oct 24): no tool moves a field to another struct
+      that every use can reach.
+    - **A field the embedded struct already provides.** `rename` rightly
+      refuses `mover.ws` to `WS` when the embedded Site promotes a `WS`;
+      what was wanted is to drop the field for the promoted one when
+      every use sees the same value (Oct 26, done as text).
+    - **A bug:** `move_declaration` with `new_name` on an embedded type
+      leaves the field name in keyed literals (`inliner{site: site{...}}`)
+      and rolls back as a bug in its checks (Oct 26; noted in item 37,
+      now done).
+    - **Refusals still too strict.** Each was worked around and none is
+      on the roadmap: `extract_function` refuses a variable that a
+      literal which can run later uses, though nothing assigns it again
+      (Oct 19, `order`; Oct 23, `cs`); `add_parameter` counts a getter
+      that makes its value on first use (`ws.Effects()`) as a side effect
+      (Oct 25); `inline_variable` and `remove_parameter` treat
+      `p.TypesInfo` as able to panic or change (Oct 22); `rename` refuses
+      a field because a test prints its struct with `%+v` (Oct 25: a
+      test's output is not behavior to keep, but that is the user's
+      call); `introduce_parameter` counted defining a local as a write
+      that could change what the expression reads (Oct 25, `freshLocals`;
+      check whether item 35 fixed it).
+    - **Each call of a function by another chosen by its arguments.**
+      Thirty-four calls of `set` became calls of the recorder the
+      argument named, by a script (Oct 25): one more story for item 9's
+      "every occurrence of a pattern".
+    - **replace_text after gofmt's alignment.** `old` written as the
+      model wrote it, before gofmt aligned it, is not found (Oct 19, a
+      loop's indentation; Oct 20, a field comment; Oct 22, a map's
+      keys). CLAUDE.md says to grep for the line; the tool could match
+      ignoring whitespace when one place matches, or show the nearest
+      match in its refusal.
+    - **Files that are not Go.** No tool copies a file or a directory of
+      fixtures (Oct 21, Oct 26: `cp`), replaces a whole non-Go file (Oct
+      25, a reference batch rewritten by Python), or moves a block of
+      text within a file (Oct 20, the friction log reordered by a
+      script).
+    - **Experiments the session notes leave open:** a hazard as one site
+      among many, or a prompt that does not ask to keep behavior
+      (cost-history 15); and tasks a model gets wrong by hand, named as
+      the next evidence for the tools (cost-history 14).
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
