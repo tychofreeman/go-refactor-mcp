@@ -98,12 +98,18 @@ var byName = strings.NewReplacer(
 )
 
 // reads returns text, which describes inspect, as this server's reads
-// allow.
+// allow and for the languages it serves.
 func (s *Server) reads(text string) string {
-	if !s.ReadByName {
-		return text
+	if s.ReadByName {
+		text = byName.Replace(text)
 	}
-	return byName.Replace(text)
+	switch {
+	case s.typescript != nil && s.golang != nil:
+		text = strings.Replace(text, "Read Go code", "Read Go and TypeScript code", 1)
+	case s.typescript != nil:
+		text = strings.Replace(text, "Read Go code", "Read TypeScript code", 1)
+	}
+	return text
 }
 
 // New returns a server for the code at dir: Go for the module containing
@@ -148,7 +154,7 @@ func (s *Server) MCP() *mcp.Server {
 		s.golang.FullDiffs, s.golang.ReadByName = s.FullDiffs, s.ReadByName
 	}
 	if s.typescript != nil {
-		s.typescript.FullDiffs = s.FullDiffs
+		s.typescript.FullDiffs, s.typescript.ReadByName = s.FullDiffs, s.ReadByName
 	}
 	srv := mcp.NewServer(&mcp.Implementation{Name: "gorefactor", Version: Version}, &mcp.ServerOptions{
 		Instructions: s.reads(Instructions),

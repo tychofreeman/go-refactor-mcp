@@ -3163,3 +3163,15 @@ The test first with add_declaration; `addedErrors` out of `fixRefusal`
 with extract_function, the rest with add_declaration and replace_text,
 in one batch checked at its end; the docs with replace_text. Nothing by
 hand. This entry appended with a heredoc.
+
+## 2026-10-27: inspect for TypeScript
+
+TypeScript plan step 4, inspect. New packages, fixture and tests with
+create_file, written before; the language's Inspect, the server's
+description and a server test with replace_statements and replace_text,
+in batches checked at their end. One batch refused: replace_statements
+could not tell which `inspect` package the new body meant (Go's or
+TypeScript's) and asked for `imports`, which settled it. A fixture file
+replaced with replace_text, create_file refusing to overwrite. Trying it
+on Hono found a panic (a computed member name has no text), fixed with
+a test case. Nothing by hand. This entry appended with a heredoc.
