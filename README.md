@@ -1887,6 +1887,63 @@ hand or a tool got in the way.
       among many, or a prompt that does not ask to keep behavior
       (cost-history 15); and tasks a model gets wrong by hand, named as
       the next evidence for the tools (cost-history 14).
+39. **From use on another project** (glisp, 2026-10-27, its `FRICTION.md`:
+    seventeen PRs through the CLI on a small Lisp interpreter). Already
+    done from it: `refactor check` and `refactor undo` (#408, #409),
+    `add_case` before a trailing default (#412), tagged releases (v0.3.0).
+    Left, roughly by what it cost:
+    - **One indentation rule for edits.** On files indented with spaces
+      (not gofmt'd), the edits disagreed: `replace_statements` by
+      `function` re-indented with tabs, by lines kept the file's spaces;
+      `add_declaration` and `insert_statements` kept the content as
+      written; `add_case` put the content's own tab after the file's
+      spaces; added imports went in with a tab among space-indented ones
+      (four times). Fixed in the end by gofmt'ing the project. Either
+      every edit gofmts what it writes, or every edit follows the file's
+      indentation; and `check` could list files that are not gofmt'd, so
+      the mismatch shows on the first edit.
+    - **The CLI's `list` gives no argument names.** It prints the
+      descriptions, not the schemas, so `replace_expression`'s old text
+      (`expression`) and `remove_dead_code`'s `also` were guessed or
+      avoided. `refactor list` (or `refactor help <tool>`) could print each
+      tool's arguments.
+    - **A stub in the wrong file, and quietly.** A test's undeclared
+      matcher got a stub (`panic("not implemented")`) in the production
+      file, though only `_test.go` used it, and the result said only
+      "APPLIED batch: 2 steps". A stub for a name only test files use
+      belongs in the test file, and the result should name each stub.
+    - **A refusal that names another tool's argument.** `add_declaration`
+      of a test using `_, err := RunFile(...)` was refused with "give them
+      in results", an argument of `create_from_usage`, not of
+      `add_declaration`. The hint should name `create_from_usage` (with
+      `results`), or `add_declaration` should take `results` and pass it
+      on.
+    - **A line only renamed stays addressable.** In a batch, a step that
+      addressed a line an earlier `rename` had changed (only the
+      identifier) was refused as rewritten; the session split the batch in
+      two. A line whose only change is a rename could keep its number.
+    - **Smaller:** `add_parameter` could note a local in the body that
+      shadows the new parameter; `replace_statements`' description could
+      say that empty `content` deletes the statements (used three times,
+      found by trying); `check` could take `race` or test flags (`go test
+      -race` was run by hand); a tool or a `remove_dead_code` option to key
+      an unkeyed literal (three literals restated by hand to remove a
+      field; with item 38's literal elements).
+    - **One server, one module.** The server reads its module once at
+      start, so a session on one module cannot use it on another; a tool
+      or `inspect` argument to open another module, or a server serving
+      several roots.
+    - **Versions:** `refactor` has no `-version`, and both binaries report
+      only the constant; reporting the module version or commit from the
+      build information (`debug.ReadBuildInfo`) would tell which build is
+      running.
+    - **Setup notes for the README:** an `.mcp.json` added during a
+      session loads only in a new one; the tools need Go 1.26, which
+      `GOTOOLCHAIN=auto` fetches but `GOTOOLCHAIN=local` does not; and the
+      "Using gorefactor well" section, copied into another project, names
+      `mcp__gorefactor__` tools and "this checkout", which do not hold
+      through the desktop bridge (`mcp__remote-devices__gorefactor__`) or
+      with `go run ...@latest`.
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
