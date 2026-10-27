@@ -3202,3 +3202,13 @@ What a second round of glisp work (its PRs #35-#49) added to item 39,
 in README.md with replace_text. By hand: this entry, appended with a
 heredoc, and the merge conflict with #426's entry beside it, resolved
 with Python (both entries kept, #426's first).
+
+## 2026-10-27: TypeScript imports
+
+The engine's importer generalized (Go's regex into Go's fix_imports, the
+retry recognizing TypeScript's refusal, a second pass) and TypeScript's
+fix_imports added, all with replace_text and create_file in batches.
+Two batches refused and fixed by naming the import: `fiximports` is now
+a package name in both languages. One batch failed on a full disk (the
+Go build cache, 27 GB); `go clean -cache`. This entry appended with a
+heredoc.

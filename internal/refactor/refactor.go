@@ -64,9 +64,18 @@ func tolerates(ws Workspace) bool {
 // is refused in a workspace that tolerates errors, or "" if it is not.
 func addedRefusal(before, after []string) string {
 	if added := addedErrors(before, after); len(added) > 0 {
-		return fmt.Sprintf("the change adds errors the code did not have, so it was not applied. New errors:\n  %s", strings.Join(limit(added, 10), "\n  "))
+		return fmt.Sprintf("%s, so it was not applied. New errors:\n  %s", addsErrors, strings.Join(limit(added, 10), "\n  "))
 	}
 	return ""
+}
+
+// addsErrors starts addedRefusal's refusal.
+const addsErrors = "the change adds errors the code did not have"
+
+// RefusedForErrors reports whether refused refuses a step for the errors
+// it left, which a batch checked at its end may clear.
+func RefusedForErrors(refused string) bool {
+	return strings.HasPrefix(refused, "the result does not type-check") || strings.HasPrefix(refused, addsErrors)
 }
 
 // Refactoring is a refactoring of Go code.
@@ -580,7 +589,7 @@ func fixRefusal(before, after []string) string {
 	added := addedErrors(before, after)
 	switch {
 	case len(added) > 0:
-		return fmt.Sprintf("the change adds errors the code did not have, so it was not applied. New errors:\n  %s", strings.Join(limit(added, 10), "\n  "))
+		return fmt.Sprintf("%s, so it was not applied. New errors:\n  %s", addsErrors, strings.Join(limit(added, 10), "\n  "))
 	case len(after) >= len(before):
 		return fmt.Sprintf("the change fixes none of the errors, so it was not applied. Errors are:\n  %s", strings.Join(limit(after, 10), "\n  "))
 	}
@@ -740,7 +749,7 @@ func RunBatch[W Workspace](ws W, steps []StepOf[W], opts OptionsOf[W]) (*BatchRe
 // apply checked at its end: an edit that does not type-check, before the
 // last step or with something to declare what it calls.
 func retriable[W Workspace](b *BatchResult, opts OptionsOf[W]) bool {
-	return b.FailedStep > 0 && strings.HasPrefix(b.Refused, "the result does not type-check") && (b.FailedStep < b.Total || opts.Declare != nil || opts.Imports != nil)
+	return b.FailedStep > 0 && RefusedForErrors(b.Refused) && (b.FailedStep < b.Total || opts.Declare != nil || opts.Imports != nil)
 }
 
 // runBatch runs steps once, type-checked as opts says.
@@ -800,16 +809,27 @@ func runBatch[W Workspace](ws W, steps []StepOf[W], opts OptionsOf[W]) (*BatchRe
 				followStep(ws, made, next, lines, res)
 			}
 		}
-		errs := ws.Errors()
-		if len(errs) > 0 && opts.Imports != nil {
-			_, err := fixImports(ws, errs, opts, done)
+		current := func() []string { // what the steps have to clear: in a workspace that tolerates errors, those they added
+			if tolerates(ws) {
+				return addedErrors(baseline, ws.Errors())
+			}
+			return ws.Errors()
+		}
+		errs := current()
+		// A second pass fixes what the first left, such as an import that
+		// an import it added to kept it from removing.
+		for pass := 0; pass < 2 && len(errs) > 0 && opts.Imports != nil; pass++ {
+			fixed, err := fixImports(ws, errs, opts, done)
 			if err != nil {
 				if rerr := rollback(); rerr != nil {
 					return nil, fmt.Errorf("fixing imports: %v; %v", err, rerr)
 				}
 				return nil, fmt.Errorf("fixing imports: %w", err)
 			}
-			errs = ws.Errors()
+			if len(fixed) == 0 {
+				break
+			}
+			errs = current()
 		}
 		if len(errs) == 0 || opts.Declare == nil {
 			return nil, nil

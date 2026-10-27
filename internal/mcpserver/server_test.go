@@ -1028,6 +1028,10 @@ func TestTypeScriptOnly(t *testing.T) {
 	if src, _ := os.ReadFile(filepath.Join(dir, "src/plant.test.ts")); !strings.Contains(string(src), "water(3)") {
 		t.Errorf("undo did not restore the test file:\n%s", src)
 	}
+	out, _ = call(t, cs, "add_declaration", map[string]any{"file": "src/plant.ts", "content": "export const pot = 1;"})
+	mustContain(t, "add_declaration", out, "added 1 line to src/plant.ts")
+	out, _ = call(t, cs, "add_declaration", map[string]any{"file": "src/plant.test.ts", "content": "export const pots = pot;"})
+	mustContain(t, "an edit that needs an import", out, "APPLIED batch", "fix_imports: imported pot from src/plant.ts in src/plant.test.ts")
 }
 
 // A repo with both offers Go's tools, rename's description adding

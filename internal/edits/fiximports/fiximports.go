@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"go/ast"
 	"go/types"
+	"regexp"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/gocode"
@@ -42,6 +43,19 @@ func (*FixImports) InputSchema() json.RawMessage {
 func (*FixImports) ChangesBehavior() {}
 
 func (*FixImports) Fixes() {}
+
+// importError is an error an import fix may clear: an import nothing
+// uses, or a name that may be a package not imported.
+var importError = regexp.MustCompile(`^(.+\.go):\d+:\d+: (".+" imported (as \w+ )?and not used|undefined: \w+)$`)
+
+// Clears returns the file of err when it is an error an import fix may
+// clear.
+func (*FixImports) Clears(err string) (string, bool) {
+	if m := importError.FindStringSubmatch(err); m != nil {
+		return m[1], true
+	}
+	return "", false
+}
 
 // Plan checks preconditions and computes the edits.
 func (*FixImports) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {

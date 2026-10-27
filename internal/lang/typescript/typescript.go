@@ -16,6 +16,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/adddecl"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/createfile"
+	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/fiximports"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/insertstmts"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/replaceexpr"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/replacestmts"
@@ -147,7 +148,24 @@ func (l *Language) Step(tool string, args json.RawMessage) (string, bool, error)
 	if err != nil {
 		return "", false, err
 	}
+	if _, edit := r.(refactor.Edit); edit && refactor.RefusedForErrors(res.Refused) {
+		// An edit refused for its errors runs again as a batch, which adds
+		// the imports its code needs.
+		b, err := refactor.RunBatch(ws, []refactor.StepOf[*workspace.Workspace]{{Refactoring: r, Args: args}}, l.options(true))
+		if err != nil {
+			return "", false, err
+		}
+		if b.Applied {
+			return b.String(), false, nil
+		}
+	}
 	return res.String(), res.Refused != "", nil
+}
+
+// options are a batch's options, checked at its end when unchecked: the
+// engine adds the imports the steps' code needs.
+func (l *Language) options(unchecked bool) refactor.OptionsOf[*workspace.Workspace] {
+	return refactor.OptionsOf[*workspace.Workspace]{Compact: !l.FullDiffs, Unchecked: unchecked, Imports: fiximports.New()}
 }
 
 // Batch runs the steps of one batch call.
@@ -162,7 +180,7 @@ func (l *Language) Batch(args json.RawMessage) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	b, err := refactor.RunBatch(ws, batch.Steps, refactor.OptionsOf[*workspace.Workspace]{Compact: !l.FullDiffs, Unchecked: batch.Unchecked})
+	b, err := refactor.RunBatch(ws, batch.Steps, l.options(batch.Unchecked))
 	if err != nil {
 		return "", err
 	}
