@@ -133,6 +133,7 @@ hand or a tool got in the way.
    *Done* (renamed into named fields).
 7. **Packaging:** tagged releases, so `go install ...@latest` gets a stable
    version, and possibly a Claude Code plugin for a one-step install.
+   *First release: v0.3.0 (2026-10-27). Left: the plugin.*
 8. **Test run time.** CI's test step grew from about 13 s to 75 s per Go
    version between Oct 16 and Oct 19, in step with the golden cases (132 to
    824): about 9 s per 100 cases under `-race`. Each case loads a module

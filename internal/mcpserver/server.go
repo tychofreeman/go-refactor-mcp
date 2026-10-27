@@ -30,7 +30,7 @@ import (
 )
 
 // Version is reported to MCP clients.
-const Version = "0.2.0"
+const Version = "0.3.0"
 
 // Instructions are sent to the client at initialization; MCP clients such
 // as Claude Code show them to the model. They set the pace of the loop.
