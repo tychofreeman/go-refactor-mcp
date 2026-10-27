@@ -3186,6 +3186,16 @@ Go's of the same names; a test of test-first in a batch with
 add_declaration; the plan with replace_text. Nothing by hand. This
 entry appended with a heredoc.
 
+## 2026-10-27: TypeScript's statement and expression edits
+
+replace_statements, insert_statements and replace_expression for
+TypeScript. The new files with create_file and the outline's brace
+offsets, the registration and the server test with replace_text, in one
+batch checked at its end. One fix to a file in the scratchpad before it
+was created, with sed and then Python (the sed mangled the line). A smoke
+test on Hono written with a heredoc and deleted, not committed. This
+entry appended with a heredoc.
+
 ## 2026-10-27: Roadmap item 39, more from glisp
 
 What a second round of glisp work (its PRs #35-#49) added to item 39,

@@ -1003,7 +1003,7 @@ func TestTypeScriptOnly(t *testing.T) {
 	if _, ok := tools["extract_function"]; ok {
 		t.Error("a TypeScript-only repo is offered Go's extract_function")
 	}
-	for name, own := range map[string]string{"create_file": "TypeScript or not", "add_declaration": "inside Bed", "replace_text": "files that are not source"} {
+	for name, own := range map[string]string{"create_file": "TypeScript or not", "add_declaration": "inside Bed", "replace_text": "files that are not source", "replace_statements": "With function \"Bed.plant\"", "insert_statements": "constructor(soil: string) {}", "replace_expression": "p.height * 2"} {
 		if d := tools[name]; !strings.Contains(d, own) {
 			t.Errorf("%s is not offered with TypeScript's description: %q", name, d)
 		}
