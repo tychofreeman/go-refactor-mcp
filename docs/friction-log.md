@@ -3066,3 +3066,8 @@ claude.ai session without the gorefactor tools (no checkout of its own to
 run them from), so all three by hand with plain file edits. No Go
 changed. Not evidence for a tool: replace_text and create_file cover
 these edits.
+
+## 2026-10-27: CI skips changes to documentation alone
+
+The Test workflow's triggers with replace_text. Nothing by hand. This
+entry appended with replace_text.
