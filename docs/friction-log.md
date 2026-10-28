@@ -3213,6 +3213,16 @@ a package name in both languages. One batch failed on a full disk (the
 Go build cache, 27 GB); `go clean -cache`. This entry appended with a
 heredoc.
 
+## 2026-10-27: a reload that compiles none of the module
+
+The new loader, its test and the changes to Reload, Metadata.Load and
+typeCheck with create_file and replace_text in batches; the timings
+with throwaway tests written with heredocs and deleted. An `undo` meant
+for a timing step that never ran (no /usr/bin/time) undid the last
+change on the CLI's stack instead, a committed doc edit, which `git
+checkout` restored: check that the step ran before undoing it. This
+entry appended with a heredoc.
+
 ## 2026-10-27: replace_declaration takes declarations to add after it
 
 Through the CLI built from the branch, one batch: `move_file` turned the
@@ -3222,4 +3232,5 @@ two refusal goldens, and `replace_text` the code, description and schema.
 The goldens failed on the old code (checked by stashing replacedecl.go).
 One batch refused before applying: `move_file` takes `file`, not `from`.
 This entry appended with `replace_text` anchored on the last entry's end,
-not a heredoc.
+not a heredoc. The merge conflict with the loader's entry, appended at
+the same place, resolved by hand with Edit, both kept.

@@ -29,16 +29,6 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/history"
 )
 
-const loadMode = packages.NeedName |
-	packages.NeedFiles |
-	packages.NeedCompiledGoFiles |
-	packages.NeedImports |
-	packages.NeedSyntax |
-	packages.NeedTypes |
-	packages.NeedTypesInfo |
-	packages.NeedTypesSizes |
-	packages.NeedModule
-
 // Workspace is a loaded, type-checked set of packages rooted at Root.
 // It is not safe for concurrent use.
 type Workspace struct {
@@ -180,24 +170,14 @@ func (w *Workspace) Reload() error {
 		return err
 	}
 	fset := token.NewFileSet()
-	cfg := &packages.Config{
-		Mode:  loadMode,
-		Dir:   w.Root,
-		Fset:  fset,
-		Tests: true,
-		// Without -trimpath, go's build cache keys a package by its
-		// directory, so a module copied to a new path (each A/B run)
-		// compiles again: minutes for Hugo, 2 s with it.
-		BuildFlags: []string{"-trimpath"},
-	}
-	pkgs, err := packages.Load(cfg, w.Patterns...)
+	pkgs, err := loadPackages(fset, w.Root, w.Patterns)
 	if err != nil {
 		return fmt.Errorf("loading packages: %w", err)
 	}
 	if len(pkgs) == 0 {
 		return fmt.Errorf("no Go packages found in %s matching %v", w.Root, w.Patterns)
 	}
-	w.Fset, w.Pkgs, w.stamps = fset, withoutTestMains(pkgs), stamps
+	w.Fset, w.Pkgs, w.stamps = fset, pkgs, stamps
 	w.FullLoads++
 	return nil
 }

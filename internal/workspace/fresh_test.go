@@ -107,16 +107,16 @@ func TestMetadataLoadOfBrokenFiles(t *testing.T) {
 	}
 }
 
-// go list compiles each package, and reports a failure to compile as a
-// loader error, which could hide metadata problems: such a load gives no
-// metadata.
-func TestNoMetadataAfterCompileErrors(t *testing.T) {
+// go list compiles none of the module's packages, so a type error is the
+// type checker's alone, not a loader error: such a load gives metadata,
+// and edits of the package are checked incrementally.
+func TestMetadataDespiteTypeErrors(t *testing.T) {
 	w, err := Load(writeModule(t, withFile(incModule, "c/bad.go", "package c\n\nvar X int = \"s\"\n")))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := w.Metadata(); ok {
-		t.Error("metadata despite a package that failed to compile")
+	if _, ok := w.Metadata(); !ok {
+		t.Error("no metadata for a package with a type error")
 	}
 }
 
