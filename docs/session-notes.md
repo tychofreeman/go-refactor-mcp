@@ -49,6 +49,15 @@ results are in `docs/cost-history.md`.
   minutes a month, so Test runs on the newest Go only (not the minimum
   in go.mod too) and skips changes to docs alone. Keep CI runs few:
   batch small fixes into one PR where they belong together.
+- CI's time (2026-10-28, the user asked why it had grown from 2 to
+  9-12 minutes since ts-spike): every package that reaches the
+  TypeScript compiler (300k lines) compiles it, and each of their 24
+  test binaries links it. setup-go's cache is saved once per key (Go
+  version and the hash of `cache-dependency-path`), by the first job to
+  finish: the vulnerability job saved the modules alone (147 MB), so
+  vet compiled the compiler every run (145 s). That job no longer
+  caches, the test job's key includes test.yml (edit it to start a new
+  cache), and `internal/ts/...` runs without -race.
 
 ## Decisions and their reasons
 
