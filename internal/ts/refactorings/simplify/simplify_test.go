@@ -698,6 +698,67 @@ export function pick(p: Plant, q: string | undefined): string | undefined {
   return "short";
 }
 `, NewExtractFunction(), `{"start_line": 15, "end_line": 17, "name": "size"}`, "", "may be undefined"},
+		{"a case by function and case", plants + `
+export function soak(p: Plant): number {
+  switch (p.name) {
+    case "fern":
+      p.height++;
+      return p.height * 2;
+    case "moss":
+      water();
+      break;
+  }
+  return 0;
+}
+`, NewExtractFunction(), `{"function": "soak", "case": "fern", "name": "fern"}`, plants + `
+export function soak(p: Plant): number {
+  switch (p.name) {
+    case "fern":
+      return fern(p);
+    case "moss":
+      water();
+      break;
+  }
+  return 0;
+}
+
+function fern(p: Plant) {
+  p.height++;
+  return p.height * 2;
+}
+`, ""},
+		{"a case without its break", plants + `
+export function soak(p: Plant): number {
+  switch (p.name) {
+    case "moss":
+      water();
+      break;
+  }
+  return 0;
+}
+`, NewExtractFunction(), `{"function": "soak", "case": "moss", "name": "moss"}`, plants + `
+export function soak(p: Plant): number {
+  switch (p.name) {
+    case "moss":
+      moss();
+      break;
+  }
+  return 0;
+}
+
+function moss() {
+  water();
+}
+`, ""},
+		{"no such case", plants + `
+export function soak(p: Plant): number {
+  switch (p.name) {
+    case "moss":
+      return 1;
+  }
+  return 0;
+}
+`, NewExtractFunction(), `{"function": "soak", "case": "fern", "name": "f"}`, "", "soak has no case fern"},
 		{"break out", plants + `
 export function first(xs: number[]): number {
   for (const x of xs) {

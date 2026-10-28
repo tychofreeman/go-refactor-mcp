@@ -578,7 +578,7 @@ Go. Steps 1 and 2 change shared code and come before any TypeScript.
      of what may be undefined, bare and valued returns mixed, a jump
      out, `yield`, `arguments`, a type parameter or local type, mixing
      declared and assigned results, declarations at the module's top
-     level. Go's `function`/`case` address is refused for now.
+     level. Go's `function`/`case` address takes a case's body (README item 41.8).
    - `inline_function` inlines functions, consts bound to one, and
      static or private methods (`this` becomes the receiver): a body
      that is one expression anywhere, statements where the call is a
@@ -591,7 +591,7 @@ Go. Steps 1 and 2 change shared code and come before any TypeScript.
      Refused: overridable methods, async and generators, generics, rest
      or destructured parameters, overloads, early returns, `super`,
      recursion, names the body sees otherwise at the call.
-   Left for later: extract_function on a switch case, calls of
+   Left for later: calls of
    inline_function in other files (they are inlined, but all_calls
    takes only the file's), and declaring a generic function.
 9. **Move:** move_declaration, move_file, delete_file.

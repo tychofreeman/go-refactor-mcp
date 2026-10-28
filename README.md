@@ -2123,7 +2123,13 @@ hand or a tool got in the way.
        refused: inlining an await changes when the rest runs. Go's
        inline_function still refuses an early return.
     8. extract_function addressed by `function` and `case` (a switch
-       case), as Go's.
+       case), as Go's. *Done*, for replace_statements too: the case's
+       value as written (`"fern"`, `Kind.Fern`) or `default`; a last
+       `break` stays in the switch. Lines that end with a return now
+       keep their returns wherever they are (the call becomes
+       `return f(...)`), as a case's body that returns needs; before,
+       only lines that ended the function's body did. Go's copy of the
+       code after the switch for a value with no case is not done.
     9. The plan's smaller leftovers: all_calls across files, declaring a
        generic function in extract_function, a moved declaration the
        destination imports under an alias, deleting an old file left

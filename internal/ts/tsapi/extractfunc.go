@@ -208,7 +208,9 @@ func (p *Project) ExtractFunction(ctx context.Context, path string, first, last 
 		}
 	}
 	fn := ast.GetContainingFunction(stmts[0])
-	endsBody := fn != nil && owner == fn.Body() && owner.Statements()[len(owner.Statements())-1] == stmts[len(stmts)-1]
+	// Lines that end the function's body, or that end with a return, may
+	// keep their returns: the call becomes return f(...).
+	endsBody := fn != nil && owner == fn.Body() && owner.Statements()[len(owner.Statements())-1] == stmts[len(stmts)-1] || ast.IsReturnStatement(stmts[len(stmts)-1])
 	// Lines that return before the function's end come back as a value
 	// the call returns unless it is undefined (each return has one that
 	// cannot be), or as whether they returned (each return is bare).
@@ -329,7 +331,8 @@ func (p *Project) ExtractFunction(ctx context.Context, path string, first, last 
 			params = append(params, v.first.Text()+": "+c.TypeToString(t))
 			args = append(args, v.first.Text())
 		}
-		if v.usedOutside != "" && (v.declared || v.assigned) {
+		// After lines that end with a return, nothing of theirs is read.
+		if v.usedOutside != "" && (v.declared || v.assigned) && !ast.IsReturnStatement(stmts[len(stmts)-1]) {
 			if v.declared {
 				if !slices.ContainsFunc(stmts, func(s *ast.Node) bool { return s == d.Parent.Parent || s == d }) && !(ast.IsVariableDeclaration(d) && d.Parent.Flags&ast.NodeFlagsBlockScoped == 0) {
 					return nil, fmt.Sprintf("%s is declared inside a block of the lines (%s) and used after them (%s)", v.first.Text(), l.where(d), v.usedOutside)

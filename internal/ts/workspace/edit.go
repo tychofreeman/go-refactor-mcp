@@ -88,3 +88,13 @@ func (w *Workspace) ReplaceExpression(path string, line int, expr string, column
 	}
 	return fe, len(es), refusal
 }
+
+// CaseLines returns the lines of the body of the case value of a switch in
+// function, in the file at path.
+func (w *Workspace) CaseLines(path, function, value string, withBreak bool) (first, last int, refusal string) {
+	p := w.project(path)
+	if p == nil {
+		return 0, 0, w.none(path)
+	}
+	return p.CaseLines(path, function, value, withBreak)
+}
