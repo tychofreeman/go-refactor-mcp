@@ -532,6 +532,9 @@ results are in `docs/cost-history.md`.
 
 ## A/B findings to remember
 
+- `examples/CLAUDE.md` is the instruction set that did best, for users
+  to copy (2026-10-28, the user asked): the user's moves cut to what
+  measurably helped. When a run finds better instructions, update it.
 - Without a CLAUDE.md asking for it, a fresh model never used gorefactor.
   With one, it edits through it, but for additive features finds "nothing
   to refactor first"; tasks need the design in the way to see refactoring.

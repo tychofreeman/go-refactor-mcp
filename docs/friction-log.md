@@ -3310,6 +3310,15 @@ statements, the summary named per call after a test caught a cached
 call site, the test and its expected lines, the docs) with replace_text
 and create_file through the CLI. This entry appended with a heredoc.
 
+## 2026-10-28: CLAUDE.md's known gaps
+
+The list had kept three gaps' lines after they were filled, each
+rewritten to say what now works (an unused field, exported code, moving
+and deleting files), so it read as gaps it no longer had. It now names
+the two left: restoring a file from an earlier commit, and replacing a
+whole file, which create_file refuses (glisp #69 took three steps for
+it). With replace_text; nothing by hand.
+
 ## 2026-10-28: TypeScript's simplify refactorings (step 8)
 
 The four new files written in the scratchpad (with Python fixing two
