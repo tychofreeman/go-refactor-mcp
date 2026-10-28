@@ -3252,3 +3252,12 @@ with move_declaration: the engine called what was to move, so moving it
 first would have made the engine import Go's create_from_usage, a
 cycle. A test run failed on a full disk (the build cache again); `go
 clean -cache`. This entry appended with a heredoc.
+
+## 2026-10-27: TypeScript's add, remove and move parameter
+
+The new files with create_file, the registration and the server test
+with replace_text, in one batch checked at its end; the
+noUnusedParameters refusal and its test in a second. One test case
+fixed in the scratchpad with Python before the file was created. Two
+smoke tests on Hono written with heredocs and deleted, not committed.
+This entry appended with a heredoc.
