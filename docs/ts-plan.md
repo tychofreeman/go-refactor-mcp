@@ -666,6 +666,15 @@ Go. Steps 1 and 2 change shared code and come before any TypeScript.
     or five (warehouse, notify, billing) with tests, and the CLAUDE.md
     variants. First A/B: mcp vs manual on the features run. Then a
     mixed task (a Go handler and its TypeScript client).
+    The first part is in: the five notify derivations
+    (`eval-tasks/ts-derivations.json`, the module in
+    `testdata/ts-notify`, checked by `tsc -p .` and `node --test`),
+    the arms' instructions (`eval-tasks/claude-md-ts`), and the first
+    run, mcp vs manual (`docs/cost-history.md` section 20): every run
+    passed, the mcp arm at 1.35 times manual's cost, its waste mostly
+    two gaps Go does not have (no stubs for a test written first,
+    inline_function refusing an early return). Left: those two gaps,
+    warehouse and billing, and the mixed task.
     Before it, every tool was run on Hono (`docs/ts-hono-pass.md`): the
     four style bugs it found are fixed, and so are its three gaps
     (extract_function with an early return, invert_if of a returning

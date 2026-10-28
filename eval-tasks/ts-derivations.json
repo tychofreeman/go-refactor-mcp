@@ -1,0 +1,12 @@
+[
+  {"name": "ts-notify-shared-record", "dir": "testdata/ts-notify", "tests": "testdata/ts-notify-shared-record", "check": "tsc -p . && node --test",
+   "prompt": "Email.send and SMS.send in src/notify.ts do nearly the same thing. Make both call one exported module-level function record(sent: string[], channel: string, to: string, text: string): void, which logs \"<channel> to <to>\" with log (src/log.ts) and pushes \"<to>: <text>\" onto sent. What they send and log must not change."},
+  {"name": "ts-notify-optout", "dir": "testdata/ts-notify", "tests": "testdata/ts-notify-optout", "check": "tsc -p . && node --test",
+   "prompt": "Users can opt out of channels. Add an optional field optOut?: Record<string, boolean> to the User interface in src/notify.ts, keyed by a channel's name (what Notifier.name returns). broadcast does not send on a channel the user opted out of, and that user's summary line lists only the channels it sent on."},
+  {"name": "ts-notify-contacts", "dir": "testdata/ts-notify", "tests": "testdata/ts-notify-contacts", "check": "tsc -p . && node --test",
+   "prompt": "Replace the fields email and phone of the User interface in src/notify.ts with one field contacts: Record<string, string>, keyed by channel name: \"email\" for the email address and \"sms\" for the phone number. What is sent and logged must not change otherwise."},
+  {"name": "ts-notify-fit", "dir": "testdata/ts-notify", "tests": "testdata/ts-notify-fit", "check": "tsc -p . && node --test",
+   "prompt": "truncate in src/notify.ts is used only by SMS. Replace it with a public method fit(text: string): string of SMS that cuts text to the 20 characters a text message holds, and remove truncate. What is sent must not change."},
+  {"name": "ts-notify-batch", "dir": "testdata/ts-notify", "tests": "testdata/ts-notify-batch", "check": "tsc -p . && node --test",
+   "prompt": "broadcast should take its users and message as one value. Add an exported interface Batch { users: User[]; message: Message } to src/notify.ts and change broadcast to broadcast(c: Config, b: Batch): string[], updating every caller. What it sends and returns must not change."}
+]

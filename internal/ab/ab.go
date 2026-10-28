@@ -55,21 +55,25 @@ var Arms = []string{"mcp", "manual"}
 // code only by name (refactor-mcp -read-by-name, and no other reads).
 var ExtraArms = []string{"hybrid", "names"}
 
+// checking is the Bash every arm that may not write may run to check
+// TypeScript: the type check and the tests.
+var checking = []string{"Bash(tsc:*)", "Bash(npx tsc:*)", "Bash(node --test:*)", "Bash(npm test:*)"}
+
 // lookingBash is the Bash the mcp arm may run: building, testing and
 // looking, but nothing that edits a file, so its edits go through the MCP.
-var lookingBash = []string{
+var lookingBash = append([]string{
 	"Bash(go build:*)", "Bash(go test:*)", "Bash(go vet:*)", "Bash(gofmt -l:*)",
 	"Bash(git diff:*)", "Bash(git status:*)", "Bash(ls:*)", "Bash(grep:*)",
 	"Bash(cd:*)", "Bash(cat:*)", "Bash(head:*)", "Bash(tail:*)", "Bash(wc:*)",
-}
+}, checking...)
 
 // namesBash is the Bash the names arm may run: the mcp arm's, without
 // what shows a file's lines (cat, head, tail, grep), so that it reads Go
 // code only through inspect, by name.
-var namesBash = []string{
+var namesBash = append([]string{
 	"Bash(go build:*)", "Bash(go test:*)", "Bash(go vet:*)", "Bash(gofmt -l:*)",
 	"Bash(git diff:*)", "Bash(git status:*)", "Bash(ls:*)", "Bash(cd:*)", "Bash(wc:*)",
-}
+}, checking...)
 
 // toolSet is what an arm gives the model.
 type toolSet struct {

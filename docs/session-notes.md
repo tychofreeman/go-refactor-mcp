@@ -541,6 +541,15 @@ results are in `docs/cost-history.md`.
 
 ## A/B findings to remember
 
+- TypeScript tasks (2026-10-28, cost-history 20): a seeded module is a
+  tsconfig with `"types": []` (no node_modules), `.ts` imports
+  (`allowImportingTsExtensions`, `erasableSyntaxOnly`) so Node 22 runs
+  it from source, and tests that throw (`src/testing.ts`'s `equal`),
+  run by `node --test`; logging goes to a module's `logged` array,
+  since `console` needs types the config leaves out. The task's check
+  is `tsc -p . && node --test`; quality columns stay empty (Go only).
+  Validate each hidden test: it fails on the module and passes after
+  a reference change (a scratch script did this; not kept).
 - `examples/CLAUDE.md` is the instruction set that did best, for users
   to copy (2026-10-28, the user asked): the user's moves cut to what
   measurably helped. When a run finds better instructions, update it.

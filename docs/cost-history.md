@@ -1499,6 +1499,44 @@ failure ran out of stages with every batch applied. By hand it is
 still $0.186 (4/4), 11% below, with half again the lines (69 against
 43).
 
+## 20. TypeScript: the notify derivations (Oct 28)
+
+The first A/B run on TypeScript (`docs/ts-plan.md` step 11): the five
+derivation tasks of section 8 on a translation of the notify module
+(`eval-tasks/ts-derivations.json`, `testdata/ts-notify`: hidden tests
+run by `node --test` after `tsc -p .`), the mcp and manual arms with
+`eval-tasks/claude-md-ts` (the features run's instructions, for
+TypeScript), Sonnet, 2 runs each (`eval-runs/ts-notify-1`, $2.79).
+Every run passed. The quality columns are empty: they measure Go only.
+
+| task | mcp | manual |
+|---|---|---|
+| shared record | $0.19 · 8.5 turns | $0.17 · 11.5 |
+| opt-out | $0.17 · 13.5 | $0.13 · 12.5 |
+| Contacts map | $0.13 · 8.0 | $0.11 · 9.5 |
+| fit method | $0.18 · 19.0 | $0.09 · 6.0 |
+| Batch parameter | $0.13 · 8.0 | $0.10 · 8.0 |
+| all, per run | $0.16 · 424K input · 8.7 requests | $0.12 · 281K · 6.4 |
+
+The mcp arm cost 35% more, as on Go's small modules (about 1.5x), most
+of it in fit: 13 turns of the mcp arm's 87 requests had a refused
+gorefactor call, against one denied Edit for manual. By cause:
+
+- No stubs for a test written first (5): a test calling `s.fit(...)`,
+  or passing users with `optOut`, was refused because nothing declares
+  the member or field; Go declares stubs for both (CLAUDE.md, "Test
+  first through the tools"). The models then wrote the code first.
+- inline_function refused `truncate` for its early return (2), the
+  derivation fit wanted (inline it into `fit`); Go's inlines it.
+- Guessed arguments (4): `line` as a string, `into` on add_declaration,
+  `old` on replace_expression, `function` on inline_function.
+- A range cutting a statement (2), each refusal naming the range to
+  use.
+
+Reading was through inspect and Bash alike (inspect 18K tokens of
+results, Bash 32K, Grep 13K). The first two causes are what to fix
+before the next run.
+
 ## What made the difference
 
 - **Smaller results** (#75, rename locations): the largest single win when

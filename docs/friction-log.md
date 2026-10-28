@@ -3367,3 +3367,12 @@ The three fixes and their tests with replace_text through the CLI, in
 two batches written by Python (old and new texts in files); a first
 batch was refused whole on an anchor that did not match, and resent.
 The docs with replace_text. This entry appended with a heredoc.
+
+## 2026-10-28: TypeScript eval tasks (step 11)
+
+The module, hidden tests, task file and instructions written and
+checked in the scratchpad (`tsc`, `node --test`, a Python script that
+applied a reference change to each task), then created with
+create_file in one batch; ab.go's allowlists and move.go's `.ts`
+extensions with replace_text, its test too. The docs with replace_text.
+This entry appended with a heredoc.
