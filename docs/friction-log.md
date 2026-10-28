@@ -3234,3 +3234,10 @@ One batch refused before applying: `move_file` takes `file`, not `from`.
 This entry appended with `replace_text` anchored on the last entry's end,
 not a heredoc. The merge conflict with the loader's entry, appended at
 the same place, resolved by hand with Edit, both kept.
+
+## 2026-10-27: add_field for TypeScript, and tool aliases
+
+add_field for TypeScript and the add_property alias, with create_file
+and replace_text in two batches. Two fixes to a file in the scratchpad
+before it was created, with Python. Nothing by hand in the repo. This
+entry appended with a heredoc.

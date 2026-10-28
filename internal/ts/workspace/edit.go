@@ -43,6 +43,16 @@ func (w *Workspace) Body(path string, blockStart, blockEnd int) (tsapi.Place, st
 	return p.Body(path, blockStart, blockEnd)
 }
 
+// MemberPlace returns where new members of the type called name go in the
+// file at path, and whether it is a class or an interface.
+func (w *Workspace) MemberPlace(path, name, after, before string) (tsapi.Place, string, string) {
+	p := w.project(path)
+	if p == nil {
+		return tsapi.Place{}, "", w.none(path)
+	}
+	return p.MemberPlace(path, name, after, before)
+}
+
 // Insertion returns where statements go before, after or into what is on
 // line of the file at path.
 func (w *Workspace) Insertion(path string, line int, where string) (tsapi.Place, string) {
