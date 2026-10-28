@@ -396,11 +396,11 @@ func (p *Project) ExtractVariable(ctx context.Context, path string, line int, ex
 	}
 	var edits []Edit
 	indent := l.indent(l.line(l.pos(stmt)))
-	decl := "const " + name + " = " + l.source(e) + ";"
+	decl := "const " + name + " = " + l.source(e)
 	if at := l.start(l.line(l.pos(stmt))); strings.TrimSpace(l.text[at:l.pos(stmt)]) == "" {
-		edits = append(edits, Edit{File: l.f.FileName(), Start: at, End: at, NewText: indent + decl + "\n"})
+		edits = append(edits, Edit{File: l.f.FileName(), Start: at, End: at, NewText: indent + decl + l.semi() + "\n"})
 	} else {
-		edits = append(edits, Edit{File: l.f.FileName(), Start: l.pos(stmt), End: l.pos(stmt), NewText: decl + " "})
+		edits = append(edits, Edit{File: l.f.FileName(), Start: l.pos(stmt), End: l.pos(stmt), NewText: decl + "; "})
 	}
 	for _, t := range targets {
 		text := name
@@ -478,7 +478,7 @@ func (p *Project) InlineVariable(ctx context.Context, path string, line int, fun
 		var found []*ast.Symbol
 		identifiers(l.f.AsNode(), func(id *ast.Node) {
 			start := l.pos(id)
-			if id.Text() == name && l.line(start) == line && (column == 0 || start-l.start(line)+1 == column) {
+			if id.Text() == name && !propertyName(id) && l.line(start) == line && (column == 0 || start-l.start(line)+1 == column) {
 				if s := symbolOf(c, id); s != nil && !slices.Contains(found, s) {
 					found = append(found, s)
 				}

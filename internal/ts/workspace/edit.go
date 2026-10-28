@@ -53,6 +53,15 @@ func (w *Workspace) MemberPlace(path, name, after, before string) (tsapi.Place, 
 	return p.MemberPlace(path, name, after, before)
 }
 
+// Semi is what ends a statement or member in the style of the file at
+// path: ";" or nothing.
+func (w *Workspace) Semi(path string) string {
+	if p := w.project(path); p != nil {
+		return p.Semi(path)
+	}
+	return ";"
+}
+
 // Insertion returns where statements go before, after or into what is on
 // line of the file at path.
 func (w *Workspace) Insertion(path string, line int, where string) (tsapi.Place, string) {

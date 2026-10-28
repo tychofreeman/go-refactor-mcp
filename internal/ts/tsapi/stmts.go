@@ -76,6 +76,9 @@ func (l *lined) unit() string {
 		if strings.HasPrefix(ind, "\t") {
 			return "\t"
 		}
+		if line := strings.TrimSpace(l.text[l.start(n):l.end(n)]); strings.HasPrefix(line, "*") {
+			continue // a block comment's continuation
+		}
 		if len(ind) > 0 && len(ind) < len(l.text[l.start(n):l.end(n)]) && (least == 0 || len(ind) < least) {
 			least = len(ind)
 		}

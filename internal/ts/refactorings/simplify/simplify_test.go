@@ -740,3 +740,40 @@ export const d = new Bed().depth();
 `, NewInlineFunction(), `{"line": 20, "name": "depth"}`, "", "a subclass could override"},
 	})
 }
+
+// A file in another style: no semicolons, and a doc comment whose lines
+// start with one space.
+func TestFileStyle(t *testing.T) {
+	src := `/**
+ * Sizes.
+ */
+export function size(n: number): string {
+  const doubled = n * 2
+  return doubled > 9 ? 'big' : 'small'
+}
+`
+	check(t, []change{
+		{"extract_variable", src, NewExtractVariable(), `{"line": 6, "expression": "doubled > 9", "name": "big"}`, `/**
+ * Sizes.
+ */
+export function size(n: number): string {
+  const doubled = n * 2
+  const big = doubled > 9
+  return big ? 'big' : 'small'
+}
+`, ""},
+		{"extract_function", src, NewExtractFunction(), `{"start_line": 5, "end_line": 5, "name": "double"}`, `/**
+ * Sizes.
+ */
+export function size(n: number): string {
+  const doubled = double(n)
+  return doubled > 9 ? 'big' : 'small'
+}
+
+function double(n: number) {
+  const doubled = n * 2
+  return doubled
+}
+`, ""},
+	})
+}

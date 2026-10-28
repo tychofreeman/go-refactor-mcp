@@ -659,6 +659,11 @@ Go. Steps 1 and 2 change shared code and come before any TypeScript.
     or five (warehouse, notify, billing) with tests, and the CLAUDE.md
     variants. First A/B: mcp vs manual on the features run. Then a
     mixed task (a Go handler and its TypeScript client).
+    Before it, every tool was run on Hono (`docs/ts-hono-pass.md`): the
+    four style bugs it found are fixed; its gaps (extract_function with
+    an early return, invert_if of a returning if before the last
+    statements, inline_function choosing another name for a parameter
+    whose name is taken) are for later.
 
 ## 7. Decisions open
 

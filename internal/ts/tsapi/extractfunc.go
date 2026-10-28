@@ -367,22 +367,22 @@ func (p *Project) ExtractFunction(ctx context.Context, path string, first, last 
 	}
 	switch {
 	case len(b.returns) > 0:
-		call = "return " + call + ";"
+		call = "return " + call + l.semi()
 	case len(outs) == 0:
-		call += ";"
+		call += l.semi()
 	case len(outs) == 1:
-		result = "return " + names[0] + ";"
+		result = "return " + names[0] + l.semi()
 		if declaredOuts == 1 {
-			call = keyword + " " + names[0] + " = " + call + ";"
+			call = keyword + " " + names[0] + " = " + call + l.semi()
 		} else {
-			call = names[0] + " = " + call + ";"
+			call = names[0] + " = " + call + l.semi()
 		}
 	default:
-		result = "return { " + strings.Join(names, ", ") + " };"
+		result = "return { " + strings.Join(names, ", ") + " }" + l.semi()
 		if declaredOuts > 0 {
-			call = keyword + " { " + strings.Join(names, ", ") + " } = " + call + ";"
+			call = keyword + " { " + strings.Join(names, ", ") + " } = " + call + l.semi()
 		} else {
-			call = "({ " + strings.Join(names, ", ") + " } = " + call + ");"
+			call = "({ " + strings.Join(names, ", ") + " } = " + call + ")" + l.semi()
 		}
 	}
 	lineStart, lineEnd := l.start(first), l.start(last+1)

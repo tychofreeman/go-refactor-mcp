@@ -113,17 +113,77 @@ func (p *Project) AddImports(file string, imports []Import) ([]Edit, string) {
 	return edits, ""
 }
 
-// semicolons reports whether the file ends statements with semicolons, as
-// its first import does, or else its first statement not ending in a
-// brace.
-func (l *lined) semicolons() bool {
-	for _, s := range l.f.Statements.Nodes {
-		src := l.text[l.pos(s):s.End()]
-		if ast.IsImportDeclaration(s) || !strings.HasSuffix(src, "}") {
-			return strings.HasSuffix(src, ";")
-		}
+// Semi is what ends a statement or member in the style of the file at
+// path: ";" or nothing.
+func (p *Project) Semi(path string) string {
+	l, why := p.lined(path)
+	if why != "" {
+		return ";"
 	}
-	return true
+	return l.semi()
+}
+
+// semi is what ends a statement in the file's style: ";" or nothing.
+func (l *lined) semi() string {
+	if l.semicolons() {
+		return ";"
+	}
+	return ""
+}
+
+// quote is the file's quote for strings: its imports', else its first
+// string's, else a double quote.
+func (l *lined) quote() string {
+	q := ""
+	moduleSpecifiers(l.f, func(spec, _ *ast.Node) {
+		if q == "" {
+			q = l.text[l.pos(spec):][:1]
+		}
+	})
+	if q != "" {
+		return q
+	}
+	var visit func(n *ast.Node) bool
+	visit = func(n *ast.Node) bool {
+		if q == "" && ast.IsStringLiteral(n) {
+			q = l.text[l.pos(n):][:1]
+		}
+		if q == "" {
+			n.ForEachChild(visit)
+		}
+		return q != ""
+	}
+	visit(l.f.AsNode())
+	if q == `'` {
+		return q
+	}
+	return `"`
+}
+
+// semicolons reports whether the file ends statements with semicolons, as
+// its first import does, or else its first statement, at any depth, not
+// ending in a brace; true when it has none.
+func (l *lined) semicolons() bool {
+	found, semi := false, true
+	var visit func(n *ast.Node) bool
+	visit = func(n *ast.Node) bool {
+		if found {
+			return true
+		}
+		if n.CanHaveStatements() {
+			for _, s := range n.Statements() {
+				src := l.text[l.pos(s):s.End()]
+				if ast.IsImportDeclaration(s) || ast.IsStatement(s) && !strings.HasSuffix(src, "}") {
+					found, semi = true, strings.HasSuffix(src, ";")
+					return true
+				}
+			}
+		}
+		n.ForEachChild(visit)
+		return found
+	}
+	visit(l.f.AsNode())
+	return semi
 }
 
 // relPath is the path of target relative to dir, both absolute and
