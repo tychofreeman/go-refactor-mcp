@@ -3289,3 +3289,12 @@ implementation and its overloads, the overload edits in the four tools,
 the tests and the docs. One batch refused on an anchor whose
 indentation I had guessed; a shorter, unique anchor fixed it. This entry
 appended with a heredoc.
+
+## 2026-10-28: TypeScript's effects analysis
+
+The analysis written in the scratchpad and created with create_file;
+the four uses in the signature tools, the tests and the docs with
+replace_text through the CLI. One batch refused on a test that assigned
+a move to a variable typed by the remove; the batch's Python fixed. A
+first create_file used `path` for `file` and was refused. This entry
+appended with a heredoc.

@@ -455,9 +455,8 @@ Go. Steps 1 and 2 change shared code and come before any TypeScript.
    is not a call (a value: `xs.map(f)` would pass an index), a spread
    argument, overloads, constructors, a body that reads the removed
    parameter or `arguments`, a value whose names do not mean the same at
-   every call (`ResolveName` at each call), and, until step 7's effects
-   analysis, a dropped or reordered argument that is not plainly free of
-   effects (a name, a literal, `this`, a property or function). Where
+   every call (`ResolveName` at each call), and a dropped or reordered argument
+   with effects (judged by step 7's analysis). Where
    `noUnusedParameters` is on, a new parameter must start with `_` (the
    refusal says so; Hono has it on). On Hono the reference search takes
    about 45 ms; the step's time is the engine's diagnostics (8.7 s the
@@ -496,6 +495,27 @@ Go. Steps 1 and 2 change shared code and come before any TypeScript.
    overloads' names are skipped by the call search.
 7. **Effects analysis** (section 4) as one `analysis` package with a
    `Move` question, built before the refactorings that need it.
+   First part *done*: `tsapi.Effects` (in `tsapi`, not a package of its
+   own, since it asks the checker) says what evaluating an expression
+   may do: write (a call or assignment not known, a getter, a spread,
+   `valueOf` through an operator on what is not a number, bigint,
+   string, boolean or enum), throw (a property or method of what may be
+   null or undefined, a non-null assertion included; `in` and
+   `instanceof`), read (a `let`, `var`, parameter or property) and make
+   a new value. Known: arithmetic and templates on those types, `Math`
+   but `random`, string and array methods that change nothing, and
+   `map`, `filter` and the like with an arrow callback judged by its
+   body. The signature tools ask it in place of the syntactic check:
+   remove may drop an argument that neither writes nor throws, move may
+   reorder arguments of which at most one writes or throws and none
+   reads while another writes, and introduce_parameter may move an
+   expression that may be dropped and duplicate an argument that may
+   be evaluated twice. Refusals name the part: "removing the argument
+   next() of the call at use.ts:4 would drop the call next() at
+   use.ts:4". Decision 4 taken strict for now. Left: the module's own
+   functions judged by their bodies (every call of one is unknown),
+   and the `Move` question with a path (past which statements, how many
+   times), which step 8's refactorings need.
 8. **Simplify:** extract / inline variable and function, invert_if,
    remove_else, move statements.
 9. **Move:** move_declaration, move_file, delete_file.
@@ -516,7 +536,10 @@ Go. Steps 1 and 2 change shared code and come before any TypeScript.
    and project settings, not Prettier; or run the project's Prettier on
    changed ranges when it is installed.
 4. **Nullish dereference and throwing past a call:** take Go's rule
-   (allow moving it past calls that return) or start strict.
+   (allow moving it past calls that return) or start strict. Started
+   strict (step 7): what may throw is not dropped, duplicated or
+   reordered with another that writes or throws. Revisit with refusals
+   from real repos.
 5. **Strictness:** refuse refactorings in files compiled without
    `strict`, or apply them with a note (proposed: note).
 

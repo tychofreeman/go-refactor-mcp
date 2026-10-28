@@ -154,8 +154,8 @@ func (p *Project) ChangeSignature(ctx context.Context, path, name string, ch Sig
 			if i >= m {
 				continue
 			}
-			if !simple(args.Nodes[i]) {
-				return nil, fmt.Sprintf("the argument %s of the call at %s could have effects, which removing it would drop", cl.source(args.Nodes[i]), cl.where(call))
+			if e := (effects{c, cl}).Of(args.Nodes[i]); !e.CanDrop() {
+				return nil, fmt.Sprintf("removing the argument %s of the call at %s would drop %s", cl.source(args.Nodes[i]), cl.where(call), e.Why)
 			}
 			edits = append(edits, cl.removeAt(args, i))
 		default:
@@ -163,10 +163,12 @@ func (p *Project) ChangeSignature(ctx context.Context, path, name string, ch Sig
 			if m <= lo {
 				continue
 			}
+			var all []Effects
 			for _, a := range args.Nodes[lo:min(m, hi+1)] {
-				if !simple(a) {
-					return nil, fmt.Sprintf("the argument %s of the call at %s could have effects, so its order matters", cl.source(a), cl.where(call))
-				}
+				all = append(all, (effects{c, cl}).Of(a))
+			}
+			if why := canReorder(all); why != "" {
+				return nil, fmt.Sprintf("the move would reorder the arguments of the call at %s, and their order matters: %s", cl.where(call), why)
 			}
 			if m <= hi {
 				return nil, fmt.Sprintf("the call at %s passes %d of the arguments the move reorders; pass them all first", cl.where(call), m)

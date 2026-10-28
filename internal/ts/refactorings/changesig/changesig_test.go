@@ -131,9 +131,40 @@ func TestRemoveAndMoveParameter(t *testing.T) {
 	mustContain(t, dir, "src/water.ts", "function prune(bed: string): string")
 	mustContain(t, dir, "src/garden.ts", `prune("roses")`)
 
-	res = run(t, ws, NewMove(), `{"name": "water", "parameter": "liters", "before": "bed"}`)
-	if want := "the argument minutes * 2 of the call at water.ts:11 could have effects"; res.Applied || !strings.Contains(res.Refused, want) {
-		t.Errorf("want a refusal with %q, got %s", want, res)
+	// minutes * 2 is arithmetic on numbers, which may move.
+	if res := run(t, ws, NewMove(), `{"name": "water", "parameter": "liters", "before": "bed"}`); !res.Applied {
+		t.Fatalf("%s", res)
+	}
+	mustContain(t, dir, "src/water.ts", "return water(minutes * 2, bed);")
+}
+
+// TestEffects checks what removing and moving arguments may drop or
+// reorder, judged from their types.
+func TestEffects(t *testing.T) {
+	head := "import { water, prune } from \"./water\";\nlet n = 0;\nfunction next(): number { return n++; }\n"
+	for _, tc := range []struct{ name, use, tool, args, want string }{
+		{"pure", "export const a = prune(\"x\", Math.max(1, 2));\nexport const b = prune(\"y\", \"ab\".length + [1, 2].map((x) => x * 2).length);\n", "remove", `{"name": "prune", "parameter": "height"}`, ""},
+		{"call", "export const a = prune(\"x\", next());\n", "remove", `{"name": "prune", "parameter": "height"}`, "would drop the call next() at use.ts:4"},
+		{"nullable", "declare const p: { h: number } | undefined;\nexport const a = prune(\"x\", p!.h);\n", "remove", `{"name": "prune", "parameter": "height"}`, "p!.h, which reads a property of what may be null or undefined"},
+		{"getter", "const bed = { get h() { return n; } };\nexport const a = prune(\"x\", bed.h);\n", "remove", `{"name": "prune", "parameter": "height"}`, "the getter bed.h at use.ts:5"},
+		{"arithmetic", "export const a = water(`${n}`, n * 2);\n", "move", `{"name": "water", "parameter": "liters", "before": "bed"}`, ""},
+		{"constant", "export const a = water(\"x\", next());\n", "move", `{"name": "water", "parameter": "liters", "before": "bed"}`, ""},
+		{"order", "export const a = water(`${n}`, next());\n", "move", `{"name": "water", "parameter": "liters", "before": "bed"}`, "their order matters: the call next() at use.ts:4"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ws, _ := load(t, map[string]string{"src/use.ts": head + tc.use})
+			var r refactor.RefactoringOf[*workspace.Workspace] = NewRemove()
+			if tc.tool == "move" {
+				r = NewMove()
+			}
+			res := run(t, ws, r, tc.args)
+			switch {
+			case tc.want == "" && !res.Applied:
+				t.Errorf("want applied, got %s", res)
+			case tc.want != "" && (res.Applied || !strings.Contains(res.Refused, tc.want)):
+				t.Errorf("want a refusal with %q, got %s", tc.want, res)
+			}
+		})
 	}
 }
 
@@ -276,6 +307,7 @@ func TestIntroduceParameter(t *testing.T) {
 		`{"function": "grow", "expression": "k", "parameter": "h"}`:           "reads k, a local of grow",
 		`{"function": "measure", "expression": "p.height", "parameter": "h"}`: "reads state the body may change before it reads it (at label.ts:20)",
 		`{"function": "label", "expression": "p.weight", "parameter": "w"}`:   "has no expression p.weight",
+		`{"function": "measure", "expression": "log(p)", "parameter": "l"}`:   "every call would evaluate log(p) instead of the body, and it may not be moved: the call log(p) at label.ts:20",
 	} {
 		if res := intro(args); res.Applied || !strings.Contains(res.Refused, want) {
 			t.Errorf("%s: want a refusal with %q, got %s", args, want, res)
