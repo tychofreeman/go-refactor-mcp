@@ -3261,3 +3261,14 @@ noUnusedParameters refusal and its test in a second. One test case
 fixed in the scratchpad with Python before the file was created. Two
 smoke tests on Hono written with heredocs and deleted, not committed.
 This entry appended with a heredoc.
+
+## 2026-10-27: TypeScript constructors, introduce_parameter and convert_params_to_object
+
+All through the CLI: constructors and the shared `target` with
+replace_text (the call search moved out of ChangeSignature as text; one
+retry where a moved `return` kept its old form), the new files with
+create_file and the tools appended to the existing ones with
+replace_text. Two names fixed in a refused batch's JSON with Python
+(`IsParameterDeclaration`, a unary's `Operand`). A test's map line
+missed once: gofmt had re-aligned it. This entry appended with a
+heredoc.

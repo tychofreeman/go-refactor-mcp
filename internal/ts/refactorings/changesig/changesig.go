@@ -15,7 +15,7 @@ import (
 
 const (
 	fileProp = `"file": {"type": "string", "description": "The file that declares the function, relative to the root."}`
-	nameProp = `"name": {"type": "string", "description": "The function's name, or Class.method for a method."}`
+	nameProp = `"name": {"type": "string", "description": "The function's name, Class.method for a method, or Class.constructor."}`
 )
 
 // plan makes ch to the function a names, with the summary given.
@@ -45,8 +45,8 @@ func (*AddParameter) Name() string { return "add_parameter" }
 
 func (*AddParameter) Description() string {
 	return `Add a parameter to a function or method, and pass the same value for it at every call in the solution: with parameter unit, type string and value "L", function water(bed: string, liters: number) becomes water(bed: string, liters: number, unit: string), and water("roses", 2) becomes water("roses", 2, "L"). The body does not use it yet, so behavior is unchanged; add it, then change the body.
-Identify the function by file and name (Class.method for a method). value must mean the same at every call (a name every call sees alike); before puts the parameter ahead of that one (default: last, before a rest parameter). A call passing fewer arguments gets undefined for those it skips.
-Refuses, saying why: a function used as a value (xs.map(f) passes an index), a call that spreads its arguments, overloads, a constructor, a name the body already reads, a value a call cannot see.`
+Identify the function by file and name (Class.method for a method; Class.constructor, whose calls are the news of the class and the super calls of classes extending it). value must mean the same at every call (a name every call sees alike); before puts the parameter ahead of that one (default: last, before a rest parameter). A call passing fewer arguments gets undefined for those it skips.
+Refuses, saying why: a function used as a value (xs.map(f) passes an index), a call that spreads its arguments, overloads, a class extending one without a constructor of its own, a name the body already reads, a value a call cannot see.`
 }
 
 func (*AddParameter) InputSchema() json.RawMessage {
@@ -86,7 +86,7 @@ func (*RemoveParameter) Name() string { return "remove_parameter" }
 func (*RemoveParameter) Description() string {
 	return `Remove a parameter the body does not read, and its argument at every call in the solution: removing height, function prune(bed: string, height: number) becomes prune(bed: string), and prune("roses", 3) becomes prune("roses"). Use it last when taking a feature out: first change the body so it no longer reads the parameter.
 Identify the function by file and name (Class.method for a method), and give the parameter. A dropped argument must plainly have no effects: a name, a literal, this, a property of one, or a function.
-Refuses, saying why: a body that reads the parameter or arguments, a function used as a value, a call that spreads its arguments, an argument that could have effects.`
+Refuses, saying why: a body that reads the parameter or arguments, a parameter property (constructor(public soil: string)), a function used as a value, a call that spreads its arguments, an argument that could have effects.`
 }
 
 func (*RemoveParameter) InputSchema() json.RawMessage {
@@ -148,4 +148,103 @@ func (*MoveParameter) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refac
 		where = "before " + a.Before
 	}
 	return plan(ws, a.File, a.Name, tsapi.SignatureChange{Move: a.Parameter, Before: a.Before}, fmt.Sprintf("moved parameter %s of %s to %s", a.Parameter, a.Name, where))
+}
+
+// IntroduceParameter replaces an expression in a body with a new
+// parameter, which every call passes the expression for.
+type IntroduceParameter struct{}
+
+// NewIntroduce returns introduce_parameter.
+func NewIntroduce() *IntroduceParameter { return &IntroduceParameter{} }
+
+func (*IntroduceParameter) Name() string { return "introduce_parameter" }
+
+func (*IntroduceParameter) Description() string {
+	return `Replace an expression in a function's body with a new parameter, and pass the expression at every call, written in the call's own terms: introducing p.height as height, function label(p: Plant): string { return p.name + p.height; } becomes label(p: Plant, height: number) with the body p.name + height, and label(rose) becomes label(rose, rose.height). Then remove_parameter p once the body no longer reads it. this works too in a method: this.depth in Bed.describe becomes bed.depth at bed.describe(rose).
+Identify the expression by file, function (name, Class.method or Class.constructor) and its source text; every occurrence in the body that means the same is replaced. The parameter goes last, before a rest parameter; its type is the expression's.
+The expression is then evaluated once, at the call, so it must have no effects and read nothing the body changes before it reads it. Refuses, saying why: a local of the function, a name a call sees otherwise, an argument that could have effects (it is evaluated twice), an expression in a loop or closure that reads changing state, a function used as a value.`
+}
+
+func (*IntroduceParameter) InputSchema() json.RawMessage {
+	return json.RawMessage(`{
+  "type": "object",
+  "properties": {
+    ` + fileProp + `,
+    "function":   {"type": "string", "description": "The function whose body has the expression: name, Class.method or Class.constructor."},
+    "expression": {"type": "string", "description": "Source text of the expression, e.g. \"p.height\"."},
+    "parameter":  {"type": "string", "description": "Name of the new parameter."}
+  },
+  "required": ["file", "function", "expression", "parameter"],
+  "additionalProperties": false
+}`)
+}
+
+func (*IntroduceParameter) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
+	var a struct{ File, Function, Expression, Parameter string }
+	if err := refactor.DecodeArgs(raw, &a); err != nil {
+		return nil, err
+	}
+	path := ws.Abs(a.File)
+	if _, err := os.Stat(path); err != nil {
+		return nil, refactor.Refusef("%s: no such file", a.File)
+	}
+	edits, why := ws.IntroduceParameter(path, a.Function, a.Expression, a.Parameter)
+	if why != "" {
+		return nil, refactor.Refusef("%s", why)
+	}
+	n := 0
+	for _, fe := range edits {
+		n += len(fe.Edits)
+	}
+	return &refactor.Plan{Summary: fmt.Sprintf("introduced parameter %s of %s for %s (%d edits in %d files)", a.Parameter, a.Function, a.Expression, n, len(edits)), Edits: edits}, nil
+}
+
+// ParamsToObject bundles a function's parameters into one object.
+type ParamsToObject struct{}
+
+// NewParamsToObject returns convert_params_to_object.
+func NewParamsToObject() *ParamsToObject { return &ParamsToObject{} }
+
+func (*ParamsToObject) Name() string { return "convert_params_to_object" }
+
+func (*ParamsToObject) Description() string {
+	return `Bundle a function's parameters into one object, destructured so that the body keeps its names, and pass an object literal at every call in the solution: function water(bed: string, liters = 2) becomes water({ bed, liters = 2 }: { bed: string; liters?: number }), and water("roses", 3) becomes water({ bed: "roses", liters: 3 }). With type_name, the object's type is an interface declared just before the function (WaterOptions). When every field is optional, the object defaults to {}.
+Identify the function by file and name (Class.method for a method, Class.constructor).
+Refuses, saying why: a body that reads arguments, a rest parameter, a parameter that is already destructured or is a parameter property, a function used as a value, a call that spreads its arguments.`
+}
+
+func (*ParamsToObject) InputSchema() json.RawMessage {
+	return json.RawMessage(`{
+  "type": "object",
+  "properties": {
+    ` + fileProp + `,
+    ` + nameProp + `,
+    "type_name": {"type": "string", "description": "Optional: declare the object's type as an interface of this name."}
+  },
+  "required": ["file", "name"],
+  "additionalProperties": false
+}`)
+}
+
+func (*ParamsToObject) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
+	var a struct {
+		File, Name string
+		TypeName   string `json:"type_name"`
+	}
+	if err := refactor.DecodeArgs(raw, &a); err != nil {
+		return nil, err
+	}
+	path := ws.Abs(a.File)
+	if _, err := os.Stat(path); err != nil {
+		return nil, refactor.Refusef("%s: no such file", a.File)
+	}
+	edits, why := ws.ParamsToObject(path, a.Name, a.TypeName)
+	if why != "" {
+		return nil, refactor.Refusef("%s", why)
+	}
+	n := 0
+	for _, fe := range edits {
+		n += len(fe.Edits)
+	}
+	return &refactor.Plan{Summary: fmt.Sprintf("bundled the parameters of %s into an object (%d edits in %d files)", a.Name, n, len(edits)), Edits: edits}, nil
 }

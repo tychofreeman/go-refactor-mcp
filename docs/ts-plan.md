@@ -462,8 +462,20 @@ Go. Steps 1 and 2 change shared code and come before any TypeScript.
    refusal says so; Hono has it on). On Hono the reference search takes
    about 45 ms; the step's time is the engine's diagnostics (8.7 s the
    first time on a clone without `node_modules`, 11k errors).
-   Left: `introduce_parameter`, `change_return_type`,
-   `convert_params_to_object`, constructors and overloads.
+   Second part *done*: constructors (`Class.constructor`: the news of
+   the class and the super calls of classes extending it; refused: a
+   subclass without a constructor of its own, the class used as a value,
+   `new C` without parentheses, removing a parameter property);
+   `introduce_parameter` (by function and expression text; the
+   expression in each call's own terms, parameters becoming arguments
+   and `this` the receiver; refused: a local, a name a call sees
+   otherwise, an argument that could have effects, state the body may
+   change before, a loop or closure); `convert_params_to_object` (a new
+   tool, no Go counterpart: the parameters destructured in one object,
+   `type_name` for an interface, `= {}` when all are optional). The
+   lookup and call search are `tsapi`'s `target`, shared by all four.
+   Left: `add_result` (`change_return_type` as its alias, by the rule
+   for names), and overloads.
 7. **Effects analysis** (section 4) as one `analysis` package with a
    `Move` question, built before the refactorings that need it.
 8. **Simplify:** extract / inline variable and function, invert_if,
