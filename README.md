@@ -2112,7 +2112,16 @@ hand or a tool got in the way.
        counterpart.
     7. inline_function's refusals where a sound form exists: an early
        return first, then rest or destructured parameters, overloads,
-       generics, async functions.
+       generics, async functions. *Done* but async: guards and a last
+       return become a conditional expression, inlined anywhere
+       (`truncate`'s shape in the TypeScript A/B run); a body that
+       returns early is inlined where the call is a return's whole
+       value; a rest parameter is declared as the array of the rest, a
+       destructured one as its pattern; of overloads the implementation
+       is inlined, and the signatures go with it; a generic function
+       whose body does not name its type parameters. Async stays
+       refused: inlining an await changes when the rest runs. Go's
+       inline_function still refuses an early return.
     8. extract_function addressed by `function` and `case` (a switch
        case), as Go's.
     9. The plan's smaller leftovers: all_calls across files, declaring a

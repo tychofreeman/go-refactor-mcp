@@ -825,6 +825,92 @@ function f(x: number): number {
 
 export const y = f(2);
 `, NewInlineFunction(), `{"line": 22, "name": "f"}`, "", "returns early"},
+		{"guards", plants + `
+function cut(s: string, n: number): string {
+  if (s.length <= n) {
+    return s;
+  }
+  return s.slice(0, n);
+}
+
+export function label(p: Plant): string {
+  return "name: " + cut(p.name, 3);
+}
+`, NewInlineFunction(), `{"line": 22, "name": "cut"}`, plants + `
+export function label(p: Plant): string {
+  return "name: " + (p.name.length <= 3 ? p.name : p.name.slice(0, 3));
+}
+`, ""},
+		{"early return, as a return's value", plants + `
+function pick(p: Plant): string {
+  if (p.height > 1) {
+    water();
+    return "tall";
+  }
+  return "short";
+}
+
+export function kind(p: Plant): string {
+  return pick(p);
+}
+`, NewInlineFunction(), `{"line": 23, "name": "pick"}`, plants + `
+export function kind(p: Plant): string {
+  if (p.height > 1) {
+    water();
+    return "tall";
+  }
+  return "short";
+}
+`, ""},
+		{"overloads and a rest parameter", plants + `
+function total(): number;
+function total(...xs: number[]): number;
+function total(...xs: number[]): number {
+  return xs.length;
+}
+
+export function count(): number {
+  const n = total(1, 2);
+  return n;
+}
+`, NewInlineFunction(), `{"line": 21, "name": "total"}`, plants + `
+export function count(): number {
+  const xs: number[] = [1, 2];
+  const n = xs.length;
+  return n;
+}
+`, ""},
+		{"a destructured parameter", plants + `
+function area({ height }: Plant): number {
+  return height * height;
+}
+
+export function size(p: Plant): number {
+  return area(p) + 1;
+}
+`, NewInlineFunction(), `{"line": 19, "name": "area"}`, plants + `
+export function size(p: Plant): number {
+  const { height }: Plant = p;
+  return height * height + 1;
+}
+`, ""},
+		{"generic", plants + `
+function first<T>(xs: T[]): T | undefined {
+  return xs[0];
+}
+
+export const f = first([1, 2]);
+`, NewInlineFunction(), `{"line": 18, "name": "first"}`, plants + `
+export const f = [1, 2][0];
+`, ""},
+		{"generic, naming its type parameter", plants + `
+function wrap<T>(x: T): T[] {
+  const out: T[] = [x];
+  return out;
+}
+
+export const w = wrap(1);
+`, NewInlineFunction(), `{"line": 19, "name": "wrap"}`, "", "uses its type parameter T"},
 		{"recursive", plants + `
 function f(x: number): number {
   return x > 0 ? f(x - 1) : 0;
