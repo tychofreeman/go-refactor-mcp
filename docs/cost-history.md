@@ -1522,20 +1522,24 @@ The mcp arm cost 35% more, as on Go's small modules (about 1.5x), most
 of it in fit: 13 turns of the mcp arm's 87 requests had a refused
 gorefactor call, against one denied Edit for manual. By cause:
 
-- No stubs for a test written first (5): a test calling `s.fit(...)`,
-  or passing users with `optOut`, was refused because nothing declares
-  the member or field; Go declares stubs for both (CLAUDE.md, "Test
-  first through the tools"). The models then wrote the code first.
+- No stub for a test written first (2): a test passing `s.fit(...)` to
+  `equal`, which takes `unknown`, was refused because nothing declares
+  `fit`; the stub was not declared since a place that takes `unknown`
+  did not count as telling the result type. The models then wrote the
+  code first. Fixed in README item 41.1.
+- The model's own test did not type-check (2): users written with
+  `optOut: { sms: true }` beside `{ email: false }` widen to types not
+  assignable to `Record<string, boolean>`.
 - inline_function refused `truncate` for its early return (2), the
   derivation fit wanted (inline it into `fit`); Go's inlines it.
-- Guessed arguments (4): `line` as a string, `into` on add_declaration,
-  `old` on replace_expression, `function` on inline_function.
+- Guessed arguments (5): `line` as a string, `where` left out, `into`
+  on add_declaration, `old` on replace_expression, `function` on
+  inline_function.
 - A range cutting a statement (2), each refusal naming the range to
   use.
 
 Reading was through inspect and Bash alike (inspect 18K tokens of
-results, Bash 32K, Grep 13K). The first two causes are what to fix
-before the next run.
+results, Bash 32K, Grep 13K).
 
 ## What made the difference
 

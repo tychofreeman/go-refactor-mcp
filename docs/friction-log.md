@@ -3376,3 +3376,11 @@ applied a reference change to each task), then created with
 create_file in one batch; ab.go's allowlists and move.go's `.ts`
 extensions with replace_text, its test too. The docs with replace_text.
 This entry appended with a heredoc.
+
+## 2026-10-28: TypeScript stubs for a test written first (item 41.1)
+
+The changes and tests with replace_text through the CLI, in batches
+written by Python; a step that added imports was dropped after the step
+before it had added them (replace_text adds the imports Go code needs).
+The roadmap and docs with replace_text. This entry appended with a
+heredoc.

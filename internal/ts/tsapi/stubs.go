@@ -156,7 +156,8 @@ func (l *lined) importedFrom(c *checker.Checker, name string) (string, bool) {
 }
 
 // resultType is the type a call's result is used as: what its place
-// expects, or void for a call that is a statement.
+// expects (unknown where it takes any value), or void for a call that is
+// a statement.
 func resultType(c *checker.Checker, call *ast.Node) (string, bool) {
 	parent := call.Parent
 	for parent != nil && ast.IsParenthesizedExpression(parent) {
@@ -171,9 +172,37 @@ func resultType(c *checker.Checker, call *ast.Node) (string, bool) {
 	}
 	s := c.TypeToString(t)
 	if s == "any" || s == "unknown" {
-		return "", false
+		return "unknown", true
 	}
 	return s, true
+}
+
+// Functions returns the names of the functions content declares at its
+// top level with a body, or of the methods when content is members of a
+// class; none when content does not parse.
+func Functions(content string, members bool) []string {
+	text := content
+	if members {
+		text = "class __Content {\n" + content + "\n}\n"
+	}
+	f := parseText(text)
+	if len(f.Diagnostics()) > 0 {
+		return nil
+	}
+	nodes := f.Statements.Nodes
+	if members {
+		if len(nodes) != 1 || !ast.IsClassDeclaration(nodes[0]) {
+			return nil
+		}
+		nodes = nodes[0].Members()
+	}
+	var out []string
+	for _, n := range nodes {
+		if (ast.IsFunctionDeclaration(n) || ast.IsMethodDeclaration(n)) && n.Name() != nil && n.Body() != nil {
+			out = append(out, n.Name().Text())
+		}
+	}
+	return out
 }
 
 // parameters writes the parameters of a stub from a call's arguments:
