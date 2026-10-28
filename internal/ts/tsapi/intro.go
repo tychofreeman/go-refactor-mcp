@@ -144,6 +144,11 @@ func (p *Project) IntroduceParameter(ctx context.Context, path, name, expr, para
 		at = n - 1
 	}
 	edits := []Edit{l.insertAt(t.fn.ParameterList(), t.off+at, param+": "+typ)}
+	more, why := t.insertInOverloads(at, param+": "+typ)
+	if why != "" {
+		return nil, why
+	}
+	edits = append(edits, more...)
 	meaning := func(x *ast.Node) bool {
 		if !slices.Equal(tokens(l.source(x)), want) {
 			return false

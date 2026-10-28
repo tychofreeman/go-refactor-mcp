@@ -353,3 +353,68 @@ export const c = count(3);
 		}
 	}
 }
+
+var overloaded = map[string]string{
+	"src/grow.ts": `export function grow(p: string): string;
+export function grow(p: number, by: number): number;
+export function grow(p: string | number, by = 1): string | number {
+  return typeof p === "string" ? p + "!" : p + by;
+}
+
+export function shade(p: string, x: number): string;
+export function shade(p: number): number;
+export function shade(p: string | number, x?: number): string | number {
+  return p;
+}
+`,
+	"src/use.ts": `import { grow, shade } from "./grow";
+
+export const s = grow("rose");
+export const n = grow(2, 3);
+export const a = shade("a", 1);
+export const b = shade(2);
+`,
+}
+
+// Overloads change with their implementation, each at the same
+// position, where they have the parameter.
+func TestOverloads(t *testing.T) {
+	ws, dir := load(t, overloaded)
+	do := func(r refactor.RefactoringOf[*workspace.Workspace], args string) *refactor.Result {
+		t.Helper()
+		res, err := refactor.Run(ws, r, json.RawMessage(`{"file": "src/grow.ts", `+args[1:]), refactor.OptionsOf[*workspace.Workspace]{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return res
+	}
+	if res := do(NewAdd(), `{"name": "grow", "parameter": "unit", "type": "string", "value": "\"cm\""}`); res.Applied || !strings.Contains(res.Refused, "the overload at grow.ts:1 has 1 parameters") {
+		t.Errorf("a parameter added where an overload cannot take it: %s", res)
+	}
+	if res := do(NewMove(), `{"name": "grow", "parameter": "by", "before": "p"}`); res.Applied || !strings.Contains(res.Refused, "the overload at grow.ts:1 has only some of the parameters") {
+		t.Errorf("a move an overload only partly has: %s", res)
+	}
+	if res := do(NewAdd(), `{"name": "grow", "parameter": "unit", "type": "string", "value": "\"cm\"", "before": "by"}`); !res.Applied {
+		t.Fatalf("%s", res)
+	}
+	mustContain(t, dir, "src/grow.ts", "grow(p: string, unit: string): string;", "grow(p: number, unit: string, by: number): number;", "grow(p: string | number, unit: string, by = 1): string | number {")
+	mustContain(t, dir, "src/use.ts", `grow("rose", "cm")`, `grow(2, "cm", 3)`)
+
+	if res := do(NewRemove(), `{"name": "shade", "parameter": "x"}`); !res.Applied {
+		t.Fatalf("%s", res)
+	}
+	mustContain(t, dir, "src/grow.ts", "shade(p: string): string;", "shade(p: number): number;", "shade(p: string | number): string | number {")
+	mustContain(t, dir, "src/use.ts", `shade("a")`, "shade(2)")
+
+	if res := do(NewAddResult(), `{"name": "grow", "field": "ok", "type": "boolean", "value": "true"}`); !res.Applied {
+		t.Fatalf("%s", res)
+	}
+	mustContain(t, dir, "src/grow.ts", "unit: string): { value: string; ok: boolean };", "by: number): { value: number; ok: boolean };", "by = 1): { value: string | number; ok: boolean } {")
+	mustContain(t, dir, "src/use.ts", `grow("rose", "cm").value`)
+
+	if res := do(NewParamsToObject(), `{"name": "shade"}`); !res.Applied {
+		t.Fatalf("%s", res)
+	}
+	mustContain(t, dir, "src/grow.ts", "export function shade({ p }: { p: string }): string;", "export function shade({ p }: { p: number }): number;", "export function shade({ p }: { p: string | number }): string | number {")
+	mustContain(t, dir, "src/use.ts", `shade({ p: "a" })`, "shade({ p: 2 })")
+}

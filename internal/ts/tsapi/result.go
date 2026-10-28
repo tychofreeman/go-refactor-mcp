@@ -88,6 +88,13 @@ func (p *Project) AddResult(ctx context.Context, path, name, field, typ, value, 
 		}
 		edits = append(edits, Edit{File: l.f.FileName(), Start: at + 1, End: at + 1, NewText: ": " + newType})
 	}
+	for _, o := range t.overloads {
+		rt := o.Type()
+		if rt == nil {
+			return nil, fmt.Sprintf("the overload at %s has no result type written; write it first", l.where(o))
+		}
+		edits = append(edits, Edit{File: l.f.FileName(), Start: l.pos(rt), End: rt.End(), NewText: fmt.Sprintf("{ %s: %s; %s: %s }", kept, l.source(rt), field, strings.TrimSpace(typ))})
+	}
 	body := fn.Body()
 	if !ast.IsBlock(body) {
 		edits = append(edits, Edit{File: l.f.FileName(), Start: l.pos(body), End: body.End(), NewText: "(" + obj(inner(body)) + ")"})

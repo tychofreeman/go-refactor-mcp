@@ -3281,3 +3281,11 @@ name fixed in the refused batch's JSON with Python
 (`GetFunctionFlags`, as the node has no AsteriskToken method). The
 recursive-call case written into the scratchpad copy with Python before
 the file was created. This entry appended with a heredoc.
+
+## 2026-10-28: TypeScript overloads in the signature tools
+
+All with replace_text through the CLI: the lookup returning the
+implementation and its overloads, the overload edits in the four tools,
+the tests and the docs. One batch refused on an anchor whose
+indentation I had guessed; a shorter, unique anchor fixed it. This entry
+appended with a heredoc.
