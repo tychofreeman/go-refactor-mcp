@@ -1983,6 +1983,58 @@ hand or a tool got in the way.
         package clause. Experiments (a constant changed for a timing
         probe, then restored) went around the tools; `undo` covers them
         only when the change went through a tool.
+    - **The third round** (2026-10-28, glisp's entries from "direct
+      calls to builtins" to the language spec: the wasm generator
+      restructured, builtins and value kinds made tables, rest
+      parameters, vectors, CHAMP maps). Most PRs were one batch that
+      passed first time; `replace_declaration` taking extra
+      declarations (above) settled the most repeated refusal. What is
+      left, by what it cost:
+      - **Wrap statements in a closure passed to a call.** Most of the
+        `wasmBody` PR (nine batches, about 120 steps) turned `If ...
+        Else ... End` and `Block Loop ... End` runs into `ifElse(func()
+        {...}, ...)`/`when`/`until` calls, by Python-computed
+        `replace_text`. Item 20's containers stop at a closure called at
+        once; this is the same edit with the literal passed to a named
+        function, its free variables staying captured.
+      - **Delete a declaration by name, whatever its uses.** Old
+        versions of helpers whose new versions live in another file went
+        by `replace_text` of their whole text, found by fragile regexes:
+        `remove_dead_code` needs them unused, `move_declaration` moves
+        them unchanged. An edit that deletes a named declaration (its
+        comment included), checked with the batch, or
+        `replace_declaration` with `to_file`.
+      - **Replace text within a function.** `compileLambda` was changed
+        by substring replacements computed outside and sent as a whole
+        `replace_declaration`. `replace_text` scoped by `function` would
+        send only the changed parts, and make `old` unique there.
+      - **Imports tidied at the end of a batch checked at its end.** A
+        step replacing the last user of an import removed it, and the
+        next step, which needed it, was refused; with `check: "end"`
+        unused imports could wait for the end, as stubs do.
+      - **Append to a file, and replace a whole file.** Friction entries
+        went in by heredoc until the session found it could anchor
+        `replace_text` on the last entry's final lines (this project's
+        sessions did the same, 126 times); an `append` (or `at: "end"`)
+        has no anchor to find. `create_file` refuses an existing file, so
+        a new `wasm_maps.go` took create, delete and move; an
+        `overwrite` option would be one step.
+      - **Asked again:** whether a name is free in a package (twice more:
+        `field`, `strings`), and `create_file` from a local file (a batch
+        was lost to an unquoted heredoc running the backticks in Go
+        content).
+      - **Not a tool gap, but worth a look:** splitting `builtin`'s
+        `min`, `max` into an embedded `arity` took 29 `replace_text`
+        steps generated from `inspect`'s listing (the first script
+        misread its line-number prefix), where `extract_struct` should do
+        it in one (it rewrites unkeyed literals whose moved fields are
+        adjacent; untried on glisp). The session did not find the
+        tool; its description says "split a struct that holds two
+        things", not "group fields". The type check twice let through a
+        behavior change in a hand-written edit (a case's dropped
+        `return`, an inverted test); output hashed before and after
+        caught both, which says what a check for a pure refactoring
+        could compare.
 40. **TypeScript** (2026-10-27, the user): the same tools for TypeScript,
     in this repo and from this server, under the same names; each tool
     picks the language from its file's extension. Built on the Go port
