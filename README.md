@@ -2067,6 +2067,13 @@ hand or a tool got in the way.
        `unknown`, and add_declaration of a function or method replaces
        its stub in the file or the class, as Go's does.
     2. `change_field_type`, `change_parameter_type` and `change_type`.
+       *Done*, as edits: each writes or adds the annotation (a property
+       of a class, interface or object type; a parameter; a type
+       alias's target). Types are erased, so no value changes, and the
+       uses are not adapted: a batch with check "end" changes those
+       that no longer type-check after it. Go converts at the uses; an
+       assertion (`as`) would be TypeScript's counterpart, for later if
+       runs show the model needs it.
     3. `function_to_method` and `method_to_function`.
     4. `prepare_switch_for_types` (only `union_switch_to_method`, its
        last step, exists).

@@ -16,6 +16,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/adddecl"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/addfield"
+	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/changetype"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/createfile"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/createfromusage"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/fiximports"
@@ -56,7 +57,7 @@ func New(dir string, h *history.Stack) *Language {
 
 // all is TypeScript's refactorings and edits.
 func all() []refactor.RefactoringOf[*workspace.Workspace] {
-	return []refactor.RefactoringOf[*workspace.Workspace]{rename.New(), createfile.New(), adddecl.New(), replacetext.New(), replacestmts.New(), insertstmts.New(), replaceexpr.New(), addfield.New(), createfromusage.New(), changesig.NewAdd(), changesig.NewRemove(), changesig.NewMove(), changesig.NewIntroduce(), changesig.NewParamsToObject(), changesig.NewAddResult(),
+	return []refactor.RefactoringOf[*workspace.Workspace]{rename.New(), createfile.New(), adddecl.New(), replacetext.New(), replacestmts.New(), insertstmts.New(), replaceexpr.New(), addfield.New(), createfromusage.New(), changesig.NewAdd(), changesig.NewRemove(), changesig.NewMove(), changesig.NewIntroduce(), changesig.NewParamsToObject(), changesig.NewAddResult(), changesig.NewChangeFieldType(), changesig.NewChangeParameterType(), changetype.New(),
 		simplify.NewExtractVariable(), simplify.NewInlineVariable(), simplify.NewMoveUp(), simplify.NewMoveDown(), simplify.NewInvertIf(), simplify.NewRemoveElse(), simplify.NewExtractFunction(), simplify.NewInlineFunction(),
 		move.NewMoveDeclaration(), move.NewMoveFile(), move.NewDeleteFile(),
 		shapes.NewFold(), shapes.NewParameterize(), shapes.NewMergeDuplicate(), shapes.NewRemoveDeadCode(), shapes.NewExtractInterface(), shapes.NewUnionSwitchToMethod()}

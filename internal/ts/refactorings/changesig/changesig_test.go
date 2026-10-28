@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/changetype"
+	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/replacetext"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/workspace"
 )
 
@@ -82,6 +84,91 @@ func mustContain(t *testing.T, dir, file string, wants ...string) {
 			t.Errorf("%s lacks %q:\n%s", file, w, b)
 		}
 	}
+}
+
+// retyped is a file of types whose declared types the next test changes.
+const retyped = `export type Liters = number;
+
+export type Size = "small" | "big";
+
+export interface Plant {
+  name: string;
+  height?: number;
+}
+
+export class Bed {
+  depth = 2;
+  plants: Plant[] = [];
+}
+
+export function grow(p: Plant, by: number): Plant {
+  return { ...p, height: (p.height ?? 0) + by };
+}
+
+export const halve: (n: number) => number = n => n / 2;
+
+export const label = (p: Plant): string => p.name;
+`
+
+func TestChangeTypes(t *testing.T) {
+	ws, dir := load(t, map[string]string{"src/plant.ts": retyped})
+	in := func(r refactor.RefactoringOf[*workspace.Workspace], args string) *refactor.Result {
+		t.Helper()
+		res, err := refactor.Run(ws, r, json.RawMessage(`{"file": "src/plant.ts", `+args[1:]), refactor.OptionsOf[*workspace.Workspace]{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return res
+	}
+	for _, tc := range []struct {
+		r    refactor.RefactoringOf[*workspace.Workspace]
+		args string
+	}{
+		{NewChangeFieldType(), `{"name": "Plant.height", "type": "Liters"}`},
+		{NewChangeFieldType(), `{"name": "Bed.depth", "type": "Liters"}`},
+		{NewChangeParameterType(), `{"name": "grow", "parameter": "by", "type": "Liters"}`},
+		{NewChangeParameterType(), `{"name": "halve", "parameter": "n", "type": "Liters"}`},
+		{changetype.New(), `{"name": "Size", "type": "\"small\" | \"big\" | \"huge\""}`},
+	} {
+		if res := in(tc.r, tc.args); !res.Applied {
+			t.Fatalf("%s %s: %s", tc.r.Name(), tc.args, res)
+		}
+	}
+	mustContain(t, dir, "src/plant.ts", "  height?: Liters;", "  depth: Liters = 2;", "grow(p: Plant, by: Liters)", "= (n: Liters) => n / 2;", `type Size = "small" | "big" | "huge";`)
+	for _, tc := range []struct {
+		r          refactor.RefactoringOf[*workspace.Workspace]
+		args, want string
+	}{
+		{NewChangeFieldType(), `{"name": "Plant.name", "type": "number"}`, "Type 'number' is not assignable to type 'string'"},
+		{NewChangeFieldType(), `{"name": "Bed.soil", "type": "string"}`, "Bed has no property soil"},
+		{NewChangeFieldType(), `{"name": "Size.small", "type": "string"}`, "change it with change_type"},
+		{NewChangeParameterType(), `{"name": "grow", "parameter": "q", "type": "Plant"}`, "grow has no parameter named q"},
+		{changetype.New(), `{"name": "Plant", "type": "string"}`, "change its members with change_field_type"},
+	} {
+		if res := in(tc.r, tc.args); res.Applied || !strings.Contains(res.Refused, tc.want) {
+			t.Errorf("%s %s: want a refusal with %q, got %s", tc.r.Name(), tc.args, tc.want, res)
+		}
+	}
+}
+
+// A change that breaks a use goes through in a batch checked at its end,
+// together with the change to the use.
+func TestChangeTypeInABatch(t *testing.T) {
+	ws, dir := load(t, map[string]string{"src/plant.ts": retyped})
+	step := func(r refactor.RefactoringOf[*workspace.Workspace], args string) refactor.StepOf[*workspace.Workspace] {
+		return refactor.StepOf[*workspace.Workspace]{Refactoring: r, Args: json.RawMessage(`{"file": "src/plant.ts", ` + args[1:])}
+	}
+	b, err := refactor.RunBatch(ws, []refactor.StepOf[*workspace.Workspace]{
+		step(NewChangeFieldType(), `{"name": "Plant.name", "type": "number"}`),
+		step(replacetext.New(), `{"old": "=> p.name;", "new": "=> String(p.name);"}`),
+	}, refactor.OptionsOf[*workspace.Workspace]{Unchecked: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !b.Applied {
+		t.Fatalf("not applied: %s", b)
+	}
+	mustContain(t, dir, "src/plant.ts", "  name: number;", "=> String(p.name);")
 }
 
 func TestAddParameter(t *testing.T) {
