@@ -112,10 +112,31 @@ func (p *Project) ChangeSignature(ctx context.Context, path, name string, ch Sig
 	switch {
 	case ch.Add != nil:
 		edits = append(edits, l.insertAt(decl, off+at, ch.Add.Name+": "+strings.TrimSpace(ch.Add.Type)))
+		more, why := t.insertInOverloads(at, ch.Add.Name+": "+strings.TrimSpace(ch.Add.Type))
+		if why != "" {
+			return nil, why
+		}
+		edits = append(edits, more...)
 	case ch.Remove != "":
 		edits = append(edits, l.removeAt(decl, off+index(ch.Remove)))
+		for _, o := range t.overloads {
+			if list, ooff := passed(o); len(list.Nodes)-ooff > index(ch.Remove) {
+				edits = append(edits, l.removeAt(list, ooff+index(ch.Remove)))
+			}
+		}
 	default:
 		edits = append(edits, l.permute(decl.Nodes[off:], order(n, moved, at))...)
+		lo, hi := min(moved, at), max(moved, at-1)
+		for _, o := range t.overloads {
+			list, ooff := passed(o)
+			switch k := len(list.Nodes) - ooff; {
+			case k <= lo:
+			case k <= hi:
+				return nil, fmt.Sprintf("the overload at %s has only some of the parameters the move reorders", l.where(o))
+			default:
+				edits = append(edits, l.permute(list.Nodes[ooff:ooff+hi+1], order(hi+1, moved, at))...)
+			}
+		}
 	}
 	for _, call := range calls {
 		cl := newLined(ast.GetSourceFileOfNode(call))
@@ -159,15 +180,16 @@ func (p *Project) ChangeSignature(ctx context.Context, path, name string, ch Sig
 // target is a function whose signature is to change: its declaration and,
 // once findCalls has run, its calls in the project.
 type target struct {
-	l        *lined
-	fn       *ast.Node
-	nameNode *ast.Node // the name its callers use
-	c        *checker.Checker
-	sym      *ast.Symbol
-	params   []*ast.Node // with a this parameter, if there is one
-	off      int         // 1 when a this parameter, which is not passed, comes first
-	ctor     bool
-	calls    []*ast.Node
+	l         *lined
+	fn        *ast.Node   // the implementation
+	overloads []*ast.Node // its overload signatures, which change with it
+	nameNode  *ast.Node   // the name its callers use
+	c         *checker.Checker
+	sym       *ast.Symbol
+	params    []*ast.Node // with a this parameter, if there is one
+	off       int         // 1 when a this parameter, which is not passed, comes first
+	ctor      bool
+	calls     []*ast.Node
 }
 
 // target finds the function or method called name in the file at path;
@@ -177,7 +199,7 @@ func (p *Project) target(ctx context.Context, path, name string) (*target, func(
 	if refusal != "" {
 		return nil, nil, refusal
 	}
-	fn, nameNode, why := l.function(name)
+	fn, overloads, nameNode, why := l.function(name)
 	if why != "" {
 		return nil, nil, why
 	}
@@ -187,7 +209,7 @@ func (p *Project) target(ctx context.Context, path, name string) (*target, func(
 		done()
 		return nil, nil, fmt.Sprintf("%s has no symbol to find its calls by", name)
 	}
-	t := &target{l: l, fn: fn, nameNode: nameNode, c: c, sym: sym, params: fn.Parameters(), ctor: ast.IsConstructorDeclaration(fn)}
+	t := &target{l: l, fn: fn, overloads: overloads, nameNode: nameNode, c: c, sym: sym, params: fn.Parameters(), ctor: ast.IsConstructorDeclaration(fn)}
 	if len(t.params) > 0 && ast.IsThisParameter(t.params[0]) {
 		t.off = 1
 	}
@@ -210,6 +232,16 @@ func (t *target) isRest(i int) bool {
 	return i >= 0 && i < len(t.params)-t.off && t.params[t.off+i].AsParameterDeclaration().DotDotDotToken != nil
 }
 
+// declares reports whether id is the name of one of t's overloads.
+func (t *target) declares(id *ast.Node) bool {
+	for _, o := range t.overloads {
+		if o.Name() == id {
+			return true
+		}
+	}
+	return false
+}
+
 // findCalls finds every call of t in the project, or why one is not known.
 func (t *target) findCalls(p *Project) string {
 	c := t.c
@@ -224,7 +256,7 @@ func (t *target) findCalls(p *Project) string {
 			if why != "" {
 				return true
 			}
-			if ast.IsIdentifier(nd) && nd.Text() == t.sym.Name && nd != t.nameNode {
+			if ast.IsIdentifier(nd) && nd.Text() == t.sym.Name && nd != t.nameNode && !t.declares(nd) {
 				if s := c.GetSymbolAtLocation(nd); s != nil && c.SkipAlias(s) == t.sym {
 					var found []*ast.Node
 					var w string
@@ -254,9 +286,9 @@ func (t *target) findCalls(p *Project) string {
 
 // function finds the function or method called name in the file: a
 // function declaration, a function or arrow function bound to a const, or
-// a method of a class ("Class.method"). It returns the function and the
-// name its callers use.
-func (l *lined) function(name string) (fn, nameNode *ast.Node, refusal string) {
+// a method of a class ("Class.method"). It returns the implementation,
+// its overload signatures, and the name its callers use.
+func (l *lined) function(name string) (fn *ast.Node, overloads []*ast.Node, nameNode *ast.Node, refusal string) {
 	class, member, isMember := strings.Cut(name, ".")
 	var found []*ast.Node
 	for _, s := range l.f.Statements.Nodes {
@@ -280,7 +312,7 @@ func (l *lined) function(name string) (fn, nameNode *ast.Node, refusal string) {
 					}
 				}
 				if len(found) == 0 {
-					return nil, nil, fmt.Sprintf("%s has no constructor of its own; declare one first", class)
+					return nil, nil, nil, fmt.Sprintf("%s has no constructor of its own; declare one first", class)
 				}
 				continue
 			}
@@ -291,15 +323,51 @@ func (l *lined) function(name string) (fn, nameNode *ast.Node, refusal string) {
 			}
 		}
 	}
-	switch {
-	case len(found) == 0:
-		return nil, nil, fmt.Sprintf("the file declares no function or method %s (give name, or Class.method)", name)
-	case len(found) > 1:
-		return nil, nil, fmt.Sprintf("%s has overloads; changing them together is not supported yet", name)
-	case found[0].Body() == nil:
-		return nil, nil, fmt.Sprintf("%s has no body", name)
+	if len(found) == 0 {
+		return nil, nil, nil, fmt.Sprintf("the file declares no function or method %s (give name, or Class.method)", name)
 	}
-	return found[0], nameNode, ""
+	for _, f := range found {
+		switch {
+		case f.Body() == nil:
+			overloads = append(overloads, f)
+		case fn != nil:
+			return nil, nil, nil, fmt.Sprintf("%s has two bodies", name)
+		default:
+			fn = f
+		}
+	}
+	if fn == nil {
+		return nil, nil, nil, fmt.Sprintf("%s has no body", name)
+	}
+	if !ast.IsConstructorDeclaration(fn) && !ast.IsArrowFunction(fn) && !ast.IsFunctionExpression(fn) {
+		nameNode = fn.Name()
+	}
+	return fn, overloads, nameNode, ""
+}
+
+// passed returns the parameter list of the signature o and how many of its
+// parameters are not passed (1 for a this parameter).
+func passed(o *ast.Node) (*ast.NodeList, int) {
+	list := o.ParameterList()
+	if len(list.Nodes) > 0 && ast.IsThisParameter(list.Nodes[0]) {
+		return list, 1
+	}
+	return list, 0
+}
+
+// insertInOverloads returns the edits that insert text as the parameter at
+// position at of every overload of t; or why an overload has too few
+// parameters to take it there, where calls matching it would pass it.
+func (t *target) insertInOverloads(at int, text string) ([]Edit, string) {
+	var edits []Edit
+	for _, o := range t.overloads {
+		list, off := passed(o)
+		if k := len(list.Nodes) - off; k < at {
+			return nil, fmt.Sprintf("the overload at %s has %d parameters, fewer than the position the new one takes (%d): calls matching it would not pass it there", t.l.where(o), k, at+1)
+		}
+		edits = append(edits, t.l.insertAt(list, off+at, text))
+	}
+	return edits, ""
 }
 
 // reads returns where body reads name: the symbol sym if it is given,

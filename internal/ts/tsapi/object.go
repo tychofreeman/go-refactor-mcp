@@ -28,6 +28,9 @@ func (p *Project) ParamsToObject(ctx context.Context, path, name, typeName strin
 	if len(params) == 0 {
 		return nil, fmt.Sprintf("%s has no parameters to bundle", name)
 	}
+	if typeName != "" && len(t.overloads) > 0 {
+		return nil, fmt.Sprintf("%s has overloads, whose objects would have different types; leave out type_name", name)
+	}
 	if typeName != "" && !scanner.IsIdentifierText(typeName, 0) {
 		return nil, fmt.Sprintf("%q is not a valid type name", typeName)
 	}
@@ -79,6 +82,44 @@ func (p *Project) ParamsToObject(ctx context.Context, path, name, typeName strin
 		param += " = {}"
 	}
 	edits := []Edit{{File: l.f.FileName(), Start: l.pos(params[0]), End: params[len(params)-1].End(), NewText: param}}
+	// Each overload takes an object of its own type, keyed by the
+	// implementation's names.
+	for _, o := range t.overloads {
+		list, ooff := passed(o)
+		ops := list.Nodes[ooff:]
+		if len(ops) == 0 {
+			continue
+		}
+		if len(ops) > len(params) {
+			return nil, fmt.Sprintf("the overload at %s has more parameters than the implementation", l.where(o))
+		}
+		var keys, types []string
+		optional := true
+		for i, op := range ops {
+			d := op.AsParameterDeclaration()
+			if d.DotDotDotToken != nil || op.Name() == nil || !ast.IsIdentifier(op.Name()) {
+				return nil, fmt.Sprintf("the overload at %s has a rest or destructured parameter (%s)", l.where(o), l.source(op))
+			}
+			key := params[i].Name().Text()
+			mark := ""
+			if d.QuestionToken != nil {
+				mark = "?"
+			} else {
+				optional = false
+			}
+			typ := "any"
+			if d.Type != nil {
+				typ = l.source(d.Type)
+			}
+			keys = append(keys, key)
+			types = append(types, fmt.Sprintf("%s%s: %s", key, mark, typ))
+		}
+		text := "{ " + strings.Join(keys, ", ") + " }: { " + strings.Join(types, "; ") + " }"
+		if optional {
+			text = "{ " + strings.Join(keys, ", ") + " }?: { " + strings.Join(types, "; ") + " }"
+		}
+		edits = append(edits, Edit{File: l.f.FileName(), Start: l.pos(ops[0]), End: ops[len(ops)-1].End(), NewText: text})
+	}
 	if typeName != "" {
 		decl := fn
 		if ast.IsArrowFunction(fn) || ast.IsFunctionExpression(fn) {

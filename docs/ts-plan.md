@@ -483,8 +483,17 @@ Go. Steps 1 and 2 change shared code and come before any TypeScript.
    statement stays; an expression-bodied arrow gets `({ ... })`, and a
    recursive call inside a return reads its own `.value`. Refused: a
    function returning nothing, async functions, generators.
-   Left: overloads (all signatures with the implementation), refused
-   today by every one of these tools.
+   Overloads *done*, so step 6 is: every one of these tools changes the
+   overload signatures with the implementation, at the implementation's
+   positions (overloads may name parameters otherwise): add and
+   introduce insert into each overload, refusing one too short to take
+   the parameter where calls matching it would pass it; remove takes it
+   out of each overload that has it; move reorders each that has the
+   whole range, refusing one with part of it; add_result wraps each
+   overload's result type (refusing one with none written);
+   convert_params_to_object gives each overload an object of its own
+   types keyed by the implementation's names (no `type_name` then). The
+   overloads' names are skipped by the call search.
 7. **Effects analysis** (section 4) as one `analysis` package with a
    `Move` question, built before the refactorings that need it.
 8. **Simplify:** extract / inline variable and function, invert_if,

@@ -47,7 +47,7 @@ func (*AddParameter) Name() string { return "add_parameter" }
 func (*AddParameter) Description() string {
 	return `Add a parameter to a function or method, and pass the same value for it at every call in the solution: with parameter unit, type string and value "L", function water(bed: string, liters: number) becomes water(bed: string, liters: number, unit: string), and water("roses", 2) becomes water("roses", 2, "L"). The body does not use it yet, so behavior is unchanged; add it, then change the body.
 Identify the function by file and name (Class.method for a method; Class.constructor, whose calls are the news of the class and the super calls of classes extending it). value must mean the same at every call (a name every call sees alike); before puts the parameter ahead of that one (default: last, before a rest parameter). A call passing fewer arguments gets undefined for those it skips.
-Refuses, saying why: a function used as a value (xs.map(f) passes an index), a call that spreads its arguments, overloads, a class extending one without a constructor of its own, a name the body already reads, a value a call cannot see.`
+Refuses, saying why: a function used as a value (xs.map(f) passes an index), a call that spreads its arguments, an overload with too few parameters to take it where it goes (overloads change with the implementation), a class extending one without a constructor of its own, a name the body already reads, a value a call cannot see.`
 }
 
 func (*AddParameter) InputSchema() json.RawMessage {
