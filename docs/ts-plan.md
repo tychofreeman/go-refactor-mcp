@@ -447,6 +447,23 @@ Go. Steps 1 and 2 change shared code and come before any TypeScript.
    compiler suggests another for ("Did you mean") is left alone.
 6. **Signatures** (Go's most common by-hand step): add / remove / move /
    introduce parameter, change_return_type, convert_params_to_object.
+   First part *done*: `add_parameter`, `remove_parameter`,
+   `move_parameter` (`internal/ts/refactorings/changesig`, the core in
+   `tsapi/signature.go`): a function, an arrow function bound to a
+   const, or a class method, by name, at its declaration and every call
+   in every project, merged as rename merges. Refused: a reference that
+   is not a call (a value: `xs.map(f)` would pass an index), a spread
+   argument, overloads, constructors, a body that reads the removed
+   parameter or `arguments`, a value whose names do not mean the same at
+   every call (`ResolveName` at each call), and, until step 7's effects
+   analysis, a dropped or reordered argument that is not plainly free of
+   effects (a name, a literal, `this`, a property or function). Where
+   `noUnusedParameters` is on, a new parameter must start with `_` (the
+   refusal says so; Hono has it on). On Hono the reference search takes
+   about 45 ms; the step's time is the engine's diagnostics (8.7 s the
+   first time on a clone without `node_modules`, 11k errors).
+   Left: `introduce_parameter`, `change_return_type`,
+   `convert_params_to_object`, constructors and overloads.
 7. **Effects analysis** (section 4) as one `analysis` package with a
    `Move` question, built before the refactorings that need it.
 8. **Simplify:** extract / inline variable and function, invert_if,
