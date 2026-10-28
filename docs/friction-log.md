@@ -3212,3 +3212,14 @@ Two batches refused and fixed by naming the import: `fiximports` is now
 a package name in both languages. One batch failed on a full disk (the
 Go build cache, 27 GB); `go clean -cache`. This entry appended with a
 heredoc.
+
+## 2026-10-27: replace_declaration takes declarations to add after it
+
+Through the CLI built from the branch, one batch: `move_file` turned the
+`refuse_two` golden into `adds_after` (a directory, moved whole),
+`delete_file` its `refused.txt`, `create_file` the new expectations and
+two refusal goldens, and `replace_text` the code, description and schema.
+The goldens failed on the old code (checked by stashing replacedecl.go).
+One batch refused before applying: `move_file` takes `file`, not `from`.
+This entry appended with `replace_text` anchored on the last entry's end,
+not a heredoc.
