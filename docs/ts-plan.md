@@ -556,7 +556,9 @@ Go. Steps 1 and 2 change shared code and come before any TypeScript.
      swaps; a new first branch that cannot fall through un-nests the
      other unless keep_else; an if without else becomes a guard as the
      last statement of a function's body (`return;`) or a loop's
-     (`continue;`). `remove_else` un-nests the else after a branch that
+     (`continue;`), and one whose branch leaves takes what follows it
+     as its new branch (`if (c) { T } R` to `if (!c) { R } T`, with a
+     `return` or `continue` after R when R can fall through). `remove_else` un-nests the else after a branch that
      cannot fall through, an else-if becoming a separate if. Both
      refuse names that un-nesting would make clash, and re-indent
      without touching lines inside a multi-line string or template.
@@ -568,7 +570,12 @@ Go. Steps 1 and 2 change shared code and come before any TypeScript.
      used outside the lines come back as the result, one as itself,
      several as an object (`const { a, b } = f(...)`, or
      `({ a, b } = f(...))`). Lines that end the function's body keep
-     their returns (`return f(...)`). Refused: other returns, a jump
+     their returns (`return f(...)`). Lines that return earlier return
+     a value the call returns unless it is undefined (`const result =
+     f(...)`, then `if (result !== undefined) { return result }`), when
+     no return's value may be undefined, or, when every return is bare,
+     whether they returned (`if (f(...)) { return }`). Refused: returns
+     of what may be undefined, bare and valued returns mixed, a jump
      out, `yield`, `arguments`, a type parameter or local type, mixing
      declared and assigned results, declarations at the module's top
      level. Go's `function`/`case` address is refused for now.
@@ -579,7 +586,7 @@ Go. Steps 1 and 2 change shared code and come before any TypeScript.
      An argument replaces its parameter when `Check` allows it (others
      are passed before it, the body after it; `Unused`, `Maybe` or
      `Several` by its uses), else it is declared before the statement
-     (`const p: T = arg;`). all_calls takes the file's calls; the
+     (`const p: T = arg;`, as `p2` to `p9` when `p` is taken there). all_calls takes the file's calls; the
      function goes when nothing else uses it, unless exported.
      Refused: overridable methods, async and generators, generics, rest
      or destructured parameters, overloads, early returns, `super`,
@@ -660,10 +667,10 @@ Go. Steps 1 and 2 change shared code and come before any TypeScript.
     variants. First A/B: mcp vs manual on the features run. Then a
     mixed task (a Go handler and its TypeScript client).
     Before it, every tool was run on Hono (`docs/ts-hono-pass.md`): the
-    four style bugs it found are fixed; its gaps (extract_function with
-    an early return, invert_if of a returning if before the last
-    statements, inline_function choosing another name for a parameter
-    whose name is taken) are for later.
+    four style bugs it found are fixed, and so are its three gaps
+    (extract_function with an early return, invert_if of a returning
+    if before the last statements, inline_function choosing another
+    name for a parameter whose name is taken).
 
 ## 7. Decisions open
 

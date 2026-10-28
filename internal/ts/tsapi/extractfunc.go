@@ -209,8 +209,24 @@ func (p *Project) ExtractFunction(ctx context.Context, path string, first, last 
 	}
 	fn := ast.GetContainingFunction(stmts[0])
 	endsBody := fn != nil && owner == fn.Body() && owner.Statements()[len(owner.Statements())-1] == stmts[len(stmts)-1]
+	// Lines that return before the function's end come back as a value
+	// the call returns unless it is undefined (each return has one that
+	// cannot be), or as whether they returned (each return is bare).
+	early := ""
 	if len(b.returns) > 0 && !endsBody {
-		return nil, fmt.Sprintf("%s returns from the function the lines are in; only lines that end its body may return", l.part(b.returns[0]))
+		for _, r := range b.returns {
+			switch e := r.Expression(); {
+			case e == nil && early != "value":
+				early = "bare"
+			case e != nil && early != "bare":
+				if mayBeUndefined(c.GetTypeAtLocation(e)) {
+					return nil, fmt.Sprintf("%s returns what may be undefined, so a call could not tell it from the lines going on; only lines that end the function's body may return it", l.part(r))
+				}
+				early = "value"
+			default:
+				return nil, fmt.Sprintf("the lines return a value in some places and nothing in others (%s)", l.part(r))
+			}
+		}
 	}
 
 	// Where the new function goes: after the class member, for a method;
@@ -347,6 +363,7 @@ func (p *Project) ExtractFunction(ctx context.Context, path string, first, last 
 	}
 
 	// The call, in place of the lines.
+	indent := l.indent(l.line(start))
 	call := name + "(" + strings.Join(args, ", ") + ")"
 	if member != nil {
 		call = "this." + call
@@ -365,7 +382,27 @@ func (p *Project) ExtractFunction(ctx context.Context, path string, first, last 
 			keyword = o.keyword
 		}
 	}
+	var rs []repl // what changes in the lines
 	switch {
+	case early == "value":
+		r := ""
+		for _, cand := range []string{"result", name + "Result", "returned"} {
+			if taken(c, l, cand, stmts[0]) == "" && !strings.Contains(l.text[start:end], cand) {
+				r = cand
+				break
+			}
+		}
+		if r == "" {
+			return nil, "no name is free for what the lines return; rename a local result first"
+		}
+		call = "const " + r + " = " + call + l.semi() + "\n" + indent + "if (" + r + " !== undefined) {\n" + indent + l.unit() + "return " + r + l.semi() + "\n" + indent + "}"
+		result = "return undefined" + l.semi()
+	case early == "bare":
+		call = "if (" + call + ") {\n" + indent + l.unit() + "return" + l.semi() + "\n" + indent + "}"
+		result = "return false" + l.semi()
+		for _, r := range b.returns {
+			rs = append(rs, repl{l.pos(r), l.pos(r) + len("return"), "return true"})
+		}
 	case len(b.returns) > 0:
 		call = "return " + call + l.semi()
 	case len(outs) == 0:
@@ -386,13 +423,12 @@ func (p *Project) ExtractFunction(ctx context.Context, path string, first, last 
 		}
 	}
 	lineStart, lineEnd := l.start(first), l.start(last+1)
-	indent := l.indent(l.line(start))
 	edits := []Edit{{File: l.f.FileName(), Start: lineStart, End: lineEnd, NewText: indent + call + "\n"}}
 
 	// The new function.
 	ind := l.indent(l.line(l.pos(top)))
 	unit := l.unit()
-	text := l.reindent(lineStart, lineEnd, indent, ind+unit)
+	text := l.reindent(lineStart, lineEnd, indent, ind+unit, rs...)
 	if !strings.HasSuffix(text, "\n") {
 		text += "\n"
 	}

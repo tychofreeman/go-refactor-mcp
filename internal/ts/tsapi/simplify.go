@@ -225,7 +225,7 @@ func (l *lined) withBlank(a, b int) (int, int) {
 // reindent returns the text of the whole lines [start, end) with the
 // indentation from replaced by to, but for lines inside a string or
 // template that spans lines.
-func (l *lined) reindent(start, end int, from, to string) string {
+func (l *lined) reindent(start, end int, from, to string, rs ...repl) string {
 	inside := map[int]bool{}
 	var visit func(n *ast.Node) bool
 	visit = func(n *ast.Node) bool {
@@ -245,7 +245,7 @@ func (l *lined) reindent(start, end int, from, to string) string {
 	visit(l.f.AsNode())
 	var b strings.Builder
 	for line := l.line(start); line <= l.count() && l.start(line) < end; line++ {
-		s := l.text[l.start(line):min(l.start(line+1), end)]
+		s := l.substitute(l.start(line), min(l.start(line+1), end), rs)
 		if !inside[line] {
 			if strings.HasPrefix(s, from) {
 				s = to + s[len(from):]
@@ -829,14 +829,19 @@ func (p *Project) InvertIf(ctx context.Context, path string, line, column int, k
 		jump := ""
 		owner := ifs.Parent
 		switch {
-		case !inList(ifs) || owner.Statements()[len(owner.Statements())-1] != ifs:
+		case !inList(ifs):
 		case ast.IsBlock(owner) && ast.IsFunctionLike(owner.Parent):
-			jump = "return;"
+			jump = "return" + l.semi()
 		case ast.IsBlock(owner) && ast.IsIterationStatement(owner.Parent, false):
-			jump = "continue;"
+			jump = "continue" + l.semi()
+		}
+		if list := owner.Statements(); inList(ifs) && list[len(list)-1] != ifs {
+			// if (c) { T, which leaves } R becomes if (!c) { R } T: R
+			// must then leave too, or end the body it is the end of.
+			return l.invertBefore(c, ifs, head, jump)
 		}
 		if jump == "" {
-			return nil, "an if without else is inverted only as the last statement of a function's body or a loop's, where it becomes a guard (return or continue)"
+			return nil, "an if without else is inverted only as the last statement of a function's body or a loop's (where it becomes a guard: return or continue), or when what follows it leaves"
 		}
 		rest, why := l.unnest(c, ifs, then)
 		if why != "" {
@@ -863,6 +868,55 @@ func (p *Project) InvertIf(ctx context.Context, path string, line, column int, k
 		text += "\n" + rest
 	}
 	return edit(text), ""
+}
+
+// invertBefore returns the edits that invert ifs, which has no else and
+// statements after it, R: its first branch T leaves, so if (c) { T } R
+// becomes if (!c) { R } T. R must leave too, or end a function's or a
+// loop's body, where jump ends it.
+func (l *lined) invertBefore(c *checker.Checker, ifs *ast.Node, head, jump string) ([]Edit, string) {
+	then := ifs.AsIfStatement().ThenStatement
+	list := ifs.Parent.Statements()
+	rest := list[slices.Index(list, ifs)+1:]
+	if !terminates(then) {
+		return nil, "an if without else is inverted, with what follows it as its new first branch, only when its branch ends with a return, throw, break or continue"
+	}
+	last := rest[len(rest)-1]
+	if terminates(last) {
+		jump = ""
+	} else if jump == "" {
+		return nil, fmt.Sprintf("what follows the if can fall through (%s), and it would then go on to the if's branch", l.part(last))
+	}
+	var syms []*ast.Symbol
+	for _, s := range rest {
+		syms = append(syms, symbols(c, declared(s))...)
+	}
+	if u := uses(c, then, syms); u != nil {
+		return nil, fmt.Sprintf("the if's branch uses %s, which what follows it declares", u.Text())
+	}
+	indent := l.indent(l.line(l.pos(ifs)))
+	unit := l.unit()
+	a := l.start(l.line(l.pos(rest[0])))
+	_, endLine := l.lines(last)
+	if strings.TrimSpace(l.text[a:l.pos(rest[0])]) != "" || !quiet(l.text[last.End():l.end(endLine)]) {
+		return nil, "what follows the if shares its lines with other code"
+	}
+	body := l.reindent(a, l.start(endLine+1), indent, indent+unit)
+	if !strings.HasSuffix(body, "\n") {
+		body += "\n"
+	}
+	if jump != "" {
+		body += indent + unit + jump + "\n"
+	}
+	unnested, why := l.unnest(c, ifs, then)
+	if why != "" {
+		return nil, why
+	}
+	text := head + "{\n" + body + indent + "}"
+	if unnested != "" {
+		text += "\n" + unnested
+	}
+	return []Edit{{File: l.f.FileName(), Start: l.pos(ifs), End: l.end(endLine), NewText: text}}, ""
 }
 
 // RemoveElse returns the edits that un-nest the else of the if on line,

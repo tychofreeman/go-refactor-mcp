@@ -303,7 +303,7 @@ func (*ExtractFunction) Description() string {
 	return `Move a run of whole statements into a new function, declared after the one they are in, and call it in their place: in function report(beds: Bed[]), extracting let total = 0 and the loop that adds each b.depth to it, as sum, gives const total = sum(beds) there and function sum(beds: Bed[]) { let total = 0; for ...; return total; }. Locals the statements use become parameters; those they declare or assign that are used elsewhere come back as the result (an object of them when several). Statements that use this become a private method of the class; with await, the function is async and the call awaited.
 Identify the statements by file, start_line and end_line: whole statements of one block, as inspect numbers them. doc becomes the new function's doc comment.
 Returns: when the lines end the function's body, their returns stay and the call becomes return sum(...).
-Refuses, saying why: other returns, a break or continue out of the lines, yield, arguments, this outside a class's method, a type parameter or a type declared in the function, a variable declared in a block of the lines and used after them, declaring some results and assigning others.`
+Lines that return before the function's end return a value the call returns unless it is undefined, or whether they returned. Refuses, saying why: an early return of what may be undefined, a break or continue out of the lines, yield, arguments, this outside a class's method, a type parameter or a type declared in the function, a variable declared in a block of the lines and used after them, declaring some results and assigning others.`
 }
 
 func (*ExtractFunction) InputSchema() json.RawMessage {

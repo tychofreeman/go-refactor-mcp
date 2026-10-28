@@ -59,16 +59,19 @@ reading different variables of one name, inline_variable whose value
 reads state a call in a loop may change, moving a statement past the
 declaration it uses, extract_interface of a generic class.
 
-Gaps the pass found, for later (`docs/ts-plan.md`):
+Gaps the pass found, now closed (each case above runs on Hono):
 
-- extract_function refuses lines with an early return; Go's makes
-  them return a result the call checks.
+- extract_function refused lines with an early return. They now come
+  back as a value the call returns unless it is undefined
+  (`getResponse`'s `if (this.res) { ... return newResponse }`), or,
+  when every return is bare, as whether they returned.
 - invert_if of an if that returns, followed by the function's last
-  statements (`if (x) { ...; return y } return z`), is refused; Go's
-  un-nests that shape.
-- inline_function refuses when a parameter's name is taken where it
-  would be declared (`const generator = initializeGenerator(generator)`);
-  it could choose another name.
+  statements (`if (x) { ...; return y } return z`), was refused. What
+  follows becomes the new branch, and the old branch follows the if.
+- inline_function refused when a parameter's name was taken where it
+  would be declared (`const generator = initializeGenerator(...)`). It
+  now declares it as `generator2`, the first of `p2` to `p9` that is
+  free.
 - No shape in Hono for union_switch_to_method or merge_duplicate_function
   to apply to; both rest on their unit tests.
 

@@ -3360,3 +3360,10 @@ batches written by Python; the two tests appended with replace_text on
 the files' last lines. The pass itself drove the server over stdio
 with a script in the scratchpad (not kept). This entry appended with a
 heredoc.
+
+## 2026-10-28: the gaps the Hono pass found
+
+The three fixes and their tests with replace_text through the CLI, in
+two batches written by Python (old and new texts in files); a first
+batch was refused whole on an anchor that did not match, and resent.
+The docs with replace_text. This entry appended with a heredoc.
