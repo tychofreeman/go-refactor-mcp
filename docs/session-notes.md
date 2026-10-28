@@ -225,6 +225,15 @@ results are in `docs/cost-history.md`.
   those calls as edits in a note, over refusing them: the plans that
   wanted it pass `DefaultPolicy()` from other packages, which no proof
   reaches. README roadmap item 31.
+- **One tool per operation, other names as aliases** (2026-10-27, the
+  user): TypeScript's "add a property" is `add_field`, Go's name, by
+  the plan's rule (same names where the operation is the same, so
+  recipes and eval tasks transfer), not `add_property` as its table
+  had it. The user then asked for an alias: `refactor.ToolName` maps
+  other names to a tool (`add_property` to `add_field`) wherever the
+  server resolves a name, in batch steps and the CLI, for either
+  language. Aliases are not published tools, so they cost nothing
+  against the budget; a direct MCP call can only use a published name.
 - **Options over new tools** (2026-10-21): the pointer alias (gap A)
   is `pointer` on `extract_variable`, not a tool of its own: the model
   already reaches for extract_variable, and its refusal for a field

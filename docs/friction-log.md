@@ -3222,3 +3222,10 @@ for a timing step that never ran (no /usr/bin/time) undid the last
 change on the CLI's stack instead, a committed doc edit, which `git
 checkout` restored: check that the step ran before undoing it. This
 entry appended with a heredoc.
+
+## 2026-10-27: add_field for TypeScript, and tool aliases
+
+add_field for TypeScript and the add_property alias, with create_file
+and replace_text in two batches. Two fixes to a file in the scratchpad
+before it was created, with Python. Nothing by hand in the repo. This
+entry appended with a heredoc.

@@ -12,6 +12,18 @@ type BatchOf[W Workspace] struct {
 	Summary   bool // report without the diff ("report": "summary")
 }
 
+// toolAliases are other names of tools, by which a batch step or the CLI
+// may call them: an operation's name in another language's words.
+var toolAliases = map[string]string{"add_property": "add_field"}
+
+// ToolName returns the tool that name is another name of, or name.
+func ToolName(name string) string {
+	if t, ok := toolAliases[name]; ok {
+		return t
+	}
+	return name
+}
+
 // ParseBatch reads the batch tool's arguments, finding each step's tool
 // with lookup; "check" is a checkpoint. A refusal is returned as text.
 func ParseBatch[W Workspace](args json.RawMessage, lookup func(string) (RefactoringOf[W], bool)) (BatchOf[W], string) {

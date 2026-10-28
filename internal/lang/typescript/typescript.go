@@ -15,6 +15,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/lang"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/adddecl"
+	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/addfield"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/createfile"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/fiximports"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/insertstmts"
@@ -50,10 +51,11 @@ func New(dir string, h *history.Stack) *Language {
 
 // all is TypeScript's refactorings and edits.
 func all() []refactor.RefactoringOf[*workspace.Workspace] {
-	return []refactor.RefactoringOf[*workspace.Workspace]{rename.New(), createfile.New(), adddecl.New(), replacetext.New(), replacestmts.New(), insertstmts.New(), replaceexpr.New()}
+	return []refactor.RefactoringOf[*workspace.Workspace]{rename.New(), createfile.New(), adddecl.New(), replacetext.New(), replacestmts.New(), insertstmts.New(), replaceexpr.New(), addfield.New()}
 }
 
 func lookup(name string) (refactor.RefactoringOf[*workspace.Workspace], bool) {
+	name = refactor.ToolName(name)
 	for _, r := range all() {
 		if r.Name() == name {
 			return r, true

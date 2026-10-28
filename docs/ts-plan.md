@@ -275,7 +275,7 @@ eval tasks transfer.
 | add_result | **change_return_type** | no multiple results in TS; widen to an object or tuple |
 | method_to_function, function_to_method | same | classes only |
 | extract_struct | **extract_interface** / **extract_type** | name a type from an object type or a class's members |
-| add_field | **add_property** | to interface, type literal or class |
+| add_field | same, also called `add_property` | to interface, type literal or class |
 | fold, parameterize, merge_duplicate_function | same | |
 | remove_dead_code | same | plus unused exports, unused properties |
 | move_statement_up / down | same | |
@@ -429,7 +429,12 @@ Go. Steps 1 and 2 change shared code and come before any TypeScript.
    the steps added where errors are tolerated, and makes a second pass
    for what the first left. Sorting imports, the rest of organize
    imports, is not offered: no step needed it.
-   Left: `add_property`, and stubs for what a test calls.
+   `add_field` *done*, under Go's name (the user's choice, by the rule
+   above), with `add_property` as another name a batch step or the CLI
+   may use (`refactor.ToolName`): properties into an interface, a class
+   or a type alias of an object type, after or before a member or at the
+   end, a type on one line opened up into lines.
+   Left: stubs for what a test calls.
 6. **Signatures** (Go's most common by-hand step): add / remove / move /
    introduce parameter, change_return_type, convert_params_to_object.
 7. **Effects analysis** (section 4) as one `analysis` package with a

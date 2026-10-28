@@ -88,6 +88,7 @@ func All() []refactor.Refactoring {
 
 // Lookup returns the refactoring with the given name.
 func Lookup(name string) (refactor.Refactoring, bool) {
+	name = refactor.ToolName(name)
 	for _, r := range All() {
 		if r.Name() == name {
 			return r, true
