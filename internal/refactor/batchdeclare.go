@@ -3,64 +3,23 @@ package refactor
 import (
 	"encoding/json"
 	"fmt"
-	"go/types"
 	"regexp"
 	"slices"
 	"strings"
-
-	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
 
-// The errors of a use of a function, method, type or field nothing
-// declares.
-var (
-	undefinedName = regexp.MustCompile(`^(.+\.go):\d+:\d+: undefined: (?:(\w+)\.)?(\w+)$`)
-	missingMethod = regexp.MustCompile(`^(.+\.go):\d+:\d+: .* undefined \(type (\S+) has no field or method (\w+)\)$`)
-	unknownField  = regexp.MustCompile(`^(.+\.go):\d+:\d+: unknown field (\w+) in struct literal(?: of type (\S+))?`)
-)
-
-// declaredNames returns what the workspace declares: "file\x00Name" for
-// each name at package level of each file's package (the file relative to
-// the root), and "Type.Name" for each field and method of a named type. A
-// batch takes them when it begins, so that it does not declare again what
-// a step removed.
-func declaredNames(w Workspace) map[string]bool {
-	ws, ok := w.(*workspace.Workspace)
-	if !ok {
-		return nil
-	}
-	out := map[string]bool{}
-	for _, p := range ws.Pkgs {
-		if p.Types == nil {
-			continue
-		}
-		scope := p.Types.Scope()
-		for _, n := range scope.Names() {
-			for _, f := range p.CompiledGoFiles {
-				out[ws.Rel(f)+"\x00"+n] = true
-			}
-			named, ok := scope.Lookup(n).Type().(*types.Named)
-			if _, isType := scope.Lookup(n).(*types.TypeName); !isType || !ok {
-				continue
-			}
-			for i := range named.NumMethods() {
-				out[n+"."+named.Method(i).Name()] = true
-			}
-			if st, ok := named.Underlying().(*types.Struct); ok {
-				for i := range st.NumFields() {
-					out[n+"."+st.Field(i).Name()] = true
-				}
-			}
-		}
-	}
-	return out
-}
-
-// bareType is the name of the type an error spells t (Shipment,
-// *freight.Shipment), without its package or pointer.
-func bareType(t string) string {
-	t = strings.TrimLeft(t, "*")
-	return t[strings.LastIndex(t, ".")+1:]
+// DeclarerOf is what opts.Declare is: a fix that declares stubs for what
+// a file uses and nothing declares, which reads the errors it may clear.
+type DeclarerOf[W Workspace] interface {
+	// Missing reports whether err is a use of a name nothing declares,
+	// and returns its file, the name, the key Declared lists it under,
+	// and a name the file's code declares that name may misspell ("" if
+	// none).
+	Missing(ws W, err string) (file, name, key, close string, ok bool)
+	// Declared returns the keys of what ws declares. A batch takes them
+	// when it begins, so that it does not declare again what a step
+	// removed.
+	Declared(ws W) map[string]bool
 }
 
 // declareMissing runs opts.Declare on each file whose errors errs name
@@ -70,24 +29,19 @@ func bareType(t string) string {
 // removed. It returns the steps it applied, and a note on each name it
 // left; it calls done on each step just after applying it.
 func declareMissing[W Workspace](ws W, errs []string, before map[string]bool, opts OptionsOf[W], done func(*Result)) ([]*Result, []string, error) {
+	d, ok := any(opts.Declare).(DeclarerOf[W])
+	if !ok {
+		return nil, nil, nil
+	}
 	byFile := map[string][]string{}
 	var files, skipped []string
 	for _, e := range errs {
-		var file, name, key string // key: how before has it
-		if m := undefinedName.FindStringSubmatch(e); m != nil {
-			file, name = m[1], m[3]
-			key = file + "\x00" + name
-			if close := closeName(ws, file, name); m[2] == "" && close != "" {
-				skipped = append(skipped, fmt.Sprintf("%s was not declared for you, since it is close to %s; if it is meant to be new, declare it with create_from_usage", name, close))
-				continue
-			}
-		} else if m := missingMethod.FindStringSubmatch(e); m != nil {
-			file, name = m[1], m[3]
-			key = bareType(m[2]) + "." + name
-		} else if m := unknownField.FindStringSubmatch(e); m != nil {
-			file, name = m[1], m[2]
-			key = bareType(m[3]) + "." + name
-		} else {
+		file, name, key, close, ok := d.Missing(ws, e)
+		if !ok {
+			continue
+		}
+		if close != "" {
+			skipped = append(skipped, fmt.Sprintf("%s was not declared for you, since it is close to %s; if it is meant to be new, declare it with create_from_usage", name, close))
 			continue
 		}
 		if before[key] {
@@ -215,25 +169,6 @@ func declareIn[W Workspace](ws W, file string, names []string, opts OptionsOf[W]
 		names = slices.DeleteFunc(slices.Clone(names), func(n string) bool { return n == name })
 	}
 	return nil, nil, why(), nil
-}
-
-// closeName returns a name file's package declares that name may be a
-// misspelling of, or "".
-func closeName(w Workspace, file, name string) string {
-	ws, ok := w.(*workspace.Workspace)
-	if !ok {
-		return ""
-	}
-	pkg, _ := ws.FileSyntax(ws.Abs(file))
-	if pkg == nil || pkg.Types == nil {
-		return ""
-	}
-	for _, n := range pkg.Types.Scope().Names() {
-		if Close(n, name) {
-			return n
-		}
-	}
-	return ""
 }
 
 // Close reports whether name, which is not n, may be a misspelling of

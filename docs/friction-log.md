@@ -3241,3 +3241,14 @@ add_field for TypeScript and the add_property alias, with create_file
 and replace_text in two batches. Two fixes to a file in the scratchpad
 before it was created, with Python. Nothing by hand in the repo. This
 entry appended with a heredoc.
+
+## 2026-10-27: TypeScript stubs
+
+The engine's declarer generalized (Go's regexes and declaredNames moved
+into Go's create_from_usage as Missing and Declared; the test declarers
+given Go's reading) and TypeScript's create_from_usage added, with
+replace_text and create_file in batches. The move was done as text, not
+with move_declaration: the engine called what was to move, so moving it
+first would have made the engine import Go's create_from_usage, a
+cycle. A test run failed on a full disk (the build cache again); `go
+clean -cache`. This entry appended with a heredoc.

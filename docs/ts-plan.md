@@ -434,7 +434,17 @@ Go. Steps 1 and 2 change shared code and come before any TypeScript.
    may use (`refactor.ToolName`): properties into an interface, a class
    or a type alias of an object type, after or before a member or at the
    end, a type on one line opened up into lines.
-   Left: stubs for what a test calls.
+   Stubs *done*, so step 5 is: as for Go, a batch checked at its end
+   declares what its steps call and nothing declares, through
+   `create_from_usage` (`internal/ts/edits/createfromusage`), typed from
+   the first call (parameters by the arguments, the result by what the
+   call's place expects, `void` for a statement): an exported function
+   in the module a test imports it from, a function in the file, a
+   method in the class (a signature in the interface) it is called on.
+   The engine's declarer now reads its own errors
+   (`refactor.DeclarerOf`: `Missing`, `Declared`); Go's regexes and
+   `declaredNames` moved into Go's `create_from_usage`. A name the
+   compiler suggests another for ("Did you mean") is left alone.
 6. **Signatures** (Go's most common by-hand step): add / remove / move /
    introduce parameter, change_return_type, convert_params_to_object.
 7. **Effects analysis** (section 4) as one `analysis` package with a

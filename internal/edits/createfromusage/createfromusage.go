@@ -10,6 +10,7 @@ import (
 	"go/token"
 	"go/types"
 	"os"
+	"regexp"
 	"slices"
 	"sort"
 	"strconv"
@@ -56,6 +57,88 @@ func (*CreateFromUsage) InputSchema() json.RawMessage {
 func (*CreateFromUsage) ChangesBehavior() {}
 
 func (*CreateFromUsage) Fixes() {}
+
+// The errors of a use of a function, method, type or field nothing
+// declares.
+var (
+	undefinedName = regexp.MustCompile(`^(.+\.go):\d+:\d+: undefined: (?:(\w+)\.)?(\w+)$`)
+	missingMethod = regexp.MustCompile(`^(.+\.go):\d+:\d+: .* undefined \(type (\S+) has no field or method (\w+)\)$`)
+	unknownField  = regexp.MustCompile(`^(.+\.go):\d+:\d+: unknown field (\w+) in struct literal(?: of type (\S+))?`)
+)
+
+// Missing reports whether err is a use of a function, method, type or
+// field nothing declares, and which (see refactor.DeclarerOf): its key is
+// "file\x00Name" for a package-level name, "Type.Name" for a field or
+// method.
+func (*CreateFromUsage) Missing(ws *workspace.Workspace, err string) (file, name, key, close string, ok bool) {
+	if m := undefinedName.FindStringSubmatch(err); m != nil {
+		file, name = m[1], m[3]
+		if m[2] == "" {
+			close = closeName(ws, file, name)
+		}
+		return file, name, file + "\x00" + name, close, true
+	}
+	if m := missingMethod.FindStringSubmatch(err); m != nil {
+		return m[1], m[3], bareType(m[2]) + "." + m[3], "", true
+	}
+	if m := unknownField.FindStringSubmatch(err); m != nil {
+		return m[1], m[2], bareType(m[3]) + "." + m[2], "", true
+	}
+	return "", "", "", "", false
+}
+
+// Declared returns what ws declares: "file\x00Name" for each name at
+// package level of each file's package (the file relative to the root),
+// and "Type.Name" for each field and method of a named type.
+func (*CreateFromUsage) Declared(ws *workspace.Workspace) map[string]bool {
+	out := map[string]bool{}
+	for _, p := range ws.Pkgs {
+		if p.Types == nil {
+			continue
+		}
+		scope := p.Types.Scope()
+		for _, n := range scope.Names() {
+			for _, f := range p.CompiledGoFiles {
+				out[ws.Rel(f)+"\x00"+n] = true
+			}
+			named, ok := scope.Lookup(n).Type().(*types.Named)
+			if _, isType := scope.Lookup(n).(*types.TypeName); !isType || !ok {
+				continue
+			}
+			for i := range named.NumMethods() {
+				out[n+"."+named.Method(i).Name()] = true
+			}
+			if st, ok := named.Underlying().(*types.Struct); ok {
+				for i := range st.NumFields() {
+					out[n+"."+st.Field(i).Name()] = true
+				}
+			}
+		}
+	}
+	return out
+}
+
+// bareType is the name of the type an error spells t (Shipment,
+// *freight.Shipment), without its package or pointer.
+func bareType(t string) string {
+	t = strings.TrimLeft(t, "*")
+	return t[strings.LastIndex(t, ".")+1:]
+}
+
+// closeName returns a name file's package declares that name may be a
+// misspelling of, or "".
+func closeName(ws *workspace.Workspace, file, name string) string {
+	pkg, _ := ws.FileSyntax(ws.Abs(file))
+	if pkg == nil || pkg.Types == nil {
+		return ""
+	}
+	for _, n := range pkg.Types.Scope().Names() {
+		if refactor.Close(n, name) {
+			return n
+		}
+	}
+	return ""
+}
 
 type args struct {
 	File    string            `json:"file"`

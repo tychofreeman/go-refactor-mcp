@@ -763,8 +763,11 @@ func runBatch[W Workspace](ws W, steps []StepOf[W], opts OptionsOf[W]) (*BatchRe
 		b.Refused = err.Error()
 		return b, nil
 	}
-	before := declaredNames(ws) // by file: what its package declared when the batch began (Go)
-	var baseline []string       // the errors the batch began with, where they are tolerated
+	var before map[string]bool // what the workspace declared when the batch began
+	if d, ok := any(opts.Declare).(DeclarerOf[W]); ok {
+		before = d.Declared(ws)
+	}
+	var baseline []string // the errors the batch began with, where they are tolerated
 	if tolerates(ws) {
 		baseline = ws.Errors()
 	}
