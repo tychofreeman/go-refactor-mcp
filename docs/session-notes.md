@@ -230,7 +230,8 @@ results are in `docs/cost-history.md`.
   the plan's rule (same names where the operation is the same, so
   recipes and eval tasks transfer), not `add_property` as its table
   had it. The user then asked for an alias: `refactor.ToolName` maps
-  other names to a tool (`add_property` to `add_field`) wherever the
+  other names to a tool (`add_property` to `add_field`, and
+  `change_return_type`, the plan's name, to `add_result`) wherever the
   server resolves a name, in batch steps and the CLI, for either
   language. Aliases are not published tools, so they cost nothing
   against the budget; a direct MCP call can only use a published name.

@@ -3272,3 +3272,12 @@ replace_text. Two names fixed in a refused batch's JSON with Python
 (`IsParameterDeclaration`, a unary's `Operand`). A test's map line
 missed once: gofmt had re-aligned it. This entry appended with a
 heredoc.
+
+## 2026-10-27: TypeScript's add_result
+
+The new file with create_file, the tool, its test, the alias and the
+registration with replace_text, in one batch checked at its end; one
+name fixed in the refused batch's JSON with Python
+(`GetFunctionFlags`, as the node has no AsteriskToken method). The
+recursive-call case written into the scratchpad copy with Python before
+the file was created. This entry appended with a heredoc.
