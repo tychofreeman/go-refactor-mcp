@@ -588,6 +588,32 @@ Go. Steps 1 and 2 change shared code and come before any TypeScript.
    inline_function in other files (they are inlined, but all_calls
    takes only the file's), and declaring a generic function.
 9. **Move:** move_declaration, move_file, delete_file.
+   *Done* (`internal/ts/refactorings/move`, the logic in `tsapi`'s
+   move.go):
+   - `move_file` moves a file or directory through the language
+     service's file rename: the module specifiers that refer to it, its
+     own relative imports and the tsconfig's file lists change; other
+     files move byte for byte.
+   - `delete_file` refuses a file another file still imports (for a
+     directory, from outside it), naming the imports.
+   - `move_declaration` moves top-level declarations (a function with
+     its overloads, class, interface, type, enum, a one-variable
+     statement), with the comments above them, to a file it creates
+     when needed: exported when anything outside uses them; the old
+     file's imports they use follow them (re-specified for the new
+     place), and those only they used go; the old file imports what it
+     still uses of them; other files' imports of them from the old file
+     change to the new one (the whole specifier when all its names
+     move, else split), and the destination's own import of them goes.
+     `also` and `with_dependencies` as in Go. Refused: a declaration
+     that stays and is not exported but is used by what moves, a name
+     the destination declares, a default export, a namespace, several
+     variables in one statement, a namespace import of the old file
+     that uses what moves, `export *` of it, `import()` or `require()`
+     of it. Go's `new_name` is refused: rename before or after.
+   Left for later: a moved declaration that the destination reaches
+   through a name of its own (an alias), and deleting an old file left
+   empty.
 10. **Shapes:** fold, parameterize, merge_duplicate_function,
     remove_dead_code, extract_interface, union_switch_to_method.
 11. **Measuring:** `refactor-ab` with TypeScript tasks: translate four
