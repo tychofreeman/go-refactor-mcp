@@ -1959,6 +1959,12 @@ hand or a tool got in the way.
         2") rolled the batch back, and the fix was `replace_declaration`
         plus `add_declaration` with `after`. Taking the extra declarations
         and placing them after the replaced one would save the retry.
+        *Done:* `content` may hold the new declaration and then
+        declarations to add after it (refused if another comes first, or
+        for one spec of a group); the note names what was added. It came
+        up a third and fourth time in glisp's next round (#58, `Lambda`'s
+        `String` with two new methods; #54's `slotStore` and `pushCall`
+        earlier), worked around by a splitting script.
       - **A new name's clash shows only at the end.** New files used names
         the package already had (`str`, `field`); a batch with `check:
         "end"` caught it, but only after all steps, rolling back eleven. A

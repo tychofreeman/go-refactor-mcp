@@ -29,7 +29,7 @@ func (*ReplaceDeclaration) Name() string { return "replace_declaration" }
 
 func (*ReplaceDeclaration) Description() string {
 	return `Replace a whole top-level declaration, found by name, with new source: an edit, for a signature and body that change together, or a declaration too long to restate as replace_text's old (a table, a type); for a body alone, use replace_statements with function. With name "Cart.Total" and content func (c *Cart) Total() (int, error) { ... }, Total's signature and body are replaced together.
-content is the one new declaration, declaring the same name (to rename, use rename); in a parenthesized group, just its spec. The old doc comment stays unless content has its own. Packages content names are imported, and those only the old declaration used are removed. Callers a new signature breaks are refused, or fixed in the same batch with check "end".`
+content is the new declaration, declaring the same name (to rename, use rename), then any declarations to add after it (a helper it now calls); in a parenthesized group, just its spec. The old doc comment stays unless content has its own. Packages content names are imported, and those only the old declaration used are removed. Callers a new signature breaks are refused, or fixed in the same batch with check "end".`
 }
 
 func (*ReplaceDeclaration) InputSchema() json.RawMessage {
@@ -40,7 +40,7 @@ func (*ReplaceDeclaration) InputSchema() json.RawMessage {
     "line":    {"type": "integer", "description": "1-based line of that occurrence. Omit it to find name as a symbol of the package of file."},
     "name":    {"type": "string",  "description": "The declared name: Name, or Type.Method for a method."},
     "column":  {"type": "integer", "description": "Optional 1-based column, only needed to disambiguate."},
-    "content": {"type": "string",  "description": "The new declaration, as Go source, with a doc comment to replace the old one."},
+    "content": {"type": "string",  "description": "The new declaration, as Go source, with a doc comment to replace the old one; declarations after it are added after it."},
     "imports": {"type": "array", "items": {"type": "string"}, "description": "Optional: import paths to use for package names content uses, when the name alone is ambiguous."}
   },
   "required": ["file", "name", "content"],
@@ -91,11 +91,16 @@ func (*ReplaceDeclaration) Plan(ws *workspace.Workspace, raw json.RawMessage) (*
 	if err != nil {
 		return nil, err
 	}
-	if len(decls) != 1 {
-		return nil, refactor.Refusef("content must be one declaration, the new %s; it has %d", obj.Name(), len(decls))
-	}
+	// The new declaration, then any to add after it.
 	nd := decls[0]
+	var extra []string
+	for _, d := range decls[1:] {
+		extra = append(extra, declared(d)...)
+	}
 	if names := declared(nd); !slices.Contains(names, obj.Name()) {
+		if slices.Contains(extra, obj.Name()) {
+			return nil, refactor.Refusef("content must start with the new %s; declarations to add go after it", obj.Name())
+		}
 		return nil, refactor.Refusef("content declares %s, not %s; to rename it, use rename", strings.Join(names, ", "), obj.Name())
 	}
 	if err := sameKind(decl, nd); err != nil {
@@ -109,7 +114,7 @@ func (*ReplaceDeclaration) Plan(ws *workspace.Workspace, raw json.RawMessage) (*
 	case spec != nil:
 		// One spec of a group: its doc stays, and the new spec's text goes in.
 		g := nd.(*ast.GenDecl)
-		if len(g.Specs) != 1 {
+		if len(g.Specs) != 1 || len(decls) != 1 {
 			return nil, refactor.Refusef("%s is one spec of a group; content must declare just it", obj.Name())
 		}
 		text = textOf(a.Content, g.Specs[0])
@@ -129,6 +134,9 @@ func (*ReplaceDeclaration) Plan(ws *workspace.Workspace, raw json.RawMessage) (*
 		Summary:  fmt.Sprintf("replaced %s in %s", a.Name, ws.Rel(path)),
 		Edits:    []edit.FileEdit{{Path: path, Edits: append([]edit.TextEdit{{Start: tf.Offset(start), End: tf.Offset(end), NewText: text}}, adder.Edits()...)}},
 		Supplied: a.Content,
+	}
+	if len(extra) > 0 {
+		plan.Notes = append(plan.Notes, fmt.Sprintf("added %s after %s", strings.Join(extra, ", "), obj.Name()))
 	}
 	if len(added) > 0 {
 		plan.Notes = append(plan.Notes, gocode.ImportNote("added", added))
