@@ -2074,7 +2074,15 @@ hand or a tool got in the way.
        that no longer type-check after it. Go converts at the uses; an
        assertion (`as`) would be TypeScript's counterpart, for later if
        runs show the model needs it.
-    3. `function_to_method` and `method_to_function`.
+    3. `function_to_method` and `method_to_function`. *Done*: a
+       function becomes a method of the class its first parameter is
+       typed with, declared in the same file, the parameter becoming
+       `this`; a method becomes a function after its class taking the
+       instance first, imported where it is called. Calls keep their
+       evaluation order. Refused: dynamic dispatch (a member that
+       overrides, implements or is overridden), `this` or the parameter
+       in a nested function, `super`, `#` names, `?.` calls, recursion
+       and uses as a value.
     4. `prepare_switch_for_types` (only `union_switch_to_method`, its
        last step, exists).
     5. `extract_struct` (TypeScript has extract_interface and
