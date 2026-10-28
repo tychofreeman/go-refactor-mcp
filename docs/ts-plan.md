@@ -530,6 +530,63 @@ Go. Steps 1 and 2 change shared code and come before any TypeScript.
    reorder) are the same rules; step 8's refactorings ask `Check`.
 8. **Simplify:** extract / inline variable and function, invert_if,
    remove_else, move statements.
+   *Done* (`internal/ts/refactorings/simplify`, the logic in `tsapi`'s
+   simplify.go, extractfunc.go and inlinefunc.go), each asking step
+   7's `Check`:
+   - `extract_variable` inserts `const name = e;` before the
+     statement: `e` moves past what runs before it there (`Maybe` after
+     `&&`, `?.` or in a branch; `Shared`, with the whole loop as what
+     runs between, in a loop's condition); its names must mean the same
+     there. all_occurrences takes the same expression later in the
+     block where nothing between could change it. Refused: an
+     assignment's target, a method called through it (its `this`), part
+     of an optional chain, an expression in no block. `pointer` is
+     Go's and refused.
+   - `inline_variable` replaces each use of a `const` or never-assigned
+     `let` (one declarator of several keeps the others): its value
+     moves past what lies between the declaration and the use, the
+     whole loop when the use is in one; several uses are `Several`. A
+     use inside a function takes only a constant value.
+   - `move_statement_up` / `_down` swap two statements with their
+     comments: refused when one uses what the other declares (a
+     function declaration aside, as it is hoisted) or when `Check`
+     finds the order matters.
+   - `invert_if` negates (exactly: `===`/`!==`, `!`, De Morgan, `<`
+     and `>=` only for strings and bigints, as a number may be NaN) and
+     swaps; a new first branch that cannot fall through un-nests the
+     other unless keep_else; an if without else becomes a guard as the
+     last statement of a function's body (`return;`) or a loop's
+     (`continue;`). `remove_else` un-nests the else after a branch that
+     cannot fall through, an else-if becoming a separate if. Both
+     refuse names that un-nesting would make clash, and re-indent
+     without touching lines inside a multi-line string or template.
+   - `extract_function` makes a function after the top-level
+     statement (a `private` method after the member when the lines use
+     `this` or `super`, `static` in a static one; `async` with `await`):
+     locals read become parameters, typed at their first use (declared
+     type when the lines assign them); those declared or assigned and
+     used outside the lines come back as the result, one as itself,
+     several as an object (`const { a, b } = f(...)`, or
+     `({ a, b } = f(...))`). Lines that end the function's body keep
+     their returns (`return f(...)`). Refused: other returns, a jump
+     out, `yield`, `arguments`, a type parameter or local type, mixing
+     declared and assigned results, declarations at the module's top
+     level. Go's `function`/`case` address is refused for now.
+   - `inline_function` inlines functions, consts bound to one, and
+     static or private methods (`this` becomes the receiver): a body
+     that is one expression anywhere, statements where the call is a
+     statement, a declaration's or assignment's value, or a return.
+     An argument replaces its parameter when `Check` allows it (others
+     are passed before it, the body after it; `Unused`, `Maybe` or
+     `Several` by its uses), else it is declared before the statement
+     (`const p: T = arg;`). all_calls takes the file's calls; the
+     function goes when nothing else uses it, unless exported.
+     Refused: overridable methods, async and generators, generics, rest
+     or destructured parameters, overloads, early returns, `super`,
+     recursion, names the body sees otherwise at the call.
+   Left for later: extract_function on a switch case, calls of
+   inline_function in other files (they are inlined, but all_calls
+   takes only the file's), and declaring a generic function.
 9. **Move:** move_declaration, move_file, delete_file.
 10. **Shapes:** fold, parameterize, merge_duplicate_function,
     remove_dead_code, extract_interface, union_switch_to_method.

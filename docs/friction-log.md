@@ -3309,3 +3309,15 @@ changed with `sed -i`. The rest (declarations shared by three
 statements, the summary named per call after a test caught a cached
 call site, the test and its expected lines, the docs) with replace_text
 and create_file through the CLI. This entry appended with a heredoc.
+
+## 2026-10-28: TypeScript's simplify refactorings (step 8)
+
+The four new files written in the scratchpad (with Python fixing two
+names and a shadowed variable in them before the first batch) and
+created with create_file in one batch checked at its end, with the
+workspace's `Edits` (add_declaration), the registration and `chosen`
+taking over `Statements`' search (replace_text). The tests' expected
+lines, the fixes the tests found (a shorthand property, `Shared` with
+the loop as what runs between, a blank line left by a deleted
+function, module-level declarations) and the docs with replace_text.
+This entry appended with a heredoc.
