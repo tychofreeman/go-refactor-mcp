@@ -68,6 +68,19 @@ func TestFunction(t *testing.T) {
 	}
 }
 
+// function and case replace a case's body.
+func TestCase(t *testing.T) {
+	ws, dir := garden(t)
+	res := run(t, ws, `{"file": "src/garden.ts", "function": "water", "content": "switch (liters) {\n  case 1:\n    return \"one\";\n  default:\n    return \"many\";\n}"}`)
+	if !res.Applied {
+		t.Fatalf("%s", res)
+	}
+	res = run(t, ws, `{"file": "src/garden.ts", "function": "water", "case": "1", "content": "return \"a liter\";"}`)
+	if want := "    case 1:\n      return \"a liter\";\n    default:"; !res.Applied || !strings.Contains(source(t, dir), want) {
+		t.Fatalf("%s\n%s", res, source(t, dir))
+	}
+}
+
 func TestRefusals(t *testing.T) {
 	ws, _ := garden(t)
 	for _, tc := range []struct{ args, want string }{

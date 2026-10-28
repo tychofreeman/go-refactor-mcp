@@ -301,7 +301,7 @@ func (*ExtractFunction) Name() string { return "extract_function" }
 
 func (*ExtractFunction) Description() string {
 	return `Move a run of whole statements into a new function, declared after the one they are in, and call it in their place: in function report(beds: Bed[]), extracting let total = 0 and the loop that adds each b.depth to it, as sum, gives const total = sum(beds) there and function sum(beds: Bed[]) { let total = 0; for ...; return total; }. Locals the statements use become parameters; those they declare or assign that are used elsewhere come back as the result (an object of them when several). Statements that use this become a private method of the class; with await, the function is async and the call awaited.
-Identify the statements by file, start_line and end_line: whole statements of one block, as inspect numbers them. doc becomes the new function's doc comment.
+Identify the statements by file, start_line and end_line: whole statements of one block, as inspect numbers them; or a case's body by function and case ("fern" in function water, or default; a last break stays), which stays valid after earlier steps. doc becomes the new function's doc comment.
 Returns: when the lines end the function's body, their returns stay and the call becomes return sum(...).
 Lines that return before the function's end return a value the call returns unless it is undefined, or whether they returned. Refuses, saying why: an early return of what may be undefined, a break or continue out of the lines, yield, arguments, this outside a class's method, a type parameter or a type declared in the function, a variable declared in a block of the lines and used after them, declaring some results and assigning others.`
 }
@@ -313,10 +313,12 @@ func (*ExtractFunction) InputSchema() json.RawMessage {
     ` + fileProp + `,
     "start_line": {"type": "integer", "description": "1-based first line of the statements to extract."},
     "end_line":   {"type": "integer", "description": "1-based last line of the statements to extract (inclusive)."},
+    "function":   {"type": "string",  "description": "Instead of the lines: the function (name or Class.method) with the switch whose case to extract."},
+    "case":       {"type": "string",  "description": "With function: the case's value as written (\"fern\", Kind.Fern) or default."},
     "name":       {"type": "string",  "description": "Name for the new function."},
     "doc":        {"type": "string",  "description": "Optional doc comment for the new function, its text without /** */."}
   },
-  "required": ["file", "start_line", "end_line", "name"],
+  "required": ["file", "name"],
   "additionalProperties": false
 }`)
 }
@@ -335,8 +337,18 @@ func (*ExtractFunction) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
-	if a.Case != "" || a.Function != "" {
-		return nil, refactor.Refusef("function and case address a switch's case in Go; for TypeScript, give start_line and end_line")
+	switch {
+	case (a.Case != "") != (a.Function != ""):
+		return nil, refactor.Refusef("give function and case together, for a case's body; or start_line and end_line")
+	case a.Case != "" && (a.StartLine != 0 || a.EndLine != 0):
+		return nil, refactor.Refusef("give either function and case or start_line and end_line, not both")
+	case a.Case != "":
+		path := ws.Abs(a.File)
+		first, last, why := ws.CaseLines(path, a.Function, a.Case, false)
+		if why != "" {
+			return nil, refactor.Refusef("%s", why)
+		}
+		a.StartLine, a.EndLine = first, last
 	}
 	if a.StartLine == 0 || a.EndLine == 0 {
 		return nil, refactor.Refusef("give start_line and end_line")
@@ -355,9 +367,9 @@ func NewInlineFunction() *InlineFunction { return &InlineFunction{} }
 func (*InlineFunction) Name() string { return "inline_function" }
 
 func (*InlineFunction) Description() string {
-	return `Replace a call with the function's body, and delete the function when nothing else uses it: the inverse of extract_function. With function area(b: Bed) { return b.width * b.depth; }, const a = area(bed) becomes const a = bed.width * bed.depth. A body that is one expression or one return may be inlined anywhere; a body of statements where the call is a statement, a declaration's or assignment's value, or a return. Parameters are replaced by the arguments where that is safe, and otherwise declared first (const b = arg;).
+	return `Replace a call with the function's body, and delete the function when nothing else uses it: the inverse of extract_function. With function area(b: Bed) { return b.width * b.depth; }, const a = area(bed) becomes const a = bed.width * bed.depth. A body that is one expression or one return may be inlined anywhere, and so may guards and a last return (if (s.length <= n) return s; return s.slice(0, n); becomes s.length <= n ? s : s.slice(0, n)); a body of statements where the call is a statement, a declaration's or assignment's value, or a return, and one that returns early only where the call is a return's whole value. Parameters are replaced by the arguments where that is safe, and otherwise declared first (const b = arg;; a rest parameter as the array of the rest, a destructured one as its pattern). Of overloads, the implementation is inlined.
 Identify the call by file, line and the function's name (column if the name is on the line twice). With all_calls, every call in the file is inlined and the function deleted (give file and name); if one call cannot be, none is. keep_function keeps the function; an exported one is always kept.
-Refuses, saying why: methods a subclass could override (only static and private ones are inlined), async functions and generators, generic functions, rest or destructured parameters, overloads, an early return, super, recursion, a name the body uses that means something else at the call.`
+Refuses, saying why: methods a subclass could override (only static and private ones are inlined), async functions and generators, a body that names a type parameter, a destructured rest parameter, an early return elsewhere than a return's value, super, recursion, a name the body uses that means something else at the call.`
 }
 
 func (*InlineFunction) InputSchema() json.RawMessage {

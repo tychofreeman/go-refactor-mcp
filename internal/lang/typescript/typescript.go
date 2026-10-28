@@ -14,13 +14,16 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/history"
 	"github.com/tychofreeman/go-refactor-mcp/internal/lang"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/addcase"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/adddecl"
+	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/addelement"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/addfield"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/changetype"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/createfile"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/createfromusage"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/fiximports"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/insertstmts"
+	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/replacedecl"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/replaceexpr"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/replacestmts"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/replacetext"
@@ -60,7 +63,7 @@ func all() []refactor.RefactoringOf[*workspace.Workspace] {
 	return []refactor.RefactoringOf[*workspace.Workspace]{rename.New(), createfile.New(), adddecl.New(), replacetext.New(), replacestmts.New(), insertstmts.New(), replaceexpr.New(), addfield.New(), createfromusage.New(), changesig.NewAdd(), changesig.NewRemove(), changesig.NewMove(), changesig.NewIntroduce(), changesig.NewParamsToObject(), changesig.NewAddResult(), changesig.NewChangeFieldType(), changesig.NewChangeParameterType(), changetype.New(), changesig.NewFunctionToMethod(), changesig.NewMethodToFunction(),
 		simplify.NewExtractVariable(), simplify.NewInlineVariable(), simplify.NewMoveUp(), simplify.NewMoveDown(), simplify.NewInvertIf(), simplify.NewRemoveElse(), simplify.NewExtractFunction(), simplify.NewInlineFunction(),
 		move.NewMoveDeclaration(), move.NewMoveFile(), move.NewDeleteFile(),
-		shapes.NewFold(), shapes.NewParameterize(), shapes.NewMergeDuplicate(), shapes.NewRemoveDeadCode(), shapes.NewExtractInterface(), shapes.NewUnionSwitchToMethod(), shapes.NewPrepareSwitchForTypes()}
+		shapes.NewFold(), shapes.NewParameterize(), shapes.NewMergeDuplicate(), shapes.NewRemoveDeadCode(), shapes.NewExtractInterface(), shapes.NewUnionSwitchToMethod(), shapes.NewPrepareSwitchForTypes(), addcase.New(), addelement.New(), replacedecl.New()}
 }
 
 // goNames are Go tools' names for the TypeScript tool that does their

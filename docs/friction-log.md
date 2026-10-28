@@ -3411,3 +3411,11 @@ appended with a heredoc.
 
 The alias and its test with replace_text and create_file through the
 CLI; the docs with replace_text. This entry appended with a heredoc.
+
+## 2026-10-28: TypeScript's add_case, add_element and replace_declaration, inline_function's refusals, extract_function by function and case (items 41.6-41.8)
+
+The new files with create_file and the rest with replace_text through
+the CLI, in batches written by Python and checked at their end; a batch
+refused for a compiler function that does not exist
+(`ast.IsCaseOrDefaultClause`) was fixed in the scratchpad copy and
+resent. The docs with replace_text. This entry appended with a heredoc.

@@ -1,0 +1,86 @@
+package addelement
+
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/ts/workspace"
+)
+
+// edited runs New on a fresh copy of src (as src/g.ts) with args, and
+// returns the file after, or the refusal.
+func edited(t *testing.T, src, args string) (string, string) {
+	t.Helper()
+	dir := t.TempDir()
+	for name, text := range map[string]string{
+		"tsconfig.json": `{"compilerOptions": {"strict": true, "module": "ESNext", "moduleResolution": "Bundler", "noEmit": true, "types": []}, "include": ["src"]}`,
+		"src/g.ts":      src,
+	} {
+		p := filepath.Join(dir, name)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ws, err := workspace.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := refactor.Run(ws, New(), json.RawMessage(`{"file": "src/g.ts", `+args[1:]), refactor.OptionsOf[*workspace.Workspace]{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Applied {
+		return "", res.Refused
+	}
+	b, err := os.ReadFile(filepath.Join(dir, "src/g.ts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b), ""
+}
+
+type tcase struct{ name, args, want, refused string }
+
+func check(t *testing.T, src string, cases []tcase) {
+	t.Helper()
+	for _, tc := range cases {
+		got, refused := edited(t, src, tc.args)
+		switch {
+		case tc.refused != "" && !strings.Contains(refused, tc.refused):
+			t.Errorf("%s: want a refusal with %q, got %q\n%s", tc.name, tc.refused, refused, got)
+		case tc.refused == "" && refused != "":
+			t.Errorf("%s: refused: %s", tc.name, refused)
+		case tc.refused == "" && !strings.Contains(got, tc.want):
+			t.Errorf("%s:\n%s\nwant it to hold:\n%s", tc.name, got, tc.want)
+		}
+	}
+}
+
+const plants = `export const sizes = {
+  fern: 3,
+  moss: 1,
+};
+
+export const names = ["fern", "moss"];
+
+export const none: string[] = [];
+`
+
+func TestAddElement(t *testing.T) {
+	check(t, plants, []tcase{
+		{"at the end, with a trailing comma", `{"line": 1, "element": "cactus: 2"}`, "  moss: 1,\n  cactus: 2,\n};", ""},
+		{"before a key", `{"line": 1, "element": "rose: 4", "before": "moss"}`, "  fern: 3,\n  rose: 4,\n  moss: 1,", ""},
+		{"at the end of a line", `{"line": 6, "element": "\"cactus\""}`, `["fern", "moss", "cactus"]`, ""},
+		{"after an element", `{"line": 6, "element": "\"rose\"", "after": "\"fern\""}`, `["fern", "rose", "moss"]`, ""},
+		{"into an empty one", `{"line": 8, "element": "\"x\""}`, `none: string[] = ["x"];`, ""},
+		{"no such key", `{"line": 1, "element": "x: 1", "after": "oak"}`, "", "has no element oak"},
+		{"no literal", `{"line": 2, "element": "x: 1"}`, "", "no object or array literal starts on line 2"},
+	})
+}

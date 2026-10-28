@@ -2103,11 +2103,33 @@ hand or a tool got in the way.
        `m.src.path`), would change the objects' shape at run time in
        TypeScript; not done.
     6. The edits `add_case`, `add_element` and `replace_declaration`.
+       *Done*: clauses at a switch's end (before a final default and
+       the cases falling into it) or next to a clause, `else if`
+       branches at a chain's end or next to one; an element in an object
+       or array literal, at its end or by key, in the literal's layout;
+       a declaration replaced by name, its doc comment kept unless the
+       content has one. With these every Go tool has a TypeScript
+       counterpart.
     7. inline_function's refusals where a sound form exists: an early
        return first, then rest or destructured parameters, overloads,
-       generics, async functions.
+       generics, async functions. *Done* but async: guards and a last
+       return become a conditional expression, inlined anywhere
+       (`truncate`'s shape in the TypeScript A/B run); a body that
+       returns early is inlined where the call is a return's whole
+       value; a rest parameter is declared as the array of the rest, a
+       destructured one as its pattern; of overloads the implementation
+       is inlined, and the signatures go with it; a generic function
+       whose body does not name its type parameters. Async stays
+       refused: inlining an await changes when the rest runs. Go's
+       inline_function still refuses an early return.
     8. extract_function addressed by `function` and `case` (a switch
-       case), as Go's.
+       case), as Go's. *Done*, for replace_statements too: the case's
+       value as written (`"fern"`, `Kind.Fern`) or `default`; a last
+       `break` stays in the switch. Lines that end with a return now
+       keep their returns wherever they are (the call becomes
+       `return f(...)`), as a case's body that returns needs; before,
+       only lines that ended the function's body did. Go's copy of the
+       code after the switch for a value with no case is not done.
     9. The plan's smaller leftovers: all_calls across files, declaring a
        generic function in extract_function, a moved declaration the
        destination imports under an alias, deleting an old file left

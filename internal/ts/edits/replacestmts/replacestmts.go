@@ -28,7 +28,7 @@ func (*ReplaceStatements) Name() string { return "replace_statements" }
 
 func (*ReplaceStatements) Description() string {
 	return `Replace whole statements of one block with new TypeScript statements: an edit, to write a function's body (a stub becomes the implementation) or change what statements do. With function "Bed.plant" and content this.plants.push(p);, plant's whole body becomes that statement.
-Give start_line and end_line (inclusive, as inspect numbers them) covering whole statements of one block, comments and blank lines included; or function (name, or Class.member, an arrow function bound to a const too) for the whole body, even an empty one, which stays valid after earlier steps. content is re-indented to the block; empty content deletes the statements.
+Give start_line and end_line (inclusive, as inspect numbers them) covering whole statements of one block, comments and blank lines included; or function (name, or Class.member, an arrow function bound to a const too) for the whole body, even an empty one, which stays valid after earlier steps; with case too ("fern", or default), the body of that case of its switch. content is re-indented to the block; empty content deletes the statements.
 Refuses, saying why: lines that cut a statement (naming the lines that would not); content that is not statements, or does not type-check.`
 }
 
@@ -38,6 +38,7 @@ func (*ReplaceStatements) InputSchema() json.RawMessage {
   "properties": {
     "file":       {"type": "string",  "description": "Relative to the root."},
     "function":   {"type": "string",  "description": "Instead of the lines: the function (name or Class.member) whose body to replace."},
+    "case":       {"type": "string",  "description": "With function: replace the body of this case of its switch instead (\"fern\", or default)."},
     "start_line": {"type": "integer", "description": "First line (1-based)."},
     "end_line":   {"type": "integer", "description": "Last line (inclusive)."},
     "content":    {"type": "string",  "description": "The new statements."}
@@ -51,6 +52,7 @@ func (*ReplaceStatements) Plan(ws *workspace.Workspace, raw json.RawMessage) (*r
 	var a struct {
 		File      string `json:"file"`
 		Function  string `json:"function"`
+		Case      string `json:"case"`
 		StartLine int    `json:"start_line"`
 		EndLine   int    `json:"end_line"`
 		Content   string `json:"content"`
@@ -64,6 +66,17 @@ func (*ReplaceStatements) Plan(ws *workspace.Workspace, raw json.RawMessage) (*r
 	path := ws.Abs(a.File)
 	if _, err := os.Stat(path); err != nil {
 		return nil, refactor.Refusef("%s: no such file", a.File)
+	}
+	if a.Case != "" {
+		// A case's body: its lines, then as lines.
+		if a.Function == "" {
+			return nil, refactor.Refusef("give the function whose switch has the case")
+		}
+		first, last, why := ws.CaseLines(path, a.Function, a.Case, true)
+		if why != "" {
+			return nil, refactor.Refusef("%s", why)
+		}
+		a.Function, a.StartLine, a.EndLine = "", first, last
 	}
 	empty := strings.TrimSpace(a.Content) == ""
 	var n int
