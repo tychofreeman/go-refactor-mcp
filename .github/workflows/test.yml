@@ -47,6 +47,13 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version: ${{ matrix.go }}
+          # The cache is saved once per key, by the first job to finish.
+          # This file is in the key so that only this job's full build
+          # cache (the TypeScript compiler compiled) is saved under it;
+          # change it to start a new one.
+          cache-dependency-path: |
+            go.sum
+            .github/workflows/test.yml
 
       - name: Check formatting
         run: |
@@ -77,7 +84,12 @@ jobs:
           # -json records how long each package and test took; test.log
           # keeps the usual output, for the log and the failure annotation.
           status=0
-          go test -race -json ./... > test.json 2> test.err || status=$?
+          # The TypeScript packages run without -race: each of their test
+          # binaries links the whole TypeScript compiler, which the race
+          # detector makes far slower to build, and they run little
+          # concurrently.
+          go test -race -json $(go list ./... | grep -v '/internal/ts/') > test.json 2> test.err || status=$?
+          go test -json ./internal/ts/... >> test.json 2>> test.err || status=$?
           { cat test.err; jq -Rj 'fromjson? | select(.Action == "output" or .Action == "build-output") | .Output' test.json; } > test.log
           cat test.log
           sh .github/test-times.sh test.json "Go ${{ matrix.go }}"
@@ -98,6 +110,9 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version: stable
+          # Not cached: finishing first, this job saved a cache of the
+          # modules alone under the test job's key.
+          cache: false
 
       - name: govulncheck
         # Fails only when the code calls a function with a known
