@@ -2134,9 +2134,22 @@ hand or a tool got in the way.
        generic function in extract_function, a moved declaration the
        destination imports under an alias, deleting an old file left
        empty, fold of near-duplicates that differ in constants, and a
-       base class in union_switch_to_method.
+       base class in union_switch_to_method. *Done*: all_calls inlines
+       every file's calls and drops their imports; extract_function
+       declares the type parameters the lines use; the destination's
+       uses of an alias take the declaration's name; a file left empty
+       is deleted; a string parameter of fold's pattern stands for
+       constant text of a template and a run of a + chain; an abstract
+       class's direct subclasses take a union's place, the base getting
+       the method as abstract (one level of subclasses).
     10. Tooling: TypeScript in the `refactor` CLI (inspect and batches),
-        and the A/B quality columns for TypeScript.
+        and the A/B quality columns for TypeScript. *Done*: a CLI call
+        naming TypeScript files runs through the server's languages
+        (`mcpserver.Server.Call`); its undo history lives in the
+        process, so `refactor undo` does not reach TypeScript steps of
+        earlier invocations. `metrics` measures TypeScript functions
+        (`tsapi.Measure`: complexity and nesting counted as Go's), so
+        refactor-ab's quality table covers TypeScript runs.
     11. With the user: whether to keep tolerating errors already in the
         code (a step may add none), and real repositories beyond Hono,
         where union_switch_to_method and merge_duplicate_function found

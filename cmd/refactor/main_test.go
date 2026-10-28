@@ -44,6 +44,35 @@ func read(t *testing.T, dir string) string {
 	return string(b)
 }
 
+// A call naming TypeScript files runs TypeScript's tools.
+func TestTypeScript(t *testing.T) {
+	dir := t.TempDir()
+	for name, content := range map[string]string{
+		"tsconfig.json": `{"compilerOptions": {"strict": true, "module": "ESNext", "moduleResolution": "Bundler", "noEmit": true, "types": []}, "include": ["src"]}`,
+		"src/a.ts":      "export function water(liters: number): string {\n  return liters + \" L\";\n}\n",
+	} {
+		p := filepath.Join(dir, name)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var out strings.Builder
+	stdout = &out
+	defer func() { stdout = os.Stdout }()
+	if code := run([]string{"-C", dir, "inspect", "file=src/a.ts"}); code != 0 || !strings.Contains(out.String(), "export function water(liters: number): string") {
+		t.Fatalf("inspect: exit status %d\n%s", code, out.String())
+	}
+	if code := run([]string{"-C", dir, "rename", "file=src/a.ts", "name=water", "new_name=soak"}); code != 0 {
+		t.Fatalf("rename: exit status %d\n%s", code, out.String())
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, "src/a.ts")); !strings.Contains(string(b), "function soak(") {
+		t.Errorf("a.ts:\n%s", b)
+	}
+}
+
 func TestRunDeclaresWhatAnEditCalls(t *testing.T) {
 	dir := module(t, "package p\n\nfunc f() {}\n")
 	if code := run([]string{"-C", dir, "add_declaration", `{"file":"p.go","content":"func g() int { return h(1) }"}`}); code != 0 {

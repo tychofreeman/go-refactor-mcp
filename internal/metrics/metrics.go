@@ -1,15 +1,18 @@
-// Package metrics measures the functions in a set of Go files, so a
+// Package metrics measures the functions in a set of Go and TypeScript
+// files, so a
 // refactoring run can be judged by numbers: did complexity and nesting go
 // down? The numbers are the ones inspect shows the model.
 package metrics
 
 import (
+	"fmt"
 	"go/parser"
 	"go/token"
 	"sort"
 	"strings"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/inspect"
+	"github.com/tychofreeman/go-refactor-mcp/internal/ts/tsapi"
 )
 
 // Thresholds above which a function counts as too complex or too nested.
@@ -33,13 +36,23 @@ type Func struct {
 func Measure(files map[string][]byte) ([]Func, error) {
 	var paths []string
 	for p := range files {
-		if strings.HasSuffix(p, ".go") && !strings.HasSuffix(p, "_test.go") {
+		if strings.HasSuffix(p, ".go") && !strings.HasSuffix(p, "_test.go") || isTypeScript(p) {
 			paths = append(paths, p)
 		}
 	}
 	sort.Strings(paths)
 	var out []Func
 	for _, p := range paths {
+		if isTypeScript(p) {
+			ms := tsapi.Measure(p, files[p])
+			if ms == nil && !tsapi.Parses(p, files[p]) {
+				return nil, fmt.Errorf("%s does not parse", p)
+			}
+			for _, m := range ms {
+				out = append(out, Func{File: p, Name: m.Name, Lines: m.End - m.Start + 1, Complexity: m.Complexity, Nesting: m.Nesting})
+			}
+			continue
+		}
 		fset := token.NewFileSet()
 		f, err := parser.ParseFile(fset, p, files[p], parser.ParseComments)
 		if err != nil {
@@ -53,6 +66,15 @@ func Measure(files map[string][]byte) ([]Func, error) {
 		}
 	}
 	return out, nil
+}
+
+// isTypeScript reports whether p is a TypeScript source file other than a
+// test or a declaration file.
+func isTypeScript(p string) bool {
+	if strings.HasSuffix(p, ".d.ts") || strings.Contains(p, ".test.") || strings.Contains(p, ".spec.") {
+		return false
+	}
+	return strings.HasSuffix(p, ".ts") || strings.HasSuffix(p, ".tsx")
 }
 
 // Summary aggregates a set of functions.

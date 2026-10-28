@@ -27,9 +27,10 @@ still applies.
   workspace's own programs through `tsapi`'s small host, project by
   project, merging the edits; not through the language server's
   session, which would hold a second copy of every program.
-- Read TypeScript with `inspect` as Go's: `refactor inspect file=src/x.ts`
-  from the CLI does not reach it yet (the CLI is Go's), so through the
-  server, or `go test` with a query.
+- Read TypeScript with `inspect` as Go's: `refactor inspect file=src/x.ts`,
+  and batches and steps on TypeScript files, run through the server's
+  languages from the CLI; `refactor undo` does not reach them across
+  invocations (their history lives in the process).
 - Fixtures are small solutions under `testdata/` in the garden domain
   of the tool examples (`Plant`, `Bed`, `water`), not the eval tasks'.
   They need no `node_modules`: `"types": []` in the config.

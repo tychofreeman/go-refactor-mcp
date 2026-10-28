@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/inspect"
+	"github.com/tychofreeman/go-refactor-mcp/internal/ts/tsapi"
 )
 
 // Changed returns the functions of after (path -> source) that are new,
@@ -70,6 +71,12 @@ func Duplicated(files map[string][]byte) int {
 func funcTexts(files map[string][]byte) map[[2]string]string {
 	out := map[[2]string]string{}
 	for p, src := range files {
+		if isTypeScript(p) {
+			for _, m := range tsapi.Measure(p, src) {
+				out[[2]string{p, m.Name}] = m.Text
+			}
+			continue
+		}
 		fset := token.NewFileSet()
 		f, err := parser.ParseFile(fset, p, src, parser.ParseComments)
 		if err != nil {
