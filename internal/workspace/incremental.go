@@ -341,7 +341,7 @@ func (w *Workspace) typeCheck(p *packages.Package, dep bool, files []*ast.File, 
 	}
 	_ = types.NewChecker(tc, w.Fset, tpkg, info).Files(files)
 
-	p.Syntax, p.Types, p.TypesInfo = files, tpkg, info
+	p.Fset, p.Syntax, p.Types, p.TypesInfo = w.Fset, files, tpkg, info
 	p.TypeErrors, p.Errors = typeErrs, errs
 	p.IllTyped = len(errs) > 0
 }
