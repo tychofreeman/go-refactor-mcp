@@ -132,38 +132,12 @@ func (p *Project) Statements(path string, first, last int) (start, end int, inde
 	if refusal != "" {
 		return 0, 0, "", 0, refusal
 	}
-	if first < 1 || last < first || last > l.count() {
-		return 0, 0, "", 0, fmt.Sprintf("lines %d-%d are not a range of lines of the file, which has %d", first, last, l.count())
-	}
-	var chosen, over []*ast.Node
-	l.lists(func(_ *ast.Node, list []*ast.Node) {
-		var in, o []*ast.Node
-		for _, s := range list {
-			a, b := l.lines(s)
-			if a >= first && b <= last {
-				in = append(in, s)
-			}
-			if a <= last && b >= first {
-				o = append(o, s)
-			}
+	chosen, why := l.chosen(first, last)
+	if why != "" {
+		if strings.Contains(why, "whole statements") {
+			why += " (to replace a whole body, give function)"
 		}
-		if chosen == nil && len(in) > 0 {
-			chosen = in
-		}
-		if len(o) > 0 {
-			over = o
-		}
-	})
-	if !l.whole(chosen, first, last) {
-		msg := fmt.Sprintf("lines %d-%d do not hold whole statements of one block", first, last)
-		if len(over) > 0 {
-			a, _ := l.lines(over[0])
-			_, b := l.lines(over[len(over)-1])
-			if (a != first || b != last) && l.whole(over, a, b) {
-				msg += fmt.Sprintf("; lines %d-%d do", a, b)
-			}
-		}
-		return 0, 0, "", 0, msg + " (to replace a whole body, give function)"
+		return 0, 0, "", 0, why
 	}
 	return l.start(first), l.start(last + 1), l.indent(l.line(l.pos(chosen[0]))), len(chosen), ""
 }

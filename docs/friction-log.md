@@ -3318,3 +3318,15 @@ and deleting files), so it read as gaps it no longer had. It now names
 the two left: restoring a file from an earlier commit, and replacing a
 whole file, which create_file refuses (glisp #69 took three steps for
 it). With replace_text; nothing by hand.
+
+## 2026-10-28: TypeScript's simplify refactorings (step 8)
+
+The four new files written in the scratchpad (with Python fixing two
+names and a shadowed variable in them before the first batch) and
+created with create_file in one batch checked at its end, with the
+workspace's `Edits` (add_declaration), the registration and `chosen`
+taking over `Statements`' search (replace_text). The tests' expected
+lines, the fixes the tests found (a shorthand property, `Shared` with
+the loop as what runs between, a blank line left by a deleted
+function, module-level declarations) and the docs with replace_text.
+This entry appended with a heredoc.

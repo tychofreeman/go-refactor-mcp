@@ -42,6 +42,12 @@ func (w *Workspace) AddResult(path, name, field, typ, value, kept string) ([]edi
 	})
 }
 
+// Edits returns the edits change makes in every project that has the
+// file at path, each once; or the first refusal.
+func (w *Workspace) Edits(path string, change func(*tsapi.Project) ([]tsapi.Edit, string)) ([]edit.FileEdit, string) {
+	return w.merged(path, change)
+}
+
 // merged runs change in every project that has the file at path and
 // returns its edits, each once, in files under the root; or the first
 // refusal.

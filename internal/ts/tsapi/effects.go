@@ -157,7 +157,8 @@ const (
 // Move is a change to where, or how often, code is evaluated: Expr, an
 // expression or a statement, would be evaluated past Past (statements or
 // expressions that run between its old and new places, in either
-// direction), and Times as often as now.
+// direction, and between its evaluations: a loop's other parts), and
+// Times as often as now.
 type Move struct {
 	Expr  *ast.Node
 	Past  []*ast.Node
@@ -185,13 +186,8 @@ func (a *effects) Check(m Move) string {
 		case assigns != "":
 			return fmt.Sprintf("%s would %s, and %s assigns a variable", q, then, assigns)
 		}
-		if m.Times == Several || m.Times == Shared {
-			switch {
-			case e.Reads:
-				return fmt.Sprintf("%s would %s, and %s reads state that could change between them", q, then, e.At.Read)
-			case e.Fresh:
-				return fmt.Sprintf("%s would %s, and %s makes a new value each time", q, then, e.At.Fresh)
-			}
+		if (m.Times == Several || m.Times == Shared) && e.Fresh {
+			return fmt.Sprintf("%s would %s, and %s makes a new value each time", q, then, e.At.Fresh)
 		}
 	}
 	if len(m.Past) == 0 {
