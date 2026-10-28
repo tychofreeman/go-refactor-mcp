@@ -32,6 +32,7 @@ import (
 	"strings"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/inspect"
+	"github.com/tychofreeman/go-refactor-mcp/internal/mcpserver"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
@@ -70,6 +71,28 @@ func run(argv []string) int {
 			fmt.Printf("%s\n  %s\n\n", r.Name(), strings.ReplaceAll(r.Description(), "\n", "\n  "))
 		}
 		return 0
+	}
+	if name != "check" && name != "undo" {
+		// TypeScript's files go to the server's languages, as a tool
+		// call does; Go's to the module loaded here.
+		if raw, err := parseArgs(rest); err == nil {
+			if srv := mcpserver.New(*dir); srv.LanguageFor(raw) == "TypeScript" {
+				if *dryRun {
+					fmt.Fprintln(os.Stderr, "-n does not apply to TypeScript files")
+					return 1
+				}
+				text, refused, err := srv.Call(name, raw)
+				if err != nil {
+					fmt.Fprintln(os.Stderr, "error:", err)
+					return 1
+				}
+				fmt.Fprint(stdout, text)
+				if refused {
+					return 2
+				}
+				return 0
+			}
+		}
 	}
 	if name == "batch" {
 		return runBatch(rest, *dir, *pattern, *dryRun)

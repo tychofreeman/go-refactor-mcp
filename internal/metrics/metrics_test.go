@@ -41,6 +41,48 @@ func TestClassify(t *testing.T) {
 }
 `
 
+// TypeScript's functions, methods and functions bound to a const are
+// measured as Go's are; test files are left out.
+func TestMeasureTypeScript(t *testing.T) {
+	funcs, err := Measure(map[string][]byte{
+		"src/a.ts": []byte(`/** Waters. */
+export function water(n: number): string {
+  if (n > 1 && n < 9) {
+    for (const x of [1]) {
+      if (x) {
+        return "a";
+      }
+    }
+  }
+  return n > 0 ? "b" : "c";
+}
+
+export class Bed {
+  depth(): number {
+    return 1;
+  }
+}
+
+export const twice = (n: number) => n * 2;
+`),
+		"src/a.test.ts": []byte("export function t(): void {}\n"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []Func{
+		{File: "src/a.ts", Name: "water", Lines: 11, Complexity: 6, Nesting: 3},
+		{File: "src/a.ts", Name: "Bed.depth", Lines: 3, Complexity: 1},
+		{File: "src/a.ts", Name: "twice", Lines: 1, Complexity: 1},
+	}
+	if !reflect.DeepEqual(funcs, want) {
+		t.Errorf("Measure =\n%+v\nwant\n%+v", funcs, want)
+	}
+	if _, err := Measure(map[string][]byte{"src/b.ts": []byte("export function (")}); err == nil {
+		t.Error("a file that does not parse was measured")
+	}
+}
+
 func TestMeasureSkipsTestFiles(t *testing.T) {
 	got, err := Measure(map[string][]byte{"b.go": []byte(b), "a.go": []byte(a), "a_test.go": []byte(aTest)})
 	if err != nil {

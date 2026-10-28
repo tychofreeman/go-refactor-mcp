@@ -591,9 +591,8 @@ Go. Steps 1 and 2 change shared code and come before any TypeScript.
      Refused: overridable methods, async and generators, generics, rest
      or destructured parameters, overloads, early returns, `super`,
      recursion, names the body sees otherwise at the call.
-   Left for later: calls of
-   inline_function in other files (they are inlined, but all_calls
-   takes only the file's), and declaring a generic function.
+   All calls in every file, and generic extraction, are done (README
+   item 41.9).
 9. **Move:** move_declaration, move_file, delete_file.
    *Done* (`internal/ts/refactorings/move`, the logic in `tsapi`'s
    move.go):
@@ -618,9 +617,8 @@ Go. Steps 1 and 2 change shared code and come before any TypeScript.
      variables in one statement, a namespace import of the old file
      that uses what moves, `export *` of it, `import()` or `require()`
      of it. Go's `new_name` is refused: rename before or after.
-   Left for later: a moved declaration that the destination reaches
-   through a name of its own (an alias), and deleting an old file left
-   empty.
+   A destination's alias and an old file left empty are handled
+   (README item 41.9).
 10. **Shapes:** fold, parameterize, merge_duplicate_function,
     remove_dead_code, extract_interface, union_switch_to_method.
     *Done* (`internal/ts/refactorings/shapes`, the logic in `tsapi`'s
@@ -658,10 +656,9 @@ Go. Steps 1 and 2 change shared code and come before any TypeScript.
       of the solution's classes, becomes a method of each class; the
       subject becomes `this`, the locals used parameters; every class
       needs a case, and no default or final else.
-    Left for later: fold of near-duplicates that differ in constants
-    (Go's `%s` and concatenation matches), the rest of the
+    Left for later: the rest of the
     one-case-at-a-time path after prepare_switch_for_types (README
-    item 41.4), and a class hierarchy (a base class) in
+    item 41.4), and a hierarchy deeper than one abstract class in
     union_switch_to_method.
 11. **Measuring:** `refactor-ab` with TypeScript tasks: translate four
     or five (warehouse, notify, billing) with tests, and the CLAUDE.md

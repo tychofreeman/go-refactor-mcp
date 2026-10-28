@@ -558,7 +558,8 @@ results are in `docs/cost-history.md`.
   it from source, and tests that throw (`src/testing.ts`'s `equal`),
   run by `node --test`; logging goes to a module's `logged` array,
   since `console` needs types the config leaves out. The task's check
-  is `tsc -p . && node --test`; quality columns stay empty (Go only).
+  is `tsc -p . && node --test`; the quality columns measure TypeScript
+  too since item 41.10 (they were empty in cost-history 20).
   Validate each hidden test: it fails on the module and passes after
   a reference change (a scratch script did this; not kept).
 - `examples/CLAUDE.md` is the instruction set that did best, for users

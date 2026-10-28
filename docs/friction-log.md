@@ -3419,3 +3419,12 @@ the CLI, in batches written by Python and checked at their end; a batch
 refused for a compiler function that does not exist
 (`ast.IsCaseOrDefaultClause`) was fixed in the scratchpad copy and
 resent. The docs with replace_text. This entry appended with a heredoc.
+
+## 2026-10-28: TypeScript's smaller leftovers and tooling (items 41.9-41.10)
+
+New files with create_file, the rest with replace_text through the CLI
+in batches written by Python. By hand, in the scratchpad: a test whose
+TypeScript template's backticks broke a Go raw string, regenerated with
+quoted strings; a test name mangled by a slice in the Python script,
+then put right with rename. The docs with replace_text. This entry
+appended with a heredoc.

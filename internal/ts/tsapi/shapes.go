@@ -20,6 +20,8 @@ type matcher struct {
 	holes    map[*ast.Symbol]int    // the pattern's parameters that match any expression, by position
 	this     bool                   // this in the pattern is a hole too, at position len(holes)
 	args     []*ast.Node            // what each hole matched, first
+	texts    []string               // for a hole that stands for text other than args' source: that text
+	runs     [][]*ast.Node          // and the code nodes it is made of (none for constant text)
 	uses     [][]*ast.Node          // the pattern's uses of each hole
 	pair     map[*ast.Symbol]*ast.Symbol
 	back     map[*ast.Symbol]*ast.Symbol
@@ -56,6 +58,8 @@ func (m *matcher) fork() *matcher {
 		n.back[k] = v
 	}
 	n.args = slices.Clone(m.args)
+	n.texts = slices.Clone(m.texts)
+	n.runs = slices.Clone(m.runs)
 	n.uses = make([][]*ast.Node, len(m.uses))
 	for i := range m.uses {
 		n.uses[i] = slices.Clone(m.uses[i])
@@ -107,6 +111,10 @@ func (m *matcher) match(p, x *ast.Node) bool {
 		}
 		m.uses[hole] = append(m.uses[hole], p)
 		if a := m.args[hole]; a != nil {
+			if m.texts[hole] != "" {
+				m.why = fmt.Sprintf("%s stands for text in one place and for %s in another", m.pl.part(p), m.cl.part(x))
+				return false
+			}
 			if !slices.Equal(tokens(m.cl.source(a)), tokens(m.cl.source(x))) || !slices.Equal(symbolsOf(m.c, a), symbolsOf(m.c, x)) {
 				m.why = fmt.Sprintf("%s and %s stand for the same parameter but differ", m.cl.part(a), m.cl.part(x))
 				return false
@@ -115,6 +123,22 @@ func (m *matcher) match(p, x *ast.Node) bool {
 		}
 		m.args[hole] = x
 		return true
+	}
+	// Text: a template's string parameters may stand for constant text,
+	// a + chain's for a run of operands.
+	if ast.IsTemplateExpression(p) && (ast.IsTemplateExpression(x) || ast.IsStringLiteral(x) || x.Kind == ast.KindNoSubstitutionTemplateLiteral) {
+		if n := m.fork(); p.Kind == x.Kind && n.matchChildren(p, x) {
+			*m = *n
+			return true
+		}
+		return m.matchTemplate(p, x) || m.differ(p, x)
+	}
+	if ast.IsBinaryExpression(p) && ast.IsBinaryExpression(x) && p.AsBinaryExpression().OperatorToken.Kind == ast.KindPlusToken && x.AsBinaryExpression().OperatorToken.Kind == ast.KindPlusToken {
+		if n := m.fork(); n.matchChildren(p, x) {
+			*m = *n
+			return true
+		}
+		return m.matchConcat(p, x) || m.differ(p, x)
 	}
 	if p.Kind != x.Kind {
 		return m.differ(p, x)
@@ -163,6 +187,11 @@ func (m *matcher) match(p, x *ast.Node) bool {
 		p.Flags&ast.NodeFlagsOptionalChain != x.Flags&ast.NodeFlagsOptionalChain:
 		return m.differ(p, x)
 	}
+	return m.matchChildren(p, x)
+}
+
+// matchChildren reports whether x's children match p's, one by one.
+func (m *matcher) matchChildren(p, x *ast.Node) bool {
 	pc, xc := children(p), children(x)
 	if len(pc) == 0 {
 		if !slices.Equal(tokens(m.pl.source(p)), tokens(m.cl.source(x))) {

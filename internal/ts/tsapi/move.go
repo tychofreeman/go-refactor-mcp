@@ -510,8 +510,45 @@ func (p *Project) MoveDeclaration(ctx context.Context, file string, line int, na
 				switch {
 				case len(moves) == 0:
 				case f == dest:
+					// Its uses of a name it imported under an alias take the
+					// declaration's own name.
+					for _, i := range moves {
+						el := list.Nodes[i]
+						pn := el.PropertyName()
+						if pn == nil || pn.Text() == el.Name().Text() {
+							continue
+						}
+						alias := c.GetSymbolAtLocation(el.Name())
+						identifiers(f.AsNode(), func(id *ast.Node) {
+							if id == el.Name() {
+								return
+							}
+							s := c.GetSymbolAtLocation(id)
+							shorthand := id.Parent != nil && ast.IsShorthandPropertyAssignment(id.Parent) && id.Parent.Name() == id
+							if shorthand {
+								s = c.GetShorthandAssignmentValueSymbol(id.Parent)
+							}
+							if s != alias {
+								return
+							}
+							text := pn.Text()
+							if shorthand {
+								text = id.Text() + ": " + text
+							}
+							edits = append(edits, Edit{File: f.FileName(), Start: fl.pos(id), End: id.End(), NewText: text})
+						})
+					}
 					if len(moves) == len(list.Nodes) && clause.Name() == nil {
 						if a, b, ok := fl.lineRange(owner); ok {
+							imports := 0
+							for _, s := range f.Statements.Nodes {
+								if ast.IsImportDeclaration(s) {
+									imports++
+								}
+							}
+							if imports == 1 { // the last import: the blank line after it too
+								a, b = fl.withBlank(a, b)
+							}
 							edits = append(edits, Edit{File: f.FileName(), Start: a, End: b})
 						}
 					} else {

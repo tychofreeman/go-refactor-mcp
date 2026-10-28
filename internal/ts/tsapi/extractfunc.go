@@ -172,6 +172,53 @@ func (b *body) visit(n *ast.Node) {
 	}
 }
 
+// typeParamsUsed returns the type parameters of the functions (and the
+// class, when the new code is not its method) around stmts that the
+// statements or the new parameters' types name: the new function declares
+// them.
+func (l *lined) typeParamsUsed(c *checker.Checker, stmts []*ast.Node, params []string, member *ast.Node) []*ast.Node {
+	var out []*ast.Node
+	for n := stmts[0].Parent; n != nil; n = n.Parent {
+		if !(ast.IsFunctionLike(n) || ast.IsClassLike(n)) || member != nil && n == member.Parent {
+			continue
+		}
+		for _, tp := range n.TypeParameters() {
+			name := tp.Name().Text()
+			used := slices.ContainsFunc(params, func(p string) bool { return containsWord(p, name) })
+			for _, s := range stmts {
+				identifiers(s, func(id *ast.Node) {
+					if !used && id.Text() == name {
+						if sym := c.GetSymbolAtLocation(id); sym != nil && slices.Contains(sym.Declarations, tp) {
+							used = true
+						}
+					}
+				})
+			}
+			if used {
+				out = append([]*ast.Node{tp}, out...)
+			}
+		}
+	}
+	return out
+}
+
+// containsWord reports whether s holds word as a whole identifier.
+func containsWord(s, word string) bool {
+	for i := strings.Index(s, word); i >= 0; {
+		before := i == 0 || !scanner.IsIdentifierPart(rune(s[i-1]))
+		after := i+len(word) == len(s) || !scanner.IsIdentifierPart(rune(s[i+len(word)]))
+		if before && after {
+			return true
+		}
+		j := strings.Index(s[i+1:], word)
+		if j < 0 {
+			return false
+		}
+		i += 1 + j
+	}
+	return false
+}
+
 // ExtractFunction returns the edits that move the statements on lines
 // first-last into a new function called name, declared after the
 // function they are in (a method of its class when they use this), and
@@ -285,8 +332,7 @@ func (p *Project) ExtractFunction(ctx context.Context, path string, first, last 
 				return
 			}
 			if sym.Flags&ast.SymbolFlagsTypeParameter != 0 {
-				bad = fmt.Sprintf("the lines use the type parameter %s (%s); a generic function is not made yet", id.Text(), l.where(id))
-				return
+				return // declared on the new function, below
 			}
 			if sym.Flags&ast.SymbolFlagsValue == 0 {
 				if !in(d) {
@@ -439,6 +485,14 @@ func (p *Project) ExtractFunction(ctx context.Context, path string, first, last 
 		text += ind + unit + result + "\n"
 	}
 	head := "function " + name
+	if tps := l.typeParamsUsed(c, stmts, params, member); len(tps) > 0 {
+		var srcs []string
+		for _, tp := range tps {
+			srcs = append(srcs, l.source(tp))
+		}
+		name += "<" + strings.Join(srcs, ", ") + ">"
+		head += "<" + strings.Join(srcs, ", ") + ">"
+	}
 	if member != nil {
 		head = "private " + name
 		if ast.IsStatic(member) {

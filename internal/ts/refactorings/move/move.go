@@ -82,9 +82,19 @@ func (*MoveDeclaration) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 	if why != "" {
 		return nil, refactor.Refusef("%s", why)
 	}
+	emptied := false
 	for i := range edits {
 		if created && edits[i].Path == to {
 			edits[i].Verbatim = true
+		}
+		// An old file left with nothing in it goes.
+		if edits[i].Path == path {
+			if before, err := os.ReadFile(path); err == nil {
+				if after, err := edit.Apply(before, edits[i].Edits); err == nil && strings.TrimSpace(string(after)) == "" {
+					edits[i] = edit.FileEdit{Path: path, Delete: true}
+					emptied = true
+				}
+			}
 		}
 	}
 	names := a.Name
@@ -94,6 +104,9 @@ func (*MoveDeclaration) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 	summary := fmt.Sprintf("moved %s to %s", names, ws.Rel(to))
 	if created {
 		summary += " (created)"
+	}
+	if emptied {
+		summary += fmt.Sprintf("; %s, left empty, is deleted", ws.Rel(path))
 	}
 	return &refactor.Plan{Summary: summary, Edits: edits}, nil
 }

@@ -759,6 +759,28 @@ export function soak(p: Plant): number {
   return 0;
 }
 `, NewExtractFunction(), `{"function": "soak", "case": "fern", "name": "f"}`, "", "soak has no case fern"},
+		{"generic", plants + `
+export function firsts<T>(xs: T[][]): T[] {
+  const out: T[] = [];
+  for (const x of xs) {
+    out.push(x[0]);
+  }
+  return out;
+}
+`, NewExtractFunction(), `{"start_line": 15, "end_line": 18, "name": "heads"}`, plants + `
+export function firsts<T>(xs: T[][]): T[] {
+  const out = heads(xs);
+  return out;
+}
+
+function heads<T>(xs: T[][]) {
+  const out: T[] = [];
+  for (const x of xs) {
+    out.push(x[0]);
+  }
+  return out;
+}
+`, ""},
 		{"break out", plants + `
 export function first(xs: number[]): number {
   for (const x of xs) {
@@ -989,6 +1011,24 @@ export class Bed {
 export const d = new Bed().depth();
 `, NewInlineFunction(), `{"line": 20, "name": "depth"}`, "", "a subclass could override"},
 	})
+}
+
+// all_calls inlines the calls in other files too, and drops their
+// imports of the function; an exported function stays.
+func TestInlineAllCallsAcrossFiles(t *testing.T) {
+	ws, dir := load(t, map[string]string{
+		"src/plant.ts": "export interface Plant {\n  name: string;\n  height: number;\n}\n\nexport function area(p: Plant): number {\n  return p.height * p.height;\n}\n\nexport const a = area({ name: \"fern\", height: 2 });\n",
+		"src/use.ts":   "import { area, type Plant } from \"./plant\";\n\nexport function size(q: Plant): number {\n  return area(q) + 1;\n}\n",
+	})
+	res := run(t, ws, NewInlineFunction(), `{"file": "src/plant.ts", "name": "area", "all_calls": true}`)
+	if !res.Applied {
+		t.Fatalf("%s", res)
+	}
+	want(t, dir, "src/use.ts", "import { type Plant } from \"./plant\";\n\nexport function size(q: Plant): number {\n  return q.height * q.height + 1;\n}\n")
+	b, _ := os.ReadFile(filepath.Join(dir, "src/plant.ts"))
+	if !strings.Contains(string(b), "export function area(") || strings.Contains(string(b), "= area(") {
+		t.Errorf("plant.ts:\n%s", b)
+	}
 }
 
 // A file in another style: no semicolons, and a doc comment whose lines
