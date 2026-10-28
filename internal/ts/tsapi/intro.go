@@ -58,8 +58,8 @@ func (p *Project) IntroduceParameter(ctx context.Context, path, name, expr, para
 		}
 	}
 	e := occurrences[0]
-	if !simple(e) {
-		return nil, fmt.Sprintf("%s could have effects; a call would evaluate it instead of the body, every time", strings.TrimSpace(expr))
+	if ef := (effects{c, l}).Of(e); !ef.CanDrop() || len(occurrences) > 1 && !ef.CanRepeat() {
+		return nil, fmt.Sprintf("every call would evaluate %s instead of the body, and it may not be moved: %s", strings.TrimSpace(expr), ef.Why+map[bool]string{true: "it makes a new value, which the body's uses would then share"}[ef.Why == ""])
 	}
 
 	// What the expression reads: parameters (by position), this, and names
@@ -180,15 +180,15 @@ func (p *Project) IntroduceParameter(ctx context.Context, path, name, expr, para
 				text := "undefined"
 				if r.param < len(args.Nodes) {
 					a := args.Nodes[r.param]
-					if !simple(a) {
-						return nil, fmt.Sprintf("the argument %s at %s could have effects, and would be evaluated twice", cl.source(a), cl.where(call))
+					if ef := (effects{c, cl}).Of(a); !ef.CanRepeat() {
+						return nil, fmt.Sprintf("the argument %s at %s would be evaluated twice: %s", cl.source(a), cl.where(call), ef.Why+map[bool]string{true: "it makes a new value each time"}[ef.Why == ""])
 					}
 					text = operand(cl, a)
 				}
 				subs = append(subs, sub{l.pos(r.node), r.node.End(), text})
 			default: // this
 				callee := call.Expression()
-				if !ast.IsPropertyAccessExpression(callee) || !simple(callee.Expression()) {
+				if !ast.IsPropertyAccessExpression(callee) || !(effects{c, cl}).Of(callee.Expression()).CanRepeat() {
 					return nil, fmt.Sprintf("the call at %s has no plain receiver to stand for this", cl.where(call))
 				}
 				subs = append(subs, sub{l.pos(r.node), r.node.End(), operand(cl, callee.Expression())})
