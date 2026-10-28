@@ -63,8 +63,17 @@ func all() []refactor.RefactoringOf[*workspace.Workspace] {
 		shapes.NewFold(), shapes.NewParameterize(), shapes.NewMergeDuplicate(), shapes.NewRemoveDeadCode(), shapes.NewExtractInterface(), shapes.NewUnionSwitchToMethod(), shapes.NewPrepareSwitchForTypes()}
 }
 
+// goNames are Go tools' names for the TypeScript tool that does their
+// operation, with the same arguments: a call of the Go name on a
+// TypeScript file runs it. extract_struct embeds a struct in Go; an
+// interface that extends one is TypeScript's counterpart.
+var goNames = map[string]string{"extract_struct": "extract_interface", "type_switch_to_method": "union_switch_to_method"}
+
 func lookup(name string) (refactor.RefactoringOf[*workspace.Workspace], bool) {
 	name = refactor.ToolName(name)
+	if ts, ok := goNames[name]; ok {
+		name = ts
+	}
 	for _, r := range all() {
 		if r.Name() == name {
 			return r, true

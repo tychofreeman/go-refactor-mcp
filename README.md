@@ -2094,7 +2094,14 @@ hand or a tool got in the way.
        `case`) and narrowing with values, which change_field_type does
        not do in TypeScript yet.
     5. `extract_struct` (TypeScript has extract_interface and
-       convert_params_to_object).
+       convert_params_to_object). *Done* as a name: Go embeds the new
+       struct so every use keeps working, and an interface that extends
+       the new one is TypeScript's counterpart, which extract_interface
+       makes; so extract_struct on a TypeScript file runs it, as
+       type_switch_to_method runs union_switch_to_method (the same
+       arguments). Go's next step, a named field (`m.path` to
+       `m.src.path`), would change the objects' shape at run time in
+       TypeScript; not done.
     6. The edits `add_case`, `add_element` and `replace_declaration`.
     7. inline_function's refusals where a sound form exists: an early
        return first, then rest or destructured parameters, overloads,

@@ -274,7 +274,7 @@ eval tasks transfer.
 | change_parameter_type, change_type, change_field_type | same (`change_property_type`) | edits: types are erased, uses are not adapted (README item 41.2) |
 | add_result | **change_return_type** | no multiple results in TS; widen to an object or tuple |
 | method_to_function, function_to_method | same | classes only |
-| extract_struct | **extract_interface** / **extract_type** | name a type from an object type or a class's members |
+| extract_struct | **extract_interface** / **extract_type** | name a type from an object type or a class's members; extract_struct on a TypeScript file runs extract_interface (README item 41.5) |
 | add_field | same, also called `add_property` | to interface, type literal or class |
 | fold, parameterize, merge_duplicate_function | same | |
 | remove_dead_code | same | plus unused exports, unused properties |
