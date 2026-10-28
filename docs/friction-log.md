@@ -3298,3 +3298,14 @@ replace_text through the CLI. One batch refused on a test that assigned
 a move to a variable typed by the remove; the batch's Python fixed. A
 first create_file used `path` for `file` and was refused. This entry
 appended with a heredoc.
+
+## 2026-10-28: TypeScript's Move and summaries of module functions
+
+effects.go rewritten by hand with Write: most of the file changed (the
+analysis became a pointer with caches, every case gained the locals
+and parts), which as replace_text steps would have been one per
+function and longer than the file. The callers' five constructor calls
+changed with `sed -i`. The rest (declarations shared by three
+statements, the summary named per call after a test caught a cached
+call site, the test and its expected lines, the docs) with replace_text
+and create_file through the CLI. This entry appended with a heredoc.
