@@ -1,6 +1,6 @@
 # TypeScript
 
-The TypeScript side of the server: `docs/ts-plan.md` is the plan (step 9
+The TypeScript side of the server: `docs/ts-plan.md` is the plan (step 10
 is next), `docs/ts-spike.md` what the spike measured. Claude Code
 loads this file when a session reads files here; the root CLAUDE.md
 still applies.

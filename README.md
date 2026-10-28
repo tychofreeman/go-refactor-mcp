@@ -2090,7 +2090,7 @@ internal/
   ts/                         TypeScript (see internal/ts/CLAUDE.md)
     tsapi/                    the one door to the TypeScript 7 compiler: projects, updates, diagnostics
     workspace/                a solution's projects as the engine's workspace: apply, undo, errors
-    refactorings/             TypeScript's refactorings: rename, changesig (signatures), simplify (extract, inline, invert, move)
+    refactorings/             TypeScript's refactorings: rename, changesig (signatures), simplify (extract, inline, invert, move statements), move (declarations and files)
     edits/                    TypeScript's edits: create_file, replace_text, add_field and the rest
   workspace/                  go/packages loading (incl. tests), apply, undo, errors
   history/                    a change to files (write, restore) and the undo stack, for any language

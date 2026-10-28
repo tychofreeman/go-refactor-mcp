@@ -3330,3 +3330,13 @@ lines, the fixes the tests found (a shorthand property, `Shared` with
 the loop as what runs between, a blank line left by a deleted
 function, module-level declarations) and the docs with replace_text.
 This entry appended with a heredoc.
+
+## 2026-10-28: TypeScript's move_declaration, move_file and delete_file (step 9)
+
+The three new files written in the scratchpad and created with
+create_file in one batch checked at its end (a clash with signature.go's
+`target` renamed with `sed` in the scratchpad copy before the retry),
+with the registration by replace_text. The test file with create_file;
+the fixes the tests found (an import inserted inside the lines of one
+being removed, importers named by full path) and the docs with
+replace_text. This entry appended with a heredoc.
