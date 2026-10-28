@@ -1,0 +1,61 @@
+// Package replacedecl is replace_declaration for TypeScript: an edit that replaces a declaration, found by name, with new source.
+package replacedecl
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+
+	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/ts/tsapi"
+	"github.com/tychofreeman/go-refactor-mcp/internal/ts/workspace"
+)
+
+// ReplaceDeclaration is replace_declaration.
+type ReplaceDeclaration struct{}
+
+// New returns replace_declaration.
+func New() *ReplaceDeclaration { return &ReplaceDeclaration{} }
+
+func (*ReplaceDeclaration) ChangesBehavior() {}
+
+func (*ReplaceDeclaration) Name() string { return "replace_declaration" }
+
+func (*ReplaceDeclaration) Description() string {
+	return `Replace a whole declaration, found by name, with new source: an edit, for a signature and body that change together, or a declaration too long to restate as replace_text's old (a table, a type); for a body alone, use replace_statements with function. With name "Bed.depth" and content depth(extra: number): number { return this.base + extra; }, depth's signature and body are replaced together, indented as it was.
+content is the new declaration; the old doc comment stays unless content has its own. Callers a new signature breaks are refused, or fixed in the same batch with check "end".
+Refuses, saying why: a name the file does not declare, or declares more than once (overloads, merged declarations).`
+}
+
+func (*ReplaceDeclaration) InputSchema() json.RawMessage {
+	return json.RawMessage(`{
+  "type": "object",
+  "properties": {
+    "file":    {"type": "string", "description": "The file that declares it, relative to the root."},
+    "name":    {"type": "string", "description": "The declared name: name, or Class.member for a member."},
+    "content": {"type": "string", "description": "The new declaration, with a doc comment to replace the old one."}
+  },
+  "required": ["file", "name", "content"],
+  "additionalProperties": false
+}`)
+}
+
+func (*ReplaceDeclaration) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
+	var a struct {
+		File    string `json:"file"`
+		Name    string `json:"name"`
+		Content string `json:"content"`
+	}
+	if err := refactor.DecodeArgs(raw, &a); err != nil {
+		return nil, err
+	}
+	path := ws.Abs(a.File)
+	if _, err := os.Stat(path); err != nil {
+		return nil, refactor.Refusef("%s: no such file", a.File)
+	}
+	edits, why := ws.Edits(path, func(p *tsapi.Project) ([]tsapi.Edit, string) { return p.ReplaceDeclaration(path, a.Name, a.Content) })
+	if why != "" {
+		return nil, refactor.Refusef("%s", why)
+	}
+	return &refactor.Plan{Summary: fmt.Sprintf("replaced %s", a.Name), Edits: edits}, nil
+}

@@ -237,7 +237,8 @@ results are in `docs/cost-history.md`.
 - **TypeScript's gaps before its cost** (2026-10-28, the user): "not
   too worried about the cost with TypeScript at the moment", so A/B
   reruns and more TypeScript tasks wait; the gaps against Go are README
-  roadmap item 41, done in its order, one PR each.
+  roadmap item 41, done in its order. The user then asked for fewer
+  PRs for the rest (2026-10-28): items 6-8 in one, 9-10 in another.
 - **TypeScript's type changes are edits** (2026-10-28, item 41.2):
   change_field_type and change_parameter_type only write the
   annotation, since types are erased and no value can change; but a
