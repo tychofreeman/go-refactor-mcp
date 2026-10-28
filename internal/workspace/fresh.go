@@ -65,7 +65,17 @@ func (m *Metadata) Load() (*Workspace, error) {
 	w := &Workspace{Root: m.root, Base: m.base, Patterns: m.patterns, Fset: m.fset, stamps: stamps, History: &history.Stack{}}
 	pkgs := metadataOf(m.pkgs)
 	w.Pkgs = pkgs[:m.roots]
+	if err := check(w.Fset, pkgs, m.roots); err != nil {
+		return nil, err
+	}
+	return w, nil
+}
 
+// check parses the files of pkgs into fset, each once, and type-checks
+// pkgs in dependency order: the first roots of them as roots, the rest,
+// test variants of their dependencies, without function bodies. A
+// package's errors are the loader's, then its parse and type errors.
+func check(fset *token.FileSet, pkgs []*packages.Package, roots int) error {
 	// Parse each file once: the packages that contain it share its syntax,
 	// as they do after a full load.
 	syntax := map[string]*ast.File{}
@@ -75,9 +85,9 @@ func (m *Metadata) Load() (*Workspace, error) {
 			if _, ok := syntax[path]; ok {
 				continue
 			}
-			f, err := parser.ParseFile(w.Fset, path, nil, parser.AllErrors|parser.ParseComments)
+			f, err := parser.ParseFile(fset, path, nil, parser.AllErrors|parser.ParseComments)
 			if f == nil {
-				return nil, fmt.Errorf("parsing %s: %w", path, err)
+				return fmt.Errorf("parsing %s: %w", path, err)
 			}
 			syntax[path] = f
 			if err != nil {
@@ -90,16 +100,22 @@ func (m *Metadata) Load() (*Workspace, error) {
 	for _, p := range pkgs {
 		set[p] = true
 	}
+	w := &Workspace{Fset: fset}
 	for _, p := range dependencyOrder(set) {
 		var files []*ast.File
 		var errs []packages.Error
+		for _, e := range p.Errors {
+			if e.Kind != packages.ParseError && e.Kind != packages.TypeError {
+				errs = append(errs, e)
+			}
+		}
 		for _, path := range p.CompiledGoFiles {
 			files = append(files, syntax[path])
 			errs = append(errs, parseErrs[path]...)
 		}
-		w.typeCheck(p, slices.Index(pkgs, p) >= m.roots, files, errs)
+		w.typeCheck(p, slices.Index(pkgs, p) >= roots, files, errs)
 	}
-	return w, nil
+	return nil
 }
 
 // metadataOf copies the metadata of the packages src, leaving out syntax,

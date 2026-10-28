@@ -499,6 +499,23 @@ results are in `docs/cost-history.md`.
   on its result.
 - **Choose the next tool by evidence:** the friction log for hand edits,
   A/B transcripts for a fresh model's refusals and wasted turns.
+- **A reload compiles none of the module** (2026-10-27, the user asked
+  to fix the tools' slowness): packages.Load with types has go list
+  compile every package to export data, the module's own too, which
+  the workspace then type-checks from source anyway. Once the
+  TypeScript compiler became a dependency, a new file in `tsapi`
+  recompiled its 18 dependents: 2 min 10 s, and a 13-step batch 546 s.
+  `loadPackages` (internal/workspace/load.go) asks go list for metadata
+  only, loads the standard library's and other modules' types from
+  export data (with NeedExportFile: with NeedDeps alone go/packages
+  checks them from source), and type-checks the module's packages here
+  (`check`, shared with `Metadata.Load`). The same batch took 20.7 s, a
+  reload about 2 s; `TestLoadMatchesTypedLoad` compares it with
+  go/packages' load. Type errors are no longer loader errors, so edits
+  of a package with errors stay incremental. The user asked whether
+  splitting into a server and commands would help: the MCP server
+  already is one and paid the same reloads; a CLI that talks to a
+  running server is still an option, mainly for TypeScript's warm state.
 - **Query tool deferred** (2026-10-18): about 55% of greps were symbol
   lookups, but grep was about 5% of an arm's input tokens. Revisit only
   with new evidence, and check gopls's MCP server first.
