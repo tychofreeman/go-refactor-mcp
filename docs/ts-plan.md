@@ -512,10 +512,22 @@ Go. Steps 1 and 2 change shared code and come before any TypeScript.
    expression that may be dropped and duplicate an argument that may
    be evaluated twice. Refusals name the part: "removing the argument
    next() of the call at use.ts:4 would drop the call next() at
-   use.ts:4". Decision 4 taken strict for now. Left: the module's own
-   functions judged by their bodies (every call of one is unknown),
-   and the `Move` question with a path (past which statements, how many
-   times), which step 8's refactorings need.
+   use.ts:4". Decision 4 taken strict for now.
+   Second part *done*, so step 7 is: the module's own functions are
+   judged by their bodies (a function, a const bound to one, a static
+   or private method, which nothing overrides; not async, generators,
+   overloads or a recursive call), without their own locals and
+   returns, and refusals name the call. Locals are tracked apart: a
+   variable or parameter that no function inside its own assigns, so
+   that a call cannot change it; what assigns or reads one says which.
+   Statements have effects too, with a return, or a break or continue
+   that jumps out of them, as leaving. `Move{Expr, Past, Times}` and
+   `Check` are Go's `analysis.Move` for TypeScript: whether code may be
+   evaluated past other code (they must not both write, throw or
+   leave, one write what the other reads, or one assign a local the
+   other uses) and another number of times (`Maybe`, `Several`,
+   `Shared`, `Unused`, as in Go). The tools' own checks (drop, repeat,
+   reorder) are the same rules; step 8's refactorings ask `Check`.
 8. **Simplify:** extract / inline variable and function, invert_if,
    remove_else, move statements.
 9. **Move:** move_declaration, move_file, delete_file.

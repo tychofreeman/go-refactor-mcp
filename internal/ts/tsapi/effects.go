@@ -2,21 +2,32 @@ package tsapi
 
 import (
 	"fmt"
+	"maps"
+	"slices"
+	"strings"
 
 	"github.com/buke/typescript-go-internal/v7/pkg/ast"
 	"github.com/buke/typescript-go-internal/v7/pkg/checker"
 )
 
-// Effects is what evaluating an expression may do, from its syntax and
-// types. Conservative: what it cannot tell, it counts as writing and
-// throwing.
+// Effects is what evaluating an expression or running statements may do,
+// from their syntax and types. Conservative: what it cannot tell, it
+// counts as writing and throwing.
 type Effects struct {
 	Writes bool // may change state or run code not known: a call, an assignment, a getter, valueOf through an operator
 	Throws bool // may throw: a property of what may be null or undefined, a call
-	Reads  bool // reads state that may change: a let, a var, a parameter, a property
+	Reads  bool // reads state other code may change: a property, a variable of the module or one a closure assigns
 	Fresh  bool // makes a new object, function or array, which a second evaluation would not share
-	// Why names the first part that writes or throws, for a refusal:
-	// "the call log(p) at bed.ts:3".
+	Leaves bool // a return, break or continue that jumps out of the code
+	// Assigns and Locals are the locals it assigns and reads, each with
+	// the part that does: a local is a variable or parameter of a
+	// function that no function inside it assigns, so only the code
+	// itself changes it.
+	Assigns, Locals map[*ast.Symbol]string
+	// At names the first part that does each, for a refusal: "the call
+	// log(p) at bed.ts:3".
+	At struct{ Write, Throw, Read, Fresh, Leave string }
+	// Why names the first part that writes or throws.
 	Why string
 }
 
@@ -28,28 +39,274 @@ func (e *Effects) add(o Effects) {
 	e.Throws = e.Throws || o.Throws
 	e.Reads = e.Reads || o.Reads
 	e.Fresh = e.Fresh || o.Fresh
+	e.Leaves = e.Leaves || o.Leaves
+	first := func(a *string, b string) {
+		if *a == "" {
+			*a = b
+		}
+	}
+	first(&e.At.Write, o.At.Write)
+	first(&e.At.Throw, o.At.Throw)
+	first(&e.At.Read, o.At.Read)
+	first(&e.At.Fresh, o.At.Fresh)
+	first(&e.At.Leave, o.At.Leave)
+	e.Assigns = union(e.Assigns, o.Assigns)
+	e.Locals = union(e.Locals, o.Locals)
+}
+
+// union adds b's entries missing from a, copying a first.
+func union(a, b map[*ast.Symbol]string) map[*ast.Symbol]string {
+	if len(b) == 0 {
+		return a
+	}
+	out := maps.Clone(a)
+	if out == nil {
+		out = map[*ast.Symbol]string{}
+	}
+	for s, w := range b {
+		if _, ok := out[s]; !ok {
+			out[s] = w
+		}
+	}
+	return out
 }
 
 // CanDrop reports whether not evaluating it would change nothing.
-func (e Effects) CanDrop() bool { return !e.Writes && !e.Throws }
+func (e Effects) CanDrop() bool { return !e.Writes && !e.Throws && !e.Leaves && len(e.Assigns) == 0 }
 
 // CanRepeat reports whether evaluating it twice gives the same as once.
 func (e Effects) CanRepeat() bool { return e.CanDrop() && !e.Fresh }
 
-// effects is the analysis for one file.
-type effects struct {
-	c *checker.Checker
-	l *lined
+// acts returns what it does that another part must not be reordered with,
+// as the part and a verb phrase, or "".
+func (e Effects) acts() (string, string) {
+	switch {
+	case e.Writes:
+		return e.At.Write, "may change state"
+	case e.Throws:
+		return e.At.Throw, "may throw"
+	case e.Leaves:
+		return e.At.Leave, "leaves"
+	}
+	return "", ""
 }
 
-// unknown is what an expression does whose effects are not known.
-func (a effects) unknown(n *ast.Node, what string) Effects {
-	return Effects{Writes: true, Throws: true, Reads: true, Why: fmt.Sprintf("%s %s at %s", what, a.l.source(n), a.l.where(n))}
+// conflict returns why a and b may not be evaluated in the other order,
+// or "": both act, one writes what the other reads, or they share a
+// local that one assigns.
+func conflict(a, b Effects) string {
+	ap, av := a.acts()
+	bp, bv := b.acts()
+	switch {
+	case ap != "" && bp != "":
+		return fmt.Sprintf("%s %s, and %s %s", ap, av, bp, bv)
+	case a.Writes && b.Reads:
+		return fmt.Sprintf("%s may change state, and %s reads state", a.At.Write, b.At.Read)
+	case b.Writes && a.Reads:
+		return fmt.Sprintf("%s may change state, and %s reads state", b.At.Write, a.At.Read)
+	}
+	for _, s := range sortedSymbols(a.Assigns) {
+		if w, ok := b.Assigns[s]; ok {
+			return fmt.Sprintf("%s and %s both assign %s", a.Assigns[s], w, s.Name)
+		}
+		if w, ok := b.Locals[s]; ok {
+			return fmt.Sprintf("%s assigns %s, and %s reads it", a.Assigns[s], s.Name, w)
+		}
+	}
+	for _, s := range sortedSymbols(b.Assigns) {
+		if w, ok := a.Locals[s]; ok {
+			return fmt.Sprintf("%s assigns %s, and %s reads it", b.Assigns[s], s.Name, w)
+		}
+	}
+	return ""
 }
+
+// sortedSymbols returns m's symbols by name, so that refusals do not
+// change from run to run.
+func sortedSymbols(m map[*ast.Symbol]string) []*ast.Symbol {
+	out := slices.Collect(maps.Keys(m))
+	slices.SortFunc(out, func(x, y *ast.Symbol) int { return strings.Compare(x.Name+m[x], y.Name+m[y]) })
+	return out
+}
+
+// canReorder returns why the expressions may not be evaluated in another
+// order, or "": no two of them conflict.
+func canReorder(all []Effects) string {
+	for i := range all {
+		for _, b := range all[i+1:] {
+			if why := conflict(all[i], b); why != "" {
+				return why
+			}
+		}
+	}
+	return ""
+}
+
+// Times says how often an expression would be evaluated after a move,
+// for each time it is evaluated now.
+type Times int
+
+const (
+	Once    Times = iota // as often as now
+	Maybe                // once or not at all (it moves under a condition)
+	Several              // once for each of several uses, each evaluating it again
+	Shared               // once, with the one value standing for several evaluations
+	Unused               // once more or once less, where nothing uses the value (an argument added or dropped)
+)
+
+// Move is a change to where, or how often, code is evaluated: Expr, an
+// expression or a statement, would be evaluated past Past (statements or
+// expressions that run between its old and new places, in either
+// direction), and Times as often as now.
+type Move struct {
+	Expr  *ast.Node
+	Past  []*ast.Node
+	Times Times
+}
+
+// Check returns why the move would change what the program does, or ""
+// when it would not.
+func (a *effects) Check(m Move) string {
+	e := a.ofNodes([]*ast.Node{m.Expr})
+	q := a.lined(m.Expr).source(m.Expr)
+	assigns := ""
+	if s := sortedSymbols(e.Assigns); len(s) > 0 {
+		assigns = e.Assigns[s[0]]
+	}
+	then := map[Times]string{Maybe: "then not always be evaluated", Several: "be evaluated another number of times",
+		Shared: "be evaluated once for several uses", Unused: "be evaluated another number of times"}[m.Times]
+	if m.Times != Once {
+		p, v := e.acts()
+		switch {
+		case e.Throws && !e.Writes && !e.Leaves && m.Times == Shared:
+			// shared, it throws at the first use either way
+		case p != "":
+			return fmt.Sprintf("%s would %s, and %s %s", q, then, p, v)
+		case assigns != "":
+			return fmt.Sprintf("%s would %s, and %s assigns a variable", q, then, assigns)
+		}
+		if m.Times == Several || m.Times == Shared {
+			switch {
+			case e.Reads:
+				return fmt.Sprintf("%s would %s, and %s reads state that could change between them", q, then, e.At.Read)
+			case e.Fresh:
+				return fmt.Sprintf("%s would %s, and %s makes a new value each time", q, then, e.At.Fresh)
+			}
+		}
+	}
+	if len(m.Past) == 0 {
+		return ""
+	}
+	if why := conflict(e, a.ofNodes(m.Past)); why != "" {
+		return fmt.Sprintf("%s cannot move past what runs between: %s", q, why)
+	}
+	return ""
+}
+
+// effects is the analysis of code of one program.
+type effects struct {
+	c     *checker.Checker
+	l     *lined
+	files map[*ast.SourceFile]*lined
+	local map[*ast.Symbol]bool
+	sums  map[*ast.Node]*Effects // a module function's body; nil while it is summarized
+}
+
+func newEffects(c *checker.Checker, l *lined) *effects {
+	return &effects{c: c, l: l, files: map[*ast.SourceFile]*lined{l.f: l}, local: map[*ast.Symbol]bool{}, sums: map[*ast.Node]*Effects{}}
+}
+
+// lined returns the file of n.
+func (a *effects) lined(n *ast.Node) *lined {
+	f := ast.GetSourceFileOfNode(n)
+	if l, ok := a.files[f]; ok {
+		return l
+	}
+	l := newLined(f)
+	a.files[f] = l
+	return l
+}
+
+// part names n for a refusal: "the call log(p) at bed.ts:3".
+func (a *effects) part(n *ast.Node, what string) string {
+	l := a.lined(n)
+	if what != "" {
+		what += " "
+	}
+	return fmt.Sprintf("%s%s at %s", what, l.source(n), l.where(n))
+}
+
+// unknown is what code does whose effects are not known.
+func (a *effects) unknown(n *ast.Node, what string) Effects {
+	p := a.part(n, what)
+	e := Effects{Writes: true, Throws: true, Reads: true, Why: p}
+	e.At.Write, e.At.Throw, e.At.Read = p, p, p
+	return e
+}
+
+// throws is what code does that may throw and nothing else.
+func (a *effects) throws(n *ast.Node, why string) Effects {
+	p := fmt.Sprintf("%s, %s, at %s", a.lined(n).source(n), why, a.lined(n).where(n))
+	e := Effects{Throws: true, Why: p}
+	e.At.Throw = p
+	return e
+}
+
+// isLocal reports whether s is a local: a variable or parameter of a
+// function that no function inside that function assigns.
+func (a *effects) isLocal(s *ast.Symbol) bool {
+	if v, ok := a.local[s]; ok {
+		return v
+	}
+	d := s.ValueDeclaration
+	fn := (*ast.Node)(nil)
+	if d != nil && (ast.IsVariableDeclaration(d) || ast.IsParameterDeclaration(d)) {
+		fn = ast.GetContainingFunction(d)
+	}
+	ok := fn != nil && fn.Body() != nil && !a.assignedInside(fn.Body(), s, false)
+	a.local[s] = ok
+	return ok
+}
+
+// assignedInside reports whether code in n, inside a function nested in
+// it when nested is false at first, assigns s.
+func (a *effects) assignedInside(n *ast.Node, s *ast.Symbol, nested bool) bool {
+	found := false
+	var visit func(x *ast.Node, nested bool) bool
+	visit = func(x *ast.Node, nested bool) bool {
+		if found {
+			return true
+		}
+		if ast.IsFunctionLike(x) {
+			nested = true
+		}
+		if nested {
+			var target *ast.Node
+			switch {
+			case ast.IsBinaryExpression(x) && ast.IsAssignmentOperator(x.AsBinaryExpression().OperatorToken.Kind):
+				target = x.AsBinaryExpression().Left
+			case ast.IsPrefixUnaryExpression(x) && isUpdate(x.AsPrefixUnaryExpression().Operator):
+				target = x.AsPrefixUnaryExpression().Operand
+			case ast.IsPostfixUnaryExpression(x):
+				target = x.AsPostfixUnaryExpression().Operand
+			}
+			if target != nil && slices.Contains(symbolsOf(a.c, target), s) {
+				found = true
+				return true
+			}
+		}
+		x.ForEachChild(func(y *ast.Node) bool { return visit(y, nested) })
+		return found
+	}
+	n.ForEachChild(func(y *ast.Node) bool { return visit(y, nested) })
+	return found
+}
+
+func isUpdate(op ast.Kind) bool { return op == ast.KindPlusPlusToken || op == ast.KindMinusMinusToken }
 
 // primitive reports whether every value of n's type is a number, bigint,
 // string, boolean or enum, which operators coerce without running code.
-func (a effects) primitive(n *ast.Node) bool {
+func (a *effects) primitive(n *ast.Node) bool {
 	t := a.c.GetTypeAtLocation(n)
 	if t == nil {
 		return false
@@ -69,7 +326,7 @@ func (a effects) primitive(n *ast.Node) bool {
 // maybeNullish reports whether n's type admits null or undefined, or is
 // not known (any, unknown). A non-null assertion does not count: it
 // checks nothing at run time.
-func (a effects) maybeNullish(n *ast.Node) bool {
+func (a *effects) maybeNullish(n *ast.Node) bool {
 	for ast.IsNonNullExpression(n) || ast.IsParenthesizedExpression(n) {
 		n = n.Expression()
 	}
@@ -105,7 +362,7 @@ var callbackMethods = map[string]bool{"map": true, "filter": true, "some": true,
 func pureMath(name string) bool { return name != "random" }
 
 // Of returns the effects of evaluating n.
-func (a effects) Of(n *ast.Node) Effects {
+func (a *effects) Of(n *ast.Node) Effects {
 	var out Effects
 	switch {
 	case n == nil:
@@ -122,15 +379,20 @@ func (a effects) Of(n *ast.Node) Effects {
 			return a.unknown(n, "the name")
 		}
 		if s.Flags&(ast.SymbolFlagsBlockScopedVariable|ast.SymbolFlagsFunctionScopedVariable) != 0 && !isConst(s.ValueDeclaration) {
-			out.Reads = true
+			if a.isLocal(s) {
+				out.Locals = map[*ast.Symbol]string{s: a.part(n, "")}
+			} else {
+				out.Reads, out.At.Read = true, a.part(n, "")
+			}
 		}
 		return out
 	case ast.IsParenthesizedExpression(n), ast.IsAsExpression(n), ast.IsSatisfiesExpression(n), ast.IsNonNullExpression(n), ast.IsTypeAssertion(n):
 		return a.Of(n.Expression())
 	case ast.IsArrowFunction(n), ast.IsFunctionExpression(n), ast.IsClassExpression(n):
-		return Effects{Fresh: true}
+		out.Fresh, out.At.Fresh = true, a.part(n, "")
+		return out
 	case ast.IsArrayLiteralExpression(n):
-		out.Fresh = true
+		out.Fresh, out.At.Fresh = true, a.part(n, "")
 		for _, el := range n.AsArrayLiteralExpression().Elements.Nodes {
 			if ast.IsSpreadElement(el) && !a.c.IsArrayType(a.c.GetTypeAtLocation(el.Expression())) {
 				out.add(a.unknown(el, "the spread"))
@@ -141,7 +403,7 @@ func (a effects) Of(n *ast.Node) Effects {
 	case ast.IsSpreadElement(n):
 		return a.Of(n.Expression())
 	case ast.IsObjectLiteralExpression(n):
-		out.Fresh = true
+		out.Fresh, out.At.Fresh = true, a.part(n, "")
 		for _, p := range n.AsObjectLiteralExpression().Properties.Nodes {
 			switch {
 			case ast.IsPropertyAssignment(p):
@@ -167,9 +429,12 @@ func (a effects) Of(n *ast.Node) Effects {
 			out.add(a.Of(n.AsElementAccessExpression().ArgumentExpression))
 		}
 		out.Reads = true
+		if out.At.Read == "" {
+			out.At.Read = a.part(n, "")
+		}
 		optional := n.Flags&ast.NodeFlagsOptionalChain != 0
 		if a.maybeNullish(obj) && !optional {
-			out.add(Effects{Throws: true, Why: fmt.Sprintf("%s, which reads a property of what may be null or undefined, at %s", a.l.source(n), a.l.where(n))})
+			out.add(a.throws(n, "which reads a property of what may be null or undefined"))
 		}
 		if ast.IsPropertyAccessExpression(n) {
 			if s := a.c.GetSymbolAtLocation(n.Name()); s != nil && s.Flags&ast.SymbolFlagsGetAccessor != 0 {
@@ -188,21 +453,16 @@ func (a effects) Of(n *ast.Node) Effects {
 		return out
 	case ast.IsPrefixUnaryExpression(n):
 		u := n.AsPrefixUnaryExpression()
+		if isUpdate(u.Operator) {
+			return a.assign(n, u.Operand, true)
+		}
 		out.add(a.Of(u.Operand))
-		switch u.Operator {
-		case ast.KindPlusPlusToken, ast.KindMinusMinusToken:
-			out.add(a.unknown(n, "the update"))
-		case ast.KindExclamationToken:
-		default:
-			if !a.primitive(u.Operand) {
-				out.add(a.unknown(u.Operand, "the conversion of"))
-			}
+		if u.Operator != ast.KindExclamationToken && !a.primitive(u.Operand) {
+			out.add(a.unknown(u.Operand, "the conversion of"))
 		}
 		return out
 	case ast.IsPostfixUnaryExpression(n):
-		out.add(a.Of(n.AsPostfixUnaryExpression().Operand))
-		out.add(a.unknown(n, "the update"))
-		return out
+		return a.assign(n, n.AsPostfixUnaryExpression().Operand, true)
 	case ast.IsTypeOfExpression(n), ast.IsVoidExpression(n):
 		return a.Of(n.Expression())
 	case ast.IsConditionalExpression(n):
@@ -213,15 +473,22 @@ func (a effects) Of(n *ast.Node) Effects {
 		return out
 	case ast.IsBinaryExpression(n):
 		b := n.AsBinaryExpression()
+		op := b.OperatorToken.Kind
+		if ast.IsAssignmentOperator(op) {
+			out = a.assign(n, b.Left, op != ast.KindEqualsToken)
+			out.add(a.Of(b.Right))
+			if op != ast.KindEqualsToken && !ast.IsLogicalOrCoalescingAssignmentOperator(op) && !(a.primitive(b.Left) && a.primitive(b.Right)) {
+				out.add(a.unknown(n, "the conversion in"))
+			}
+			return out
+		}
 		out.add(a.Of(b.Left))
 		out.add(a.Of(b.Right))
-		switch op := b.OperatorToken.Kind; {
-		case ast.IsAssignmentOperator(op):
-			out.add(a.unknown(n, "the assignment"))
+		switch {
 		case op == ast.KindAmpersandAmpersandToken, op == ast.KindBarBarToken, op == ast.KindQuestionQuestionToken, op == ast.KindCommaToken,
 			op == ast.KindEqualsEqualsEqualsToken, op == ast.KindExclamationEqualsEqualsToken:
 		case op == ast.KindInstanceOfKeyword, op == ast.KindInKeyword:
-			out.add(Effects{Throws: true, Why: fmt.Sprintf("%s, which throws when its right side is not an object, at %s", a.l.source(n), a.l.where(n))})
+			out.add(a.throws(n, "which throws when its right side is not an object"))
 		default:
 			for _, side := range []*ast.Node{b.Left, b.Right} {
 				if !a.primitive(side) {
@@ -236,13 +503,56 @@ func (a effects) Of(n *ast.Node) Effects {
 	return a.unknown(n, "the expression")
 }
 
-// call returns the effects of a call: known only for pure methods of
-// strings and arrays and of Math, whose arguments are judged too.
-func (a effects) call(n *ast.Node) Effects {
+// assign returns the effects of n assigning target, which it reads first
+// when reads: a local, or else a change of state not known.
+func (a *effects) assign(n, target *ast.Node, reads bool) Effects {
+	var out Effects
+	for ast.IsParenthesizedExpression(target) || ast.IsNonNullExpression(target) {
+		target = target.Expression()
+	}
+	if ast.IsIdentifier(target) {
+		if s := a.c.GetSymbolAtLocation(target); s != nil && a.isLocal(s) {
+			if reads {
+				out.add(a.Of(target))
+			}
+			out.Assigns = map[*ast.Symbol]string{s: a.part(n, "")}
+			if !a.primitive(target) && reads && !ast.IsBinaryExpression(n) {
+				out.add(a.unknown(target, "the conversion of"))
+			}
+			return out
+		}
+	}
+	if ast.IsPropertyAccessExpression(target) || ast.IsElementAccessExpression(target) {
+		out.add(a.Of(target.Expression()))
+	}
+	out.add(a.unknown(n, "the assignment"))
+	return out
+}
+
+// call returns the effects of a call: known for pure methods of strings
+// and arrays and of Math, and for the module's own functions by their
+// bodies, whose arguments are judged too.
+func (a *effects) call(n *ast.Node) Effects {
 	callee := n.Expression()
 	var out Effects
 	for _, arg := range n.Arguments() {
 		out.add(a.Of(arg))
+	}
+	if body := a.ownFunction(callee); body != nil {
+		if ast.IsPropertyAccessExpression(callee) {
+			out.add(a.Of(callee.Expression()))
+			if a.maybeNullish(callee.Expression()) && n.Flags&ast.NodeFlagsOptionalChain == 0 {
+				out.add(a.throws(n, "a method of what may be null or undefined"))
+			}
+		}
+		out.add(a.summary(n, body))
+		if t := a.c.GetTypeAtLocation(n); !a.primitive(n) && (t == nil || t.Flags()&(checker.TypeFlagsVoid|checker.TypeFlagsUndefined|checker.TypeFlagsNull) == 0) {
+			out.Fresh = true
+			if out.At.Fresh == "" {
+				out.At.Fresh = a.part(n, "the call")
+			}
+		}
+		return out
 	}
 	if !ast.IsPropertyAccessExpression(callee) {
 		out.add(a.unknown(n, "the call"))
@@ -267,7 +577,7 @@ func (a effects) call(n *ast.Node) Effects {
 		}
 		// The callback runs for each element: its body's effects count.
 		be := a.Of(body)
-		be.Fresh = false
+		be.Fresh, be.At.Fresh = false, ""
 		out.add(be)
 	default:
 		out.add(a.unknown(n, "the call"))
@@ -275,46 +585,291 @@ func (a effects) call(n *ast.Node) Effects {
 	}
 	out.add(a.Of(recv))
 	if a.maybeNullish(recv) && n.Flags&ast.NodeFlagsOptionalChain == 0 {
-		out.add(Effects{Throws: true, Why: fmt.Sprintf("%s, a method of what may be null or undefined, at %s", a.l.source(n), a.l.where(n))})
+		out.add(a.throws(n, "a method of what may be null or undefined"))
 	}
 	return out
 }
 
+// ownFunction returns the declaration of the function callee names, when
+// the module declares it with a body and no other declaration could run
+// instead: a function, a const bound to a function, or a method that is
+// static or private, which no subclass overrides.
+func (a *effects) ownFunction(callee *ast.Node) *ast.Node {
+	var name *ast.Node
+	switch {
+	case ast.IsIdentifier(callee):
+		name = callee
+	case ast.IsPropertyAccessExpression(callee):
+		name = callee.Name()
+	default:
+		return nil
+	}
+	s := a.c.GetSymbolAtLocation(name)
+	if s != nil && s.Flags&ast.SymbolFlagsAlias != 0 {
+		s = a.c.GetAliasedSymbol(s)
+	}
+	if s == nil || len(s.Declarations) != 1 {
+		return nil // overloads are judged by the implementation; none to keep it simple
+	}
+	d := s.Declarations[0]
+	if ast.GetSourceFileOfNode(d).IsDeclarationFile {
+		return nil
+	}
+	switch {
+	case ast.IsFunctionDeclaration(d) && ast.IsIdentifier(callee):
+	case ast.IsVariableDeclaration(d) && isConst(d) && ast.IsIdentifier(callee) && d.Initializer() != nil &&
+		(ast.IsArrowFunction(d.Initializer()) || ast.IsFunctionExpression(d.Initializer())):
+		d = d.Initializer()
+	case ast.IsMethodDeclaration(d) && ast.IsPropertyAccessExpression(callee) &&
+		(d.ModifierFlags()&(ast.ModifierFlagsStatic|ast.ModifierFlagsPrivate) != 0 || ast.IsPrivateIdentifier(d.Name())):
+	default:
+		return nil
+	}
+	if d.Body() == nil || ast.GetFunctionFlags(d)&(ast.FunctionFlagsAsync|ast.FunctionFlagsGenerator) != 0 {
+		return nil
+	}
+	return d
+}
+
+// summary returns what calling fn may do: what its body does, but for
+// its own locals and its returns. A call while fn is being summarized (a
+// recursive one) is not known.
+func (a *effects) summary(call, fn *ast.Node) Effects {
+	if s, ok := a.sums[fn]; ok {
+		if s == nil {
+			return a.unknown(call, "the call")
+		}
+		return a.named(*s, call)
+	}
+	a.sums[fn] = nil
+	body := fn.Body()
+	var e Effects
+	if ast.IsBlock(body) {
+		e = a.ofNodes(body.Statements())
+	} else {
+		e = a.Of(body)
+	}
+	e.Leaves, e.At.Leave = false, ""
+	e.Fresh, e.At.Fresh = false, ""
+	own := func(m map[*ast.Symbol]string) map[*ast.Symbol]string {
+		var out map[*ast.Symbol]string
+		for s, w := range m {
+			if d := s.ValueDeclaration; d != nil && d.Pos() >= fn.Pos() && d.End() <= fn.End() && ast.GetSourceFileOfNode(d) == ast.GetSourceFileOfNode(fn) {
+				continue
+			}
+			if out == nil {
+				out = map[*ast.Symbol]string{}
+			}
+			out[s] = w
+		}
+		return out
+	}
+	e.Assigns, e.Locals = own(e.Assigns), own(e.Locals)
+	a.sums[fn] = &e
+	return a.named(e, call)
+}
+
+// named returns a body's effects e with every part named as call, which
+// refusals name rather than code in the body.
+func (a *effects) named(e Effects, call *ast.Node) Effects {
+	at := a.part(call, "the call")
+	for _, f := range []*string{&e.At.Write, &e.At.Throw, &e.At.Read, &e.Why} {
+		if *f != "" {
+			*f = at
+		}
+	}
+	rename := func(m map[*ast.Symbol]string) map[*ast.Symbol]string {
+		if m == nil {
+			return nil
+		}
+		out := map[*ast.Symbol]string{}
+		for s := range m {
+			out[s] = at
+		}
+		return out
+	}
+	e.Assigns, e.Locals = rename(e.Assigns), rename(e.Locals)
+	return e
+}
+
+// ofNodes returns the effects of running nodes in order: statements or
+// expressions.
+func (a *effects) ofNodes(nodes []*ast.Node) Effects {
+	w := walk{a: a, labels: map[string]bool{}}
+	var out Effects
+	for _, n := range nodes {
+		if ast.IsExpression(n) {
+			out.add(a.Of(n))
+		} else {
+			out.add(w.stmt(n))
+		}
+	}
+	return out
+}
+
+// walk is the effects of statements, knowing which jumps stay inside
+// them: a break or continue of a loop, switch or label they hold.
+type walk struct {
+	a               *effects
+	loops, switches int
+	labels          map[string]bool
+}
+
+func (w *walk) stmts(list []*ast.Node) Effects {
+	var out Effects
+	for _, s := range list {
+		out.add(w.stmt(s))
+	}
+	return out
+}
+
+func (w *walk) leaves(n *ast.Node) Effects {
+	e := Effects{Leaves: true}
+	e.At.Leave = w.a.part(n, "")
+	return e
+}
+
+func (w *walk) stmt(n *ast.Node) Effects {
+	a := w.a
+	var out Effects
+	switch {
+	case n == nil, n.Kind == ast.KindEmptyStatement, ast.IsFunctionDeclaration(n), ast.IsInterfaceDeclaration(n), ast.IsTypeAliasDeclaration(n):
+		return out
+	case ast.IsExpressionStatement(n):
+		return a.Of(n.Expression())
+	case ast.IsVariableStatement(n):
+		return w.declare(n.AsVariableStatement().DeclarationList, false)
+	case ast.IsBlock(n):
+		return w.stmts(n.Statements())
+	case ast.IsIfStatement(n):
+		s := n.AsIfStatement()
+		out.add(a.Of(s.Expression))
+		out.add(w.stmt(s.ThenStatement))
+		out.add(w.stmt(s.ElseStatement))
+		return out
+	case ast.IsReturnStatement(n):
+		out.add(a.Of(n.Expression()))
+		out.add(w.leaves(n))
+		return out
+	case ast.IsThrowStatement(n):
+		out.add(a.Of(n.Expression()))
+		t := Effects{Throws: true, Why: a.part(n, "")}
+		t.At.Throw = t.Why
+		out.add(t)
+		return out
+	case n.Kind == ast.KindBreakStatement, n.Kind == ast.KindContinueStatement:
+		label := n.Label()
+		switch {
+		case label != nil && w.labels[label.Text()]:
+		case label == nil && n.Kind == ast.KindBreakStatement && w.loops+w.switches > 0:
+		case label == nil && n.Kind == ast.KindContinueStatement && w.loops > 0:
+		default:
+			out.add(w.leaves(n))
+		}
+		return out
+	case ast.IsLabeledStatement(n):
+		ls := n.AsLabeledStatement()
+		had := w.labels[ls.Label.Text()]
+		w.labels[ls.Label.Text()] = true
+		out = w.stmt(ls.Statement)
+		w.labels[ls.Label.Text()] = had
+		return out
+	case ast.IsForStatement(n):
+		f := n.AsForStatement()
+		if f.Initializer != nil && ast.IsVariableDeclarationList(f.Initializer) {
+			out.add(w.declare(f.Initializer, false))
+		} else {
+			out.add(a.Of(f.Initializer))
+		}
+		out.add(a.Of(f.Condition))
+		out.add(a.Of(f.Incrementor))
+		out.add(w.loop(f.Statement))
+		return out
+	case ast.IsWhileStatement(n), ast.IsDoStatement(n):
+		out.add(a.Of(n.Expression()))
+		out.add(w.loop(n.Statement()))
+		return out
+	case ast.IsForInOrOfStatement(n):
+		f := n.AsForInOrOfStatement()
+		out.add(a.Of(f.Expression))
+		if ast.IsForOfStatement(n) && !a.c.IsArrayType(a.c.GetTypeAtLocation(f.Expression)) {
+			out.add(a.unknown(f.Expression, "the iteration of"))
+		}
+		out.add(Effects{Reads: true})
+		if out.At.Read == "" {
+			out.At.Read = a.part(f.Expression, "")
+		}
+		if ast.IsVariableDeclarationList(f.Initializer) {
+			out.add(w.declare(f.Initializer, true))
+		} else {
+			out.add(a.assign(f.Initializer, f.Initializer, false))
+		}
+		out.add(w.loop(f.Statement))
+		return out
+	case ast.IsSwitchStatement(n):
+		s := n.AsSwitchStatement()
+		out.add(a.Of(s.Expression))
+		w.switches++
+		for _, c := range s.CaseBlock.AsCaseBlock().Clauses.Nodes {
+			out.add(a.Of(c.Expression()))
+			out.add(w.stmts(c.Statements()))
+		}
+		w.switches--
+		return out
+	case ast.IsTryStatement(n):
+		t := n.AsTryStatement()
+		out.add(w.stmt(t.TryBlock))
+		if t.CatchClause != nil {
+			out.add(w.stmt(t.CatchClause.AsCatchClause().Block))
+		}
+		out.add(w.stmt(t.FinallyBlock))
+		return out
+	}
+	return a.unknown(n, "the statement")
+}
+
+// declare returns the effects of a list of variable declarations, given
+// their values or, when element, each element of a loop: a local is
+// assigned, and anything else (a pattern, a variable of the module) is
+// not known.
+func (w *walk) declare(list *ast.Node, element bool) Effects {
+	a := w.a
+	var out Effects
+	for _, d := range list.AsVariableDeclarationList().Declarations.Nodes {
+		if !element {
+			out.add(a.Of(d.Initializer()))
+		}
+		if nm := d.Name(); ast.IsIdentifier(nm) {
+			if s := a.c.GetSymbolAtLocation(nm); s != nil && a.isLocal(s) {
+				out.add(Effects{Assigns: map[*ast.Symbol]string{s: a.part(d, "")}})
+				continue
+			}
+		}
+		out.add(a.unknown(d, "the declaration"))
+	}
+	return out
+}
+
+// loop returns the effects of a loop's body.
+func (w *walk) loop(body *ast.Node) Effects {
+	w.loops++
+	defer func() { w.loops-- }()
+	return w.stmt(body)
+}
+
 // global reports whether n names something the standard library
 // declares, not a name of the module's own.
-func (a effects) global(n *ast.Node) bool {
+func (a *effects) global(n *ast.Node) bool {
 	s := a.c.GetSymbolAtLocation(n)
 	return s != nil && s.ValueDeclaration != nil && ast.GetSourceFileOfNode(s.ValueDeclaration).IsDeclarationFile
 }
 
 // knownReceiver reports whether recv is a string or an array, whose pure
 // methods are known.
-func (a effects) knownReceiver(recv *ast.Node) bool {
+func (a *effects) knownReceiver(recv *ast.Node) bool {
 	t := a.c.GetTypeAtLocation(recv)
 	if t == nil {
 		return false
 	}
 	return t.Flags()&checker.TypeFlagsStringLike != 0 || a.c.IsArrayType(t)
-}
-
-// canReorder reports whether the expressions may be evaluated in another
-// order: at most one of them writes or throws, and no other reads state
-// while one writes. It returns why not.
-func canReorder(all []Effects) string {
-	var acting []Effects
-	reads := false // whether one that neither writes nor throws reads
-	for _, e := range all {
-		if e.Writes || e.Throws {
-			acting = append(acting, e)
-		} else {
-			reads = reads || e.Reads
-		}
-	}
-	switch {
-	case len(acting) > 1:
-		return acting[0].Why + " and " + acting[1].Why
-	case len(acting) == 1 && acting[0].Writes && reads:
-		return acting[0].Why
-	}
-	return ""
 }

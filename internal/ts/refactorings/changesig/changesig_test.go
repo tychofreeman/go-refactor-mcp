@@ -256,7 +256,9 @@ export function grow(p: Plant): number {
   return k;
 }
 
-export function log(p: Plant): void {}
+export function log(p: Plant): void {
+  p.height++;
+}
 
 export function measure(p: Plant): number {
   log(p);
@@ -305,9 +307,9 @@ func TestIntroduceParameter(t *testing.T) {
 	for args, want := range map[string]string{
 		`{"function": "label", "expression": "UNIT", "parameter": "unit"}`:    "UNIT in UNIT is not the same at the call at use.ts:4",
 		`{"function": "grow", "expression": "k", "parameter": "h"}`:           "reads k, a local of grow",
-		`{"function": "measure", "expression": "p.height", "parameter": "h"}`: "reads state the body may change before it reads it (at label.ts:20)",
+		`{"function": "measure", "expression": "p.height", "parameter": "h"}`: "reads state the body may change before it reads it (at label.ts:22)",
 		`{"function": "label", "expression": "p.weight", "parameter": "w"}`:   "has no expression p.weight",
-		`{"function": "measure", "expression": "log(p)", "parameter": "l"}`:   "every call would evaluate log(p) instead of the body, and it may not be moved: the call log(p) at label.ts:20",
+		`{"function": "measure", "expression": "log(p)", "parameter": "l"}`:   "every call would evaluate log(p) instead of the body, and it may not be moved: the call log(p) at label.ts:22",
 	} {
 		if res := intro(args); res.Applied || !strings.Contains(res.Refused, want) {
 			t.Errorf("%s: want a refusal with %q, got %s", args, want, res)
