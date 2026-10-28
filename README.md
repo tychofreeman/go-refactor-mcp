@@ -2101,6 +2101,12 @@ Or share it with a project by committing a `.mcp.json` at its root (see
 }
 ```
 
+For the instructions, `examples/CLAUDE.md` is a CLAUDE.md to copy into
+your project: the one that did best in the A/B runs (the user's moves of
+`eval-tasks/claude-md-derivations`, cut to what measurably helped;
+`docs/cost-history.md` sections 8, 9 and 14). Without a CLAUDE.md that asks
+for them, a fresh model does not use the tools.
+
 If `refactor-mcp` is not on the `PATH` Claude Code sees, use its absolute
 path as the command. The server works on the module containing `-C`, or
 `$CLAUDE_PROJECT_DIR` (which Claude Code sets), or its working directory.
