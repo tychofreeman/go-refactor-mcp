@@ -424,7 +424,7 @@ func (in *inliner) inline(l *lined, call *ast.Node) ([]Edit, string) {
 			if t := b.param.Type(); t != nil {
 				typ = ": " + fl.source(t)
 			}
-			decls = append(decls, kw+" "+pn+typ+" = "+b.text+";")
+			decls = append(decls, kw+" "+pn+typ+" = "+b.text+l.semi())
 		}
 		if !exprForm {
 			for _, s := range in.stmts {
@@ -529,7 +529,7 @@ func (in *inliner) inline(l *lined, call *ast.Node) ([]Edit, string) {
 			if ast.IsObjectLiteralExpression(in.ret) || ast.IsFunctionExpression(in.ret) || ast.IsClassExpression(in.ret) {
 				value = "(" + value + ")"
 			}
-			out.WriteString(indent + value + ";\n")
+			out.WriteString(indent + value + l.semi() + "\n")
 		}
 	}
 	edits = append(edits, Edit{File: l.f.FileName(), Start: a, End: b, NewText: out.String()})

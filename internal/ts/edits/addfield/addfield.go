@@ -66,7 +66,7 @@ func (*AddField) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.P
 	if a.Type != "" {
 		var lines []string
 		for _, n := range strings.Split(content, ",") {
-			lines = append(lines, strings.TrimSpace(n)+": "+strings.TrimSpace(a.Type)+";")
+			lines = append(lines, strings.TrimSpace(n)+": "+strings.TrimSpace(a.Type)+ws.Semi(path))
 		}
 		content = strings.Join(lines, "\n")
 	}

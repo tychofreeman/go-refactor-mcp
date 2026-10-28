@@ -562,10 +562,6 @@ func (p *Project) MergeDuplicate(ctx context.Context, path string, line int, nam
 		}
 		byFile[f] = append(byFile[f], r)
 	}
-	quote, semi := `"`, ";"
-	if !l.semicolons() {
-		semi = ""
-	}
 	for _, f := range order {
 		fl := newLined(f)
 		local := keepName // the name the file knows keep by
@@ -600,7 +596,7 @@ func (p *Project) MergeDuplicate(ctx context.Context, path string, line int, nam
 				return nil, fmt.Sprintf("%s already means something else in %s", keepName, fl.f.FileName())
 			}
 			at, text := fl.importAt()
-			edits = append(edits, Edit{File: f.FileName(), Start: at, End: at, NewText: text(importLine{spec: fl.specFor(kl.f.FileName()), named: []string{keepName}}.text(quote, semi))})
+			edits = append(edits, Edit{File: f.FileName(), Start: at, End: at, NewText: text(importLine{spec: fl.specFor(kl.f.FileName()), named: []string{keepName}}.text(fl.quote(), fl.semi()))})
 		}
 		for _, spec := range importsDel {
 			list := spec.Parent.AsNamedImports().Elements
@@ -799,7 +795,7 @@ func (p *Project) Parameterize(ctx context.Context, path string, functions []str
 		if !method && !ast.IsFunctionDeclaration(fn) {
 			bind = l.indent(l.line(l.pos(functionDecl(fn))))
 		}
-		edits = append(edits, Edit{File: l.f.FileName(), Start: l.pos(body), End: body.End(), NewText: "{\n" + bind + l.unit() + call + ";\n" + bind + "}"})
+		edits = append(edits, Edit{File: l.f.FileName(), Start: l.pos(body), End: body.End(), NewText: "{\n" + bind + l.unit() + call + l.semi() + "\n" + bind + "}"})
 	}
 	slices.SortFunc(edits, func(a, b Edit) int { return a.Start - b.Start })
 	return edits, ""

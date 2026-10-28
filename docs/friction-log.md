@@ -3352,3 +3352,11 @@ specifiers as references, the blank line after imports that all go,
 move_declaration's import cleanup replaced by the shared
 `dropImports`) and the docs with replace_text. This entry appended
 with a heredoc.
+
+## 2026-10-28: the TypeScript tools on Hono
+
+The fixes with replace_text and add_declaration through the CLI, in
+batches written by Python; the two tests appended with replace_text on
+the files' last lines. The pass itself drove the server over stdio
+with a script in the scratchpad (not kept). This entry appended with a
+heredoc.

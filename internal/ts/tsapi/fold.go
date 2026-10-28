@@ -177,10 +177,6 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 		})
 	}
 	// Each match becomes a call, where that does the same.
-	quote, semi := `"`, ";"
-	if !l.semicolons() {
-		semi = ""
-	}
 	imported := map[*ast.SourceFile]bool{}
 	for _, m := range matches {
 		root := m.root[0]
@@ -269,11 +265,7 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 				if !imported[cl.f] {
 					imported[cl.f] = true
 					at, text := cl.importAt()
-					fs := semi
-					if !cl.semicolons() {
-						fs = ""
-					}
-					edits = append(edits, Edit{File: cl.f.FileName(), Start: at, End: at, NewText: text(importLine{spec: cl.specFor(l.f.FileName()), named: []string{callee}}.text(quote, fs))})
+					edits = append(edits, Edit{File: cl.f.FileName(), Start: at, End: at, NewText: text(importLine{spec: cl.specFor(l.f.FileName()), named: []string{callee}}.text(cl.quote(), cl.semi()))})
 				}
 			}
 		}
@@ -293,7 +285,7 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 			edits = append(edits, Edit{File: cl.f.FileName(), Start: cl.pos(root), End: root.End(), NewText: call})
 		} else {
 			last := m.root[len(m.root)-1]
-			edits = append(edits, Edit{File: cl.f.FileName(), Start: cl.pos(root), End: last.End(), NewText: call + ";"})
+			edits = append(edits, Edit{File: cl.f.FileName(), Start: cl.pos(root), End: last.End(), NewText: call + cl.semi()})
 		}
 		folded++
 	}

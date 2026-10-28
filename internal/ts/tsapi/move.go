@@ -363,15 +363,7 @@ func (p *Project) MoveDeclaration(ctx context.Context, file string, line int, na
 	}
 	// The moved text.
 	var moved strings.Builder
-	quote, semi := `"`, ""
-	if l.semicolons() {
-		semi = ";"
-	}
-	moduleSpecifiers(l.f, func(spec, _ *ast.Node) {
-		if quote == `"` {
-			quote = l.text[l.pos(spec):][:1]
-		}
-	})
+	quote, semi := l.quote(), l.semi()
 	for i, s := range moving {
 		a, b, ok := l.lineRange(s)
 		if !ok {
@@ -568,10 +560,7 @@ func (p *Project) MoveDeclaration(ctx context.Context, file string, line int, na
 			return nil, false, why
 		}
 		if len(fresh) > 0 {
-			fq, fs := quote, semi
-			if !fl.semicolons() {
-				fs = ""
-			}
+			fq, fs := fl.quote(), fl.semi()
 			var texts []string
 			for _, im := range fresh {
 				texts = append(texts, im.text(fq, fs))
@@ -582,6 +571,9 @@ func (p *Project) MoveDeclaration(ctx context.Context, file string, line int, na
 	}
 	// The new place.
 	var header []string
+	if dest != nil {
+		quote, semi = dl.quote(), dl.semi()
+	}
 	for _, im := range needs {
 		if dest != nil {
 			// What the file imports already from that module.

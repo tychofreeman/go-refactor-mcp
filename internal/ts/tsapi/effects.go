@@ -564,6 +564,10 @@ func (a *effects) call(n *ast.Node) Effects {
 		}
 		return out
 	case pureMethods[method] && a.knownReceiver(recv):
+	case (method == "replace" || method == "replaceAll") && a.knownReceiver(recv) && len(n.Arguments()) == 2 &&
+		(a.primitive(n.Arguments()[0]) || n.Arguments()[0].Kind == ast.KindRegularExpressionLiteral) && a.primitive(n.Arguments()[1]):
+		// with a string or a regular expression written there, and a
+		// string for what replaces it (not a function, which it would call)
 	case callbackMethods[method] && a.c.IsArrayType(a.c.GetTypeAtLocation(recv)) && len(n.Arguments()) > 0:
 		cb := n.Arguments()[0]
 		body := cb.Body()

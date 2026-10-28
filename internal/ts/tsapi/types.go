@@ -69,7 +69,7 @@ func (l *lined) memberSignature(c *checker.Checker, class, m *ast.Node) (string,
 		if ast.HasSyntacticModifier(m, ast.ModifierFlagsReadonly) {
 			ro = "readonly "
 		}
-		return ro + name + opt + ": " + typeOf(m.Name(), m.Type()) + ";", ""
+		return ro + name + opt + ": " + typeOf(m.Name(), m.Type()) + l.semi(), ""
 	case ast.IsMethodDeclaration(m):
 		var ps []string
 		for _, prm := range m.Parameters() {
@@ -89,7 +89,7 @@ func (l *lined) memberSignature(c *checker.Checker, class, m *ast.Node) (string,
 		} else if sig := c.GetSignatureFromDeclaration(m); sig != nil {
 			ret = c.TypeToString(c.GetReturnTypeOfSignature(sig))
 		}
-		return name + "(" + strings.Join(ps, ", ") + "): " + ret + ";", ""
+		return name + "(" + strings.Join(ps, ", ") + "): " + ret + l.semi(), ""
 	case ast.IsGetAccessorDeclaration(m):
 		setter := slices.ContainsFunc(class.Members(), func(o *ast.Node) bool {
 			return ast.IsSetAccessorDeclaration(o) && o.Name() != nil && l.source(o.Name()) == name
@@ -101,9 +101,9 @@ func (l *lined) memberSignature(c *checker.Checker, class, m *ast.Node) (string,
 			ret = c.TypeToString(c.GetReturnTypeOfSignature(sig))
 		}
 		if setter {
-			return name + ": " + ret + ";", ""
+			return name + ": " + ret + l.semi(), ""
 		}
-		return "readonly " + name + ": " + ret + ";", ""
+		return "readonly " + name + ": " + ret + l.semi(), ""
 	case ast.IsSetAccessorDeclaration(m):
 		return "", "" // with its getter
 	}
@@ -545,6 +545,6 @@ func (p *Project) UnionSwitchToMethod(ctx context.Context, path string, line int
 	if returning > 0 {
 		call = "return " + call
 	}
-	edits = append(edits, Edit{File: l.f.FileName(), Start: l.pos(stmt), End: stmt.End(), NewText: call + ";"})
+	edits = append(edits, Edit{File: l.f.FileName(), Start: l.pos(stmt), End: stmt.End(), NewText: call + l.semi()})
 	return edits, ""
 }

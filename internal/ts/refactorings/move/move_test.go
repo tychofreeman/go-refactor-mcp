@@ -245,3 +245,17 @@ export const y = p.water({ depth: 2 });
 	refused(t, run(t, ws, NewMoveDeclaration(), `{"file": "src/plant.ts", "name": "morning", "to_file": "src/dup.ts"}`), "dup.ts already declares morning (dup.ts:1)")
 	refused(t, run(t, ws, NewMoveDeclaration(), `{"file": "src/garden.ts", "name": "tend", "to_file": "src/plant.ts", "new_name": "x"}`), "new_name is for Go")
 }
+
+// Imports are written in each file's own quotes and semicolons.
+func TestMoveDeclarationKeepsEachFilesStyle(t *testing.T) {
+	ws, dir := load(t, map[string]string{
+		"src/size.ts": "export const big = (n: number): boolean => n > 9\n\nexport const label = 'size'\n",
+		"src/use.ts":  "import { big } from './size'\n\nexport const b = big(3)\n",
+	})
+	res := run(t, ws, NewMoveDeclaration(), `{"file": "src/size.ts", "name": "big", "to_file": "src/big.ts"}`)
+	if !res.Applied {
+		t.Fatalf("%s", res)
+	}
+	want(t, dir, "src/use.ts", "import { big } from './big'\n\nexport const b = big(3)\n")
+	want(t, dir, "src/size.ts", "export const label = 'size'\n")
+}
