@@ -1000,8 +1000,8 @@ func TestTypeScriptOnly(t *testing.T) {
 	dir := tsSetup(t, nil)
 	cs := connect(t, New(dir))
 	tools := toolDescriptions(t, cs)
-	if _, ok := tools["fold"]; ok {
-		t.Error("a TypeScript-only repo is offered Go's fold")
+	if _, ok := tools["extract_struct"]; ok {
+		t.Error("a TypeScript-only repo is offered Go's extract_struct")
 	}
 	for name, own := range map[string]string{"create_file": "TypeScript or not", "add_declaration": "inside Bed", "replace_text": "files that are not source", "replace_statements": "With function \"Bed.plant\"", "insert_statements": "constructor(soil: string) {}", "replace_expression": "p.height * 2", "add_field": "add_property is another name", "create_from_usage": "throw new Error(\"not implemented\")", "add_parameter": "water(\"roses\", 2, \"L\")", "remove_parameter": "prune(\"roses\")", "move_parameter": "prune(3, \"roses\")", "introduce_parameter": "label(rose, rose.height)", "convert_params_to_object": "water({ bed: \"roses\", liters: 3 })", "add_result": "load(\"a\").value"} {
 		if d := tools[name]; !strings.Contains(d, own) {
@@ -1058,7 +1058,7 @@ func TestGoAndTypeScript(t *testing.T) {
 	mustContain(t, "rename in TypeScript", out, `renamed "morning" to "dawn"`)
 	out, _ = call(t, cs, "rename", map[string]any{"file": "calc/calc.go", "name": "Apply", "new_name": "Scale"})
 	mustContain(t, "rename in Go", out, `"Apply" to "Scale"`)
-	out, _ = call(t, cs, "fold", map[string]any{"file": "src/bed.ts", "name": "water"})
+	out, _ = call(t, cs, "extract_struct", map[string]any{"file": "src/bed.ts", "name": "Bed", "fields": []any{"soil"}, "new_type": "Soil"})
 	mustContain(t, "a tool TypeScript does not have yet", out, "does not work on TypeScript files yet")
 	out, _ = call(t, cs, "batch", map[string]any{"steps": []any{
 		map[string]any{"tool": "rename", "args": map[string]any{"file": "src/bed.ts", "name": "dawn", "new_name": "noon"}},

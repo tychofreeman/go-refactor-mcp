@@ -3340,3 +3340,15 @@ with the registration by replace_text. The test file with create_file;
 the fixes the tests found (an import inserted inside the lines of one
 being removed, importers named by full path) and the docs with
 replace_text. This entry appended with a heredoc.
+
+## 2026-10-28: TypeScript's shapes (step 10)
+
+The four new files written in the scratchpad and created with
+create_file in one batch checked at its end (a `path` parameter that
+shadowed the package, renamed with `sed` in the scratchpad copy before
+the retry), with the registration by replace_text. The test file with
+create_file; the fixes the tests found (nil heritage clauses, import
+specifiers as references, the blank line after imports that all go,
+move_declaration's import cleanup replaced by the shared
+`dropImports`) and the docs with replace_text. This entry appended
+with a heredoc.

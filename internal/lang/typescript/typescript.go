@@ -27,6 +27,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/refactorings/changesig"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/refactorings/move"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/refactorings/rename"
+	"github.com/tychofreeman/go-refactor-mcp/internal/ts/refactorings/shapes"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/refactorings/simplify"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/workspace"
 )
@@ -57,7 +58,8 @@ func New(dir string, h *history.Stack) *Language {
 func all() []refactor.RefactoringOf[*workspace.Workspace] {
 	return []refactor.RefactoringOf[*workspace.Workspace]{rename.New(), createfile.New(), adddecl.New(), replacetext.New(), replacestmts.New(), insertstmts.New(), replaceexpr.New(), addfield.New(), createfromusage.New(), changesig.NewAdd(), changesig.NewRemove(), changesig.NewMove(), changesig.NewIntroduce(), changesig.NewParamsToObject(), changesig.NewAddResult(),
 		simplify.NewExtractVariable(), simplify.NewInlineVariable(), simplify.NewMoveUp(), simplify.NewMoveDown(), simplify.NewInvertIf(), simplify.NewRemoveElse(), simplify.NewExtractFunction(), simplify.NewInlineFunction(),
-		move.NewMoveDeclaration(), move.NewMoveFile(), move.NewDeleteFile()}
+		move.NewMoveDeclaration(), move.NewMoveFile(), move.NewDeleteFile(),
+		shapes.NewFold(), shapes.NewParameterize(), shapes.NewMergeDuplicate(), shapes.NewRemoveDeadCode(), shapes.NewExtractInterface(), shapes.NewUnionSwitchToMethod()}
 }
 
 func lookup(name string) (refactor.RefactoringOf[*workspace.Workspace], bool) {

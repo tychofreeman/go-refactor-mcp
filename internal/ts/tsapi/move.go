@@ -419,7 +419,6 @@ func (p *Project) MoveDeclaration(ctx context.Context, file string, line int, na
 		}
 		needs = append(needs, im)
 	}
-	stillUsed := map[*ast.Node]bool{} // import specifiers the old file uses outside the moved code
 	identifiers(l.f.AsNode(), func(id *ast.Node) {
 		if ast.IsDeclarationName(id) || ast.IsImportSpecifier(id.Parent) {
 			return
@@ -437,9 +436,6 @@ func (p *Project) MoveDeclaration(ctx context.Context, file string, line int, na
 		}
 		isImport := ast.IsImportSpecifier(d) || ast.IsImportClause(d) || ast.IsNamespaceImport(d)
 		if !in(id) {
-			if isImport {
-				stillUsed[d] = true
-			}
 			return
 		}
 		switch {
@@ -466,57 +462,6 @@ func (p *Project) MoveDeclaration(ctx context.Context, file string, line int, na
 			addNeed(newLinedSpec(to, from, l), id.Text(), false, false, sym.Flags&ast.SymbolFlagsValue == 0)
 		}
 	})
-	// Imports of the old file that only the moved code used go.
-	for _, s := range l.f.Statements.Nodes {
-		if !ast.IsImportDeclaration(s) || s.AsImportDeclaration().ImportClause == nil {
-			continue
-		}
-		var all, unused []*ast.Node
-		clause := s.AsImportDeclaration().ImportClause
-		if clause.Name() != nil {
-			all = append(all, clause)
-		}
-		if nb := clause.AsImportClause().NamedBindings; nb != nil {
-			if ast.IsNamespaceImport(nb) {
-				all = append(all, nb)
-			} else {
-				all = append(all, nb.AsNamedImports().Elements.Nodes...)
-			}
-		}
-		usedByMoved := func(d *ast.Node) bool {
-			found := false
-			for _, m := range moving {
-				identifiers(m, func(id *ast.Node) {
-					if s := c.GetSymbolAtLocation(id); s != nil && len(s.Declarations) > 0 && s.Declarations[0] == d {
-						found = true
-					}
-				})
-			}
-			return found
-		}
-		for _, d := range all {
-			if !stillUsed[d] && usedByMoved(d) {
-				unused = append(unused, d)
-			}
-		}
-		switch {
-		case len(unused) == 0:
-		case len(unused) == len(all):
-			a, b, ok := l.lineRange(s)
-			if ok {
-				edits = append(edits, Edit{File: from, Start: a, End: b})
-			}
-		default:
-			if nb := clause.AsImportClause().NamedBindings; nb != nil && ast.IsNamedImports(nb) {
-				list := nb.AsNamedImports().Elements
-				for i := len(list.Nodes) - 1; i >= 0; i-- {
-					if slices.Contains(unused, list.Nodes[i]) {
-						edits = append(edits, l.removeAt(list, i))
-					}
-				}
-			}
-		}
-	}
 	// The old file imports what it still uses of the moved code.
 	var back []string
 	for _, sym := range movedSyms {
@@ -530,6 +475,8 @@ func (p *Project) MoveDeclaration(ctx context.Context, file string, line int, na
 			back = append(back, sym.Name)
 		}
 	}
+	// Imports of the old file that only the moved code used go.
+	edits = append(edits, dropImports(c, l, in, len(back) == 0)...)
 	if len(back) > 0 {
 		im := importLine{spec: l.specFor(to), named: back}
 		at, text := l.importAt()
