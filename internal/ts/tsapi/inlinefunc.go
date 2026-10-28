@@ -130,14 +130,12 @@ func (p *Project) InlineFunction(ctx context.Context, path string, line int, nam
 	if all {
 		calls = nil
 		for _, r := range refs {
-			call := isCallee(r)
-			if call == nil || ast.GetSourceFileOfNode(r) != l.f {
-				continue
+			if call := isCallee(r); call != nil {
+				calls = append(calls, call)
 			}
-			calls = append(calls, call)
 		}
 		if len(calls) == 0 {
-			return nil, false, fmt.Sprintf("%s has no calls in this file", name)
+			return nil, false, fmt.Sprintf("%s has no calls", name)
 		}
 	}
 	var edits []Edit
@@ -155,6 +153,22 @@ func (p *Project) InlineFunction(ctx context.Context, path string, line int, nam
 			return nil, false, why
 		}
 		edits = append(edits, es...)
+	}
+	// Another file's import of the function goes when its calls do.
+	gone := map[*ast.Node]bool{}
+	files := map[*ast.SourceFile]bool{}
+	for _, call := range calls {
+		callee := call.Expression()
+		if ast.IsPropertyAccessExpression(callee) {
+			callee = callee.Name()
+		}
+		gone[callee] = true
+		if f := ast.GetSourceFileOfNode(call); f != in.fl.f {
+			files[f] = true
+		}
+	}
+	for f := range files {
+		edits = append(edits, dropImports(c, newLined(f), func(n *ast.Node) bool { return gone[n] }, true)...)
 	}
 	deleted := false
 	if !keep && len(refs) == len(calls) {

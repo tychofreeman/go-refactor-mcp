@@ -368,7 +368,7 @@ func (*InlineFunction) Name() string { return "inline_function" }
 
 func (*InlineFunction) Description() string {
 	return `Replace a call with the function's body, and delete the function when nothing else uses it: the inverse of extract_function. With function area(b: Bed) { return b.width * b.depth; }, const a = area(bed) becomes const a = bed.width * bed.depth. A body that is one expression or one return may be inlined anywhere, and so may guards and a last return (if (s.length <= n) return s; return s.slice(0, n); becomes s.length <= n ? s : s.slice(0, n)); a body of statements where the call is a statement, a declaration's or assignment's value, or a return, and one that returns early only where the call is a return's whole value. Parameters are replaced by the arguments where that is safe, and otherwise declared first (const b = arg;; a rest parameter as the array of the rest, a destructured one as its pattern). Of overloads, the implementation is inlined.
-Identify the call by file, line and the function's name (column if the name is on the line twice). With all_calls, every call in the file is inlined and the function deleted (give file and name); if one call cannot be, none is. keep_function keeps the function; an exported one is always kept.
+Identify the call by file, line and the function's name (column if the name is on the line twice). With all_calls, every call in the solution is inlined, other files' imports of it go, and the function is deleted (give file and name); if one call cannot be, none is. keep_function keeps the function; an exported one is always kept.
 Refuses, saying why: methods a subclass could override (only static and private ones are inlined), async functions and generators, a body that names a type parameter, a destructured rest parameter, an early return elsewhere than a return's value, super, recursion, a name the body uses that means something else at the call.`
 }
 
@@ -381,7 +381,7 @@ func (*InlineFunction) InputSchema() json.RawMessage {
     "name":          {"type": "string",  "description": "Name of the called function or method (for a call x.m(), m)."},
     "column":        {"type": "integer", "description": "Optional 1-based column of the name, only needed if it appears more than once on the line."},
     "keep_function": {"type": "boolean", "description": "Keep the function even if no other call to it is left. Default false."},
-    "all_calls":     {"type": "boolean", "description": "Inline every call to the function in file, then delete it (unless keep_function). Without line, name is a function (name or Class.method) of file."}
+    "all_calls":     {"type": "boolean", "description": "Inline every call to the function, in every file, then delete it (unless keep_function). Without line, name is a function (name or Class.method) of file."}
   },
   "required": ["file", "name"],
   "additionalProperties": false

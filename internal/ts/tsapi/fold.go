@@ -109,6 +109,8 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 	type found struct {
 		root  []*ast.Node
 		args  []*ast.Node
+		texts []string
+		runs  [][]*ast.Node
 		uses  [][]*ast.Node
 		where string
 	}
@@ -117,6 +119,7 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 		m := newMatcher(c, l, cl)
 		m.holes, m.this = holes, method
 		m.args, m.uses = make([]*ast.Node, nholes), make([][]*ast.Node, nholes)
+		m.texts, m.runs = make([]string, nholes), make([][]*ast.Node, nholes)
 		m.inP = inFn
 		enclosing := ast.GetContainingFunction(roots[0])
 		if enclosing != nil {
@@ -141,7 +144,7 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 				return
 			}
 		}
-		matches = append(matches, found{root: roots, args: m.args, uses: m.uses, where: cl.where(roots[0])})
+		matches = append(matches, found{root: roots, args: m.args, texts: m.texts, runs: m.runs, uses: m.uses, where: cl.where(roots[0])})
 	}
 	for _, f := range prog.GetSourceFiles() {
 		if f.IsDeclarationFile {
@@ -184,11 +187,33 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 		ef := newEffects(c, cl)
 		skip := func(why string) { skipped = append(skipped, m.where+": "+why) }
 		var holeNodes []*ast.Node
-		for _, a := range m.args {
-			holeNodes = append(holeNodes, a)
+		for i, a := range m.args {
+			switch {
+			case m.runs[i] != nil:
+				holeNodes = append(holeNodes, m.runs[i]...)
+			case m.texts[i] == "":
+				holeNodes = append(holeNodes, a)
+			}
 		}
 		ok := true
 		for i, a := range m.args {
+			if m.texts[i] != "" {
+				// Constant text needs no check; a run, each of its operands.
+				for _, r := range m.runs[i] {
+					var past []*ast.Node
+					for _, rt := range m.root {
+						past = append(past, parts(rt, rt.End(), holeNodes)...)
+					}
+					if why := ef.Check(Move{Expr: r, Past: past, Times: Once}); why != "" {
+						skip(why)
+						ok = false
+					}
+				}
+				if !ok {
+					break
+				}
+				continue
+			}
 			if i < len(paramTypes) {
 				pt := c.GetTypeAtLocation(fn.Parameters()[i].Name())
 				if at := c.GetTypeAtLocation(a); at != nil && pt != nil && !c.IsTypeAssignableTo(at, pt) {
@@ -210,7 +235,7 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 				past = append(past, parts(r, r.End(), holeNodes)...)
 			}
 			for j, b := range m.args {
-				if j != i {
+				if j != i && m.texts[j] == "" {
 					past = append(past, b)
 				}
 			}
@@ -275,7 +300,9 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 				break
 			}
 			s := cl.source(a)
-			if ast.IsBinaryExpression(a) && a.AsBinaryExpression().OperatorToken.Kind == ast.KindCommaToken {
+			if m.texts[i] != "" {
+				s = m.texts[i]
+			} else if ast.IsBinaryExpression(a) && a.AsBinaryExpression().OperatorToken.Kind == ast.KindCommaToken {
 				s = "(" + s + ")"
 			}
 			args = append(args, s)

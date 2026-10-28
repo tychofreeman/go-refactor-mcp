@@ -40,6 +40,55 @@ func (l *lined) typeDecl(c *checker.Checker, line int, name string, column int) 
 	return nil, fmt.Sprintf("the file declares no class, interface or type %s at its top level", name)
 }
 
+// abstractMembers returns members, but when it is one instance of an
+// abstract class of the solution: the instances of the classes extending
+// it directly, which are all its instances can be; and that class.
+func (p *Project) abstractMembers(c *checker.Checker, members []*checker.Type) ([]*checker.Type, *ast.Node, string) {
+	if len(members) != 1 {
+		return members, nil, ""
+	}
+	base := classOfType(members[0])
+	if base == nil || !ast.HasSyntacticModifier(base, ast.ModifierFlagsAbstract) {
+		return members, nil, ""
+	}
+	sym := c.GetSymbolAtLocation(base.Name())
+	var out []*checker.Type
+	why := ""
+	for _, f := range p.prog.GetProgram().GetSourceFiles() {
+		if f.IsDeclarationFile {
+			continue
+		}
+		var visit func(n *ast.Node) bool
+		visit = func(n *ast.Node) bool {
+			if ast.IsClassDeclaration(n) && n.Name() != nil {
+				for _, h := range nodes(n.AsClassDeclaration().HeritageClauses) {
+					if h.AsHeritageClause().Token != ast.KindExtendsKeyword {
+						continue
+					}
+					for _, t := range h.AsHeritageClause().Types.Nodes {
+						if e := t.Expression(); e != nil && ast.IsIdentifier(e) && symbolOf(c, e) == sym {
+							if ast.HasSyntacticModifier(n, ast.ModifierFlagsAbstract) && why == "" {
+								why = fmt.Sprintf("%s extends %s and is abstract too; only one level of subclasses is handled", n.Name().Text(), base.Name().Text())
+							}
+							out = append(out, c.GetTypeAtLocation(n.Name()))
+						}
+					}
+				}
+			}
+			n.ForEachChild(visit)
+			return false
+		}
+		visit(f.AsNode())
+	}
+	if why != "" {
+		return nil, nil, why
+	}
+	if len(out) == 0 {
+		return members, nil, ""
+	}
+	return out, base, ""
+}
+
 // nodes returns the nodes of a list that may be nil.
 func nodes(list *ast.NodeList) []*ast.Node {
 	if list == nil {
@@ -309,6 +358,8 @@ func (p *Project) UnionSwitchToMethod(ctx context.Context, path string, line int
 	}
 	var arms []arm
 	var subject *ast.Node
+	var base *ast.Node // an abstract class the subject is typed with, whose subclasses are the arms
+	var why3 string
 	classOf := func(t *checker.Type) *ast.Node {
 		if t == nil || t.Symbol() == nil {
 			return nil
@@ -328,6 +379,9 @@ func (p *Project) UnionSwitchToMethod(ctx context.Context, path string, line int
 		members := []*checker.Type{t}
 		if t.Flags()&checker.TypeFlagsUnion != 0 {
 			members = t.Types()
+		}
+		if members, base, why3 = p.abstractMembers(c, members); why3 != "" {
+			return nil, why3
 		}
 		clauses := stmt.AsSwitchStatement().CaseBlock.AsCaseBlock().Clauses.Nodes
 		for _, cl := range clauses {
@@ -399,6 +453,9 @@ func (p *Project) UnionSwitchToMethod(ctx context.Context, path string, line int
 		members := []*checker.Type{t}
 		if t.Flags()&checker.TypeFlagsUnion != 0 {
 			members = t.Types()
+		}
+		if members, base, why3 = p.abstractMembers(c, members); why3 != "" {
+			return nil, why3
 		}
 		for _, m := range members {
 			if cls := classOf(m); cls == nil || !slices.ContainsFunc(arms, func(a arm) bool { return a.class == cls }) {
@@ -530,7 +587,11 @@ func (p *Project) UnionSwitchToMethod(ctx context.Context, path string, line int
 				text += ln
 			}
 		}
-		decl := "\n" + mind + method + "(" + strings.Join(ps, ", ") + "): " + ret + " {\n" + text + mind + "}\n"
+		head := method
+		if base != nil && p.prog.GetProgram().Options().NoImplicitOverride.IsTrue() {
+			head = "override " + method
+		}
+		decl := "\n" + mind + head + "(" + strings.Join(ps, ", ") + "): " + ret + " {\n" + text + mind + "}\n"
 		closing := a.class.End() - 1
 		at := cl.start(cl.line(closing))
 		if strings.TrimSpace(cl.text[at:closing]) != "" {
@@ -540,6 +601,22 @@ func (p *Project) UnionSwitchToMethod(ctx context.Context, path string, line int
 			decl = strings.TrimPrefix(decl, "\n")
 		}
 		edits = append(edits, Edit{File: cl.f.FileName(), Start: at, End: at, NewText: decl})
+	}
+	if base != nil {
+		// The base declares the method its subclasses now have.
+		bl := newLined(ast.GetSourceFileOfNode(base))
+		for _, m := range base.Members() {
+			if m.Name() != nil && bl.source(m.Name()) == method {
+				return nil, fmt.Sprintf("%s already has a member %s", base.Name().Text(), method)
+			}
+		}
+		closing := base.End() - 1
+		at := bl.start(bl.line(closing))
+		if strings.TrimSpace(bl.text[at:closing]) != "" {
+			return nil, fmt.Sprintf("%s's closing brace shares its line; put it on a line of its own", base.Name().Text())
+		}
+		mind := bl.indent(bl.line(bl.pos(base))) + bl.unit()
+		edits = append(edits, Edit{File: bl.f.FileName(), Start: at, End: at, NewText: mind + "abstract " + method + "(" + strings.Join(ps, ", ") + "): " + ret + bl.semi() + "\n"})
 	}
 	call := operand(l, subject) + "." + method + "(" + strings.Join(args, ", ") + ")"
 	if returning > 0 {

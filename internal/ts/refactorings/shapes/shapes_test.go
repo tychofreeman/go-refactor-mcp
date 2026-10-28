@@ -486,6 +486,31 @@ export function water(p: Plant, out: string[]): void {
 	})
 }
 
+// The subclasses of an abstract class take a union's place; the base
+// declares the method.
+func TestUnionSwitchToMethodOnABaseClass(t *testing.T) {
+	ws, dir := load(t, map[string]string{
+		"src/plants.ts": "export abstract class Plant {\n  abstract readonly kind: string;\n}\n\nexport class Fern extends Plant {\n  readonly kind = \"fern\";\n  mist = 2;\n}\n\nexport class Cactus extends Plant {\n  readonly kind = \"cactus\";\n}\n",
+		"src/water.ts":  "import { Plant, Fern, Cactus } from \"./plants\";\n\nexport function water(p: Plant, out: number[]): void {\n  if (p instanceof Fern) {\n    out.push(p.mist);\n  } else if (p instanceof Cactus) {\n    out.push(1);\n  }\n}\n",
+	})
+	res := run(t, ws, NewUnionSwitchToMethod(), `{"file": "src/water.ts", "function": "water", "method": "water"}`)
+	if !res.Applied {
+		t.Fatalf("%s", res)
+	}
+	want(t, dir, "src/plants.ts", "export abstract class Plant {\n  abstract readonly kind: string;\n  abstract water(out: number[]): void;\n}\n\nexport class Fern extends Plant {\n  readonly kind = \"fern\";\n  mist = 2;\n\n  water(out: number[]): void {\n    out.push(this.mist);\n  }\n}\n\nexport class Cactus extends Plant {\n  readonly kind = \"cactus\";\n\n  water(out: number[]): void {\n    out.push(1);\n  }\n}\n")
+}
+
+// A template's string parameter stands for constant text, and a +
+// chain's for a run of operands, as Go's %s and concatenation do.
+func TestFoldTextAndConcatenation(t *testing.T) {
+	ws, dir := load(t, map[string]string{"src/s.ts": "const logged: string[] = [];\n\nfunction log(line: string): void {\n  logged.push(line);\n}\n\nfunction record(entries: string[], device: string, bed: string, text: string): void {\n  log(`${device} on ${bed}`);\n  entries.push(bed + \": \" + text);\n}\n\nexport class Sprinkler {\n  entries: string[] = [];\n\n  run(bed: string, note: string): void {\n    log(`sprinkler on ${bed}`);\n    this.entries.push(bed + \": \" + note + \"!\");\n  }\n}\n"})
+	res := run(t, ws, NewFold(), `{"file": "src/s.ts", "name": "record"}`)
+	if !res.Applied {
+		t.Fatalf("%s", res)
+	}
+	want(t, dir, "src/s.ts", "const logged: string[] = [];\n\nfunction log(line: string): void {\n  logged.push(line);\n}\n\nfunction record(entries: string[], device: string, bed: string, text: string): void {\n  log(`${device} on ${bed}`);\n  entries.push(bed + \": \" + text);\n}\n\nexport class Sprinkler {\n  entries: string[] = [];\n\n  run(bed: string, note: string): void {\n    record(this.entries, \"sprinkler\", bed, note + \"!\");\n  }\n}\n")
+}
+
 func TestUnionSwitchToMethod(t *testing.T) {
 	check(t, []change{
 		{"switch", map[string]string{"src/plants.ts": ferns, "src/water.ts": `import { Plant } from "./plants";

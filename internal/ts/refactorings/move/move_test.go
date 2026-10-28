@@ -219,6 +219,36 @@ export function label(n: number): string {
 `)
 }
 
+// A destination that imported what moves under an alias calls it by its
+// own name.
+func TestMoveDeclarationIntoAFileThatAliasesIt(t *testing.T) {
+	ws, dir := load(t, map[string]string{
+		"src/size.ts": "export function big(n: number): boolean {\n  return n > 9;\n}\n\nexport const label = \"size\";\n",
+		"src/use.ts":  "import { big as large } from \"./size\";\n\nexport const b = large(3);\nexport const o = { large };\n",
+	})
+	res := run(t, ws, NewMoveDeclaration(), `{"file": "src/size.ts", "name": "big", "to_file": "src/use.ts"}`)
+	if !res.Applied {
+		t.Fatalf("%s", res)
+	}
+	want(t, dir, "src/use.ts", "export const b = big(3);\nexport const o = { large: big };\n\nexport function big(n: number): boolean {\n  return n > 9;\n}\n")
+}
+
+// A file the move leaves empty is deleted.
+func TestMoveDeclarationDeletesAnEmptyFile(t *testing.T) {
+	ws, dir := load(t, map[string]string{
+		"src/size.ts": "export const big = (n: number): boolean => n > 9;\n",
+		"src/use.ts":  "import { big } from \"./size\";\n\nexport const b = big(3);\n",
+	})
+	res := run(t, ws, NewMoveDeclaration(), `{"file": "src/size.ts", "name": "big", "to_file": "src/big.ts"}`)
+	if !res.Applied || !strings.Contains(res.String(), "src/size.ts, left empty, is deleted") {
+		t.Fatalf("%s", res)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "src/size.ts")); !os.IsNotExist(err) {
+		t.Errorf("src/size.ts is still there: %v", err)
+	}
+	want(t, dir, "src/use.ts", "import { big } from \"./big\";\n\nexport const b = big(3);\n")
+}
+
 func TestMoveDeclarationKeepsTsExtensions(t *testing.T) {
 	ws, dir := load(t, map[string]string{
 		"tsconfig.json": strings.Replace(config, `"noEmit": true`, `"noEmit": true, "allowImportingTsExtensions": true`, 1),
