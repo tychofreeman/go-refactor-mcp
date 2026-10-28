@@ -335,3 +335,56 @@ func (*UnionSwitchToMethod) Plan(ws *workspace.Workspace, raw json.RawMessage) (
 		return p.UnionSwitchToMethod(bg, path, a.Line, a.Function, a.Method)
 	})
 }
+
+// PrepareSwitchForTypes prepares a switch for its cases to move into
+// classes one at a time.
+type PrepareSwitchForTypes struct{}
+
+// NewPrepareSwitchForTypes returns prepare_switch_for_types.
+func NewPrepareSwitchForTypes() *PrepareSwitchForTypes { return &PrepareSwitchForTypes{} }
+
+func (*PrepareSwitchForTypes) Name() string { return "prepare_switch_for_types" }
+
+func (*PrepareSwitchForTypes) Description() string {
+	return `Prepare a switch for its cases to move into classes one at a time, each case becoming the method of a class that implements an interface: a subject that has the method runs it, and the switch handles the rest. No class implements it yet, so nothing changes until a case moves. With interface Species and method water,
+  function water(p: Plant, days: number): number { switch (p.species) { case "fern": return days * 3; case "cactus": return 1; } return 0; }
+becomes
+  interface Species { water(days: number): number; }
+  function water(p: Plant, days: number): number { if (typeof p.species === "object" && p.species !== null && "water" in p.species) { return (p.species as Species).water(days); } switch (p.species) { ... } return 0; }
+The subject must be able to hold an object: widen it first (change_field_type to unknown). The interface is declared before the function, or gets the method when the file has it. The locals the cases use become the method's parameters. Every case must return, or none (then the switch goes in the else). Cases that share a body (case "moss": case "cactus":) are split, each with a copy, so that each moves alone.
+Identify the switch by file and line, or by function when it is that function's only switch.
+Refuses, saying why: a subject that holds no object or would be evaluated again with another value, an interface that already has the method, a case that uses this, leaves other than by return or assigns a local it uses, a shared body that declares something.`
+}
+
+func (*PrepareSwitchForTypes) InputSchema() json.RawMessage {
+	return json.RawMessage(`{
+  "type": "object",
+  "properties": {
+    "file":      {"type": "string",  "description": "The file with the switch, relative to the root."},
+    "line":      {"type": "integer", "description": "1-based line on which the switch starts."},
+    "function":  {"type": "string",  "description": "Instead of line: the function (name or Class.method) whose only switch it is."},
+    "interface": {"type": "string",  "description": "The interface: declared before the function if the file has none of that name."},
+    "method":    {"type": "string",  "description": "Name of the interface's new method."}
+  },
+  "required": ["file", "interface", "method"],
+  "additionalProperties": false
+}`)
+}
+
+func (*PrepareSwitchForTypes) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
+	var a struct {
+		File      string `json:"file"`
+		Line      int    `json:"line"`
+		Function  string `json:"function"`
+		Interface string `json:"interface"`
+		Method    string `json:"method"`
+	}
+	if err := refactor.DecodeArgs(raw, &a); err != nil {
+		return nil, err
+	}
+	return plan(ws, a.File, func() string {
+		return fmt.Sprintf("prepared the switch for its cases to move into classes implementing %s.%s", a.Interface, a.Method)
+	}, func(p *tsapi.Project, path string) ([]tsapi.Edit, string) {
+		return p.PrepareSwitchForTypes(bg, path, a.Line, a.Function, a.Interface, a.Method)
+	})
+}
