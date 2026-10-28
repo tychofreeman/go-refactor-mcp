@@ -3398,3 +3398,11 @@ The new tsapi file with create_file, the rest with replace_text through
 the CLI in one batch checked at its end, written by Python; the docs
 with replace_text. Nothing by hand but this entry, appended with a
 heredoc.
+
+## 2026-10-28: TypeScript's prepare_switch_for_types (item 41.4)
+
+The new tsapi file with create_file, the rest with replace_text through
+the CLI in one batch checked at its end; two fixes to the draft (a
+local named like the `body` type, a fallback for lineRange) made in the
+scratchpad copy before the batch. The docs with replace_text. This entry
+appended with a heredoc.

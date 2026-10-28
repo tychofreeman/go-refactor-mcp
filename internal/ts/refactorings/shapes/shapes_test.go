@@ -393,6 +393,99 @@ export class Cactus {
 export type Plant = Fern | Cactus;
 `
 
+func TestPrepareSwitchForTypes(t *testing.T) {
+	plant := `export interface Plant {
+  name: string;
+  species: unknown;
+}
+`
+	check(t, []change{
+		{"returning", map[string]string{"src/water.ts": plant + `
+export function water(p: Plant, days: number): number {
+  switch (p.species) {
+    case "fern":
+      return days * 3;
+    case "moss":
+    case "cactus":
+      return 1;
+  }
+  return 0;
+}
+`}, NewPrepareSwitchForTypes(), `{"file": "src/water.ts", "function": "water", "interface": "Species", "method": "water"}`, map[string]string{"src/water.ts": plant + `
+export interface Species {
+  water(days: number): number;
+}
+
+export function water(p: Plant, days: number): number {
+  if (typeof p.species === "object" && p.species !== null && "water" in p.species) {
+    return (p.species as Species).water(days);
+  }
+  switch (p.species) {
+    case "fern":
+      return days * 3;
+    case "moss":
+      return 1;
+    case "cactus":
+      return 1;
+  }
+  return 0;
+}
+`}, ""},
+		{"in the else", map[string]string{"src/water.ts": plant + `
+export interface Species {
+  water(days: number): number;
+}
+
+export function label(p: Plant, out: string[]): void {
+  switch (p.species) {
+    case "fern":
+      out.push("green");
+      break;
+    default:
+      out.push("?");
+  }
+}
+`}, NewPrepareSwitchForTypes(), `{"file": "src/water.ts", "function": "label", "interface": "Species", "method": "label"}`, map[string]string{"src/water.ts": plant + `
+export interface Species {
+  water(days: number): number;
+  label(out: string[]): void;
+}
+
+export function label(p: Plant, out: string[]): void {
+  if (typeof p.species === "object" && p.species !== null && "label" in p.species) {
+    (p.species as Species).label(out);
+  } else {
+    switch (p.species) {
+      case "fern":
+        out.push("green");
+        break;
+      default:
+        out.push("?");
+    }
+  }
+}
+`}, ""},
+		{"no object", map[string]string{"src/water.ts": `export function water(species: string): number {
+  switch (species) {
+    case "fern":
+      return 3;
+  }
+  return 0;
+}
+`}, NewPrepareSwitchForTypes(), `{"file": "src/water.ts", "function": "water", "interface": "Species", "method": "water"}`, nil, "holds no object; widen it first"},
+		{"some return", map[string]string{"src/water.ts": plant + `
+export function water(p: Plant, out: string[]): void {
+  switch (p.species) {
+    case "fern":
+      return;
+    default:
+      out.push("?");
+  }
+}
+`}, NewPrepareSwitchForTypes(), `{"file": "src/water.ts", "function": "water", "interface": "Species", "method": "water"}`, nil, "some cases return and some do not"},
+	})
+}
+
 func TestUnionSwitchToMethod(t *testing.T) {
 	check(t, []change{
 		{"switch", map[string]string{"src/plants.ts": ferns, "src/water.ts": `import { Plant } from "./plants";

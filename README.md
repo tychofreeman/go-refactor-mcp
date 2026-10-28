@@ -2084,7 +2084,15 @@ hand or a tool got in the way.
        in a nested function, `super`, `#` names, `?.` calls, recursion
        and uses as a value.
     4. `prepare_switch_for_types` (only `union_switch_to_method`, its
-       last step, exists).
+       last step, exists). *Done*: as Go's, an interface gets the
+       method (the locals the cases use its parameters) and a guard
+       before the switch hands it a subject that has the method, as
+       `typeof s === "object" && s !== null && "m" in s`, then
+       `(s as I).m(...)`; the subject must be able to hold an object
+       (widen it to `unknown` first, as Go to `any`). The rest of the
+       one-case-at-a-time path needs item 8 (extract_function by
+       `case`) and narrowing with values, which change_field_type does
+       not do in TypeScript yet.
     5. `extract_struct` (TypeScript has extract_interface and
        convert_params_to_object).
     6. The edits `add_case`, `add_element` and `replace_declaration`.

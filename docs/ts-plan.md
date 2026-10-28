@@ -659,8 +659,9 @@ Go. Steps 1 and 2 change shared code and come before any TypeScript.
       subject becomes `this`, the locals used parameters; every class
       needs a case, and no default or final else.
     Left for later: fold of near-duplicates that differ in constants
-    (Go's `%s` and concatenation matches), prepare_switch_for_types'
-    one-case-at-a-time path, and a class hierarchy (a base class) in
+    (Go's `%s` and concatenation matches), the rest of the
+    one-case-at-a-time path after prepare_switch_for_types (README
+    item 41.4), and a class hierarchy (a base class) in
     union_switch_to_method.
 11. **Measuring:** `refactor-ab` with TypeScript tasks: translate four
     or five (warehouse, notify, billing) with tests, and the CLAUDE.md
