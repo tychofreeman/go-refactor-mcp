@@ -42,6 +42,18 @@ Moves that work:
   step.
 - **A field or function a new test uses** is stubbed for you.
 
+## Friction log
+
+When no gorefactor tool covers a step, make it by hand, as small as it
+can be, and log it in `docs/friction-log.md`. Append one entry per
+change (a PR, or a task) at the end of the file, never between older
+entries: what you did by hand, why no tool did it (none exists, one
+refused and why, or its argument was missing), and the operation that
+would have done it. Log refusals that cost a turn too. Edits to files
+that are not Go, made with replace_text, need no entry. The log is the
+evidence for which tool to build next, so record the gap, not a
+workaround.
+
 ## Using the tools
 
 - Load every gorefactor schema you will need in one ToolSearch.
