@@ -616,6 +616,45 @@ Go. Steps 1 and 2 change shared code and come before any TypeScript.
    empty.
 10. **Shapes:** fold, parameterize, merge_duplicate_function,
     remove_dead_code, extract_interface, union_switch_to_method.
+    *Done* (`internal/ts/refactorings/shapes`, the logic in `tsapi`'s
+    shapes.go, fold.go and types.go). One matcher compares code with a
+    pattern node for node: names mean the same but for the pattern's
+    own locals, paired one to one with the code's, and its holes
+    (parameters, and `this` for a method), which match any expression.
+    - `fold`: a body that is one expression (or one return) matches
+      expressions anywhere in the solution; a body of statements
+      without a result matches runs of statements in any block. Each
+      match becomes a call where `Check` allows each argument's move to
+      the call (evaluated once, before the body), its type is
+      assignable, the function's name means it there (or the file can
+      import it, which it then does), and a local the statements
+      declare is not used after them; the result lists the matches
+      left and why. Methods: private ones, or of a class nothing
+      extends.
+    - `parameterize`: functions (or methods of one class) the same but
+      for literals become calls of a new function taking them, after
+      the last of them.
+    - `merge_duplicate_function`: the same signature and bodies;
+      every use, imports included, turns to the one kept, imported
+      where needed (it must be exported to be seen elsewhere).
+    - `remove_dead_code`: top-level declarations and class or
+      interface members nothing uses (imports and re-exports count),
+      with the imports only they used; not a member that implements
+      or overrides one of a base type, nor a value whose evaluation
+      does something. Exported code goes with a note.
+    - `extract_interface` (Go's extract_struct): an interface's
+      members move into a new one it extends; a type alias of an object
+      type becomes `New & { rest }`; a class gets an interface of the
+      members' signatures and implements it.
+    - `union_switch_to_method` (Go's type_switch_to_method): a switch
+      on a discriminant property, or an instanceof chain, over a union
+      of the solution's classes, becomes a method of each class; the
+      subject becomes `this`, the locals used parameters; every class
+      needs a case, and no default or final else.
+    Left for later: fold of near-duplicates that differ in constants
+    (Go's `%s` and concatenation matches), prepare_switch_for_types'
+    one-case-at-a-time path, and a class hierarchy (a base class) in
+    union_switch_to_method.
 11. **Measuring:** `refactor-ab` with TypeScript tasks: translate four
     or five (warehouse, notify, billing) with tests, and the CLAUDE.md
     variants. First A/B: mcp vs manual on the features run. Then a
