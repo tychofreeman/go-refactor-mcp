@@ -32,36 +32,13 @@ type NewParameter struct {
 // method called name ("f", or "Class.method") in the file at path, at its
 // declaration and every call in the project; or why it cannot be made.
 func (p *Project) ChangeSignature(ctx context.Context, path, name string, ch SignatureChange) ([]Edit, string) {
-	l, refusal := p.lined(path)
-	if refusal != "" {
-		return nil, refusal
-	}
-	fn, nameNode, why := l.function(name)
+	t, done, why := p.target(ctx, path, name)
 	if why != "" {
 		return nil, why
 	}
-	c, done := p.prog.GetProgram().GetTypeChecker(ctx)
 	defer done()
-	sym := c.GetSymbolAtLocation(nameNode)
-	if sym == nil {
-		return nil, fmt.Sprintf("%s has no symbol to find its calls by", name)
-	}
-	params := fn.Parameters()
-	off := 0 // a this parameter is not passed
-	if len(params) > 0 && ast.IsThisParameter(params[0]) {
-		off = 1
-	}
-	index := func(n string) int {
-		for i, prm := range params[off:] {
-			if nm := prm.Name(); nm != nil && ast.IsIdentifier(nm) && nm.Text() == n {
-				return i
-			}
-		}
-		return -1
-	}
-	isRest := func(i int) bool {
-		return i >= 0 && i < len(params)-off && params[off+i].AsParameterDeclaration().DotDotDotToken != nil
-	}
+	l, fn, c, params, off, ctor := t.l, t.fn, t.c, t.params, t.off, t.ctor
+	index, isRest := t.index, t.isRest
 	n := len(params) - off
 	at := n // where the added or moved parameter goes
 	if ch.Before != "" {
@@ -91,6 +68,9 @@ func (p *Project) ChangeSignature(ctx context.Context, path, name string, ch Sig
 		if i < 0 {
 			return nil, fmt.Sprintf("%s has no parameter %s", name, ch.Remove)
 		}
+		if ctor && params[off+i].Modifiers() != nil && len(params[off+i].Modifiers().Nodes) > 0 {
+			return nil, fmt.Sprintf("%s is a parameter property, which declares a field of the class too; it cannot be removed as a parameter", ch.Remove)
+		}
 		prm := c.GetSymbolAtLocation(params[off+i].Name())
 		if where := l.reads(c, fn.Body(), ch.Remove, prm); where != "" {
 			return nil, fmt.Sprintf("the body of %s reads %s (%s); change the body first so that it no longer does", name, ch.Remove, where)
@@ -117,35 +97,10 @@ func (p *Project) ChangeSignature(ctx context.Context, path, name string, ch Sig
 		}
 	}
 
-	var calls []*ast.Node
-	for _, f := range p.prog.GetProgram().GetSourceFiles() {
-		if f.IsDeclarationFile || strings.Contains(f.FileName(), "/node_modules/") {
-			continue
-		}
-		fl := newLined(f)
-		var visit func(nd *ast.Node) bool
-		visit = func(nd *ast.Node) bool {
-			if why != "" {
-				return true
-			}
-			if ast.IsIdentifier(nd) && nd.Text() == sym.Name && nd != nameNode {
-				if s := c.GetSymbolAtLocation(nd); s != nil && c.SkipAlias(s) == sym {
-					call, w := fl.callOf(nd)
-					switch {
-					case w != "":
-						why = w
-					case call != nil:
-						calls = append(calls, call)
-					}
-				}
-			}
-			return nd.ForEachChild(visit)
-		}
-		visit(f.AsNode())
-		if why != "" {
-			return nil, why
-		}
+	if why := t.findCalls(p); why != "" {
+		return nil, why
 	}
+	calls := t.calls
 	if value != nil {
 		if why := sameMeaning(c, value, calls); why != "" {
 			return nil, why
@@ -201,6 +156,102 @@ func (p *Project) ChangeSignature(ctx context.Context, path, name string, ch Sig
 	return edits, ""
 }
 
+// target is a function whose signature is to change: its declaration and,
+// once findCalls has run, its calls in the project.
+type target struct {
+	l        *lined
+	fn       *ast.Node
+	nameNode *ast.Node // the name its callers use
+	c        *checker.Checker
+	sym      *ast.Symbol
+	params   []*ast.Node // with a this parameter, if there is one
+	off      int         // 1 when a this parameter, which is not passed, comes first
+	ctor     bool
+	calls    []*ast.Node
+}
+
+// target finds the function or method called name in the file at path;
+// done releases the checker it holds.
+func (p *Project) target(ctx context.Context, path, name string) (*target, func(), string) {
+	l, refusal := p.lined(path)
+	if refusal != "" {
+		return nil, nil, refusal
+	}
+	fn, nameNode, why := l.function(name)
+	if why != "" {
+		return nil, nil, why
+	}
+	c, done := p.prog.GetProgram().GetTypeChecker(ctx)
+	sym := c.GetSymbolAtLocation(nameNode)
+	if sym == nil {
+		done()
+		return nil, nil, fmt.Sprintf("%s has no symbol to find its calls by", name)
+	}
+	t := &target{l: l, fn: fn, nameNode: nameNode, c: c, sym: sym, params: fn.Parameters(), ctor: ast.IsConstructorDeclaration(fn)}
+	if len(t.params) > 0 && ast.IsThisParameter(t.params[0]) {
+		t.off = 1
+	}
+	return t, done, ""
+}
+
+// index is the position of the parameter called n among those passed, or
+// -1.
+func (t *target) index(n string) int {
+	for i, prm := range t.params[t.off:] {
+		if nm := prm.Name(); nm != nil && ast.IsIdentifier(nm) && nm.Text() == n {
+			return i
+		}
+	}
+	return -1
+}
+
+// isRest reports whether the parameter at position i is a rest parameter.
+func (t *target) isRest(i int) bool {
+	return i >= 0 && i < len(t.params)-t.off && t.params[t.off+i].AsParameterDeclaration().DotDotDotToken != nil
+}
+
+// findCalls finds every call of t in the project, or why one is not known.
+func (t *target) findCalls(p *Project) string {
+	c := t.c
+	why := ""
+	for _, f := range p.prog.GetProgram().GetSourceFiles() {
+		if f.IsDeclarationFile || strings.Contains(f.FileName(), "/node_modules/") {
+			continue
+		}
+		fl := newLined(f)
+		var visit func(nd *ast.Node) bool
+		visit = func(nd *ast.Node) bool {
+			if why != "" {
+				return true
+			}
+			if ast.IsIdentifier(nd) && nd.Text() == t.sym.Name && nd != t.nameNode {
+				if s := c.GetSymbolAtLocation(nd); s != nil && c.SkipAlias(s) == t.sym {
+					var found []*ast.Node
+					var w string
+					if t.ctor {
+						found, w = fl.constructionsOf(nd)
+					} else {
+						var call *ast.Node
+						if call, w = fl.callOf(nd); call != nil {
+							found = []*ast.Node{call}
+						}
+					}
+					if w != "" {
+						why = w
+					}
+					t.calls = append(t.calls, found...)
+				}
+			}
+			return nd.ForEachChild(visit)
+		}
+		visit(f.AsNode())
+		if why != "" {
+			return why
+		}
+	}
+	return ""
+}
+
 // function finds the function or method called name in the file: a
 // function declaration, a function or arrow function bound to a const, or
 // a method of a class ("Class.method"). It returns the function and the
@@ -223,7 +274,15 @@ func (l *lined) function(name string) (fn, nameNode *ast.Node, refusal string) {
 			}
 		case isMember && ast.IsClassDeclaration(s) && s.Name() != nil && s.Name().Text() == class:
 			if member == "constructor" {
-				return nil, nil, "changing a constructor's parameters is not supported yet"
+				for _, m := range s.Members() {
+					if ast.IsConstructorDeclaration(m) {
+						found, nameNode = append(found, m), s.Name()
+					}
+				}
+				if len(found) == 0 {
+					return nil, nil, fmt.Sprintf("%s has no constructor of its own; declare one first", class)
+				}
+				continue
 			}
 			for _, m := range s.Members() {
 				if ast.IsMethodDeclaration(m) && m.Name() != nil && l.text[l.pos(m.Name()):m.Name().End()] == member {
@@ -285,6 +344,76 @@ func (l *lined) callOf(id *ast.Node) (*ast.Node, string) {
 		return call, ""
 	}
 	return nil, fmt.Sprintf("%s is used as a value at %s, where what calls it passes is not known", id.Text(), l.where(id))
+}
+
+// constructionsOf returns the calls of the constructor of the class that
+// the reference id names: a new of it, or the super calls of a class
+// extending it; none for a use as a type, a static member, instanceof,
+// implements, or an import. It refuses any other use, which could
+// construct the class with arguments that are not known.
+func (l *lined) constructionsOf(id *ast.Node) ([]*ast.Node, string) {
+	p := id.Parent
+	spread := func(call *ast.Node) string {
+		for _, a := range call.Arguments() {
+			if ast.IsSpreadElement(a) {
+				return fmt.Sprintf("the call at %s spreads its arguments (%s), so where each goes is not known", l.where(call), l.source(a))
+			}
+		}
+		return ""
+	}
+	switch {
+	case ast.IsImportSpecifier(p), ast.IsExportSpecifier(p), ast.IsImportClause(p), ast.IsTypeReferenceNode(p), ast.IsTypeQueryNode(p):
+		return nil, ""
+	case ast.IsPropertyAccessExpression(p) && p.Expression() == id:
+		return nil, ""
+	case ast.IsBinaryExpression(p) && p.AsBinaryExpression().OperatorToken.Kind == ast.KindInstanceOfKeyword && p.AsBinaryExpression().Right == id:
+		return nil, ""
+	case ast.IsNewExpression(p) && p.Expression() == id:
+		if p.ArgumentList() == nil {
+			return nil, fmt.Sprintf("new %s at %s has no parentheses to pass arguments in", id.Text(), l.where(p))
+		}
+		if why := spread(p); why != "" {
+			return nil, why
+		}
+		return []*ast.Node{p}, ""
+	case ast.IsExpressionWithTypeArguments(p) && ast.IsHeritageClause(p.Parent):
+		if p.Parent.AsHeritageClause().Token != ast.KindExtendsKeyword {
+			return nil, ""
+		}
+		derived := p.Parent.Parent
+		name := "a class"
+		if derived.Name() != nil {
+			name = derived.Name().Text()
+		}
+		var ctor *ast.Node
+		for _, m := range derived.Members() {
+			if ast.IsConstructorDeclaration(m) && m.Body() != nil {
+				ctor = m
+			}
+		}
+		if ctor == nil {
+			return nil, fmt.Sprintf("%s extends %s without a constructor of its own, so its news pass their arguments straight to %s's; declare one first", name, id.Text(), id.Text())
+		}
+		var calls []*ast.Node
+		why := ""
+		var visit func(n *ast.Node) bool
+		visit = func(n *ast.Node) bool {
+			if ast.IsClassDeclaration(n) || ast.IsClassExpression(n) {
+				return false
+			}
+			if ast.IsCallExpression(n) && n.Expression().Kind == ast.KindSuperKeyword {
+				if w := spread(n); w != "" && why == "" {
+					why = w
+				}
+				calls = append(calls, n)
+			}
+			n.ForEachChild(visit)
+			return false
+		}
+		ctor.Body().ForEachChild(visit)
+		return calls, why
+	}
+	return nil, fmt.Sprintf("%s is used as a value at %s, where it could be constructed with arguments that are not known", id.Text(), l.where(id))
 }
 
 // sameMeaning refuses a value whose names do not mean the same at every
