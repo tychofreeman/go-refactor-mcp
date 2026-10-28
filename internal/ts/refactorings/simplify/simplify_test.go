@@ -412,7 +412,53 @@ export function f(x: number): number {
   }
   return x;
 }
-`, NewInvertIf(), `{"line": 15}`, "", "an if without else is inverted only"},
+`, NewInvertIf(), `{"line": 15}`, "", "only when its branch ends with a return"},
+		{"guard in the middle", plants + `
+export function f(x: number): number {
+  if (x > 0) {
+    return 0;
+  }
+  water();
+  return x;
+}
+`, NewInvertIf(), `{"line": 15}`, plants + `
+export function f(x: number): number {
+  if (!(x > 0)) {
+    water();
+    return x;
+  }
+  return 0;
+}
+`, ""},
+		{"what follows falls through", plants + `
+export function f(x: number): void {
+  if (x > 0) {
+    water();
+    return;
+  }
+  water();
+}
+`, NewInvertIf(), `{"line": 15}`, plants + `
+export function f(x: number): void {
+  if (!(x > 0)) {
+    water();
+    return;
+  }
+  water();
+  return;
+}
+`, ""},
+		{"branch uses what follows declares", plants + `
+export function f(x: number): number {
+  if (x > 0) {
+    return g();
+  }
+  function g() {
+    return 1;
+  }
+  return 2;
+}
+`, NewInvertIf(), `{"line": 15}`, "", "which what follows it declares"},
 		{"remove else", plants + `
 export function depth(p: Plant | undefined): number {
   if (!p) {
@@ -604,7 +650,54 @@ export function pick(p: Plant): string {
   water();
   return "short";
 }
-`, NewExtractFunction(), `{"start_line": 15, "end_line": 17, "name": "size"}`, "", "only lines that end its body may return"},
+`, NewExtractFunction(), `{"start_line": 15, "end_line": 17, "name": "size"}`, plants + `
+export function pick(p: Plant): string {
+  const result = size(p);
+  if (result !== undefined) {
+    return result;
+  }
+  water();
+  return "short";
+}
+
+function size(p: Plant) {
+  if (p.height > 1) {
+    return "tall";
+  }
+  return undefined;
+}
+`, ""},
+		{"early bare return", plants + `
+export function pick(p: Plant): void {
+  if (p.height > 1) {
+    return;
+  }
+  water();
+}
+`, NewExtractFunction(), `{"start_line": 15, "end_line": 17, "name": "tall"}`, plants + `
+export function pick(p: Plant): void {
+  if (tall(p)) {
+    return;
+  }
+  water();
+}
+
+function tall(p: Plant) {
+  if (p.height > 1) {
+    return true;
+  }
+  return false;
+}
+`, ""},
+		{"early return of what may be undefined", plants + `
+export function pick(p: Plant, q: string | undefined): string | undefined {
+  if (p.height > 1) {
+    return q;
+  }
+  water();
+  return "short";
+}
+`, NewExtractFunction(), `{"start_line": 15, "end_line": 17, "name": "size"}`, "", "may be undefined"},
 		{"break out", plants + `
 export function first(xs: number[]): number {
   for (const x of xs) {
@@ -653,6 +746,16 @@ export function size(): number {
 export function size(): number {
   const p: Plant = { name: "fern", height: water() };
   return p.height * p.height;
+}
+`, ""},
+		{"argument declared under another name", area + `
+export function size(p: Plant): number {
+  return area({ name: p.name, height: water() });
+}
+`, NewInlineFunction(), `{"line": 19, "name": "area"}`, plants + `
+export function size(p: Plant): number {
+  const p2: Plant = { name: p.name, height: water() };
+  return p2.height * p2.height;
 }
 `, ""},
 		{"statements", plants + `

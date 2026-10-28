@@ -266,6 +266,32 @@ type binding struct {
 	argL  *lined
 	text  string // the argument's source, or "undefined"
 	bound bool
+	name  string // when bound under a name other than the parameter's
+}
+
+// identifierTexts returns the names of the identifiers in n.
+func identifierTexts(n *ast.Node) []string {
+	var out []string
+	identifiers(n, func(id *ast.Node) { out = append(out, id.Text()) })
+	return out
+}
+
+// mayBeUndefined reports whether a value of t may be undefined (or is not
+// known: any, unknown, void).
+func mayBeUndefined(t *checker.Type) bool {
+	if t == nil {
+		return true
+	}
+	types := []*checker.Type{t}
+	if t.Flags()&checker.TypeFlagsUnion != 0 {
+		types = t.Types()
+	}
+	for _, u := range types {
+		if u.Flags()&(checker.TypeFlagsUndefined|checker.TypeFlagsVoid|checker.TypeFlagsAnyOrUnknown) != 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // inline returns the edits that inline call, in the file l.
@@ -413,8 +439,20 @@ func (in *inliner) inline(l *lined, call *ast.Node) ([]Edit, string) {
 				}
 			}
 			pn := b.param.Name().Text()
-			if why := taken(c, l, pn, stmt); why != "" {
-				return nil, fmt.Sprintf("the parameter %s would be declared at the call: %s", pn, why)
+			if taken(c, l, pn, stmt) != "" {
+				// Taken at the call: another name, which neither the call's
+				// statement sees nor the function uses.
+				free := ""
+				for i := 2; i < 10 && free == ""; i++ {
+					cand := fmt.Sprintf("%s%d", pn, i)
+					if taken(c, l, cand, stmt) == "" && !slices.ContainsFunc(identifierTexts(in.fn), func(s string) bool { return s == cand }) {
+						free = cand
+					}
+				}
+				if free == "" {
+					return nil, fmt.Sprintf("the parameter %s would be declared at the call, where %s and the names after it are taken", pn, pn)
+				}
+				b.name, pn = free, free
 			}
 			kw := "const"
 			if assignedIn(c, []*ast.Node{bodyRoot}, c.GetSymbolAtLocation(b.param.Name())) {
@@ -439,12 +477,20 @@ func (in *inliner) inline(l *lined, call *ast.Node) ([]Edit, string) {
 	// The replacements in the body: parameters and this.
 	var rs []repl
 	for _, b := range bs {
-		if b.bound {
+		if b.bound && b.name == "" {
 			continue
 		}
 		ps := c.GetSymbolAtLocation(b.param.Name())
 		identifiers(bodyRoot, func(id *ast.Node) {
 			if symbolOf(c, id) != ps {
+				return
+			}
+			if b.bound { // declared under another name
+				text := b.name
+				if ast.IsShorthandPropertyAssignment(id.Parent) {
+					text = id.Text() + ": " + b.name
+				}
+				rs = append(rs, repl{fl.pos(id), id.End(), text})
 				return
 			}
 			text := b.text
