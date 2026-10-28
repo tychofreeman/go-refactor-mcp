@@ -115,6 +115,21 @@ func TestStubInTheFileAndInAClass(t *testing.T) {
 	}
 }
 
+// A call passed where any value goes (a test's equal(got: unknown, ...))
+// gets a stub returning unknown.
+func TestStubWhereAnyValueGoes(t *testing.T) {
+	ws, dir := load(t, copyOf(garden))
+	b := batch(t, ws,
+		mk(adddecl.New(), map[string]string{"file": "src/plant.ts", "content": "import { Bed } from \"./bed\";\n\nfunction same(got: unknown, want: unknown): boolean {\n  return got === want;\n}\n\nexport const ok = same(new Bed().fill(2), 2);"}),
+	)
+	if !b.Applied {
+		t.Fatalf("not applied: %s", b)
+	}
+	if got, want := read(t, dir, "src/bed.ts"), "  fill(n: number): unknown {\n"; !strings.Contains(got, want) {
+		t.Errorf("bed.ts:\n%s\nwant it to hold:\n%s", got, want)
+	}
+}
+
 // A name not called, or whose result type its place does not tell, gets
 // no stub, and the batch says why.
 func TestNoStub(t *testing.T) {

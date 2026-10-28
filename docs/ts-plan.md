@@ -673,8 +673,10 @@ Go. Steps 1 and 2 change shared code and come before any TypeScript.
     run, mcp vs manual (`docs/cost-history.md` section 20): every run
     passed, the mcp arm at 1.35 times manual's cost, its waste mostly
     two gaps Go does not have (no stubs for a test written first,
-    inline_function refusing an early return). Left: those two gaps,
-    warehouse and billing, and the mixed task.
+    inline_function refusing an early return). On the back burner
+    (2026-10-28, the user: the cost with TypeScript is not a worry for
+    now): a rerun, warehouse and billing, and the mixed task. The gaps
+    against Go are README roadmap item 41, worked through in its order.
     Before it, every tool was run on Hono (`docs/ts-hono-pass.md`): the
     four style bugs it found are fixed, and so are its three gaps
     (extract_function with an early return, invert_if of a returning

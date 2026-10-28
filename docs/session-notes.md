@@ -234,6 +234,10 @@ results are in `docs/cost-history.md`.
   those calls as edits in a note, over refusing them: the plans that
   wanted it pass `DefaultPolicy()` from other packages, which no proof
   reaches. README roadmap item 31.
+- **TypeScript's gaps before its cost** (2026-10-28, the user): "not
+  too worried about the cost with TypeScript at the moment", so A/B
+  reruns and more TypeScript tasks wait; the gaps against Go are README
+  roadmap item 41, done in its order, one PR each.
 - **One tool per operation, other names as aliases** (2026-10-27, the
   user): TypeScript's "add a property" is `add_field`, Go's name, by
   the plan's rule (same names where the operation is the same, so

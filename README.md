@@ -2057,6 +2057,39 @@ hand or a tool got in the way.
     correct in 10 ms; it found that every project of a solution must be
     loaded (a file's default project left its tests out of a rename).
 
+41. **TypeScript's gaps against Go** (2026-10-28, the user asked for
+    them on the roadmap and to work through them in this order, one PR
+    each; the cost of the TypeScript tools against editing by hand is on
+    the back burner meanwhile, so these are judged by what they let the
+    model do, not by A/B cost):
+    1. Stubs for a test written first. *Done*: a call passed where any
+       value goes (`equal(got: unknown, ...)`) gets a stub returning
+       `unknown`, and add_declaration of a function or method replaces
+       its stub in the file or the class, as Go's does.
+    2. `change_field_type`, `change_parameter_type` and `change_type`.
+    3. `function_to_method` and `method_to_function`.
+    4. `prepare_switch_for_types` (only `union_switch_to_method`, its
+       last step, exists).
+    5. `extract_struct` (TypeScript has extract_interface and
+       convert_params_to_object).
+    6. The edits `add_case`, `add_element` and `replace_declaration`.
+    7. inline_function's refusals where a sound form exists: an early
+       return first, then rest or destructured parameters, overloads,
+       generics, async functions.
+    8. extract_function addressed by `function` and `case` (a switch
+       case), as Go's.
+    9. The plan's smaller leftovers: all_calls across files, declaring a
+       generic function in extract_function, a moved declaration the
+       destination imports under an alias, deleting an old file left
+       empty, fold of near-duplicates that differ in constants, and a
+       base class in union_switch_to_method.
+    10. Tooling: TypeScript in the `refactor` CLI (inspect and batches),
+        and the A/B quality columns for TypeScript.
+    11. With the user: whether to keep tolerating errors already in the
+        code (a step may add none), and real repositories beyond Hono,
+        where union_switch_to_method and merge_duplicate_function found
+        nothing to apply to.
+
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
 candidates and the evidence for each, gathered from the friction log.

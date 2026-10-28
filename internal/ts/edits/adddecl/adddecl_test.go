@@ -71,6 +71,29 @@ func TestAddDeclaration(t *testing.T) {
 	}
 }
 
+// A function or method named like a stub replaces it: in its place, at
+// its indentation, whether content goes next to a member or at the end.
+func TestReplacesAStub(t *testing.T) {
+	ws, dir := solution(t)
+	stub := "throw new Error(\"not implemented\");"
+	res := run(t, ws, `{"file": "src/bed.ts", "content": "export class Tray {\n  depth(): number {\n    return 1;\n  }\n  fill(n: number): number {\n    `+strings.ReplaceAll(stub, `"`, `\"`)+`\n  }\n}\n\nexport function dryness(n: number): boolean {\n  `+strings.ReplaceAll(stub, `"`, `\"`)+`\n}"}`)
+	if !res.Applied {
+		t.Fatalf("the stubs were not added: %s", res)
+	}
+	res = run(t, ws, `{"file": "src/bed.ts", "content": "  fill(n: number): number {\n    return n * this.depth();\n  }", "after": "Tray.depth"}`)
+	if !res.Applied || !strings.Contains(res.String(), "replacing the stub of Tray.fill") {
+		t.Fatalf("the method did not replace its stub: %s", res)
+	}
+	res = run(t, ws, `{"file": "src/bed.ts", "content": "export function dryness(n: number): boolean {\n  return n > 1;\n}"}`)
+	if !res.Applied || !strings.Contains(res.String(), "replacing the stub of dryness") {
+		t.Fatalf("the function did not replace its stub: %s", res)
+	}
+	want := "export class Tray {\n  depth(): number {\n    return 1;\n  }\n  fill(n: number): number {\n    return n * this.depth();\n  }\n}\n\nexport function dryness(n: number): boolean {\n  return n > 1;\n}\n"
+	if got := read(t, dir, "src/bed.ts"); !strings.HasSuffix(got, want) {
+		t.Fatalf("bed.ts:\n%s\nwant it to end:\n%s", got, want)
+	}
+}
+
 // Test first: a batch checked at its end adds a test calling what nothing
 // declares yet, then declares it; without the declaration it is refused.
 func TestTestFirstInABatch(t *testing.T) {
