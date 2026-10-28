@@ -14,7 +14,7 @@ type BatchOf[W Workspace] struct {
 
 // toolAliases are other names of tools, by which a batch step or the CLI
 // may call them: an operation's name in another language's words.
-var toolAliases = map[string]string{"add_property": "add_field"}
+var toolAliases = map[string]string{"add_property": "add_field", "change_return_type": "add_result"}
 
 // ToolName returns the tool that name is another name of, or name.
 func ToolName(name string) string {

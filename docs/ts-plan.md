@@ -474,8 +474,17 @@ Go. Steps 1 and 2 change shared code and come before any TypeScript.
    tool, no Go counterpart: the parameters destructured in one object,
    `type_name` for an interface, `= {}` when all are optional). The
    lookup and call search are `tsapi`'s `target`, shared by all four.
-   Left: `add_result` (`change_return_type` as its alias, by the rule
-   for names), and overloads.
+   `add_result` *done*, so step 6 is but for overloads:
+   `change_return_type` is its alias, by the rule for names. The result
+   becomes an object holding the old result (`kept`, default `value`)
+   and the new field; every return gives `value`; every call that uses
+   the result reads `.value`, which works inside any expression, so
+   unlike Go no call is refused for where its result goes; a call as a
+   statement stays; an expression-bodied arrow gets `({ ... })`, and a
+   recursive call inside a return reads its own `.value`. Refused: a
+   function returning nothing, async functions, generators.
+   Left: overloads (all signatures with the implementation), refused
+   today by every one of these tools.
 7. **Effects analysis** (section 4) as one `analysis` package with a
    `Move` question, built before the refactorings that need it.
 8. **Simplify:** extract / inline variable and function, invert_if,

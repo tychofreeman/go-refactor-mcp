@@ -1,6 +1,7 @@
 // Package changesig changes the parameters of TypeScript functions and
 // methods, at their declarations and at every call: add_parameter,
-// remove_parameter and move_parameter.
+// remove_parameter, move_parameter, introduce_parameter,
+// convert_params_to_object and add_result.
 package changesig
 
 import (
@@ -247,4 +248,55 @@ func (*ParamsToObject) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refa
 		n += len(fe.Edits)
 	}
 	return &refactor.Plan{Summary: fmt.Sprintf("bundled the parameters of %s into an object (%d edits in %d files)", a.Name, n, len(edits)), Edits: edits}, nil
+}
+
+// AddResult adds a result to a function, which every call that uses the
+// result leaves aside.
+type AddResult struct{}
+
+// NewAddResult returns add_result.
+func NewAddResult() *AddResult { return &AddResult{} }
+
+func (*AddResult) Name() string { return "add_result" }
+
+func (*AddResult) Description() string {
+	return `Add a result to a function or method (change_return_type is another name for it in a batch): its result becomes an object holding the old result and the new one, every return gives value for the new one, and every call that uses the result reads the old one: with field error, type string | null and value null, function load(id: string): string becomes load(id: string): { value: string; error: string | null }, return x becomes return { value: x, error: null }, and const v = load("a") becomes const v = load("a").value; a call as a statement stays. Then make the body return real errors. kept names the old result (default value).
+Identify the function by file and name (Class.method for a method). value must plainly have no effects.
+Refuses, saying why: a function that returns nothing (void), an async function or generator, a function used as a value, a call that spreads its arguments.`
+}
+
+func (*AddResult) InputSchema() json.RawMessage {
+	return json.RawMessage(`{
+  "type": "object",
+  "properties": {
+    ` + fileProp + `,
+    ` + nameProp + `,
+    "field": {"type": "string", "description": "Name of the new result in the object."},
+    "type":  {"type": "string", "description": "Its type, as TypeScript valid in the declaring file."},
+    "value": {"type": "string", "description": "The expression every return gives it, e.g. null."},
+    "kept":  {"type": "string", "description": "Optional: the name the old result keeps in the object. Default: value."}
+  },
+  "required": ["file", "name", "field", "type", "value"],
+  "additionalProperties": false
+}`)
+}
+
+func (*AddResult) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
+	var a struct{ File, Name, Field, Type, Value, Kept string }
+	if err := refactor.DecodeArgs(raw, &a); err != nil {
+		return nil, err
+	}
+	path := ws.Abs(a.File)
+	if _, err := os.Stat(path); err != nil {
+		return nil, refactor.Refusef("%s: no such file", a.File)
+	}
+	edits, why := ws.AddResult(path, a.Name, a.Field, a.Type, a.Value, a.Kept)
+	if why != "" {
+		return nil, refactor.Refusef("%s", why)
+	}
+	n := 0
+	for _, fe := range edits {
+		n += len(fe.Edits)
+	}
+	return &refactor.Plan{Summary: fmt.Sprintf("added result %s to %s (%d edits in %d files)", a.Field, a.Name, n, len(edits)), Edits: edits}, nil
 }

@@ -34,6 +34,14 @@ func (w *Workspace) ParamsToObject(path, name, typeName string) ([]edit.FileEdit
 	})
 }
 
+// AddResult returns the edits that add a result field to the function
+// called name, at its returns and at every call that uses its result.
+func (w *Workspace) AddResult(path, name, field, typ, value, kept string) ([]edit.FileEdit, string) {
+	return w.merged(path, func(p *tsapi.Project) ([]tsapi.Edit, string) {
+		return p.AddResult(context.Background(), path, name, field, typ, value, kept)
+	})
+}
+
 // merged runs change in every project that has the file at path and
 // returns its edits, each once, in files under the root; or the first
 // refusal.

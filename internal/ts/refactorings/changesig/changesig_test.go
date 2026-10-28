@@ -304,3 +304,52 @@ func TestParamsToObject(t *testing.T) {
 		t.Errorf("want a refusal with %q, got %s", want, res)
 	}
 }
+
+func TestAddResult(t *testing.T) {
+	ws, dir := load(t, map[string]string{
+		"src/load.ts": `export function load(id: string): string {
+  if (id === "") {
+    return "none";
+  }
+  return id.toUpperCase();
+}
+
+export const count = (n: number): number => (n <= 0 ? 0 : count(n - 1) + 1);
+
+export function noop(): void {}
+`,
+		"src/use.ts": `import { load, count } from "./load";
+
+export const v = load("a");
+export const len = load("b").length;
+load("c");
+export const c = count(3);
+`,
+	})
+	add := func(args string) *refactor.Result {
+		t.Helper()
+		res, err := refactor.Run(ws, NewAddResult(), json.RawMessage(`{"file": "src/load.ts", `+args[1:]), refactor.OptionsOf[*workspace.Workspace]{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return res
+	}
+	if res := add(`{"name": "load", "field": "error", "type": "string | null", "value": "null"}`); !res.Applied {
+		t.Fatalf("%s", res)
+	}
+	mustContain(t, dir, "src/load.ts", "export function load(id: string): { value: string; error: string | null } {", `return { value: "none", error: null };`, "return { value: id.toUpperCase(), error: null };")
+	mustContain(t, dir, "src/use.ts", `export const v = load("a").value;`, `load("b").value.length`, "\nload(\"c\");\n")
+	if res := add(`{"name": "count", "field": "steps", "type": "number", "value": "0", "kept": "total"}`); !res.Applied {
+		t.Fatalf("%s", res)
+	}
+	mustContain(t, dir, "src/load.ts", "export const count = (n: number): { total: number; steps: number } => ({ total: (n <= 0 ? 0 : count(n - 1).total + 1), steps: 0 });")
+	mustContain(t, dir, "src/use.ts", "count(3).total")
+	for args, want := range map[string]string{
+		`{"name": "noop", "field": "e", "type": "number", "value": "0"}`:          "noop returns void",
+		`{"name": "load", "field": "x", "type": "number", "value": "Date.now()"}`: "could have effects",
+	} {
+		if res := add(args); res.Applied || !strings.Contains(res.Refused, want) {
+			t.Errorf("%s: want a refusal with %q, got %s", args, want, res)
+		}
+	}
+}
