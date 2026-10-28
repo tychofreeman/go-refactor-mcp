@@ -238,6 +238,12 @@ results are in `docs/cost-history.md`.
   too worried about the cost with TypeScript at the moment", so A/B
   reruns and more TypeScript tasks wait; the gaps against Go are README
   roadmap item 41, done in its order, one PR each.
+- **TypeScript's type changes are edits** (2026-10-28, item 41.2):
+  change_field_type and change_parameter_type only write the
+  annotation, since types are erased and no value can change; but a
+  refactoring in a batch with check "end" must still type-check on its
+  own, so they are edits, as Go's change_type is, letting the fixes to
+  the uses follow them in the batch.
 - **One tool per operation, other names as aliases** (2026-10-27, the
   user): TypeScript's "add a property" is `add_field`, Go's name, by
   the plan's rule (same names where the operation is the same, so

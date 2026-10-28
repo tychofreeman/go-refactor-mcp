@@ -3384,3 +3384,10 @@ written by Python; a step that added imports was dropped after the step
 before it had added them (replace_text adds the imports Go code needs).
 The roadmap and docs with replace_text. This entry appended with a
 heredoc.
+
+## 2026-10-28: TypeScript's change_field_type, change_parameter_type and change_type (item 41.2)
+
+The new files with create_file and the rest with replace_text, through
+the CLI in batches written by Python; a batch refused for an ambiguous
+package name was resent with replace_text's `imports`. The docs with
+replace_text. This entry appended with a heredoc.

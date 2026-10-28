@@ -1,7 +1,8 @@
 // Package changesig changes the parameters of TypeScript functions and
 // methods, at their declarations and at every call: add_parameter,
 // remove_parameter, move_parameter, introduce_parameter,
-// convert_params_to_object and add_result.
+// convert_params_to_object and add_result; and the edits of declared
+// types change_field_type and change_parameter_type.
 package changesig
 
 import (
@@ -299,4 +300,100 @@ func (*AddResult) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.
 		n += len(fe.Edits)
 	}
 	return &refactor.Plan{Summary: fmt.Sprintf("added result %s to %s (%d edits in %d files)", a.Field, a.Name, n, len(edits)), Edits: edits}, nil
+}
+
+// retype plans change, a change of a declared type, in the file named.
+func retype(ws *workspace.Workspace, file string, change func(p *tsapi.Project, path string) ([]tsapi.Edit, string), summary string) (*refactor.Plan, error) {
+	path := ws.Abs(file)
+	if _, err := os.Stat(path); err != nil {
+		return nil, refactor.Refusef("%s: no such file", file)
+	}
+	edits, why := ws.Edits(path, func(p *tsapi.Project) ([]tsapi.Edit, string) { return change(p, path) })
+	if why != "" {
+		return nil, refactor.Refusef("%s", why)
+	}
+	return &refactor.Plan{Summary: summary, Edits: edits}, nil
+}
+
+// ChangeFieldType changes a property's declared type.
+type ChangeFieldType struct{}
+
+// NewChangeFieldType returns change_field_type.
+func NewChangeFieldType() *ChangeFieldType { return &ChangeFieldType{} }
+
+// ChangesBehavior makes it an edit, checked with the rest of a batch:
+// types are erased, so no value changes, but the uses are not adapted,
+// and a batch with check "end" changes them after it.
+func (*ChangeFieldType) ChangesBehavior() {}
+
+func (*ChangeFieldType) Name() string { return "change_field_type" }
+
+func (*ChangeFieldType) Description() string {
+	return `Change the declared type of a property of a class, an interface or an object type: with name Plant.height and type Centimeters, height: number becomes height: Centimeters (a property without a type gets one). Types are erased, so no value changes, but the uses stay as they are: an edit, so that a batch with check "end" can change those that no longer type-check after it (an assertion such as p.height as number, or another annotation); alone, it is refused, listing them.
+Identify the property by file and name as Type.property.
+Refuses, saying why: a method or accessor, a type alias that is not an object type (change it with change_type).`
+}
+
+func (*ChangeFieldType) InputSchema() json.RawMessage {
+	return json.RawMessage(`{
+  "type": "object",
+  "properties": {
+    "file": {"type": "string", "description": "The file that declares the type, relative to the root."},
+    "name": {"type": "string", "description": "The property as Type.property."},
+    "type": {"type": "string", "description": "Its new type, as TypeScript valid in the declaring file."}
+  },
+  "required": ["file", "name", "type"],
+  "additionalProperties": false
+}`)
+}
+
+func (*ChangeFieldType) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
+	var a struct{ File, Name, Type string }
+	if err := refactor.DecodeArgs(raw, &a); err != nil {
+		return nil, err
+	}
+	return retype(ws, a.File, func(p *tsapi.Project, path string) ([]tsapi.Edit, string) {
+		return p.ChangeFieldType(path, a.Name, a.Type)
+	}, fmt.Sprintf("changed the type of %s to %s", a.Name, a.Type))
+}
+
+// ChangeParameterType changes a parameter's declared type.
+type ChangeParameterType struct{}
+
+// NewChangeParameterType returns change_parameter_type.
+func NewChangeParameterType() *ChangeParameterType { return &ChangeParameterType{} }
+
+// ChangesBehavior makes it an edit, as ChangeFieldType's does.
+func (*ChangeParameterType) ChangesBehavior() {}
+
+func (*ChangeParameterType) Name() string { return "change_parameter_type" }
+
+func (*ChangeParameterType) Description() string {
+	return `Change the declared type of a function's or method's parameter: with name water, parameter liters and type Liters, function water(bed: string, liters: number) becomes water(bed: string, liters: Liters). Types are erased, so no value changes, but the body and the calls stay as they are: an edit, so that a batch with check "end" can change those that no longer type-check after it; alone, it is refused, listing them.
+Identify the function by file and name (Class.method for a method).
+Refuses, saying why: a function with overload signatures, a destructured parameter.`
+}
+
+func (*ChangeParameterType) InputSchema() json.RawMessage {
+	return json.RawMessage(`{
+  "type": "object",
+  "properties": {
+    ` + fileProp + `,
+    ` + nameProp + `,
+    "parameter": {"type": "string", "description": "Name of the parameter whose type changes."},
+    "type":      {"type": "string", "description": "Its new type, as TypeScript valid in the declaring file."}
+  },
+  "required": ["file", "name", "parameter", "type"],
+  "additionalProperties": false
+}`)
+}
+
+func (*ChangeParameterType) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
+	var a struct{ File, Name, Parameter, Type string }
+	if err := refactor.DecodeArgs(raw, &a); err != nil {
+		return nil, err
+	}
+	return retype(ws, a.File, func(p *tsapi.Project, path string) ([]tsapi.Edit, string) {
+		return p.ChangeParameterType(path, a.Name, a.Parameter, a.Type)
+	}, fmt.Sprintf("changed the type of %s's parameter %s to %s", a.Name, a.Parameter, a.Type))
 }

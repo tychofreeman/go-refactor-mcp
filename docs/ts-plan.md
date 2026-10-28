@@ -271,7 +271,7 @@ eval tasks transfer.
 | extract_function / inline_function | same | `this`, `await`, closures |
 | invert_if, remove_else | same | |
 | add_parameter, remove_parameter, move_parameter, introduce_parameter | same | overloads; optional and default parameters; rest parameters |
-| change_parameter_type, change_type, change_field_type | same (`change_property_type`) | |
+| change_parameter_type, change_type, change_field_type | same (`change_property_type`) | edits: types are erased, uses are not adapted (README item 41.2) |
 | add_result | **change_return_type** | no multiple results in TS; widen to an object or tuple |
 | method_to_function, function_to_method | same | classes only |
 | extract_struct | **extract_interface** / **extract_type** | name a type from an object type or a class's members |
