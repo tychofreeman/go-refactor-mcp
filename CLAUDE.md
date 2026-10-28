@@ -100,11 +100,10 @@ until the MCP is reconnected.
    range that cuts a statement is refused with the range to use. Every
    step can be undone with `undo`.
 
-Known gaps (do these by hand and log them): nothing restores a file.
-remove_dead_code removes an unused struct field (`Type.Field`).
-Refactorings change exported code and note when the module's API
-changed. Files and directories move and go with
-move_file and delete_file.
+Known gaps (do these by hand and log them): nothing restores a file to an
+earlier commit's version, and nothing replaces a whole file (create_file
+refuses one that exists: use replace_text, or create the new one under
+another name, delete_file the old and move_file the new into place).
 
 ## Measuring cost
 
