@@ -3406,3 +3406,8 @@ the CLI in one batch checked at its end; two fixes to the draft (a
 local named like the `body` type, a fallback for lineRange) made in the
 scratchpad copy before the batch. The docs with replace_text. This entry
 appended with a heredoc.
+
+## 2026-10-28: extract_struct on TypeScript files (item 41.5)
+
+The alias and its test with replace_text and create_file through the
+CLI; the docs with replace_text. This entry appended with a heredoc.
