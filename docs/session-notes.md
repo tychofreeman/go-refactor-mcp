@@ -789,7 +789,10 @@ results are in `docs/cost-history.md`.
   builds them (2026-10-22, the user). `refactor check run_tests=true`
   is the check tool, and `refactor undo` reverts the last step or batch
   of any earlier invocation: the CLI keeps the undo stack in the user's
-  cache directory, a file per module, its last 50 changes (2026-10-27). Write long JSON to a
+  cache directory, a file per module, its last 50 changes (2026-10-27).
+  Every test binary that reaches the TypeScript checker links the whole
+  compiler, so the Go build cache grows to about 27 GB and fills the
+  session's disk: on "no space left on device", `go clean -cache`. Write long JSON to a
   file in the scratchpad and pass `@path` (or `-` for stdin, #205):
   Go escapes such as `\n` then survive, which an unquoted heredoc
   turned into newlines.

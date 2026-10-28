@@ -1,0 +1,147 @@
+package createfromusage
+
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/adddecl"
+	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/fiximports"
+	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/replacetext"
+	"github.com/tychofreeman/go-refactor-mcp/internal/ts/workspace"
+)
+
+type step = refactor.StepOf[*workspace.Workspace]
+
+func load(t *testing.T, files map[string]string) (*workspace.Workspace, string) {
+	t.Helper()
+	dir := t.TempDir()
+	files["tsconfig.json"] = `{"compilerOptions": {"strict": true, "module": "ESNext", "moduleResolution": "Bundler", "noEmit": true, "types": []}, "include": ["src"]}`
+	for name, text := range files {
+		p := filepath.Join(dir, name)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ws, err := workspace.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ws, dir
+}
+
+func read(t *testing.T, dir, rel string) string {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join(dir, rel))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
+func mk(r refactor.RefactoringOf[*workspace.Workspace], args map[string]string) step {
+	raw, _ := json.Marshal(args)
+	return step{Refactoring: r, Args: raw}
+}
+
+// batch runs steps checked at their end, with the stubs and imports the
+// engine supplies, as the TypeScript language does.
+func batch(t *testing.T, ws *workspace.Workspace, steps ...step) *refactor.BatchResult {
+	t.Helper()
+	b, err := refactor.RunBatch(ws, steps, refactor.OptionsOf[*workspace.Workspace]{Unchecked: true, Imports: fiximports.New(), Declare: New()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
+
+var garden = map[string]string{
+	"src/plant.ts": "export function water(liters: number): string {\n  return `${liters} L`;\n}\n",
+	"src/bed.ts":   "export class Bed {\n  plants: string[] = [];\n}\n",
+}
+
+func copyOf(m map[string]string) map[string]string {
+	out := map[string]string{}
+	for k, v := range m {
+		out[k] = v
+	}
+	return out
+}
+
+// A test imports what its module does not export yet: the stub is
+// exported from that module, typed from the call.
+func TestStubInTheImportedModule(t *testing.T) {
+	files := copyOf(garden)
+	files["src/plant.test.ts"] = "import { water } from \"./plant\";\n\nexport const label: string = water(1);\n"
+	ws, dir := load(t, files)
+	b := batch(t, ws,
+		mk(replacetext.New(), map[string]string{"file": "src/plant.test.ts", "old": "import { water }", "new": "import { water, shade }"}),
+		mk(adddecl.New(), map[string]string{"file": "src/plant.test.ts", "content": "export const shaded: number = shade(10, \"noon\");"}),
+	)
+	if !b.Applied {
+		t.Fatalf("not applied: %s", b)
+	}
+	want := "export function shade(n: number, s: string): number {\n  throw new Error(\"not implemented\");\n}\n"
+	if got := read(t, dir, "src/plant.ts"); !strings.HasSuffix(got, "}\n\n"+want) {
+		t.Fatalf("plant.ts:\n%s\nwant it to end:\n%s", got, want)
+	}
+	if !strings.Contains(b.String(), "create_from_usage: declared stubs for shade") {
+		t.Errorf("the result does not name the stub:\n%s", b)
+	}
+}
+
+// A name the file calls and nothing exports is declared in the file; a
+// method is declared in the class it is called on, named after the
+// arguments that are names.
+func TestStubInTheFileAndInAClass(t *testing.T) {
+	ws, dir := load(t, copyOf(garden))
+	b := batch(t, ws,
+		mk(adddecl.New(), map[string]string{"file": "src/plant.ts", "content": "import { Bed } from \"./bed\";\n\nexport const dry: boolean = dryness(2);\n\nexport function sow(rose: string): number {\n  return new Bed().count(rose);\n}"}),
+	)
+	if !b.Applied {
+		t.Fatalf("not applied: %s", b)
+	}
+	if got, want := read(t, dir, "src/plant.ts"), "\nfunction dryness(n: number): boolean {\n  throw new Error(\"not implemented\");\n}\n"; !strings.HasSuffix(got, want) {
+		t.Errorf("plant.ts:\n%s\nwant it to end:\n%s", got, want)
+	}
+	if got, want := read(t, dir, "src/bed.ts"), "export class Bed {\n  plants: string[] = [];\n  count(rose: string): number {\n    throw new Error(\"not implemented\");\n  }\n}\n"; got != want {
+		t.Errorf("bed.ts:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+// A name not called, or whose result type its place does not tell, gets
+// no stub, and the batch says why.
+func TestNoStub(t *testing.T) {
+	for _, tc := range []struct{ content, want string }{
+		{"export const v = moisture;", "no stub was declared for moisture, which is not called"},
+		{"export const vs = [shade(1)];", "no stub was declared for shade: cannot tell the results of shade"},
+	} {
+		ws, _ := load(t, copyOf(garden))
+		b := batch(t, ws, mk(adddecl.New(), map[string]string{"file": "src/plant.ts", "content": tc.content}))
+		if b.Applied || !strings.Contains(b.Refused, tc.want) {
+			t.Errorf("%s: want a refusal with %q, got %s", tc.content, tc.want, b)
+		}
+	}
+}
+
+func TestMissing(t *testing.T) {
+	ws, _ := load(t, copyOf(garden))
+	for err, want := range map[string]string{
+		"src/plant.ts:3:29: Cannot find name 'dryness'.":                               "src/plant.ts\x00dryness",
+		"src/plant.ts:6:20: Property 'count' does not exist on type 'Bed'.":            "Bed.count",
+		"src/plant.test.ts:1:17: Module '\"./plant\"' has no exported member 'shade'.": "src/plant.test.ts\x00shade",
+	} {
+		if _, _, key, _, ok := New().Missing(ws, err); !ok || key != want {
+			t.Errorf("Missing(%q) = %q, %v; want %q", err, key, ok, want)
+		}
+	}
+	if _, name, _, close, _ := New().Missing(ws, "src/plant.ts:3:29: Cannot find name 'watr'. Did you mean 'water'?"); name != "watr" || close != "water" {
+		t.Errorf("a misspelling: %q close to %q", name, close)
+	}
+}

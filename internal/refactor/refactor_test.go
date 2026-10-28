@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
+	"github.com/tychofreeman/go-refactor-mcp/internal/edits/createfromusage"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
@@ -723,7 +724,16 @@ func (declare) Name() string                 { return "declare" }
 func (declare) Description() string          { return "" }
 func (declare) InputSchema() json.RawMessage { return json.RawMessage(`{}`) }
 func (declare) ChangesBehavior()             {}
-func (declare) Fixes()                       {}
+
+// goDeclarer reads Go's errors for the declarers here, as
+// create_from_usage does.
+var goDeclarer = createfromusage.New()
+
+func (declare) Missing(ws *workspace.Workspace, err string) (string, string, string, string, bool) {
+	return goDeclarer.Missing(ws, err)
+}
+func (declare) Declared(ws *workspace.Workspace) map[string]bool { return goDeclarer.Declared(ws) }
+func (declare) Fixes()                                           {}
 func (d declare) Plan(ws *workspace.Workspace, _ json.RawMessage) (*refactor.Plan, error) {
 	path := ws.Abs("m.go")
 	src, _ := os.ReadFile(path)
@@ -959,7 +969,11 @@ func (declarePicky) Name() string                 { return "declare" }
 func (declarePicky) Description() string          { return "" }
 func (declarePicky) InputSchema() json.RawMessage { return json.RawMessage(`{}`) }
 func (declarePicky) ChangesBehavior()             {}
-func (declarePicky) Fixes()                       {}
+func (declarePicky) Missing(ws *workspace.Workspace, err string) (string, string, string, string, bool) {
+	return goDeclarer.Missing(ws, err)
+}
+func (declarePicky) Declared(ws *workspace.Workspace) map[string]bool { return goDeclarer.Declared(ws) }
+func (declarePicky) Fixes()                                           {}
 func (declarePicky) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
 	var a struct{ Names []string }
 	json.Unmarshal(raw, &a)
@@ -1024,7 +1038,11 @@ func (declareTop) Name() string                 { return "declare" }
 func (declareTop) Description() string          { return "" }
 func (declareTop) InputSchema() json.RawMessage { return json.RawMessage(`{}`) }
 func (declareTop) ChangesBehavior()             {}
-func (declareTop) Fixes()                       {}
+func (declareTop) Missing(ws *workspace.Workspace, err string) (string, string, string, string, bool) {
+	return goDeclarer.Missing(ws, err)
+}
+func (declareTop) Declared(ws *workspace.Workspace) map[string]bool { return goDeclarer.Declared(ws) }
+func (declareTop) Fixes()                                           {}
 func (d declareTop) Plan(ws *workspace.Workspace, _ json.RawMessage) (*refactor.Plan, error) {
 	path := ws.Abs("m.go")
 	src, _ := os.ReadFile(path)

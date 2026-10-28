@@ -17,6 +17,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/adddecl"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/addfield"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/createfile"
+	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/createfromusage"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/fiximports"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/insertstmts"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/replaceexpr"
@@ -51,7 +52,7 @@ func New(dir string, h *history.Stack) *Language {
 
 // all is TypeScript's refactorings and edits.
 func all() []refactor.RefactoringOf[*workspace.Workspace] {
-	return []refactor.RefactoringOf[*workspace.Workspace]{rename.New(), createfile.New(), adddecl.New(), replacetext.New(), replacestmts.New(), insertstmts.New(), replaceexpr.New(), addfield.New()}
+	return []refactor.RefactoringOf[*workspace.Workspace]{rename.New(), createfile.New(), adddecl.New(), replacetext.New(), replacestmts.New(), insertstmts.New(), replaceexpr.New(), addfield.New(), createfromusage.New()}
 }
 
 func lookup(name string) (refactor.RefactoringOf[*workspace.Workspace], bool) {
@@ -165,9 +166,10 @@ func (l *Language) Step(tool string, args json.RawMessage) (string, bool, error)
 }
 
 // options are a batch's options, checked at its end when unchecked: the
-// engine adds the imports the steps' code needs.
+// engine adds the imports the steps' code needs, and stubs for what it
+// calls but nothing declares.
 func (l *Language) options(unchecked bool) refactor.OptionsOf[*workspace.Workspace] {
-	return refactor.OptionsOf[*workspace.Workspace]{Compact: !l.FullDiffs, Unchecked: unchecked, Imports: fiximports.New()}
+	return refactor.OptionsOf[*workspace.Workspace]{Compact: !l.FullDiffs, Unchecked: unchecked, Imports: fiximports.New(), Declare: createfromusage.New()}
 }
 
 // Batch runs the steps of one batch call.
