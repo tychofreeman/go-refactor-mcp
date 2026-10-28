@@ -171,13 +171,13 @@ func respec(spec, from, to string) string {
 }
 
 // specFor returns the module specifier of the file at target for a file
-// at from, in the style of the file's own relative imports (with .js or
-// without an extension).
+// at from, in the style of the file's own relative imports (with .js,
+// with .ts or without an extension).
 func (l *lined) specFor(target string) string {
 	ext := ""
 	moduleSpecifiers(l.f, func(spec, _ *ast.Node) {
-		if s := spec.Text(); strings.HasPrefix(s, ".") && strings.HasSuffix(s, ".js") {
-			ext = ".js"
+		if s := spec.Text(); strings.HasPrefix(s, ".") && (strings.HasSuffix(s, ".js") || strings.HasSuffix(s, ".ts")) {
+			ext = path.Ext(s)
 		}
 	})
 	rel := relPath(path.Dir(l.f.FileName()), target)

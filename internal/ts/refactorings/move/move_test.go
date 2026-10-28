@@ -219,6 +219,32 @@ export function label(n: number): string {
 `)
 }
 
+func TestMoveDeclarationKeepsTsExtensions(t *testing.T) {
+	ws, dir := load(t, map[string]string{
+		"tsconfig.json": strings.Replace(config, `"noEmit": true`, `"noEmit": true, "allowImportingTsExtensions": true`, 1),
+		"src/sizes.ts": `import { water } from "./plant.ts";
+
+function big(n: number): boolean {
+  return n > 9;
+}
+
+export function label(n: number): string {
+  return big(n) ? water({ depth: n }) : "small";
+}
+`})
+	res := run(t, ws, NewMoveDeclaration(), `{"file": "src/sizes.ts", "name": "big", "to_file": "src/big.ts"}`)
+	if !res.Applied {
+		t.Fatalf("%s", res)
+	}
+	want(t, dir, "src/sizes.ts", `import { water } from "./plant.ts";
+import { big } from "./big.ts";
+
+export function label(n: number): string {
+  return big(n) ? water({ depth: n }) : "small";
+}
+`)
+}
+
 func TestMoveDeclarationSplitsAnImport(t *testing.T) {
 	ws, dir := load(t, map[string]string{"src/both.ts": `import { water, morning } from "./plant";
 
