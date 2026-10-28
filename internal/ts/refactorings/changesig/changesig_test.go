@@ -151,6 +151,143 @@ func TestChangeTypes(t *testing.T) {
 	}
 }
 
+// A function becomes a method of its first parameter's class and back;
+// the calls in other files follow, with their imports.
+func TestFunctionToMethodAndBack(t *testing.T) {
+	ws, dir := load(t, map[string]string{
+		"src/bed.ts": `export class Bed {
+  depth = 2;
+  plants: string[] = [];
+
+  size(): number {
+    return this.plants.length * this.depth;
+  }
+}
+
+/** Liters a bed takes. */
+export function liters(b: Bed, per: number): number {
+  return b.size() * per;
+}
+`,
+		"src/use.ts": `import { Bed, liters } from "./bed";
+
+export const l = liters(new Bed(), 2);
+export const twice = (b: Bed) => liters(b, 1) + b.size();
+`,
+	})
+	in := func(r refactor.RefactoringOf[*workspace.Workspace], args string) {
+		t.Helper()
+		res, err := refactor.Run(ws, r, json.RawMessage(`{"file": "src/bed.ts", `+args[1:]), refactor.OptionsOf[*workspace.Workspace]{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !res.Applied {
+			t.Fatalf("%s %s: %s", r.Name(), args, res)
+		}
+	}
+	in(NewFunctionToMethod(), `{"name": "liters"}`)
+	want := func(file, text string) {
+		t.Helper()
+		b, err := os.ReadFile(filepath.Join(dir, file))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(b) != text {
+			t.Fatalf("%s:\n%s\nwant:\n%s", file, b, text)
+		}
+	}
+	want("src/bed.ts", `export class Bed {
+  depth = 2;
+  plants: string[] = [];
+
+  size(): number {
+    return this.plants.length * this.depth;
+  }
+
+  /** Liters a bed takes. */
+  liters(per: number): number {
+    return this.size() * per;
+  }
+}
+`)
+	want("src/use.ts", `import { Bed } from "./bed";
+
+export const l = (new Bed()).liters(2);
+export const twice = (b: Bed) => b.liters(1) + b.size();
+`)
+	in(NewMethodToFunction(), `{"name": "Bed.size", "new_name": "area"}`)
+	want("src/bed.ts", `export class Bed {
+  depth = 2;
+  plants: string[] = [];
+
+  /** Liters a bed takes. */
+  liters(per: number): number {
+    return area(this) * per;
+  }
+}
+
+export function area(bed: Bed): number {
+  return bed.plants.length * bed.depth;
+}
+`)
+	want("src/use.ts", `import { Bed } from "./bed";
+import { area } from "./bed";
+
+export const l = (new Bed()).liters(2);
+export const twice = (b: Bed) => b.liters(1) + area(b);
+`)
+}
+
+func TestFunctionToMethodRefusals(t *testing.T) {
+	ws, _ := load(t, map[string]string{"src/bed.ts": `export class Bed {
+  depth = 2;
+  size(): number {
+    return this.depth;
+  }
+}
+
+export class Raised extends Bed {
+  size(): number {
+    return 3;
+  }
+}
+
+export function shade(n: number): number {
+  return n;
+}
+
+export function depth(b: Bed): number {
+  return b.depth;
+}
+
+export function deeper(b: Bed): Bed {
+  b = new Bed();
+  return b;
+}
+
+export const all = [new Bed()].map(depth);
+`})
+	for _, tc := range []struct {
+		r          refactor.RefactoringOf[*workspace.Workspace]
+		args, want string
+	}{
+		{NewFunctionToMethod(), `{"name": "shade"}`, "not of a class of the solution"},
+		{NewFunctionToMethod(), `{"name": "depth"}`, "Bed already has a member depth"},
+		{NewFunctionToMethod(), `{"name": "depth", "new_name": "deep"}`, "used as a value"},
+		{NewFunctionToMethod(), `{"name": "deeper"}`, "assigns its parameter b"},
+		{NewMethodToFunction(), `{"name": "Bed.size"}`, "Raised overrides Bed.size"},
+		{NewMethodToFunction(), `{"name": "Raised.size"}`, "implements or overrides a member of Bed"},
+	} {
+		res, err := refactor.Run(ws, tc.r, json.RawMessage(`{"file": "src/bed.ts", `+tc.args[1:]), refactor.OptionsOf[*workspace.Workspace]{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if res.Applied || !strings.Contains(res.Refused, tc.want) {
+			t.Errorf("%s %s: want a refusal with %q, got %s", tc.r.Name(), tc.args, tc.want, res)
+		}
+	}
+}
+
 // A change that breaks a use goes through in a batch checked at its end,
 // together with the change to the use.
 func TestChangeTypeInABatch(t *testing.T) {

@@ -1,11 +1,13 @@
 // Package changesig changes the parameters of TypeScript functions and
 // methods, at their declarations and at every call: add_parameter,
 // remove_parameter, move_parameter, introduce_parameter,
-// convert_params_to_object and add_result; and the edits of declared
-// types change_field_type and change_parameter_type.
+// convert_params_to_object, add_result, function_to_method and
+// method_to_function; and the edits of declared types change_field_type
+// and change_parameter_type.
 package changesig
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -396,4 +398,85 @@ func (*ChangeParameterType) Plan(ws *workspace.Workspace, raw json.RawMessage) (
 	return retype(ws, a.File, func(p *tsapi.Project, path string) ([]tsapi.Edit, string) {
 		return p.ChangeParameterType(path, a.Name, a.Parameter, a.Type)
 	}, fmt.Sprintf("changed the type of %s's parameter %s to %s", a.Name, a.Parameter, a.Type))
+}
+
+// FunctionToMethod makes a function a method of its first parameter's
+// class.
+type FunctionToMethod struct{}
+
+// NewFunctionToMethod returns function_to_method.
+func NewFunctionToMethod() *FunctionToMethod { return &FunctionToMethod{} }
+
+func (*FunctionToMethod) Name() string { return "function_to_method" }
+
+func (*FunctionToMethod) Description() string {
+	return `Turn a function into a method of the class its first parameter is typed with, and change every call: function depth(b: Bed, extra: number): number becomes the method depth(extra: number): number at the end of Bed, with b as this, and depth(bed, 2) becomes bed.depth(2). The reverse of method_to_function. The class must be declared in the function's file: move_declaration the function there first.
+Identify the function by file and name; new_name gives the method another name.
+Refuses, saying why: a name the class, a class it extends or one extending it already has; a body that uses this, assigns the parameter or uses it in a nested function; a function used as a value, generic, overloaded or recursive.`
+}
+
+func (*FunctionToMethod) InputSchema() json.RawMessage {
+	return json.RawMessage(`{
+  "type": "object",
+  "properties": {
+    ` + fileProp + `,
+    "name":     {"type": "string", "description": "The function's name."},
+    "new_name": {"type": "string", "description": "Optional name for the method (default: the function's)."}
+  },
+  "required": ["file", "name"],
+  "additionalProperties": false
+}`)
+}
+
+func (*FunctionToMethod) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
+	var a struct {
+		File, Name string
+		NewName    string `json:"new_name"`
+	}
+	if err := refactor.DecodeArgs(raw, &a); err != nil {
+		return nil, err
+	}
+	return retype(ws, a.File, func(p *tsapi.Project, path string) ([]tsapi.Edit, string) {
+		return p.FunctionToMethod(context.Background(), path, a.Name, a.NewName)
+	}, fmt.Sprintf("made %s a method", a.Name))
+}
+
+// MethodToFunction makes a method a function taking the instance first.
+type MethodToFunction struct{}
+
+// NewMethodToFunction returns method_to_function.
+func NewMethodToFunction() *MethodToFunction { return &MethodToFunction{} }
+
+func (*MethodToFunction) Name() string { return "method_to_function" }
+
+func (*MethodToFunction) Description() string {
+	return `Turn a method into a function whose first parameter is the instance, and change every call: Bed's depth(extra: number): number becomes function depth(bed: Bed, extra: number): number after the class, with this as bed, and bed.depth(2) becomes depth(bed, 2); a file that calls it imports it. The reverse of function_to_method. Use it before moving a method elsewhere, or when it uses little of its class.
+Identify the method by file and name (Class.method); new_name gives the function another name.
+Refuses, saying why: a method that overrides or implements a member, or that a subclass overrides; a static method, a private name (#), a body using super; a method used as a value, called with ?. or calling itself; a name already taken.`
+}
+
+func (*MethodToFunction) InputSchema() json.RawMessage {
+	return json.RawMessage(`{
+  "type": "object",
+  "properties": {
+    ` + fileProp + `,
+    "name":     {"type": "string", "description": "The method as Class.method."},
+    "new_name": {"type": "string", "description": "Optional name for the function (default: the method's)."}
+  },
+  "required": ["file", "name"],
+  "additionalProperties": false
+}`)
+}
+
+func (*MethodToFunction) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
+	var a struct {
+		File, Name string
+		NewName    string `json:"new_name"`
+	}
+	if err := refactor.DecodeArgs(raw, &a); err != nil {
+		return nil, err
+	}
+	return retype(ws, a.File, func(p *tsapi.Project, path string) ([]tsapi.Edit, string) {
+		return p.MethodToFunction(context.Background(), path, a.Name, a.NewName)
+	}, fmt.Sprintf("made %s a function", a.Name))
 }

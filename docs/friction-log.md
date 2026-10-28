@@ -3391,3 +3391,10 @@ The new files with create_file and the rest with replace_text, through
 the CLI in batches written by Python; a batch refused for an ambiguous
 package name was resent with replace_text's `imports`. The docs with
 replace_text. This entry appended with a heredoc.
+
+## 2026-10-28: TypeScript's function_to_method and method_to_function (item 41.3)
+
+The new tsapi file with create_file, the rest with replace_text through
+the CLI in one batch checked at its end, written by Python; the docs
+with replace_text. Nothing by hand but this entry, appended with a
+heredoc.
