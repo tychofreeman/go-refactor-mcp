@@ -248,6 +248,9 @@ results are in `docs/cost-history.md`.
   a note): printed text is allowed to change, and a note lists the
   calls. What may find a field by name (encoding/json, text/template, a
   function not known) still refuses an exported field. README item 42.
+  extract_struct and remove_dead_code then followed (the user asked
+  them "up to par"): any printing is a note, since their changes show
+  in `%v` too; remove_dead_code also refuses `reflect.DeepEqual`.
 - **A getter that caches its result reads, it does not write**
   (2026-10-29, the user chose this of three: keep refusing, recognise
   the shape, or allow with a note). `analysis.cacheOf` recognises

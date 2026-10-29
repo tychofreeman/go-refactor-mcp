@@ -34,6 +34,7 @@ type target struct {
 	strct    *ast.StructType
 	typeName types.Object
 	litEdits []edit.FileEdit // for a field: unkeyed literals of its type, without its element
+	printed  []string        // for a field: calls whose output changes, since fmt prints its struct
 }
 
 // node is what goes: the spec, or the whole declaration.
@@ -460,8 +461,14 @@ func (t *target) checkField(ws *workspace.Workspace) error {
 				return err
 			}
 		}
-		if arg := analysis.PassedAsInterface(p.TypesInfo, p.Syntax, isT); arg != nil {
-			return refactor.Refusef("a value holding %s is passed as an interface at %s; reflection there (fmt's %%v, encoding/json, reflect.DeepEqual) sees its fields, and would no longer see %s", tn, ws.Position(arg.Pos()), name)
+	}
+	for _, ref := range analysis.ReflectedIn(ws.Pkgs, ws.Fset, isT) {
+		at := ws.Position(ref.Arg.Pos())
+		switch ref.Sight {
+		case analysis.Prints, analysis.PrintsNames:
+			t.printed = append(t.printed, at+" "+ref.Callee)
+		case analysis.Compares, analysis.SeesNames:
+			return refactor.Refusef("a value holding %s is %s at %s, where reflection may see its fields (encoding/json, reflect.DeepEqual), and would no longer see %s; only fmt's printing is allowed, with a note", tn, ref.Passed(), at, name)
 		}
 	}
 	return t.checkUnused(ws)

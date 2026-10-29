@@ -1,0 +1,1 @@
+a value holding user is passed as an interface to reflect.DeepEqual at m.go:10:54, where reflection may see its fields

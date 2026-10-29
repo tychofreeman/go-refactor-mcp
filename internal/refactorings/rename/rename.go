@@ -529,21 +529,14 @@ func (r *renamer) checkReflected(st *types.Struct, named *types.Named) error {
 			return ok && keyOf(r.ws.Fset, n.Obj()) == keyOf(r.ws.Fset, named.Obj())
 		}
 	}
-	seen := map[string]bool{}
-	for _, p := range r.ws.Pkgs {
-		if p.TypesInfo == nil {
-			continue
-		}
-		for _, ref := range analysis.ReflectedArgs(p.TypesInfo, p.Syntax, match) {
-			at := r.ws.Position(ref.Arg.Pos())
-			switch {
-			case ref.Sight == analysis.SeesNames && exported:
-				return refactor.Refusef("a value holding %s is passed as an interface to %s at %s, where reflection may find fields by name (encoding/json, text/template), so renaming the field %s to %s could change what it does; only fmt's printing (%%+v, %%#v) is allowed, with a note",
-					what, ref.Callee, at, r.old, r.new)
-			case ref.Sight == analysis.PrintsNames && !seen[at]:
-				seen[at] = true
-				r.printed = append(r.printed, at+" "+ref.Callee)
-			}
+	for _, ref := range analysis.ReflectedIn(r.ws.Pkgs, r.ws.Fset, match) {
+		at := r.ws.Position(ref.Arg.Pos())
+		switch {
+		case ref.Sight == analysis.SeesNames && exported:
+			return refactor.Refusef("a value holding %s is %s at %s, where reflection may find fields by name (encoding/json, text/template), so renaming the field %s to %s could change what it does; only fmt's printing (%%+v, %%#v) is allowed, with a note",
+				what, ref.Passed(), at, r.old, r.new)
+		case ref.Sight == analysis.PrintsNames:
+			r.printed = append(r.printed, at+" "+ref.Callee)
 		}
 	}
 	return nil
@@ -1090,12 +1083,8 @@ func (r *renamer) plan() (*refactor.Plan, error) {
 		plan.Notes = append(plan.Notes, refactor.APINote(r.old, "renaming it"))
 	}
 	plan.Notes = append(plan.Notes, r.implements...)
-	if n := len(r.printed); n > 0 {
-		list := strings.Join(r.printed[:min(n, 5)], ", ")
-		if n > 5 {
-			list += fmt.Sprintf(", and %d more", n-5)
-		}
-		plan.Notes = append(plan.Notes, "what these calls print changes, since fmt's %+v and %#v show field names: "+list)
+	if len(r.printed) > 0 {
+		plan.Notes = append(plan.Notes, "what these calls print changes, since fmt's %+v and %#v show field names: "+textutil.FirstFew(r.printed, 5))
 	}
 	if len(docFes) > 0 {
 		plan.Notes = append(plan.Notes, fmt.Sprintf("renamed %q in the doc comment that starts with it", r.old))

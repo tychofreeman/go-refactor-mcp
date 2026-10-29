@@ -1,1 +1,1 @@
-a point is passed as an interface at a.go:5:36
+a point is converted to any at a.go:5:36

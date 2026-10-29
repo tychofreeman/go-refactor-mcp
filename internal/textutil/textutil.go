@@ -91,6 +91,16 @@ func Plural(n int) string {
 	return "s"
 }
 
+// FirstFew joins the first n items with commas and says how many more
+// there are: "a, b, and 3 more".
+func FirstFew(items []string, n int) string {
+	s := strings.Join(items[:min(len(items), n)], ", ")
+	if len(items) > n {
+		s += fmt.Sprintf(", and %d more", len(items)-n)
+	}
+	return s
+}
+
 // Locate returns the byte spans of old in src[lo:hi]: its exact
 // occurrences or, when there are none, those that match it with the
 // spacing within lines ignored (each run of spaces and tabs standing for

@@ -5,30 +5,31 @@ import (
 	"testing"
 )
 
-func TestNamedVerbs(t *testing.T) {
+func TestFormatVerbs(t *testing.T) {
+	v, plus, sharp := verb{r: 'v'}, verb{r: 'v', plus: true}, verb{r: 'v', sharp: true}
 	for _, c := range []struct {
 		format string
-		want   map[int]verbFlags
+		want   map[int][]verb
 	}{
-		{"%+v", map[int]verbFlags{0: {plus: true}}},
-		{"%v %+v", map[int]verbFlags{1: {plus: true}}},
-		{"%+[2]v %v", map[int]verbFlags{1: {plus: true}}},
-		{"%*d %#v", map[int]verbFlags{2: {sharp: true}}},
-		{"%-10.*f %+v", map[int]verbFlags{2: {plus: true}}},
-		{"%% %+v", map[int]verbFlags{0: {plus: true}}},
-		{"%[3]*.[2]*[1]f %+v", map[int]verbFlags{1: {plus: true}}},
-		{"%+v %#v %#[1]v", map[int]verbFlags{0: {plus: true, sharp: true}, 1: {sharp: true}}},
-		{"%+d %#x %+q", map[int]verbFlags{}},
-		{"größe %+v", map[int]verbFlags{0: {plus: true}}},
+		{"%+v", map[int][]verb{0: {plus}}},
+		{"%v %+v", map[int][]verb{0: {v}, 1: {plus}}},
+		{"%+[2]v %v", map[int][]verb{1: {plus}, 2: {v}}},
+		{"%*d %#v", map[int][]verb{1: {{r: 'd'}}, 2: {sharp}}},
+		{"%-10.*f %+v", map[int][]verb{1: {{r: 'f'}}, 2: {plus}}},
+		{"%% %+v", map[int][]verb{0: {plus}}},
+		{"%[3]*.[2]*[1]f %+v", map[int][]verb{0: {{r: 'f'}}, 1: {plus}}},
+		{"%+v %#v %#[1]v", map[int][]verb{0: {plus, sharp}, 1: {sharp}}},
+		{"%+d %#x %T", map[int][]verb{0: {{r: 'd', plus: true}}, 1: {{r: 'x', sharp: true}}, 2: {{r: 'T'}}}},
+		{"größe %+v", map[int][]verb{0: {plus}}},
 	} {
-		got, ok := namedVerbs(c.format)
+		got, ok := formatVerbs(c.format)
 		if !ok || !reflect.DeepEqual(got, c.want) {
-			t.Errorf("namedVerbs(%q) = %v, %v; want %v", c.format, got, ok, c.want)
+			t.Errorf("formatVerbs(%q) = %v, %v; want %v", c.format, got, ok, c.want)
 		}
 	}
 	for _, bad := range []string{"%[x]v", "%[0]v", "%+"} {
-		if _, ok := namedVerbs(bad); ok {
-			t.Errorf("namedVerbs(%q) is ok; want not", bad)
+		if _, ok := formatVerbs(bad); ok {
+			t.Errorf("formatVerbs(%q) is ok; want not", bad)
 		}
 	}
 }
