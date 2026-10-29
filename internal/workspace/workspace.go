@@ -354,7 +354,11 @@ func (w *Workspace) Preview(label string, fes []edit.FileEdit) (history.Change, 
 			diffs = append(diffs, edit.Unified(w.Rel(fe.Path), before, nil))
 			continue
 		}
-		after, err := edit.Apply(before, fe.Edits)
+		edits := fe.Edits
+		if !created && strings.HasSuffix(fe.Path, ".go") && !fe.Verbatim {
+			edits = followIndent(before, edits)
+		}
+		after, err := edit.Apply(before, edits)
 		if err != nil {
 			return history.Change{}, fmt.Errorf("%s: %w", w.Rel(fe.Path), err)
 		}
@@ -463,6 +467,56 @@ func gofmtIfClean(path string, before, after []byte) []byte {
 		return fa
 	}
 	return after
+}
+
+// followIndent returns edits with what they write at a line's start
+// indented as src is, when src is indented with spaces: each leading tab
+// becomes src's unit of indentation. Text with a raw string is left as
+// it is, since the lines of a raw string are its value.
+func followIndent(src []byte, edits []edit.TextEdit) []edit.TextEdit {
+	unit := spaceUnit(src)
+	if unit == "" {
+		return edits
+	}
+	out := make([]edit.TextEdit, len(edits))
+	for i, e := range edits {
+		out[i] = e
+		if strings.Contains(e.NewText, "`") {
+			continue
+		}
+		lines := strings.Split(e.NewText, "\n")
+		for j, l := range lines {
+			if j == 0 && e.Start > 0 && src[e.Start-1] != '\n' {
+				continue // mid-line, not a line's start
+			}
+			tabs := len(l) - len(strings.TrimLeft(l, "\t"))
+			lines[j] = strings.Repeat(unit, tabs) + l[tabs:]
+		}
+		out[i].NewText = strings.Join(lines, "\n")
+	}
+	return out
+}
+
+// spaceUnit is src's unit of indentation when more of its indented lines
+// start with spaces than with tabs: the shortest run of leading spaces; ""
+// otherwise.
+func spaceUnit(src []byte) string {
+	tabs, spaces, unit := 0, 0, 0
+	for _, l := range strings.Split(string(src), "\n") {
+		switch {
+		case strings.HasPrefix(l, "\t"):
+			tabs++
+		case strings.HasPrefix(l, " ") && strings.TrimSpace(l) != "":
+			spaces++
+			if n := len(l) - len(strings.TrimLeft(l, " ")); unit == 0 || n < unit {
+				unit = n
+			}
+		}
+	}
+	if spaces <= tabs {
+		return ""
+	}
+	return strings.Repeat(" ", unit)
 }
 
 func paths(files map[string][]byte) []string {

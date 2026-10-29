@@ -237,6 +237,21 @@ func TestLineMapOf(t *testing.T) {
 	}
 }
 
+// A line only renamed in place keeps its number: an edit within it that
+// adds no line break does not rewrite it.
+func TestLineMapOfInPlace(t *testing.T) {
+	before := "a\nreturn total\nb\n"
+	after := "a\nreturn sum\nb\n"
+	i := strings.Index(before, "total")
+	edits := []TextEdit{{Start: i, End: i + len("total"), NewText: "sum"}}
+	if got := LineMapOf([]byte(before), []byte(after), edits); got[2] != 0 {
+		t.Fatalf("LineMapOf keeps the renamed line, so this test shows nothing: %v", got)
+	}
+	if got, want := LineMapOfInPlace([]byte(before), []byte(after), edits), []int{0, 1, 2, 3}; !slices.Equal(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
 func TestPosMapOf(t *testing.T) {
 	before := []byte("x := f() + f()\n")
 	// Replace the first f() with 1.

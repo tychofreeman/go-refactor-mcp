@@ -3492,6 +3492,19 @@ call's check comes before the body's and the refusal names `also`.
 The group's later steps looked up a function an earlier step had
 already changed; they now skip it. Nothing by hand.
 
+## 2026-10-29: uses of a type, by what each does with it
+
+All through the CLI, test first; the categories were checked on a
+scratch module before and after. Nothing by hand.
+
+## 2026-10-29: extract_function returns a captured variable nothing writes again
+
+All through the CLI. A replace_text scoped by `function` named the
+wrong function first (refused: no such function), then the one the
+line is in. The other too-strict refusals of item 38 were reproduced
+on a scratch module before deciding which were still there. Nothing
+by hand.
+
 ## 2026-10-29: refactor list with arguments, -version, check's race, hints
 
 All through the CLI. A batch was refused once because rename had
@@ -3501,3 +3514,11 @@ replaced (rename updates comments). Nothing by hand.
 ## 2026-10-29: add_element moves and rewrites a literal's elements
 
 All through the CLI, goldens first. Nothing by hand.
+
+## 2026-10-29: edits follow a file's spaces; a renamed line keeps its number; dead fields in unkeyed literals
+
+All through the CLI, tests and goldens first. A golden that expected
+remove_dead_code to refuse an unkeyed literal became an applied case:
+move_file renamed its directory (after one call with the wrong argument
+name, refused with the schema), delete_file removed its refused.txt.
+Nothing by hand.

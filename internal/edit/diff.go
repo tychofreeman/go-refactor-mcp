@@ -330,11 +330,23 @@ func group(ops []op, ctx int) []hunk {
 // Where after differs from what the edits make of before (gofmt), a line
 // diff follows the lines from one to the other.
 func LineMapOf(before, after []byte, edits []TextEdit) []int {
+	return lineMapOf(before, after, edits, false)
+}
+
+// LineMapOfInPlace is LineMapOf for a change made the same at every site,
+// such as a rename: a line an edit changes within, adding no line break,
+// keeps its number.
+func LineMapOfInPlace(before, after []byte, edits []TextEdit) []int {
+	return lineMapOf(before, after, edits, true)
+}
+
+// lineMapOf is LineMapOf, and with inPlace LineMapOfInPlace.
+func lineMapOf(before, after []byte, edits []TextEdit, inPlace bool) []int {
 	applied, err := Apply(before, edits)
 	if err != nil {
 		return LineMap(before, after)
 	}
-	m := editLineMap(before, applied, edits)
+	m := editLineMap(before, applied, edits, inPlace)
 	if bytes.Equal(applied, after) {
 		return m
 	}
@@ -447,7 +459,7 @@ func stripSpace(src []byte) []byte {
 
 // editLineMap is LineMap for applied, which is exactly what edits make of
 // before.
-func editLineMap(before, applied []byte, edits []TextEdit) []int {
+func editLineMap(before, applied []byte, edits []TextEdit, inPlace bool) []int {
 	starts := map[int]int{0: 1} // applied's line numbers, by the offset each starts at
 	for i, c := range applied {
 		if c == '\n' {
@@ -459,18 +471,24 @@ func editLineMap(before, applied []byte, edits []TextEdit) []int {
 	s := 0 // where line i starts in before
 	for i, l := range lines {
 		text := s + len(strings.TrimSuffix(l, "\n")) // where its newline is
-		at, touched := s, false                      // where it starts in applied
+		at, touched, within := s, false, false       // where it starts in applied
 		for _, e := range edits {
 			switch {
 			case e.End <= s:
 				at += len(e.NewText) - (e.End - e.Start)
+			case e.Start < text && inPlace && e.Start >= s && e.End <= text && !strings.Contains(e.NewText, "\n"):
+				within = true
 			case e.Start < text:
 				touched = true
 			}
 		}
+		switch {
+		case touched:
+		case within:
+			m[i+1] = starts[at] // changed in place: the same line
 		// An edit at the newline, or one just before the line, may still have
 		// changed it ("x" glued to its start): its text must be there, as a line.
-		if !touched && at+len(l) <= len(applied) && string(applied[at:at+len(l)]) == l {
+		case at+len(l) <= len(applied) && string(applied[at:at+len(l)]) == l:
 			m[i+1] = starts[at]
 		}
 		s += len(l)
