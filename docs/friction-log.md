@@ -3456,6 +3456,16 @@ aliased local import a later step used). One argument guessed wrong
 (add_field's `type` and `comment` for `field`), refused with the
 schema. Nothing by hand.
 
+## 2026-10-28: remove_parameter's value, the inverse of introduce_parameter
+
+All through the CLI: goldens first, then the code (a new file by
+create_file from a scratch file through `content_file`, Plan split by
+replace_declaration), in batches checked at their end. The first run
+refused every case: the check that value does not name the parameter
+counted the field name in `b.depth`; fixed by skipping selectors. A
+recursive call's argument was checked as a body evaluation until it was
+left out (it goes with the parameter). Nothing by hand.
+
 ## 2026-10-29: extract_struct's into, a field between structs
 
 All through the CLI, in a worktree while the previous PR's checks ran.
