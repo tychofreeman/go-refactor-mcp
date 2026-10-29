@@ -1929,7 +1929,9 @@ hand or a tool got in the way.
       25, a reference batch rewritten by Python), or moves a block of
       text within a file (Oct 20, the friction log reordered by a
       script). Replacing a whole file is *done* (create_file's
-      `overwrite`); copying files and moving a block of text are not.
+      `overwrite`), and so is copying one through the CLI: create_file
+      with `content_file` naming the file to copy. A directory of
+      fixtures, and moving a block of text, are not.
     - **Experiments the session notes leave open:** a hazard as one site
       among many, or a prompt that does not ask to keep behavior
       (cost-history 15); and tasks a model gets wrong by hand, named as
@@ -2029,7 +2031,10 @@ hand or a tool got in the way.
         meant finding every `x.(Function)` and type switch on it; `inspect`
         `uses` lists a type's every reference (conversions, signatures),
         so this was a `grep`. A `uses` filter for type assertions and
-        switch cases would find exactly those.
+        switch cases would find exactly those. *Done:* `uses` of a type
+        groups them as their own: asserted, a type switch case (with its
+        switch), converted to, made by a literal; the rest (signatures,
+        receivers) stay under read.
       - **Smaller:** `add_field` inside a batch with `check: "end"` let
         unkeyed literals through until the last step, whose refusal then
         named them; alone it refuses at once, which is clearer.

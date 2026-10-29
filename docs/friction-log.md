@@ -3491,3 +3491,8 @@ under a new name, which replace_declaration refuses), so that every
 call's check comes before the body's and the refusal names `also`.
 The group's later steps looked up a function an earlier step had
 already changed; they now skip it. Nothing by hand.
+
+## 2026-10-29: uses of a type, by what each does with it
+
+All through the CLI, test first; the categories were checked on a
+scratch module before and after. Nothing by hand.
