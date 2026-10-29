@@ -3474,3 +3474,11 @@ new literal rewrite; the new file came from a scratch file by
 `content_file`. The goldens' outputs were taken from runs of the new
 build on scratch modules, read, and saved with create_file. Nothing by
 hand.
+
+## 2026-10-29: replace_statements' wrap
+
+All through the CLI, in a worktree; the new file by create_file. A
+first batch was refused for `ws.Position(...).Line` (Position returns
+a string), named in the refusal. The disk filled while two worktrees'
+checks built at once (the Go build cache reached 26 GB); `go clean
+-cache` and one check at a time. Nothing by hand.

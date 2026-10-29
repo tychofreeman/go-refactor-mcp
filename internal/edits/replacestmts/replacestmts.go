@@ -33,24 +33,26 @@ func New() *ReplaceStatements { return &ReplaceStatements{} }
 func (*ReplaceStatements) Name() string { return "replace_statements" }
 
 func (*ReplaceStatements) Description() string {
-	return `Replace whole statements of one block with new Go statements: an edit, to write a function's body (a stub becomes the implementation) or change what statements do. With function "Cart.Total" and content return len(c.Items), Total's whole body becomes that statement.
-Give start_line and end_line (inclusive, as inspect numbers them) covering whole statements of one block, comments and blank lines included; or function for the whole body (even one on the signature's line), which stays valid after earlier steps. content is re-indented to the block. Empty content over whole case clauses deletes them.
-Packages content names are imported (imports picks one when several fit, such as rand); imports only the replaced statements used are removed.`
+	return `Replace whole statements of one block with new Go statements: an edit, to write a body (a stub's) or change what statements do. With function "Cart.Total" and content return len(c.Items), Total's whole body becomes that statement.
+Give start_line and end_line (inclusive, as inspect numbers them) covering whole statements of one block, comments and blank lines included; or function for the whole body, which stays valid after earlier steps. content is re-indented to the block. Empty content over whole case clauses deletes them.
+wrap in place of content keeps the statements, at the line $body of the code it gives: "once(func() {\n$body\n})".
+Packages content names are imported; those only the replaced statements used are removed.`
 }
 
 func (*ReplaceStatements) InputSchema() json.RawMessage {
 	return json.RawMessage(`{
   "type": "object",
   "properties": {
-    "file":       {"type": "string",  "description": "Relative to the workspace root."},
-    "function":   {"type": "string",  "description": "Instead of the lines: the function (Name or Type.Method) whose body to replace."},
+    "file":       {"type": "string",  "description": "Relative to the root."},
+    "function":   {"type": "string",  "description": "Instead of the lines: the function (Name or Type.Method)."},
     "case":       {"type": "string",  "description": "With function: that case's body, by value (\"\\\"fern\\\"\") or default."},
-    "start_line": {"type": "integer", "description": "First line (1-based)."},
-    "end_line":   {"type": "integer", "description": "Last line (inclusive)."},
+    "start_line": {"type": "integer", "description": "First line."},
+    "end_line":   {"type": "integer", "description": "Last line."},
     "content":    {"type": "string",  "description": "The new statements."},
-    "imports":    {"type": "array", "items": {"type": "string"}, "description": "Optional: import paths for ambiguous names (math/rand)."}
+    "wrap":       {"type": "string",  "description": "Instead of content: code with a line $body."},
+    "imports":    {"type": "array", "items": {"type": "string"}, "description": "Paths to import for ambiguous names (math/rand)."}
   },
-  "required": ["file", "content"],
+  "required": ["file"],
   "additionalProperties": false
 }`)
 }
@@ -65,6 +67,7 @@ type args struct {
 	StartLine int      `json:"start_line"`
 	EndLine   int      `json:"end_line"`
 	Content   string   `json:"content"`
+	Wrap      string   `json:"wrap,omitempty"`
 	Imports   []string `json:"imports,omitempty"`
 }
 
@@ -80,6 +83,13 @@ func (*ReplaceStatements) Plan(ws *workspace.Workspace, raw json.RawMessage) (*r
 		return nil, err
 	}
 	pkg, file, src := opened.Pkg, opened.File, opened.Src
+	var given map[string]json.RawMessage
+	if json.Unmarshal(raw, &given) == nil && given["content"] == nil && a.Wrap == "" {
+		return nil, refactor.Refusef("content is required (the new statements, or empty to delete them), or wrap to keep them inside other code")
+	}
+	if a.Wrap != "" && a.Content != "" {
+		return nil, refactor.Refusef("give content or wrap, not both: wrap keeps the statements, inside the code it gives")
+	}
 	if a.Function != "" && (a.StartLine != 0 || a.EndLine != 0) {
 		return nil, refactor.Refusef("give either function or start_line and end_line, not both")
 	}
@@ -95,13 +105,19 @@ func (*ReplaceStatements) Plan(ws *workspace.Workspace, raw json.RawMessage) (*r
 		if a.StartLine, a.EndLine, err = locate.CaseBody(tf, src, fd, a.Case, false); err != nil {
 			return nil, err
 		}
+	case a.Function != "" && a.Wrap != "":
+		fd := locate.Func(file, a.Function)
+		if fd == nil || fd.Body == nil || len(fd.Body.List) == 0 {
+			return nil, refactor.Refusef("no function %s with statements in %s; give Name, or Type.Method for a method", a.Function, a.File)
+		}
+		a.StartLine, a.EndLine = tf.Line(fd.Body.List[0].Pos()), tf.Line(fd.Body.List[len(fd.Body.List)-1].End())
 	case a.Function != "":
 		return replaceBody(ws, pkg, file, src, a)
 	}
 	if a.StartLine < 1 || a.EndLine < a.StartLine || a.EndLine > tf.LineCount() {
 		return nil, refactor.Refusef("lines %d-%d are not a range of lines of %s, which has %d", a.StartLine, a.EndLine, a.File, tf.LineCount())
 	}
-	if strings.TrimSpace(a.Content) == "" {
+	if strings.TrimSpace(a.Content) == "" && a.Wrap == "" {
 		if err := checkLive(ws, pkg, file, a.StartLine, a.EndLine); err != nil {
 			return nil, err
 		}
@@ -112,6 +128,9 @@ func (*ReplaceStatements) Plan(ws *workspace.Workspace, raw json.RawMessage) (*r
 	stmts, err := selectStatements(tf, file, src, a.StartLine, a.EndLine)
 	if err != nil {
 		return nil, err
+	}
+	if a.Wrap != "" {
+		return wrapStatements(ws, pkg, file, src, a, stmts)
 	}
 	content, err := gocode.ParseStatements(a.Content)
 	if err != nil {
