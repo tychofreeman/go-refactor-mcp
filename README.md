@@ -2296,6 +2296,28 @@ hand or a tool got in the way.
         tolerating them for now; no other repository in mind, so those
         two tools rest on their unit tests until one comes up.
 
+42. **Renaming a field that fmt prints** (2026-10-29, the user): rename
+    refused an exported field whenever a value holding its struct was
+    passed as an interface, so a test's `t.Errorf("%+v", got)` blocked
+    it (friction log, 2026-10-25). `analysis.ReflectedArgs` now says what
+    each callee sees (`Sight`): fmt's, log's and testing's printers see
+    field names only through `%+v` and `%#v`, and not in a value that
+    prints itself (`String`, `Error`, `Format`, `GoString`);
+    `reflect.DeepEqual` sees none; any other function, or a conversion, may
+    find fields by name. rename refuses only the last; for printers it
+    goes ahead and lists in a note the calls whose output changes, for
+    unexported fields too (they were not checked, though `%+v` prints
+    them). *Done.* Open:
+    - **Wrappers:** a `logf(format string, args ...any)` that passes to
+      fmt is a function not known, so it still refuses. vet's printf
+      check finds wrappers by facts; a summary could carry "this
+      parameter reaches a printer".
+    - **Other users:** extract_struct (the printed shape changes) and
+      remove_dead_code still use `PassedAsInterface`, which counts every
+      callee.
+    - **Values not followed:** assignments to interface variables and
+      returns are not looked at (`var x any = v; json.Marshal(x)`).
+
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
 candidates and the evidence for each, gathered from the friction log.
