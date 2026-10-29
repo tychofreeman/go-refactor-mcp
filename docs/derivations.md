@@ -360,9 +360,26 @@ func sign(n int) string {          s := sign(n)   becomes
                                    }
 ```
 
-A return in a loop or a switch has no else to take the rest, so it
-sets a flag the rest is guarded by, and in a loop breaks out of the
-outermost one, labelled:
+A return in a loop or a switch has no else to take the rest. When the
+rest is only a return of a value that can be evaluated first (it does
+nothing, cannot panic, and the loop changes nothing it reads), the
+user's way: the variable starts with that value, each return in the
+loop assigns it and breaks out:
+
+```go
+	v := -1
+loop:
+	for _, x := range xs {
+		if x > 0 {
+			v = x
+			break loop
+		}
+	}
+```
+
+Otherwise (a statement before the last return, or a value the loop
+changes, `return total`), each return sets a flag the rest is guarded
+by:
 
 ```go
 	var v int
@@ -376,6 +393,7 @@ loop:
 		}
 	}
 	if !returned {
+		println("none")
 		v = -1
 	}
 ```

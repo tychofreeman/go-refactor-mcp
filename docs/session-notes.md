@@ -269,6 +269,12 @@ results are in `docs/cost-history.md`.
   user's other way, extract what encloses the call so nothing runs
   after it, now inlines with the returns kept (`returnsRightAfter`
   sees through ifs, switches and blocks); derivations section 9.
+  The user's simpler form comes first (`hoistable`, both languages):
+  when what follows the loop or switch is only `return E` and E can
+  be evaluated before it (an analysis.Move past it, Maybe times), the
+  variable starts as E and each return assigns and breaks, with no
+  flag; the flag stays for statements after the loop, or an E the
+  loop changes.
   TypeScript has the same (`tsapi/early.go`, with remove_else's
   `wrap`), loops and switches included, but a return converted in a
   switch also breaks out of it (a case falls through), the variable is
