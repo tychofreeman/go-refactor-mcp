@@ -158,6 +158,11 @@ func (*AddParameter) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refact
 	if a.ReplaceVariable {
 		plan.Notes = append(plan.Notes, replacedNote(ws, t, a.Parameter, unproven)...)
 	}
+	for _, m := range t.group() {
+		if n := m.shadowNote(a.Parameter); n != "" {
+			plan.Notes = append(plan.Notes, n)
+		}
+	}
 	return plan, nil
 }
 
@@ -237,6 +242,24 @@ func (t *target) hides(name string, replace bool) (*types.Var, error) {
 			t.obj.Name(), kind(o), name, where, name, hint)
 	}
 	return hidden, nil
+}
+
+// shadowNote says where the body declares name in an inner scope, which
+// hides the new parameter there; "" if it does not.
+func (t *target) shadowNote(name string) string {
+	if t.decl == nil || t.decl.Body == nil {
+		return ""
+	}
+	var first *ast.Ident
+	for id, o := range t.Pkg.TypesInfo.Defs {
+		if o != nil && id.Name == name && t.decl.Body.Pos() <= id.Pos() && id.Pos() < t.decl.Body.End() && (first == nil || id.Pos() < first.Pos()) {
+			first = id
+		}
+	}
+	if first == nil {
+		return ""
+	}
+	return fmt.Sprintf("the body of %s declares %s in an inner scope (at %s), which hides the new parameter there", t.obj.Name(), name, t.WS.Position(first.Pos()))
 }
 
 // checkReplaced refuses replace_variable when typ is not the type of the
