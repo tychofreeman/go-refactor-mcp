@@ -256,7 +256,7 @@ results are in `docs/cost-history.md`.
   missed refusals the code makes or kept one it no longer makes
   (inline_function's goto and early return). When a PR adds or removes
   a refusal, change the line in the same PR; a definition must stay
-  under 's 1,700 characters, so trim to fit.
+  under `TestLoadedToolsStaySmall`'s 1,700 characters, so trim to fit.
 - **A getter that caches its result reads, it does not write**
   (2026-10-29, the user chose this of three: keep refusing, recognise
   the shape, or allow with a note). `analysis.cacheOf` recognises
