@@ -3613,6 +3613,17 @@ Nothing by hand.
 - Everything else through the CLI (replace_declaration, add_declaration,
   replace_text).
 
+## 2026-10-29: TypeScript's tests at a checkpoint; what still differs from Go
+
+The test command and its tests with add_declaration and replace_text
+through the CLI, in one batch checked at its end; a test's
+`history.New` (no such function) refused at the end and fixed in the
+batch's JSON; a package.json script escaped twice in the test, fixed
+with replace_text from files. The roadmap item from a subagent's
+survey, checked against the code. A batch file of an earlier session
+with the same name in the scratchpad ran first and was undone with
+`refactor undo`. Nothing by hand.
+
 ## 2026-10-29: extract_struct and remove_dead_code on the new reflection check
 
 - The goldens moved from `refuse_*` to their printing names by
