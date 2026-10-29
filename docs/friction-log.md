@@ -3491,3 +3491,11 @@ under a new name, which replace_declaration refuses), so that every
 call's check comes before the body's and the refusal names `also`.
 The group's later steps looked up a function an earlier step had
 already changed; they now skip it. Nothing by hand.
+
+## 2026-10-29: extract_function returns a captured variable nothing writes again
+
+All through the CLI. A replace_text scoped by `function` named the
+wrong function first (refused: no such function), then the one the
+line is in. The other too-strict refusals of item 38 were reproduced
+on a scratch module before deciding which were still there. Nothing
+by hand.
