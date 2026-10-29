@@ -40,7 +40,8 @@ func (*RemoveParameter) InputSchema() json.RawMessage {
     "name":      {"type": "string",  "description": "The function's name: with line, just the method name for a method; without line, the package-level name or Type.Method."},
     "column":    {"type": "integer", "description": "Optional 1-based column, only needed to disambiguate."},
     "parameter": {"type": "string",  "description": "Name of the parameter to remove."},
-    "value":     {"type": "string",  "description": "Optional: what every call passes for it, written in the body's terms (the receiver, other parameters); the body's uses become this."}
+    "value":     {"type": "string",  "description": "Optional: what every call passes for it, written in the body's terms (the receiver, other parameters); the body's uses become this."},
+    "also":      {"type": "array", "items": {"type": "string"}, "description": "With value: more functions (Type.Method) whose parameter of that name goes in the same step, so that calls among them that pass it on count."}
   },
   "required": ["file", "name", "parameter"],
   "additionalProperties": false
@@ -48,12 +49,13 @@ func (*RemoveParameter) InputSchema() json.RawMessage {
 }
 
 type removeArgs struct {
-	File      string `json:"file"`
-	Line      int    `json:"line"`
-	Column    int    `json:"column,omitempty"`
-	Name      string `json:"name"`
-	Parameter string `json:"parameter"`
-	Value     string `json:"value,omitempty"`
+	File      string   `json:"file"`
+	Line      int      `json:"line"`
+	Column    int      `json:"column,omitempty"`
+	Name      string   `json:"name"`
+	Parameter string   `json:"parameter"`
+	Value     string   `json:"value,omitempty"`
+	Also      []string `json:"also,omitempty"`
 }
 
 // cut is a range of source text the refactoring deletes.
@@ -82,11 +84,20 @@ func planRemove(ws *workspace.Workspace, a removeArgs) (*refactor.Plan, error) {
 	if err != nil {
 		return nil, err
 	}
+	if len(a.Also) > 0 && a.Value == "" {
+		return nil, refactor.Refusef("also goes with value: functions whose calls pass the same value for %s", a.Parameter)
+	}
+	var dropped map[string]bool
+	if a.Value != "" {
+		if dropped, err = droppedArgs(ws, a, t); err != nil {
+			return nil, err
+		}
+	}
 	var cuts []cut
 	for _, m := range t.group() {
 		var shown []ast.Expr
 		if a.Value != "" && m.decl != nil {
-			if shown, err = m.shownValue(a.Value, m.params[at], at); err != nil {
+			if shown, err = m.valueIn(a.Value, dropped); err != nil {
 				return nil, err
 			}
 		}
@@ -108,7 +119,7 @@ func planRemove(ws *workspace.Workspace, a removeArgs) (*refactor.Plan, error) {
 			}
 			if len(shown) > 0 {
 				// The body now evaluates the value where it used the
-				// argument, as shownValue checked.
+				// argument, as checkShown checks.
 				if err := m.checkPasses(shown[0], c, at); err != nil {
 					return nil, err
 				}
@@ -126,6 +137,9 @@ func planRemove(ws *workspace.Workspace, a removeArgs) (*refactor.Plan, error) {
 				}
 			}
 			cuts = append(cuts, m.argCut(c.expr, at, variadic))
+		}
+		if err := m.checkShown(a.Value, m.params[at], shown); err != nil {
+			return nil, err
 		}
 	}
 	if err := t.checkNothingLeftUnused(cuts); err != nil {
@@ -181,7 +195,7 @@ func (t *target) checkUnused(p param) error {
 				t.fixes = append(t.fixes, fix...)
 				break
 			}
-			return refactor.Refusef("the body of %s uses %s (at %s); remove that use first", t.obj.Name(), p.name, t.WS.Position(id.Pos()))
+			return refactor.Refusef("the body of %s uses %s (at %s); remove that use first, or give value, the expression every call passes for it", t.obj.Name(), p.name, t.WS.Position(id.Pos()))
 		}
 	}
 	if t.obj.Signature().TypeParams().Len() > 0 && containsTypeParam(info.TypeOf(p.field.Type)) {

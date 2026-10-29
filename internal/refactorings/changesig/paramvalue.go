@@ -16,9 +16,11 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
 
-// Expand makes a removal with value two steps: the body's uses of the
-// parameter become value, then the parameter goes once the body is shown
-// to get from value what every call passed.
+// Expand makes a removal with value two steps for each function it
+// names (the function, then also): the body's uses of the parameter
+// become value, then, once every body has, the parameter goes from each,
+// as each is shown to get from value what every call passed. A call
+// among them that passes on its own parameter then passes the value.
 func (r *RemoveParameter) Expand(ws *workspace.Workspace, raw json.RawMessage) ([]refactor.Step, error) {
 	var a removeArgs
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
@@ -27,7 +29,22 @@ func (r *RemoveParameter) Expand(ws *workspace.Workspace, raw json.RawMessage) (
 	if a.Value == "" {
 		return nil, nil
 	}
-	return []refactor.Step{{Refactoring: valueForParam{}, Args: raw}, {Refactoring: removeShown{}, Args: raw}}, nil
+	names := append([]string{a.Name}, a.Also...)
+	var write, remove []refactor.Step
+	for i, n := range names {
+		b := a
+		if i > 0 {
+			b.Name, b.Line, b.Column = n, 0, 0
+		}
+		b.Also = append(append([]string{}, names[:i]...), names[i+1:]...)
+		args, err := json.Marshal(b)
+		if err != nil {
+			return nil, err
+		}
+		write = append(write, refactor.Step{Refactoring: valueForParam{}, Args: args})
+		remove = append(remove, refactor.Step{Refactoring: removeShown{}, Args: args})
+	}
+	return append(write, remove...), nil
 }
 
 // valueForParam is the first step of remove_parameter with value: an edit
@@ -126,46 +143,75 @@ func (removeShown) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor
 	return planRemove(ws, a)
 }
 
-// shownValue returns the expressions of m's body that are value, each
-// checked to give, wherever the body evaluates it, what it would give at
-// the call, as introduce_parameter checks an expression it moves there;
-// but not an argument at index at of a call of m itself, which goes with
-// the parameter.
-func (m *target) shownValue(value string, p param, at int) ([]ast.Expr, error) {
+// valueIn returns the expressions of m's body that are value, but not an
+// argument that goes with the parameter (dropped, by position: one of a
+// call of m or of a function losing it in the same step).
+func (m *target) valueIn(value string, dropped map[string]bool) ([]ast.Expr, error) {
 	want, err := locate.ExprTokens(value)
 	if err != nil {
 		return nil, err
 	}
-	info := m.Pkg.TypesInfo
-	dropped := map[ast.Expr]bool{}
-	for _, c := range m.calls {
-		if at < len(c.expr.Args) {
-			dropped[c.expr.Args[at]] = true
-		}
-	}
 	var found []ast.Expr
 	ast.Inspect(m.decl.Body, func(n ast.Node) bool {
 		if e, ok := n.(ast.Expr); ok && locate.TokensMatch(m.TF, m.Src, e, want) {
-			if !dropped[e] {
+			if !dropped[m.WS.Fset.Position(e.Pos()).String()] {
 				found = append(found, e)
 			}
 			return false
 		}
 		return true
 	})
+	return found, nil
+}
+
+// checkShown checks that each of found, the places m's body evaluates
+// value, gives what it would give at the call, as introduce_parameter
+// checks an expression it moves there.
+func (m *target) checkShown(value string, p param, found []ast.Expr) error {
+	info := m.Pkg.TypesInfo
 	ptype := info.TypeOf(p.field.Type)
 	for _, e := range found {
 		if t := info.TypeOf(e); t == nil || !types.Identical(t, ptype) {
-			return nil, refactor.Refusef("%s is of type %s, not %s's type %s", value, t, p.name, ptype)
+			return refactor.Refusef("%s is of type %s, not %s's type %s", value, t, p.name, ptype)
 		}
 		if why := analysis.UsedAsVariable(info, analysis.PathTo(m.File, e)); why != "" {
-			return nil, refactor.Refusef("%s %s in the body of %s (at %s), so it does not keep the value the calls passed", value, why, m.obj.Name(), m.WS.Position(e.Pos()))
+			return refactor.Refusef("%s %s in the body of %s (at %s), so it does not keep the value the calls passed", value, why, m.obj.Name(), m.WS.Position(e.Pos()))
 		}
 		if err := m.checkIntroduced(info, m.File, e); err != nil {
-			return nil, err
+			return err
 		}
 	}
-	return found, nil
+	return nil
+}
+
+// droppedArgs returns, by position, the arguments for parameter of every
+// call of the functions a removal with value names, which go with it.
+func droppedArgs(ws *workspace.Workspace, a removeArgs, t *target) (map[string]bool, error) {
+	dropped := map[string]bool{}
+	for _, n := range append([]string{""}, a.Also...) {
+		g := t
+		if n != "" {
+			var err error
+			if g, err = findFamily(ws, locate.IdentQuery{File: a.File, Name: n}); err != nil {
+				return nil, err
+			}
+		}
+		i, err := g.named().paramIndex(a.Parameter)
+		if err != nil && n != "" {
+			continue // removed already, by an earlier step
+		}
+		if err != nil {
+			return nil, err
+		}
+		for _, m := range g.group() {
+			for _, c := range m.calls {
+				if i < len(c.expr.Args) {
+					dropped[ws.Fset.Position(c.expr.Args[i].Pos()).String()] = true
+				}
+			}
+		}
+	}
+	return dropped, nil
 }
 
 // checkPasses checks that the call c passes, at index at, the expression
@@ -188,7 +234,7 @@ func (m *target) checkPasses(e ast.Expr, c call, at int) error {
 	gt, err1 := locate.ExprTokens(got)
 	wt, err2 := locate.ExprTokens(want)
 	if err1 != nil || err2 != nil || !locate.EqualTokens(unparen(gt), unparen(wt)) {
-		return refactor.Refusef("the call at %s passes %s, not %s (%s as the call would write it); change what it passes first", m.WS.Position(c.expr.Pos()), got, want, m.Text(e))
+		return refactor.Refusef("the call at %s passes %s, not %s (%s as the call would write it); change what it passes first, or, if its function passes on a parameter of its own, name that function in also", m.WS.Position(c.expr.Pos()), got, want, m.Text(e))
 	}
 	return nil
 }

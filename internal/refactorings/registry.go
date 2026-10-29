@@ -58,6 +58,7 @@ func All() []refactor.Refactoring {
 		changesig.NewIntroduceParameter(),
 		changesig.NewMethodToFunction(),
 		changesig.NewFunctionToMethod(),
+		changesig.NewMoveMethod(),
 		movedecl.New(),
 		extractstruct.New(),
 		mergefunc.New(),

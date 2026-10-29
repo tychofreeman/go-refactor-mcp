@@ -3482,3 +3482,12 @@ first batch was refused for `ws.Position(...).Line` (Position returns
 a string), named in the refusal. The disk filled while two worktrees'
 checks built at once (the Go build cache reached 26 GB); `go clean
 -cache` and one check at a time. Nothing by hand.
+
+## 2026-10-29: move_method; remove_parameter's also
+
+All through the CLI, goldens first. shownValue became valueIn and
+checkShown by rename and replace_declaration (a first try replaced it
+under a new name, which replace_declaration refuses), so that every
+call's check comes before the body's and the refusal names `also`.
+The group's later steps looked up a function an earlier step had
+already changed; they now skip it. Nothing by hand.

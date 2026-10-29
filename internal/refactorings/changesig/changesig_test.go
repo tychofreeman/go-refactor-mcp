@@ -29,3 +29,7 @@ func TestGoldenAddResult(t *testing.T) {
 func TestGoldenChangeParameterType(t *testing.T) {
 	refactortest.Run(t, NewChangeParameterType(), "testdata/change_parameter_type")
 }
+
+func TestGoldenMoveMethod(t *testing.T) {
+	refactortest.Run(t, NewMoveMethod(), "testdata/move_method")
+}

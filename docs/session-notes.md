@@ -227,7 +227,7 @@ results are in `docs/cost-history.md`.
   run is a refactoring), an option of an existing tool, a composite
   named by intent built from primitives that are not tools, and only
   then a new tool, which at the budget merges or replaces one. `TestToolBudget` holds
-  the count (50: 44 tools today, raised from 44 by the user "for now")
+  the count (50: 45 tools today, raised from 44 by the user "for now"; move_method was the 45th, 2026-10-29)
   and the instructions' size; raise it only with the user. README roadmap item 25.
 
 - **A parameter may take a package variable's place** (2026-10-25, the
