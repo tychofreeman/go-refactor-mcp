@@ -31,6 +31,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/tychofreeman/go-refactor-mcp/internal/history"
 	"github.com/tychofreeman/go-refactor-mcp/internal/inspect"
 	"github.com/tychofreeman/go-refactor-mcp/internal/mcpserver"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
@@ -81,7 +82,20 @@ func run(argv []string) int {
 					fmt.Fprintln(os.Stderr, "-n does not apply to TypeScript files")
 					return 1
 				}
+				// The undo stack is the module's, as for Go: one file
+				// that both languages' invocations load and save.
+				path, err := undoFileOf(*dir)
+				if err == nil {
+					err = srv.LoadUndo(path)
+				}
+				if err != nil {
+					fmt.Fprintln(os.Stderr, err)
+					return 1
+				}
 				text, refused, err := srv.Call(name, raw)
+				if serr := srv.SaveUndo(path); serr != nil {
+					fmt.Fprintln(os.Stderr, "the undo stack was not saved:", serr)
+				}
 				if err != nil {
 					fmt.Fprintln(os.Stderr, "error:", err)
 					return 1
@@ -267,6 +281,26 @@ func undoFile(root string) (string, error) {
 	return filepath.Join(cache, "gorefactor", "undo", hex.EncodeToString(sum[:8])+".json"), nil
 }
 
+// undoFileOf returns the file of the undo stack of the module at or
+// above dir: its go.mod's directory, or dir when there is none.
+func undoFileOf(dir string) (string, error) {
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return "", err
+	}
+	return undoFile(workspace.ModuleRoot(abs))
+}
+
+// touchesTypeScript reports whether the change wrote a TypeScript file.
+func touchesTypeScript(c history.Change) bool {
+	for p := range c.After {
+		if strings.HasSuffix(p, ".ts") || strings.HasSuffix(p, ".tsx") || strings.HasSuffix(p, ".mts") || strings.HasSuffix(p, ".cts") {
+			return true
+		}
+	}
+	return false
+}
+
 // keepUndo loads the undo stack earlier invocations left for ws's module,
 // and returns the function that saves it once this invocation's changes
 // are made.
@@ -289,6 +323,38 @@ func keepUndo(ws *workspace.Workspace) (func(), error) {
 // module, as the undo tool does for a session. It exits with status 2
 // when there is none, or it cannot be undone.
 func runUndo(dir, pattern string) int {
+	// A change to TypeScript files is undone by TypeScript's language,
+	// through the server, from the same stack.
+	path, err := undoFileOf(dir)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	var stack history.Stack
+	if err := stack.Load(path); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	if c, ok := stack.Last(); ok && touchesTypeScript(c) {
+		srv := mcpserver.New(dir)
+		if err := srv.LoadUndo(path); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		text, err := srv.Undo()
+		if serr := srv.SaveUndo(path); serr != nil {
+			fmt.Fprintln(os.Stderr, "the undo stack was not saved:", serr)
+		}
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			return 1
+		}
+		fmt.Fprint(stdout, text)
+		if !strings.HasPrefix(text, "UNDONE") {
+			return 2
+		}
+		return 0
+	}
 	ws, err := workspace.Load(dir, pattern)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)

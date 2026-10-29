@@ -2145,15 +2145,18 @@ hand or a tool got in the way.
     10. Tooling: TypeScript in the `refactor` CLI (inspect and batches),
         and the A/B quality columns for TypeScript. *Done*: a CLI call
         naming TypeScript files runs through the server's languages
-        (`mcpserver.Server.Call`); its undo history lives in the
-        process, so `refactor undo` does not reach TypeScript steps of
-        earlier invocations. `metrics` measures TypeScript functions
+        (`mcpserver.Server.Call`), and `refactor undo` reverts its
+        steps as Go's: both languages' invocations load and save one
+        stack file per module, and undo goes to the language whose
+        files the last change wrote. `metrics` measures TypeScript functions
         (`tsapi.Measure`: complexity and nesting counted as Go's), so
         refactor-ab's quality table covers TypeScript runs.
     11. With the user: whether to keep tolerating errors already in the
         code (a step may add none), and real repositories beyond Hono,
         where union_switch_to_method and merge_duplicate_function found
-        nothing to apply to.
+        nothing to apply to. *Decided* (2026-10-28, the user): keep
+        tolerating them for now; no other repository in mind, so those
+        two tools rest on their unit tests until one comes up.
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the

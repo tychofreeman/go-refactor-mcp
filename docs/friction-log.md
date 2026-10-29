@@ -3428,3 +3428,11 @@ TypeScript template's backticks broke a Go raw string, regenerated with
 quoted strings; a test name mangled by a slice in the Python script,
 then put right with rename. The docs with replace_text. This entry
 appended with a heredoc.
+
+## 2026-10-28: refactor undo for TypeScript
+
+ModuleRoot exported with rename; the rest with replace_text through the
+CLI in one batch checked at its end. A first rename landed on a stale
+main (a pull had failed on a fetch refspec of a deleted branch); it was
+discarded and redone on the current one. This entry appended with a
+heredoc.
