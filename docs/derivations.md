@@ -238,6 +238,92 @@ recorders as one-line wrappers over `set` instead of extracting them
 works the same, and is what fresh models chose
 (`docs/composition-probe.md`).
 
+## 8. A value a getter makes on first use, passed in
+
+A getter that makes its result on first use and caches it in a field:
+
+```go
+// index returns the beds by name, making the index on first use.
+func (g *Garden) index() map[string]*Bed {
+	if g.byName == nil {
+		g.byName = map[string]*Bed{}
+		for i := range g.beds {
+			g.byName[g.beds[i].Name] = &g.beds[i]
+		}
+	}
+	return g.byName
+}
+
+type planner struct{ g *Garden }
+
+// place puts pl in its bed.
+func (p *planner) place(pl Plant) error {
+	if pl.Bed == "" {
+		return errors.New("no bed")
+	}
+	b, ok := p.g.index()[pl.Bed]
+	if !ok {
+		return fmt.Errorf("no bed %q", pl.Bed)
+	}
+	b.Plants = append(b.Plants, pl)
+	return nil
+}
+```
+
+Wanted: `place` takes the index instead of reaching into the garden,
+so a test can pass a map (Oct 25: `ws.Effects()`, done then with `nil`
+and replace_text).
+
+**Strictly, one step.** introduce_parameter of `p.g.index()`: the
+callers pass it, evaluated at the call. Its first call assigns
+`g.byName`, which was a side effect, so it was refused. Since
+2026-10-29 a getter of this shape (`if r.f == nil { ... }` then
+`return r.f`) counts as reading `r.f` and what the block reads, its
+writes to the cache as its own: called earlier or again, it returns
+the same. Where the body evaluates the getter first (`find` in
+`introduce_parameter/cache_getter`) the step now applies. Here it is
+still refused, rightly: `p.g` is read at the call, before the guard,
+so a nil `p` with an empty `Bed` would panic where it returned an
+error.
+
+**Split at the guard, then strictly.** extract_function of the four
+statements after the guard (`placeIn`: `place` keeps the guard and
+`return p.placeIn(pl)`), then introduce_parameter of `p.g.index()` in
+`placeIn`, which evaluates it first on every call:
+
+```go
+func (p *planner) place(pl Plant) error {
+	if pl.Bed == "" {
+		return errors.New("no bed")
+	}
+	return p.placeIn(pl, p.g.index())
+}
+
+func (p *planner) placeIn(pl Plant, beds map[string]*Bed) error {
+	b, ok := beds[pl.Bed]
+	...
+```
+
+**Non-strict, with the tools before the change.** The same split, then
+introduce_parameter of the method value `p.g.index` instead of the
+call: the parameter is a function that makes the value when called, so
+the getter still runs where it ran, and nothing about when it runs has
+to be proved:
+
+```go
+	return p.placeIn(pl, p.g.index)
+}
+
+func (p *planner) placeIn(pl Plant, index func() map[string]*Bed) error {
+	b, ok := index()[pl.Bed]
+```
+
+Both ran with the CLI on a scratch module, the non-strict one on the
+tools before the change. What neither can do is fold the wrapper
+away: inline_function of `place` into `PlaceAll` is refused, since
+`place` returns early and its call is an if statement's header (moved
+out with extract_variable, an assignment), not `return place(...)`.
+
 ## The user's principle
 
 Not every operation will exist. Use the operations there are; where

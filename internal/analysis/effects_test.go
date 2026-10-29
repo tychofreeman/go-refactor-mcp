@@ -127,6 +127,38 @@ func ptrFresh() int {
 
 func callsGet(c *counterT) int { return c.get() }
 
+type cacheT struct {
+	keys []string
+	set  map[string]bool
+	hits int
+}
+
+func (c *cacheT) lookup() map[string]bool {
+	if c.set == nil {
+		c.set = map[string]bool{}
+		for _, k := range c.keys {
+			c.set[k] = true
+		}
+	}
+	return c.set
+}
+
+func (c *cacheT) counted() map[string]bool {
+	if c.set == nil {
+		c.set = map[string]bool{}
+	}
+	c.hits++
+	return c.set
+}
+
+func (c *cacheT) leaks() map[string]bool {
+	if c.set == nil {
+		c.set = map[string]bool{}
+		counter++
+	}
+	return c.set
+}
+
 func kind(x any) string {
 	switch v := x.(type) {
 	case int:
@@ -183,13 +215,15 @@ func TestEffectsFunc(t *testing.T) {
 		"inc":        {true, true, true},
 		"incCopy":    {false, false, false},
 		"kind":       {false, false, false},
+		"lookup":     {false, true, true}, // made on first use: the write is a cache, so a read
+		"counted":    {true, true, true},  // counts its calls besides
+		"leaks":      {true, true, true},  // making it does something else too
 	}
-	counterT := pkg.Scope().Lookup("counterT").Type()
 	for name, w := range want {
 		obj := pkg.Scope().Lookup(name)
-		if obj == nil {
-			ms := types.NewMethodSet(types.NewPointer(counterT))
-			for i := 0; i < ms.Len(); i++ {
+		for _, typ := range []string{"counterT", "cacheT"} {
+			ms := types.NewMethodSet(types.NewPointer(pkg.Scope().Lookup(typ).Type()))
+			for i := 0; obj == nil && i < ms.Len(); i++ {
 				if ms.At(i).Obj().Name() == name {
 					obj = ms.At(i).Obj()
 				}

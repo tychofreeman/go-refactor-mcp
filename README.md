@@ -1928,7 +1928,15 @@ hand or a tool got in the way.
       28). Left, as decisions rather than bugs: add_parameter's lazy
       getter, whose first call assigns a field (an effect, though
       repeating it changes nothing a caller can see), and rename's test
-      that prints a struct with `%+v` (the user's call).
+      that prints a struct with `%+v` (the user's call). The lazy getter
+      is *done* (the user chose to recognise its shape): a method whose
+      body is `if r.f == nil { ... }` then `return r.f` counts as
+      reading `r.f` and what its block reads, and its writes to the
+      cache as its own (`analysis.cacheOf`), so moving or repeating its
+      call is judged as for any read. `docs/derivations.md` section 8
+      has the example, a split that makes it apply past an early
+      return, and the non-strict way with the tools before (pass the
+      method value).
     - **Each call of a function by another chosen by its arguments.**
       Thirty-four calls of `set` became calls of the recorder the
       argument named, by a script (Oct 25): one more story for item 9's
