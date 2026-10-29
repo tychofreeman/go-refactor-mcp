@@ -1,9 +1,9 @@
 # How this project was built
 
 A record of the practices behind go-refactor-mcp, written to decide which
-are worth repeating. It covers 15–21 October 2026: about 500 commits, PRs
-#1–#218. It was written on 18 October for the first four days (#1–#65)
-and extended on 21 October. It draws on the git history,
+are worth repeating. It covers 15–29 October 2026: PRs #1–#479. It was
+written on 18 October for the first four days (#1–#65), extended on 21
+October (to #218) and on 29 October. It draws on the git history,
 `docs/friction-log.md`, `docs/edits.md`, `docs/cost-history.md` and
 `docs/session-notes.md`; judgments are Claude's.
 
@@ -73,6 +73,60 @@ and extended on 21 October. It draws on the git history,
     `parameterize`, #209–#212), and an A/B of guidance in the user's
     moves (#214, #215): no saving on a small module, but on code with
     many uses 14% less cost and 39% fewer lines written by hand.
+13. **Days 7–8 (21–22 Oct): what a fresh model can learn, and fold.**
+    Exploration runs asked models to try several derivations and write
+    lessons for later ones (#227–#244). Lessons halved the lines written
+    by hand but not the cost, and a lesson that named a workaround went
+    stale once the tools improved. `fold` grew until it folded
+    near-duplicates in one call (#245–#253), on the user's decision to
+    let a nil dereference move past calls that return. Descriptions
+    became shorter, with one example per use (#255–#261). Their examples
+    moved to a garden domain that no eval task uses (#294).
+14. **Days 8–9 (22–23 Oct): reading, deriving and the design question.**
+    From names and signatures alone the model planned the reference
+    derivations (#262–#269), so what failed was the tools' interface.
+    The kind-into-types derivation was built and run end to end
+    (#272–#285). Probes showed that a fresh model sees a type code when
+    asked about design, but extends it when asked for a feature. A
+    preparing session of its own made the design in 15 of 15 runs,
+    against 0 of 15 without it. It did not pay back on small modules
+    (#291–#304).
+15. **Days 10–11 (24–25 Oct): cost, a shared matcher and a loop of our
+    own.** Where a session's cost goes (#308): cache writes 69%, and the
+    first request is 38% of the total. fold's matcher became
+    `internal/pattern`, shared with `parameterize` (#311–#319). Cheaper
+    models and trap tasks found no case where the tools beat editing by
+    hand on tasks every arm passes (#322–#328). A plan-then-execute loop
+    (`loop.py`) followed (#324 on), and was tuned over a long chain of
+    runs (#330–#405).
+16. **Day 12 (26 Oct): one analysis of what code does.** Six PRs merged
+    Stable, MayPanic and the effect summaries into one, with
+    standard-library facts in one table (#360–#365). On top came
+    `analysis.Move`, one judgment of moving an evaluation (#379–#401),
+    `Reach`, `Owner` and `site.Site`. Addressing a switch case by its
+    value (#343–#378) let a plan that cannot read bodies still move
+    cases.
+17. **Day 13 (27 Oct): releases, speed and TypeScript.** The CLI gained
+    `check` and `undo` (#408, #409). Releases are made by CI when the
+    version changes (#410–#412). Reloads stopped compiling the module
+    (#429): a 13-step batch went from 546 s to 21 s. The user chose
+    TypeScript in this repo, behind one server. A plan, a spike on Hono,
+    a language-neutral engine and a dispatcher came first (#414–#420),
+    then the TypeScript tools (#421–#433).
+18. **Day 14 (28 Oct): TypeScript's gaps.** Roadmap item 41 closed the
+    gaps against Go one by one (#434–#456), with TypeScript eval tasks.
+    `examples/CLAUDE.md` became the instruction set for users to copy
+    (#439). CI's cache was fixed (#445).
+19. **Day 15 (29 Oct): the user's derivations into the engine.**
+    A parameter into a field, fields between structs, replace_statements'
+    `wrap` and move_method (#459–#462); merging literals
+    (#467); the recipe for calls split by an argument (#468); routing to
+    other modules (#469); the rule that a gap names the compositions
+    tried (#470); cached getters as reads (#471); inlining early returns,
+    in loops and switches, with the default value hoisted, in Go and
+    TypeScript (#472–#475); fields that fmt prints (#476, #477). Then an
+    audit of every tool description against its code (#478), and of what
+    TypeScript still lacks (#479).
 
 ## Practices and what they did for decision-making
 
@@ -362,6 +416,82 @@ moves gave the first measured support for the thesis.
 for a list; prefer options on existing tools and general operations to
 task-shaped tools.
 
+### 16. Probes before A/B runs
+
+A probe asks a fresh model one question in isolation (`claude -p` in a
+copy of the repo, read-only tools) for a few cents to two dollars, where
+an A/B run costs several dollars and hours. Examples: would it recognise
+the type code (three framings), can it plan from a call tree, does it
+find a composition with the tools in view (`docs/composition-probe.md`).
+
+*Effect on decisions.* Probes said which A/B was worth running and what
+to change first. The composition probe found that Sonnet composed the
+user's derivation in 8 of 9 answers, and was stopped only by one stale
+clause in inline_function's description. That one clause was the fix.
+
+*Worth repeating:* yes. Isolate the copy at a path that does not name
+the checkout: a probe that found the real repo reviewed the wrong code.
+
+### 17. Options put to the user, decisions recorded with them
+
+When a rule could reasonably go more than one way, the session set out
+two or three options with what each costs (keep refusing, recognise the
+shape, allow with a note), and the user chose. The choice went into the
+session notes with the alternatives and the reason.
+
+*Effect.* Decisions held across sessions and were not re-argued: the nil
+dereference past a log line, cached getters, fields that fmt prints,
+TypeScript tolerating its existing errors. Where the user stayed unsure
+(the nil dereference), the note says so, and the relaxation was kept
+narrow and easy to revert.
+
+*Worth repeating:* yes, with the losing options written down.
+
+### 18. A budget of tools
+
+The user worried that tools would multiply until their context
+outweighed the gain. A test holds the count and the instructions' size,
+raised only with the user. A new operation goes, in order, into a proof
+in the engine, an option of an existing tool, or a composite. Only then
+does it become a tool.
+
+*Effect.* Most of day 15's features went into the engine (inline_function
+rewrites early returns itself) or became options (`wrap`, `from`,
+`to_file`). The budget was raised once, by the user, for move_method.
+
+*Worth repeating:* yes, for any tool set a model chooses from.
+
+### 19. A second language behind the same server
+
+TypeScript came in through a written plan with open decisions, a spike
+on a real project, and then a refactor of the engine into
+language-neutral code before any TypeScript tool. The user chose one
+server, routing by file extension, so that the shared code (diffs,
+batches, the MCP server, the A/B harness) lands once.
+
+*Effect.* About 40 TypeScript tools in two days, sharing batches,
+checkpoints, undo and refusal handling with Go. The cost was gaps that
+only showed when looked for: a checkpoint ran `go test` in a TypeScript
+project until #479.
+
+*Worth repeating:* yes. Plan and spike first, generalise the engine
+before adding the language, then survey for gaps against the first
+language.
+
+### 20. Read-only surveys in parallel
+
+Broad questions (do descriptions match the code? what does TypeScript
+lack?) went to read-only subagents with a narrow brief, while the main
+session went on with a PR. Their findings were checked against the code
+before anything changed.
+
+*Effect.* The description audit found eleven tools whose refusal lines
+had fallen behind. The TypeScript survey found a real bug and ranked the
+gaps. Both finished within one PR's test run.
+
+*Worth repeating:* yes, for questions that would mean reading across
+many files. Verify before acting.
+
 ## What did not work as well
 
 - **Line numbers.** Several tool calls reused line numbers from before an
@@ -383,7 +513,23 @@ task-shaped tools.
   took a second round each time.
 - **Doc numbers and stale state.** PR numbers guessed in docs, roadmap
   items left open after the work, and notes kept outside the repo each
-  cost a follow-up PR.
+  cost a follow-up PR. Tool descriptions drifted in the same way: eleven
+  "Refuses" lines were behind their code by 29 October.
+- **Gaps logged that were compositions.** "No tool does this" was
+  written for changes that two or three existing tools composed to. The
+  user found the composition, and the session had not, with the
+  descriptions in view.
+- **This project's own habits.** Sessions read with `sed` and `grep`
+  far more than with `inspect`. They refactored on the way to their own
+  changes only where the derivation was the task. And they extended a
+  type code while building the tool that removes one.
+- **Long tuning chains.** The plan-then-execute loop went through about
+  thirty runs on one task (lending kinds), each fixing what the last one
+  showed. It ended with writing by hand cheaper on local changes and
+  deriving cheaper where one step carries a change to many uses: a
+  result a smaller design of the experiment might have shown sooner.
+- **Scratch files reused by name.** A batch file named like one from an
+  earlier session ran in its place. Undo caught it.
 
 ## Recommendations for future projects
 
@@ -417,3 +563,15 @@ In rough order of value for the cost:
     order the user chooses.
 14. Collect the user's own derivations by posing problems; build general
     operations from their gaps rather than tools shaped to one task.
+15. Before logging a gap, look for a sequence of existing operations
+    that composes to the change, and write down the sequences tried.
+16. Answer narrow questions with cheap probes before paying for an A/B
+    run.
+17. Put real choices to the user as options with their costs, and record
+    the choice with the options it beat.
+18. Budget the tools; prefer a proof in the engine or an option to a new
+    tool.
+19. For a second language, plan, spike and make the engine neutral
+    first; then survey for gaps against the first language.
+20. Change a tool's description in the PR that changes what it refuses,
+    and audit descriptions against code from time to time.

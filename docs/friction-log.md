@@ -3613,6 +3613,12 @@ Nothing by hand.
 - Everything else through the CLI (replace_declaration, add_declaration,
   replace_text).
 
+## 2026-10-29: the history through 29 October; patterns sessions used
+
+Both written in the scratchpad and sent as replace_text and create_file
+steps of one batch; the history's PR list read with `gh api`. Nothing by
+hand.
+
 ## 2026-10-29: TypeScript's tests at a checkpoint; what still differs from Go
 
 The test command and its tests with add_declaration and replace_text
