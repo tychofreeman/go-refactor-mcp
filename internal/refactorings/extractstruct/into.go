@@ -32,10 +32,10 @@ func (x *extraction) planInto(a args) (*refactor.Plan, error) {
 	if err := x.checkIntoNames(); err != nil {
 		return nil, err
 	}
-	if err := x.notPassedAsInterface(x.tn, "the moved fields gone"); err != nil {
+	if err := x.reflected(x.tn, "the moved fields gone"); err != nil {
 		return nil, err
 	}
-	if err := x.notPassedAsInterface(x.into.tn, "the moved fields"); err != nil {
+	if err := x.reflected(x.into.tn, "the moved fields"); err != nil {
 		return nil, err
 	}
 	if err := x.checkIntoLiterals(); err != nil {
@@ -74,6 +74,9 @@ func (x *extraction) planInto(a args) (*refactor.Plan, error) {
 			plan.Notes = append(plan.Notes, refactor.APINote(tn.Name(), "moving fields from "+x.tn.Name()+" into "+x.into.tn.Name()))
 			break
 		}
+	}
+	if len(x.printed) > 0 {
+		plan.Notes = append(plan.Notes, "what these calls print changes, since fmt prints the moved fields inside "+x.into.tn.Name()+" now: "+textutil.FirstFew(x.printed, 5))
 	}
 	return plan, nil
 }

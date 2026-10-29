@@ -42,7 +42,7 @@ func (*Rename) Name() string { return "rename" }
 func (*Rename) Description() string {
 	return `Rename a variable, constant, function, type, type parameter, struct field or method, and every reference to it in the workspace: renaming the field nm of Plant to Name changes the declaration, every p.nm and Plant{nm: x}, and a doc comment that starts with the old name; other comments that mention it are listed in a note. Renaming an embedded field (Bed.Soil to Ground) makes it the named field Ground Soil, and what reached through it names it: b.PH becomes b.Ground.PH.
 Identify the symbol by file, line and its current name (column if the name is on the line twice with different meanings); for a local, function ("Name" or "Type.Method") can take the place of line and stays valid after edits.
-Refuses, saying why: a new name that would clash with or shadow another, an exported name used in another package that would become unexported, a method whose new name would change which interfaces its type implements, an embedded field whose methods give a type an interface or are reached by a method expression, an exported field of a struct passed where reflection may find it by name (encoding/json; what fmt's %+v prints is listed in a note), a symbol declared outside the workspace.`
+Refuses, saying why: a new name that would clash with or shadow another, an interface method, a type embedded in a struct, a function whose new name changes whether or how go test runs it, an import or a label, an exported name used in another package that would become unexported, a method whose new name would change which interfaces its type implements, an embedded field whose methods give a type an interface or are reached by a method expression, an exported field of a struct passed where reflection may find it by name (encoding/json; what fmt's %+v prints is listed in a note), a symbol declared outside the workspace.`
 }
 
 func (*Rename) InputSchema() json.RawMessage {
@@ -529,21 +529,14 @@ func (r *renamer) checkReflected(st *types.Struct, named *types.Named) error {
 			return ok && keyOf(r.ws.Fset, n.Obj()) == keyOf(r.ws.Fset, named.Obj())
 		}
 	}
-	seen := map[string]bool{}
-	for _, p := range r.ws.Pkgs {
-		if p.TypesInfo == nil {
-			continue
-		}
-		for _, ref := range analysis.ReflectedArgs(p.TypesInfo, p.Syntax, match) {
-			at := r.ws.Position(ref.Arg.Pos())
-			switch {
-			case ref.Sight == analysis.SeesNames && exported:
-				return refactor.Refusef("a value holding %s is passed as an interface to %s at %s, where reflection may find fields by name (encoding/json, text/template), so renaming the field %s to %s could change what it does; only fmt's printing (%%+v, %%#v) is allowed, with a note",
-					what, ref.Callee, at, r.old, r.new)
-			case ref.Sight == analysis.PrintsNames && !seen[at]:
-				seen[at] = true
-				r.printed = append(r.printed, at+" "+ref.Callee)
-			}
+	for _, ref := range analysis.ReflectedIn(r.ws.Pkgs, r.ws.Fset, match) {
+		at := r.ws.Position(ref.Arg.Pos())
+		switch {
+		case ref.Sight == analysis.SeesNames && exported:
+			return refactor.Refusef("a value holding %s is %s at %s, where reflection may find fields by name (encoding/json, text/template), so renaming the field %s to %s could change what it does; only fmt's printing (%%+v, %%#v) is allowed, with a note",
+				what, ref.Passed(), at, r.old, r.new)
+		case ref.Sight == analysis.PrintsNames:
+			r.printed = append(r.printed, at+" "+ref.Callee)
 		}
 	}
 	return nil
@@ -1090,12 +1083,8 @@ func (r *renamer) plan() (*refactor.Plan, error) {
 		plan.Notes = append(plan.Notes, refactor.APINote(r.old, "renaming it"))
 	}
 	plan.Notes = append(plan.Notes, r.implements...)
-	if n := len(r.printed); n > 0 {
-		list := strings.Join(r.printed[:min(n, 5)], ", ")
-		if n > 5 {
-			list += fmt.Sprintf(", and %d more", n-5)
-		}
-		plan.Notes = append(plan.Notes, "what these calls print changes, since fmt's %+v and %#v show field names: "+list)
+	if len(r.printed) > 0 {
+		plan.Notes = append(plan.Notes, "what these calls print changes, since fmt's %+v and %#v show field names: "+textutil.FirstFew(r.printed, 5))
 	}
 	if len(docFes) > 0 {
 		plan.Notes = append(plan.Notes, fmt.Sprintf("renamed %q in the doc comment that starts with it", r.old))

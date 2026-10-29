@@ -248,6 +248,15 @@ results are in `docs/cost-history.md`.
   a note): printed text is allowed to change, and a note lists the
   calls. What may find a field by name (encoding/json, text/template, a
   function not known) still refuses an exported field. README item 42.
+  extract_struct and remove_dead_code then followed (the user asked
+  them "up to par"): any printing is a note, since their changes show
+  in `%v` too; remove_dead_code also refuses `reflect.DeepEqual`.
+- **Descriptions drift behind refusals** (2026-10-29, the user asked
+  whether they match): an audit found 11 Go tools whose "Refuses" line
+  missed refusals the code makes or kept one it no longer makes
+  (inline_function's goto and early return). When a PR adds or removes
+  a refusal, change the line in the same PR; a definition must stay
+  under `TestLoadedToolsStaySmall`'s 1,700 characters, so trim to fit.
 - **A getter that caches its result reads, it does not write**
   (2026-10-29, the user chose this of three: keep refusing, recognise
   the shape, or allow with a note). `analysis.cacheOf` recognises

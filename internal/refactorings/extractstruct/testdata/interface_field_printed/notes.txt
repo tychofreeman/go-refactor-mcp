@@ -1,0 +1,2 @@
+fmt prints the moved fields inside xy now
+a.go:9:42 fmt.Printf

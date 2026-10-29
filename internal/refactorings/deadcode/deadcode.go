@@ -31,7 +31,7 @@ func (*RemoveDeadCode) Name() string { return "remove_dead_code" }
 func (*RemoveDeadCode) Description() string {
 	return `Delete a top-level declaration or a struct field that nothing uses, with its doc comment and the imports only it used: once the last call of legacyFormat went, removing legacyFormat deletes the function and its import of strings; removing Plant.Colour deletes the field once nothing reads, writes or names it in a literal (the end of a change of representation: fold literals through a setter, then remove the old fields). Exported code goes too, with a note that the module's API changed.
 Identify it by file and name (Name, Type.Method or Type.Field), or by line; also names more declarations of the package to remove with it, such as functions that only call each other, or a type and its methods.
-Refuses, saying why: something still used (its own body aside); init, main or a test function; a method an interface names; an initializer with side effects; a blank name (var _ I = (*T)(nil)); a type with methods left; a field that is embedded, declared with others, given other than a constant in an unkeyed literal (a constant's element goes with it), or of a struct passed to an interface.`
+Refuses, saying why: something still used (its own body aside); init, main or a test function; a declaration with a //go: directive; a constant whose iota value a later one depends on; a method an interface names; an initializer with side effects; a blank name (var _ I = (*T)(nil)); a type with methods left; a field that is embedded, declared with others, given other than a constant in an unkeyed literal (a constant's element goes with it), or of a struct passed where reflection may see its fields (encoding/json, a comparison by reflection; what fmt prints is listed in a note).`
 }
 
 func (*RemoveDeadCode) InputSchema() json.RawMessage {
@@ -122,6 +122,11 @@ func (*RemoveDeadCode) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refa
 	plan.Edits = edit.Merge(plan.Edits)
 	if dropped > 0 {
 		plan.Notes = append(plan.Notes, fmt.Sprintf("deleted its element from %d unkeyed literal%s", dropped, textutil.Plural(dropped)))
+	}
+	for _, t := range group {
+		if len(t.printed) > 0 {
+			plan.Notes = append(plan.Notes, fmt.Sprintf("what these calls print changes, since %s no longer prints: %s", t.obj.Name(), textutil.FirstFew(t.printed, 5)))
+		}
 	}
 	names := []string{a.Name}
 	names = append(names, a.Also...)
