@@ -498,8 +498,9 @@ func isFreshValue(info *types.Info, v *types.Var, rhs ast.Expr) bool {
 // Owner ranks at least own. The zero owned has none, for a call
 // summarized outside any body.
 type owned struct {
-	f   *Func
-	own Owner // whose memory counts as the summarized code's own: ThisFunc for a whole function, ThisCode for part of one out of its context
+	f           *Func
+	own         Owner      // whose memory counts as the summarized code's own: ThisFunc for a whole function, ThisCode for part of one out of its context
+	recv, cache *types.Var // for a getter that makes its result on first use, its receiver and the field it caches it in (cacheOf)
 }
 
 // body walks one function body for summarize.
@@ -521,18 +522,85 @@ type body struct {
 func (e *Effects) summarize(src funcSource) *Summary {
 	f := AnalyzeFunc(src.info, src.decl)
 	b := &body{e: e, owned: owned{f: f, own: ThisFunc}, sync: map[*ast.FuncLit]bool{}, callees: map[ast.Expr]bool{}, addressed: addressedIn(src.info, src.decl.Body)}
+	var fill *ast.BlockStmt
+	b.recv, b.cache, fill = cacheOf(src.info, src.decl)
 	ast.Inspect(src.decl.Body, b.visit)
+	if m := b.s.At.Makes; fill != nil && m != nil && fill.Pos() <= m.Pos() && m.End() <= fill.End() {
+		b.s.Makes, b.s.At.Makes = "", nil // later calls return what the first made
+	}
 	return &b.s
+}
+
+// cacheOf returns the receiver of decl and the field it caches its result
+// in, and the block that makes the result, when decl is a getter that
+// makes it on first use: its body is if r.f == nil { ... } then return
+// r.f. Its writes to r.f, and to what r.f holds, only fill the cache:
+// whenever the block runs, later calls return what it made, so they
+// count as the code's own, and r.f is read.
+func cacheOf(info *types.Info, decl *ast.FuncDecl) (recv, field *types.Var, fill *ast.BlockStmt) {
+	if decl.Recv == nil || len(decl.Recv.List) != 1 || len(decl.Recv.List[0].Names) != 1 || decl.Body == nil || len(decl.Body.List) != 2 {
+		return nil, nil, nil
+	}
+	recv, _ = info.Defs[decl.Recv.List[0].Names[0]].(*types.Var)
+	is := func(x ast.Expr) *types.Var {
+		sel, ok := ast.Unparen(x).(*ast.SelectorExpr)
+		if !ok {
+			return nil
+		}
+		if id, ok := ast.Unparen(sel.X).(*ast.Ident); !ok || recv == nil || info.Uses[id] != recv {
+			return nil
+		}
+		v, _ := info.Uses[sel.Sel].(*types.Var)
+		return v
+	}
+	ifs, ok := decl.Body.List[0].(*ast.IfStmt)
+	ret, ok2 := decl.Body.List[1].(*ast.ReturnStmt)
+	if !ok || !ok2 || ifs.Init != nil || ifs.Else != nil || len(ret.Results) != 1 {
+		return nil, nil, nil
+	}
+	cond, ok := ast.Unparen(ifs.Cond).(*ast.BinaryExpr)
+	if !ok || cond.Op != token.EQL || !info.Types[cond.Y].IsNil() {
+		return nil, nil, nil
+	}
+	if field = is(cond.X); field == nil || !field.IsField() || is(ret.Results[0]) != field {
+		return nil, nil, nil
+	}
+	return recv, field, ifs.Body
+}
+
+// caches reports whether x is the cache field of a getter that makes its
+// result on first use (see cacheOf), or part of what it holds.
+func (o owned) caches(x ast.Expr) bool {
+	if o.cache == nil {
+		return false
+	}
+	for {
+		switch e := ast.Unparen(x).(type) {
+		case *ast.SelectorExpr:
+			if id, ok := ast.Unparen(e.X).(*ast.Ident); ok && o.f.Info.Uses[id] == o.recv && o.f.Info.Uses[e.Sel] == o.cache {
+				return true
+			}
+			x = e.X
+		case *ast.IndexExpr:
+			x = e.X
+		case *ast.StarExpr:
+			x = e.X
+		default:
+			return false
+		}
+	}
 }
 
 // pointsPrivate reports whether the memory x (a pointer, slice or map)
 // points to belongs to the summarized code.
-func (o owned) pointsPrivate(x ast.Expr) bool { return o.f != nil && o.f.Pointee(x) >= o.own }
+func (o owned) pointsPrivate(x ast.Expr) bool {
+	return o.f != nil && (o.f.Pointee(x) >= o.own || o.caches(x))
+}
 
 // private reports whether writing to the assignable expression x changes
 // only memory the summarized code owns: a local variable or part of one,
 // or memory a fresh local points to.
-func (o owned) private(x ast.Expr) bool { return o.f != nil && o.f.Owner(x) >= o.own }
+func (o owned) private(x ast.Expr) bool { return o.f != nil && (o.f.Owner(x) >= o.own || o.caches(x)) }
 
 // effect, read, unsafe and stops record what n does, where it is the
 // first of its kind: a side effect, a read of what other code can change,
