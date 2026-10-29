@@ -3575,6 +3575,18 @@ replacement with replace_text. The branch merges #471's branch to
 update derivation section 8, rerun with the CLI on its scratch module.
 Nothing by hand.
 
+## 2026-10-29: early returns in loops and switches; remove_else's wrap
+
+Goldens first with create_file (the loop refusal golden deleted with
+delete_file, as the loop now inlines), `exits` and its helpers with
+add_declaration, `tailForm` and `tailIf` removed with
+replace_declaration, `tailResults` and `returnsRightAfter` replaced
+with replace_declaration, the fields with add_field, wrapElse and its
+option with add_declaration, add_field and replace_text. The user's
+alternative (extract the enclosing if, then inline) run with the CLI on
+a scratch module first; it showed returnsRightAfter missed a call
+nested in an if. Nothing by hand.
+
 ## 2026-10-29: TypeScript's inline_function and early returns; remove_else's wrap
 
 Tests first with replace_text, `tsapi/early.go` with create_file, the
