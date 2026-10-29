@@ -243,6 +243,11 @@ results are in `docs/cost-history.md`.
   the count (50: 45 tools today, raised from 44 by the user "for now"; move_method was the 45th, 2026-10-29)
   and the instructions' size; raise it only with the user. README roadmap item 25.
 
+- **Renaming a field that fmt prints** (2026-10-29, the user chose
+  the third of three: keep refusing, allow in tests only, or allow with
+  a note): printed text is allowed to change, and a note lists the
+  calls. What may find a field by name (encoding/json, text/template, a
+  function not known) still refuses an exported field. README item 42.
 - **A getter that caches its result reads, it does not write**
   (2026-10-29, the user chose this of three: keep refusing, recognise
   the shape, or allow with a note). `analysis.cacheOf` recognises

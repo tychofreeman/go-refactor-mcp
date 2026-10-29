@@ -1,1 +1,1 @@
-a value holding rec is passed as an interface at m.go:10:58; reflection there (encoding/json, text/template, fmt's %+v) sees field names
+a value holding rec is passed as an interface to json.Marshal at m.go:10:58, where reflection may find fields by name

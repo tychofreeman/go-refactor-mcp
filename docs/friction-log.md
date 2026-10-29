@@ -3603,3 +3603,12 @@ outputs, replace_text for the TypeScript tests), `hoistable` and
 `hoist` with add_declaration, the hooks in exits, plan, tailResults,
 finish and earlyBody with replace_text, the fields with add_field.
 Nothing by hand.
+
+## 2026-10-29: renaming a field that fmt prints
+
+- Goldens and `internal/analysis/reflect_test.go` written with Python
+  generating the batch's create_file steps (one file per golden part),
+  sent through the CLI; the old `refuse_field_in_slice_printed` removed
+  with delete_file. Nothing was edited by hand.
+- Everything else through the CLI (replace_declaration, add_declaration,
+  replace_text).
