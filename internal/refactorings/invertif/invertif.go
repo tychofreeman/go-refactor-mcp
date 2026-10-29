@@ -65,6 +65,7 @@ type args struct {
 	Line     int    `json:"line"`
 	Column   int    `json:"column,omitempty"`
 	KeepElse bool   `json:"keep_else,omitempty"`
+	Wrap     bool   `json:"wrap,omitempty"`
 }
 
 type inversion struct {
@@ -78,6 +79,9 @@ func (*InvertIf) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.P
 	var a args
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
+	}
+	if a.Wrap {
+		return nil, refactor.Refusef("invalid arguments: wrap is a remove_else argument")
 	}
 	x, s, err := load(ws, a)
 	if err != nil {

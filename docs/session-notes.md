@@ -256,12 +256,19 @@ results are in `docs/cost-history.md`.
   statements after an if that returns in its else, then give the
   function one result variable that each return assigns, and the body
   has one return at its end. inline_function does both itself
-  (`tailForm`, `tailResults`, by the order of the tool budget: a proof
+  (`exits`, `tailResults`, by the order of the tool budget: a proof
   in the engine first), assigning the call's variables directly, or a
   temporary of the result's type when a variable's type differs (a nil
   `*T` returned into an `error` must stay a typed nil). A return in a
-  loop, switch or block is still refused. The steps are not exposed as
-  tools of their own.
+  loop or switch sets a flag that guards the statements after it, and
+  in a loop breaks out of the outermost one, labelled (`exits`); goto
+  is still refused. The user then asked to expose the first step:
+  remove_else's `wrap` (its inverse). Assigning the returns to one
+  variable stays inside inline_function until a second use appears
+  (extract_function of code that returns is the candidate). The
+  user's other way, extract what encloses the call so nothing runs
+  after it, now inlines with the returns kept (`returnsRightAfter`
+  sees through ifs, switches and blocks); derivations section 9.
 - **A parameter may take a package variable's place** (2026-10-25, the
   user): add_parameter's `replace_variable` lets the new parameter hide
   the package variable the body reads. Where the engine cannot prove a

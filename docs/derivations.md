@@ -341,6 +341,64 @@ gives
 and rename `placeIn` to `place`. A return in a loop, a switch or a
 block is still refused: the statements after it cannot become an else.
 
+## 9. Inlining a function that returns early
+
+The user's derivation (2026-10-29): give each if that returns the
+statements after it as its else branch, then give the function one
+variable of its result type that each return assigns, and return it at
+the end. With one return, the inline is trivial. remove_else's `wrap`
+is the first step on its own; inline_function does both itself, never
+changing the callee:
+
+```go
+func sign(n int) string {          s := sign(n)   becomes
+	if n < 0 {                     var s string
+		return "neg"               if n < 0 {
+	}                                  s = "neg"
+	return "pos"                   } else {
+}                                      s = "pos"
+                                   }
+```
+
+A return in a loop or a switch has no else to take the rest, so it
+sets a flag the rest is guarded by, and in a loop breaks out of the
+outermost one, labelled:
+
+```go
+	var v int
+	var returned bool
+loop:
+	for _, x := range xs {
+		if x > 0 {
+			v = x
+			returned = true
+			break loop
+		}
+	}
+	if !returned {
+		v = -1
+	}
+```
+
+Another way, the user's too, when the call sits in a setter's if:
+extract the if (or whatever encloses the call) into a method of its
+own. There nothing runs after the call, so the callee's returns stay
+returns, and the inline only copies the body in:
+
+```go
+func (p *planner) placeIf(force bool, bed string) {
+	if force {
+		if bed == "" {
+			return
+		}
+		p.placed = append(p.placed, bed)
+	}
+}
+```
+
+It keeps a method, where the first way rewrites the returns in the
+caller; which reads better depends on the code around the call.
+
 ## The user's principle
 
 Not every operation will exist. Use the operations there are; where
