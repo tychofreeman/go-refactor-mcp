@@ -22,6 +22,19 @@ results are in `docs/cost-history.md`.
   same place, so parallel PRs conflicted there one after another
   (2026-10-22, #263-#267).
 - When the user says "do X, then Y", do them in order, each in its own PR.
+- **Look for a composition before logging a gap** (2026-10-29, the
+  user). The 34 calls of `set` (Oct 25) were logged as "no tool
+  replaces each call with a call chosen by its argument"; the user saw
+  extract one call per field, fold it, inline `set`. This session had
+  missed it too, with the descriptions in view: it took the target as
+  one transformation and checked tools one at a time. So a gap needs
+  the sequences tried (CLAUDE.md, the friction log's header). A probe
+  (`docs/composition-probe.md`, $1.11): posed with the tools in view,
+  Sonnet found wrappers + fold in 8 of 9 answers, cold, and stopped
+  before inlining `set` only because inline_function's description
+  listed "an early return" (it inlines one at a caller's last
+  statement; the description now says so). Haiku wrote the recorders
+  out and moved calls by text, taking the recipe 1 in 3 when named.
 - **Reason from the highest abstraction that captures the problem**
   (2026-10-22, the user). Before planning code, name the change at
   that level: "this field holds one of three modes, switched on in

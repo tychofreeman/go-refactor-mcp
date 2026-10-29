@@ -232,6 +232,12 @@ per field, which `merge_duplicate_function` refuses to merge
 recorders keep `field := &b.summary.Reads` from the inlined pointer
 parameter.
 
+A body that returns early (set's duplicate check) inlines too: each
+recorder's call of `set` is its last statement. Declaring the
+recorders as one-line wrappers over `set` instead of extracting them
+works the same, and is what fresh models chose
+(`docs/composition-probe.md`).
+
 ## The user's principle
 
 Not every operation will exist. Use the operations there are; where

@@ -9,6 +9,11 @@ the way, or a tool result that was correct but awkward. It is the evidence
 for what to build next, and for whether the workflow helps.
 
 Each entry: the story, the refactoring wanted, what happened, and the gap.
+A gap is a change no sequence of the tools makes: an entry that says no
+tool does something also names the sequences of two or three tools it
+tried and why each failed (since 2026-10-29; the 34 calls of `set`, Oct
+25, were logged as a missing tool and turned out to be extract, fold and
+inline, `docs/derivations.md` section 7).
 A hand edit that changed behavior on purpose (new code, a changed
 statement) is logged too, with the edit that would have covered it; the
 candidates and their evidence are collected in `docs/edits.md`.
@@ -3537,3 +3542,10 @@ A replace_text with `function` was refused for a doc comment outside
 the body; resent without it. create_from_usage declared a struct field
 that a step used before it existed, which a later step removed when the
 design changed. Nothing by hand.
+
+## 2026-10-29: a gap names the compositions tried
+
+CLAUDE.md, the friction log's header and the session notes with
+replace_text; the probe's write-up with create_file and
+inline_function's description with replace_text. The probe's plan was
+run with the CLI on a copy of its module. Nothing by hand.

@@ -25,6 +25,14 @@ tool covers a change, make it by hand and log it in `docs/friction-log.md`
 evidence for which tool to build next; candidate edit tools are in
 `docs/edits.md`.
 
+Before deciding that no tool covers a change, name what the result is
+made of in operations (each new function is the old one with an argument
+fixed: extract, fold, inline) and look for a sequence of two or three
+tools that composes to it; `docs/derivations.md` has those found so far.
+A friction-log entry that says no tool does something names the
+sequences tried and why each failed. A gap that turns out to be a
+composition goes into `docs/derivations.md`, not the roadmap.
+
 One branch and one PR per item, never commits to main; the user merges.
 Before pushing, run what CI runs (`.github/workflows/test.yml`); hand edits
 are not gofmt-ed, so this catches them:
