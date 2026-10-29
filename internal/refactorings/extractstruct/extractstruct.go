@@ -40,6 +40,7 @@ func (*ExtractStruct) Name() string { return "extract_struct" }
 
 func (*ExtractStruct) Description() string {
 	return `Move some fields of a struct into a new struct type, embedded in their place, so that every use (m.path) keeps working: moving path and mode of type mover struct { path string; mode int; n int } into source declares type source struct { path string; mode int } and makes mover struct { source; n int }, and mover{path: p} becomes mover{source: source{path: p}}. To hold it as a named field instead, then rename mover.source (to src: m.path becomes m.src.path). Use it to split a struct that holds two things, before giving the new type methods or a file of its own.
+With into in place of new_type, the fields go to the end of a struct that already exists, one the struct embeds or holds in a field by value: moving depth of Bed into Soil, held as soil, makes b.depth b.soil.depth and Bed{depth: 3} Bed{soil: Soil{depth: 3}}.
 Identify the struct by file and name, or by line at its declaration or a use; fields are the names to move, new_type the new type's name.
 Refuses, saying why: a struct whose values are passed to an interface (reflection, fmt's %+v and encoding/json would see the new field), a generic struct, an embedded field or part of a field group to move, a name already taken, an unkeyed literal whose moved fields are not next to each other. For an exported struct the result notes that the module's API changed.`
 }
@@ -53,9 +54,10 @@ func (*ExtractStruct) InputSchema() json.RawMessage {
     "name":     {"type": "string",  "description": "The struct type's name; without line, it is found among the package-level names."},
     "column":   {"type": "integer", "description": "Optional 1-based column, only needed to disambiguate."},
     "fields":   {"type": "array", "items": {"type": "string"}, "description": "The fields to move into the new type."},
-    "new_type": {"type": "string",  "description": "Name of the new struct type, which is also the embedded field's name."}
+    "new_type": {"type": "string",  "description": "Name of the new struct type, which is also the embedded field's name."},
+    "into":     {"type": "string",  "description": "Instead of new_type: an existing struct type the struct embeds or holds in a field, by value, to move the fields into."}
   },
-  "required": ["file", "name", "fields", "new_type"],
+  "required": ["file", "name", "fields"],
   "additionalProperties": false
 }`)
 }
@@ -67,6 +69,7 @@ type args struct {
 	Name    string   `json:"name"`
 	Fields  []string `json:"fields"`
 	NewType string   `json:"new_type"`
+	Into    string   `json:"into"`
 }
 
 // extraction is one planning run.
@@ -87,6 +90,7 @@ type extraction struct {
 	contig  bool
 	srcs    map[string][]byte
 	litEdit map[string][]edit.TextEdit // per file: literal rewrites so far
+	into    *into                      // the existing struct the fields move into, or nil for a new one
 }
 
 // Plan checks preconditions and computes the edits.
@@ -96,7 +100,9 @@ func (*ExtractStruct) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refac
 		return nil, err
 	}
 	switch {
-	case !token.IsIdentifier(a.NewType):
+	case a.Into != "" && a.NewType != "":
+		return nil, refactor.Refusef("give new_type for a new struct, or into for one that exists, not both")
+	case a.Into == "" && !token.IsIdentifier(a.NewType):
 		return nil, refactor.Refusef("new_type %q is not a valid Go identifier", a.NewType)
 	case len(a.Fields) == 0:
 		return nil, refactor.Refusef("fields is required: the names of the fields to move")
@@ -108,6 +114,9 @@ func (*ExtractStruct) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refac
 	x.newType = a.NewType
 	if err := x.selectFields(a.Fields); err != nil {
 		return nil, err
+	}
+	if a.Into != "" {
+		return x.planInto(a)
 	}
 	if err := x.checkNames(); err != nil {
 		return nil, err
@@ -300,9 +309,16 @@ func sameObj(fset *token.FileSet, a, b types.Object) bool {
 // in a pointer, slice, map or field) passed to an interface parameter or
 // converted to an interface: what reflection sees there would change.
 func (x *extraction) checkNotPassedAsInterface() error {
+	return x.notPassedAsInterface(x.tn, "the new embedded one")
+}
+
+// notPassedAsInterface refuses a value holding tn passed as an interface,
+// where reflection would see the struct's changed fields (what names
+// them).
+func (x *extraction) notPassedAsInterface(tn *types.TypeName, what string) error {
 	match := func(t types.Type) bool {
 		n, ok := t.(*types.Named)
-		return ok && sameObj(x.WS.Fset, n.Obj(), x.tn)
+		return ok && sameObj(x.WS.Fset, n.Obj(), tn)
 	}
 	for _, p := range x.WS.Pkgs {
 		if p.TypesInfo == nil {
@@ -312,11 +328,15 @@ func (x *extraction) checkNotPassedAsInterface() error {
 		if arg == nil {
 			continue
 		}
-		what := "a value holding " + x.tn.Name()
-		if x.isT(p.TypesInfo.TypeOf(arg)) {
-			what = "a " + x.tn.Name()
+		holding := "a value holding " + tn.Name()
+		t := p.TypesInfo.TypeOf(arg)
+		if pt, ok := t.(*types.Pointer); ok {
+			t = pt.Elem()
 		}
-		return refactor.Refusef("%s is passed as an interface at %s; reflection there (fmt's %%+v, encoding/json, reflect) sees the struct's fields, and would see the new embedded one", what, x.WS.Position(arg.Pos()))
+		if match(t) {
+			holding = "a " + tn.Name()
+		}
+		return refactor.Refusef("%s is passed as an interface at %s; reflection there (fmt's %%+v, encoding/json, reflect) sees the struct's fields, and would see %s", holding, x.WS.Position(arg.Pos()), what)
 	}
 	return nil
 }
@@ -376,6 +396,9 @@ func (x *extraction) rewriteLiterals() (int, error) {
 
 // rewrite rewrites one literal, if it sets a moving field.
 func (x *extraction) rewrite(l lit) (bool, error) {
+	if x.into != nil {
+		return x.rewriteInto(l)
+	}
 	src, err := x.source(l.path)
 	if err != nil {
 		return false, err
@@ -432,6 +455,12 @@ func (x *extraction) rewrite(l lit) (bool, error) {
 		elts[x.lo] = typ + "{" + strings.Join(group, ", ") + "}"
 	}
 
+	return x.writeElts(cl, l, src, elts)
+}
+
+// writeElts writes elts as the elements of the literal cl, on one line
+// if it was on one, else one a line.
+func (x *extraction) writeElts(cl *ast.CompositeLit, l lit, src []byte, elts []string) (bool, error) {
 	tf := x.WS.Fset.File(cl.Pos())
 	if tf.Line(cl.Lbrace) == tf.Line(cl.Rbrace) {
 		x.replace(l.path, src, cl.Lbrace, cl.Rbrace+1, "{"+strings.Join(elts, ", ")+"}")
