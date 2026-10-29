@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/tychofreeman/go-refactor-mcp/internal/mcpserver"
 )
 
 // TestMain keeps the undo stacks the tests save out of the user's cache,
@@ -234,5 +236,24 @@ func TestBatchAddressesARenamedLine(t *testing.T) {
 	}
 	if b, _ := os.ReadFile(filepath.Join(dir, "p.go")); !strings.Contains(string(b), "return sum + 1") {
 		t.Errorf("p.go:\n%s", b)
+	}
+}
+
+// list prints each tool's arguments, and with names only those tools;
+// -version prints the version.
+func TestListAndVersion(t *testing.T) {
+	var out strings.Builder
+	stdout = &out
+	defer func() { stdout = os.Stdout }()
+	if code := run([]string{"list", "replace_expression"}); code != 0 {
+		t.Fatalf("list: exit status %d", code)
+	}
+	got := out.String()
+	if !strings.Contains(got, "replace_expression takes:") || !strings.Contains(got, "  expression (required):") || strings.Contains(got, "\nrename\n") {
+		t.Errorf("list replace_expression:\n%s", got)
+	}
+	out.Reset()
+	if code := run([]string{"-version"}); code != 0 || !strings.HasPrefix(out.String(), "refactor "+mcpserver.Version) {
+		t.Errorf("-version: exit status %d: %q", code, out.String())
 	}
 }

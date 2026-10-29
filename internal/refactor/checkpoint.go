@@ -109,9 +109,19 @@ var TestTimeout = 10 * time.Minute
 // GoTest runs go test on pattern in dir and returns its output; the error
 // says why the tests did not pass.
 func GoTest(dir, pattern string) (string, error) {
+	return goTest(dir, pattern)
+}
+
+// GoTestRace is GoTest with the race detector on.
+func GoTestRace(dir, pattern string) (string, error) {
+	return goTest(dir, "-race", pattern)
+}
+
+// goTest runs go test with args in dir, within TestTimeout.
+func goTest(dir string, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), TestTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "go", "test", pattern)
+	cmd := exec.CommandContext(ctx, "go", append([]string{"test"}, args...)...)
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	if ctx.Err() == context.DeadlineExceeded {
@@ -128,6 +138,7 @@ func CheckReport(errs []string, root string, raw json.RawMessage) (report string
 	var a struct {
 		RunTests bool   `json:"run_tests"`
 		Packages string `json:"packages"`
+		Race     bool   `json:"race"`
 	}
 	if err := DecodeArgs(raw, &a); err != nil {
 		return "", false, err
@@ -156,7 +167,11 @@ func CheckReport(errs []string, root string, raw json.RawMessage) (report string
 	if strings.HasPrefix(pattern, "-") {
 		return "", false, Refusef("packages must be a package pattern, not a flag")
 	}
-	out, testErr := GoTest(root, pattern)
+	run := GoTest
+	if a.Race {
+		run = GoTestRace
+	}
+	out, testErr := run(root, pattern)
 	if testErr != nil {
 		fmt.Fprintf(&sb, "\nTESTS FAILED (%v):\n", testErr)
 		passed = false
