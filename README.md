@@ -1932,7 +1932,9 @@ hand or a tool got in the way.
     - **Each call of a function by another chosen by its arguments.**
       Thirty-four calls of `set` became calls of the recorder the
       argument named, by a script (Oct 25): one more story for item 9's
-      "every occurrence of a pattern".
+      "every occurrence of a pattern". *Done* as a derivation, no tool:
+      extract one call per value, fold it, inline the function
+      (`docs/derivations.md` section 7).
     - **replace_text after gofmt's alignment.** `old` written as the
       model wrote it, before gofmt aligned it, is not found (Oct 19, a
       loop's indentation; Oct 20, a field comment; Oct 22, a map's

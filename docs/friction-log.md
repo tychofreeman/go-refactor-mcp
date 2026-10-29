@@ -3522,3 +3522,8 @@ remove_dead_code to refuse an unkeyed literal became an applied case:
 move_file renamed its directory (after one call with the wrong argument
 name, refused with the schema), delete_file removed its refused.txt.
 Nothing by hand.
+
+## 2026-10-29: a recipe for calls split by an argument
+
+docs/derivations.md section 7 and the roadmap with replace_text, the
+derivation run with the CLI on a scratch module. Nothing by hand.
