@@ -1852,7 +1852,17 @@ hand or a tool got in the way.
       as twenty-odd replace_text steps (Oct 24, `pattern.Attempt`). The
       inverse of `introduce_parameter`, replacing a parameter with the
       argument every call passes, is named only inside item 24 (Oct 22,
-      `change_field_type`'s modes).
+      `change_field_type`'s modes). *Done* for one function at a time:
+      remove_parameter's `value` (the expression every call passes, in
+      the body's terms: `b.info`) writes it for the body's uses and
+      drops the parameter, once each call is shown to pass it and each
+      place the body evaluates it to get what the call passed (the
+      checks of introduce_parameter, run the other way); a recursive
+      call passing the parameter on counts as passing it. Left: methods
+      that pass the parameter to each other (the thirteen), where no one
+      method's calls pass the field until another is done; a `value`
+      over several functions at once, or setting the field first and
+      proving the calls pass it, would cover them.
     - **A field between structs.** `relaxer` moved from the matcher to
       `folder` by text (Oct 24): no tool moves a field to another struct
       that every use can reach.
