@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -1193,5 +1194,41 @@ func TestArgumentAliases(t *testing.T) {
 		if note := strings.Join(res.Notes, "\n"); !strings.Contains(note, c.note) || c.note == "" && note != "" {
 			t.Errorf("%s: notes %q, want %q", c.args, note, c.note)
 		}
+	}
+}
+
+// An argument the tool takes as text may be given as a file instead:
+// content_file for content, read from a path absolute or relative to the
+// root, so that long content need not be quoted into the call.
+func TestArgumentFromFile(t *testing.T) {
+	ws, path := setup(t, src)
+	os.WriteFile(filepath.Join(filepath.Dir(path), "body.txt"), []byte("x := 1\n"), 0o644)
+	abs := filepath.Join(t.TempDir(), "new.txt")
+	os.WriteFile(abs, []byte("b"), 0o644)
+	for _, c := range []struct{ args, summary string }{
+		{`{"file": "m.go", "content_file": "body.txt"}`, `{"content":"x := 1\n","file":"m.go"}`},
+		{`{"file": "m.go", "old": "a", "new_file": ` + strconv.Quote(abs) + `}`, `{"file":"m.go","new":"b","old":"a"}`},
+	} {
+		res, err := refactor.Run(ws, echo{}, json.RawMessage(c.args), refactor.Options{DryRun: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if res.Summary != c.summary {
+			t.Errorf("%s: got %s, want %s", c.args, res.Summary, c.summary)
+		}
+	}
+	res, err := refactor.Run(ws, echo{}, json.RawMessage(`{"file": "m.go", "content_file": "missing.txt"}`), refactor.Options{DryRun: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(res.Refused, "content_file") || !strings.Contains(res.Refused, "missing.txt") {
+		t.Errorf("refused %q, want it to name content_file and the path", res.Refused)
+	}
+	b, err := refactor.RunBatch(ws, []refactor.Step{{Refactoring: echo{}, Args: json.RawMessage(`{"file": "m.go", "content_file": "body.txt"}`)}}, refactor.Options{DryRun: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.Refused != "" {
+		t.Errorf("batch refused: %s", b.Refused)
 	}
 }

@@ -3,8 +3,11 @@
 package textutil
 
 import (
+	"fmt"
 	"go/scanner"
 	"go/token"
+	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -86,4 +89,86 @@ func Plural(n int) string {
 		return ""
 	}
 	return "s"
+}
+
+// Locate returns the byte spans of old in src[lo:hi]: its exact
+// occurrences or, when there are none, those that match it with the
+// spacing within lines ignored (each run of spaces and tabs standing for
+// any other, as gofmt aligns them); loose says which. refusal says why
+// none was taken: old was not found, or was found more than once and not
+// all were asked for. where names the file in a refusal.
+func Locate(src, old string, lo, hi int, all bool, where string) (spans [][2]int, loose bool, refusal string) {
+	text := src[lo:hi]
+	for i := 0; ; {
+		j := strings.Index(text[i:], old)
+		if j < 0 {
+			break
+		}
+		spans = append(spans, [2]int{lo + i + j, lo + i + j + len(old)})
+		i += j + len(old)
+	}
+	if len(spans) == 0 {
+		for _, m := range spacingIgnored(old).FindAllStringIndex(text, -1) {
+			spans = append(spans, [2]int{lo + m[0], lo + m[1]})
+		}
+		loose = len(spans) > 0
+	}
+	switch {
+	case len(spans) == 0:
+		return nil, false, fmt.Sprintf("old was not found in %s; it must match the file, though spacing within lines may differ%s", where, lineHint(src[:hi], old, lo))
+	case len(spans) > 1 && !all:
+		var lines []string
+		for _, s := range spans {
+			lines = append(lines, strconv.Itoa(1+strings.Count(src[:s[0]], "\n")))
+		}
+		return nil, false, fmt.Sprintf("old occurs %d times in %s (lines %s); include more of the surrounding text to pick one, or set all_occurrences", len(spans), where, strings.Join(lines, ", "))
+	}
+	return spans, loose, ""
+}
+
+// spacingIgnored returns a pattern matching text with each run of spaces
+// and tabs in it standing for any other, and line breaks kept.
+func spacingIgnored(text string) *regexp.Regexp {
+	var sb strings.Builder
+	for i := 0; i < len(text); {
+		if c := text[i]; c != ' ' && c != '\t' && c != '\n' {
+			sb.WriteString(regexp.QuoteMeta(text[i : i+1]))
+			i++
+			continue
+		}
+		j := i
+		for j < len(text) && strings.IndexByte(" \t\n", text[j]) >= 0 {
+			j++
+		}
+		if n := strings.Count(text[i:j], "\n"); n > 0 {
+			sb.WriteString(strings.Repeat(`[ \t]*\n`, n) + `[ \t]*`)
+		} else {
+			sb.WriteString(`[ \t]+`)
+		}
+		i = j
+	}
+	return regexp.MustCompile(sb.String())
+}
+
+// lineHint names, for a refusal, the lines of src from offset lo where the
+// first line of old that src has is, with spacing ignored; "" if none.
+func lineHint(src, old string, lo int) string {
+	start := 1 + strings.Count(src[:lo], "\n")
+	srcLines := strings.Split(src[lo:], "\n")
+	for _, ol := range strings.Split(old, "\n") {
+		want := strings.Join(strings.Fields(ol), " ")
+		if want == "" {
+			continue
+		}
+		var at []string
+		for i, sl := range srcLines {
+			if strings.Contains(strings.Join(strings.Fields(sl), " "), want) {
+				at = append(at, strconv.Itoa(start+i))
+			}
+		}
+		if len(at) > 0 {
+			return fmt.Sprintf("; its line %s is at line%s %s", want, Plural(len(at)), strings.Join(at[:min(len(at), 5)], ", "))
+		}
+	}
+	return ""
 }

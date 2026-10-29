@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -59,6 +61,12 @@ func argsProblem(schema, args json.RawMessage) string {
 	if len(args) > 0 && json.Unmarshal(args, &given) != nil {
 		return ""
 	}
+	for k, v := range given {
+		if base, ok := fileArgOf(s.Properties, given, k); ok {
+			given[base] = v
+			delete(given, k)
+		}
+	}
 	var unknown, missing []string
 	for k := range given {
 		if _, ok := s.Properties[k]; !ok {
@@ -107,6 +115,9 @@ func aliasArgs(schema, args json.RawMessage) (json.RawMessage, string) {
 		if _, ok := s.Properties[k]; ok {
 			continue
 		}
+		if _, ok := fileArgOf(s.Properties, given, k); ok {
+			continue // read by readFileArgs
+		}
 		var fits []string
 		for _, w := range strings.Split(k, "_") {
 			if free(w) && !slices.Contains(fits, w) {
@@ -131,6 +142,59 @@ func aliasArgs(schema, args json.RawMessage) (json.RawMessage, string) {
 		return args, ""
 	}
 	return out, "took " + orList(took, "and")
+}
+
+// fileArgOf returns the argument the given argument k stands for when it
+// names a file to read that argument from: k is base_file, base is an
+// argument of the schema's properties that given does not give, and k is
+// not itself one (create_from_usage's to_file).
+func fileArgOf(props map[string]json.RawMessage, given map[string]json.RawMessage, k string) (string, bool) {
+	base, ok := strings.CutSuffix(k, "_file")
+	if !ok {
+		return "", false
+	}
+	_, own := props[k]
+	_, has := props[base]
+	_, taken := given[base]
+	return base, !own && has && !taken
+}
+
+// readFileArgs replaces each argument of args that names a file to read
+// another from (content_file for content) with that file's text, read
+// from a path absolute or relative to dir.
+func readFileArgs(dir string, schema, args json.RawMessage) (json.RawMessage, error) {
+	var s struct {
+		Properties map[string]json.RawMessage `json:"properties"`
+	}
+	given := map[string]json.RawMessage{}
+	if json.Unmarshal(schema, &s) != nil || len(s.Properties) == 0 || len(args) == 0 || json.Unmarshal(args, &given) != nil {
+		return args, nil
+	}
+	changed := false
+	for _, k := range slices.Sorted(maps.Keys(given)) {
+		base, ok := fileArgOf(s.Properties, given, k)
+		if !ok {
+			continue
+		}
+		var path string
+		if err := json.Unmarshal(given[k], &path); err != nil {
+			return nil, Refusef("%s must be a path, a string", k)
+		}
+		if !filepath.IsAbs(path) {
+			path = filepath.Join(dir, path)
+		}
+		text, err := os.ReadFile(path)
+		if err != nil {
+			return nil, Refusef("cannot read %s %s: %v", k, path, err)
+		}
+		given[base], _ = json.Marshal(string(text))
+		delete(given, k)
+		changed = true
+	}
+	if !changed {
+		return args, nil
+	}
+	return json.Marshal(given)
 }
 
 // orList joins items as "a, b or c", with conj in place of or.

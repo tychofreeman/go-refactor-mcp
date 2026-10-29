@@ -25,7 +25,7 @@ func (*CreateFile) Name() string { return "create_file" }
 
 func (*CreateFile) Description() string {
 	return `Create a new file, TypeScript or not (a fixture, JSON), with any missing directories: an edit. A source file a project's include takes joins that project; what it adds must type-check, so a test written first goes with what it calls, in one batch with check "end".
-The file must not exist; undo removes it.`
+The file must not exist, unless overwrite is set to replace all of it; undo removes or restores it.`
 }
 
 func (*CreateFile) InputSchema() json.RawMessage {
@@ -33,7 +33,8 @@ func (*CreateFile) InputSchema() json.RawMessage {
   "type": "object",
   "properties": {
     "file":    {"type": "string", "description": "Path of the new file, relative to the root."},
-    "content": {"type": "string", "description": "The file's complete contents."}
+    "content": {"type": "string", "description": "The file's complete contents."},
+    "overwrite": {"type": "boolean", "description": "Replace the file if it exists."}
   },
   "required": ["file", "content"],
   "additionalProperties": false
@@ -42,8 +43,9 @@ func (*CreateFile) InputSchema() json.RawMessage {
 
 func (*CreateFile) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
 	var a struct {
-		File    string `json:"file"`
-		Content string `json:"content"`
+		File      string `json:"file"`
+		Content   string `json:"content"`
+		Overwrite bool   `json:"overwrite"`
 	}
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
@@ -52,16 +54,22 @@ func (*CreateFile) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor
 	if !ws.Contains(path) {
 		return nil, refactor.Refusef("%s is outside the root %s, or in node_modules", a.File, ws.Root)
 	}
-	if _, err := os.Stat(path); err == nil {
-		return nil, refactor.Refusef("%s already exists; change it with the other tools", a.File)
+	old, err := os.ReadFile(path)
+	exists := err == nil
+	if exists && !a.Overwrite {
+		return nil, refactor.Refusef("%s already exists; change it with the other tools, or set overwrite to replace it", a.File)
+	}
+	did := "created"
+	if exists {
+		did = "replaced"
 	}
 	content := a.Content
 	if content != "" && !strings.HasSuffix(content, "\n") {
 		content += "\n"
 	}
 	return &refactor.Plan{
-		Summary:  fmt.Sprintf("created %s (%d lines)", ws.Rel(path), strings.Count(content, "\n")),
-		Edits:    []edit.FileEdit{{Path: path, Edits: []edit.TextEdit{{NewText: content}}, Verbatim: true}},
+		Summary:  fmt.Sprintf("%s %s (%d lines)", did, ws.Rel(path), strings.Count(content, "\n")),
+		Edits:    []edit.FileEdit{{Path: path, Edits: []edit.TextEdit{{End: len(old), NewText: content}}, Verbatim: true}},
 		Supplied: content,
 	}, nil
 }

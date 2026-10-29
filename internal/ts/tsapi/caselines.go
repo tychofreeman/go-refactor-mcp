@@ -59,3 +59,17 @@ func (p *Project) CaseLines(path, function, value string, withBreak bool) (first
 	}
 	return l.line(l.pos(stmts[0])), l.line(stmts[len(stmts)-1].End() - 1), ""
 }
+
+// FunctionSpan returns the byte offsets of the function (name, or
+// Class.method) of the file at path, from its first token to its end.
+func (p *Project) FunctionSpan(path, function string) (start, end int, refusal string) {
+	l, why := p.lined(path)
+	if why != "" {
+		return 0, 0, why
+	}
+	fn, _, _, why := l.function(function)
+	if why != "" {
+		return 0, 0, why
+	}
+	return l.pos(fn), fn.End(), ""
+}

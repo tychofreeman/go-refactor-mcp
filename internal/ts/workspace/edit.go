@@ -98,3 +98,13 @@ func (w *Workspace) CaseLines(path, function, value string, withBreak bool) (fir
 	}
 	return p.CaseLines(path, function, value, withBreak)
 }
+
+// FunctionSpan returns the byte offsets of the function (name, or
+// Class.method) of the file at path.
+func (w *Workspace) FunctionSpan(path, function string) (start, end int, refusal string) {
+	p := w.project(path)
+	if p == nil {
+		return 0, 0, w.none(path)
+	}
+	return p.FunctionSpan(path, function)
+}

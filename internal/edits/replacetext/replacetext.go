@@ -18,6 +18,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/gocode"
 	"github.com/tychofreeman/go-refactor-mcp/internal/imports"
+	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
@@ -34,7 +35,7 @@ func (*ReplaceText) Name() string { return "replace_text" }
 
 func (*ReplaceText) Description() string {
 	return `Replace exact text in a file: an edit, for what the other tools do not cover: text in string literals and comments, and files that are not Go (go.mod, JSON, test fixtures, docs). old "version 1.2" and new "version 1.3" change that text in README.md. To change Go code, replace_statements, replace_expression and insert_statements usually fit better.
-old must be exactly as in the file, whitespace and indentation included, and occur once, or set all_occurrences. files in place of file makes the same replacement in several files (old must be in each). It addresses text, not lines, so it stays valid after earlier steps of a batch. In a Go file, packages new uses (strings.Join) are imported.`
+old must be as in the file and occur once, or set all_occurrences; spacing within lines may differ (gofmt's alignment) where that still finds it. function limits the search to one function of a Go file. append with no old adds new at the end of the file. files in place of file makes the same replacement in several files (old must be in each). It addresses text, not lines, so it stays valid after earlier steps of a batch. In a Go file, packages new uses (strings.Join) are imported.`
 }
 
 func (*ReplaceText) InputSchema() json.RawMessage {
@@ -43,12 +44,14 @@ func (*ReplaceText) InputSchema() json.RawMessage {
   "properties": {
     "file":            {"type": "string",  "description": "Path of the file, relative to the workspace root: any file of the module, Go or not."},
     "files":           {"type": "array", "items": {"type": "string"}, "description": "Instead of file: several files, to make the same replacement in each."},
-    "old":             {"type": "string",  "description": "The text to replace, exactly as it is in the file (whitespace and indentation too)."},
+    "old":             {"type": "string",  "description": "The text to replace, as it is in the file."},
     "new":             {"type": "string",  "description": "The text to put in its place."},
     "all_occurrences": {"type": "boolean", "description": "Replace every occurrence of old in the file, not just the only one."},
+    "function":        {"type": "string",  "description": "Optional: look for old only in this function of the Go file (Name, or Type.Method)."},
+    "append":          {"type": "boolean", "description": "Instead of old: add new at the end of the file."},
     "imports":         {"type": "array", "items": {"type": "string"}, "description": "Optional: import paths to use for package names new uses, when the name alone is ambiguous."}
   },
-  "required": ["old", "new"],
+  "required": ["new"],
   "additionalProperties": false
 }`)
 }
@@ -63,6 +66,8 @@ func (*ReplaceText) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refacto
 		Old            string   `json:"old"`
 		New            string   `json:"new"`
 		AllOccurrences bool     `json:"all_occurrences"`
+		Function       string   `json:"function"`
+		Append         bool     `json:"append"`
 		Imports        []string `json:"imports"`
 	}
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
@@ -74,17 +79,26 @@ func (*ReplaceText) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refacto
 	case a.File != "":
 		a.Files = []string{a.File}
 	}
-	if len(a.Files) == 0 || a.Old == "" {
-		return nil, refactor.Refusef("file (or files) and old are required")
+	switch {
+	case len(a.Files) == 0:
+		return nil, refactor.Refusef("file (or files) is required")
+	case a.Append && (a.Old != "" || a.Function != ""):
+		return nil, refactor.Refusef("append adds new at the end; leave out old and function")
+	case !a.Append && a.Old == "":
+		return nil, refactor.Refusef("old is required, or append to add new at the end")
+	case a.Function != "" && len(a.Files) > 1:
+		return nil, refactor.Refusef("function names a function of one file; give file, not files")
 	}
 	plan := &refactor.Plan{Supplied: a.New}
 	n := 0
 	var added []string
+	loose := false
 	for _, file := range a.Files {
-		fe, k, err := fileEdit(ws, file, a.Old, a.New, a.AllOccurrences)
+		fe, k, l, err := fileEdit(ws, file, a.Old, a.New, a.AllOccurrences, a.Function, a.Append)
 		if err != nil {
 			return nil, err
 		}
+		loose = loose || l
 		paths, err := addImports(ws, &fe, a.Imports)
 		if err != nil {
 			return nil, err
@@ -97,6 +111,9 @@ func (*ReplaceText) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refacto
 		plan.Edits = append(plan.Edits, fe)
 		n += k
 	}
+	if loose {
+		plan.Notes = append(plan.Notes, "old matched with the spacing within lines ignored")
+	}
 	if len(added) > 0 {
 		plan.Notes = append(plan.Notes, gocode.ImportNote("added", added))
 	}
@@ -105,45 +122,54 @@ func (*ReplaceText) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refacto
 		where = fmt.Sprintf("%d files", len(a.Files))
 	}
 	plan.Summary = fmt.Sprintf("replaced %d occurrence%s of the text in %s", n, textutil.Plural(n), where)
+	if a.Append {
+		plan.Summary = "appended the text to " + where
+	}
 	return plan, nil
 }
 
 // fileEdit returns the edit replacing old with new in file: its one
-// occurrence, or with all every occurrence.
-func fileEdit(ws *workspace.Workspace, file, old, new string, all bool) (edit.FileEdit, int, error) {
+// occurrence, or with all every occurrence; in function alone if one is
+// named; or with appending, adding new at the end. loose says whether old
+// matched only with the spacing within lines ignored.
+func fileEdit(ws *workspace.Workspace, file, old, new string, all bool, function string, appending bool) (fe edit.FileEdit, n int, loose bool, err error) {
 	path := ws.Abs(file)
 	rel := ws.Rel(path)
 	if !ws.Contains(path) {
-		return edit.FileEdit{}, 0, refactor.Refusef("%s is outside the workspace %s", file, ws.Root)
+		return fe, 0, false, refactor.Refusef("%s is outside the workspace %s", file, ws.Root)
 	}
 	src, err := os.ReadFile(path)
 	if err != nil {
-		return edit.FileEdit{}, 0, refactor.Refusef("cannot read %s: %v; to make a new file, use create_file", rel, err)
+		return fe, 0, false, refactor.Refusef("cannot read %s: %v; to make a new file, use create_file", rel, err)
 	}
-	var at []int // byte offsets of old in src
-	for i := 0; ; {
-		j := strings.Index(string(src[i:]), old)
-		if j < 0 {
-			break
+	fe = edit.FileEdit{Path: path}
+	if appending {
+		if len(src) > 0 && src[len(src)-1] != '\n' {
+			new = "\n" + new
 		}
-		at = append(at, i+j)
-		i += j + len(old)
+		fe.Edits = []edit.TextEdit{{Start: len(src), End: len(src), NewText: new}}
+		return fe, 1, false, nil
 	}
-	switch {
-	case len(at) == 0:
-		return edit.FileEdit{}, 0, refactor.Refusef("old was not found in %s; it must match the file exactly, including whitespace and indentation", rel)
-	case len(at) > 1 && !all:
-		var lines []string
-		for _, off := range at {
-			lines = append(lines, strconv.Itoa(1+strings.Count(string(src[:off]), "\n")))
+	lo, hi := 0, len(src)
+	if function != "" {
+		_, f := ws.FileSyntax(path)
+		var fd *ast.FuncDecl
+		if f != nil {
+			fd = locate.Func(f, function)
 		}
-		return edit.FileEdit{}, 0, refactor.Refusef("old occurs %d times in %s (lines %s); include more of the surrounding text to pick one, or set all_occurrences", len(at), rel, strings.Join(lines, ", "))
+		if fd == nil {
+			return fe, 0, false, refactor.Refusef("no function %s in %s", function, rel)
+		}
+		lo, hi = ws.Fset.Position(fd.Pos()).Offset, ws.Fset.Position(fd.End()).Offset
 	}
-	fe := edit.FileEdit{Path: path}
-	for _, off := range at {
-		fe.Edits = append(fe.Edits, edit.TextEdit{Start: off, End: off + len(old), NewText: bracketed(ws, path, off, old, new)})
+	spans, loose, why := textutil.Locate(string(src), old, lo, hi, all, rel)
+	if why != "" {
+		return fe, 0, false, refactor.Refusef("%s", why)
 	}
-	return fe, len(at), nil
+	for _, s := range spans {
+		fe.Edits = append(fe.Edits, edit.TextEdit{Start: s[0], End: s[1], NewText: bracketed(ws, path, s[0], string(src[s[0]:s[1]]), new)})
+	}
+	return fe, len(spans), loose, nil
 }
 
 // bracketed returns new, to replace old at offset off of the Go file

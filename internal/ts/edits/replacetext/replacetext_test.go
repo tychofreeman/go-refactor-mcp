@@ -69,3 +69,23 @@ func TestReplaceText(t *testing.T) {
 		}
 	}
 }
+
+// append adds to the end, function limits the search to one function, and
+// spacing within lines may differ from the file's.
+func TestReplaceTextOptions(t *testing.T) {
+	ws, dir := solution(t)
+	if err := os.WriteFile(filepath.Join(dir, "NOTES.md"), []byte("- a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res := run(t, ws, `{"file": "NOTES.md", "append": true, "new": "- b\n"}`)
+	if !res.Applied || read(t, dir, "NOTES.md") != "- a\n- b\n" {
+		t.Fatalf("not appended: %s", res)
+	}
+	res = run(t, ws, `{"file": "src/plant.ts", "function": "water", "old": "return    `+"`"+`${liters} L`+"`"+`", "new": "return `+"`"+`${liters} litres`+"`"+`"}`)
+	if !res.Applied || !strings.Contains(read(t, dir, "src/plant.ts"), "litres") {
+		t.Fatalf("not replaced in water: %s", res)
+	}
+	if res := run(t, ws, `{"file": "src/plant.ts", "function": "prune", "old": "x", "new": "y"}`); res.Applied || !strings.Contains(res.Refused, "prune") {
+		t.Errorf("want a refusal naming prune, got %s", res)
+	}
+}

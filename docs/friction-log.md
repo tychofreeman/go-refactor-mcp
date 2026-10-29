@@ -3436,3 +3436,13 @@ CLI in one batch checked at its end. A first rename landed on a stale
 main (a pull had failed on a fetch refspec of a deleted branch); it was
 discarded and redone on the current one. This entry appended with a
 heredoc.
+
+## 2026-10-28: replace_text's append, function and spacing; create_file's overwrite; file arguments
+
+All through the CLI: tests and goldens first, then the code, in batches
+checked at their end; the TypeScript side in a batch of its own. A first
+batch mixing both languages' tests was refused for a stub it could not
+type (`Locate`, used before declared) after twelve minutes, mostly a
+wait loop of mine whose `pgrep -f` matched itself; the batch then went
+with the implementation in it. This entry appended with replace_text's
+new `append`, the first not by heredoc. Nothing by hand.

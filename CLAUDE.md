@@ -93,17 +93,19 @@ until the MCP is reconnected.
    none (`add_field` for a field the new test uses).
 7. **replace_text for everything else:** string literals, comments, and
    files that are not Go (README, docs, JSON fixtures); `files` makes
-   the same replacement in several files. `old` must match
-   the file exactly, after gofmt's alignment: if it is not found, grep for
-   the line as it is.
+   the same replacement in several files, `function` looks only in one
+   function, and `append` adds `new` at the end of the file (the
+   friction log's entry). `old` must match the file, though spacing
+   within lines may differ; a refusal names the nearest lines.
+   Through the CLI, `content_file` (or `new_file`) takes a text
+   argument from a file, so long content needs no quoting.
 8. **Read refusals; they say what to send.** A refusal changes nothing. A
    range that cuts a statement is refused with the range to use. Every
    step can be undone with `undo`.
 
 Known gaps (do these by hand and log them): nothing restores a file to an
-earlier commit's version, and nothing replaces a whole file (create_file
-refuses one that exists: use replace_text, or create the new one under
-another name, delete_file the old and move_file the new into place).
+earlier commit's version (create_file with `overwrite` and the old
+text is the way), and nothing copies a file.
 
 ## Measuring cost
 
