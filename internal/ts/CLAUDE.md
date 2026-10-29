@@ -29,8 +29,8 @@ still applies.
   session, which would hold a second copy of every program.
 - Read TypeScript with `inspect` as Go's: `refactor inspect file=src/x.ts`,
   and batches and steps on TypeScript files, run through the server's
-  languages from the CLI; `refactor undo` does not reach them across
-  invocations (their history lives in the process).
+  languages from the CLI; `refactor undo` reverts them as Go's (one
+  stack file per module for both languages).
 - Fixtures are small solutions under `testdata/` in the garden domain
   of the tool examples (`Plant`, `Bed`, `water`), not the eval tasks'.
   They need no `node_modules`: `"types": []` in the config.

@@ -71,6 +71,16 @@ func TestTypeScript(t *testing.T) {
 	if b, _ := os.ReadFile(filepath.Join(dir, "src/a.ts")); !strings.Contains(string(b), "function soak(") {
 		t.Errorf("a.ts:\n%s", b)
 	}
+	// undo, in another invocation, reverts the rename.
+	if code := run([]string{"-C", dir, "undo"}); code != 0 {
+		t.Fatalf("undo: exit status %d\n%s", code, out.String())
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, "src/a.ts")); !strings.Contains(string(b), "function water(") {
+		t.Errorf("a.ts after undo:\n%s", b)
+	}
+	if code := run([]string{"-C", dir, "undo"}); code != 2 {
+		t.Errorf("a second undo: exit status %d, want 2 (nothing left)\n%s", code, out.String())
+	}
 }
 
 func TestRunDeclaresWhatAnEditCalls(t *testing.T) {

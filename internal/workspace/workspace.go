@@ -149,7 +149,7 @@ func Load(dir string, patterns ...string) (*Workspace, error) {
 	if err != nil {
 		return nil, err
 	}
-	root := moduleRoot(base)
+	root := ModuleRoot(base)
 	if len(patterns) == 0 {
 		patterns = []string{"./..."}
 	}
@@ -253,9 +253,9 @@ func (w *Workspace) Abs(path string) string {
 	return p
 }
 
-// moduleRoot returns the nearest ancestor of dir (inclusive) containing a
+// ModuleRoot returns the nearest ancestor of dir (inclusive) containing a
 // go.mod, or dir itself if there is none.
-func moduleRoot(dir string) string {
+func ModuleRoot(dir string) string {
 	for d := dir; ; {
 		if fileExists(filepath.Join(d, "go.mod")) {
 			return d

@@ -84,6 +84,8 @@ results are in `docs/cost-history.md`.
   a step must add no error, rather than start from none. The cost: an
   error already in a file can hide what a step breaks there (an `any`
   where a type was lost). Revisit with evidence from real repos.
+  Asked again at the end of item 41 (2026-10-28): keep accepting them
+  for now; the user had no other repository in mind to try.
 
 - **Manual edits as small as possible** (2026-10-21, the user's
   principle): not every operation will exist; use the ones there are,
