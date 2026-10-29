@@ -26,6 +26,7 @@ func (*RemoveParameter) Name() string { return "remove_parameter" }
 
 func (*RemoveParameter) Description() string {
 	return `Remove a parameter the body does not use, and its argument at every call in the workspace: removing retries, func send(to string, retries int) becomes func send(to string), and send(addr, 3) becomes send(addr). Use it last when taking a feature out: first change the body so it no longer uses the parameter. A body whose first mention of it assigns it (n, err := f()) does not use it.
+With value, a parameter the body uses goes too, when every call passes that expression of the receiver or the other parameters, the inverse of introduce_parameter: value "b.depth" makes func (b *Bed) water(depth int) int { return depth * 2 } func (b *Bed) water() int { return b.depth * 2 }, and x.water(x.depth) x.water().
 Identify the function by file and name, or by line at its declaration or any call, and give the parameter. A dropped argument must have no side effects and not be able to panic.
 Refuses, saying why: a body that reads the parameter, a function used as a value, a method that would start or stop implementing an interface from outside the module, an argument whose removal leaves a variable or import unused.`
 }
@@ -38,7 +39,8 @@ func (*RemoveParameter) InputSchema() json.RawMessage {
     "line":      {"type": "integer", "description": "1-based line of that occurrence. Omit it to find name as a symbol of the package of file."},
     "name":      {"type": "string",  "description": "The function's name: with line, just the method name for a method; without line, the package-level name or Type.Method."},
     "column":    {"type": "integer", "description": "Optional 1-based column, only needed to disambiguate."},
-    "parameter": {"type": "string",  "description": "Name of the parameter to remove."}
+    "parameter": {"type": "string",  "description": "Name of the parameter to remove."},
+    "value":     {"type": "string",  "description": "Optional: what every call passes for it, written in the body's terms (the receiver, other parameters); the body's uses become this."}
   },
   "required": ["file", "name", "parameter"],
   "additionalProperties": false
@@ -51,6 +53,7 @@ type removeArgs struct {
 	Column    int    `json:"column,omitempty"`
 	Name      string `json:"name"`
 	Parameter string `json:"parameter"`
+	Value     string `json:"value,omitempty"`
 }
 
 // cut is a range of source text the refactoring deletes.
@@ -65,6 +68,12 @@ func (*RemoveParameter) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
+	return planRemove(ws, a)
+}
+
+// planRemove removes the parameter a names; with a.Value, one the body
+// has stopped using once every call is shown to pass that value.
+func planRemove(ws *workspace.Workspace, a removeArgs) (*refactor.Plan, error) {
 	t, err := findFamily(ws, locate.IdentQuery{File: a.File, Line: a.Line, Column: a.Column, Name: a.Name})
 	if err != nil {
 		return nil, err
@@ -75,6 +84,12 @@ func (*RemoveParameter) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 	}
 	var cuts []cut
 	for _, m := range t.group() {
+		var shown []ast.Expr
+		if a.Value != "" && m.decl != nil {
+			if shown, err = m.shownValue(a.Value, m.params[at], at); err != nil {
+				return nil, err
+			}
+		}
 		if err := m.checkUnused(m.params[at]); err != nil {
 			return nil, err
 		}
@@ -90,6 +105,15 @@ func (*RemoveParameter) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 			args := c.expr.Args
 			if at >= len(args) {
 				continue // a variadic parameter given no arguments
+			}
+			if len(shown) > 0 {
+				// The body now evaluates the value where it used the
+				// argument, as shownValue checked.
+				if err := m.checkPasses(shown[0], c, at); err != nil {
+					return nil, err
+				}
+				cuts = append(cuts, m.argCut(c.expr, at, variadic))
+				continue
 			}
 			dropped := args[at : at+1]
 			if variadic {
@@ -115,7 +139,11 @@ func (*RemoveParameter) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 	for _, m := range t.group() {
 		fes = append(fes, m.fixes...)
 	}
-	return t.newPlan(fmt.Sprintf("removed parameter %q from %s", a.Parameter, t.groupName()), fes), nil
+	summary := fmt.Sprintf("removed parameter %q from %s", a.Parameter, t.groupName())
+	if a.Value != "" {
+		summary += ", which every call passed as " + a.Value
+	}
+	return t.newPlan(summary, fes), nil
 }
 
 // paramIndex returns the index of the named parameter in the flattened
