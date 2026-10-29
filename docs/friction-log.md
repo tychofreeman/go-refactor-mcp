@@ -3612,3 +3612,12 @@ Nothing by hand.
   with delete_file. Nothing was edited by hand.
 - Everything else through the CLI (replace_declaration, add_declaration,
   replace_text).
+
+## 2026-10-29: extract_struct and remove_dead_code on the new reflection check
+
+- The goldens moved from `refuse_*` to their printing names by
+  create_file and delete_file steps that Python wrote from the old files,
+  and their out/ by `go test -update`. Nothing was edited by hand.
+- `verbFlags` and `namedVerbs` became `verb` and `formatVerbs` by rename
+  before their replacement (replace_declaration refuses a content that
+  declares another name), and a local `verb` had to be renamed first.
