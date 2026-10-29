@@ -42,6 +42,18 @@ func run(t *testing.T, ws *workspace.Workspace, args string) *refactor.Result {
 	return res
 }
 
+// overwrite replaces a file that exists.
+func TestOverwrite(t *testing.T) {
+	ws, dir := solution(t)
+	res := run(t, ws, `{"file": "src/plant.ts", "content": "export const water = (liters: number): string => `+"`"+`${liters} L`+"`"+`;\n", "overwrite": true}`)
+	if !res.Applied || !strings.Contains(read(t, dir, "src/plant.ts"), "export const water") {
+		t.Fatalf("not overwritten: %s", res)
+	}
+	if res := run(t, ws, `{"file": "src/plant.ts", "content": "x", "overwrite": false}`); res.Applied || !strings.Contains(res.Refused, "overwrite") {
+		t.Errorf("want a refusal naming overwrite, got %s", res)
+	}
+}
+
 func TestCreateFile(t *testing.T) {
 	ws, dir := solution(t)
 	res := run(t, ws, `{"file": "src/soil.ts", "content": "export const ph = 6.5;"}`)

@@ -16,7 +16,8 @@ results are in `docs/cost-history.md`.
   change to the tools.
 - Ask before starting an A/B run unless the user asked for one: each costs
   a few dollars.
-- Append friction log entries at the end of `docs/friction-log.md`.
+- Append friction log entries at the end of `docs/friction-log.md`,
+  with replace_text's `append` (since 2026-10-28; before, by heredoc).
   Inserting them before an older entry put every PR's entry at the
   same place, so parallel PRs conflicted there one after another
   (2026-10-22, #263-#267).

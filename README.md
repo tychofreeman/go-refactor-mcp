@@ -1877,12 +1877,16 @@ hand or a tool got in the way.
       loop's indentation; Oct 20, a field comment; Oct 22, a map's
       keys). CLAUDE.md says to grep for the line; the tool could match
       ignoring whitespace when one place matches, or show the nearest
-      match in its refusal.
+      match in its refusal. *Done:* when `old` is not found exactly,
+      replace_text matches it with the spacing within lines ignored (a
+      note says so), and a refusal names the lines where the first line
+      of `old` the file has is (`textutil.Locate`, both languages).
     - **Files that are not Go.** No tool copies a file or a directory of
       fixtures (Oct 21, Oct 26: `cp`), replaces a whole non-Go file (Oct
       25, a reference batch rewritten by Python), or moves a block of
       text within a file (Oct 20, the friction log reordered by a
-      script).
+      script). Replacing a whole file is *done* (create_file's
+      `overwrite`); copying files and moving a block of text are not.
     - **Experiments the session notes leave open:** a hazard as one site
       among many, or a prompt that does not ask to keep behavior
       (cost-history 15); and tasks a model gets wrong by hand, named as
@@ -1953,7 +1957,11 @@ hand or a tool got in the way.
         batch's JSON by a script, since `create_file` takes its content
         only inline. A `content_file` argument naming a local file would
         remove the script; the same for `add_declaration`'s and
-        `replace_statements`' `content`.
+        `replace_statements`' `content`. *Done,* for every tool and
+        both languages: `content_file` gives `content` from a file
+        (`new_file` gives `new`, and so on: any `X_file` the schema
+        lacks, for a text argument `X` it has), a path absolute or
+        relative to the root (`refactor.readFileArgs`).
       - **`replace_declaration` takes exactly one declaration.** Twice the
         replacement came with a new helper beside it; the refusal ("it has
         2") rolled the batch back, and the fix was `replace_declaration`
@@ -2008,6 +2016,7 @@ hand or a tool got in the way.
         by substring replacements computed outside and sent as a whole
         `replace_declaration`. `replace_text` scoped by `function` would
         send only the changed parts, and make `old` unique there.
+        *Done:* replace_text's `function` (Go and TypeScript).
       - **Imports tidied at the end of a batch checked at its end.** A
         step replacing the last user of an import removed it, and the
         next step, which needed it, was refused; with `check: "end"`
@@ -2018,7 +2027,9 @@ hand or a tool got in the way.
         sessions did the same, 126 times); an `append` (or `at: "end"`)
         has no anchor to find. `create_file` refuses an existing file, so
         a new `wasm_maps.go` took create, delete and move; an
-        `overwrite` option would be one step.
+        `overwrite` option would be one step. *Done:* replace_text's
+        `append` adds `new` at the end of the file, and create_file's
+        `overwrite` replaces one that exists (both languages).
       - **Asked again:** whether a name is free in a package (twice more:
         `field`, `strings`), and `create_file` from a local file (a batch
         was lost to an unquoted heredoc running the backticks in Go

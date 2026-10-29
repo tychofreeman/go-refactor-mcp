@@ -260,6 +260,11 @@ func Run[W Workspace](ws W, r RefactoringOf[W], args json.RawMessage, opts Optio
 	}
 
 	args, took := aliasArgs(r.InputSchema(), args)
+	args, err := readFileArgs(ws.Dir(), r.InputSchema(), args)
+	if err != nil {
+		res.Refused = err.Error()
+		return res, nil
+	}
 	if ex, ok := r.(ExpanderOf[W]); ok {
 		steps, err := ex.Expand(ws, args)
 		if err != nil && IsRefusal(err) {

@@ -27,7 +27,7 @@ func (*CreateFile) Name() string { return "create_file" }
 
 func (*CreateFile) Description() string {
 	return `Create a new file, Go or not (go.mod, JSON, a test fixture), with any missing directories: an edit. A Go file must parse and match its directory's package (a test may use the _test package), and is gofmt-ed. What it calls that nothing declares gets a stub, so a test written first compiles and fails: cart_test.go with if got := (&Cart{}).Total(); got != 0 { ... } also declares func (c *Cart) Total() int.
-For several files, such as a fixture directory, send the create_file steps together in one batch. The file must not exist; undo removes it.`
+For several files, such as a fixture directory, send the create_file steps together in one batch. The file must not exist, unless overwrite is set to replace all of it; undo removes or restores it.`
 }
 
 func (*CreateFile) InputSchema() json.RawMessage {
@@ -35,7 +35,8 @@ func (*CreateFile) InputSchema() json.RawMessage {
   "type": "object",
   "properties": {
     "file":    {"type": "string", "description": "Path of the new file, relative to the workspace root."},
-    "content": {"type": "string", "description": "The file's complete contents."}
+    "content": {"type": "string", "description": "The file's complete contents."},
+    "overwrite": {"type": "boolean", "description": "Replace the file if it exists."}
   },
   "required": ["file", "content"],
   "additionalProperties": false
@@ -45,8 +46,9 @@ func (*CreateFile) InputSchema() json.RawMessage {
 func (*CreateFile) ChangesBehavior() {}
 
 type createArgs struct {
-	File    string `json:"file"`
-	Content string `json:"content"`
+	File      string `json:"file"`
+	Content   string `json:"content"`
+	Overwrite bool   `json:"overwrite"`
 }
 
 // Plan checks preconditions and computes the edits.
@@ -63,8 +65,10 @@ func (*CreateFile) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor
 	if !ws.Contains(path) {
 		return nil, refactor.Refusef("%s is outside the workspace %s", a.File, ws.Root)
 	}
-	if _, err := os.Stat(path); err == nil {
-		return nil, refactor.Refusef("%s already exists; change it with the other tools", rel)
+	old, err := os.ReadFile(path)
+	exists := err == nil
+	if exists && !a.Overwrite {
+		return nil, refactor.Refusef("%s already exists; change it with the other tools, or set overwrite to replace it", rel)
 	}
 	// Missing directories are created (and removed again by undo), but a
 	// file in the way is not replaced.
@@ -87,9 +91,13 @@ func (*CreateFile) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor
 	if a.Content != "" && !strings.HasSuffix(a.Content, "\n") {
 		lines++
 	}
+	did := "created"
+	if exists {
+		did = "replaced"
+	}
 	return &refactor.Plan{
-		Summary:  fmt.Sprintf("created %s (%d line%s)", rel, lines, textutil.Plural(lines)),
-		Edits:    []edit.FileEdit{{Path: path, Edits: []edit.TextEdit{{NewText: a.Content}}}},
+		Summary:  fmt.Sprintf("%s %s (%d line%s)", did, rel, lines, textutil.Plural(lines)),
+		Edits:    []edit.FileEdit{{Path: path, Edits: []edit.TextEdit{{End: len(old), NewText: a.Content}}}},
 		Supplied: a.Content,
 	}, nil
 }
