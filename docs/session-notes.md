@@ -6,8 +6,9 @@ past choices were made, and where the work stands. Every session reads
 this (CLAUDE.md imports it). When you learn something a later session
 would need, add it here in the same PR as the work, and correct or remove
 what has become wrong. Keep it short: facts, with the reason, not a diary.
-The longer history is in `docs/how-this-project-was-built.md`, and A/B
-results are in `docs/cost-history.md`.
+The longer history is in `docs/how-this-project-was-built.md`, A/B
+results are in `docs/cost-history.md`, and the refactorings and working
+patterns sessions use, with their steps, in `docs/patterns.md`.
 
 ## Working with the user
 
