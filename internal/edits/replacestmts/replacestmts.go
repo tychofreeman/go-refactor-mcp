@@ -33,24 +33,24 @@ func New() *ReplaceStatements { return &ReplaceStatements{} }
 func (*ReplaceStatements) Name() string { return "replace_statements" }
 
 func (*ReplaceStatements) Description() string {
-	return `Replace whole statements of one block with new Go statements: an edit, to write a function's body (a stub becomes the implementation) or change what statements do. With function "Cart.Total" and content return len(c.Items), Total's whole body becomes that statement.
-Give start_line and end_line (inclusive, as inspect numbers them) covering whole statements of one block, comments and blank lines included; or function for the whole body (even one on the signature's line), which stays valid after earlier steps. content is re-indented to the block. Empty content over whole case clauses deletes them.
-wrap in place of content keeps the statements and puts them, re-indented, at the line $body of the code it gives: wrap "if verbose {\n$body\n}" makes them the body of an if, "once(func() {\n$body\n})" of a closure passed to once; the result notes a return, defer, break or continue whose meaning that changes.
-Packages content names are imported (imports picks one when several fit, such as rand); imports only the replaced statements used are removed.`
+	return `Replace whole statements of one block with new Go statements: an edit, to write a body (a stub's) or change what statements do. With function "Cart.Total" and content return len(c.Items), Total's whole body becomes that statement.
+Give start_line and end_line (inclusive, as inspect numbers them) covering whole statements of one block, comments and blank lines included; or function for the whole body, which stays valid after earlier steps. content is re-indented to the block. Empty content over whole case clauses deletes them.
+wrap in place of content keeps the statements, at the line $body of the code it gives: "once(func() {\n$body\n})".
+Packages content names are imported; those only the replaced statements used are removed.`
 }
 
 func (*ReplaceStatements) InputSchema() json.RawMessage {
 	return json.RawMessage(`{
   "type": "object",
   "properties": {
-    "file":       {"type": "string",  "description": "Relative to the workspace root."},
-    "function":   {"type": "string",  "description": "Instead of the lines: the function (Name or Type.Method) whose body to replace."},
+    "file":       {"type": "string",  "description": "Relative to the root."},
+    "function":   {"type": "string",  "description": "Instead of the lines: the function (Name or Type.Method)."},
     "case":       {"type": "string",  "description": "With function: that case's body, by value (\"\\\"fern\\\"\") or default."},
-    "start_line": {"type": "integer", "description": "First line (1-based)."},
-    "end_line":   {"type": "integer", "description": "Last line (inclusive)."},
+    "start_line": {"type": "integer", "description": "First line."},
+    "end_line":   {"type": "integer", "description": "Last line."},
     "content":    {"type": "string",  "description": "The new statements."},
-    "wrap":       {"type": "string",  "description": "Instead of content: code around the statements, with $body on its own line where they go."},
-    "imports":    {"type": "array", "items": {"type": "string"}, "description": "Optional: import paths for ambiguous names (math/rand)."}
+    "wrap":       {"type": "string",  "description": "Instead of content: code with a line $body."},
+    "imports":    {"type": "array", "items": {"type": "string"}, "description": "Paths to import for ambiguous names (math/rand)."}
   },
   "required": ["file"],
   "additionalProperties": false
