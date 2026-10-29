@@ -459,6 +459,33 @@ export function f(x: number): number {
   return 2;
 }
 `, NewInvertIf(), `{"line": 15}`, "", "which what follows it declares"},
+		{"wrap the rest in an else", plants + `
+export function depth(p: Plant | undefined): number {
+  if (!p) {
+    return 0;
+  }
+  const h = p.height;
+  return h * 2;
+}
+`, NewRemoveElse(), `{"line": 15, "wrap": true}`, plants + `
+export function depth(p: Plant | undefined): number {
+  if (!p) {
+    return 0;
+  } else {
+    const h = p.height;
+    return h * 2;
+  }
+}
+`, ""},
+		{"wrap refused: falls through", plants + `
+export function depth(p: Plant | undefined): number {
+  let h = 0;
+  if (p) {
+    h = p.height;
+  }
+  return h * 2;
+}
+`, NewRemoveElse(), `{"line": 16, "wrap": true}`, "", "can fall through"},
 		{"remove else", plants + `
 export function depth(p: Plant | undefined): number {
   if (!p) {
@@ -896,6 +923,118 @@ export class Box {
 }
 
 export const t = 3 * Box.size;
+`, ""},
+		{"early return assigned", plants + `
+function sign(n: number): string {
+  if (n < 0) {
+    water();
+    return "neg";
+  }
+  return "pos";
+}
+
+export function use(n: number): string {
+  const s = sign(n);
+  return s + "!";
+}
+`, NewInlineFunction(), `{"line": 23, "name": "sign"}`, plants + `
+export function use(n: number): string {
+  let s: string;
+  if (n < 0) {
+    water();
+    s = "neg";
+  } else {
+    s = "pos";
+  }
+  return s + "!";
+}
+`, ""},
+		{"early return in a loop", plants + `
+function find(xs: number[]): number {
+  for (const x of xs) {
+    if (x > 0) {
+      return x;
+    }
+  }
+  return -1;
+}
+
+export function use(xs: number[]): number {
+  const v = find(xs);
+  return v + 1;
+}
+`, NewInlineFunction(), `{"line": 24, "name": "find"}`, plants + `
+export function use(xs: number[]): number {
+  let v!: number;
+  let returned = false;
+  loop: for (const x of xs) {
+    if (x > 0) {
+      v = x;
+      returned = true;
+      break loop;
+    }
+  }
+  if (!returned) {
+    v = -1;
+  }
+  return v + 1;
+}
+`, ""},
+		{"early return as a statement", plants + `
+function warn(n: number): void {
+  if (n > 0) {
+    return;
+  }
+  water();
+}
+
+export function use(n: number): void {
+  warn(n);
+  water();
+}
+`, NewInlineFunction(), `{"line": 22, "name": "warn"}`, plants + `
+export function use(n: number): void {
+  if (n > 0) {
+  } else {
+    water();
+  }
+  water();
+}
+`, ""},
+		{"early return in a switch", plants + `
+function size(k: string): number {
+  switch (k) {
+    case "s":
+      return 1;
+    case "m":
+      return 2;
+  }
+  return 3;
+}
+
+export function use(k: string): number {
+  const n = size(k);
+  return n * 2;
+}
+`, NewInlineFunction(), `{"line": 25, "name": "size"}`, plants + `
+export function use(k: string): number {
+  let n!: number;
+  let returned = false;
+  switch (k) {
+    case "s":
+      n = 1;
+      returned = true;
+      break;
+    case "m":
+      n = 2;
+      returned = true;
+      break;
+  }
+  if (!returned) {
+    n = 3;
+  }
+  return n * 2;
+}
 `, ""},
 		{"early return", plants + `
 function f(x: number): number {

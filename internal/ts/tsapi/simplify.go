@@ -957,3 +957,44 @@ func (p *Project) RemoveElse(ctx context.Context, path string, line, column int)
 	}
 	return []Edit{{File: l.f.FileName(), Start: l.pos(is.ThenStatement), End: ifs.End(), NewText: text}}, ""
 }
+
+// WrapElse returns the edits that make the statements after the if on
+// line (at column, when given), whose first branch cannot fall through,
+// its else branch: the inverse of RemoveElse.
+func (p *Project) WrapElse(ctx context.Context, path string, line, column int) ([]Edit, string) {
+	l, why := p.lined(path)
+	if why != "" {
+		return nil, why
+	}
+	ifs, why := l.ifAt(line, column)
+	if why != "" {
+		return nil, why
+	}
+	is := ifs.AsIfStatement()
+	switch {
+	case is.ElseStatement != nil:
+		return nil, "the if has an else already"
+	case !terminates(is.ThenStatement):
+		return nil, "the if's branch can fall through to what follows it (it does not end with a return, throw, break or continue on every path), so in an else that code would no longer run after it"
+	case !inList(ifs):
+		return nil, fmt.Sprintf("the if is %s's only statement, so nothing follows it", l.part(ifs.Parent))
+	}
+	list := ifs.Parent.Statements()
+	rest := list[slices.Index(list, ifs)+1:]
+	if len(rest) == 0 {
+		return nil, "nothing follows the if in its block"
+	}
+	for _, s := range rest {
+		if ast.IsFunctionDeclaration(s) || ast.IsClassDeclaration(s) || ast.IsVariableStatement(s) && s.AsVariableStatement().DeclarationList.Flags&ast.NodeFlagsBlockScoped == 0 {
+			return nil, fmt.Sprintf("%s declares what the code before the if may use, which in the else it could not", l.where(s))
+		}
+	}
+	f := l.f.FileName()
+	edits := []Edit{{File: f, Start: is.ThenStatement.End(), End: is.ThenStatement.End(), NewText: " else {"}}
+	end := rest[len(rest)-1].End()
+	for n := l.line(l.pos(rest[0])); n <= l.line(end); n++ {
+		edits = append(edits, Edit{File: f, Start: l.start(n), End: l.start(n), NewText: l.unit()})
+	}
+	edits = append(edits, Edit{File: f, Start: end, End: end, NewText: "\n" + l.indent(l.line(l.pos(ifs))) + "}"})
+	return edits, ""
+}

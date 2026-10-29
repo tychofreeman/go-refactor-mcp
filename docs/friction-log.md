@@ -3586,3 +3586,12 @@ option with add_declaration, add_field and replace_text. The user's
 alternative (extract the enclosing if, then inline) run with the CLI on
 a scratch module first; it showed returnsRightAfter missed a call
 nested in an if. Nothing by hand.
+
+## 2026-10-29: TypeScript's inline_function and early returns; remove_else's wrap
+
+Tests first with replace_text, `tsapi/early.go` with create_file, the
+inliner's hooks, `earlyBody`, `WrapElse` and the tools' options with
+replace_text and add_declaration. A first test expected an if/else and
+got a conditional expression: two guards and a last return already
+inline as one; the test now has a statement in its guard. Nothing by
+hand.
