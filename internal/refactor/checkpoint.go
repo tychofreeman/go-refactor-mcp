@@ -172,14 +172,18 @@ func CheckReport(errs []string, root string, raw json.RawMessage) (report string
 		run = GoTestRace
 	}
 	out, testErr := run(root, pattern)
-	if testErr != nil {
-		fmt.Fprintf(&sb, "\nTESTS FAILED (%v):\n", testErr)
-		passed = false
-	} else {
-		sb.WriteString("\nTESTS PASSED:\n")
+	sb.WriteString(TestsReport(out, testErr))
+	return sb.String(), passed && testErr == nil, nil
+}
+
+// TestsReport is the part of check's report that says whether the tests
+// passed, with the end of their output.
+func TestsReport(out string, err error) string {
+	head := "\nTESTS PASSED:\n"
+	if err != nil {
+		head = fmt.Sprintf("\nTESTS FAILED (%v):\n", err)
 	}
-	sb.WriteString(lastLines(out, 150) + "\n")
-	return sb.String(), passed, nil
+	return head + lastLines(out, 150) + "\n"
 }
 
 // unformatted returns the Go files under root, relative to it, that gofmt

@@ -3618,3 +3618,29 @@ Nothing by hand.
 Both written in the scratchpad and sent as replace_text and create_file
 steps of one batch; the history's PR list read with `gh api`. Nothing by
 hand.
+
+## 2026-10-29: TypeScript's tests at a checkpoint; what still differs from Go
+
+The test command and its tests with add_declaration and replace_text
+through the CLI, in one batch checked at its end; a test's
+`history.New` (no such function) refused at the end and fixed in the
+batch's JSON; a package.json script escaped twice in the test, fixed
+with replace_text from files. The roadmap item from a subagent's
+survey, checked against the code. A batch file of an earlier session
+with the same name in the scratchpad ran first and was undone with
+`refactor undo`. Nothing by hand.
+
+## 2026-10-29: extract_struct and remove_dead_code on the new reflection check
+
+- The goldens moved from `refuse_*` to their printing names by
+  create_file and delete_file steps that Python wrote from the old files,
+  and their out/ by `go test -update`. Nothing was edited by hand.
+- `verbFlags` and `namedVerbs` became `verb` and `formatVerbs` by rename
+  before their replacement (replace_declaration refuses a content that
+  declares another name), and a local `verb` had to be renamed first.
+
+## 2026-10-29: descriptions brought in line with the refusals
+
+All with replace_text through the CLI, from an audit run by a subagent
+and checked against the code; replace_statements' text trimmed four
+times to fit its size test. Nothing by hand.

@@ -1,13 +1,16 @@
 // Package typescript is the TypeScript language of the server: its
-// refactorings and edits on the solution's workspace: so far rename,
-// create_file, add_declaration and replace_text (docs/ts-plan.md); the
-// other tools refuse its files, saying so.
+// refactorings and edits on the solution's workspace, under the Go tools'
+// names where the operation is the same (docs/ts-plan.md); a tool it does
+// not have refuses its files, saying so.
 package typescript
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -189,7 +192,46 @@ func (l *Language) Step(tool string, args json.RawMessage) (string, bool, error)
 // engine adds the imports the steps' code needs, and stubs for what it
 // calls but nothing declares.
 func (l *Language) options(unchecked bool) refactor.OptionsOf[*workspace.Workspace] {
-	return refactor.OptionsOf[*workspace.Workspace]{Compact: !l.FullDiffs, Unchecked: unchecked, Imports: fiximports.New(), Declare: createfromusage.New()}
+	return refactor.OptionsOf[*workspace.Workspace]{Compact: !l.FullDiffs, Unchecked: unchecked, Imports: fiximports.New(), Declare: createfromusage.New(), Test: l.test}
+}
+
+// test runs the project's tests: package.json's test script when it has
+// one, else node --test; a pattern other than ./... names the test files.
+func (l *Language) test(pattern string) (string, error) {
+	root := l.root()
+	argv := testCommand(root, pattern)
+	cmd := exec.Command(argv[0], argv[1:]...)
+	cmd.Dir = root
+	out, err := cmd.CombinedOutput()
+	return string(out), err
+}
+
+// root is the directory of the solution's tsconfig.json, or the server's
+// directory before the solution loads.
+func (l *Language) root() string {
+	if l.ws != nil {
+		return l.ws.Dir()
+	}
+	return l.dir
+}
+
+// testCommand is the command test runs in dir.
+func testCommand(dir, pattern string) []string {
+	var files []string
+	if pattern != "" && pattern != "./..." {
+		files = strings.Fields(pattern)
+	}
+	var pkg struct {
+		Scripts map[string]string `json:"scripts"`
+	}
+	if b, err := os.ReadFile(filepath.Join(dir, "package.json")); err == nil && json.Unmarshal(b, &pkg) == nil && pkg.Scripts["test"] != "" {
+		argv := []string{"npm", "test", "--silent"}
+		if len(files) > 0 {
+			argv = append(append(argv, "--"), files...)
+		}
+		return argv
+	}
+	return append([]string{"node", "--test"}, files...)
 }
 
 // Batch runs the steps of one batch call.
@@ -236,10 +278,12 @@ func (l *Language) Inspect(args json.RawMessage) (string, error) {
 	return out, nil
 }
 
-// Check reports whether the solution type-checks; it runs no tests yet.
+// Check reports whether the solution type-checks, and runs its tests if
+// asked (Language.test).
 func (l *Language) Check(_ context.Context, args json.RawMessage) (string, error) {
 	var a struct {
-		RunTests bool `json:"run_tests"`
+		RunTests bool   `json:"run_tests"`
+		Packages string `json:"packages"`
 	}
 	if err := refactor.DecodeArgs(args, &a); err != nil {
 		return err.Error(), nil
@@ -259,7 +303,8 @@ func (l *Language) Check(_ context.Context, args json.RawMessage) (string, error
 		return err.Error(), nil
 	}
 	if a.RunTests {
-		report += "\nThe tests were not run: check does not run TypeScript tests yet."
+		out, testErr := l.test(a.Packages)
+		report += refactor.TestsReport(out, testErr)
 	}
 	return report, nil
 }

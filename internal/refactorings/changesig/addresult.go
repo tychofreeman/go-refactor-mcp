@@ -29,7 +29,7 @@ func (*AddResult) Name() string { return "add_result" }
 func (*AddResult) Description() string {
 	return `Add a result to a function or method, last, with the same value at every return, and update every call: with type error and value nil, func load() string becomes func load() (string, error), each return x becomes return x, nil, and v := load() becomes v, _ := load(); a call as a statement stays. Then make the body return real errors.
 Identify the function by file and name, or by line at its declaration or any call. value must have no side effects and not be able to panic.
-Refuses, saying why: named results, a call whose result is used inside an expression or returned by the caller (assign it to a variable first), a function used as a value.`
+Refuses, saying why: named results, a call whose result is used inside an expression or returned by the caller (assign it to a variable first), a return that gives another call's results, a declaration of the call's results that states their type, a function used as a value.`
 }
 
 func (*AddResult) InputSchema() json.RawMessage {
