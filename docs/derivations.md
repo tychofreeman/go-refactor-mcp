@@ -201,6 +201,37 @@ and `remove_parameter` refused `p.TypesInfo` (a field read through a
 pointer may panic, or change past a call), so one call passed `nil`
 for the unused parameter before it was removed.
 
+## 7. Calls of one function split by an argument
+
+`b.set(&b.summary.Panics, w)` is called 34 times with one of a few
+fields as its first argument. Wanted: one recorder per field,
+`b.panics(w)`, and no `set` (Oct 25: done then by a script).
+
+**Derivation** (the user's, 2026-10-29): for each field, extract one
+of its calls into a function, then fold that function, which turns
+every other call with that field into a call of it; then inline `set`
+into the recorders.
+
+**Run** (a module of the same shape: three fields, five calls; 8
+steps, nothing by hand):
+- `extract_function` of one call per field, whose second argument is
+  a variable: the call uses the receiver, so the new function is
+  already a method of `body`, `func (b *body) panics(w Where)`. Where
+  a field has only calls with an expression there (`Where{n.line +
+  1}`), `extract_variable` first, or the method takes what the
+  expression reads and no longer matches the other calls.
+- `fold` of each recorder: a parameter matches any expression of its
+  type, so `b.set(&b.summary.Panics, n.Pos())` becomes
+  `b.panics(n.Pos())`.
+- `inline_variable` of the variables extracted for it, and
+  `inline_function` of `set` with `all_calls`, which deletes it.
+
+One function per call instead would leave several identical methods
+per field, which `merge_duplicate_function` refuses to merge
+(methods); extracting one per field and folding makes none. The
+recorders keep `field := &b.summary.Reads` from the inlined pointer
+parameter.
+
 ## The user's principle
 
 Not every operation will exist. Use the operations there are; where
