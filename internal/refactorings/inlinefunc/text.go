@@ -28,8 +28,23 @@ func (x *inliner) replacement() ([]edit.TextEdit, error) {
 	} else if b != "" {
 		lines = append(lines, ind+b)
 	}
+	var post []string
+	if x.tails {
+		pre, edits, after, err := x.tailResults()
+		if err != nil {
+			return nil, err
+		}
+		for _, p := range pre {
+			lines = append(lines, ind+p)
+		}
+		x.bodyEdits = append(append(x.bodyEdits, x.tailEdits...), edits...)
+		post = after
+	}
 	if body := x.bodyText(ind); body != "" {
 		lines = append(lines, body)
+	}
+	for _, p := range post {
+		lines = append(lines, ind+p)
 	}
 	res, err := x.resultLines()
 	if err != nil {
