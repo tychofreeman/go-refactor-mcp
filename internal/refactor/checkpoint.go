@@ -1,10 +1,16 @@
 package refactor
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"go/format"
+	"io/fs"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -103,9 +109,19 @@ var TestTimeout = 10 * time.Minute
 // GoTest runs go test on pattern in dir and returns its output; the error
 // says why the tests did not pass.
 func GoTest(dir, pattern string) (string, error) {
+	return goTest(dir, pattern)
+}
+
+// GoTestRace is GoTest with the race detector on.
+func GoTestRace(dir, pattern string) (string, error) {
+	return goTest(dir, "-race", pattern)
+}
+
+// goTest runs go test with args in dir, within TestTimeout.
+func goTest(dir string, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), TestTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "go", "test", pattern)
+	cmd := exec.CommandContext(ctx, "go", append([]string{"test"}, args...)...)
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	if ctx.Err() == context.DeadlineExceeded {
@@ -122,6 +138,7 @@ func CheckReport(errs []string, root string, raw json.RawMessage) (report string
 	var a struct {
 		RunTests bool   `json:"run_tests"`
 		Packages string `json:"packages"`
+		Race     bool   `json:"race"`
 	}
 	if err := DecodeArgs(raw, &a); err != nil {
 		return "", false, err
@@ -133,6 +150,13 @@ func CheckReport(errs []string, root string, raw json.RawMessage) (report string
 	} else {
 		fmt.Fprintf(&sb, "TYPE-CHECK FAILED (%d errors):\n  %s\n", len(errs), strings.Join(errs, "\n  "))
 	}
+	if files := unformatted(root); len(files) > 0 {
+		s := "s"
+		if len(files) == 1 {
+			s = ""
+		}
+		fmt.Fprintf(&sb, "NOT GOFMT-ED (%d file%s): %s; edits there follow each file's own indentation\n", len(files), s, strings.Join(limit(files, 10), ", "))
+	}
 	if !a.RunTests {
 		return sb.String(), passed, nil
 	}
@@ -143,7 +167,11 @@ func CheckReport(errs []string, root string, raw json.RawMessage) (report string
 	if strings.HasPrefix(pattern, "-") {
 		return "", false, Refusef("packages must be a package pattern, not a flag")
 	}
-	out, testErr := GoTest(root, pattern)
+	run := GoTest
+	if a.Race {
+		run = GoTestRace
+	}
+	out, testErr := run(root, pattern)
 	if testErr != nil {
 		fmt.Fprintf(&sb, "\nTESTS FAILED (%v):\n", testErr)
 		passed = false
@@ -152,6 +180,39 @@ func CheckReport(errs []string, root string, raw json.RawMessage) (report string
 	}
 	sb.WriteString(lastLines(out, 150) + "\n")
 	return sb.String(), passed, nil
+}
+
+// unformatted returns the Go files under root, relative to it, that gofmt
+// would change; not those under testdata, vendor, node_modules or a
+// hidden directory.
+func unformatted(root string) []string {
+	var out []string
+	filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		name := d.Name()
+		if d.IsDir() {
+			if path != root && (name == "testdata" || name == "vendor" || name == "node_modules" || strings.HasPrefix(name, ".")) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(name, ".go") {
+			return nil
+		}
+		src, err := os.ReadFile(path)
+		if err != nil {
+			return nil
+		}
+		if f, err := format.Source(src); err == nil && !bytes.Equal(f, src) {
+			rel, _ := filepath.Rel(root, path)
+			out = append(out, filepath.ToSlash(rel))
+		}
+		return nil
+	})
+	sort.Strings(out)
+	return out
 }
 
 // lastLines keeps the last n lines of s.

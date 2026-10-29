@@ -40,7 +40,7 @@ func checkArgs[W Workspace](steps []StepOf[W]) error {
 		sb.WriteString("\n  " + p)
 	}
 	for _, r := range tools {
-		sb.WriteString(argsHelp(r.Name(), r.InputSchema()))
+		sb.WriteString(ArgsHelp(r.Name(), r.InputSchema()))
 	}
 	return fmt.Errorf("%s", sb.String())
 }

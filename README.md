@@ -1910,7 +1910,19 @@ hand or a tool got in the way.
       test's output is not behavior to keep, but that is the user's
       call); `introduce_parameter` counted defining a local as a write
       that could change what the expression reads (Oct 25, `freshLocals`;
-      check whether item 35 fixed it).
+      check whether item 35 fixed it). Rechecked (2026-10-29), each
+      reproduced on a scratch module: extract_function's is *done*, a
+      variable nothing writes after its declaration may be returned though
+      a literal that runs later keeps it, since the copy holds the same
+      (`writtenAgain`; still refused once anything writes it again);
+      introduce_parameter's local and inline_variable's `p.TypesInfo`
+      past a module function no longer refuse (items 34-35 fixed them);
+      remove_parameter's dropped `p.TypesInfo` is right to refuse alone
+      (a pointer read that can panic) and is now `value`'s case (item
+      28). Left, as decisions rather than bugs: add_parameter's lazy
+      getter, whose first call assigns a field (an effect, though
+      repeating it changes nothing a caller can see), and rename's test
+      that prints a struct with `%+v` (the user's call).
     - **Each call of a function by another chosen by its arguments.**
       Thirty-four calls of `set` became calls of the recorder the
       argument named, by a script (Oct 25): one more story for item 9's
@@ -1950,34 +1962,56 @@ hand or a tool got in the way.
       (four times). Fixed in the end by gofmt'ing the project. Either
       every edit gofmts what it writes, or every edit follows the file's
       indentation; and `check` could list files that are not gofmt'd, so
-      the mismatch shows on the first edit.
+      the mismatch shows on the first edit. *Done* the second way: in a
+      file indented with spaces, each leading tab of what any edit writes
+      at a line's start becomes the file's unit of indentation (the
+      shortest run of leading spaces; `workspace.followIndent`, one place
+      for every edit and the imports they add; text with a raw string is
+      left as written). gofmt-ed files are formatted after each step, as
+      before. `check` lists the module's files that are not gofmt-ed.
     - **The CLI's `list` gives no argument names.** It prints the
       descriptions, not the schemas, so `replace_expression`'s old text
       (`expression`) and `remove_dead_code`'s `also` were guessed or
       avoided. `refactor list` (or `refactor help <tool>`) could print each
-      tool's arguments.
+      tool's arguments. *Done:* `refactor list [tool...]` prints each
+      tool's description and its arguments, required ones marked.
     - **A stub in the wrong file, and quietly.** A test's undeclared
       matcher got a stub (`panic("not implemented")`) in the production
       file, though only `_test.go` used it, and the result said only
       "APPLIED batch: 2 steps". A stub for a name only test files use
       belongs in the test file, and the result should name each stub.
+      The result names each stub and its file on a "chose:" line (it did
+      by the time of this item; glisp's run printed the batch's summary
+      alone). Where a stub goes stays as it is: a name only a test calls is
+      also what test-first work calls before writing it, which belongs in
+      the production file, and nothing tells the two apart. A stub for a
+      test's call now says so on its "chose:" line, with the to_file that
+      puts it in the test file instead.
     - **A refusal that names another tool's argument.** `add_declaration`
       of a test using `_, err := RunFile(...)` was refused with "give them
       in results", an argument of `create_from_usage`, not of
       `add_declaration`. The hint should name `create_from_usage` (with
       `results`), or `add_declaration` should take `results` and pass it
-      on.
+      on. *Done* the first way: the refusal names create_from_usage and,
+      in a batch, a step of it before the step that needs it.
     - **A line only renamed stays addressable.** In a batch, a step that
       addressed a line an earlier `rename` had changed (only the
       identifier) was refused as rewritten; the session split the batch in
       two. A line whose only change is a rename could keep its number.
+      *Done:* after a step that makes the same change at every site (a
+      rename), a line it changed within, adding no line break, keeps its
+      number (`edit.LineMapOfInPlace`).
     - **Smaller:** `add_parameter` could note a local in the body that
-      shadows the new parameter; `replace_statements`' description could
+      shadows the new parameter (*done*: a declaration in an inner scope is
+      noted; one at the body's top level was already refused); `replace_statements`' description could
       say that empty `content` deletes the statements (used three times,
       found by trying); `check` could take `race` or test flags (`go test
-      -race` was run by hand); a tool or a `remove_dead_code` option to key
+      -race` was run by hand; *done*: check's `race`, with `run_tests`); a tool or a `remove_dead_code` option to key
       an unkeyed literal (three literals restated by hand to remove a
-      field; with item 38's literal elements).
+      field; with item 38's literal elements; *done* for what that was
+      for: remove_dead_code deletes a field's element from unkeyed
+      literals when it is a constant or nil, and refuses one it would
+      have to evaluate).
     - **One server, one module.** The server reads its module once at
       start, so a session on one module cannot use it on another; a tool
       or `inspect` argument to open another module, or a server serving
@@ -1985,14 +2019,17 @@ hand or a tool got in the way.
     - **Versions:** `refactor` has no `-version`, and both binaries report
       only the constant; reporting the module version or commit from the
       build information (`debug.ReadBuildInfo`) would tell which build is
-      running.
+      running. *Done:* both take `-version` and print the release with the
+      module version they were installed at, or the commit they were built
+      from (`mcpserver.BuildVersion`).
     - **Setup notes for the README:** an `.mcp.json` added during a
       session loads only in a new one; the tools need Go 1.26, which
       `GOTOOLCHAIN=auto` fetches but `GOTOOLCHAIN=local` does not; and the
       "Using gorefactor well" section, copied into another project, names
       `mcp__gorefactor__` tools and "this checkout", which do not hold
       through the desktop bridge (`mcp__remote-devices__gorefactor__`) or
-      with `go run ...@latest`.
+      with `go run ...@latest`. *Done* ("Using it from Claude Code",
+      setup notes).
     - **Later the same day** (glisp PRs #35-#49: a WebAssembly backend,
       a garbage collector, strings, line numbers in errors; ~4,000 lines,
       nearly all through the CLI's `batch`). What it added, by what it
@@ -2100,10 +2137,10 @@ hand or a tool got in the way.
         `min`, `max` into an embedded `arity` took 29 `replace_text`
         steps generated from `inspect`'s listing (the first script
         misread its line-number prefix), where `extract_struct` should do
-        it in one (it rewrites unkeyed literals whose moved fields are
-        adjacent; untried on glisp). The session did not find the
-        tool; its description says "split a struct that holds two
-        things", not "group fields". The type check twice let through a
+      it in one (it rewrites unkeyed literals whose moved fields are
+      adjacent; untried on glisp). The session did not find the
+      tool; its description says "split a struct that holds two
+      things", not "group fields" (*done*: it now says both). The type check twice let through a
         behavior change in a hand-written edit (a case's dropped
         `return`, an inverted test); output hashed before and after
         caught both, which says what a check for a pure refactoring
@@ -2338,6 +2375,20 @@ for them, a fresh model does not use the tools.
 If `refactor-mcp` is not on the `PATH` Claude Code sees, use its absolute
 path as the command. The server works on the module containing `-C`, or
 `$CLAUDE_PROJECT_DIR` (which Claude Code sets), or its working directory.
+
+Setup notes:
+- Claude Code reads `.mcp.json` when a session starts: one added during a
+  session takes effect in the next.
+- The tools need Go 1.26 or later. With `GOTOOLCHAIN=auto` (the default)
+  `go install` fetches it; with `GOTOOLCHAIN=local` an older Go fails.
+- Tool names carry the server's name as Claude Code sees it:
+  `mcp__gorefactor__inspect` here, `mcp__remote-devices__gorefactor__inspect`
+  through the desktop app's bridge. Instructions copied from this repo's
+  CLAUDE.md name the first and speak of "this checkout"; in another
+  project, name the tools without the prefix, as `examples/CLAUDE.md` does.
+- `refactor-mcp -version` and `refactor -version` say which build runs:
+  the release, or the commit it was built from.
+- `refactor list [tool...]` prints each tool's description and arguments.
 
 Then, in a Go project, ask something like *"use the gorefactor tools to
 simplify calc/calc.go"*. Run `/mcp` in Claude Code to see the server's status.

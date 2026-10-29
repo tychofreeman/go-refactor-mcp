@@ -61,6 +61,26 @@ func TestApplyAndUndo(t *testing.T) {
 	}
 }
 
+// In a file indented with spaces, not gofmt-ed, what an edit writes at a
+// line's start follows the file: its tabs become the file's indentation.
+func TestApplyFollowsSpaceIndent(t *testing.T) {
+	src := "package m\n\nfunc F() int {\n    x := 1\n    return x\n}\n"
+	dir := writeModule(t, map[string]string{"m.go": src})
+	w, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "m.go")
+	at := strings.Index(src, "    return")
+	if _, err := w.Apply("insert", []edit.FileEdit{{Path: path, Edits: []edit.TextEdit{{Start: at, End: at, NewText: "\tx++\n\tif x > 1 {\n\t\tx--\n\t}\n"}}}}); err != nil {
+		t.Fatal(err)
+	}
+	want := "package m\n\nfunc F() int {\n    x := 1\n    x++\n    if x > 1 {\n        x--\n    }\n    return x\n}\n"
+	if got, _ := os.ReadFile(path); string(got) != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+}
+
 func TestUndoKeptInAFile(t *testing.T) {
 	src := "package m\n\nfunc F() int { return 1 }\n"
 	dir := writeModule(t, map[string]string{"m.go": src})

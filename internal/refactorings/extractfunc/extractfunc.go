@@ -865,11 +865,12 @@ func (x *extraction) analyzeDataFlow() error {
 		case x.fa.Addressed[v]:
 			return refactor.Refusef("%s (declared at line %d) has its address taken, or a pointer method is called on it, and is used after the selected lines; returning it would return a copy, so anything holding its address would no longer see the same variable (some types, like strings.Builder, also refuse to be copied). Include its later uses in the selection",
 				v.Name(), x.line(v.Pos()))
-		case x.capturedLater(v):
+		case x.capturedLater(v) && x.writtenAgain(v):
 			// A literal that only runs during its statement (an ast.Inspect
 			// visitor, say), or only when the selected lines call it, has
 			// finished by the time the new function returns v, so a copy
-			// loses nothing.
+			// loses nothing; nor does one of a variable nothing writes
+			// after its declaration, whose copy always holds the same.
 			return refactor.Refusef("%s (declared at line %d) is used by a function literal that can run later, and after the selected lines; returning it would return a copy that the function literal no longer shares. Include its later uses in the selection",
 				v.Name(), x.line(v.Pos()))
 		}
@@ -2192,6 +2193,18 @@ func (x *extraction) inSelection(n ast.Node) bool { return x.inSelectionPos(n.Po
 func (x *extraction) capturedLater(v *types.Var) bool {
 	for _, lit := range x.fa.AsyncLits[v] {
 		if !x.calledOnlyInSelection(lit) {
+			return true
+		}
+	}
+	return false
+}
+
+// writtenAgain reports whether the function writes v anywhere but where
+// it declares it: then a copy of v returned from the new function and the
+// variable a function literal keeps could come to differ.
+func (x *extraction) writtenAgain(v *types.Var) bool {
+	for _, n := range x.fa.Modified[v] {
+		if !(n.Pos() <= v.Pos() && v.Pos() < n.End()) {
 			return true
 		}
 	}
