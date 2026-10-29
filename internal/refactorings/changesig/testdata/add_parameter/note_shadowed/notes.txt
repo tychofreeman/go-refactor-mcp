@@ -1,0 +1,1 @@
+the body of double declares t in an inner scope (at a.go:5:3), which hides the new parameter there

@@ -1232,3 +1232,20 @@ func TestArgumentFromFile(t *testing.T) {
 		t.Errorf("batch refused: %s", b.Refused)
 	}
 }
+
+// check names the module's Go files that are not gofmt-ed, where edits
+// follow the file's own indentation.
+func TestCheckReportNamesUnformattedFiles(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "a.go"), []byte("package a\n\nfunc F() {\n    println()\n}\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, "b.go"), []byte("package a\n\nfunc G() {}\n"), 0o644)
+	os.MkdirAll(filepath.Join(dir, "testdata"), 0o755)
+	os.WriteFile(filepath.Join(dir, "testdata", "c.go"), []byte("package  c\n"), 0o644)
+	report, passed, err := refactor.CheckReport(nil, dir, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !passed || !strings.Contains(report, "NOT GOFMT-ED (1 file): a.go") || strings.Contains(report, "c.go") {
+		t.Errorf("passed %v, report:\n%s", passed, report)
+	}
+}

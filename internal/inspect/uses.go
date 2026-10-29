@@ -16,7 +16,7 @@ import (
 )
 
 // roles are what a use does with what it names, in the order shown.
-var roles = []string{"switch on it", "compared", "asserted", "written", "passed as an interface", "called", "read"}
+var roles = []string{"switch on it", "compared", "asserted", "a type switch case", "converted to", "made by a literal", "written", "passed as an interface", "called", "read"}
 
 // use is one use of an object: where, and the code that shows what is
 // done with it.
@@ -188,6 +188,11 @@ func classify(fset *token.FileSet, info *types.Info, stack []ast.Node) (string, 
 		}
 		break
 	}
+	if _, isType := info.Uses[stack[len(stack)-1].(*ast.Ident)].(*types.TypeName); isType {
+		if role, text := classifyType(fset, info, stack, i, e); role != "" {
+			return role, text
+		}
+	}
 	switch parent := stack[i-1].(type) {
 	case *ast.SwitchStmt:
 		if parent.Tag == e {
@@ -235,6 +240,29 @@ func classify(fset *token.FileSet, info *types.Info, stack []ast.Node) (string, 
 		}
 	}
 	return "read", line(fset, e)
+}
+
+// classifyType says what the use e of a type, at stack[i], does with it
+// where that is particular to types: a case of a type switch, a
+// conversion, a composite literal; "" for the other uses.
+func classifyType(fset *token.FileSet, info *types.Info, stack []ast.Node, i int, e ast.Expr) (string, string) {
+	switch parent := stack[i-1].(type) {
+	case *ast.CaseClause:
+		if i >= 3 {
+			if ts, ok := stack[i-3].(*ast.TypeSwitchStmt); ok {
+				return "a type switch case", "switch " + line(fset, ts.Assign) + ": case " + line(fset, e)
+			}
+		}
+	case *ast.CallExpr:
+		if parent.Fun == e && len(parent.Args) == 1 {
+			return "converted to", line(fset, parent)
+		}
+	case *ast.CompositeLit:
+		if parent.Type == e {
+			return "made by a literal", line(fset, parent)
+		}
+	}
+	return "", ""
 }
 
 // paramType is the type of the parameter that arg is passed for in call.

@@ -11,6 +11,7 @@ import (
 	"golang.org/x/tools/go/packages"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
+	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
@@ -32,6 +33,7 @@ type target struct {
 	field    *ast.Field
 	strct    *ast.StructType
 	typeName types.Object
+	litEdits []edit.FileEdit // for a field: unkeyed literals of its type, without its element
 }
 
 // node is what goes: the spec, or the whole declaration.
@@ -436,30 +438,67 @@ func (t *target) checkField(ws *workspace.Workspace) error {
 		n, ok := t.(*types.Named)
 		return ok && analysis.ObjectKey(ws.Fset, n.Origin().Obj()) == key
 	}
+	seen := map[string]bool{} // literals, by position, across package variants
 	for _, p := range ws.Pkgs {
 		if p.TypesInfo == nil {
 			continue
 		}
-		var unkeyed ast.Node
+		var unkeyed []*ast.CompositeLit
 		for _, f := range p.Syntax {
 			ast.Inspect(f, func(n ast.Node) bool {
 				lit, ok := n.(*ast.CompositeLit)
-				if ok && unkeyed == nil && len(lit.Elts) > 0 && isT(p.TypesInfo.TypeOf(lit)) {
+				if ok && len(lit.Elts) > 0 && isT(p.TypesInfo.TypeOf(lit)) {
 					if _, kv := lit.Elts[0].(*ast.KeyValueExpr); !kv {
-						unkeyed = lit
+						unkeyed = append(unkeyed, lit)
 					}
 				}
-				return unkeyed == nil
+				return true
 			})
 		}
-		if unkeyed != nil {
-			return refactor.Refusef("an unkeyed literal of %s at %s lists every field; give it keys first", tn, ws.Position(unkeyed.Pos()))
+		for _, lit := range unkeyed {
+			if err := t.dropElement(ws, p, lit, seen); err != nil {
+				return err
+			}
 		}
 		if arg := analysis.PassedAsInterface(p.TypesInfo, p.Syntax, isT); arg != nil {
 			return refactor.Refusef("a value holding %s is passed as an interface at %s; reflection there (fmt's %%v, encoding/json, reflect.DeepEqual) sees its fields, and would no longer see %s", tn, ws.Position(arg.Pos()), name)
 		}
 	}
 	return t.checkUnused(ws)
+}
+
+// dropElement adds to t's edits the deletion of the field's element from
+// lit, an unkeyed literal of its type, when the element is a constant or
+// nil: nothing it does is lost with it. Otherwise it refuses.
+func (t *target) dropElement(ws *workspace.Workspace, p *packages.Package, lit *ast.CompositeLit, seen map[string]bool) error {
+	pos := ws.Fset.Position(lit.Pos())
+	if seen[pos.String()] {
+		return nil
+	}
+	seen[pos.String()] = true
+	at := 0
+	for _, f := range t.strct.Fields.List {
+		if f == t.field {
+			break
+		}
+		at += max(len(f.Names), 1)
+	}
+	if at >= len(lit.Elts) {
+		return nil
+	}
+	e := lit.Elts[at]
+	if tv := p.TypesInfo.Types[e]; tv.Value == nil && !tv.IsNil() {
+		return refactor.Refusef("the unkeyed literal of %s at %s gives %s for %s, which deleting the field would no longer evaluate; give the literal keys first", t.typeName.Name(), ws.Position(lit.Pos()), types.ExprString(e), t.obj.Name())
+	}
+	off := func(p token.Pos) int { return ws.Fset.Position(p).Offset }
+	from, to := off(e.Pos()), off(e.End())
+	if at+1 < len(lit.Elts) {
+		to = off(lit.Elts[at+1].Pos())
+	} else if at > 0 {
+		from = off(lit.Elts[at-1].End())
+	}
+	t.litEdits = append(t.litEdits, edit.FileEdit{Path: pos.Filename, Edits: []edit.TextEdit{{Start: from, End: to}}})
+	return nil
 }
 
 // fieldSpan returns the bytes to delete for a field: its whole lines, with

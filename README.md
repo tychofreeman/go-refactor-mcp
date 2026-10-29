@@ -1916,7 +1916,19 @@ hand or a tool got in the way.
       test's output is not behavior to keep, but that is the user's
       call); `introduce_parameter` counted defining a local as a write
       that could change what the expression reads (Oct 25, `freshLocals`;
-      check whether item 35 fixed it).
+      check whether item 35 fixed it). Rechecked (2026-10-29), each
+      reproduced on a scratch module: extract_function's is *done*, a
+      variable nothing writes after its declaration may be returned though
+      a literal that runs later keeps it, since the copy holds the same
+      (`writtenAgain`; still refused once anything writes it again);
+      introduce_parameter's local and inline_variable's `p.TypesInfo`
+      past a module function no longer refuse (items 34-35 fixed them);
+      remove_parameter's dropped `p.TypesInfo` is right to refuse alone
+      (a pointer read that can panic) and is now `value`'s case (item
+      28). Left, as decisions rather than bugs: add_parameter's lazy
+      getter, whose first call assigns a field (an effect, though
+      repeating it changes nothing a caller can see), and rename's test
+      that prints a struct with `%+v` (the user's call).
     - **Each call of a function by another chosen by its arguments.**
       Thirty-four calls of `set` became calls of the recorder the
       argument named, by a script (Oct 25): one more story for item 9's
@@ -1935,7 +1947,9 @@ hand or a tool got in the way.
       25, a reference batch rewritten by Python), or moves a block of
       text within a file (Oct 20, the friction log reordered by a
       script). Replacing a whole file is *done* (create_file's
-      `overwrite`); copying files and moving a block of text are not.
+      `overwrite`), and so is copying one through the CLI: create_file
+      with `content_file` naming the file to copy. A directory of
+      fixtures, and moving a block of text, are not.
     - **Experiments the session notes leave open:** a hazard as one site
       among many, or a prompt that does not ask to keep behavior
       (cost-history 15); and tasks a model gets wrong by hand, named as
@@ -1954,7 +1968,13 @@ hand or a tool got in the way.
       (four times). Fixed in the end by gofmt'ing the project. Either
       every edit gofmts what it writes, or every edit follows the file's
       indentation; and `check` could list files that are not gofmt'd, so
-      the mismatch shows on the first edit.
+      the mismatch shows on the first edit. *Done* the second way: in a
+      file indented with spaces, each leading tab of what any edit writes
+      at a line's start becomes the file's unit of indentation (the
+      shortest run of leading spaces; `workspace.followIndent`, one place
+      for every edit and the imports they add; text with a raw string is
+      left as written). gofmt-ed files are formatted after each step, as
+      before. `check` lists the module's files that are not gofmt-ed.
     - **The CLI's `list` gives no argument names.** It prints the
       descriptions, not the schemas, so `replace_expression`'s old text
       (`expression`) and `remove_dead_code`'s `also` were guessed or
@@ -1984,13 +2004,20 @@ hand or a tool got in the way.
       addressed a line an earlier `rename` had changed (only the
       identifier) was refused as rewritten; the session split the batch in
       two. A line whose only change is a rename could keep its number.
+      *Done:* after a step that makes the same change at every site (a
+      rename), a line it changed within, adding no line break, keeps its
+      number (`edit.LineMapOfInPlace`).
     - **Smaller:** `add_parameter` could note a local in the body that
-      shadows the new parameter; `replace_statements`' description could
+      shadows the new parameter (*done*: a declaration in an inner scope is
+      noted; one at the body's top level was already refused); `replace_statements`' description could
       say that empty `content` deletes the statements (used three times,
       found by trying); `check` could take `race` or test flags (`go test
       -race` was run by hand; *done*: check's `race`, with `run_tests`); a tool or a `remove_dead_code` option to key
       an unkeyed literal (three literals restated by hand to remove a
-      field; with item 38's literal elements).
+      field; with item 38's literal elements; *done* for what that was
+      for: remove_dead_code deletes a field's element from unkeyed
+      literals when it is a constant or nil, and refuses one it would
+      have to evaluate).
     - **One server, one module.** The server reads its module once at
       start, so a session on one module cannot use it on another; a tool
       or `inspect` argument to open another module, or a server serving
@@ -2047,7 +2074,10 @@ hand or a tool got in the way.
         meant finding every `x.(Function)` and type switch on it; `inspect`
         `uses` lists a type's every reference (conversions, signatures),
         so this was a `grep`. A `uses` filter for type assertions and
-        switch cases would find exactly those.
+        switch cases would find exactly those. *Done:* `uses` of a type
+        groups them as their own: asserted, a type switch case (with its
+        switch), converted to, made by a literal; the rest (signatures,
+        receivers) stay under read.
       - **Smaller:** `add_field` inside a batch with `check: "end"` let
         unkeyed literals through until the last step, whose refusal then
         named them; alone it refuses at once, which is clearer.

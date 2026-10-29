@@ -287,6 +287,54 @@ func TestNamesFree(t *testing.T) {
 	}
 }
 
+// The uses of a type say how each treats it: asserted, a case of a type
+// switch, converted to, made by a literal; the rest are read.
+func TestUsesOfAType(t *testing.T) {
+	t.Setenv("GOWORK", "off")
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example.com/s\n\ngo 1.22\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, "s.go"), []byte(`package s
+
+type Value interface{ String() string }
+
+type Leaf struct{ name string }
+
+func (l Leaf) String() string { return l.name }
+
+func call(v Value) string {
+	if l, ok := v.(Leaf); ok {
+		return l.name
+	}
+	switch x := v.(type) {
+	case Leaf:
+		return x.name
+	}
+	return Leaf(struct{ name string }{"g"}).String()
+}
+
+func mk() Leaf { return Leaf{name: "f"} }
+`), 0o644)
+	ws, err := workspace.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := Run(ws, Query{Uses: []string{"Leaf"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"asserted (1):\n  s.go:10  v.(Leaf)",
+		"a type switch case (1):\n  s.go:14  switch x := v.(type): case Leaf",
+		"converted to (1):\n  s.go:17  Leaf(struct{ name string }{\"g\"})",
+		"made by a literal (1):\n  s.go:20  Leaf{name: \"f\"}",
+		"read (2):",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output lacks %q:\n%s", want, out)
+		}
+	}
+}
+
 // TestNamesGrouped: declarations of one file are shown under one header,
 // in the order asked.
 func TestNamesGrouped(t *testing.T) {
