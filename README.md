@@ -2318,6 +2318,56 @@ hand or a tool got in the way.
     - **Values not followed:** assignments to interface variables and
       returns are not looked at (`var x any = v; json.Marshal(x)`).
 
+43. **TypeScript against Go, what still differs** (2026-10-29, the user
+    asked where TypeScript does not match Go; read from the code and
+    run on scratch projects, after item 41 closed). Go has move_method,
+    which TypeScript refuses; TypeScript alone has
+    convert_params_to_object. In order of how often feature work in
+    TypeScript would meet them:
+    1. **Tests at a checkpoint.** A batch's `check` step with
+       `run_tests` ran `go test` in the TypeScript project, and failed
+       the batch; `check` ran none. *Done:* both run package.json's test
+       script, or `node --test`, with `packages` naming test files.
+    2. **create_from_usage stubs functions and methods only.** A test
+       written first that does `new Cart()` or reads `x.total` gets no
+       class or property; no `to_file`, no `results`
+       (`tsapi/stubs.go`).
+    3. **rename by `Class.member`, and locals by `function`.** A member
+       needs a line ("declares no top-level", `ts/refactorings/rename`);
+       the lookup other tools use for members could serve it.
+    4. **The server's instructions are Go's** in a TypeScript-only
+       project ("tools for the Go module"); only inspect's text adapts.
+    5. **Method families.** add_parameter and the other signature tools
+       on a method that implements an interface or overrides one are
+       refused by the type check; Go changes the family together
+       (`changesig` `findFamily`).
+    6. **inspect `uses`** is refused.
+    7. **add_field does not fill object literals** of the type that lack
+       the property; they are refused. Go fills unkeyed literals.
+    8. **One schema per tool in a project with both languages**
+       (`lang.Dispatcher.Tools` keeps the first language's): TypeScript's
+       own options (`add_element`'s `column`, `add_result`'s `field` and
+       `kept`) are not advertised, and Go's schema forbids unknown
+       properties. Merge the properties of the two.
+    9. **rename through string keys.** Nothing refuses or notes a type
+       whose values reach `JSON.stringify`, `Object.keys`, `in` or an
+       index by a string, as Go's reflection check does for
+       encoding/json and fmt.
+    10. Rarer, and most compose from existing tools: remove_parameter's
+        `value` and `also`; add_element's `name` and `from`; fold's
+        setter and parameter-object matches; replace_statements' `wrap`;
+        add_parameter's `replace_variable`; change_field_type's `values`;
+        extract_function's `split`; other solutions than the nearest
+        tsconfig's; a cached getter read as a read (`analysis.cacheOf`);
+        move_method.
+    Deliberate differences, not gaps: errors already in the code are
+    tolerated (item 41.11), type changes are edits (41.2), add_result
+    returns an object (`field`, `kept`), extract_struct runs
+    extract_interface (41.5), async functions are not inlined (41.7).
+    Also found: remove_else's `wrap` does not re-indent the moved
+    statements in a file that is not formatted (both languages' output
+    was right on formatted files).
+
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
 candidates and the evidence for each, gathered from the friction log.
