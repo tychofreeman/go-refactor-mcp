@@ -1,0 +1,1 @@
+a point is passed as an interface to json.Marshal at a.go:7:60, where reflection may look at the struct's fields

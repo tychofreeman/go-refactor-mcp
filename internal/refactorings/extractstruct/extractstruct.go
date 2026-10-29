@@ -15,6 +15,7 @@ import (
 	"go/token"
 	"go/types"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 
@@ -42,7 +43,7 @@ func (*ExtractStruct) Description() string {
 	return `Move some fields of a struct into a new struct type, embedded in their place, so that every use (m.path) keeps working: moving path and mode of type mover struct { path string; mode int; n int } into source declares type source struct { path string; mode int } and makes mover struct { source; n int }, and mover{path: p} becomes mover{source: source{path: p}}. To hold it as a named field instead, then rename mover.source (to src: m.path becomes m.src.path). Use it to split a struct that holds two things, or to group fields that belong together, before giving the new type methods or a file of its own.
 With into in place of new_type, the fields go to the end of a struct that already exists, one the struct embeds or holds in a field by value: moving depth of Bed into Soil, held as soil, makes b.depth b.soil.depth and Bed{depth: 3} Bed{soil: Soil{depth: 3}}.
 Identify the struct by file and name, or by line at its declaration or a use; fields are the names to move, new_type the new type's name.
-Refuses, saying why: a struct whose values are passed to an interface (reflection, fmt's %+v and encoding/json would see the new field), a generic struct, an embedded field or part of a field group to move, a name already taken, an unkeyed literal whose moved fields are not next to each other. For an exported struct the result notes that the module's API changed.`
+Refuses, saying why: a struct whose values are passed where reflection may look at its fields (encoding/json; what fmt prints is listed in a note), a generic struct, an embedded field or part of a field group to move, a name already taken, an unkeyed literal whose moved fields are not next to each other. For an exported struct the result notes that the module's API changed.`
 }
 
 func (*ExtractStruct) InputSchema() json.RawMessage {
@@ -76,6 +77,7 @@ type args struct {
 type extraction struct {
 	site.Site
 	tn      *types.TypeName
+	printed []string // calls whose output changes: fmt prints the struct
 	gen     *ast.GenDecl
 	spec    *ast.TypeSpec
 	st      *ast.StructType
@@ -121,7 +123,7 @@ func (*ExtractStruct) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refac
 	if err := x.checkNames(); err != nil {
 		return nil, err
 	}
-	if err := x.checkNotPassedAsInterface(); err != nil {
+	if err := x.checkReflected(); err != nil {
 		return nil, err
 	}
 	n, err := x.rewriteLiterals()
@@ -143,6 +145,9 @@ func (*ExtractStruct) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refac
 	}
 	if analysis.PublicAPI(x.tn, ws.Pkgs) {
 		plan.Notes = append(plan.Notes, refactor.APINote(x.tn.Name(), "moving its fields into "+x.newType)+" (their literals cannot name the moved fields; reflection sees the embedded field)")
+	}
+	if len(x.printed) > 0 {
+		plan.Notes = append(plan.Notes, "what these calls print changes, since fmt prints the moved fields inside "+x.newType+" now: "+textutil.FirstFew(x.printed, 5))
 	}
 	return plan, nil
 }
@@ -305,38 +310,41 @@ func sameObj(fset *token.FileSet, a, b types.Object) bool {
 	return pa == pb && a.Name() == b.Name()
 }
 
-// checkNotPassedAsInterface refuses a value holding the type (itself, or
-// in a pointer, slice, map or field) passed to an interface parameter or
-// converted to an interface: what reflection sees there would change.
-func (x *extraction) checkNotPassedAsInterface() error {
-	return x.notPassedAsInterface(x.tn, "the new embedded one")
+// checkReflected refuses a value holding the type passed where reflection
+// may look at its fields, and lists in x.printed the calls of fmt that
+// print it.
+func (x *extraction) checkReflected() error {
+	return x.reflected(x.tn, "the new embedded one")
 }
 
-// notPassedAsInterface refuses a value holding tn passed as an interface,
-// where reflection would see the struct's changed fields (what names
-// them).
-func (x *extraction) notPassedAsInterface(tn *types.TypeName, what string) error {
+// reflected refuses a value holding tn (itself, or in a pointer, slice,
+// map or field) passed as an interface where reflection may look at the
+// struct's fields (encoding/json, reflect, a function not known): it would
+// see what. Where fmt prints the value, it adds the call to x.printed,
+// since what it prints changes.
+func (x *extraction) reflected(tn *types.TypeName, what string) error {
 	match := func(t types.Type) bool {
 		n, ok := t.(*types.Named)
 		return ok && sameObj(x.WS.Fset, n.Obj(), tn)
 	}
-	for _, p := range x.WS.Pkgs {
-		if p.TypesInfo == nil {
-			continue
+	for _, ref := range analysis.ReflectedIn(x.WS.Pkgs, x.WS.Fset, match) {
+		at := x.WS.Position(ref.Arg.Pos())
+		switch ref.Sight {
+		case analysis.Prints, analysis.PrintsNames:
+			if call := at + " " + ref.Callee; !slices.Contains(x.printed, call) {
+				x.printed = append(x.printed, call)
+			}
+		case analysis.SeesNames:
+			holding := "a value holding " + tn.Name()
+			t := ref.Type
+			if pt, ok := t.(*types.Pointer); ok {
+				t = pt.Elem()
+			}
+			if match(t) {
+				holding = "a " + tn.Name()
+			}
+			return refactor.Refusef("%s is %s at %s, where reflection may look at the struct's fields (encoding/json, reflect), and would see %s; only fmt's printing is allowed, with a note", holding, ref.Passed(), at, what)
 		}
-		arg := analysis.PassedAsInterface(p.TypesInfo, p.Syntax, match)
-		if arg == nil {
-			continue
-		}
-		holding := "a value holding " + tn.Name()
-		t := p.TypesInfo.TypeOf(arg)
-		if pt, ok := t.(*types.Pointer); ok {
-			t = pt.Elem()
-		}
-		if match(t) {
-			holding = "a " + tn.Name()
-		}
-		return refactor.Refusef("%s is passed as an interface at %s; reflection there (fmt's %%+v, encoding/json, reflect) sees the struct's fields, and would see %s", holding, x.WS.Position(arg.Pos()), what)
 	}
 	return nil
 }

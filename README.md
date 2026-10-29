@@ -2259,7 +2259,8 @@ hand or a tool got in the way.
        is inlined, and the signatures go with it; a generic function
        whose body does not name its type parameters. Async stays
        refused: inlining an await changes when the rest runs. Go's
-       inline_function still refuses an early return.
+       inline_function then still refused an early return (it inlines
+       them since #472).
     8. extract_function addressed by `function` and `case` (a switch
        case), as Go's. *Done*, for replace_statements too: the case's
        value as written (`"fern"`, `Kind.Fern`) or `default`; a last
@@ -2313,8 +2314,13 @@ hand or a tool got in the way.
       check finds wrappers by facts; a summary could carry "this
       parameter reaches a printer".
     - **Other users:** extract_struct (the printed shape changes) and
-      remove_dead_code still use `PassedAsInterface`, which counts every
-      callee.
+      remove_dead_code still used `PassedAsInterface`, which counts every
+      callee. *Done:* both go ahead where fmt prints the value, at any
+      verb (`Prints` as well as `PrintsNames`), and note the calls;
+      remove_dead_code still refuses `reflect.DeepEqual` (`Compares`: two
+      values that differed only in the field would compare equal), and
+      both refuse what may find fields by name. `ReflectedIn` runs it
+      over a workspace's packages, once per argument.
     - **Values not followed:** assignments to interface variables and
       returns are not looked at (`var x any = v; json.Marshal(x)`).
 

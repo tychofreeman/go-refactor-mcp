@@ -33,10 +33,10 @@ func New() *ReplaceStatements { return &ReplaceStatements{} }
 func (*ReplaceStatements) Name() string { return "replace_statements" }
 
 func (*ReplaceStatements) Description() string {
-	return `Replace whole statements of one block with new Go statements: an edit, to write a body (a stub's) or change what statements do. With function "Cart.Total" and content return len(c.Items), Total's whole body becomes that statement.
-Give start_line and end_line (inclusive, as inspect numbers them) covering whole statements of one block, comments and blank lines included; or function for the whole body, which stays valid after earlier steps. content is re-indented to the block. Empty content over whole case clauses deletes them.
+	return `Replace whole statements of one block with new Go statements: an edit, to write a body or change what statements do. With function "Cart.Total" and content return len(c.Items), Total's whole body becomes that statement.
+Give start_line and end_line (inclusive, as inspect shows) covering whole statements of one block, comments and blank lines included; or function for the whole body, which stays valid after earlier steps. content is re-indented to the block. Empty content over whole case clauses deletes them (not one the value may still reach, or one fallen into).
 wrap in place of content keeps the statements, at the line $body of the code it gives: "once(func() {\n$body\n})".
-Packages content names are imported; those only the replaced statements used are removed.`
+Imports are added and removed as content needs.`
 }
 
 func (*ReplaceStatements) InputSchema() json.RawMessage {
