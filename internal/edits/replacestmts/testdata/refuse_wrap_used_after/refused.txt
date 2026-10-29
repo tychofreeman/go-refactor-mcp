@@ -1,0 +1,1 @@
+d is declared in the statements and used after them

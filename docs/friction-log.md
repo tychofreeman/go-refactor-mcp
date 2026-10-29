@@ -3455,3 +3455,11 @@ problem was reproduced first with the CLI on a scratch module (an
 aliased local import a later step used). One argument guessed wrong
 (add_field's `type` and `comment` for `field`), refused with the
 schema. Nothing by hand.
+
+## 2026-10-29: replace_statements' wrap
+
+All through the CLI, in a worktree; the new file by create_file. A
+first batch was refused for `ws.Position(...).Line` (Position returns
+a string), named in the refusal. The disk filled while two worktrees'
+checks built at once (the Go build cache reached 26 GB); `go clean
+-cache` and one check at a time. Nothing by hand.

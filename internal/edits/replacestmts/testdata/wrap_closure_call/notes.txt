@@ -1,0 +1,1 @@
+defer at line 6 now runs when the function literal returns

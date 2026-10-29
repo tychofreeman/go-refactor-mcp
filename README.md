@@ -821,7 +821,15 @@ hand or a tool got in the way.
       then gives. The inverse, unwrapping a body into its parent, is the
       same checks backward, and with `move_statement_in`/`_out`
       (`docs/edits.md`) gives "wrap in an if and move the statements
-      in", one of the user's derivations.
+      in", one of the user's derivations. *Done* as an edit, for any
+      container: replace_statements' `wrap` keeps the statements and
+      puts them, re-indented, at the line `$body` of the code it gives
+      (`if verbose {\n$body\n}`, `once(func() {\n$body\n})`, by lines,
+      `case` or `function`). It refuses statements that declare a name
+      used after them, and notes a return, defer, break or continue
+      whose meaning the container changes. Not yet: the refactoring
+      forms that prove nothing changes (`{ }`, `if true`, `for range
+      1`, a closure called at once), and unwrapping.
     - **A branch of an if** (the user, 2026-10-25): add_case adds
       `else if` and `else` branches to an if, as it adds cases to a
       switch: at the line of the if, at the end of its chain (before
@@ -2008,7 +2016,8 @@ hand or a tool got in the way.
         {...}, ...)`/`when`/`until` calls, by Python-computed
         `replace_text`. Item 20's containers stop at a closure called at
         once; this is the same edit with the literal passed to a named
-        function, its free variables staying captured.
+        function, its free variables staying captured. *Done:*
+        replace_statements' `wrap` (item 20).
       - **Delete a declaration by name, whatever its uses.** Old
         versions of helpers whose new versions live in another file went
         by `replace_text` of their whole text, found by fragile regexes:
