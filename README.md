@@ -2023,7 +2023,14 @@ hand or a tool got in the way.
     - **One server, one module.** The server reads its module once at
       start, so a session on one module cannot use it on another; a tool
       or `inspect` argument to open another module, or a server serving
-      several roots.
+      several roots. *Done* for Go: a call that names a file of another
+      module (a directory with its own go.mod, beside or inside this one;
+      `../tools/a.go`, or an absolute path) works in that module, loaded
+      on first use; its result starts by saying which module, with paths
+      relative to its root, and undo reverts it there. A call or batch
+      naming files of two modules is refused. Left: TypeScript (a
+      program per tsconfig.json), and a `to` of move_file in another
+      module, which stays relative to that module's root.
     - **Versions:** `refactor` has no `-version`, and both binaries report
       only the constant; reporting the module version or commit from the
       build information (`debug.ReadBuildInfo`) would tell which build is
@@ -2085,7 +2092,12 @@ hand or a tool got in the way.
         named them; alone it refuses at once, which is clearer.
         `create_from_usage`'s `to_file` must already exist ("is not a file
         of package"); creating it would save a `create_file` with only a
-        package clause. Experiments (a constant changed for a timing
+        package clause. *Done:* add_field gives every unkeyed literal of
+        the struct the new fields' zero values in their place (refusing,
+        with the literal, only when a zero value names a package its file
+        does not import), so it no longer refuses them at all; and a
+        `to_file` that does not exist, in the target package's directory,
+        is created with the stubs. Experiments (a constant changed for a timing
         probe, then restored) went around the tools; `undo` covers them
         only when the change went through a tool.
     - **The third round** (2026-10-28, glisp's entries from "direct
