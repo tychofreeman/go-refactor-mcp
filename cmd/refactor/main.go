@@ -28,6 +28,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -49,12 +50,17 @@ func run(argv []string) int {
 	pattern := fs.String("p", "./...", "package pattern to load")
 	dryRun := fs.Bool("n", false, "dry run: print the diff without writing")
 	asJSON := fs.Bool("json", false, "print the result as JSON (without declaring what an edit calls)")
+	version := fs.Bool("version", false, "print the version and exit")
 	fs.Usage = func() {
-		fmt.Fprintf(fs.Output(), "usage: refactor [flags] list\n       refactor [flags] <refactoring> key=value... | '<json>' | @file | -\n       refactor [flags] batch '<json>' | @file | -\n       refactor [flags] inspect key=value... | '<json>' | @file | -\n       refactor [flags] check [run_tests=true] [packages=./...]\n       refactor [flags] undo\n\n@file reads the JSON from a file, - from stdin. In the JSON, content_file (new_file, ...) gives a text argument from a file.\n\nflags:\n")
+		fmt.Fprintf(fs.Output(), "usage: refactor [flags] list [tool...]   (descriptions and arguments)\n       refactor [flags] <refactoring> key=value... | '<json>' | @file | -\n       refactor [flags] batch '<json>' | @file | -\n       refactor [flags] inspect key=value... | '<json>' | @file | -\n       refactor [flags] check [run_tests=true] [packages=./...]\n       refactor [flags] undo\n\n@file reads the JSON from a file, - from stdin. In the JSON, content_file (new_file, ...) gives a text argument from a file.\n\nflags:\n")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(argv); err != nil {
 		return 1
+	}
+	if *version {
+		fmt.Fprintln(stdout, "refactor", mcpserver.BuildVersion())
+		return 0
 	}
 	if fs.NArg() == 0 {
 		fs.Usage()
@@ -62,16 +68,20 @@ func run(argv []string) int {
 	}
 
 	name := fs.Arg(0)
+	if name == "list" {
+		want := fs.Args()[1:]
+		for _, r := range refactorings.All() {
+			if len(want) > 0 && !slices.Contains(want, r.Name()) {
+				continue
+			}
+			fmt.Fprintf(stdout, "%s\n  %s\n%s\n\n", r.Name(), strings.ReplaceAll(r.Description(), "\n", "\n  "), strings.ReplaceAll(refactor.ArgsHelp(r.Name(), r.InputSchema()), "\n", "\n  "))
+		}
+		return 0
+	}
 	rest, err := jsonFrom(fs.Args()[1:])
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
-	}
-	if name == "list" {
-		for _, r := range refactorings.All() {
-			fmt.Printf("%s\n  %s\n\n", r.Name(), strings.ReplaceAll(r.Description(), "\n", "\n  "))
-		}
-		return 0
 	}
 	if name != "check" && name != "undo" {
 		// TypeScript's files go to the server's languages, as a tool

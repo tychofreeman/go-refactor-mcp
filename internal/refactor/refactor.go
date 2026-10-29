@@ -294,7 +294,7 @@ func Run[W Workspace](ws W, r RefactoringOf[W], args json.RawMessage, opts Optio
 		if IsRefusal(err) {
 			res.Refused = err.Error()
 			if strings.HasPrefix(res.Refused, "invalid arguments") {
-				res.Refused += argsHelp(r.Name(), r.InputSchema())
+				res.Refused += ArgsHelp(r.Name(), r.InputSchema())
 			}
 			return res, nil
 		}
@@ -1197,9 +1197,9 @@ func DecodeArgs(args json.RawMessage, v any) error {
 	return nil
 }
 
-// argsHelp lists a tool's arguments, from its input schema and in its
+// ArgsHelp lists a tool's arguments, from its input schema and in its
 // order, for a refusal of arguments it does not take.
-func argsHelp(name string, schema json.RawMessage) string {
+func ArgsHelp(name string, schema json.RawMessage) string {
 	var s struct {
 		Properties json.RawMessage `json:"properties"`
 		Required   []string        `json:"required"`
