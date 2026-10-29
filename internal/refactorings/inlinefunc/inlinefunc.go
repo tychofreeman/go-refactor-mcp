@@ -17,6 +17,7 @@ import (
 	"go/token"
 	"go/types"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 
@@ -41,7 +42,7 @@ func (*InlineFunction) Name() string { return "inline_function" }
 func (*InlineFunction) Description() string {
 	return `Replace a call with the function's body, and delete the function when nothing else uses it: the inverse of extract_function. With func full(u User) string { return u.First + " " + u.Last }, name := full(u) becomes name := u.First + " " + u.Last. The call may be a statement, the right side of an assignment, a return, or, for a body that is one return, part of an expression; parameters are replaced by the arguments where that is safe, and otherwise declared first (p := arg).
 Identify the call by file, line and the function's name (column if the name is on the line twice). With all_calls, every call in the module is inlined and the function deleted (give file and name); if one call cannot be, none is. keep_function keeps the function.
-Refuses, saying why: generic or variadic functions, calls through an interface or a function value, defer or recover, named results, a return inside a loop, switch or block (one in an if is fine: the statements after it go in its else, and each return assigns the results), a name that would mean something else at the call.`
+Refuses, saying why: generic or variadic functions, calls through an interface or a function value, defer or recover, named results, goto, a name that would mean something else at the call. A body that returns early is fine: each return assigns the results, the statements after an if that returns become its else, and a return in a loop or switch sets a flag that guards the rest.`
 }
 
 func (*InlineFunction) InputSchema() json.RawMessage {
@@ -106,9 +107,12 @@ type inliner struct {
 	block      ast.Node     // the block or clause holding stmt
 	blockScope *types.Scope // its scope
 	ret        *ast.ReturnStmt
-	results    []ast.Expr      // ret's results, for assign and stmtCall
-	tails      bool            // every return is a tail return once the statements after an if that returns are its else (tailForm)
-	tailEdits  []edit.TextEdit // the callee's edits that make those else branches
+	results    []ast.Expr               // ret's results, for assign and stmtCall
+	tails      bool                     // the body returns early: each return assigns the results instead (exits)
+	tailEdits  []edit.TextEdit          // the callee's edits that reshape its body for that: else branches, guards, a loop's label
+	exitOf     map[*ast.ReturnStmt]exit // how each return leaves the body (exits)
+	flag       string                   // the variable that says the body returned, once a guard needs it
+	guarded    bool                     // a guard reads the flag
 
 	params  []*param
 	merged  map[*types.Var]*ast.Ident // body locals that take the place of a result variable
@@ -556,9 +560,13 @@ func (x *inliner) decideShape() error {
 		// An if that returns, with the statements after it as its else,
 		// returns only at the ends of its branches: each return then
 		// assigns the call's results instead, and the body runs to its end.
-		if x.hasGoto || !x.tailForm(x.decl.Body.List, &x.tailEdits) {
-			return refactor.Refusef("%q returns early (at %s) inside a loop, switch or block; a function with such returns can only be inlined where it is called as \"return %s(...)\"",
+		if x.hasGoto {
+			return refactor.Refusef("%q returns early (at %s) and uses goto; a function with goto can only be inlined where it is called as \"return %s(...)\"",
 				name, x.WS.Position(r.Pos()), name)
+		}
+		x.exitOf = map[*ast.ReturnStmt]exit{}
+		if _, ok := x.exits(x.decl.Body.List, true, ""); !ok {
+			return refactor.Refusef("%q has statements after a return (at %s), which never run", name, x.WS.Position(r.Pos()))
 		}
 		x.tails = true
 		return nil
@@ -571,66 +579,189 @@ func (x *inliner) decideShape() error {
 	return nil
 }
 
-// tailForm reports whether every return in list is a tail return once
-// each if that returns is given the statements after it as its else
-// branch: the last statement of the list, or of a branch of an if that
-// is itself in tail position. It adds the edits that make those else
-// branches to wrap. A return in a loop, a switch or a block is not one.
-func (x *inliner) tailForm(list []ast.Stmt, wrap *[]edit.TextEdit) bool {
+// exit is how a return of the body being inlined leaves it, once each
+// return assigns the results instead.
+type exit struct {
+	flag  bool   // the body goes on after it: it sets the returned flag
+	label string // the loop it then breaks out of, or ""
+}
+
+// exits plans how each return in list leaves the body: a return at the
+// end of a list that ends the body only assigns; an if that returns is
+// given the statements after it as its else; any other return also sets
+// a flag that guards the statements after it (if !returned { ... }), and
+// inside a loop breaks out of the outermost one, labelled. tail says
+// whether falling off list ends the body, and loop is the label of the
+// loop list is in, or "". It reports whether a return in list sets the
+// flag, and false for a return it cannot plan (statements after it).
+func (x *inliner) exits(list []ast.Stmt, tail bool, loop string) (flagged, ok bool) {
 	for i, s := range list {
 		if !hasReturn(s) {
 			continue
 		}
 		last := i == len(list)-1
+		rest := list[i+1:]
+		var f bool
 		switch s := s.(type) {
 		case *ast.ReturnStmt:
-			return last
+			if !last {
+				return false, false
+			}
+			if tail {
+				x.exitOf[s] = exit{}
+				return flagged, true
+			}
+			x.exitOf[s] = exit{flag: true, label: loop}
+			return true, true
 		case *ast.IfStmt:
-			if !x.tailIf(s, wrap) {
-				return false
+			if !last && tail && loop == "" && s.Else == nil && returnsAtEnd(s.Body.List) {
+				// The statements after the if run only when it does not
+				// return: they become its else branch.
+				if _, ok := x.exits(s.Body.List, true, loop); !ok {
+					return false, false
+				}
+				rb := x.callee.Off(s.Body.Rbrace)
+				x.tailEdits = append(x.tailEdits, edit.TextEdit{Start: rb, End: rb + 1, NewText: "} else {"})
+				x.insert(x.callee.Off(list[len(list)-1].End()), "\n}")
+				f, ok := x.exits(rest, true, loop)
+				return flagged || f, ok
 			}
-			if last {
-				return true
+			for b := ast.Stmt(s); b != nil; {
+				var body []ast.Stmt
+				switch e := b.(type) {
+				case *ast.IfStmt:
+					body, b = e.Body.List, e.Else
+				case *ast.BlockStmt:
+					body, b = e.List, nil
+				}
+				g, ok := x.exits(body, last && tail, loop)
+				if !ok {
+					return false, false
+				}
+				f = f || g
 			}
-			if s.Else != nil || !returnsAtEnd(s.Body.List) {
-				return false
+		case *ast.SwitchStmt, *ast.TypeSwitchStmt, *ast.SelectStmt:
+			for _, c := range clauses(s) {
+				g, ok := x.exits(c, last && tail, loop)
+				if !ok {
+					return false, false
+				}
+				f = f || g
 			}
-			// The statements after the if run only when it does not
-			// return: they become its else branch.
-			rb := x.callee.Off(s.Body.Rbrace)
-			end := x.callee.Off(list[len(list)-1].End())
-			*wrap = append(*wrap, edit.TextEdit{Start: rb, End: rb + 1, NewText: "} else {"})
-			closed := false // nested else branches end at the same place: one edit closes them all
-			for j, e := range *wrap {
-				if e.Start == end && e.End == end {
-					(*wrap)[j].NewText += "\n}"
-					closed = true
+		case *ast.BlockStmt:
+			var ok bool
+			if f, ok = x.exits(s.List, last && tail, loop); !ok {
+				return false, false
+			}
+		case *ast.ForStmt, *ast.RangeStmt, *ast.LabeledStmt:
+			label, body := loop, loopBody(s)
+			if body == nil {
+				return false, false
+			}
+			if label == "" { // the outermost loop: a return breaks out of all of them
+				if l, ok := s.(*ast.LabeledStmt); ok {
+					label = l.Label.Name
+				} else {
+					label = x.freshLabel("loop")
+					x.insert(x.callee.Off(s.Pos()), label+":\n")
 				}
 			}
-			if !closed {
-				*wrap = append(*wrap, edit.TextEdit{Start: end, End: end, NewText: "\n}"})
+			var ok bool
+			if f, ok = x.exits(body.List, false, label); !ok {
+				return false, false
 			}
-			return x.tailForm(list[i+1:], wrap)
 		default:
-			return false
+			return false, false
+		}
+		flagged = flagged || f
+		if f && !last && loop == "" {
+			// The statements after s run only if nothing in it returned.
+			x.guarded = true
+			x.insert(x.callee.Off(rest[0].Pos()), "if !"+x.flagName()+" {\n")
+			x.insert(x.callee.Off(rest[len(rest)-1].End()), "\n}")
+			g, ok := x.exits(rest, tail, loop)
+			return flagged || g, ok
 		}
 	}
-	return true
+	return flagged, true
 }
 
-// tailIf reports whether the returns in s's branches are tail returns
-// (see tailForm).
-func (x *inliner) tailIf(s *ast.IfStmt, wrap *[]edit.TextEdit) bool {
-	if !x.tailForm(s.Body.List, wrap) {
-		return false
+// insert adds text at off of the callee to the edits that reshape its
+// body, after any text already inserted there.
+func (x *inliner) insert(off int, text string) {
+	for i, e := range x.tailEdits {
+		if e.Start == off && e.End == off {
+			x.tailEdits[i].NewText += text
+			return
+		}
 	}
-	switch e := s.Else.(type) {
-	case *ast.IfStmt:
-		return x.tailIf(e, wrap)
-	case *ast.BlockStmt:
-		return x.tailForm(e.List, wrap)
+	x.tailEdits = append(x.tailEdits, edit.TextEdit{Start: off, End: off, NewText: text})
+}
+
+// flagName is the name of the variable that says the body returned.
+func (x *inliner) flagName() string {
+	if x.flag == "" {
+		x.flag = x.freshName("returned")
 	}
-	return true
+	return x.flag
+}
+
+// freshLabel returns base, or base with a number, that labels nothing in
+// the callee or the calling function.
+func (x *inliner) freshLabel(base string) string {
+	used := map[string]bool{}
+	for l := range x.labels {
+		used[l] = true
+	}
+	ast.Inspect(x.callerFn, func(n ast.Node) bool {
+		if l, ok := n.(*ast.LabeledStmt); ok {
+			used[l.Label.Name] = true
+		}
+		return true
+	})
+	name := base
+	for i := 2; used[name]; i++ {
+		name = fmt.Sprintf("%s%d", base, i)
+	}
+	x.labels[name] = true
+	return name
+}
+
+// clauses returns the bodies of the cases of s, a switch, type switch or
+// select.
+func clauses(s ast.Stmt) [][]ast.Stmt {
+	var body *ast.BlockStmt
+	switch s := s.(type) {
+	case *ast.SwitchStmt:
+		body = s.Body
+	case *ast.TypeSwitchStmt:
+		body = s.Body
+	case *ast.SelectStmt:
+		body = s.Body
+	}
+	var out [][]ast.Stmt
+	for _, c := range body.List {
+		switch c := c.(type) {
+		case *ast.CaseClause:
+			out = append(out, c.Body)
+		case *ast.CommClause:
+			out = append(out, c.Body)
+		}
+	}
+	return out
+}
+
+// loopBody returns the body of s, a loop or a labelled loop, or nil.
+func loopBody(s ast.Stmt) *ast.BlockStmt {
+	switch s := s.(type) {
+	case *ast.ForStmt:
+		return s.Body
+	case *ast.RangeStmt:
+		return s.Body
+	case *ast.LabeledStmt:
+		return loopBody(s.Stmt)
+	}
+	return nil
 }
 
 // returnsAtEnd reports whether list always ends in a return: its last
@@ -675,23 +806,39 @@ func hasReturn(s ast.Stmt) bool {
 	return found
 }
 
-// tailResults turns each return of a body whose returns are all tail
-// returns (see tailForm) into an assignment of its values to the call's
-// targets, so the body runs to its end: the declarations to put before
-// the body, the edits of its returns, and the assignments after it from
-// temporaries.
+// tailResults turns each return of a body being inlined into an
+// assignment of its values to the call's targets, as exits planned, so
+// the body runs to its end: the declarations to put before the body, the
+// edits of its returns, and the assignments after it from temporaries.
 func (x *inliner) tailResults() (pre []string, edits []edit.TextEdit, post []string, err error) {
 	targets, pre, post, err := x.tailTargets()
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	if x.guarded {
+		pre = append(pre, "var "+x.flag+" bool")
+	}
 	for _, r := range x.returns {
-		if len(r.Results) == 0 || targets == nil {
-			edits = append(edits, x.deleteLine(x.callee.Src, x.callee.TF, r))
-			continue
+		e := x.exitOf[r]
+		var then []string
+		if e.flag && x.guarded {
+			then = append(then, x.flag+" = true")
 		}
-		at := x.callee.Off(r.Pos())
-		edits = append(edits, edit.TextEdit{Start: at, End: at + len("return"), NewText: strings.Join(targets, ", ") + " ="})
+		if e.label != "" {
+			then = append(then, "break "+e.label)
+		}
+		start, end := x.callee.Off(r.Pos()), x.callee.Off(r.End())
+		switch {
+		case (len(r.Results) == 0 || targets == nil) && len(then) == 0:
+			edits = append(edits, x.deleteLine(x.callee.Src, x.callee.TF, r))
+		case len(r.Results) == 0 || targets == nil:
+			edits = append(edits, edit.TextEdit{Start: start, End: end, NewText: strings.Join(then, "\n")})
+		default:
+			edits = append(edits, edit.TextEdit{Start: start, End: start + len("return"), NewText: strings.Join(targets, ", ") + " ="})
+			if len(then) > 0 {
+				edits = append(edits, edit.TextEdit{Start: end, End: end, NewText: "\n" + strings.Join(then, "\n")})
+			}
+		}
 	}
 	return pre, edits, post, nil
 }
@@ -898,23 +1045,42 @@ func (x *inliner) findBlock() error {
 	return nil
 }
 
-// returnsRightAfter reports whether the caller returns right after s, which
-// is the last statement of a function without results or is followed by a
-// bare return: the body's own returns then do the same as falling off its
+// returnsRightAfter reports whether the caller returns right after s:
+// what follows it is a bare return, or nothing in a function without
+// results (s ends its block, and so does each if, switch, select or
+// block around it, up to the function's body; a loop would go round
+// again). The body's own returns then do the same as falling off its
 // end.
 func (x *inliner) returnsRightAfter(s ast.Stmt) bool {
-	list := x.listOf(s)
-	for i, t := range list {
-		if t != s {
+	body, sig := funcBody(x.callerFn), x.callerSig()
+	n := ast.Node(s)
+	for _, p := range x.path[slices.Index(x.path, n)+1:] {
+		var list []ast.Stmt
+		switch p := p.(type) {
+		case *ast.BlockStmt:
+			list = p.List
+		case *ast.CaseClause:
+			list = p.Body
+		case *ast.CommClause:
+			list = p.Body
+		case *ast.IfStmt, *ast.SwitchStmt, *ast.TypeSwitchStmt, *ast.SelectStmt, *ast.LabeledStmt:
+			n = p
 			continue
+		default:
+			return false
+		}
+		i := slices.Index(list, n.(ast.Stmt))
+		if i < 0 {
+			return false
 		}
 		if i+1 < len(list) {
 			r, ok := list[i+1].(*ast.ReturnStmt)
 			return ok && len(r.Results) == 0
 		}
-		body := funcBody(x.callerFn)
-		sig := x.callerSig()
-		return body != nil && len(body.List) > 0 && body.List[len(body.List)-1] == s && sig != nil && sig.Results().Len() == 0
+		if p == body {
+			return sig != nil && sig.Results().Len() == 0
+		}
+		n = p
 	}
 	return false
 }
