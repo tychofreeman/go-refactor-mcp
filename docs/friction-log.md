@@ -3595,3 +3595,11 @@ replace_text and add_declaration. A first test expected an if/else and
 got a conditional expression: two guards and a last return already
 inline as one; the test now has a statement in its guard. Nothing by
 hand.
+
+## 2026-10-29: an early return's default value before the loop
+
+Goldens and tests first (create_file with overwrite for the changed
+outputs, replace_text for the TypeScript tests), `hoistable` and
+`hoist` with add_declaration, the hooks in exits, plan, tailResults,
+finish and earlyBody with replace_text, the fields with add_field.
+Nothing by hand.

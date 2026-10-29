@@ -773,7 +773,7 @@ func (in *inliner) earlyBody(l *lined, call, stmt *ast.Node, rs *[]repl) ([]*ast
 	for caller != nil && !ast.IsFunctionLike(caller) {
 		caller = caller.Parent
 	}
-	e := &early{in: in, used: map[string]bool{}, exits: map[*ast.Node]string{}, flagged: map[*ast.Node]bool{}, breaks: map[*ast.Node]bool{}, unit: fl.unit(),
+	e := &early{in: in, used: map[string]bool{}, exits: map[*ast.Node]string{}, flagged: map[*ast.Node]bool{}, breaks: map[*ast.Node]bool{}, hoisted: map[*ast.Node]*ast.Node{}, params: *rs, unit: fl.unit(),
 		taken: func(name string) bool { return taken(c, l, name, stmt) != "" }}
 	for _, n := range identifierTexts(in.fn) {
 		e.used[n] = true
@@ -796,7 +796,7 @@ func (in *inliner) earlyBody(l *lined, call, stmt *ast.Node, rs *[]repl) ([]*ast
 		} else {
 			typ = c.TypeToString(c.GetWidenedType(c.GetTypeAtLocation(d.Name())))
 		}
-		e.target, decl = d.Name().Text(), ": "+typ
+		e.target, decl, e.decl = d.Name().Text(), ": "+typ, true
 	case ast.IsExpressionStatement(stmt) && ast.IsBinaryExpression(stmt.Expression()):
 		e.target = l.source(stmt.Expression().AsBinaryExpression().Left)
 	}
@@ -807,11 +807,14 @@ func (in *inliner) earlyBody(l *lined, call, stmt *ast.Node, rs *[]repl) ([]*ast
 	*rs = append(*rs, e.rs...)
 	var pre []string
 	if decl != "" {
-		bang := "" // a flag hides from the checker that every path assigns
-		if len(e.flagged) > 0 {
-			bang = "!"
+		switch {
+		case e.declInit != "":
+			pre = append(pre, "let "+e.target+decl+" = "+e.declInit+fl.semi())
+		case len(e.flagged) > 0: // a flag hides from the checker that every path assigns
+			pre = append(pre, "let "+e.target+"!"+decl+fl.semi())
+		default:
+			pre = append(pre, "let "+e.target+decl+fl.semi())
 		}
-		pre = append(pre, "let "+e.target+bang+decl+fl.semi())
 	}
 	if e.flag != "" {
 		pre = append(pre, "let "+e.flag+" = false"+fl.semi())

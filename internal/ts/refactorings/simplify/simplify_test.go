@@ -965,17 +965,12 @@ export function use(xs: number[]): number {
 }
 `, NewInlineFunction(), `{"line": 24, "name": "find"}`, plants + `
 export function use(xs: number[]): number {
-  let v!: number;
-  let returned = false;
+  let v: number = -1;
   loop: for (const x of xs) {
     if (x > 0) {
       v = x;
-      returned = true;
       break loop;
     }
-  }
-  if (!returned) {
-    v = -1;
   }
   return v + 1;
 }
@@ -1001,6 +996,39 @@ export function use(n: number): void {
   water();
 }
 `, ""},
+		{"early return in a loop, then statements", plants + `
+function find(xs: number[]): number {
+  for (const x of xs) {
+    if (x > 0) {
+      return x;
+    }
+  }
+  water();
+  return -1;
+}
+
+export function use(xs: number[]): number {
+  const v = find(xs);
+  return v + 1;
+}
+`, NewInlineFunction(), `{"line": 25, "name": "find"}`, plants + `
+export function use(xs: number[]): number {
+  let v!: number;
+  let returned = false;
+  loop: for (const x of xs) {
+    if (x > 0) {
+      v = x;
+      returned = true;
+      break loop;
+    }
+  }
+  if (!returned) {
+    water();
+    v = -1;
+  }
+  return v + 1;
+}
+`, ""},
 		{"early return in a switch", plants + `
 function size(k: string): number {
   switch (k) {
@@ -1018,20 +1046,14 @@ export function use(k: string): number {
 }
 `, NewInlineFunction(), `{"line": 25, "name": "size"}`, plants + `
 export function use(k: string): number {
-  let n!: number;
-  let returned = false;
+  let n: number = 3;
   switch (k) {
     case "s":
       n = 1;
-      returned = true;
       break;
     case "m":
       n = 2;
-      returned = true;
       break;
-  }
-  if (!returned) {
-    n = 3;
   }
   return n * 2;
 }

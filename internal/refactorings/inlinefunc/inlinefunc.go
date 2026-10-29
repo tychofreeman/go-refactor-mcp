@@ -107,12 +107,13 @@ type inliner struct {
 	block      ast.Node     // the block or clause holding stmt
 	blockScope *types.Scope // its scope
 	ret        *ast.ReturnStmt
-	results    []ast.Expr               // ret's results, for assign and stmtCall
-	tails      bool                     // the body returns early: each return assigns the results instead (exits)
-	tailEdits  []edit.TextEdit          // the callee's edits that reshape its body for that: else branches, guards, a loop's label
-	exitOf     map[*ast.ReturnStmt]exit // how each return leaves the body (exits)
-	flag       string                   // the variable that says the body returned, once a guard needs it
-	guarded    bool                     // a guard reads the flag
+	results    []ast.Expr                   // ret's results, for assign and stmtCall
+	tails      bool                         // the body returns early: each return assigns the results instead (exits)
+	tailEdits  []edit.TextEdit              // the callee's edits that reshape its body for that: else branches, guards, a loop's label
+	exitOf     map[*ast.ReturnStmt]exit     // how each return leaves the body (exits)
+	flag       string                       // the variable that says the body returned, once a guard needs it
+	guarded    bool                         // a guard reads the flag
+	hoisted    map[*ast.ReturnStmt]ast.Stmt // a last return whose value is assigned before the loop or switch that returns early instead (exits)
 
 	params  []*param
 	merged  map[*types.Var]*ast.Ident // body locals that take the place of a result variable
@@ -674,6 +675,16 @@ func (x *inliner) exits(list []ast.Stmt, tail bool, loop string) (flagged, ok bo
 			return false, false
 		}
 		flagged = flagged || f
+		if f && tail && loop == "" && x.hoistable(s, rest) {
+			// The value the body returns otherwise is assigned before s:
+			// each return in s overwrites it and leaves s, and nothing else
+			// runs after it.
+			if x.hoisted == nil {
+				x.hoisted = map[*ast.ReturnStmt]ast.Stmt{}
+			}
+			x.hoisted[rest[0].(*ast.ReturnStmt)] = s
+			return flagged, true
+		}
 		if f && !last && loop == "" {
 			// The statements after s run only if nothing in it returned.
 			x.guarded = true
@@ -684,6 +695,24 @@ func (x *inliner) exits(list []ast.Stmt, tail bool, loop string) (flagged, ok bo
 		}
 	}
 	return flagged, true
+}
+
+// hoistable reports whether rest, which follows s, is only a return of
+// values the call assigns, which can be evaluated before s instead: they
+// do nothing and cannot panic, so evaluating them also when s returns
+// changes nothing, and s changes nothing they read.
+func (x *inliner) hoistable(s ast.Stmt, rest []ast.Stmt) bool {
+	r, ok := rest[0].(*ast.ReturnStmt)
+	if len(rest) != 1 || !ok || len(r.Results) == 0 || x.shape != assign {
+		return false
+	}
+	for _, e := range r.Results {
+		m := analysis.Move{Effects: x.WS.Effects(), Func: x.calleeFA, Expr: e, Past: []ast.Node{s}, Times: analysis.Maybe}
+		if m.Check() != nil {
+			return false
+		}
+	}
+	return true
 }
 
 // insert adds text at off of the callee to the edits that reshape its
@@ -819,6 +848,15 @@ func (x *inliner) tailResults() (pre []string, edits []edit.TextEdit, post []str
 		pre = append(pre, "var "+x.flag+" bool")
 	}
 	for _, r := range x.returns {
+		if s, ok := x.hoisted[r]; ok {
+			var hoist string
+			if hoist, pre, err = x.hoist(r, s, targets, pre); err != nil {
+				return nil, nil, nil, err
+			}
+			at := x.callee.Off(x.callee.TF.LineStart(x.callee.TF.Line(s.Pos())))
+			edits = append(edits, x.deleteLine(x.callee.Src, x.callee.TF, r), edit.TextEdit{Start: at, End: at, NewText: hoist + "\n"})
+			continue
+		}
 		e := x.exitOf[r]
 		var then []string
 		if e.flag && x.guarded {
@@ -841,6 +879,26 @@ func (x *inliner) tailResults() (pre []string, edits []edit.TextEdit, post []str
 		}
 	}
 	return pre, edits, post, nil
+}
+
+// hoist returns the statement that assigns r's values to targets before
+// s, and pre without the declaration it takes the place of: a single
+// variable the call declares is declared there, with r's value.
+func (x *inliner) hoist(r *ast.ReturnStmt, s ast.Stmt, targets, pre []string) (string, []string, error) {
+	var vals []string
+	for _, e := range r.Results {
+		vals = append(vals, x.rewrite(x.callee.Off(e.Pos()), x.callee.Off(e.End())))
+	}
+	rhs := strings.Join(vals, ", ")
+	top := slices.Contains(x.decl.Body.List, s)
+	if decl := "var " + targets[0] + " "; top && len(targets) == 1 && len(pre) == 1 && strings.HasPrefix(pre[0], decl) {
+		want := x.sig.Results().At(0).Type()
+		if t := x.calleeFA.Info.TypeOf(r.Results[0]); t != nil && types.Identical(types.Default(t), want) {
+			return targets[0] + " := " + rhs, nil, nil
+		}
+		return pre[0] + " = " + rhs, nil, nil
+	}
+	return strings.Join(targets, ", ") + " = " + rhs, pre, nil
 }
 
 // tailTargets returns what each return's values are assigned to: the

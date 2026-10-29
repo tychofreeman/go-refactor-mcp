@@ -14,17 +14,21 @@ import (
 // the statements after it, and in a loop breaks out of the outermost one,
 // labelled.
 type early struct {
-	in      *inliner
-	rs      []repl               // the body's edits
-	target  string               // the variable each return's value goes to, or "" for a call statement
-	flag    string               // the flag's name, once a guard reads it
-	used    map[string]bool      // names and labels the function and the caller use
-	taken   func(string) bool    // whether a name means something at the call
-	exits   map[*ast.Node]string // each return planned, with the label it breaks out of, if any
-	flagged map[*ast.Node]bool   // the returns that set the flag
-	breaks  map[*ast.Node]bool   // returns in a switch, which then break out of it: a case would fall through
-	sw      bool                 // planning a switch's case, outside any loop in it
-	unit    string               // the file's indentation step
+	in       *inliner
+	rs       []repl                  // the body's edits
+	target   string                  // the variable each return's value goes to, or "" for a call statement
+	flag     string                  // the flag's name, once a guard reads it
+	used     map[string]bool         // names and labels the function and the caller use
+	taken    func(string) bool       // whether a name means something at the call
+	exits    map[*ast.Node]string    // each return planned, with the label it breaks out of, if any
+	flagged  map[*ast.Node]bool      // the returns that set the flag
+	breaks   map[*ast.Node]bool      // returns in a switch, which then break out of it: a case would fall through
+	sw       bool                    // planning a switch's case, outside any loop in it
+	hoisted  map[*ast.Node]*ast.Node // a last return whose value is assigned before the loop or switch that returns early instead
+	params   []repl                  // the parameters' replacements, for a hoisted value
+	declInit string                  // the hoisted value, when it initializes the call's variable
+	decl     bool                    // the call declares the target
+	unit     string                  // the file's indentation step
 }
 
 // insert adds text at off to the body's edits, after any text already
@@ -156,6 +160,13 @@ func (e *early) plan(list []*ast.Node, tail bool, loop string) (flagged bool, wh
 			return false, "it returns inside a statement other than an if, switch, block or loop (" + fl.where(s) + ")"
 		}
 		flagged = flagged || f
+		if f && tail && loop == "" && e.hoistable(s, rest) {
+			// The value the body returns otherwise is assigned before s:
+			// each return in s overwrites it and leaves s, and nothing else
+			// runs after it.
+			e.hoisted[rest[0]] = s
+			return flagged, ""
+		}
 		if f && !last && loop == "" {
 			// The statements after s run only if nothing in it returned.
 			if e.flag == "" {
@@ -173,10 +184,35 @@ func (e *early) plan(list []*ast.Node, tail bool, loop string) (flagged bool, wh
 	return flagged, ""
 }
 
+// hoistable reports whether rest, which follows s, is only a return of a
+// value the call assigns, which can be evaluated before s instead: it
+// does nothing and cannot throw, so evaluating it also when s returns
+// changes nothing, and s changes nothing it reads.
+func (e *early) hoistable(s *ast.Node, rest []*ast.Node) bool {
+	if len(rest) != 1 || !ast.IsReturnStatement(rest[0]) || rest[0].Expression() == nil || e.target == "" {
+		return false
+	}
+	return e.in.ef.Check(Move{Expr: rest[0].Expression(), Past: []*ast.Node{s}, Times: Maybe}) == ""
+}
+
 // finish adds the edits of the returns: each assigns its value to the
 // target, sets the flag and breaks out of its loop as planned.
 func (e *early) finish() {
 	fl, semi := e.in.fl, e.in.fl.semi()
+	for r, s := range e.hoisted {
+		x := r.Expression()
+		value := fl.substitute(fl.pos(x), x.End(), e.params)
+		if a, b, ok := fl.lineRange(r); ok {
+			e.rs = append(e.rs, repl{a, b, ""})
+		} else {
+			e.rs = append(e.rs, repl{fl.pos(r), r.End(), ""})
+		}
+		if e.decl && s.Parent == e.in.fn.Body() {
+			e.declInit = value
+			continue
+		}
+		e.insert(fl.start(fl.line(fl.pos(s))), fl.indent(fl.line(fl.pos(s)))+e.target+" = "+value+semi+"\n")
+	}
 	for r, label := range e.exits {
 		var then []string
 		if e.flagged[r] && e.flag != "" {
