@@ -2259,7 +2259,8 @@ hand or a tool got in the way.
        is inlined, and the signatures go with it; a generic function
        whose body does not name its type parameters. Async stays
        refused: inlining an await changes when the rest runs. Go's
-       inline_function still refuses an early return.
+       inline_function then still refused an early return (it inlines
+       them since #472).
     8. extract_function addressed by `function` and `case` (a switch
        case), as Go's. *Done*, for replace_statements too: the case's
        value as written (`"fern"`, `Kind.Fern`) or `default`; a last

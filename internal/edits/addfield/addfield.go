@@ -36,7 +36,7 @@ func (*AddField) Description() string {
 	return `Add fields to a struct type: an edit, to give a type the state a feature needs. field "Colour string" with after "Height" adds Colour just after Height in type Plant struct. field is Go source, one or more fields with their comments and tags, or embedded types; without after or before they go at the end. A struct on one line is opened up into lines. Packages the fields' types name are imported. To move fields that are there, use extract_struct.
 Identify the struct by file and name, or by line at its declaration or a use.
 Unkeyed literals of the struct get the new fields' zero values in their place.
-Refused with the compiler's errors: a duplicate name.`
+Refused with the compiler's errors: a duplicate name; and an unkeyed literal whose new zero value cannot be written there (a type its file does not import): give it keys first.`
 }
 
 func (*AddField) InputSchema() json.RawMessage {
