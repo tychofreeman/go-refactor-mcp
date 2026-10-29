@@ -3455,3 +3455,12 @@ problem was reproduced first with the CLI on a scratch module (an
 aliased local import a later step used). One argument guessed wrong
 (add_field's `type` and `comment` for `field`), refused with the
 schema. Nothing by hand.
+
+## 2026-10-29: extract_struct's into, a field between structs
+
+All through the CLI, in a worktree while the previous PR's checks ran.
+rewrite's tail became writeElts by extract_function, shared with the
+new literal rewrite; the new file came from a scratch file by
+`content_file`. The goldens' outputs were taken from runs of the new
+build on scratch modules, read, and saved with create_file. Nothing by
+hand.
