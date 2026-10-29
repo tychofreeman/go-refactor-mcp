@@ -3549,3 +3549,18 @@ CLAUDE.md, the friction log's header and the session notes with
 replace_text; the probe's write-up with create_file and
 inline_function's description with replace_text. The probe's plan was
 run with the CLI on a copy of its module. Nothing by hand.
+
+## 2026-10-29: a getter that caches its result
+
+The analysis test's cases and the goldens with replace_text and
+create_file (two add_parameter goldens moved to introduce_parameter
+with delete_file, since add_parameter's value is refused as able to
+panic where the body does not use it), `cacheOf`, `caches` and the
+field with add_declaration and add_field, summarize with
+replace_statements. Derivation section 8 run with the CLI on scratch
+modules. To check the new golden fails without the change,
+effects.go was put back to main's with a shell copy and restored.
+inline_function of a wrapper that returns early into its caller's if
+header was refused; tried extract_variable first (an assignment, still
+refused: only `return f(...)` takes an early return), so the wrapper
+stays. Nothing else by hand.

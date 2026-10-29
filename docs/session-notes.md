@@ -243,6 +243,15 @@ results are in `docs/cost-history.md`.
   the count (50: 45 tools today, raised from 44 by the user "for now"; move_method was the 45th, 2026-10-29)
   and the instructions' size; raise it only with the user. README roadmap item 25.
 
+- **A getter that caches its result reads, it does not write**
+  (2026-10-29, the user chose this of three: keep refusing, recognise
+  the shape, or allow with a note). `analysis.cacheOf` recognises
+  `if r.f == nil { ... }; return r.f`: its writes to `r.f` and what it
+  holds are its own, and the new values it makes do not count, since
+  later calls return the first. Only that shape: a getter that also
+  counts calls or writes anything else keeps its effect. The user also
+  asked for the non-strict way (`docs/derivations.md` section 8): pass
+  the method value, so the getter runs where it ran.
 - **A parameter may take a package variable's place** (2026-10-25, the
   user): add_parameter's `replace_variable` lets the new parameter hide
   the package variable the body reads. Where the engine cannot prove a
