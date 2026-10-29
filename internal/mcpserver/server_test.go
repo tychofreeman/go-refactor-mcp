@@ -1069,3 +1069,11 @@ func TestGoAndTypeScript(t *testing.T) {
 	}})
 	mustContain(t, "a batch over both", out, "more than one language")
 }
+
+// The build version starts with Version and may add the module version
+// or commit it was built from.
+func TestBuildVersion(t *testing.T) {
+	if v := BuildVersion(); !strings.HasPrefix(v, Version) {
+		t.Errorf("BuildVersion() = %q, want it to start with %q", v, Version)
+	}
+}
