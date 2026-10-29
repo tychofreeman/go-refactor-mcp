@@ -1223,7 +1223,7 @@ hand or a tool got in the way.
     names; a run's eight loaded schemas, about 12.5K characters, from
     when they load), a new tool 30-40 tokens a request; what grows
     faster is choosing among them. `TestToolBudget` holds the count
-    at 50 tools (44 today; the user raised it from 44 for now) and the
+    at 50 tools (45 today, with move_method; the user raised it from 44 for now) and the
     instructions at 6,000 characters. *Done.* A new
     operation is, in this order:
     - a proof in the engine, not a tool: an edit to code the engine
@@ -1433,6 +1433,25 @@ hand or a tool got in the way.
     would free two places of the budget and make several signature
     changes in one call, but would not have done #317: Change
     Signature does not delete a parameter the body uses either.
+    *Done* (2026-10-29): `value` (#459), with `also` for functions
+    that pass the parameter to each other: every body first gets the
+    value written for its uses, then each loses the parameter, so a
+    call among them that passed its own parameter on now passes the
+    value, and the check that each call passes it holds; and plain
+    remove_parameter's refusal for a parameter the body reads names
+    `value`. Left: a function that only passes the parameter on and
+    never evaluates it, when the value can panic (`m.info` through a
+    pointer): dropping its arguments is refused. `move_method` is a
+    tool (the budget had room: 45 of 50): it moves methods to a struct
+    type that embeds their receiver's type, with `also` for those that
+    call each other; the receiver's uses go through the embedded field
+    where they must (as a value, or a selector the new type resolves
+    elsewhere), `y.Soil.m()` becomes `y.m()`, and a call on a value no
+    such struct holds is refused. To a parameter's type, the move is
+    method_to_function then function_to_method with `receiver` (#318
+    did it in three steps before `receiver` existed). #317's
+    derivation is now: declare the struct (an edit), move_method with
+    `also`, then remove_parameter with `value` and `also`.
 
 29. **Plan, then execute: a loop of our own** (the user, 2026-10-25):
     with the tools, Sonnet and Haiku both cost more than editing by
@@ -1858,11 +1877,9 @@ hand or a tool got in the way.
       drops the parameter, once each call is shown to pass it and each
       place the body evaluates it to get what the call passed (the
       checks of introduce_parameter, run the other way); a recursive
-      call passing the parameter on counts as passing it. Left: methods
-      that pass the parameter to each other (the thirteen), where no one
-      method's calls pass the field until another is done; a `value`
-      over several functions at once, or setting the field first and
-      proving the calls pass it, would cover them.
+      call passing the parameter on counts as passing it. Methods that
+      pass the parameter to each other (the thirteen) go together with
+      `also` (item 28).
     - **A field between structs.** `relaxer` moved from the matcher to
       `folder` by text (Oct 24): no tool moves a field to another struct
       that every use can reach. *Done:* extract_struct's `into` moves
