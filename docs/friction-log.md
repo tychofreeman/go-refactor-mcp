@@ -3491,3 +3491,9 @@ under a new name, which replace_declaration refuses), so that every
 call's check comes before the body's and the refusal names `also`.
 The group's later steps looked up a function an earlier step had
 already changed; they now skip it. Nothing by hand.
+
+## 2026-10-29: refactor list with arguments, -version, check's race, hints
+
+All through the CLI. A batch was refused once because rename had
+already renamed the doc comment's first word that the next step
+replaced (rename updates comments). Nothing by hand.

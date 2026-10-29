@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -30,6 +31,32 @@ import (
 
 // Version is reported to MCP clients.
 const Version = "0.3.1"
+
+// BuildVersion is Version with what the build knows of its source: the
+// module version it was installed at, or the commit it was built from
+// and whether the tree had changes.
+func BuildVersion() string {
+	bi, ok := debug.ReadBuildInfo()
+	if !ok {
+		return Version
+	}
+	rev, modified := "", ""
+	for _, s := range bi.Settings {
+		switch {
+		case s.Key == "vcs.revision":
+			rev = s.Value
+		case s.Key == "vcs.modified" && s.Value == "true":
+			modified = ", modified"
+		}
+	}
+	switch {
+	case bi.Main.Version != "" && bi.Main.Version != "(devel)":
+		return Version + " (" + bi.Main.Version + ")"
+	case rev != "":
+		return Version + " (commit " + rev[:min(len(rev), 12)] + modified + ")"
+	}
+	return Version
+}
 
 // Instructions are sent to the client at initialization; MCP clients such
 // as Claude Code show them to the model. They set the pace of the loop.
@@ -217,6 +244,7 @@ func (s *Server) MCP() *mcp.Server {
   "type": "object",
   "properties": {
     "run_tests": {"type": "boolean", "description": "Also run go test."},
+    "race":      {"type": "boolean", "description": "With run_tests, run them with -race."},
     "packages":  {"type": "string",  "description": "Package pattern for go test, relative to the module root (default ./...)."}
   },
   "additionalProperties": false

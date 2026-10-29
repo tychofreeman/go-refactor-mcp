@@ -188,9 +188,13 @@ func (*CreateFromUsage) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 		names = append(names, s.fullName())
 	}
 	for _, d := range decls {
-		if d.choice != "" {
-			choices = append(choices, d.choice)
+		if d.choice == "" {
+			continue
 		}
+		if strings.HasSuffix(path, "_test.go") && !strings.HasSuffix(d.file, "_test.go") && !d.field {
+			d.choice += " (a helper only tests use: to_file " + ws.Rel(path) + " puts it there)"
+		}
+		choices = append(choices, d.choice)
 	}
 	edits, err := writeStubs(ws, decls, st.imports)
 	if err != nil {
@@ -461,7 +465,7 @@ func (st *stubber) signature(s stub, write func(types.Type) string, used map[str
 	if ok {
 		res = resultText(res)
 	} else if res, ok = results(st.Pkg.TypesInfo, st.File, s.call, write); !ok {
-		return "", refactor.Refusef("cannot tell the results of %s from its use on line %d of %s; give them in results, e.g. {%q: \"(int, error)\"}", s.name, line, st.args.File, s.name)
+		return "", refactor.Refusef("cannot tell the results of %s from its use on line %d of %s; give them in results, an argument of create_from_usage (in a batch, a create_from_usage step for this file before the step that needs it), e.g. {%q: \"(int, error)\"}", s.name, line, st.args.File, s.name)
 	}
 	return s.name + "(" + strings.Join(params, ", ") + ")" + res, nil
 }
