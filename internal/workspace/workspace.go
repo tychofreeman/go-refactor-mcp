@@ -50,8 +50,9 @@ type Workspace struct {
 	// several languages may share one.
 	History *history.Stack
 
-	stamps  map[string]stamp  // size and mtime of each relevant file at the last update
-	effects *analysis.Effects // made on first use after each update
+	stamps      map[string]stamp  // size and mtime of each relevant file at the last update
+	effects     *analysis.Effects // made on first use after each update
+	keepImports bool              // edits leave imports they make unused, for the end of a batch to remove
 }
 
 // Refresh brings the workspace up to date with the files on disk, if any
@@ -485,3 +486,11 @@ func (w *Workspace) SaveUndo(path string) error {
 func (w *Workspace) LoadUndo(path string) error {
 	return w.History.Load(path)
 }
+
+// KeepUnusedImports sets whether edits leave the imports they make
+// unused, for the end of a batch checked at its end to remove.
+func (w *Workspace) KeepUnusedImports(keep bool) { w.keepImports = keep }
+
+// KeepsUnusedImports reports whether edits leave the imports they make
+// unused.
+func (w *Workspace) KeepsUnusedImports() bool { return w.keepImports }

@@ -60,6 +60,13 @@ func tolerates(ws Workspace) bool {
 	return ok
 }
 
+// ImportKeeper is a workspace whose edits can leave the imports they make
+// unused: in a batch checked at its end, they stay for a later step to use,
+// and the end removes those still unused.
+type ImportKeeper interface {
+	KeepUnusedImports(keep bool)
+}
+
 // addedRefusal says why a step that left the errors after, from before,
 // is refused in a workspace that tolerates errors, or "" if it is not.
 func addedRefusal(before, after []string) string {
@@ -259,6 +266,10 @@ func Run[W Workspace](ws W, r RefactoringOf[W], args json.RawMessage, opts Optio
 		return res, nil
 	}
 
+	if k, ok := any(ws).(ImportKeeper); ok && isEdit && opts.Unchecked {
+		k.KeepUnusedImports(true)
+		defer k.KeepUnusedImports(false)
+	}
 	args, took := aliasArgs(r.InputSchema(), args)
 	args, err := readFileArgs(ws.Dir(), r.InputSchema(), args)
 	if err != nil {

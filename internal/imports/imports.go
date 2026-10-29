@@ -53,6 +53,10 @@ func New(ws *workspace.Workspace, pkg *packages.Package, file *ast.File, src []b
 	return a
 }
 
+// KeepsUnused reports whether an edit is to leave the imports it makes
+// unused, for the end of a batch to remove.
+func (a *Adder) KeepsUnused() bool { return a.ws.KeepsUnusedImports() }
+
 // Imported returns the name the file already imports path as ("." for a
 // dot import), and whether it does.
 func (a *Adder) Imported(path string) (string, bool) {

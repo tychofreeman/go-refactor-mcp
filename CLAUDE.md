@@ -81,7 +81,8 @@ until the MCP is reconnected.
 5. **Address by name, not line,** where a tool allows it: `file` + `name`
    for declarations (`Type.Method`, `Type.Field`), `replace_statements`
    with `function` to replace a whole body, `add_declaration` with
-   `after`/`before`. Names stay valid after earlier steps; a reference such
+   `after`/`before`, `replace_declaration` with empty `content` to
+   delete one. Names stay valid after earlier steps; a reference such
    as `$prev.end` addresses what an earlier step of the batch made.
 6. **Test first through the tools.** Add the test with `add_declaration`
    (or `create_file`). Functions and methods it calls (or passes as

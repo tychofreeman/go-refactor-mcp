@@ -284,8 +284,12 @@ func hasGoFiles(dir string) bool {
 
 // RemoveImports removes the file's imports that only the replaced code,
 // the positions for which inside is true, used and the content does not,
-// and returns their paths.
+// and returns their paths; none in a batch checked at its end, whose end
+// removes the imports left unused.
 func RemoveImports(pkg *packages.Package, file *ast.File, adder *imports.Adder, inside func(token.Pos) bool, c *Code) []string {
+	if adder.KeepsUnused() {
+		return nil
+	}
 	refs := map[string]bool{}
 	for _, n := range c.packageRefs() {
 		refs[n] = true

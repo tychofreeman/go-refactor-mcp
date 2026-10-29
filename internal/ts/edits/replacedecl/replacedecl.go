@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/tsapi"
@@ -23,7 +24,7 @@ func (*ReplaceDeclaration) Name() string { return "replace_declaration" }
 
 func (*ReplaceDeclaration) Description() string {
 	return `Replace a whole declaration, found by name, with new source: an edit, for a signature and body that change together, or a declaration too long to restate as replace_text's old (a table, a type); for a body alone, use replace_statements with function. With name "Bed.depth" and content depth(extra: number): number { return this.base + extra; }, depth's signature and body are replaced together, indented as it was.
-content is the new declaration; the old doc comment stays unless content has its own. Callers a new signature breaks are refused, or fixed in the same batch with check "end".
+content is the new declaration; the old doc comment stays unless content has its own. Empty content deletes the declaration and its doc comment. Callers a new signature or a deletion breaks are refused, or fixed in the same batch with check "end".
 Refuses, saying why: a name the file does not declare, or declares more than once (overloads, merged declarations).`
 }
 
@@ -33,7 +34,7 @@ func (*ReplaceDeclaration) InputSchema() json.RawMessage {
   "properties": {
     "file":    {"type": "string", "description": "The file that declares it, relative to the root."},
     "name":    {"type": "string", "description": "The declared name: name, or Class.member for a member."},
-    "content": {"type": "string", "description": "The new declaration, with a doc comment to replace the old one."}
+    "content": {"type": "string", "description": "The new declaration, with a doc comment to replace the old one; empty to delete it."}
   },
   "required": ["file", "name", "content"],
   "additionalProperties": false
@@ -57,5 +58,9 @@ func (*ReplaceDeclaration) Plan(ws *workspace.Workspace, raw json.RawMessage) (*
 	if why != "" {
 		return nil, refactor.Refusef("%s", why)
 	}
-	return &refactor.Plan{Summary: fmt.Sprintf("replaced %s", a.Name), Edits: edits}, nil
+	did := "replaced"
+	if strings.TrimSpace(a.Content) == "" {
+		did = "deleted"
+	}
+	return &refactor.Plan{Summary: fmt.Sprintf("%s %s", did, a.Name), Edits: edits}, nil
 }

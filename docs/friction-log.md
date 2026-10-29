@@ -3446,3 +3446,12 @@ type (`Locate`, used before declared) after twelve minutes, mostly a
 wait loop of mine whose `pgrep -f` matched itself; the batch then went
 with the implementation in it. This entry appended with replace_text's
 new `append`, the first not by heredoc. Nothing by hand.
+
+## 2026-10-28: imports kept to a batch's end; delete by replace_declaration; free names in inspect
+
+All through the CLI, tests and goldens first; test files given with
+the new `content_file`, which saved quoting them into JSON. The import
+problem was reproduced first with the CLI on a scratch module (an
+aliased local import a later step used). One argument guessed wrong
+(add_field's `type` and `comment` for `field`), refused with the
+schema. Nothing by hand.
