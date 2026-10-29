@@ -1910,7 +1910,19 @@ hand or a tool got in the way.
       test's output is not behavior to keep, but that is the user's
       call); `introduce_parameter` counted defining a local as a write
       that could change what the expression reads (Oct 25, `freshLocals`;
-      check whether item 35 fixed it).
+      check whether item 35 fixed it). Rechecked (2026-10-29), each
+      reproduced on a scratch module: extract_function's is *done*, a
+      variable nothing writes after its declaration may be returned though
+      a literal that runs later keeps it, since the copy holds the same
+      (`writtenAgain`; still refused once anything writes it again);
+      introduce_parameter's local and inline_variable's `p.TypesInfo`
+      past a module function no longer refuse (items 34-35 fixed them);
+      remove_parameter's dropped `p.TypesInfo` is right to refuse alone
+      (a pointer read that can panic) and is now `value`'s case (item
+      28). Left, as decisions rather than bugs: add_parameter's lazy
+      getter, whose first call assigns a field (an effect, though
+      repeating it changes nothing a caller can see), and rename's test
+      that prints a struct with `%+v` (the user's call).
     - **Each call of a function by another chosen by its arguments.**
       Thirty-four calls of `set` became calls of the recorder the
       argument named, by a script (Oct 25): one more story for item 9's
