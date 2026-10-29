@@ -64,7 +64,7 @@ func (d *Dispatcher) For(args json.RawMessage) (Language, string) {
 	}
 	byLang := map[Language][]string{}
 	var order []Language
-	for _, f := range namedFiles(v) {
+	for _, f := range NamedFiles(v) {
 		l := d.owner(f)
 		if l == nil {
 			continue
@@ -135,9 +135,9 @@ func (d *Dispatcher) owner(path string) Language {
 	return nil
 }
 
-// namedFiles returns the paths v gives as "file", "to_file" or "files",
+// NamedFiles returns the paths v gives as "file", "to_file" or "files",
 // at any depth, in the order they appear.
-func namedFiles(v any) []string {
+func NamedFiles(v any) []string {
 	var out []string
 	switch v := v.(type) {
 	case map[string]any:
@@ -161,15 +161,55 @@ func namedFiles(v any) []string {
 					}
 					continue
 				}
-				out = append(out, namedFiles(x)...)
+				out = append(out, NamedFiles(x)...)
 			default:
-				out = append(out, namedFiles(x)...)
+				out = append(out, NamedFiles(x)...)
 			}
 		}
 	case []any:
 		for _, x := range v {
-			out = append(out, namedFiles(x)...)
+			out = append(out, NamedFiles(x)...)
 		}
 	}
 	return out
+}
+
+// MapFiles returns v with each path it gives as "file", "to_file" or
+// "files", at any depth, replaced by f of it.
+func MapFiles(v any, f func(string) string) any {
+	switch v := v.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(v))
+		for k, x := range v {
+			switch x := x.(type) {
+			case string:
+				if k == "file" || k == "to_file" {
+					out[k] = f(x)
+					continue
+				}
+			case []any:
+				if k == "files" {
+					var fs []any
+					for _, e := range x {
+						if s, ok := e.(string); ok {
+							fs = append(fs, f(s))
+						} else {
+							fs = append(fs, e)
+						}
+					}
+					out[k] = fs
+					continue
+				}
+			}
+			out[k] = MapFiles(x, f)
+		}
+		return out
+	case []any:
+		out := make([]any, len(v))
+		for i, x := range v {
+			out[i] = MapFiles(x, f)
+		}
+		return out
+	}
+	return v
 }

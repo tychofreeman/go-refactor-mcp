@@ -10,6 +10,7 @@ import (
 	"go/token"
 	"go/types"
 	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"sort"
@@ -47,7 +48,7 @@ func (*CreateFromUsage) InputSchema() json.RawMessage {
     "file":    {"type": "string", "description": "Path of the file with the calls, relative to the workspace root."},
     "names":   {"type": "array", "items": {"type": "string"}, "description": "Optional: declare only these functions (by name, without package), not every undeclared one the file calls."},
     "results": {"type": "object", "additionalProperties": {"type": "string"}, "description": "Optional: result lists by function name, as Go source (e.g. {\"Load\": \"(*Config, error)\"}), for uses that do not tell them."},
-    "to_file": {"type": "string", "description": "Optional: the file of the target package to put the stubs in."}
+    "to_file": {"type": "string", "description": "Optional: the file of the target package to put the stubs in; a new one in its directory is created."}
   },
   "required": ["file"],
   "additionalProperties": false
@@ -221,6 +222,14 @@ func writeStubs(ws *workspace.Workspace, decls []decl, paths map[string][]string
 	var edits []edit.FileEdit
 	for _, dest := range order {
 		dpkg, dfile := ws.FileSyntax(dest)
+		if dfile == nil { // a new file
+			var text string
+			for _, d := range byFile[dest] {
+				text += d.text
+			}
+			edits = append(edits, edit.FileEdit{Path: dest, Edits: []edit.TextEdit{{NewText: newFile(packageIn(ws, filepath.Dir(dest)), text, paths[dest])}}})
+			continue
+		}
 		src, err := os.ReadFile(dest)
 		if err != nil {
 			return nil, err
@@ -1088,7 +1097,8 @@ func receiver(info *types.Info, named *types.Named, x ast.Expr) string {
 	return name + " " + t
 }
 
-// destination is the file a stub for target goes in: to_file if given;
+// destination is the file a stub for target goes in: to_file if given
+// (a file of target, or a new one in its directory);
 // else home (for a method, the file of its type) if given; else the calling file, if it is of target and not a test; else the file
 // of target the caller is named after (m.go for m_test.go), or its first.
 func destination(ws *workspace.Workspace, target *packages.Package, caller, toFile, home string) (string, error) {
@@ -1100,6 +1110,9 @@ func destination(ws *workspace.Workspace, target *packages.Package, caller, toFi
 	}
 	if toFile != "" {
 		p := ws.Abs(toFile)
+		if _, err := os.Stat(p); err != nil && strings.HasSuffix(p, ".go") && filepath.Dir(p) == packageDir(target) {
+			return p, nil // a new file of the package, which writeStubs creates
+		}
 		if dpkg, f := ws.FileSyntax(p); f == nil || dpkg.PkgPath != target.PkgPath {
 			return "", refactor.Refusef("to_file %s is not a file of package %s", toFile, target.PkgPath)
 		}
@@ -1109,7 +1122,7 @@ func destination(ws *workspace.Workspace, target *packages.Package, caller, toFi
 		return home, nil
 	}
 	if len(files) == 0 {
-		return "", refactor.Refusef("package %s has only test files; create a file for the stubs with create_file, then give it as to_file", target.PkgPath)
+		return "", refactor.Refusef("package %s has only test files; give to_file, a new file in its directory, for the stubs", target.PkgPath)
 	}
 	namesake := strings.TrimSuffix(caller, "_test.go") + ".go"
 	for _, f := range files {
@@ -1119,6 +1132,46 @@ func destination(ws *workspace.Workspace, target *packages.Package, caller, toFi
 	}
 	sort.Strings(files)
 	return files[0], nil
+}
+
+// packageDir is the directory of p's files.
+func packageDir(p *packages.Package) string {
+	if p.Dir != "" {
+		return p.Dir
+	}
+	for _, f := range p.CompiledGoFiles {
+		return filepath.Dir(f)
+	}
+	return ""
+}
+
+// packageIn is the name of the package whose files are in dir.
+func packageIn(ws *workspace.Workspace, dir string) string {
+	for _, p := range ws.Pkgs {
+		if p.Types != nil && !strings.HasSuffix(p.Types.Name(), "_test") && packageDir(p) == dir {
+			return p.Types.Name()
+		}
+	}
+	return filepath.Base(dir)
+}
+
+// newFile is the text of a new file of the package named name holding
+// decls, which import the packages at paths.
+func newFile(name string, decls string, paths []string) string {
+	var b strings.Builder
+	b.WriteString("package " + name + "\n")
+	switch len(paths) {
+	case 0:
+	case 1:
+		b.WriteString("\nimport " + strconv.Quote(paths[0]) + "\n")
+	default:
+		b.WriteString("\nimport (\n")
+		for _, p := range slices.Sorted(slices.Values(paths)) {
+			b.WriteString("\t" + strconv.Quote(p) + "\n")
+		}
+		b.WriteString(")\n")
+	}
+	return b.String() + decls
 }
 
 // parameters declares a parameter for each argument of call: of its type,

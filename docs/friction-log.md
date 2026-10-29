@@ -3527,3 +3527,13 @@ Nothing by hand.
 
 docs/derivations.md section 7 and the roadmap with replace_text, the
 derivation run with the CLI on a scratch module. Nothing by hand.
+
+## 2026-10-29: add_field fills unkeyed literals; create_from_usage creates to_file; other modules
+
+All through the CLI, goldens and tests first. A golden that expected
+add_field to refuse an unkeyed literal became an applied case (move_file
+after one call with the wrong argument name, refused with the schema).
+A replace_text with `function` was refused for a doc comment outside
+the body; resent without it. create_from_usage declared a struct field
+that a step used before it existed, which a later step removed when the
+design changed. Nothing by hand.

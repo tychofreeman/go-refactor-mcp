@@ -60,7 +60,7 @@ func BuildVersion() string {
 
 // Instructions are sent to the client at initialization; MCP clients such
 // as Claude Code show them to the model. They set the pace of the loop.
-const Instructions = `Refactoring and editing tools for the Go module in this project.
+const Instructions = `Refactoring and editing tools for the Go module in this project, and any other module a call names a file of by its path from this one (../tools/a.go).
 
 Two kinds of tool, by what they guarantee:
 - Refactorings preserve behavior. They find every reference with the type checker (every use, call and comment that names it), so there is no need to search for them first; they refuse changes that would alter behavior.
