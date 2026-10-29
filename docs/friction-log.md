@@ -3621,3 +3621,9 @@ Nothing by hand.
 - `verbFlags` and `namedVerbs` became `verb` and `formatVerbs` by rename
   before their replacement (replace_declaration refuses a content that
   declares another name), and a local `verb` had to be renamed first.
+
+## 2026-10-29: descriptions brought in line with the refusals
+
+All with replace_text through the CLI, from an audit run by a subagent
+and checked against the code; replace_statements' text trimmed four
+times to fit its size test. Nothing by hand.
