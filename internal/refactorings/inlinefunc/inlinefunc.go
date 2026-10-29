@@ -41,7 +41,7 @@ func (*InlineFunction) Name() string { return "inline_function" }
 func (*InlineFunction) Description() string {
 	return `Replace a call with the function's body, and delete the function when nothing else uses it: the inverse of extract_function. With func full(u User) string { return u.First + " " + u.Last }, name := full(u) becomes name := u.First + " " + u.Last. The call may be a statement, the right side of an assignment, a return, or, for a body that is one return, part of an expression; parameters are replaced by the arguments where that is safe, and otherwise declared first (p := arg).
 Identify the call by file, line and the function's name (column if the name is on the line twice). With all_calls, every call in the module is inlined and the function deleted (give file and name); if one call cannot be, none is. keep_function keeps the function.
-Refuses, saying why: generic or variadic functions, calls through an interface or a function value, defer or recover, named results, an early return, a name that would mean something else at the call.`
+Refuses, saying why: generic or variadic functions, calls through an interface or a function value, defer or recover, named results, an early return (except at a call that is its caller's last statement, or return f(...)), a name that would mean something else at the call.`
 }
 
 func (*InlineFunction) InputSchema() json.RawMessage {
