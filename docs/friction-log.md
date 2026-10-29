@@ -3465,3 +3465,12 @@ refused every case: the check that value does not name the parameter
 counted the field name in `b.depth`; fixed by skipping selectors. A
 recursive call's argument was checked as a body evaluation until it was
 left out (it goes with the parameter). Nothing by hand.
+
+## 2026-10-29: extract_struct's into, a field between structs
+
+All through the CLI, in a worktree while the previous PR's checks ran.
+rewrite's tail became writeElts by extract_function, shared with the
+new literal rewrite; the new file came from a scratch file by
+`content_file`. The goldens' outputs were taken from runs of the new
+build on scratch modules, read, and saved with create_file. Nothing by
+hand.

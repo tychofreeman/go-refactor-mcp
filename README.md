@@ -1857,7 +1857,15 @@ hand or a tool got in the way.
       proving the calls pass it, would cover them.
     - **A field between structs.** `relaxer` moved from the matcher to
       `folder` by text (Oct 24): no tool moves a field to another struct
-      that every use can reach.
+      that every use can reach. *Done:* extract_struct's `into` moves
+      fields to the end of a struct that already exists, one the struct
+      embeds (uses unchanged) or holds in a named field (`b.depth`
+      becomes `b.soil.depth`), by value; literals carry the fields into
+      the holding field's literal, or one made for them. Refused: a
+      pointer (values sharing one would share the fields), a name the
+      struct already has, an unkeyed literal of either struct, a
+      struct passed as an interface (reflection). Across packages and
+      the other direction (out of a held struct) are left.
     - **A field the embedded struct already provides.** `rename` rightly
       refuses `mover.ws` to `WS` when the embedded Site promotes a `WS`;
       what was wanted is to drop the field for the promoted one when
