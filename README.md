@@ -1865,7 +1865,13 @@ hand or a tool got in the way.
       nothing moves the elements of one literal into another or rewrites
       each element, so tables were merged by a script and sent as
       replace_declaration (Oct 18 twice, map entries; Oct 25, `stdFuncs`;
-      Oct 26, `stopsFuncs`).
+      Oct 26, `stopsFuncs`). *Done:* add_element's `from` adds every
+      element of another variable's literal, written by a template of
+      `$key` and `$value`; a key the literal has already merges when
+      both values are keyed literals with no field in common, and `from`
+      the literal itself rewrites each element. The literal can be named
+      by its variable (`name`). Left: TypeScript's add_element, and
+      merging into a value that is not a literal (`"os.Exit": stops`).
     - **Parameters into the receiver's state, and back.** Thirteen
       methods' `info` and `b` parameters became fields of their receiver
       as twenty-odd replace_text steps (Oct 24, `pattern.Attempt`). The

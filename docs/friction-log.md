@@ -3497,3 +3497,7 @@ already changed; they now skip it. Nothing by hand.
 All through the CLI. A batch was refused once because rename had
 already renamed the doc comment's first word that the next step
 replaced (rename updates comments). Nothing by hand.
+
+## 2026-10-29: add_element moves and rewrites a literal's elements
+
+All through the CLI, goldens first. Nothing by hand.
