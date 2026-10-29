@@ -89,3 +89,24 @@ func TestReplaceDeclaration(t *testing.T) {
 		{"no such name", `{"name": "dig", "content": "function dig() {}"}`, "", "declares no dig"},
 	})
 }
+
+// Empty content deletes the declaration, with its doc comment and the
+// blank line that set it apart.
+func TestDeleteDeclaration(t *testing.T) {
+	for _, tc := range []struct{ name, want string }{
+		{"water", "export class Bed {\n  base = 1;\n\n  /** How deep it is. */\n  depth(): number {\n    return this.base;\n  }\n}\n"},
+		{"Bed.depth", "export class Bed {\n  base = 1;\n}\n\n/** Waters a bed. */\nexport function water(b: Bed): number {\n  return 0;\n}\n"},
+	} {
+		src := plants
+		if tc.name == "Bed.depth" {
+			src = strings.Replace(src, "b.depth()", "0", 1)
+		}
+		got, refused := edited(t, src, `{"name": "`+tc.name+`", "content": ""}`)
+		if refused != "" || got != tc.want {
+			t.Errorf("%s: refused %q, got:\n%s\nwant:\n%s", tc.name, refused, got, tc.want)
+		}
+	}
+	if _, refused := edited(t, plants, `{"name": "Bed.depth", "content": ""}`); refused == "" {
+		t.Errorf("deleting a method water calls was not refused")
+	}
+}

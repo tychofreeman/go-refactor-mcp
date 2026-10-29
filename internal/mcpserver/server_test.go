@@ -696,7 +696,8 @@ func TestStubsForWhatEditsCall(t *testing.T) {
 		map[string]any{"tool": "create_file", "args": map[string]any{"file": "calc/conf.go", "content": "package calc\n\ntype Conf struct{ n int }\n"}},
 		map[string]any{"tool": "replace_statements", "args": map[string]any{"file": "calc/calc.go", "function": "Apply", "content": "c := Conf{n: n, Scale: Rate}\nif c.Strict {\n\treturn 0\n}\nreturn c.n * c.Scale"}},
 	}})
-	mustContain(t, "batch", out, "APPLIED batch: 3 steps", "field Scale int, in struct Conf", "field Strict bool, in struct Conf")
+	// sort, which the replaced body used, goes at the end of the batch.
+	mustContain(t, "batch", out, "APPLIED batch: 4 steps", "3. fix_imports: ", `removed import "sort"`, "field Scale int, in struct Conf", "field Strict bool, in struct Conf")
 	out, _ = call(t, cs, "replace_statements", map[string]any{"file": "calc/calc.go", "function": "Apply", "content": "c := Conf{n: n, Scale: Rate, Limit: 2}\nreturn c.n * c.Scale"})
 	mustContain(t, "replace_statements", out, "APPLIED batch: 2 steps", "field Limit int, in struct Conf")
 }

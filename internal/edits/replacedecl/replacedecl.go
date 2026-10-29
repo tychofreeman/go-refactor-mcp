@@ -29,7 +29,7 @@ func (*ReplaceDeclaration) Name() string { return "replace_declaration" }
 
 func (*ReplaceDeclaration) Description() string {
 	return `Replace a whole top-level declaration, found by name, with new source: an edit, for a signature and body that change together, or a declaration too long to restate as replace_text's old (a table, a type); for a body alone, use replace_statements with function. With name "Cart.Total" and content func (c *Cart) Total() (int, error) { ... }, Total's signature and body are replaced together.
-content is the new declaration, declaring the same name (to rename, use rename), then any declarations to add after it (a helper it now calls); in a parenthesized group, just its spec. The old doc comment stays unless content has its own. Packages content names are imported, and those only the old declaration used are removed. Callers a new signature breaks are refused, or fixed in the same batch with check "end".`
+content is the new declaration, declaring the same name (to rename, use rename), then any declarations to add after it (a helper it now calls); in a parenthesized group, just its spec. The old doc comment stays unless content has its own. Packages content names are imported, and those only the old declaration used are removed. Empty content deletes the declaration and its doc comment. Callers a new signature or a deletion breaks are refused, or fixed in the same batch with check "end".`
 }
 
 func (*ReplaceDeclaration) InputSchema() json.RawMessage {
@@ -40,7 +40,7 @@ func (*ReplaceDeclaration) InputSchema() json.RawMessage {
     "line":    {"type": "integer", "description": "1-based line of that occurrence. Omit it to find name as a symbol of the package of file."},
     "name":    {"type": "string",  "description": "The declared name: Name, or Type.Method for a method."},
     "column":  {"type": "integer", "description": "Optional 1-based column, only needed to disambiguate."},
-    "content": {"type": "string",  "description": "The new declaration, as Go source, with a doc comment to replace the old one; declarations after it are added after it."},
+    "content": {"type": "string",  "description": "The new declaration, as Go source, with a doc comment to replace the old one; declarations after it are added after it. Empty to delete it."},
     "imports": {"type": "array", "items": {"type": "string"}, "description": "Optional: import paths to use for package names content uses, when the name alone is ambiguous."}
   },
   "required": ["file", "name", "content"],
@@ -86,6 +86,9 @@ func (*ReplaceDeclaration) Plan(ws *workspace.Workspace, raw json.RawMessage) (*
 	decl, spec := declOf(file, obj.Pos())
 	if decl == nil {
 		return nil, refactor.Refusef("%s is not a top-level declaration", a.Name)
+	}
+	if strings.TrimSpace(a.Content) == "" {
+		return deletion(ws, declaring, path, a.Name, decl, spec)
 	}
 	code, decls, err := gocode.ParseDeclarations(a.Content)
 	if err != nil {
@@ -145,6 +148,58 @@ func (*ReplaceDeclaration) Plan(ws *workspace.Workspace, raw json.RawMessage) (*
 		plan.Notes = append(plan.Notes, gocode.ImportNote("removed", removed)+", which only the old declaration used")
 	}
 	return plan, nil
+}
+
+// deletion is the plan that deletes decl, or its spec when that is one of
+// a group, with its doc comment and the imports only it used.
+func deletion(ws *workspace.Workspace, declaring *site.Site, path, name string, decl ast.Decl, spec ast.Spec) (*refactor.Plan, error) {
+	file, src := declaring.File, declaring.Src
+	tf := ws.Fset.File(file.Pos())
+	start, end, doc := decl.Pos(), decl.End(), docOf(decl)
+	if spec != nil {
+		start, end, doc = spec.Pos(), spec.End(), specDoc(spec)
+	}
+	if doc != nil {
+		start = doc.Pos()
+	}
+	from := tf.Offset(tf.LineStart(tf.Line(start)))
+	to := tf.Offset(end)
+	for to < len(src) && src[to] != '\n' {
+		to++
+	}
+	to = min(to+1, len(src))
+	switch {
+	case spec != nil:
+	case to < len(src) && src[to] == '\n':
+		to++ // the blank line after it
+	case from > 1 && src[from-1] == '\n' && src[from-2] == '\n':
+		from-- // the last declaration: the blank line before it
+	}
+	none, err := gocode.ParseStatements("")
+	if err != nil {
+		return nil, err
+	}
+	adder := imports.New(ws, declaring.Pkg, file, src)
+	removed := gocode.RemoveImports(declaring.Pkg, file, adder, gocode.Between(start, end), none)
+	plan := &refactor.Plan{
+		Summary: fmt.Sprintf("deleted %s from %s", name, ws.Rel(path)),
+		Edits:   []edit.FileEdit{{Path: path, Edits: append([]edit.TextEdit{{Start: from, End: to}}, adder.Edits()...)}},
+	}
+	if len(removed) > 0 {
+		plan.Notes = append(plan.Notes, gocode.ImportNote("removed", removed)+", which only the deleted declaration used")
+	}
+	return plan, nil
+}
+
+// specDoc is the doc comment of a spec of a group.
+func specDoc(s ast.Spec) *ast.CommentGroup {
+	switch s := s.(type) {
+	case *ast.ValueSpec:
+		return s.Doc
+	case *ast.TypeSpec:
+		return s.Doc
+	}
+	return nil
 }
 
 // declOf is the top-level declaration of file that declares the name at

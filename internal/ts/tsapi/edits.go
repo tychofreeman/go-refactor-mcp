@@ -29,6 +29,18 @@ func (p *Project) ReplaceDeclaration(path, name, content string) ([]Edit, string
 		return nil, fmt.Sprintf("the file declares %s %d times (overloads, or merged declarations); replace them with replace_text", name, len(found))
 	}
 	d := found[0]
+	if strings.TrimSpace(content) == "" {
+		// Deleted, with its doc comment and the blank line after it, or
+		// before it when it is the last.
+		from, to := l.start(d.Start), min(l.end(d.End)+1, len(l.text))
+		switch {
+		case to < len(l.text) && l.text[to] == '\n':
+			to++
+		case from > 1 && l.text[from-1] == '\n' && l.text[from-2] == '\n':
+			from--
+		}
+		return []Edit{{File: l.f.FileName(), Start: from, End: to}}, ""
+	}
 	first := d.Start
 	content = strings.Trim(content, "\n")
 	if lead := strings.TrimSpace(content); !strings.HasPrefix(lead, "/*") && !strings.HasPrefix(lead, "//") {

@@ -257,6 +257,36 @@ func TestNames(t *testing.T) {
 	}
 }
 
+// A name nothing declares is reported free to declare, unless it is
+// predeclared or a file of the package imports a package by that name,
+// so that a new file's names can be checked before it is sent.
+func TestNamesFree(t *testing.T) {
+	t.Setenv("GOWORK", "off")
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example.com/s\n\ngo 1.22\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, "shapes.go"), []byte(shapes), 0o644)
+	os.Mkdir(filepath.Join(dir, "sub"), 0o755)
+	os.WriteFile(filepath.Join(dir, "sub", "sub.go"), []byte("package sub\n\nimport \"strings\"\n\n// Upper is s in capitals.\nfunc Upper(s string) string { return strings.ToUpper(s) }\n"), 0o644)
+	ws, err := workspace.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := Run(ws, Query{Names: []string{"sub.field", "sub.strings", "shapes.strings", "min"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"sub.field: no declaration of that name in package sub; it is free to declare",
+		"sub.strings: no declaration of that name in package sub; but sub/sub.go imports a package as strings, which a package-level strings would clash with",
+		"shapes.strings: no declaration of that name in package shapes; it is free to declare",
+		"min: no declaration of that name in the module; it is predeclared, which a package-level min would shadow",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output lacks %q:\n%s", want, out)
+		}
+	}
+}
+
 // TestNamesGrouped: declarations of one file are shown under one header,
 // in the order asked.
 func TestNamesGrouped(t *testing.T) {

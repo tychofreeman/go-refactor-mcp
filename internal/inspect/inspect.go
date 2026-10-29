@@ -16,6 +16,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -376,7 +377,7 @@ func resolve(ws *workspace.Workspace, name string) (match, error) {
 	sort.Slice(found, func(i, j int) bool { return found[i].file < found[j].file })
 	switch len(found) {
 	case 0:
-		return match{}, refactor.Refusef("no declaration of that name in the module")
+		return match{}, undeclared(ws, name)
 	case 1:
 		return found[0], nil
 	}
@@ -385,6 +386,66 @@ func resolve(ws *workspace.Workspace, name string) (match, error) {
 		places[i] = fmt.Sprintf("%s (package %s)", m.file, m.pkg)
 	}
 	return match{}, refactor.Refusef("declared in %s; name it more fully (pkg.Name, Type.Method)", strings.Join(places, ", "))
+}
+
+// undeclared is the refusal for name, which nothing in the module declares:
+// whether a package (all of them, for a name without its package's) may
+// declare it, or it is predeclared, or a file there imports a package by
+// that name.
+func undeclared(ws *workspace.Workspace, name string) error {
+	where, local, pkg := "the module", name, ""
+	if p, rest, ok := strings.Cut(name, "."); ok {
+		for _, q := range ws.Pkgs {
+			if q.Name == p {
+				where, local, pkg = "package "+p, rest, p
+				break
+			}
+		}
+	}
+	var importers []string
+	for _, p := range ws.Pkgs {
+		if pkg != "" && p.Name != pkg {
+			continue
+		}
+		for _, f := range p.Syntax {
+			tf := ws.Fset.File(f.Pos())
+			if tf == nil || !ws.Contains(tf.Name()) || slices.Contains(importers, ws.Rel(tf.Name())) {
+				continue
+			}
+			for _, imp := range f.Imports {
+				if pn := importedName(p.TypesInfo, imp); pn == local {
+					importers = append(importers, ws.Rel(tf.Name()))
+				}
+			}
+		}
+	}
+	sort.Strings(importers)
+	switch {
+	case len(importers) > 0:
+		verb := "imports"
+		if len(importers) > 1 {
+			verb = "import"
+		}
+		return refactor.Refusef("no declaration of that name in %s; but %s %s a package as %s, which a package-level %s would clash with", where, strings.Join(importers, ", "), verb, local, local)
+	case types.Universe.Lookup(local) != nil:
+		return refactor.Refusef("no declaration of that name in %s; it is predeclared, which a package-level %s would shadow", where, local)
+	}
+	return refactor.Refusef("no declaration of that name in %s; it is free to declare", where)
+}
+
+// importedName is the name imp binds in its file, "" for a blank or dot
+// import.
+func importedName(info *types.Info, imp *ast.ImportSpec) string {
+	if imp.Name != nil {
+		if imp.Name.Name == "_" || imp.Name.Name == "." {
+			return ""
+		}
+		return imp.Name.Name
+	}
+	if pn, ok := info.Implicits[imp].(*types.PkgName); ok {
+		return pn.Name()
+	}
+	return ""
 }
 
 // declarations renders file's header line, then the source of each

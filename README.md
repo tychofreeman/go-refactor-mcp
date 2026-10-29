@@ -1978,6 +1978,10 @@ hand or a tool got in the way.
         "end"` caught it, but only after all steps, rolling back eleven. A
         way to ask whether a name is free in a package (an `inspect`
         option) would let a new file be checked before it is sent.
+        *Done:* `inspect` `names` with `pkg.name` says of a name nothing
+        declares that it is free to declare, or that a file of the
+        package imports a package by that name (`strings`), or that it is
+        predeclared (`min`).
       - **Where a type is asserted.** Giving lambdas a type of their own
         meant finding every `x.(Function)` and type switch on it; `inspect`
         `uses` lists a type's every reference (conversions, signatures),
@@ -2011,7 +2015,11 @@ hand or a tool got in the way.
         `remove_dead_code` needs them unused, `move_declaration` moves
         them unchanged. An edit that deletes a named declaration (its
         comment included), checked with the batch, or
-        `replace_declaration` with `to_file`.
+        `replace_declaration` with `to_file`. *Done:*
+        replace_declaration with empty `content` deletes the declaration
+        (a spec of a group alone), its doc comment and the blank line
+        that set it apart, and the imports only it used (Go and
+        TypeScript); what it breaks is refused, or fixed in the batch.
       - **Replace text within a function.** `compileLambda` was changed
         by substring replacements computed outside and sent as a whole
         `replace_declaration`. `replace_text` scoped by `function` would
@@ -2020,7 +2028,12 @@ hand or a tool got in the way.
       - **Imports tidied at the end of a batch checked at its end.** A
         step replacing the last user of an import removed it, and the
         next step, which needed it, was refused; with `check: "end"`
-        unused imports could wait for the end, as stubs do.
+        unused imports could wait for the end, as stubs do. *Done:* in a
+        batch checked at its end, edits leave the imports they make
+        unused (`refactor.ImportKeeper`), so a later step can still use
+        one by a name no search would find (an alias, or a package
+        nothing else imports); the end's fix_imports removes those
+        still unused, as a step of the result.
       - **Append to a file, and replace a whole file.** Friction entries
         went in by heredoc until the session found it could anchor
         `replace_text` on the last entry's final lines (this project's
