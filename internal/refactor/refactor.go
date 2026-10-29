@@ -986,6 +986,9 @@ func followStep(ws Workspace, made []map[string]*stepLines, i int, lines map[str
 			// Follow the lines through the step's own edits: a line diff can
 			// pair a line with a copy the step moved elsewhere.
 			moved := edit.LineMapOf(before, c.After[p], edits)
+			if res.locations { // a rename: a line it changed in place is the same line
+				moved = edit.LineMapOfInPlace(before, c.After[p], edits)
+			}
 			if lines[rel] == nil {
 				lines[rel] = newLineMap(before)
 			}

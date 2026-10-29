@@ -221,3 +221,18 @@ func TestRunUndo(t *testing.T) {
 		t.Errorf("a third undo: exit status %d, want 2:\n%s", code, out.String())
 	}
 }
+
+// In a batch, a line an earlier rename changed in place keeps its number.
+func TestBatchAddressesARenamedLine(t *testing.T) {
+	dir := module(t, "package p\n\nfunc F() int {\n\ttotal := 1\n\treturn total\n}\n")
+	var out strings.Builder
+	stdout = &out
+	defer func() { stdout = os.Stdout }()
+	batch := `{"steps": [{"tool": "rename", "args": {"file": "p.go", "line": 4, "name": "total", "new_name": "sum"}}, {"tool": "replace_statements", "args": {"file": "p.go", "start_line": 5, "end_line": 5, "content": "return sum + 1"}}]}`
+	if code := run([]string{"-C", dir, "batch", batch}); code != 0 {
+		t.Fatalf("exit status %d:\n%s", code, out.String())
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, "p.go")); !strings.Contains(string(b), "return sum + 1") {
+		t.Errorf("p.go:\n%s", b)
+	}
+}

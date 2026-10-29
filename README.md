@@ -1948,7 +1948,13 @@ hand or a tool got in the way.
       (four times). Fixed in the end by gofmt'ing the project. Either
       every edit gofmts what it writes, or every edit follows the file's
       indentation; and `check` could list files that are not gofmt'd, so
-      the mismatch shows on the first edit.
+      the mismatch shows on the first edit. *Done* the second way: in a
+      file indented with spaces, each leading tab of what any edit writes
+      at a line's start becomes the file's unit of indentation (the
+      shortest run of leading spaces; `workspace.followIndent`, one place
+      for every edit and the imports they add; text with a raw string is
+      left as written). gofmt-ed files are formatted after each step, as
+      before. `check` lists the module's files that are not gofmt-ed.
     - **The CLI's `list` gives no argument names.** It prints the
       descriptions, not the schemas, so `replace_expression`'s old text
       (`expression`) and `remove_dead_code`'s `also` were guessed or
@@ -1969,13 +1975,20 @@ hand or a tool got in the way.
       addressed a line an earlier `rename` had changed (only the
       identifier) was refused as rewritten; the session split the batch in
       two. A line whose only change is a rename could keep its number.
+      *Done:* after a step that makes the same change at every site (a
+      rename), a line it changed within, adding no line break, keeps its
+      number (`edit.LineMapOfInPlace`).
     - **Smaller:** `add_parameter` could note a local in the body that
-      shadows the new parameter; `replace_statements`' description could
+      shadows the new parameter (*done*: a declaration in an inner scope is
+      noted; one at the body's top level was already refused); `replace_statements`' description could
       say that empty `content` deletes the statements (used three times,
       found by trying); `check` could take `race` or test flags (`go test
       -race` was run by hand); a tool or a `remove_dead_code` option to key
       an unkeyed literal (three literals restated by hand to remove a
-      field; with item 38's literal elements).
+      field; with item 38's literal elements; *done* for what that was
+      for: remove_dead_code deletes a field's element from unkeyed
+      literals when it is a constant or nil, and refuses one it would
+      have to evaluate).
     - **One server, one module.** The server reads its module once at
       start, so a session on one module cannot use it on another; a tool
       or `inspect` argument to open another module, or a server serving

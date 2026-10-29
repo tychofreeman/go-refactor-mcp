@@ -3491,3 +3491,11 @@ under a new name, which replace_declaration refuses), so that every
 call's check comes before the body's and the refusal names `also`.
 The group's later steps looked up a function an earlier step had
 already changed; they now skip it. Nothing by hand.
+
+## 2026-10-29: edits follow a file's spaces; a renamed line keeps its number; dead fields in unkeyed literals
+
+All through the CLI, tests and goldens first. A golden that expected
+remove_dead_code to refuse an unkeyed literal became an applied case:
+move_file renamed its directory (after one call with the wrong argument
+name, refused with the schema), delete_file removed its refused.txt.
+Nothing by hand.
