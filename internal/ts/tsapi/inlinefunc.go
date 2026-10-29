@@ -20,7 +20,12 @@ type repl struct {
 // substitute returns the bytes [start, end) of l's text with rs made.
 func (l *lined) substitute(start, end int, rs []repl) string {
 	rs = slices.Clone(rs)
-	sort.Slice(rs, func(i, j int) bool { return rs[i].start > rs[j].start })
+	sort.Slice(rs, func(i, j int) bool { // from the end; at one place, what is inserted there last
+		if rs[i].start != rs[j].start {
+			return rs[i].start > rs[j].start
+		}
+		return rs[i].end > rs[j].end
+	})
 	text := l.text[start:end]
 	for _, r := range rs {
 		if r.start >= start && r.end <= end {
@@ -688,11 +693,10 @@ func (in *inliner) inline(l *lined, call *ast.Node) ([]Edit, string) {
 		slices.SortFunc(edits, func(a, b Edit) int { return a.Start - b.Start })
 		return edits, ""
 	}
-	// A body that returns early is inlined only where its returns return
-	// from the caller too: a call that is a return's whole value.
-	if len(in.early) > 0 && !(ast.IsReturnStatement(stmt) && stmt.Expression() == call) {
-		return nil, fmt.Sprintf("%s returns early (%s); its call is inlined only as a return's whole value (return %s(...)), or when its body is guards (if (c) return a;) and a last return", name, fl.where(in.early[0]), name)
-	}
+	// A body that returns early keeps its returns where they return from
+	// the caller too: a call that is a return's whole value. Elsewhere each
+	// return assigns the call's value instead (early).
+	earlyMode := len(in.early) > 0 && !(ast.IsReturnStatement(stmt) && stmt.Expression() == call)
 	// A body of statements replaces a statement that is the call, declares
 	// or assigns its value, or returns it.
 	var shape string
@@ -711,18 +715,26 @@ func (in *inliner) inline(l *lined, call *ast.Node) ([]Edit, string) {
 	if shape == "value" && in.ret == nil {
 		return nil, fmt.Sprintf("%s returns nothing, but the call at %s uses its result", name, l.where(call))
 	}
+	body := in.stmts
+	var pre []string
+	if earlyMode {
+		var why string
+		if body, pre, why = in.earlyBody(l, call, stmt, &rs); why != "" {
+			return nil, fmt.Sprintf("%s returns early (%s), and %s", name, fl.where(in.early[0]), why)
+		}
+	}
 	a, b, ok := l.lineRange(stmt)
 	if !ok {
 		return nil, fmt.Sprintf("the call's statement at %s shares its lines with other code", l.where(stmt))
 	}
 	var out strings.Builder
 	out.WriteString(l.text[a:l.start(l.line(l.pos(stmt)))]) // its comments
-	for _, d := range decls {
+	for _, d := range append(decls, pre...) {
 		out.WriteString(indent + d + "\n")
 	}
-	if len(in.stmts) > 0 {
-		s0, s1 := fl.start(fl.line(fl.pos(in.stmts[0]))), fl.start(fl.line(in.stmts[len(in.stmts)-1].End()-1)+1)
-		from := fl.indent(fl.line(fl.pos(in.stmts[0])))
+	if len(body) > 0 {
+		s0, s1 := fl.start(fl.line(fl.pos(body[0]))), fl.start(fl.line(body[len(body)-1].End()-1)+1)
+		from := fl.indent(fl.line(fl.pos(body[0])))
 		for _, line := range strings.SplitAfter(fl.substitute(s0, s1, rs), "\n") {
 			if strings.HasPrefix(line, from) {
 				line = indent + line[len(from):]
@@ -730,7 +742,7 @@ func (in *inliner) inline(l *lined, call *ast.Node) ([]Edit, string) {
 			out.WriteString(line)
 		}
 	}
-	if in.ret != nil {
+	if in.ret != nil && !earlyMode {
 		value := fl.substitute(fl.pos(in.ret), in.ret.End(), rs)
 		switch {
 		case shape == "value":
@@ -747,4 +759,62 @@ func (in *inliner) inline(l *lined, call *ast.Node) ([]Edit, string) {
 	}
 	edits = append(edits, Edit{File: l.f.FileName(), Start: a, End: b, NewText: out.String()})
 	return edits, ""
+}
+
+// earlyBody plans a body that returns early for the call's statement
+// stmt (see early): the statements to put in its place, the declarations
+// to put before them, and rs with the body's edits added; or why not.
+func (in *inliner) earlyBody(l *lined, call, stmt *ast.Node, rs *[]repl) ([]*ast.Node, []string, string) {
+	c, fl := in.c, in.fl
+	if stmt.Parent == nil || ast.IsSourceFile(stmt.Parent) {
+		return nil, nil, fmt.Sprintf("its call at %s is at the top of a module, where the variable each return assigns would be one of the module's", l.where(call))
+	}
+	caller := stmt
+	for caller != nil && !ast.IsFunctionLike(caller) {
+		caller = caller.Parent
+	}
+	e := &early{in: in, used: map[string]bool{}, exits: map[*ast.Node]string{}, flagged: map[*ast.Node]bool{}, breaks: map[*ast.Node]bool{}, unit: fl.unit(),
+		taken: func(name string) bool { return taken(c, l, name, stmt) != "" }}
+	for _, n := range identifierTexts(in.fn) {
+		e.used[n] = true
+	}
+	if caller != nil {
+		for _, n := range identifierTexts(caller) {
+			e.used[n] = true
+		}
+	}
+	decl := ""
+	switch {
+	case ast.IsVariableStatement(stmt):
+		d := stmt.AsVariableStatement().DeclarationList.AsVariableDeclarationList().Declarations.Nodes[0]
+		if !ast.IsIdentifier(d.Name()) {
+			return nil, nil, fmt.Sprintf("its value at %s is destructured", l.where(call))
+		}
+		typ := ""
+		if t := d.Type(); t != nil {
+			typ = l.source(t)
+		} else {
+			typ = c.TypeToString(c.GetWidenedType(c.GetTypeAtLocation(d.Name())))
+		}
+		e.target, decl = d.Name().Text(), ": "+typ
+	case ast.IsExpressionStatement(stmt) && ast.IsBinaryExpression(stmt.Expression()):
+		e.target = l.source(stmt.Expression().AsBinaryExpression().Left)
+	}
+	if _, why := e.plan(in.fn.Body().Statements(), true, ""); why != "" {
+		return nil, nil, why
+	}
+	e.finish()
+	*rs = append(*rs, e.rs...)
+	var pre []string
+	if decl != "" {
+		bang := "" // a flag hides from the checker that every path assigns
+		if len(e.flagged) > 0 {
+			bang = "!"
+		}
+		pre = append(pre, "let "+e.target+bang+decl+fl.semi())
+	}
+	if e.flag != "" {
+		pre = append(pre, "let "+e.flag+" = false"+fl.semi())
+	}
+	return in.fn.Body().Statements(), pre, ""
 }

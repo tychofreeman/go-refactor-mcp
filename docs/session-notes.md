@@ -262,6 +262,13 @@ results are in `docs/cost-history.md`.
   `*T` returned into an `error` must stay a typed nil). A return in a
   loop, switch or block is still refused. The steps are not exposed as
   tools of their own.
+  TypeScript has the same (`tsapi/early.go`, with remove_else's
+  `wrap`), loops and switches included, but a return converted in a
+  switch also breaks out of it (a case falls through), the variable is
+  declared `let v!: T` when a flag hides from the checker that every
+  path assigns it, and a call at a module's top level is still refused
+  (its variable would be the module's). Guards with a last return
+  still inline as a conditional expression, which comes first.
 - **A parameter may take a package variable's place** (2026-10-25, the
   user): add_parameter's `replace_variable` lets the new parameter hide
   the package variable the body reads. Where the engine cannot prove a

@@ -3574,3 +3574,12 @@ move_file and given an output), the fields, `tailForm`, `tailIf`,
 replacement with replace_text. The branch merges #471's branch to
 update derivation section 8, rerun with the CLI on its scratch module.
 Nothing by hand.
+
+## 2026-10-29: TypeScript's inline_function and early returns; remove_else's wrap
+
+Tests first with replace_text, `tsapi/early.go` with create_file, the
+inliner's hooks, `earlyBody`, `WrapElse` and the tools' options with
+replace_text and add_declaration. A first test expected an if/else and
+got a conditional expression: two guards and a last return already
+inline as one; the test now has a statement in its guard. Nothing by
+hand.

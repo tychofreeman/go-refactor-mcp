@@ -259,7 +259,7 @@ func NewRemoveElse() *RemoveElse { return &RemoveElse{} }
 func (*RemoveElse) Name() string { return "remove_else" }
 
 func (*RemoveElse) Description() string {
-	return `Remove an else after an if branch that cannot fall through, un-nesting it: if (!bed) { return 0 } else { return bed.depth * 2 } becomes if (!bed) { return 0 } followed by return bed.depth * 2. An else-if becomes a separate if. When it is the else branch that exits, use invert_if instead.
+	return `Remove an else after an if branch that cannot fall through, un-nesting it: if (!bed) { return 0 } else { return bed.depth * 2 } becomes if (!bed) { return 0 } followed by return bed.depth * 2. An else-if becomes a separate if. When it is the else branch that exits, use invert_if instead. With wrap, the inverse: the statements after an if whose branch cannot fall through become its else, each outcome in a branch of its own.
 Identify the if by file and the line of its if keyword (column if the line has two).
 Refuses, saying why: an if branch that can fall through, un-nested names that would clash.`
 }
@@ -270,7 +270,8 @@ func (*RemoveElse) InputSchema() json.RawMessage {
   "properties": {
     ` + fileProp + `,
     "line":   {"type": "integer", "description": "1-based line of the if keyword."},
-    "column": {"type": "integer", "description": "Optional 1-based column of the if keyword, only needed if the line has more than one if."}
+    "column": {"type": "integer", "description": "Optional 1-based column of the if keyword, only needed if the line has more than one if."},
+    "wrap":   {"type": "boolean", "description": "Optional: the inverse, the statements after the if become its else."}
   },
   "required": ["file", "line"],
   "additionalProperties": false
@@ -282,9 +283,15 @@ func (*RemoveElse) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor
 		File   string `json:"file"`
 		Line   int    `json:"line"`
 		Column int    `json:"column"`
+		Wrap   bool   `json:"wrap"`
 	}
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
+	}
+	if a.Wrap {
+		return plan(ws, a.File, fmt.Sprintf("moved the statements after the if on line %d into its else", a.Line), func(p *tsapi.Project, path string) ([]tsapi.Edit, string) {
+			return p.WrapElse(bg, path, a.Line, a.Column)
+		})
 	}
 	return plan(ws, a.File, fmt.Sprintf("removed the else of the if on line %d", a.Line), func(p *tsapi.Project, path string) ([]tsapi.Edit, string) {
 		return p.RemoveElse(bg, path, a.Line, a.Column)
@@ -367,9 +374,9 @@ func NewInlineFunction() *InlineFunction { return &InlineFunction{} }
 func (*InlineFunction) Name() string { return "inline_function" }
 
 func (*InlineFunction) Description() string {
-	return `Replace a call with the function's body, and delete the function when nothing else uses it: the inverse of extract_function. With function area(b: Bed) { return b.width * b.depth; }, const a = area(bed) becomes const a = bed.width * bed.depth. A body that is one expression or one return may be inlined anywhere, and so may guards and a last return (if (s.length <= n) return s; return s.slice(0, n); becomes s.length <= n ? s : s.slice(0, n)); a body of statements where the call is a statement, a declaration's or assignment's value, or a return, and one that returns early only where the call is a return's whole value. Parameters are replaced by the arguments where that is safe, and otherwise declared first (const b = arg;; a rest parameter as the array of the rest, a destructured one as its pattern). Of overloads, the implementation is inlined.
+	return `Replace a call with the function's body, and delete the function when nothing else uses it: the inverse of extract_function. With function area(b: Bed) { return b.width * b.depth; }, const a = area(bed) becomes const a = bed.width * bed.depth. A body that is one expression or one return may be inlined anywhere, and so may guards and a last return (if (s.length <= n) return s; return s.slice(0, n); becomes s.length <= n ? s : s.slice(0, n)); a body of statements where the call is a statement, a declaration's or assignment's value, or a return. A body that returns early elsewhere than as a return's whole value has each return assign the call's variable: the statements after an if that returns become its else, and a return in a loop or switch sets a flag that guards the rest. Parameters are replaced by the arguments where that is safe, and otherwise declared first (const b = arg;; a rest parameter as the array of the rest, a destructured one as its pattern). Of overloads, the implementation is inlined.
 Identify the call by file, line and the function's name (column if the name is on the line twice). With all_calls, every call in the solution is inlined, other files' imports of it go, and the function is deleted (give file and name); if one call cannot be, none is. keep_function keeps the function; an exported one is always kept.
-Refuses, saying why: methods a subclass could override (only static and private ones are inlined), async functions and generators, a body that names a type parameter, a destructured rest parameter, an early return elsewhere than a return's value, super, recursion, a name the body uses that means something else at the call.`
+Refuses, saying why: methods a subclass could override (only static and private ones are inlined), async functions and generators, a body that names a type parameter, a destructured rest parameter, an early return in a call at a module's top level or inside try, super, recursion, a name the body uses that means something else at the call.`
 }
 
 func (*InlineFunction) InputSchema() json.RawMessage {
