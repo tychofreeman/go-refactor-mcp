@@ -3564,3 +3564,13 @@ inline_function of a wrapper that returns early into its caller's if
 header was refused; tried extract_variable first (an assignment, still
 refused: only `return f(...)` takes an early return), so the wrapper
 stays. Nothing else by hand.
+
+## 2026-10-29: inline_function and early returns
+
+Goldens first with create_file (the old refusal golden moved with
+move_file and given an output), the fields, `tailForm`, `tailIf`,
+`returnsAtEnd`, `hasReturn`, `tailResults`, `tailTargets` and
+`freshName` with add_field and add_declaration, the shape check and the
+replacement with replace_text. The branch merges #471's branch to
+update derivation section 8, rerun with the CLI on its scratch module.
+Nothing by hand.

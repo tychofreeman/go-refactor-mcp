@@ -252,6 +252,16 @@ results are in `docs/cost-history.md`.
   counts calls or writes anything else keeps its effect. The user also
   asked for the non-strict way (`docs/derivations.md` section 8): pass
   the method value, so the getter runs where it ran.
+- **Early returns inline** (2026-10-29, the user's derivation): wrap the
+  statements after an if that returns in its else, then give the
+  function one result variable that each return assigns, and the body
+  has one return at its end. inline_function does both itself
+  (`tailForm`, `tailResults`, by the order of the tool budget: a proof
+  in the engine first), assigning the call's variables directly, or a
+  temporary of the result's type when a variable's type differs (a nil
+  `*T` returned into an `error` must stay a typed nil). A return in a
+  loop, switch or block is still refused. The steps are not exposed as
+  tools of their own.
 - **A parameter may take a package variable's place** (2026-10-25, the
   user): add_parameter's `replace_variable` lets the new parameter hide
   the package variable the body reads. Where the engine cannot prove a

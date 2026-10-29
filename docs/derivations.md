@@ -319,10 +319,27 @@ func (p *planner) placeIn(pl Plant, index func() map[string]*Bed) error {
 ```
 
 Both ran with the CLI on a scratch module, the non-strict one on the
-tools before the change. What neither can do is fold the wrapper
-away: inline_function of `place` into `PlaceAll` is refused, since
-`place` returns early and its call is an if statement's header (moved
-out with extract_variable, an assignment), not `return place(...)`.
+tools before the change. Then the wrapper folds away, by the user's
+next derivation (2026-10-29): a function that returns early inlines
+once the statements after each if that returns become its else, and
+each return assigns a variable of the result's type instead, so the
+body runs to its end. inline_function does this itself. The call in
+`PlaceAll` is an if statement's header, so extract_variable moves it
+out first (`placed := p.place(pl)`), then inline_function of `place`
+gives
+
+```go
+		var placed error
+		if pl.Bed == "" {
+			placed = errors.New("no bed")
+		} else {
+			placed = p.placeIn(pl, p.g.index())
+		}
+		if err := placed; err != nil {
+```
+
+and rename `placeIn` to `place`. A return in a loop, a switch or a
+block is still refused: the statements after it cannot become an else.
 
 ## The user's principle
 
