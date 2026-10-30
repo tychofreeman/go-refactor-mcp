@@ -3751,3 +3751,18 @@ there. The replacements were 124 lines for `introduced`, 155 for
 AddResult with `result.edits`, about 60 for `caseClause` and `caseBody`
 and 170 added to Fold; most of the first three is old code moved, but
 moved as text cut and pasted by a script, not by a refactoring.
+
+## 2026-10-29: five chains per rewrite of item 43.10, run
+
+Asked for chains of four or more steps that would have worked, five per
+rewrite: 20 run in worktrees at each change's parent, through the CLI.
+Applied whole: add_result A5 (extract the tail twice, introduce_parameter
+of the continuation, method_to_function, function_to_method), CaseLines
+B2 (extract_variable, replace_expression, extract twice,
+introduce_parameter), fold D2 (extract the closure's statement, add_field,
+add_parameter, insert_statements) and D5. Partly: A1, A3, B1, B4, C1, C2.
+Refused at their first step: A2, A4, B3, B5, C3, C4, C5, D1, D3, D4. The
+two patterns are `docs/derivations.md` sections 10 and 11; the refusals
+that looked wrong are in README item 44. Batches broke twice on a later
+step's line number that an earlier step rewrote, and once on a
+`$2.start` that pointed at three places; both cost a second call.
