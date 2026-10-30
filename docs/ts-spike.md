@@ -1,6 +1,6 @@
 # TypeScript spike: results
 
-Step 0 of `docs/ts-plan.md` (README item 40): can the Go port of the
+Step 0 of `docs/ts-plan.md` (roadmap item 40): can the Go port of the
 TypeScript compiler, imported through `buke/typescript-go-internal`
 v7.0.2, load a project, take an edit in memory, re-check, and rename,
 fast enough for the engine? The code is `cmd/ts-spike` (throwaway; it

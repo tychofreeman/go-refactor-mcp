@@ -16,7 +16,7 @@ model ◀──(APPLIED + diff | REFUSED + reason)──┘
 
 This document is the plan only: what to build on, how the Go and
 TypeScript sides share one server, what is new for TypeScript, and the
-order of work. Status as of 2026-10-27; README roadmap item 40.
+order of work. Status as of 2026-10-27; roadmap item 40.
 
 ## 1. What to build on
 
@@ -271,10 +271,10 @@ eval tasks transfer.
 | extract_function / inline_function | same | `this`, `await`, closures |
 | invert_if, remove_else | same | |
 | add_parameter, remove_parameter, move_parameter, introduce_parameter | same | overloads; optional and default parameters; rest parameters |
-| change_parameter_type, change_type, change_field_type | same (`change_property_type`) | edits: types are erased, uses are not adapted (README item 41.2) |
+| change_parameter_type, change_type, change_field_type | same (`change_property_type`) | edits: types are erased, uses are not adapted (roadmap item 41.2) |
 | add_result | **change_return_type** | no multiple results in TS; widen to an object or tuple |
 | method_to_function, function_to_method | same | classes only |
-| extract_struct | **extract_interface** / **extract_type** | name a type from an object type or a class's members; extract_struct on a TypeScript file runs extract_interface (README item 41.5) |
+| extract_struct | **extract_interface** / **extract_type** | name a type from an object type or a class's members; extract_struct on a TypeScript file runs extract_interface (roadmap item 41.5) |
 | add_field | same, also called `add_property` | to interface, type literal or class |
 | fold, parameterize, merge_duplicate_function | same | |
 | remove_dead_code | same | plus unused exports, unused properties |
@@ -578,7 +578,7 @@ Go. Steps 1 and 2 change shared code and come before any TypeScript.
      of what may be undefined, bare and valued returns mixed, a jump
      out, `yield`, `arguments`, a type parameter or local type, mixing
      declared and assigned results, declarations at the module's top
-     level. Go's `function`/`case` address takes a case's body (README item 41.8).
+     level. Go's `function`/`case` address takes a case's body (roadmap item 41.8).
    - `inline_function` inlines functions, consts bound to one, and
      static or private methods (`this` becomes the receiver): a body
      that is one expression anywhere, statements where the call is a
@@ -618,7 +618,7 @@ Go. Steps 1 and 2 change shared code and come before any TypeScript.
      that uses what moves, `export *` of it, `import()` or `require()`
      of it. Go's `new_name` is refused: rename before or after.
    A destination's alias and an old file left empty are handled
-   (README item 41.9).
+   (roadmap item 41.9).
 10. **Shapes:** fold, parameterize, merge_duplicate_function,
     remove_dead_code, extract_interface, union_switch_to_method.
     *Done* (`internal/ts/refactorings/shapes`, the logic in `tsapi`'s
@@ -674,7 +674,7 @@ Go. Steps 1 and 2 change shared code and come before any TypeScript.
     inline_function refusing an early return). On the back burner
     (2026-10-28, the user: the cost with TypeScript is not a worry for
     now): a rerun, warehouse and billing, and the mixed task. The gaps
-    against Go are README roadmap item 41, worked through in its order.
+    against Go are roadmap item 41, worked through in its order.
     Before it, every tool was run on Hono (`docs/ts-hono-pass.md`): the
     four style bugs it found are fixed, and so are its three gaps
     (extract_function with an early return, invert_if of a returning

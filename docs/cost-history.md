@@ -834,7 +834,7 @@ in section 14.
 Two of Haiku's reorder runs were refused by move_parameter after
 extracting only one argument (`moving p.Bin() past from`): a local
 that nothing else can reach cannot observe the call, so that refusal is
-false (README, roadmap item 30).
+false (roadmap item 30).
 
 So on a module this small, with "must not change" in the prompt, the
 traps are the only thing of interest in the code, and both models find
@@ -888,7 +888,7 @@ derivation of the reference's shape, whether or not its batch passed:
 
 So Haiku sees the shapes about as well as Sonnet: it named the
 derivations for run, tail, address, policy and kinds, the last one
-being the user's widen-then-narrow derivation (README item 24),
+being the user's widen-then-narrow derivation (roadmap item 24),
 unprompted in every run, more consistently than Sonnet. Where it
 differed, it went both ways. On dispatch it never used fold and
 rewrote ten bodies it could not see. On routes it found
@@ -900,7 +900,7 @@ log formats; all of phases and kinds, Haiku's dispatch); add_parameter
 refusing a parameter named `policy` that would hide the package
 variable (5 of 8 policy plans relied on that shadowing, so the bodies
 need no rewrite); tests that still use a removed field (routes). The
-first is the view; the second a choice to make (README, roadmap item
+first is the view; the second a choice to make (roadmap item
 29's repairs, or an option); the third is in step 1's plan already
 (the test files' uses in the view).
 
@@ -1058,7 +1058,7 @@ No arm by hand ran lending-xl with either model; the nearest is section
 turns): the loop is 17% cheaper and fails a quarter of the tasks.
 
 - **Kinds fails every attempt, both models.** It is the kind-into-types
-  derivation (74 steps through the tools by hand, README item 24). The
+  derivation (74 steps through the tools by hand, roadmap item 24). The
   plans named it (widen, prepare, types, narrow) but broke on two
   refusals: prepare_switch_for_types after the plan had declared the
   interface's method itself ("interface Kind already has a method
@@ -1526,7 +1526,7 @@ gorefactor call, against one denied Edit for manual. By cause:
   `equal`, which takes `unknown`, was refused because nothing declares
   `fit`; the stub was not declared since a place that takes `unknown`
   did not count as telling the result type. The models then wrote the
-  code first. Fixed in README item 41.1.
+  code first. Fixed in roadmap item 41.1.
 - The model's own test did not type-check (2): users written with
   `optOut: { sms: true }` beside `{ email: false }` widen to types not
   assignable to `Record<string, boolean>`.
@@ -1553,7 +1553,7 @@ results, Bash 32K, Grep 13K).
 - **Not:** more tools or longer descriptions. Each adds to every request's
   context, and a fresh model uses few of them.
 
-Next (README, roadmap item 15): ranges that start at a function's `func`
+Next (roadmap item 15): ranges that start at a function's `func`
 line (5 refusals in the last chain run) answered with the body's lines,
 the reading before the first edit (Bash, Grep and Read were about two
 thirds of the tool-call input in the last feature run), and more runs per

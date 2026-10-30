@@ -420,7 +420,7 @@ caller; which reads better depends on the code around the call.
 ## 10. Sharing code that returns a refusal early: extract the tail, pass what follows
 
 Found running the compositions item 43.10's rewrites skipped
-(2026-10-29, README item 44). extract_function refuses lines that
+(2026-10-29, roadmap item 44). extract_function refuses lines that
 return on some paths unless the function returns an `error`, but lines
 that return on every path extract, and the end of a function always
 does. So extract from the start of the shared part to the end of the

@@ -3849,3 +3849,9 @@ with inline_variable then failed, so inline_variable got the same for
 several uses, a second batch; one of its refusal goldens read nothing
 that changed, so it now applies, and a write between was added to the
 refusal's input. Nothing else by hand.
+## 2026-10-30: the README's pitch, and the roadmap in its own file
+
+By hand, and no gorefactor gap: Markdown only. The README's top was
+rewritten with a Python script and the roadmap moved to `docs/roadmap.md`
+whole (2,500 lines); replace_text could have made the reference fixes, but
+this cloud session's gorefactor server ran on the linked computer.
