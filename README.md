@@ -2585,6 +2585,18 @@ hand or a tool got in the way.
        `value` and add_parameter's `replace_variable` each prove that
        a value equals an expression and substitute it; three are the
        same write-then-remove expander (`refactor.Then`).
+       *Done in part* (2026-10-30): the steps an Expand makes that are
+       not tools are `refactor.Inner` and `InnerEdit` values (name,
+       schema, a plan function) instead of a type each with four
+       methods, and both languages' remove_parameter with value build
+       their steps with `refactor.WriteThenRemove`. The proofs were not
+       merged: each shows a different thing (a call passes the value, in
+       the call's terms; every literal sets the field to a path of its
+       others; a call passes the variable's value), and what they have
+       in common is already shared (`locate.EqualTokens`,
+       `checkIntroduced` and `substitute`, which introduce_parameter
+       uses too). 47 lines fewer in the steps, about as many in the new
+       file.
     6. **A golden harness for TypeScript**, as `refactortest` is for Go
        (about 300 test lines): `load`, `run`, `check` and
        `mustContain` are redefined 37 times in 17 files.

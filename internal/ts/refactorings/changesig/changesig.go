@@ -138,34 +138,21 @@ func (*RemoveParameter) Expand(ws *workspace.Workspace, raw json.RawMessage) ([]
 		return nil, nil
 	}
 	names := append([]string{a.Name}, a.Also...)
-	var write, remove []refactor.StepOf[*workspace.Workspace]
-	for i, n := range names {
+	return refactor.WriteThenRemove[*workspace.Workspace](len(names), writeValue, removeShown, func(i int) (json.RawMessage, error) {
 		b := a
-		b.Name = n
+		b.Name = names[i]
 		b.Also = append(append([]string{}, names[:i]...), names[i+1:]...)
-		args, err := json.Marshal(b)
-		if err != nil {
-			return nil, err
-		}
-		write = append(write, refactor.StepOf[*workspace.Workspace]{Refactoring: writeValue{}, Args: args})
-		remove = append(remove, refactor.StepOf[*workspace.Workspace]{Refactoring: removeShown{}, Args: args})
-	}
-	return append(write, remove...), nil
+		return json.Marshal(b)
+	})
 }
 
 // writeValue is the first step of remove_parameter with value: an edit
 // that writes value for each use of the parameter in the body. The step
 // after it shows that this changed nothing.
-type writeValue struct{}
+var writeValue = refactor.InnerEditOf[*workspace.Workspace]{InnerOf: refactor.InnerOf[*workspace.Workspace]{Tool: "remove_parameter", Schema: refactor.Schema[removeArgs](), Do: planWriteValue}}
 
-func (writeValue) Name() string        { return "remove_parameter" }
-func (writeValue) Description() string { return "" }
-func (writeValue) InputSchema() json.RawMessage {
-	return refactor.Schema[removeArgs]()
-}
-func (writeValue) ChangesBehavior() {}
-
-func (writeValue) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
+// planWriteValue plans writeValue.
+func planWriteValue(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
 	var a removeArgs
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
@@ -186,21 +173,13 @@ func (writeValue) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.
 // removeShown is the second step of remove_parameter with value: the
 // parameter goes, now that the body no longer reads it, once every call
 // is shown to pass value.
-type removeShown struct{}
-
-func (removeShown) Name() string        { return "remove_parameter" }
-func (removeShown) Description() string { return "" }
-func (removeShown) InputSchema() json.RawMessage {
-	return refactor.Schema[removeArgs]()
-}
-
-func (removeShown) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
+var removeShown = refactor.InnerOf[*workspace.Workspace]{Tool: "remove_parameter", Schema: refactor.Schema[removeArgs](), Do: func(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
 	var a removeArgs
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
 	return planRemove(ws, a)
-}
+}}
 
 // planRemove removes the parameter a names.
 func planRemove(ws *workspace.Workspace, a removeArgs) (*refactor.Plan, error) {

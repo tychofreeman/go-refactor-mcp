@@ -3826,3 +3826,12 @@ closure's body with its `return n.ForEachChild(visit)` (or
 `sources` and the test were written by hand into create_file: new code.
 The test's first import path lacked the module's /v7. Nothing else by
 hand.
+
+## 2026-10-30: inner steps and WriteThenRemove (item 45.5)
+
+Through the CLI, one batch: create_file of the helper and its test,
+replace_statements of the Go Expand, replace_text of each step type (a
+type and four methods into one value). `WriteThenRemove` cannot infer
+its workspace type from struct arguments, so every call names it; the
+first batch was refused for that. The helper was written by hand into
+create_file: new code. Nothing else by hand.
