@@ -604,10 +604,6 @@ func (x *extraction) typeString(t types.Type) (string, error) {
 // the end of its block, after checking that one shared value is
 // equivalent to recomputing it at each of them.
 func (x *extraction) occurrences(expr ast.Expr, tv types.TypeAndValue, container ast.Node, insertPos token.Pos) ([]ast.Expr, []string, error) {
-	if o := x.move(expr, nil, analysis.Shared); o != nil {
-		return nil, nil, refactor.Refusef("all_occurrences requires an expression whose value cannot change between its occurrences, but %s could (it involves %s); extract a single occurrence instead (omit all_occurrences)",
-			x.Quote(expr), x.Quote(o.In))
-	}
 	for _, id := range x.dependsOn(expr) {
 		v, ok := x.Info.Uses[id].(*types.Var)
 		if !ok {
@@ -635,6 +631,14 @@ func (x *extraction) occurrences(expr ast.Expr, tv types.TypeAndValue, container
 		sites = append(sites, e)
 		return false
 	})
+	if o := x.shared(expr, container, insertPos, sites); o != nil {
+		if o.Past != nil {
+			return nil, nil, refactor.Refusef("all_occurrences requires an expression whose value cannot change between its occurrences, but %s %s between them, and %s %s; extract a single occurrence instead (omit all_occurrences)",
+				x.Quote(o.Past), o.PastDoes, x.Quote(expr), o.Does)
+		}
+		return nil, nil, refactor.Refusef("all_occurrences requires an expression whose value cannot change between its occurrences, but %s could (it involves %s); extract a single occurrence instead (omit all_occurrences)",
+			x.Quote(expr), x.Quote(o.In))
+	}
 
 	var notes []string
 	if len(skippedWrites) > 0 {
@@ -658,6 +662,28 @@ func (x *extraction) occurrences(expr ast.Expr, tv types.TypeAndValue, container
 	return sites, notes, nil
 }
 
+// shared returns why one value of expr, computed at insertPos, would not
+// stand for its evaluations at sites, in container: it does something
+// each evaluation repeats, or the statements from insertPos through the
+// last site change what it reads. With a site in a function literal,
+// which may run at another time, it may read nothing that can change.
+func (x *extraction) shared(expr ast.Expr, container ast.Node, insertPos token.Pos, sites []ast.Expr) *analysis.Obstacle {
+	var between []ast.Node
+	if len(sites) > 0 {
+		nodes := make([]ast.Node, len(sites))
+		for i, s := range sites {
+			nodes[i] = s
+		}
+		between = analysis.Spanning(container, insertPos, sites[len(sites)-1].Pos(), nodes...)
+	}
+	moved := expr
+	if x.pointer {
+		moved = &ast.UnaryExpr{Op: token.AND, X: expr}
+	}
+	m := analysis.Move{Effects: x.WS.Effects(), Func: x.fa, Expr: moved, Past: between, Times: analysis.Shared, Dereferenced: x.pointer, Between: between != nil}
+	return m.Check()
+}
+
 // dependsOn returns the names whose values the new variable's value
 // depends on: those of the expression, or with pointer, those of the
 // operands its address depends on.
@@ -676,18 +702,22 @@ func (x *extraction) dependsOn(expr ast.Expr) []*ast.Ident {
 // laterCopies lists positions of other identical occurrences after the
 // insertion point that all_occurrences could replace, for a helpful note.
 func (x *extraction) laterCopies(expr ast.Expr, tv types.TypeAndValue, container ast.Node, insertPos token.Pos) []string {
-	if x.move(expr, nil, analysis.Shared) != nil {
-		return nil
-	}
 	var out []string
+	var sites []ast.Expr
 	ast.Inspect(container, func(n ast.Node) bool {
 		e, ok := n.(ast.Expr)
-		if !ok || e == expr || e.Pos() < insertPos || !x.same(e, expr, tv) {
+		if !ok || e.Pos() < insertPos || !x.same(e, expr, tv) {
 			return true
 		}
-		out = append(out, x.WS.Position(e.Pos()))
+		sites = append(sites, e)
+		if e != expr {
+			out = append(out, x.WS.Position(e.Pos()))
+		}
 		return false
 	})
+	if len(out) == 0 || x.shared(expr, container, insertPos, sites) != nil {
+		return nil
+	}
 	return out
 }
 

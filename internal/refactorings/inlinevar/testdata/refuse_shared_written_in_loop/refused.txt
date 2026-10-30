@@ -1,0 +1,1 @@
+"d" is used 2 times, and its initializer `b.depth` could give a different value

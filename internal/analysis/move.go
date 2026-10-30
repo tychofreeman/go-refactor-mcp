@@ -33,6 +33,10 @@ type Move struct {
 	PastFunc     *Func // the function Past belongs to, when not Func: an argument moving into an inlined body
 	Times        Times
 	Dereferenced bool // every use dereferences the value, so a nil dereference in Expr panics there anyway and may move
+	// Between says that Past is the code that runs between the
+	// evaluations Times counts, not code Expr moves past: Expr may read
+	// what other code can change, as long as Past does not change it.
+	Between bool
 }
 
 // Obstacle is why a Move would change behavior: Kind, what the
@@ -97,7 +101,7 @@ func (m Move) Check() *Obstacle {
 		if s.Effect != "" {
 			return acts.why(q + " " + acts.Does + then)
 		}
-		if s.Reads != "" {
+		if s.Reads != "" && !m.Between {
 			return reads.why(q + " " + s.Reads + ", which could change between evaluations")
 		}
 		if panics != NoPanic && m.Times == Several { // shared, it panics the first time either way
@@ -119,6 +123,16 @@ func (m Move) Check() *Obstacle {
 	before := func(o Obstacle, past ast.Node, does string) *Obstacle {
 		o.Past, o.PastDoes = past, does
 		return o.why(q + " " + o.Does + ", and " + nodeText(past) + " " + does + " before it")
+	}
+	if m.Between { // the evaluations stay where they are; only what runs between them matters
+		switch {
+		case written != nil:
+			reads.In, reads.Does = useOf(m.Func.Info, m.Expr, written), "reads "+written.Name()
+			return before(reads, where, "assigns "+written.Name())
+		case s.Reads != "" && p.Effect != "":
+			return before(reads, p.At.Effect, p.Effect)
+		}
+		return nil
 	}
 	if s.Effect != "" {
 		switch {
@@ -215,6 +229,45 @@ func EvaluatedAfter(root ast.Node, pos token.Pos) []ast.Node {
 		}
 		return true // it encloses pos; look inside
 	})
+	return out
+}
+
+// Spanning returns the statements of block (a block, a case or a select
+// case) from the one that holds from through the one that holds to,
+// whole: the code that runs between two points of the block, with what
+// runs after the second in the same statement, a loop's other
+// iterations among it. It returns nil when one of nodes is inside a
+// function literal there, which may run at another time.
+func Spanning(block ast.Node, from, to token.Pos, nodes ...ast.Node) []ast.Node {
+	var list []ast.Stmt
+	switch b := block.(type) {
+	case *ast.BlockStmt:
+		list = b.List
+	case *ast.CaseClause:
+		list = b.Body
+	case *ast.CommClause:
+		list = b.Body
+	}
+	var out []ast.Node
+	for _, s := range list {
+		if s.End() > from && s.Pos() <= to {
+			out = append(out, s)
+		}
+	}
+	inLiteral := false
+	for _, s := range out {
+		ast.Inspect(s, func(n ast.Node) bool {
+			if lit, ok := n.(*ast.FuncLit); ok {
+				for _, x := range nodes {
+					inLiteral = inLiteral || lit.Pos() <= x.Pos() && x.End() <= lit.End()
+				}
+			}
+			return !inLiteral
+		})
+	}
+	if inLiteral {
+		return nil
+	}
 	return out
 }
 

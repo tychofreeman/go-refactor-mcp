@@ -295,7 +295,22 @@ func (x *inliner) checkVariable() error {
 func (x *inliner) checkEvaluation() error {
 	m := x.move()
 	m.Times = analysis.Several // each use evaluates it again
+	if len(x.uses) > 1 && x.owner == nil {
+		uses := make([]ast.Node, len(x.uses))
+		for i, u := range x.uses {
+			uses[i] = u
+		}
+		m.Past = analysis.Spanning(x.block, x.declStmt.End(), x.uses[len(x.uses)-1].Pos(), uses...)
+		if m.Past != nil {
+			// What it reads must not change between the uses; it may
+			// panic only where the declaration would have.
+			m.Between, m.Times = true, analysis.Shared
+		}
+	}
 	o := m.Check()
+	if o == nil && m.Between {
+		o = x.firstUse()
+	}
 	if o == nil {
 		return nil // same value and no effects however often and wherever it is evaluated
 	}
@@ -312,7 +327,7 @@ func (x *inliner) checkEvaluation() error {
 	if err != nil {
 		return err
 	}
-	m.Times = analysis.Once
+	m.Times, m.Past, m.Between = analysis.Once, nil, false
 	if x.owner == nil {
 		m.Past = x.between(stmt)
 	}
@@ -340,6 +355,21 @@ func (x *inliner) move() analysis.Move {
 		moved = &ast.UnaryExpr{Op: token.AND, X: e}
 	}
 	return analysis.Move{Effects: x.WS.Effects(), Func: x.fa, Expr: moved, Dereferenced: moved != x.init}
+}
+
+// firstUse returns why evaluating the initializer at its first use,
+// rather than at the declaration, would change what the code does: the
+// code between them could keep it from panicking where it did.
+func (x *inliner) firstUse() *analysis.Obstacle {
+	use := x.uses[0]
+	stmts := analysis.Spanning(x.block, x.declStmt.End(), use.Pos())
+	if len(stmts) == 0 {
+		return nil
+	}
+	last := stmts[len(stmts)-1]
+	m := x.move()
+	m.Past = append(stmts[:len(stmts)-1:len(stmts)-1], analysis.EvaluatedBefore(last, use.Pos(), x.declStmt)...)
+	return m.Check()
 }
 
 // between returns the statements of the block between the declaration

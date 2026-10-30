@@ -1,0 +1,1 @@
+but `grow(b)` calls grow, which assigns to b.depth between them
