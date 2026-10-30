@@ -37,6 +37,7 @@ func f(p *T, a, b int, xs []int) {
 	_ = a + r       // MOVE local past: a = 3
 	_ = a + 1       // MOVE value past: return
 	_ = a / b       // MOVE panic past: return
+	_ = log("y")    // MOVE effect past: return
 	_ = a / b       // TIMES several: a / b
 	_ = a + 1       // TIMES several: a + 1
 	_ = &T{}        // TIMES shared: &T{}
@@ -97,6 +98,7 @@ func TestMove(t *testing.T) {
 		"local past: a = 3":        "a",
 		"value past: return":       "",
 		"panic past: return":       "a / b",
+		"effect past: return":      "log(\"y\")", // it would happen where the code left before
 		"several: a / b":           "a / b",
 		"several: a + 1":           "",
 		"shared: &T{}":             "&T{}",

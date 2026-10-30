@@ -3866,6 +3866,15 @@ create_file and add_declaration: new code, moved from the copies. The
 copies went with replace_declaration of empty content and replace_text
 of their calls. The disk filled during the tests (the Go build cache);
 `go clean -cache`. Nothing else by hand.
+## 2026-10-30: the move decisions of item 45.4
+
+Through the CLI, tests first, one batch: the Go case in `TestMove`, the
+TypeScript test, two fold goldens; then replace_text in `analysis.Move`,
+tsapi's effects and fold, and add_declaration of `mayPass` and
+`sharedMove`. The new rules are new code, written by hand into those
+steps. One fold golden's refusal depends on which hole is checked
+first (a map's order), so it names what both refusals say. Nothing else
+by hand.
 ## 2026-10-30: closures passed to ForEachChild (item 44)
 
 Through the CLI, the golden first: create_file for it, replace_text in
