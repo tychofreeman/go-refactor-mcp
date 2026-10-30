@@ -2580,6 +2580,33 @@ hand or a tool got in the way.
        lines): `analysis.Move` and tsapi's `Check`, `conflict` and
        `canReorder` decide the same question; a shared core over a
        small summary interface, so the languages cannot disagree.
+       *Not built yet* (2026-10-30): compared rule by rule, the two
+       already agree where their models overlap (an effect may not
+       happen another number of times; a panic or throw may not move
+       under a condition; one shared value may throw at its first use;
+       a write and a read of the same state keep their order), and
+       sharing that part would save a few lines, since each words its
+       own refusals. They disagree in three places, each a choice of
+       meaning rather than of code:
+       - **Reads under Shared or Several.** Go refuses any expression
+         that reads state another evaluation could see changed, whatever
+         runs between; TypeScript refuses only when the code between
+         (`Past`) writes it. So `extract_variable` with
+         all_occurrences of `b.depth` in `b.depth*2 + b.depth` (a
+         pointer) is refused in Go and done in TypeScript. Go's rule is
+         needed while its callers pass no `Past` for Shared
+         (extract_variable, fold) or Several (inline_variable,
+         changesig's evaluation); taking TypeScript's would mean
+         passing the code between the occurrences.
+       - **Nil dereferences.** Go lets a nil dereference move past calls
+         that return (session notes, 2026-10-21); TypeScript has no
+         such case and refuses a throw past a write.
+       - **Leaving.** TypeScript counts a return, break or continue as
+         acting, so nothing that acts moves past it; Go asks this only
+         of code that may panic (`transfers`), and of an effect only
+         when the code may not finish (`Stops`).
+       Which way each should go is the user's to choose; the shared
+       core follows from that.
     5. **One "always equals E" proof** (about 200-300 lines):
        remove_parameter's `value` (both languages), remove_dead_code's
        `value` and add_parameter's `replace_variable` each prove that
