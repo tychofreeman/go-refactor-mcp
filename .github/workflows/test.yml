@@ -31,13 +31,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # The newest release only, for now (2026-10-27): the account has
-        # 5,000 Actions minutes a month, and each Go version costs about
-        # 5-8. The newest matters most: golang.org/x/tools must be recent
+        # The minimum version in go.mod and the newest release. Each costs
+        # about 5-8 of the account's 5,000 Actions minutes a month; the
+        # minimum was left out from 2026-10-27 to 2026-10-30 to save them.
+        # The newest matters most: golang.org/x/tools must be recent
         # enough to read the package data of the Go version users have
-        # installed. To test the minimum version in go.mod again, put
-        # "1.26.x" back before "stable".
-        go: ["stable"]
+        # installed.
+        go: ["1.26.x", "stable"]
     env:
       # Use exactly the Go version from the matrix, not one go.mod asks for.
       GOTOOLCHAIN: local

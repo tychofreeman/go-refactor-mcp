@@ -61,9 +61,10 @@ patterns sessions use, with their steps, in `docs/patterns.md`.
   workflow tags the commit and creates the release. Sessions may not
   push tags or create releases themselves (HTTP 403).
 - CI minutes (2026-10-27, the user): the account has 5,000 Actions
-  minutes a month, so Test runs on the newest Go only (not the minimum
-  in go.mod too) and skips changes to docs alone. Keep CI runs few:
-  batch small fixes into one PR where they belong together.
+  minutes a month, so Test skips changes to docs alone. It ran on the
+  newest Go only from 2026-10-27; the user put the minimum in go.mod
+  (1.26.x) back on 2026-10-30. Keep CI runs few: batch small fixes into
+  one PR where they belong together.
 - CI's time (2026-10-28, the user asked why it had grown from 2 to
   9-12 minutes since ts-spike): every package that reaches the
   TypeScript compiler (300k lines) compiles it, and each of their 24
