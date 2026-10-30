@@ -35,22 +35,17 @@ func (*RemoveDeadCode) Expand(ws *workspace.Workspace, raw json.RawMessage) ([]r
 	if err != nil {
 		return nil, err
 	}
-	return []refactor.Step{{Refactoring: readValue{}, Args: raw}, {Refactoring: New(), Args: rest}}, nil
+	return []refactor.Step{{Refactoring: readValue, Args: raw}, {Refactoring: New(), Args: rest}}, nil
 }
 
 // readValue is the first step of remove_dead_code with value: the field's
 // reads become value and its elements leave the literals, once every
 // literal is shown to set it to value and nothing writes it or the
 // fields value reads.
-type readValue struct{}
+var readValue = refactor.Inner{Tool: "remove_dead_code", Schema: refactor.Schema[args](), Do: planReadValue}
 
-func (readValue) Name() string        { return "remove_dead_code" }
-func (readValue) Description() string { return "" }
-func (readValue) InputSchema() json.RawMessage {
-	return refactor.Schema[args]()
-}
-
-func (readValue) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
+// planReadValue plans readValue.
+func planReadValue(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
 	var a args
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
