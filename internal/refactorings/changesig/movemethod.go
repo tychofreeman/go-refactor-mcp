@@ -16,21 +16,17 @@ import (
 )
 
 // MoveMethod is the "move_method" refactoring.
-type MoveMethod struct{}
+type MoveMethod struct{ refactor.Named[moveMethodArgs] }
 
 // NewMoveMethod returns the move_method refactoring.
-func NewMoveMethod() *MoveMethod { return &MoveMethod{} }
-
-func (*MoveMethod) Name() string { return "move_method" }
+func NewMoveMethod() *MoveMethod {
+	return &MoveMethod{Named: refactor.Called[moveMethodArgs]("move_method")}
+}
 
 func (*MoveMethod) Description() string {
 	return `Move a method to a struct type that embeds its receiver's type, and every call follows: with type Bed struct { Soil; name string }, moving Soil.acid to Bed makes func (s *Soil) acid() bool { return s.ph < 6 } func (s *Bed) acid() bool { return s.ph < 6 }, b.Soil.acid() b.acid(), and b.acid() stays. Uses of the receiver go through the embedded field where they must (check(s) becomes check(&s.Soil)). Every call must reach the method through the new type: also names more methods of the type to move with it, such as those that call it on their receiver.
 To move a method to a parameter's type instead, use method_to_function, then function_to_method with receiver.
 Refuses, saying why: a call on a value no struct of the new type holds, a type that does not embed the receiver's, a name the new type already has, a method some interface has.`
-}
-
-func (*MoveMethod) InputSchema() json.RawMessage {
-	return refactor.Schema[moveMethodArgs]()
 }
 
 // ChecksByCompiling makes a compile error after the move a refusal: the

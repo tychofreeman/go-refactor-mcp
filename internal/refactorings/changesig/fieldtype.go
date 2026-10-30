@@ -24,21 +24,17 @@ import (
 )
 
 // ChangeFieldType is the "change_field_type" refactoring.
-type ChangeFieldType struct{}
+type ChangeFieldType struct{ refactor.Named[fieldArgs] }
 
 // NewChangeFieldType returns the change_field_type refactoring.
-func NewChangeFieldType() *ChangeFieldType { return &ChangeFieldType{} }
-
-func (*ChangeFieldType) Name() string { return "change_field_type" }
+func NewChangeFieldType() *ChangeFieldType {
+	return &ChangeFieldType{Named: refactor.Called[fieldArgs]("change_field_type")}
+}
 
 func (*ChangeFieldType) Description() string {
 	return `Change a struct field's type so that every value keeps its meaning, converting where the field is written and, where its type matters, where it is read: ID string to ID PlantID turns Plant{ID: s} into Plant{ID: PlantID(s)} and strings.ToUpper(p.ID) into strings.ToUpper(string(p.ID)). The new type must hold every old value: the same underlying type, a number type that holds every old value, or an interface the old type implements. Widened to an interface (Species string to any), a switch on it, == with it and passing it as an interface stay; an untyped constant compared with or written to it becomes the old type where that is not its default (species("cactus")). Narrowed to an interface (Species any to Species), every value written to it must already be one, and a switch on it loses the cases no such value matches (case "fern" once every fern is a Fern{}); with values {"fern": "Fern{}"}, Plant{Species: "fern"} becomes Plant{Species: Fern{}} and p.Species == "fern" p.Species == (Fern{}) as it narrows.
 Identify the field by file and Type.Field.
 A use that cannot follow (its address taken, ++ on an interface) is listed in the refusal, and nothing changes; an embedded field and a field of a generic type are refused.`
-}
-
-func (*ChangeFieldType) InputSchema() json.RawMessage {
-	return refactor.Schema[fieldArgs]()
 }
 
 type fieldArgs struct {

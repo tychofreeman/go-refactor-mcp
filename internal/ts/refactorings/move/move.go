@@ -16,21 +16,19 @@ import (
 )
 
 // MoveDeclaration moves top-level declarations to another file.
-type MoveDeclaration struct{}
+type MoveDeclaration struct {
+	refactor.Named[moveDeclarationArgs]
+}
 
 // NewMoveDeclaration returns move_declaration.
-func NewMoveDeclaration() *MoveDeclaration { return &MoveDeclaration{} }
-
-func (*MoveDeclaration) Name() string { return "move_declaration" }
+func NewMoveDeclaration() *MoveDeclaration {
+	return &MoveDeclaration{Named: refactor.Called[moveDeclarationArgs]("move_declaration")}
+}
 
 func (*MoveDeclaration) Description() string {
 	return `Move a top-level declaration (function with its overloads, class, interface, type, enum, or a variable statement, with the comments above it) to another file, creating the file if needed: moving water from src/plant.ts to src/water.ts declares it there, exported if anything outside it uses it, and changes import { water } from "./plant" to import from "./water" in every file. Imports follow the code: what it uses of its old file's imports is imported at its new place, and an import only it used goes.
 Identify the declaration by file and name, or by line at it or any use; to_file is the destination, relative to the root. also names more top-level declarations of the same file to move with it, such as the helpers it uses; with_dependencies moves every declaration of the file it uses, and what those use.
 Refuses, saying why: code that uses a declaration that stays and is not exported (move it too, or export it first); a name the destination declares already; a default export or a namespace; a statement declaring several variables; a file that imports the old one as a namespace and uses what moves, or re-exports all of it; import() or require() of the old file.`
-}
-
-func (*MoveDeclaration) InputSchema() json.RawMessage {
-	return refactor.Schema[moveDeclarationArgs]()
 }
 
 // moveDeclarationArgs are the arguments of move_declaration.
@@ -102,19 +100,13 @@ func (*MoveDeclaration) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 }
 
 // MoveFile moves a file or directory, updating what refers to it.
-type MoveFile struct{}
+type MoveFile struct{ refactor.Named[moveFileArgs] }
 
 // NewMoveFile returns move_file.
-func NewMoveFile() *MoveFile { return &MoveFile{} }
-
-func (*MoveFile) Name() string { return "move_file" }
+func NewMoveFile() *MoveFile { return &MoveFile{Named: refactor.Called[moveFileArgs]("move_file")} }
 
 func (*MoveFile) Description() string {
 	return `Move or rename a file or directory, with everything in it, and update what refers to it: moving src/plant.ts to src/garden/plant.ts changes import { water } from "./plant" to "./garden/plant" in every file, and the moved file's own relative imports, as the language service's file rename does (the tsconfig's file lists too). Fixtures, docs and data move byte for byte. Give file and to, which must not exist; one undo moves it back.`
-}
-
-func (*MoveFile) InputSchema() json.RawMessage {
-	return refactor.Schema[moveFileArgs]()
 }
 
 // moveFileArgs are the arguments of move_file.
@@ -167,19 +159,15 @@ func (*MoveFile) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.P
 }
 
 // DeleteFile deletes a file or directory nothing imports.
-type DeleteFile struct{}
+type DeleteFile struct{ refactor.Named[deleteFileArgs] }
 
 // NewDeleteFile returns delete_file.
-func NewDeleteFile() *DeleteFile { return &DeleteFile{} }
-
-func (*DeleteFile) Name() string { return "delete_file" }
+func NewDeleteFile() *DeleteFile {
+	return &DeleteFile{Named: refactor.Called[deleteFileArgs]("delete_file")}
+}
 
 func (*DeleteFile) Description() string {
 	return `Delete a file or directory, with everything in it: for fixtures, docs and data, and for source files nothing imports any more. A file another file still imports (or a directory whose files are imported from outside it) is refused, naming the imports; to delete declarations, remove_dead_code checks that nothing uses them. Give file; one undo puts it all back.`
-}
-
-func (*DeleteFile) InputSchema() json.RawMessage {
-	return refactor.Schema[deleteFileArgs]()
 }
 
 // deleteFileArgs are the arguments of delete_file.

@@ -15,23 +15,17 @@ import (
 )
 
 // AddField adds properties to a type.
-type AddField struct{}
+type AddField struct{ refactor.Named[addFieldArgs] }
 
 // New returns add_field.
-func New() *AddField { return &AddField{} }
+func New() *AddField { return &AddField{Named: refactor.Called[addFieldArgs]("add_field")} }
 
 func (*AddField) ChangesBehavior() {}
-
-func (*AddField) Name() string { return "add_field" }
 
 func (*AddField) Description() string {
 	return `Add properties to an interface, a class or an object type (type Spot = { ... }): an edit, to give a type the state a feature needs (add_property is another name for it in a batch). field "colour: string;" with after "height" adds colour just after height in interface Plant. field is TypeScript, one or more members with their doc comments (in a class, with initializers or methods too); with type, field gives only names (field "colour", type "string"). Without after or before they go at the end. A type on one line is opened up into lines.
 Identify the type by file and name. value gives one new property to each object literal of the type that lacks it: with field "colour: string;", value "'red'" adds colour: 'red' to each.
 Refused with the compiler's errors: a duplicate name, an object literal of the type that lacks a new required property (give value, or make it optional).`
-}
-
-func (*AddField) InputSchema() json.RawMessage {
-	return refactor.Schema[addFieldArgs]()
 }
 
 // addFieldArgs are the arguments of add_field.

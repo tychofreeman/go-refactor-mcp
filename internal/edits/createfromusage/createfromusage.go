@@ -28,21 +28,17 @@ import (
 )
 
 // CreateFromUsage is the "create_from_usage" fix.
-type CreateFromUsage struct{}
+type CreateFromUsage struct{ refactor.Named[args] }
 
 // New returns the create_from_usage fix.
-func New() *CreateFromUsage { return &CreateFromUsage{} }
-
-func (*CreateFromUsage) Name() string { return "create_from_usage" }
+func New() *CreateFromUsage {
+	return &CreateFromUsage{Named: refactor.Called[args]("create_from_usage")}
+}
 
 func (*CreateFromUsage) Description() string {
 	return `Declare as stubs (bodies of panic("not implemented")) the functions, methods, types and fields that code uses before they exist, so that a test written first compiles and fails: a test with if got := (&Cart{}).Total(); got != 0 gets func (c *Cart) Total() int declared in cart.go. An edit, and one that may start from code that does not type-check, when it leaves fewer errors and no new one. Other edits declare such stubs on their own; call it to choose names, results or the file.
 From how the code uses them it declares: functions (pkg.F in that package of the module); methods on types of the module, and on every type implementing an interface it adds one to; the methods a type lacks where it is used as an interface (var _ io.Writer = (*T)(nil)); struct types from keyed literals (T{name: v}); fields a struct lacks (x.F, T{F: v}). Parameters take their arguments' types and names; results come from the use (err is an error, a value compared with 0 an int), or from results.
 Give file, the file with the uses; names limits it to those, to_file sets where stubs go. The result's "chose:" lines give each signature and file: check them.`
-}
-
-func (*CreateFromUsage) InputSchema() json.RawMessage {
-	return refactor.Schema[args]()
 }
 
 func (*CreateFromUsage) ChangesBehavior() {}

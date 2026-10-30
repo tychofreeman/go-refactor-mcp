@@ -20,20 +20,14 @@ import (
 )
 
 // AddCase is the "add_case" edit.
-type AddCase struct{}
+type AddCase struct{ refactor.Named[addCaseArgs] }
 
 // New returns the add_case edit.
-func New() *AddCase { return &AddCase{} }
-
-func (*AddCase) Name() string { return "add_case" }
+func New() *AddCase { return &AddCase{Named: refactor.Called[addCaseArgs]("add_case")} }
 
 func (*AddCase) Description() string {
 	return `Add case clauses to a switch or type switch: an edit, to handle a new value or type. At the line of switch kind {, content case "sms": return sendSMS(to) adds that clause at the end of the switch (before a default clause that ends it, and the clauses that fall through into it); at the line of one of its case clauses, where "before" or "after" (the default) puts them next to it. content is one or more clauses, each "case x:" or "default:" with its statements, re-indented; packages it names are imported. A duplicate case is refused with the compiler's error. For the statements inside a clause, use insert_statements or replace_statements.
 Branches of an if, likewise: at the line of if p.Height > 10 {, content else if p.Height > 5 { return 2 } goes at the end of its chain (before its else); at the line of an else if or else, before or after it. else { ... } goes last, once.`
-}
-
-func (*AddCase) InputSchema() json.RawMessage {
-	return refactor.Schema[addCaseArgs]()
 }
 
 // addCaseArgs are the arguments of add_case.

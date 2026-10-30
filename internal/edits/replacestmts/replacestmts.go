@@ -25,22 +25,18 @@ import (
 )
 
 // ReplaceStatements is the "replace_statements" edit.
-type ReplaceStatements struct{}
+type ReplaceStatements struct{ refactor.Named[args] }
 
 // New returns the replace_statements edit.
-func New() *ReplaceStatements { return &ReplaceStatements{} }
-
-func (*ReplaceStatements) Name() string { return "replace_statements" }
+func New() *ReplaceStatements {
+	return &ReplaceStatements{Named: refactor.Called[args]("replace_statements")}
+}
 
 func (*ReplaceStatements) Description() string {
 	return `Replace whole statements of one block with new Go statements: an edit, to write a body or change what statements do. With function "Cart.Total" and content return len(c.Items), Total's whole body becomes that statement.
 Give start_line and end_line (inclusive, as inspect shows) covering whole statements of one block, comments and blank lines included; or function for the whole body, which stays valid after earlier steps. content is re-indented to the block. Empty content over whole case clauses deletes them (not one the value may still reach, or one fallen into).
 wrap in place of content keeps the statements, at the line $body of the code it gives: "once(func() {\n$body\n})".
 Imports are added and removed as content needs.`
-}
-
-func (*ReplaceStatements) InputSchema() json.RawMessage {
-	return refactor.Schema[args]()
 }
 
 // ChangesBehavior marks this as an edit.

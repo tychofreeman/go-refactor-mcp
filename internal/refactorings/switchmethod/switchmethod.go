@@ -23,12 +23,12 @@ import (
 )
 
 // SwitchToMethod is the "type_switch_to_method" refactoring.
-type SwitchToMethod struct{}
+type SwitchToMethod struct{ refactor.Named[args] }
 
 // New returns the type_switch_to_method refactoring.
-func New() *SwitchToMethod { return &SwitchToMethod{} }
-
-func (*SwitchToMethod) Name() string { return "type_switch_to_method" }
+func New() *SwitchToMethod {
+	return &SwitchToMethod{Named: refactor.Called[args]("type_switch_to_method")}
+}
 
 func (*SwitchToMethod) Description() string {
 	return `Turn a type switch into a method of each type it switches on: each case's body becomes that type's method, the interface gets the method, and the switch becomes one call. With method care,
@@ -40,10 +40,6 @@ becomes
 and Species gets care(p Plant) string. The variables a case uses become parameters, the switch's variable (k) the receiver; case nil (or default) stays behind the nil check. Every case must return, or none.
 Identify the switch by file and line, or by function when it is that function's only type switch; method is the new method's name.
 Refuses, saying why: a switch with an init statement or a label, or in a function literal; a type of the module that implements the interface without a case, a case of several types, of a pointer type or of a type of another package, a case that assigns a variable it uses or leaves the case (break, continue, goto, defer), a method name a type or the interface already has.`
-}
-
-func (*SwitchToMethod) InputSchema() json.RawMessage {
-	return refactor.Schema[args]()
 }
 
 type args struct {

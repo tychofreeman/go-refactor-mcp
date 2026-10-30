@@ -2587,6 +2587,38 @@ hand or a tool got in the way.
     rewriting most of the engine; sharing at the decision layer (4, 5)
     is the step short of it.
 
+46. **Abstractions still missing after item 45** (2026-10-30, the user
+    asked again). Measured at 683bb37: 63,900 lines outside tests;
+    clones of 40 tokens or more 1,158 lines, about 620 removable, in
+    about 60 groups of 6-30 lines; the 38 operations written twice
+    are about 29.5k lines of Go and 15.6k of TypeScript. In order:
+    1. **A tool's name and arguments declared once.** *Done*
+       (2026-10-30): `refactor.Named[A]`, made by
+       `refactor.Called[A]("name", omit...)` and embedded in a tool,
+       gives it `Name` and `InputSchema`; 81 tools, every published
+       name and schema unchanged, about 300 lines fewer (not the 700
+       estimated: each tool keeps its `Description`, its `New` and
+       the decoding at the top of its `Plan`, which a generic `Plan`
+       of `A` would take only by moving every plan's body).
+    2. **One decision of whether code can move, for both languages**
+       (about 100 lines): the rules agree since 45.4; a core over
+       neutral facts (acts, throws: none, on null, otherwise; reads;
+       makes; leaves; locals assigned), each language wording its
+       refusals.
+    3. **A module function that runs its callback only during the
+       call**, known from its body, not a table: tsapi's own
+       `inspect` and a user's helpers. Open questions for the user
+       (2026-10-30): what counts as "only during", recursion, per
+       parameter, methods, TypeScript too, where the fact lives.
+    4. **Placing and replacing Go declarations** (about 120 lines):
+       add_declaration, add_field, insert_statements and
+       extract_struct find where code goes and write it in the
+       file's style each their own way; replace_declaration,
+       inline_function and move_declaration likewise.
+    5. **The rest of the clones** (about 150 lines): inspect's
+       `targets`, the workspaces' per-file `Apply` and `Preload`,
+       tsapi's type helpers, extract_function and inline_function.
+
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
 candidates and the evidence for each, gathered from the friction log.

@@ -30,12 +30,10 @@ import (
 )
 
 // Fold is the "fold" refactoring.
-type Fold struct{}
+type Fold struct{ refactor.Named[foldArgs] }
 
 // New returns the fold refactoring.
-func New() *Fold { return &Fold{} }
-
-func (*Fold) Name() string { return "fold" }
+func New() *Fold { return &Fold{Named: refactor.Called[foldArgs]("fold")} }
 
 func (*Fold) Description() string {
 	return `Replace code that does what an existing function does with calls to it: every match of the function's body in the module, its parameters standing for any expressions of their types, becomes a call. The function stays. extract_function makes a function from one place; fold reuses one, written or extracted, everywhere else.
@@ -46,10 +44,6 @@ What a body matches:
 - Statements, for a function without results: the same statements in any block become one call, so near-duplicate methods become calls of one function you declare. A *p matches a field, a %s of a format matches constant text, and a string parameter matches part of a + concatenation: in func (s *Sprinkler) Run(bed, note string) { log.Printf("sprinkler on %s", bed); s.Log = append(s.Log, bed+": "+note+"!") } the two statements become record(&s.Log, "sprinkler", bed, note+"!") for func record(entries *[]string, device, bed, text string) { log.Printf("%s on %s", device, bed); *entries = append(*entries, bed+": "+text) }.
 Identify the function by file and name (Name or Type.Method); with line (and in), only the matches on that line are folded, to move callers over one at a time.
 A match where the call would not do the same (an argument evaluated in another order or another number of times, a call that cannot be made from there) is left, and the result says why.`
-}
-
-func (*Fold) InputSchema() json.RawMessage {
-	return refactor.Schema[foldArgs]()
 }
 
 type foldArgs struct {

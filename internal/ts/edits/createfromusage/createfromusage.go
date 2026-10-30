@@ -20,20 +20,18 @@ import (
 )
 
 // CreateFromUsage declares stubs.
-type CreateFromUsage struct{}
+type CreateFromUsage struct {
+	refactor.Named[createFromUsageArgs]
+}
 
 // New returns create_from_usage.
-func New() *CreateFromUsage { return &CreateFromUsage{} }
-
-func (*CreateFromUsage) Name() string { return "create_from_usage" }
+func New() *CreateFromUsage {
+	return &CreateFromUsage{Named: refactor.Called[createFromUsageArgs]("create_from_usage")}
+}
 
 func (*CreateFromUsage) Description() string {
 	return `Declare stubs for what a file uses that nothing declares, typed from the uses: an edit, so that a test can be written first. With a test calling shade(10) where const shaded: number = shade(10), it declares function shade(n: number): number { throw new Error("not implemented"); }; in the module the file imports shade from, exported, if it does. new Pot(3) declares class Pot { constructor(n: number) {} }; a method called on a class (or interface) goes in it, and a property read or written there becomes size!: number. results gives types the uses do not tell; to_file puts the file's own stubs in another file. A batch checked at its end declares them for you.
 Refuses, saying why: a name the file does not call, make or read; a use whose type its place does not tell (give results).`
-}
-
-func (*CreateFromUsage) InputSchema() json.RawMessage {
-	return refactor.Schema[createFromUsageArgs]()
 }
 
 // createFromUsageArgs are the arguments of create_from_usage.

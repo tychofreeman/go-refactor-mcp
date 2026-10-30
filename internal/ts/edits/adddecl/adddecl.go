@@ -17,22 +17,20 @@ import (
 )
 
 // AddDeclaration adds declarations to a file.
-type AddDeclaration struct{}
+type AddDeclaration struct {
+	refactor.Named[addDeclarationArgs]
+}
 
 // New returns add_declaration.
-func New() *AddDeclaration { return &AddDeclaration{} }
+func New() *AddDeclaration {
+	return &AddDeclaration{Named: refactor.Called[addDeclarationArgs]("add_declaration")}
+}
 
 func (*AddDeclaration) ChangesBehavior() {}
-
-func (*AddDeclaration) Name() string { return "add_declaration" }
 
 func (*AddDeclaration) Description() string {
 	return `Add declarations (functions, classes, interfaces, types, variables, or members of a class) to an existing file: an edit; for a new file, use create_file. They go at the end of the file, or just after or before the declaration named in after or before: after "Bed.plant" puts a new method right after plant, inside Bed, so content is written as a member there. A function or method named like a stub (a body of only throw new Error("not implemented"), as create_from_usage writes) in the file, or in that class, replaces the stub.
 Refuses, saying why: a name after or before does not find; content that does not type-check where it goes.`
-}
-
-func (*AddDeclaration) InputSchema() json.RawMessage {
-	return refactor.Schema[addDeclarationArgs]()
 }
 
 // addDeclarationArgs are the arguments of add_declaration.

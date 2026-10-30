@@ -40,21 +40,15 @@ import (
 )
 
 // InlineVariable is the "inline_variable" refactoring.
-type InlineVariable struct{}
+type InlineVariable struct{ refactor.Named[args] }
 
 // New returns the inline_variable refactoring.
-func New() *InlineVariable { return &InlineVariable{} }
-
-func (*InlineVariable) Name() string { return "inline_variable" }
+func New() *InlineVariable { return &InlineVariable{Named: refactor.Called[args]("inline_variable")} }
 
 func (*InlineVariable) Description() string {
 	return `Replace every use of a local variable or constant with its initializer, and delete the declaration: the inverse of extract_variable. name := u.First; return greet(name) becomes return greet(u.First). A pointer alias (p := &e.f) is inlined as e.f where it is dereferenced. Where the variable's type differs from its initializer's (an untyped constant, an interface), a conversion keeps it.
 Identify the variable by file, line and name at its declaration or any use, or by file, function ("Name" or "Type.Method") and name, which stays valid later in a batch.
 Refuses, saying why: a variable assigned after its declaration or whose address is taken; an initializer that would be evaluated a different number of times or in another order (one with calls needs a single use, with no calls in between); something it reads changed before a use; a name that would mean something else at a use.`
-}
-
-func (*InlineVariable) InputSchema() json.RawMessage {
-	return refactor.Schema[args]()
 }
 
 // LocalsOnly marks it as finding only locals: without line, by function.

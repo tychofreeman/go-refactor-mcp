@@ -24,21 +24,15 @@ import (
 )
 
 // Parameterize is the "parameterize" refactoring.
-type Parameterize struct{}
+type Parameterize struct{ refactor.Named[args] }
 
 // New returns the parameterize refactoring.
-func New() *Parameterize { return &Parameterize{} }
-
-func (*Parameterize) Name() string { return "parameterize" }
+func New() *Parameterize { return &Parameterize{Named: refactor.Called[args]("parameterize")} }
 
 func (*Parameterize) Description() string {
 	return `Make functions that are the same but for constants into calls of one new function that takes those constants as parameters: logMist(bed) { log.Printf("mist on %s", bed) } and logDrip(row) { log.Printf("drip on %s", row) } become calls logOn(bed, "mist on %s") and logOn(row, "drip on %s") of func logOn(bed string, format string) { log.Printf(format, bed) }. Each keeps its signature and callers; inline_function with all_calls retires them.
 Give file, functions (two or more of one package with the same signature; methods of one type), name for the new function, and parameters: a name for each constant that differs, in the order they appear.
 Refuses, saying why: functions that differ in more than constants, or not at all (merge_duplicate_function is for that), a name already taken.`
-}
-
-func (*Parameterize) InputSchema() json.RawMessage {
-	return refactor.Schema[args]()
 }
 
 type args struct {

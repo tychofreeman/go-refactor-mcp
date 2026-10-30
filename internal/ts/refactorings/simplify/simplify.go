@@ -31,21 +31,19 @@ func plan(ws *workspace.Workspace, file, summary string, change func(p *tsapi.Pr
 }
 
 // ExtractVariable names an expression.
-type ExtractVariable struct{}
+type ExtractVariable struct {
+	refactor.Named[extractVariableArgs]
+}
 
 // NewExtractVariable returns extract_variable.
-func NewExtractVariable() *ExtractVariable { return &ExtractVariable{} }
-
-func (*ExtractVariable) Name() string { return "extract_variable" }
+func NewExtractVariable() *ExtractVariable {
+	return &ExtractVariable{Named: refactor.Called[extractVariableArgs]("extract_variable")}
+}
 
 func (*ExtractVariable) Description() string {
 	return `Name an expression: const name = expression; is inserted just before its statement and the name used in its place. Extracting p.height * 2 as tall, return p.height * 2 + margin becomes const tall = p.height * 2; return tall + margin;
 Identify the expression by file, the line it starts on and its source text (column if the text is on the line twice). all_occurrences also replaces the same expression later in the block, where nothing in between could change it.
 Refuses, saying why: an expression evaluated only sometimes or more than once whose evaluation could then differ (after && or ?., in a loop's condition), one that would then run before something in its statement it must follow, one assigned to, a method called through it (its this), one in no block (an arrow's expression body), a name it uses that its statement declares.`
-}
-
-func (*ExtractVariable) InputSchema() json.RawMessage {
-	return refactor.Schema[extractVariableArgs]()
 }
 
 // extractVariableArgs are the arguments of extract_variable.
@@ -88,21 +86,19 @@ func plural(n int) string {
 }
 
 // InlineVariable replaces a variable's uses with its value.
-type InlineVariable struct{}
+type InlineVariable struct {
+	refactor.Named[inlineVariableArgs]
+}
 
 // NewInlineVariable returns inline_variable.
-func NewInlineVariable() *InlineVariable { return &InlineVariable{} }
-
-func (*InlineVariable) Name() string { return "inline_variable" }
+func NewInlineVariable() *InlineVariable {
+	return &InlineVariable{Named: refactor.Called[inlineVariableArgs]("inline_variable")}
+}
 
 func (*InlineVariable) Description() string {
 	return `Replace every use of a local variable or constant with its value, and delete the declaration: the inverse of extract_variable. const tall = p.height * 2; return tall + margin; becomes return p.height * 2 + margin; A declaration of several variables keeps the others.
 Identify the variable by file, line and name at its declaration or any use, or by file, function ("name" or "Class.method") and name, which stays valid later in a batch.
 Refuses, saying why: a variable assigned after its declaration, exported, or declared by a pattern; a value that would be evaluated a different number of times or in another order with what lies between (one with calls needs a single use, with nothing in between it must not pass); a use inside a function, unless the value is constant; a name in the value that means something else at a use.`
-}
-
-func (*InlineVariable) InputSchema() json.RawMessage {
-	return refactor.Schema[inlineVariableArgs]()
 }
 
 // inlineVariableArgs are the arguments of inline_variable.
@@ -183,22 +179,16 @@ func (m *MoveStatement) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 }
 
 // InvertIf negates an if's condition and swaps its branches.
-type InvertIf struct{}
+type InvertIf struct{ refactor.Named[invertIfArgs] }
 
 // NewInvertIf returns invert_if.
-func NewInvertIf() *InvertIf { return &InvertIf{} }
-
-func (*InvertIf) Name() string { return "invert_if" }
+func NewInvertIf() *InvertIf { return &InvertIf{Named: refactor.Called[invertIfArgs]("invert_if")} }
 
 func (*InvertIf) Description() string {
 	return `Negate an if's condition and swap its branches, turning nesting into guard clauses: if (bed.wet) { plant(p) } else { return } becomes if (!bed.wet) { return } followed by plant(p); a last if (x > 0) { total += x } in a loop body becomes if (!(x > 0)) { continue } followed by total += x. keep_else only swaps the branches.
 An if without else is un-nested this way when it ends a function's body (return) or a loop's (continue). The negation is simplified where that is exact (=== and !== swap, ! drops, < and >= swap for strings, De Morgan for && and ||; a number may be NaN, so x > 0 becomes !(x > 0)).
 Identify the if by file and the line of its if keyword (column if the line has two).
 Refuses, saying why: an else-if in the else branch, an if without else anywhere else, a name un-nesting would make clash.`
-}
-
-func (*InvertIf) InputSchema() json.RawMessage {
-	return refactor.Schema[invertIfArgs]()
 }
 
 // invertIfArgs are the arguments of invert_if.
@@ -220,21 +210,17 @@ func (*InvertIf) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.P
 }
 
 // RemoveElse un-nests an else after a branch that cannot fall through.
-type RemoveElse struct{}
+type RemoveElse struct{ refactor.Named[removeElseArgs] }
 
 // NewRemoveElse returns remove_else.
-func NewRemoveElse() *RemoveElse { return &RemoveElse{} }
-
-func (*RemoveElse) Name() string { return "remove_else" }
+func NewRemoveElse() *RemoveElse {
+	return &RemoveElse{Named: refactor.Called[removeElseArgs]("remove_else")}
+}
 
 func (*RemoveElse) Description() string {
 	return `Remove an else after an if branch that cannot fall through, un-nesting it: if (!bed) { return 0 } else { return bed.depth * 2 } becomes if (!bed) { return 0 } followed by return bed.depth * 2. An else-if becomes a separate if. When it is the else branch that exits, use invert_if instead. With wrap, the inverse: the statements after an if whose branch cannot fall through become its else, each outcome in a branch of its own.
 Identify the if by file and the line of its if keyword (column if the line has two).
 Refuses, saying why: an if branch that can fall through, un-nested names that would clash.`
-}
-
-func (*RemoveElse) InputSchema() json.RawMessage {
-	return refactor.Schema[removeElseArgs]()
 }
 
 // removeElseArgs are the arguments of remove_else.
@@ -261,22 +247,20 @@ func (*RemoveElse) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor
 }
 
 // ExtractFunction moves statements into a new function.
-type ExtractFunction struct{}
+type ExtractFunction struct {
+	refactor.Named[extractFunctionArgs]
+}
 
 // NewExtractFunction returns extract_function.
-func NewExtractFunction() *ExtractFunction { return &ExtractFunction{} }
-
-func (*ExtractFunction) Name() string { return "extract_function" }
+func NewExtractFunction() *ExtractFunction {
+	return &ExtractFunction{Named: refactor.Called[extractFunctionArgs]("extract_function")}
+}
 
 func (*ExtractFunction) Description() string {
 	return `Move a run of whole statements into a new function, declared after the one they are in, and call it in their place: in function report(beds: Bed[]), extracting let total = 0 and the loop that adds each b.depth to it, as sum, gives const total = sum(beds) there and function sum(beds: Bed[]) { let total = 0; for ...; return total; }. Locals the statements use become parameters; those they declare or assign that are used elsewhere come back as the result (an object of them when several). Statements that use this become a private method of the class; with await, the function is async and the call awaited.
 Identify the statements by file, start_line and end_line: whole statements of one block, as inspect numbers them; or a case's body by function and case ("fern" in function water, or default; a last break stays), which stays valid after earlier steps; a case sharing its body with others gets a case of its own unless split is false. doc becomes the new function's doc comment.
 Returns: when the lines end the function's body, their returns stay and the call becomes return sum(...).
 Lines that return before the function's end return a value the call returns unless it is undefined, or whether they returned. Refuses, saying why: an early return of what may be undefined, a break or continue out of the lines, yield, arguments, this outside a class's method, a type parameter or a type declared in the function, a variable declared in a block of the lines and used after them, declaring some results and assigning others.`
-}
-
-func (*ExtractFunction) InputSchema() json.RawMessage {
-	return refactor.Schema[extractFunctionArgs]()
 }
 
 // extractFunctionArgs are the arguments of extract_function.
@@ -325,21 +309,19 @@ func (*ExtractFunction) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 }
 
 // InlineFunction replaces calls with the function's body.
-type InlineFunction struct{}
+type InlineFunction struct {
+	refactor.Named[inlineFunctionArgs]
+}
 
 // NewInlineFunction returns inline_function.
-func NewInlineFunction() *InlineFunction { return &InlineFunction{} }
-
-func (*InlineFunction) Name() string { return "inline_function" }
+func NewInlineFunction() *InlineFunction {
+	return &InlineFunction{Named: refactor.Called[inlineFunctionArgs]("inline_function")}
+}
 
 func (*InlineFunction) Description() string {
 	return `Replace a call with the function's body, and delete the function when nothing else uses it: the inverse of extract_function. With function area(b: Bed) { return b.width * b.depth; }, const a = area(bed) becomes const a = bed.width * bed.depth. A body that is one expression or one return may be inlined anywhere, and so may guards and a last return (if (s.length <= n) return s; return s.slice(0, n); becomes s.length <= n ? s : s.slice(0, n)); a body of statements where the call is a statement, a declaration's or assignment's value, or a return. A body that returns early elsewhere than as a return's whole value has each return assign the call's variable: the statements after an if that returns become its else, and a return in a loop or switch sets a flag that guards the rest. Parameters are replaced by the arguments where that is safe, and otherwise declared first (const b = arg;; a rest parameter as the array of the rest, a destructured one as its pattern). Of overloads, the implementation is inlined.
 Identify the call by file, line and the function's name (column if the name is on the line twice). With all_calls, every call in the solution is inlined, other files' imports of it go, and the function is deleted (give file and name); if one call cannot be, none is. keep_function keeps the function; an exported one is always kept.
 Refuses, saying why: methods a subclass could override (only static and private ones are inlined), async functions and generators, a body that names a type parameter, a destructured rest parameter, an early return in a call at a module's top level or inside try, super, recursion, a name the body uses that means something else at the call.`
-}
-
-func (*InlineFunction) InputSchema() json.RawMessage {
-	return refactor.Schema[inlineFunctionArgs]()
 }
 
 // inlineFunctionArgs are the arguments of inline_function.

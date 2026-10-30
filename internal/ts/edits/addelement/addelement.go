@@ -12,23 +12,17 @@ import (
 )
 
 // AddElement is add_element.
-type AddElement struct{}
+type AddElement struct{ refactor.Named[addElementArgs] }
 
 // New returns add_element.
-func New() *AddElement { return &AddElement{} }
+func New() *AddElement { return &AddElement{Named: refactor.Called[addElementArgs]("add_element")} }
 
 func (*AddElement) ChangesBehavior() {}
-
-func (*AddElement) Name() string { return "add_element" }
 
 func (*AddElement) Description() string {
 	return `Add an element to an object or array literal: an edit. At the line of const sizes = {, element fern: 3 adds that property at the end; after or before puts it next to the element with that key (a property's name, or an array element as written). It follows the literal's layout: on one line, or a line each, with a trailing comma when the literal has one.
 Identify the literal by file and the line it starts on (column when more than one starts there), or by file and name, the top-level variable it initializes.
 from adds every element of another variable's literal, written by element as a template ($key, $value; copied without one): name "beds", from "soils", element "$key: { soil: $value }". from the literal itself rewrites each element.`
-}
-
-func (*AddElement) InputSchema() json.RawMessage {
-	return refactor.Schema[addElementArgs]()
 }
 
 // addElementArgs are the arguments of add_element.

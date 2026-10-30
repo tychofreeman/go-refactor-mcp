@@ -3875,3 +3875,13 @@ tsapi's effects and fold, and add_declaration of `mayPass` and
 steps. One fold golden's refusal depends on which hole is checked
 first (a map's order), so it names what both refusals say. Nothing else
 by hand.
+
+## 2026-10-30: tools named once (item 46.1)
+
+Through the CLI. A throwaway program (not committed) found each tool's
+constant `Name` and its `InputSchema` and wrote one batch of 324 steps:
+replace_text of the struct (the embedded `Named`) and of each literal of
+it (its `New`), replace_declaration with empty content for the two
+methods. 17 seconds. A dump of every published tool before and after
+compared them. `Named` and `Called` were written by hand into
+add_declaration: new code. Nothing else by hand.

@@ -17,20 +17,14 @@ import (
 )
 
 // AddDeclaration is the "add_declaration" edit.
-type AddDeclaration struct{}
+type AddDeclaration struct{ refactor.Named[args] }
 
 // New returns the add_declaration edit.
-func New() *AddDeclaration { return &AddDeclaration{} }
-
-func (*AddDeclaration) Name() string { return "add_declaration" }
+func New() *AddDeclaration { return &AddDeclaration{Named: refactor.Called[args]("add_declaration")} }
 
 func (*AddDeclaration) Description() string {
 	return `Add top-level declarations (functions, methods, types, variables, constants) to an existing file: an edit; for a new file, use create_file. content is Go source with doc comments, without package clause or imports; packages it names are imported (imports picks one when a name is ambiguous). They go at the end of the file, or just after or before the declaration named in after or before: after "Cart.Total" puts a new method right after Total.
 A function or method named like a stub (a body of only panic("not implemented"), as create_from_usage writes) replaces the stub, wherever it is in the package.`
-}
-
-func (*AddDeclaration) InputSchema() json.RawMessage {
-	return refactor.Schema[args]()
 }
 
 // ChangesBehavior marks this as an edit.

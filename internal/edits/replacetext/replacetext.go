@@ -26,20 +26,16 @@ import (
 )
 
 // ReplaceText is the "replace_text" edit.
-type ReplaceText struct{}
+type ReplaceText struct {
+	refactor.Named[replaceTextArgs]
+}
 
 // New returns the replace_text edit.
-func New() *ReplaceText { return &ReplaceText{} }
-
-func (*ReplaceText) Name() string { return "replace_text" }
+func New() *ReplaceText { return &ReplaceText{Named: refactor.Called[replaceTextArgs]("replace_text")} }
 
 func (*ReplaceText) Description() string {
 	return `Replace exact text in a file: an edit, for what the other tools do not cover: text in string literals and comments, and files that are not Go (go.mod, JSON, test fixtures, docs). old "version 1.2" and new "version 1.3" change that text in README.md. To change Go code, replace_statements, replace_expression and insert_statements usually fit better.
 old must be as in the file and occur once, or set all_occurrences; spacing within lines may differ (gofmt's alignment) where that still finds it. function limits the search to one function of a Go file. append with no old adds new at the end of the file. files in place of file makes the same replacement in several files (old must be in each). It addresses text, not lines, so it stays valid after earlier steps of a batch. In a Go file, packages new uses (strings.Join) are imported.`
-}
-
-func (*ReplaceText) InputSchema() json.RawMessage {
-	return refactor.Schema[replaceTextArgs]()
 }
 
 // replaceTextArgs are the arguments of replace_text.
