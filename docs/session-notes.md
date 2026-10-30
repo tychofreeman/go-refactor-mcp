@@ -341,7 +341,10 @@ patterns sessions use, with their steps, in `docs/patterns.md`.
   two disagreements were then decided by the user: TypeScript takes
   Go's nil dereference (a nullish read may pass code that writes but
   does not throw otherwise or leave), Go takes TypeScript's leaving
-  (an effect does not move past a return, break or continue).
+  (an effect does not move past a return, break or continue). The
+  rules then became one: `internal/reorder` (`Repeat`, `Conflict`),
+  which both languages call (item 46.2); change a rule there, not in
+  `analysis.Move.Check` or tsapi's `Check`.
 - **Schemas come from argument structs** (2026-10-30, item 45.1):
   `refactor.Schema[T]()`; a property is a field with a `desc` tag,
   optional with omitempty. Published schemas did not change, so the A/B

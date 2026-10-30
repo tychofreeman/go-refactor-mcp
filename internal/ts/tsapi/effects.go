@@ -8,6 +8,7 @@ import (
 
 	"github.com/buke/typescript-go-internal/v7/pkg/ast"
 	"github.com/buke/typescript-go-internal/v7/pkg/checker"
+	"github.com/tychofreeman/go-refactor-mcp/internal/reorder"
 )
 
 // Effects is what evaluating an expression or running statements may do,
@@ -82,42 +83,45 @@ func (e Effects) CanDrop() bool { return !e.Writes && !e.Throws && !e.Leaves && 
 // CanRepeat reports whether evaluating it twice gives the same as once.
 func (e Effects) CanRepeat() bool { return e.CanDrop() && !e.Fresh }
 
-// acts returns what it does that another part must not be reordered with,
-// as the part and a verb phrase, or "".
-func (e Effects) acts() (string, string) {
+// facts are what e may do, as reorder judges it.
+func (e Effects) facts() reorder.Facts {
+	throws := reorder.NoThrow
 	switch {
-	case e.Writes:
-		return e.At.Write, "may change state"
+	case e.Throws && e.OtherThrows:
+		throws = reorder.OtherThrow
 	case e.Throws:
-		return e.At.Throw, "may throw"
-	case e.Leaves:
-		return e.At.Leave, "leaves"
+		throws = reorder.OnNull
 	}
-	return "", ""
+	return reorder.Facts{Writes: e.Writes, Reads: e.Reads, Throws: throws, Makes: e.Fresh, Leaves: e.Leaves}
 }
 
-// mayPass reports whether e, whose only act is to throw by reading
-// through what may be null or undefined, may be evaluated on the other
-// side of o, which neither throws another way nor leaves: it throws
-// either way, only what o did first differs (Go's rule for a nil
-// dereference).
-func (e Effects) mayPass(o Effects) bool {
-	return e.Throws && !e.OtherThrows && !e.Writes && !e.Leaves && !o.OtherThrows && !o.Leaves
+// does names the part of e that does k, and what it does: "the call
+// log(p) at bed.ts:3", "may change state".
+func (e Effects) does(k reorder.Kind) (string, string) {
+	switch k {
+	case reorder.Writing:
+		return e.At.Write, "may change state"
+	case reorder.Throwing:
+		return e.At.Throw, "may throw"
+	case reorder.Leaving:
+		return e.At.Leave, "leaves"
+	case reorder.Reading:
+		return e.At.Read, "reads state"
+	}
+	return e.At.Fresh, "makes a new value each time"
 }
 
 // conflict returns why a and b may not be evaluated in the other order,
-// or "": both act, one writes what the other reads, or they share a
-// local that one assigns.
+// or "": both act, one writes what the other reads (reorder.Conflict), or
+// they share a local that one assigns.
 func conflict(a, b Effects) string {
-	ap, av := a.acts()
-	bp, bv := b.acts()
-	switch {
-	case ap != "" && bp != "" && !a.mayPass(b) && !b.mayPass(a):
+	if ak, bk := reorder.Conflict(a.facts(), b.facts()); ak != reorder.None {
+		if ak == reorder.Reading { // the writer first
+			a, b, ak, bk = b, a, bk, ak
+		}
+		ap, av := a.does(ak)
+		bp, bv := b.does(bk)
 		return fmt.Sprintf("%s %s, and %s %s", ap, av, bp, bv)
-	case a.Writes && b.Reads:
-		return fmt.Sprintf("%s may change state, and %s reads state", a.At.Write, b.At.Read)
-	case b.Writes && a.Reads:
-		return fmt.Sprintf("%s may change state, and %s reads state", b.At.Write, a.At.Read)
 	}
 	for _, s := range sortedSymbols(a.Assigns) {
 		if w, ok := b.Assigns[s]; ok {
@@ -158,14 +162,14 @@ func canReorder(all []Effects) string {
 
 // Times says how often an expression would be evaluated after a move,
 // for each time it is evaluated now.
-type Times int
+type Times = reorder.Times
 
 const (
-	Once    Times = iota // as often as now
-	Maybe                // once or not at all (it moves under a condition)
-	Several              // once for each of several uses, each evaluating it again
-	Shared               // once, with the one value standing for several evaluations
-	Unused               // once more or once less, where nothing uses the value (an argument added or dropped)
+	Once    = reorder.Once
+	Maybe   = reorder.Maybe
+	Several = reorder.Several
+	Shared  = reorder.Shared
+	Unused  = reorder.Unused
 )
 
 // Move is a change to where, or how often, code is evaluated: Expr, an
@@ -190,19 +194,14 @@ func (a *effects) Check(m Move) string {
 	}
 	then := map[Times]string{Maybe: "then not always be evaluated", Several: "be evaluated another number of times",
 		Shared: "be evaluated once for several uses", Unused: "be evaluated another number of times"}[m.Times]
-	if m.Times != Once {
-		p, v := e.acts()
-		switch {
-		case e.Throws && !e.Writes && !e.Leaves && m.Times == Shared:
-			// shared, it throws at the first use either way
-		case p != "":
-			return fmt.Sprintf("%s would %s, and %s %s", q, then, p, v)
-		case assigns != "":
+	f := e.facts()
+	f.Writes = f.Writes || assigns != ""
+	if k := reorder.Repeat(m.Times, f, true); k != reorder.None {
+		if k == reorder.Writing && !e.Writes {
 			return fmt.Sprintf("%s would %s, and %s assigns a variable", q, then, assigns)
 		}
-		if (m.Times == Several || m.Times == Shared) && e.Fresh {
-			return fmt.Sprintf("%s would %s, and %s makes a new value each time", q, then, e.At.Fresh)
-		}
+		p, v := e.does(k)
+		return fmt.Sprintf("%s would %s, and %s %s", q, then, p, v)
 	}
 	if len(m.Past) == 0 {
 		return ""
