@@ -62,10 +62,7 @@ func (p *Project) valueEdits(prop *ast.Node, values map[string]string) []Edit {
 		return ast.IsPropertyAccessExpression(e) && c.GetSymbolAtLocation(e.Name()) == sym
 	}
 	var edits []Edit
-	for _, f := range p.prog.GetProgram().GetSourceFiles() {
-		if f.IsDeclarationFile || strings.Contains(f.FileName(), "/node_modules/") {
-			continue
-		}
+	for _, f := range p.sources() {
 		fl := newLined(f)
 		put := func(e *ast.Node) {
 			e = ast.SkipParentheses(e)
@@ -76,8 +73,7 @@ func (p *Project) valueEdits(prop *ast.Node, values map[string]string) []Edit {
 				}
 			}
 		}
-		var visit func(n *ast.Node) bool
-		visit = func(n *ast.Node) bool {
+		inspect(f.AsNode(), func(n *ast.Node) bool {
 			switch {
 			case ast.IsPropertyAssignment(n) && ast.IsObjectLiteralExpression(n.Parent):
 				if t := c.GetContextualType(n.Parent, checker.ContextFlagsNone); t != nil && n.Name() != nil && c.GetPropertyOfType(t, fl.source(n.Name())) == sym {
@@ -104,9 +100,8 @@ func (p *Project) valueEdits(prop *ast.Node, values map[string]string) []Edit {
 					}
 				}
 			}
-			return n.ForEachChild(visit)
-		}
-		visit(f.AsNode())
+			return true
+		})
 	}
 	return edits
 }

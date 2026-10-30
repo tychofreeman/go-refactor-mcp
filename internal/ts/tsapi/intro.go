@@ -253,14 +253,12 @@ func symbolsOf(c interface {
 	GetSymbolAtLocation(*ast.Node) *ast.Symbol
 }, n *ast.Node) []*ast.Symbol {
 	var out []*ast.Symbol
-	var visit func(x *ast.Node) bool
-	visit = func(x *ast.Node) bool {
+	inspect(n, func(x *ast.Node) bool {
 		if ast.IsIdentifier(x) {
 			out = append(out, c.GetSymbolAtLocation(x))
 		}
-		return x.ForEachChild(visit)
-	}
-	visit(n)
+		return true
+	})
 	return out
 }
 

@@ -41,8 +41,7 @@ func (p *Project) FileRename(ctx context.Context, oldPath, newPath string) []Edi
 // moduleSpecifiers calls fn with each module specifier of the file: of
 // imports, exports, import types, import() and require().
 func moduleSpecifiers(f *ast.SourceFile, fn func(spec, owner *ast.Node)) {
-	var visit func(n *ast.Node) bool
-	visit = func(n *ast.Node) bool {
+	inspect(f.AsNode(), func(n *ast.Node) bool {
 		switch {
 		case ast.IsImportDeclaration(n) || ast.IsJSImportDeclaration(n):
 			fn(n.AsImportDeclaration().ModuleSpecifier, n)
@@ -58,10 +57,8 @@ func moduleSpecifiers(f *ast.SourceFile, fn func(spec, owner *ast.Node)) {
 				fn(arg.AsLiteralTypeNode().Literal, n)
 			}
 		}
-		n.ForEachChild(visit)
-		return false
-	}
-	visit(f.AsNode())
+		return true
+	})
 }
 
 // fileOf is the file a module specifier refers to, or "".

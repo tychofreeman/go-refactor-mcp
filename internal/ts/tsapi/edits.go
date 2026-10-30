@@ -112,15 +112,12 @@ func (p *Project) AddElement(path string, line, column int, name, from, element,
 // column, when that is not 0).
 func (l *lined) literalAt(line, column int) (*ast.Node, string) {
 	var lits []*ast.Node
-	var visit func(n *ast.Node) bool
-	visit = func(n *ast.Node) bool {
+	inspect(l.f.AsNode(), func(n *ast.Node) bool {
 		if (ast.IsObjectLiteralExpression(n) || ast.IsArrayLiteralExpression(n)) && l.line(l.pos(n)) == line && (column == 0 || l.pos(n)-l.start(line)+1 == column) {
 			lits = append(lits, n)
 		}
-		n.ForEachChild(visit)
-		return false
-	}
-	visit(l.f.AsNode())
+		return true
+	})
 	switch {
 	case len(lits) == 0:
 		return nil, fmt.Sprintf("no object or array literal starts on line %d", line)
@@ -273,10 +270,7 @@ func (p *Project) FillLiterals(ctx context.Context, path, typeName, name, value 
 	defer done()
 	target := c.GetSymbolAtLocation(decl.Name())
 	var edits []Edit
-	for _, f := range p.prog.GetProgram().GetSourceFiles() {
-		if f.IsDeclarationFile || strings.Contains(f.FileName(), "/node_modules/") {
-			continue
-		}
+	for _, f := range p.sources() {
 		fl := newLined(f)
 		var visit func(n *ast.Node) bool
 		visit = func(n *ast.Node) bool {
@@ -336,8 +330,7 @@ func (p *Project) AddCase(path string, line int, where, content string) ([]Edit,
 	content = strings.Trim(content, "\n")
 	lead := strings.TrimSpace(content)
 	var sw, clause, ifs *ast.Node
-	var visit func(n *ast.Node) bool
-	visit = func(n *ast.Node) bool {
+	inspect(l.f.AsNode(), func(n *ast.Node) bool {
 		if l.line(l.pos(n)) == line || ast.IsIfStatement(n) && isElseIf(n) && l.line(elseKeyword(l, n)) == line {
 			switch {
 			case ast.IsSwitchStatement(n) && sw == nil && clause == nil:
@@ -348,10 +341,8 @@ func (p *Project) AddCase(path string, line int, where, content string) ([]Edit,
 				ifs = n
 			}
 		}
-		n.ForEachChild(visit)
-		return false
-	}
-	visit(l.f.AsNode())
+		return true
+	})
 	switch {
 	case strings.HasPrefix(lead, "case") || strings.HasPrefix(lead, "default"):
 		if clause != nil {

@@ -49,10 +49,7 @@ func (p *Project) KeyedUses(ctx context.Context, path string, offset int) (refus
 	}
 	owner := sym.Parent
 	holds := func(t *checker.Type) bool { return typeHolds(c, t, owner, map[*checker.Type]bool{}) }
-	for _, f := range p.prog.GetProgram().GetSourceFiles() {
-		if f.IsDeclarationFile || strings.Contains(f.FileName(), "/node_modules/") {
-			continue
-		}
+	for _, f := range p.sources() {
 		fl := newLined(f)
 		var visit func(n *ast.Node) bool
 		visit = func(n *ast.Node) bool {

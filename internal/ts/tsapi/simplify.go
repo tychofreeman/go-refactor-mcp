@@ -127,15 +127,12 @@ func symbolOf(c *checker.Checker, id *ast.Node) *ast.Symbol {
 
 // identifiers calls fn with each identifier in n, n included.
 func identifiers(n *ast.Node, fn func(id *ast.Node)) {
-	var visit func(x *ast.Node) bool
-	visit = func(x *ast.Node) bool {
+	inspect(n, func(x *ast.Node) bool {
 		if ast.IsIdentifier(x) {
 			fn(x)
 		}
-		x.ForEachChild(visit)
-		return false
-	}
-	visit(n)
+		return true
+	})
 }
 
 // free returns the identifiers of e that refer to values declared outside
@@ -227,8 +224,7 @@ func (l *lined) withBlank(a, b int) (int, int) {
 // template that spans lines.
 func (l *lined) reindent(start, end int, from, to string, rs ...repl) string {
 	inside := map[int]bool{}
-	var visit func(n *ast.Node) bool
-	visit = func(n *ast.Node) bool {
+	inspect(l.f.AsNode(), func(n *ast.Node) bool {
 		if n.End() <= start || n.Pos() >= end {
 			return false
 		}
@@ -239,10 +235,8 @@ func (l *lined) reindent(start, end int, from, to string, rs ...repl) string {
 			}
 			return false
 		}
-		n.ForEachChild(visit)
-		return false
-	}
-	visit(l.f.AsNode())
+		return true
+	})
 	var b strings.Builder
 	for line := l.line(start); line <= l.count() && l.start(line) < end; line++ {
 		s := l.substitute(l.start(line), min(l.start(line+1), end), rs)
@@ -664,15 +658,12 @@ func (l *lined) ifAt(line, column int) (*ast.Node, string) {
 		return nil, fmt.Sprintf("line %d out of range: the file has %d lines", line, l.count())
 	}
 	var found []*ast.Node
-	var visit func(n *ast.Node) bool
-	visit = func(n *ast.Node) bool {
+	inspect(l.f.AsNode(), func(n *ast.Node) bool {
 		if ast.IsIfStatement(n) && l.line(l.pos(n)) == line && (column == 0 || l.pos(n)-l.start(line)+1 == column) {
 			found = append(found, n)
 		}
-		n.ForEachChild(visit)
-		return false
-	}
-	visit(l.f.AsNode())
+		return true
+	})
 	switch len(found) {
 	case 0:
 		return nil, fmt.Sprintf("no if starts on line %d: %s", line, strings.TrimSpace(l.text[l.start(line):l.end(line)]))

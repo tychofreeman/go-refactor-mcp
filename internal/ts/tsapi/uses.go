@@ -57,8 +57,7 @@ func (p *Project) UsesOf(ctx context.Context, name string, rel func(string) stri
 			continue
 		}
 		l := newLined(f)
-		var visit func(n *ast.Node) bool
-		visit = func(n *ast.Node) bool {
+		inspect(f.AsNode(), func(n *ast.Node) bool {
 			if ast.IsIdentifier(n) && n != decls[0] && n.Text() == sym.Name {
 				if s := c.GetSymbolAtLocation(n); s != nil && c.SkipAlias(s) == sym && !ast.IsImportSpecifier(n.Parent) && !ast.IsExportSpecifier(n.Parent) {
 					pos := l.pos(n)
@@ -66,9 +65,8 @@ func (p *Project) UsesOf(ctx context.Context, name string, rel func(string) stri
 					uses = append(uses, Use{File: f.FileName(), Line: line, Pos: pos, Role: useRole(n), Text: strings.TrimSpace(l.text[l.start(line):l.end(line)])})
 				}
 			}
-			return n.ForEachChild(visit)
-		}
-		visit(f.AsNode())
+			return true
+		})
 	}
 	return desc, uses, true, ""
 }

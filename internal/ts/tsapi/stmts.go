@@ -105,15 +105,12 @@ func (l *lined) lines(n *ast.Node) (int, int) {
 
 // lists calls fn with each statement list of the file, outer before inner.
 func (l *lined) lists(fn func(owner *ast.Node, list []*ast.Node)) {
-	var visit func(n *ast.Node) bool
-	visit = func(n *ast.Node) bool {
+	inspect(l.f.AsNode(), func(n *ast.Node) bool {
 		if n.CanHaveStatements() {
 			fn(n, n.Statements())
 		}
-		n.ForEachChild(visit)
-		return false
-	}
-	visit(l.f.AsNode())
+		return true
+	})
 }
 
 func (p *Project) lined(path string) (*lined, string) {

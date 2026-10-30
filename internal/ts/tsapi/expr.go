@@ -58,14 +58,12 @@ func (p *Project) ReplaceExpression(ctx context.Context, path string, line int, 
 		defer done()
 		symbols := func(n *ast.Node) []*ast.Symbol {
 			var out []*ast.Symbol
-			var visit func(n *ast.Node) bool
-			visit = func(n *ast.Node) bool {
+			inspect(n, func(n *ast.Node) bool {
 				if ast.IsIdentifier(n) {
 					out = append(out, c.GetSymbolAtLocation(n))
 				}
-				return n.ForEachChild(visit)
-			}
-			visit(n)
+				return true
+			})
 			return out
 		}
 		meaning := symbols(found[0])
@@ -91,15 +89,12 @@ func (p *Project) ReplaceExpression(ctx context.Context, path string, line int, 
 // expressions calls fn with each expression of the file, outer before
 // inner, leaving out names after a dot.
 func (l *lined) expressions(fn func(*ast.Node)) {
-	var visit func(n *ast.Node) bool
-	visit = func(n *ast.Node) bool {
+	inspect(l.f.AsNode(), func(n *ast.Node) bool {
 		if ast.IsExpressionNode(n) && !(ast.IsPropertyAccessExpression(n.Parent) && n.Parent.Name() == n) {
 			fn(n)
 		}
-		n.ForEachChild(visit)
-		return false
-	}
-	visit(l.f.AsNode())
+		return true
+	})
 }
 
 // tokens returns the texts of the tokens of s.
