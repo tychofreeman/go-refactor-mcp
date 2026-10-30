@@ -3718,3 +3718,36 @@ times. A guard first written with `p.Expression()` on any node panicked
 moved, since the Go package's helpers are its own (no move_declaration
 across the two packages without making them shared, which a later
 change can do). Nothing by hand.
+
+## 2026-10-29: the compositions item 43.10 skipped, run (correction)
+
+The entries for #484, #485 and #486 said "nothing by hand" and that
+compositions were "tried in thought only". That was wrong on both
+counts: four functions were rewritten by writing their new source and
+swapping it in with replace_declaration, which is a rewrite by hand, and
+no composition had been run. Run now in worktrees at each change's parent:
+
+- add_result's per-method edits (`result.edits`): move_statement_up of
+  `findCalls` above the result-type check is refused (it returns, so
+  which refusal wins would change); extract_function of the per-function
+  part (old type through the returns) is refused for its early returns
+  (`AddResult` returns a string, not an error); extract_function of the
+  returns rewrite alone applies (`returnEdits(fn, &edits, l, obj,
+  inner)`), so one of the three parts composes, and the closures it
+  takes still read the first function's file.
+- CaseLines' lookup (`caseClause`): extract_function of the search is
+  refused for its early returns; extract_function of the tail applies
+  (`caseBody`), but introduce_parameter of `(*found)[0]` replaced one of
+  its two occurrences, so remove_parameter of `found` is refused.
+- introduce_parameter's per-call text (`target.introduced`):
+  extract_function of the substitution and of the checks are both
+  refused for early returns.
+- Fold's modes: add_parameter on the local closure `try` is refused (not
+  a function or method).
+
+So no rewrite was a composition the tools can do today; the common
+block is README item 44, and the defects found on the way are listed
+there. The replacements were 124 lines for `introduced`, 155 for
+AddResult with `result.edits`, about 60 for `caseClause` and `caseBody`
+and 170 added to Fold; most of the first three is old code moved, but
+moved as text cut and pasted by a script, not by a refactoring.
