@@ -2517,7 +2517,13 @@ hand or a tool got in the way.
          needed while its callers pass no `Past` for Shared
          (extract_variable, fold) or Several (inline_variable,
          changesig's evaluation); taking TypeScript's would mean
-         passing the code between the occurrences.
+         passing the code between the occurrences. *Done for
+         extract_variable* (2026-10-30, the user): it passes the code
+         between the declaration and the last occurrence, with
+         `Move.Between`, which judges reads against that code only, as
+         TypeScript does, and inline_variable the same for several uses
+         (its round trip with extract_variable needs it). fold and
+         changesig's evaluation keep Go's rule.
        - **Nil dereferences.** Go lets a nil dereference move past calls
          that return (session notes, 2026-10-21); TypeScript has no
          such case and refuses a throw past a write.

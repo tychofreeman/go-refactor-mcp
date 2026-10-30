@@ -326,6 +326,17 @@ patterns sessions use, with their steps, in `docs/patterns.md`.
   error, "" for nil, because this repo's functions return refusals that
   way and all four hand rewrites of 43.10 hit the refusal. Numbers were
   left out on purpose (an early `return 1` is a value, not an exit).
+- **Reads between occurrences** (2026-10-30, the user, item 45.4):
+  extract_variable's all_occurrences judges what the expression reads
+  against the code between its occurrences (`analysis.Move.Between`),
+  as TypeScript does, so `b.depth*2 + b.depth` extracts; and
+  inline_variable for several uses, since `TestGoldenRoundTrip` inlines
+  what every applying extraction made. The code between is whole
+  statements (`analysis.Spanning`), so a loop's other iterations count,
+  and nothing when a use is in a closure. fold and changesig's
+  evaluation still refuse any read, since they pass no code between;
+  give them `Between` with that code to relax them. The other two disagreements of 45.4 (nil dereferences,
+  leaving) are still the user's to decide.
 - **Schemas come from argument structs** (2026-10-30, item 45.1):
   `refactor.Schema[T]()`; a property is a field with a `desc` tag,
   optional with omitempty. Published schemas did not change, so the A/B

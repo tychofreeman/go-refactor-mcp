@@ -528,10 +528,11 @@ change behavior:
 `all_occurrences` additionally requires an expression with no calls (other
 than conversions, `len`/`cap`/`min`/`max`, and the known functions without
 side effects that cannot panic, such as `strings.ToLower`; see "Calls
-known to have no side effects"), no pointer, slice or map
-element reads, no globals, no new slices or maps, and no local variable that
-escapes (address taken, captured by a closure) or is modified after the
-declaration. Without `all_occurrences`, the result notes other occurrences
+known to have no side effects"), no new slices or maps, and no local
+variable modified after the declaration. It may read through a pointer,
+an element of a slice or map, or a global, when the code between the
+declaration and the last occurrence changes none of it (`Move.Between`:
+no call with side effects, no assignment to what it reads). Without `all_occurrences`, the result notes other occurrences
 that could be replaced.
 
 Known limitation: if both the hoisted expression and an earlier part of the
@@ -568,7 +569,12 @@ Refused (with an explanation):
   exactly once right after the declaration: inside a loop or closure, in a
   nested block, after `&&`/`||`, in an `else if`, or with a call, write or
   `return` in between (so `q := a / b; if b == 0 { return 0 }; return q`
-  is refused);
+  is refused). Used more than once, an initializer without calls that
+  have side effects may read pointers, elements and globals when the
+  statements from the declaration through the last use change none of
+  them (`Move.Between`; not when a use is in a closure), and may panic
+  when it would panic at its first use where it did at the
+  declaration;
 - a variable the initializer reads is modified before a use (or anywhere in a
   loop or closure that contains a use but not the declaration);
 - a name in the initializer would refer to something else at a use;
