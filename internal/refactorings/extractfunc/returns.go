@@ -22,7 +22,9 @@ package extractfunc
 //     The new function returns its results and an error; the returns
 //     become `return <zero results>, err`, falling off the end returns
 //     `..., nil`, and the call site checks the error and returns
-//     `nil, err` itself.
+//     `nil, err` itself. A string last result (a refusal) works the
+//     same way, with "" for nil: each early return must give a string
+//     known not to be empty.
 //
 // Anything else (an early return of a success value, say) is refused: the
 // caller could not tell whether the statements returned or fell through.
@@ -30,8 +32,10 @@ package extractfunc
 import (
 	"fmt"
 	"go/ast"
+	"go/constant"
 	"go/token"
 	"go/types"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -125,10 +129,11 @@ func (x *extraction) checkNamedResults(sig *types.Signature) error {
 func (x *extraction) checkErrorExits(sig *types.Signature) error {
 	first := x.returns[0]
 	n := sig.Results().Len()
-	if n == 0 || !types.Identical(sig.Results().At(n-1).Type(), types.Universe.Lookup("error").Type()) {
-		return refactor.Refusef("the selected lines return at line %d, but not on every path, and %s does not return an error. The new function could not tell the call site whether it returned; select statements that always return, or leave the return out",
+	if n == 0 || !exitKind(sig.Results().At(n-1).Type()) {
+		return refactor.Refusef("the selected lines return at line %d, but not on every path, and %s does not return an error, nor a string whose empty value could say it did not return. The new function could not tell the call site whether it returned; select statements that always return, or leave the return out",
 			x.line(first.Pos()), x.enclosingName())
 	}
+	x.exitType = sig.Results().At(n - 1).Type()
 	if err := x.checkNamedResults(sig); err != nil {
 		return err
 	}
@@ -150,7 +155,11 @@ func (x *extraction) checkErrorExits(sig *types.Signature) error {
 		} else if strings.Join(want, " ") != strings.Join(toks, " ") {
 			return refactor.Refusef("the returns at lines %d and %d return different values besides the error; the call site can only return one set of values", x.line(first.Pos()), x.line(r.Pos()))
 		}
-		if !x.nonNilError(r.Results[n-1], r) {
+		if !x.isError() && !x.exitNonZero(r.Results[n-1], r) {
+			return refactor.Refusef("the return at line %d returns %s, which might be empty; the call site tells an early return from falling through by a string that is not empty. Only strings known not to be are passed on: a constant, fmt.Sprintf of a format with text besides its verbs, a variable checked against \"\" around the return, or a call of a function whose every return passes such a value",
+				x.line(r.Pos()), x.quoteNode(r.Results[n-1]))
+		}
+		if x.isError() && !x.nonNilError(r.Results[n-1], r) {
 			return refactor.Refusef("the return at line %d returns %s, which might be nil; the call site tells an early return from falling through by a non-nil error. Only errors that are known to be non-nil can be passed on: a variable checked with `!= nil` around the return, a value from errors.New or fmt.Errorf, or a call of a function whose every return passes such a value",
 				x.line(r.Pos()), x.quoteNode(r.Results[n-1]))
 		}
@@ -208,6 +217,140 @@ func (x *extraction) nonNilError(e ast.Expr, r *ast.ReturnStmt) bool {
 		}
 	}
 	return x.nonNilValue(x.Info, e)
+}
+
+// exitKind reports whether t can carry an early exit as a function's last
+// result: an error (non-nil means it returned), or a string, whose empty
+// value means it did not (a refusal, say).
+func exitKind(t types.Type) bool {
+	if types.Identical(t, types.Universe.Lookup("error").Type()) {
+		return true
+	}
+	b, ok := t.Underlying().(*types.Basic)
+	return ok && b.Info()&types.IsString != 0 && b.Info()&types.IsUntyped == 0
+}
+
+// isError reports whether the early exits carry an error.
+func (x *extraction) isError() bool {
+	return types.Identical(x.exitType, types.Universe.Lookup("error").Type())
+}
+
+// exitZero spells the value of the last result that means the code did
+// not return: nil for an error, the zero value otherwise.
+func (x *extraction) exitZero() string {
+	if x.isError() {
+		return "nil"
+	}
+	z, err := x.zeroValue(x.exitType)
+	if err != nil {
+		return "nil"
+	}
+	return z
+}
+
+// exitNonZero reports whether e, returned by r as the last result, is
+// certainly not the value that means the code did not return.
+func (x *extraction) exitNonZero(e ast.Expr, r *ast.ReturnStmt) bool {
+	if x.isError() {
+		return x.nonNilError(e, r)
+	}
+	e = ast.Unparen(e)
+	if id, ok := e.(*ast.Ident); ok {
+		if v, ok := x.Info.Uses[id].(*types.Var); ok && x.checkedNonNil(v, r) {
+			return true
+		}
+	}
+	return x.nonZeroValue(x.Info, e)
+}
+
+// nonZeroValue reports whether e, a string or number type-checked in
+// info, is certainly not zero without looking at the code around it: a
+// constant that is not zero, fmt.Sprintf of a constant format with text
+// besides its verbs, or a call of a function whose every return passes
+// such a value (alwaysNonZero).
+func (x *extraction) nonZeroValue(info *types.Info, e ast.Expr) bool {
+	e = ast.Unparen(e)
+	if tv, ok := info.Types[e]; ok && tv.Value != nil {
+		return !isZeroConst(tv.Value)
+	}
+	call, ok := e.(*ast.CallExpr)
+	if !ok {
+		return false
+	}
+	fn, ok := info.Uses[analysis.IdentOf(call.Fun)].(*types.Func)
+	if !ok {
+		return false
+	}
+	if fn.Pkg() != nil && fn.Pkg().Path() == "fmt" && fn.Name() == "Sprintf" && len(call.Args) > 0 {
+		if tv, ok := info.Types[call.Args[0]]; ok && tv.Value != nil && tv.Value.Kind() == constant.String {
+			return verbs.ReplaceAllString(constant.StringVal(tv.Value), "") != ""
+		}
+		return false
+	}
+	return x.alwaysNonZero(fn)
+}
+
+// verbs matches the verbs of a format and the doubled percent sign.
+var verbs = regexp.MustCompile(`%[-+# 0]*(\[\d+\])?(\d+|\*)?(\.(\d+|\*)?)?(\[\d+\])?[a-zA-Z%]`)
+
+// isZeroConst reports whether v is the zero value of its kind.
+func isZeroConst(v constant.Value) bool {
+	switch v.Kind() {
+	case constant.String:
+		return constant.StringVal(v) == ""
+	case constant.Int, constant.Float, constant.Complex:
+		return constant.Sign(v) == 0 && constant.Sign(constant.Imag(v)) == 0
+	}
+	return false
+}
+
+// alwaysNonZero reports whether every call of fn, a function in the
+// loaded source with unnamed results that defers nothing, returns a last
+// result that nonZeroValue accepts. A recursive call proves nothing.
+func (x *extraction) alwaysNonZero(fn *types.Func) bool {
+	fn = fn.Origin()
+	if fn.Pkg() == nil {
+		return false
+	}
+	if known, ok := x.nonNilFuncs[fn]; ok {
+		return known
+	}
+	if x.nonNilFuncs == nil {
+		x.nonNilFuncs = map[*types.Func]bool{}
+	}
+	x.nonNilFuncs[fn] = false // while deciding
+	n := fn.Signature().Results().Len()
+	info, decl := x.funcDecl(fn)
+	if n == 0 || decl == nil || decl.Body == nil {
+		return false
+	}
+	for _, f := range decl.Type.Results.List {
+		if len(f.Names) > 0 {
+			return false
+		}
+	}
+	ok := true
+	ast.Inspect(decl.Body, func(node ast.Node) bool {
+		switch node := node.(type) {
+		case *ast.FuncLit:
+			return false
+		case *ast.DeferStmt:
+			ok = false
+		case *ast.ReturnStmt:
+			if len(node.Results) != n || !x.nonZeroValue(info, node.Results[n-1]) {
+				ok = false
+			}
+		}
+		return ok
+	})
+	x.nonNilFuncs[fn] = ok
+	return ok
+}
+
+// isString reports whether the early exits carry a string.
+func (x *extraction) isString() bool {
+	b, ok := x.exitType.Underlying().(*types.Basic)
+	return ok && b.Info()&types.IsString != 0
 }
 
 // nonNilValue reports whether e (type-checked in info), converted to an
@@ -371,8 +514,9 @@ func hasGoto(n ast.Node) bool {
 	return found
 }
 
-// requiresNonNil reports whether cond can only be true when v != nil:
-// it is `v != nil` (either way round) or a && chain containing that.
+// requiresNonNil reports whether cond can only be true when v != nil (or
+// v is not its zero value, "" or 0): it is `v != nil` (either way round)
+// or a && chain containing that.
 func (x *extraction) requiresNonNil(cond ast.Expr, v *types.Var) bool {
 	b, ok := ast.Unparen(cond).(*ast.BinaryExpr)
 	if !ok {
@@ -387,7 +531,8 @@ func (x *extraction) requiresNonNil(cond ast.Expr, v *types.Var) bool {
 			return ok && x.Info.Uses[id] == v
 		}
 		isNil := func(e ast.Expr) bool {
-			return x.Info.Types[e].IsNil()
+			tv := x.Info.Types[e]
+			return tv.IsNil() || tv.Value != nil && isZeroConst(tv.Value)
 		}
 		return isV(b.X) && isNil(b.Y) || isNil(b.X) && isV(b.Y)
 	}
@@ -441,9 +586,18 @@ func (x *extraction) errorName(results []*types.Var) string {
 		}
 		return true
 	}
-	name := "err"
+	base := "err"
+	if !x.isError() {
+		base = "why"
+		if _, _, sig := x.enclosingFunc(); sig != nil {
+			if v := sig.Results().At(sig.Results().Len() - 1); v.Name() != "" && v.Name() != "_" {
+				base = v.Name()
+			}
+		}
+	}
+	name := base
 	for i := 2; !free(name); i++ {
-		name = fmt.Sprintf("err%d", i)
+		name = fmt.Sprintf("%s%d", base, i)
 	}
 	return name
 }
@@ -506,7 +660,7 @@ func (x *extraction) finalReturn(f *flow) *ast.ReturnStmt {
 	if !ok || len(r.Results) != len(x.exitValues)+1 {
 		return nil
 	}
-	if id, ok := r.Results[len(r.Results)-1].(*ast.Ident); !ok || x.Info.Uses[id] != types.Universe.Lookup("nil") {
+	if tv := x.Info.Types[r.Results[len(r.Results)-1]]; !tv.IsNil() && (tv.Value == nil || !isZeroConst(tv.Value)) {
 		return nil
 	}
 	for j, v := range x.exitValues {

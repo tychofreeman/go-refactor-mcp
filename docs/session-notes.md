@@ -316,6 +316,11 @@ patterns sessions use, with their steps, in `docs/patterns.md`.
   Go's other modules: a file in no project of the solution, whose
   nearest tsconfig.json is not one of its projects either. Revisit any
   of these if the user prefers another reading.
+- **A string can carry an early exit** (2026-10-30, item 44, chosen in
+  the session): extract_function treats a string last result as an
+  error, "" for nil, because this repo's functions return refusals that
+  way and all four hand rewrites of 43.10 hit the refusal. Numbers were
+  left out on purpose (an early `return 1` is a value, not an exit).
 - **Instructions by language** (2026-10-29, item 43.4): a project
   without Go gets `TypeScriptInstructions` (internal/mcpserver), whose
   example batch `TestTypeScriptInstructions` runs and whose tool list
