@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/buke/typescript-go-internal/v7/pkg/ast"
+	"github.com/buke/typescript-go-internal/v7/pkg/checker"
 )
 
 // ChangeFieldType returns the edit that makes typ the declared type of
@@ -13,8 +14,10 @@ import (
 // alias of an object type, declared at the top level of the file at path:
 // in place of its annotation, or added when it has none. Types are
 // erased, so no value changes; whether every use still type-checks is
-// the engine's check.
-func (p *Project) ChangeFieldType(path, name, typ string) ([]Edit, string) {
+// the engine's check. values maps old constants to the new type's values,
+// put where the property is given, assigned, compared or switched on
+// with them (valueEdits).
+func (p *Project) ChangeFieldType(path, name, typ string, values map[string]string) ([]Edit, string) {
 	l, why := p.lined(path)
 	if why != "" {
 		return nil, why
@@ -39,7 +42,73 @@ func (p *Project) ChangeFieldType(path, name, typ string) ([]Edit, string) {
 	case len(found) > 1 || !(ast.IsPropertyDeclaration(found[0]) || ast.IsPropertySignatureDeclaration(found[0])):
 		return nil, fmt.Sprintf("%s is not a property but a method or an accessor; change a method's parameter with change_parameter_type", name)
 	}
-	return []Edit{l.annotate(found[0], found[0].PostfixToken(), typ)}, ""
+	return append([]Edit{l.annotate(found[0], found[0].PostfixToken(), typ)}, p.valueEdits(found[0], values)...), ""
+}
+
+// valueEdits returns the edits that put, for each old constant of values
+// ("fern", or as written), its new value wherever the property prop is
+// given that constant in an object literal of its type, assigned it,
+// compared with it (=== and ==, either side), or switched on with it as a
+// case.
+func (p *Project) valueEdits(prop *ast.Node, values map[string]string) []Edit {
+	c, done := p.prog.GetProgram().GetTypeChecker(context.Background())
+	defer done()
+	sym := c.GetSymbolAtLocation(prop.Name())
+	if sym == nil {
+		return nil
+	}
+	isProp := func(e *ast.Node) bool {
+		e = ast.SkipParentheses(e)
+		return ast.IsPropertyAccessExpression(e) && c.GetSymbolAtLocation(e.Name()) == sym
+	}
+	var edits []Edit
+	for _, f := range p.prog.GetProgram().GetSourceFiles() {
+		if f.IsDeclarationFile || strings.Contains(f.FileName(), "/node_modules/") {
+			continue
+		}
+		fl := newLined(f)
+		put := func(e *ast.Node) {
+			e = ast.SkipParentheses(e)
+			for old, v := range values {
+				if fl.source(e) == old || ast.IsStringLiteral(e) && e.Text() == strings.Trim(old, `"'`) {
+					edits = append(edits, Edit{File: f.FileName(), Start: fl.pos(e), End: e.End(), NewText: strings.TrimSpace(v)})
+					return
+				}
+			}
+		}
+		var visit func(n *ast.Node) bool
+		visit = func(n *ast.Node) bool {
+			switch {
+			case ast.IsPropertyAssignment(n) && ast.IsObjectLiteralExpression(n.Parent):
+				if t := c.GetContextualType(n.Parent, checker.ContextFlagsNone); t != nil && n.Name() != nil && c.GetPropertyOfType(t, fl.source(n.Name())) == sym {
+					put(n.Initializer())
+				}
+			case ast.IsBinaryExpression(n):
+				b := n.AsBinaryExpression()
+				switch b.OperatorToken.Kind {
+				case ast.KindEqualsToken:
+					if isProp(b.Left) {
+						put(b.Right)
+					}
+				case ast.KindEqualsEqualsEqualsToken, ast.KindExclamationEqualsEqualsToken, ast.KindEqualsEqualsToken, ast.KindExclamationEqualsToken:
+					if isProp(b.Left) {
+						put(b.Right)
+					} else if isProp(b.Right) {
+						put(b.Left)
+					}
+				}
+			case ast.IsSwitchStatement(n) && isProp(n.Expression()):
+				for _, cl := range n.AsSwitchStatement().CaseBlock.AsCaseBlock().Clauses.Nodes {
+					if ast.IsCaseClause(cl) {
+						put(cl.Expression())
+					}
+				}
+			}
+			return n.ForEachChild(visit)
+		}
+		visit(f.AsNode())
+	}
+	return edits
 }
 
 // ChangeParameterType returns the edit that makes typ the declared type

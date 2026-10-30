@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/tsapi"
@@ -442,7 +443,7 @@ func (*ChangeFieldType) Name() string { return "change_field_type" }
 
 func (*ChangeFieldType) Description() string {
 	return `Change the declared type of a property of a class, an interface or an object type: with name Plant.height and type Centimeters, height: number becomes height: Centimeters (a property without a type gets one). Types are erased, so no value changes, but the uses stay as they are: an edit, so that a batch with check "end" can change those that no longer type-check after it (an assertion such as p.height as number, or another annotation); alone, it is refused, listing them.
-Identify the property by file and name as Type.property.
+Identify the property by file and name as Type.property. values, narrowing, maps each old constant to a value of the new type: {"fern": "FERN"} turns species: "fern" and p.species === "fern" into species: FERN and p.species === FERN.
 Refuses, saying why: a method or accessor, a type alias that is not an object type (change it with change_type).`
 }
 
@@ -452,7 +453,8 @@ func (*ChangeFieldType) InputSchema() json.RawMessage {
   "properties": {
     "file": {"type": "string", "description": "The file that declares the type, relative to the root."},
     "name": {"type": "string", "description": "The property as Type.property."},
-    "type": {"type": "string", "description": "Its new type, as TypeScript valid in the declaring file."}
+    "type": {"type": "string", "description": "Its new type, as TypeScript valid in the declaring file."},
+    "values": {"type": "object", "additionalProperties": {"type": "string"}, "description": "Optional: for each old constant (\"fern\", or as written), the new type's value, put wherever the property is given, assigned, compared or switched on with it, e.g. {\"fern\": \"FERN\"}."}
   },
   "required": ["file", "name", "type"],
   "additionalProperties": false
@@ -460,12 +462,15 @@ func (*ChangeFieldType) InputSchema() json.RawMessage {
 }
 
 func (*ChangeFieldType) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
-	var a struct{ File, Name, Type string }
+	var a struct {
+		File, Name, Type string
+		Values           map[string]string
+	}
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
 	return retype(ws, a.File, func(p *tsapi.Project, path string) ([]tsapi.Edit, string) {
-		return p.ChangeFieldType(path, a.Name, a.Type)
+		return p.ChangeFieldType(path, a.Name, a.Type, a.Values)
 	}, fmt.Sprintf("changed the type of %s to %s", a.Name, a.Type))
 }
 
@@ -589,4 +594,53 @@ func (*MethodToFunction) Plan(ws *workspace.Workspace, raw json.RawMessage) (*re
 	return retype(ws, a.File, func(p *tsapi.Project, path string) ([]tsapi.Edit, string) {
 		return p.MethodToFunction(context.Background(), path, a.Name, a.NewName)
 	}, fmt.Sprintf("made %s a function", a.Name))
+}
+
+// MoveMethod moves methods down to a class that extends theirs.
+type MoveMethod struct{}
+
+// NewMoveMethod returns move_method.
+func NewMoveMethod() *MoveMethod { return &MoveMethod{} }
+
+func (*MoveMethod) Name() string { return "move_method" }
+
+func (*MoveMethod) Description() string {
+	return `Move a method down to a class that extends its class, when every use reaches it through that class: with class Bed extends Soil, moving Soil.acid to Bed takes acid() { return this.ph < 6; } out of Soil and puts it at the end of Bed, and b.acid() on a Bed stays. also names more methods of the class to move with it, such as those that call it on this.
+To move a method to a parameter's type instead, use method_to_function, then function_to_method.
+Refuses, saying why: a use through a value of another class (a Pot extends Soil too), a call on this in a method that does not move, a class to that does not extend the method's, a name to already has, a method that implements an interface's or overrides or is overridden, a static method.`
+}
+
+func (*MoveMethod) InputSchema() json.RawMessage {
+	return json.RawMessage(`{
+  "type": "object",
+  "properties": {
+    "file": {"type": "string", "description": "The file that declares the method, relative to the root."},
+    "name": {"type": "string", "description": "The method, as Class.method."},
+    "to":   {"type": "string", "description": "The class to move it to: one that extends Class."},
+    "also": {"type": "array", "items": {"type": "string"}, "description": "Other methods of the same class to move with it (method or Class.method)."}
+  },
+  "required": ["file", "name", "to"],
+  "additionalProperties": false
+}`)
+}
+
+func (*MoveMethod) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
+	var a struct {
+		File, Name, To string
+		Also           []string
+	}
+	if err := refactor.DecodeArgs(raw, &a); err != nil {
+		return nil, err
+	}
+	path := ws.Abs(a.File)
+	if _, err := os.Stat(path); err != nil {
+		return nil, refactor.Refusef("%s: no such file", a.File)
+	}
+	edits, why := ws.Edits(path, func(p *tsapi.Project) ([]tsapi.Edit, string) {
+		return p.MoveMethod(context.Background(), path, a.Name, a.To, a.Also)
+	})
+	if why != "" {
+		return nil, refactor.Refusef("%s", why)
+	}
+	return &refactor.Plan{Summary: fmt.Sprintf("moved %s to %s", strings.Join(append([]string{a.Name}, a.Also...), ", "), a.To), Edits: edits}, nil
 }

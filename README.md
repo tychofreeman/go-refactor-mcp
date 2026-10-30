@@ -2427,6 +2427,23 @@ hand or a tool got in the way.
         parameter's type after widening a literal type, that no body
         assigns; a note when the variable is assigned anywhere or the
         value is not it). A family's method is still refused for `value`.
+        change_field_type's `values` (`tsapi` `valueEdits`: each old
+        constant becomes its value where the property is given in a
+        literal of its type, assigned, compared or switched on); a cached
+        getter read as a read (`tsapi` `cacheOf`: `if (this.f ===
+        undefined) { ... } return this.f;`, or `== null`, `!this.f`; a
+        getter is summarized at all only when static or private, as a
+        method is, since a subclass could override a public one); fold's
+        parameter-object match (tried after the plain match fails, so
+        `p.height * 2` still folds to `tall(p, ...)`) and setter match (an
+        object literal of the setter's type ending with its property, so
+        the keys keep their order); move_method, down to a class that
+        extends the method's (TypeScript has no embedding: the subclass is
+        what the outer struct is in Go, and every use must reach the method
+        through it); other solutions, routed as Go's other modules: a call
+        naming a file in none of the solution's projects, whose nearest
+        tsconfig.json is not one of them either, works in that tsconfig's
+        solution, says so, and undo follows it. All of 43.10 is *Done.*
     Deliberate differences, not gaps: errors already in the code are
     tolerated (item 41.11), type changes are edits (41.2), add_result
     returns an object (`field`, `kept`), extract_struct runs

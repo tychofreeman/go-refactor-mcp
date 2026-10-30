@@ -3700,3 +3700,21 @@ into `result.edits` the same way, to run once per method of the family.
 One replace_text failed on a test map's trailing comma; one Python
 literal broke on quotes and was replaced by the CLI's replace_text.
 Nothing by hand.
+
+## 2026-10-29: TypeScript's change_field_type values, cached getters, fold's object and setter matches, move_method (item 43.10)
+
+Through the CLI, tests first. Fold's new matches were made by a Python
+script that edited the function's source at a dozen anchors, then
+replace_declaration: the changes thread a mode through a closure and
+four loops, which no refactoring reaches (introduce_parameter takes
+an expression, not a mode the closure's callers choose; tried in
+thought only). A test-first batch was refused because the test called a
+constructor whose results the stubs could not tell; the tool went in the
+same batch instead. Test line numbers were off by one or two three
+times. A guard first written with `p.Expression()` on any node panicked
+(the compiler's accessor panics for a kind without one) and became
+`matcher.objectOf`. Routing to other solutions was Go's `route`,
+`module` and `undoModule`, rewritten for tsconfigs; written out, not
+moved, since the Go package's helpers are its own (no move_declaration
+across the two packages without making them shared, which a later
+change can do). Nothing by hand.

@@ -944,3 +944,116 @@ func TestMoreMethodFamilies(t *testing.T) {
 			`w.pour({ bed: "roses", liters: 1 })`)
 	})
 }
+
+// values: narrowing a property's type, each old constant given becomes
+// the new value wherever the property is given, assigned, compared or
+// switched on with it.
+func TestChangeFieldTypeValues(t *testing.T) {
+	ws, dir := load(t, map[string]string{"src/plant.ts": `export class Fern {
+  kind = "fern";
+}
+export const FERN = new Fern();
+
+export interface Plant {
+  name: string;
+  species: "fern" | "moss" | Fern;
+}
+
+export const p: Plant = { name: "a", species: "fern" };
+
+export function isFern(x: Plant): boolean {
+  return x.species === "fern";
+}
+
+export function make(x: Plant): void {
+  x.species = 'fern';
+}
+
+export function rank(x: Plant): number {
+  switch (x.species) {
+    case "fern":
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+export const other = { species: "fern" };
+`})
+	res, err := refactor.Run(ws, NewChangeFieldType(), json.RawMessage(`{"file": "src/plant.ts", "name": "Plant.species", "type": "\"moss\" | Fern", "values": {"fern": "FERN"}}`), refactor.OptionsOf[*workspace.Workspace]{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Applied {
+		t.Fatalf("%s", res)
+	}
+	mustContain(t, dir, "src/plant.ts", `species: "moss" | Fern;`, `{ name: "a", species: FERN }`, "return x.species === FERN;", "x.species = FERN;", "    case FERN:\n", `export const other = { species: "fern" };`)
+}
+
+const soils = `export class Soil {
+  ph = 7;
+  /** acid reports a low pH. */
+  acid(): boolean {
+    return this.ph < 6;
+  }
+  sour(): boolean {
+    return this.acid();
+  }
+  label(): string {
+    return "soil";
+  }
+}
+
+export class Bed extends Soil {
+  name = "bed";
+}
+
+export class Pot extends Soil {}
+
+export function check(b: Bed): boolean {
+  return b.acid() && b.sour();
+}
+
+export const p = new Pot().label();
+`
+
+// move_method moves a method down to a class that extends its class,
+// when every call reaches it through that class.
+func TestMoveMethod(t *testing.T) {
+	move := func(ws *workspace.Workspace, args string) *refactor.Result {
+		t.Helper()
+		res, err := refactor.Run(ws, NewMoveMethod(), json.RawMessage(`{"file": "src/soil.ts", `+args[1:]), refactor.OptionsOf[*workspace.Workspace]{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return res
+	}
+	ws, dir := load(t, map[string]string{"src/soil.ts": soils})
+	if res := move(ws, `{"name": "Soil.acid", "to": "Bed", "also": ["sour"]}`); !res.Applied {
+		t.Fatalf("%s", res)
+	}
+	mustContain(t, dir, "src/soil.ts", "export class Soil {\n  ph = 7;\n  label(): string {", `export class Bed extends Soil {
+  name = "bed";
+
+  /** acid reports a low pH. */
+  acid(): boolean {
+    return this.ph < 6;
+  }
+
+  sour(): boolean {
+    return this.acid();
+  }
+}`, "return b.acid() && b.sour();")
+
+	ws, _ = load(t, map[string]string{"src/soil.ts": soils})
+	for args, want := range map[string]string{
+		`{"name": "Soil.acid", "to": "Bed"}`:   "this.acid() at soil.ts:8 reaches acid in Soil.sour, which does not move; name it in also",
+		`{"name": "Soil.label", "to": "Bed"}`:  "the call at soil.ts:25 reaches label through a Pot, not a Bed",
+		`{"name": "Soil.acid", "to": "Pot2"}`:  "no class Pot2 in the solution extends Soil",
+		`{"name": "Soil.label", "to": "Soil"}`: "no class Soil in the solution extends Soil",
+	} {
+		if res := move(ws, args); res.Applied || !strings.Contains(res.Refused, want) {
+			t.Errorf("%s: want a refusal with %q, got %s", args, want, res)
+		}
+	}
+}

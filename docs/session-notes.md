@@ -304,6 +304,18 @@ patterns sessions use, with their steps, in `docs/patterns.md`.
   A function not known that takes `unknown` is not checked, unlike Go's
   interface parameters: in TypeScript that would refuse every value a
   test's `equal(got: unknown, ...)` sees.
+- **TypeScript's counterparts of Go-only shapes** (2026-10-29, item
+  43.10, chosen in the session, not by the user): move_method moves a
+  method down to a class that extends its class (TypeScript has no
+  embedding; a subclass is what the outer struct is), every use reaching
+  it through that class. A getter is summarized, and a cached one read
+  as a read, only when static or private, as a method is: a public one
+  could be overridden by a subclass the analysis cannot see. Fold's
+  setter is `{ ...p, f: v }`, matching a literal of p's type that ends
+  with f, since key order shows in JSON. Other solutions are routed as
+  Go's other modules: a file in no project of the solution, whose
+  nearest tsconfig.json is not one of its projects either. Revisit any
+  of these if the user prefers another reading.
 - **Instructions by language** (2026-10-29, item 43.4): a project
   without Go gets `TypeScriptInstructions` (internal/mcpserver), whose
   example batch `TestTypeScriptInstructions` runs and whose tool list

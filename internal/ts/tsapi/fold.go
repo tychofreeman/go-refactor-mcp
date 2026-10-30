@@ -98,6 +98,24 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 	if method {
 		nholes++
 	}
+	// A parameter the body uses only by its properties (d.plants) may
+	// stand for an object that a call makes of what stands for each, where
+	// the code does not read them off one value.
+	objects := map[int][]string{}
+	fields := map[*ast.Symbol]map[string]int{}
+	nall := nholes
+	for i, prm := range fn.Parameters() {
+		s := c.GetSymbolAtLocation(prm.Name())
+		if props := propertiesOnly(c, body, s); len(props) > 0 {
+			fields[s] = map[string]int{}
+			for _, f := range props {
+				fields[s][f] = nall
+				nall++
+			}
+			objects[i] = props
+		}
+	}
+	st := setterOf(c, fn, expr, holes)
 	inFn := within(fn)
 	exported := ast.HasSyntacticModifier(functionDecl(fn), ast.ModifierFlagsExport) || method
 	if in == "" {
@@ -113,13 +131,18 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 		runs  [][]*ast.Node
 		uses  [][]*ast.Node
 		where string
+		obj   bool // parameters used by their properties stand for an object of them
 	}
 	var matches []found
-	try := func(cl *lined, roots []*ast.Node, pats []*ast.Node) {
+	try := func(cl *lined, roots []*ast.Node, pats []*ast.Node, obj bool) {
 		m := newMatcher(c, l, cl)
 		m.holes, m.this = holes, method
-		m.args, m.uses = make([]*ast.Node, nholes), make([][]*ast.Node, nholes)
-		m.texts, m.runs = make([]string, nholes), make([][]*ast.Node, nholes)
+		n := nholes
+		if obj {
+			m.fields, n = fields, nall
+		}
+		m.args, m.uses = make([]*ast.Node, n), make([][]*ast.Node, n)
+		m.texts, m.runs = make([]string, n), make([][]*ast.Node, n)
 		m.inP = inFn
 		enclosing := ast.GetContainingFunction(roots[0])
 		if enclosing != nil {
@@ -135,7 +158,7 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 			}
 		}
 		for i, a := range m.args {
-			if a == nil {
+			if a == nil && !(obj && objects[i] != nil) {
 				what := "this"
 				if i < len(fn.Parameters()) {
 					what = fn.Parameters()[i].Name().Text()
@@ -144,7 +167,57 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 				return
 			}
 		}
-		matches = append(matches, found{root: roots, args: m.args, texts: m.texts, runs: m.runs, uses: m.uses, where: cl.where(roots[0])})
+		matches = append(matches, found{root: roots, args: m.args, texts: m.texts, runs: m.runs, uses: m.uses, where: cl.where(roots[0]), obj: obj})
+	}
+	// tryBoth tries a match as it is, then with the parameters used by
+	// their properties standing for an object of them.
+	tryBoth := func(cl *lined, roots []*ast.Node, pats []*ast.Node) {
+		before := len(matches)
+		try(cl, roots, pats, false)
+		if len(matches) == before && len(fields) > 0 {
+			try(cl, roots, pats, true)
+		}
+	}
+	// trySetter matches an object literal of the setter's type that ends
+	// with its property: the others stand for the object it sets.
+	trySetter := func(cl *lined, n *ast.Node) bool {
+		t := c.GetContextualType(n, checker.ContextFlagsNone)
+		props := n.AsObjectLiteralExpression().Properties.Nodes
+		if t == nil || !sameType(t, st.typ) || len(props) == 0 {
+			return false
+		}
+		last := props[len(props)-1]
+		if !ast.IsPropertyAssignment(last) || last.Name() == nil || ast.IsComputedPropertyName(last.Name()) || cl.source(last.Name()) != st.field {
+			return false
+		}
+		m := found{root: []*ast.Node{n}, args: make([]*ast.Node, nholes), texts: make([]string, nholes), runs: make([][]*ast.Node, nholes), uses: make([][]*ast.Node, nholes), where: cl.where(n)}
+		m.args[st.value], m.uses[st.value] = last.Initializer(), []*ast.Node{st.valueUse}
+		m.uses[st.spread] = []*ast.Node{st.spreadUse}
+		rest := props[:len(props)-1]
+		if len(rest) == 1 && ast.IsSpreadAssignment(rest[0]) {
+			m.args[st.spread] = rest[0].Expression()
+		} else {
+			var texts []string
+			for _, r := range rest {
+				texts = append(texts, cl.source(r))
+				switch {
+				case ast.IsPropertyAssignment(r):
+					m.runs[st.spread] = append(m.runs[st.spread], r.Initializer())
+				case ast.IsShorthandPropertyAssignment(r):
+					m.runs[st.spread] = append(m.runs[st.spread], r.Name())
+				case ast.IsSpreadAssignment(r):
+					m.runs[st.spread] = append(m.runs[st.spread], r.Expression())
+				default:
+					return false
+				}
+			}
+			m.args[st.spread], m.texts[st.spread] = n, "{}"
+			if len(texts) > 0 {
+				m.texts[st.spread] = "{ " + strings.Join(texts, ", ") + " }"
+			}
+		}
+		matches = append(matches, m)
+		return true
 	}
 	for _, f := range prog.GetSourceFiles() {
 		if f.IsDeclarationFile {
@@ -161,8 +234,8 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 			cl.expressions(func(n *ast.Node) {
 				if n.Kind == expr.Kind && outside(n) && onLine(n) && !slices.ContainsFunc(matches, func(m found) bool {
 					return m.root[0].Pos() <= n.Pos() && n.End() <= m.root[0].End() && ast.GetSourceFileOfNode(m.root[0]) == f
-				}) {
-					try(cl, []*ast.Node{n}, []*ast.Node{expr})
+				}) && !(st != nil && trySetter(cl, n)) {
+					tryBoth(cl, []*ast.Node{n}, []*ast.Node{expr})
 				}
 			})
 			continue
@@ -171,7 +244,7 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 			for i := 0; i+len(stmts) <= len(list); i++ {
 				if list[i].Kind == stmts[0].Kind && outside(list[i]) && onLine(list[i]) {
 					before := len(matches)
-					try(cl, list[i:i+len(stmts)], stmts)
+					tryBoth(cl, list[i:i+len(stmts)], stmts)
 					if len(matches) > before {
 						i += len(stmts) - 1
 					}
@@ -191,12 +264,15 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 			switch {
 			case m.runs[i] != nil:
 				holeNodes = append(holeNodes, m.runs[i]...)
-			case m.texts[i] == "":
+			case m.texts[i] == "" && a != nil:
 				holeNodes = append(holeNodes, a)
 			}
 		}
 		ok := true
 		for i, a := range m.args {
+			if a == nil {
+				continue // an object of the holes of its properties
+			}
 			if m.texts[i] != "" {
 				// Constant text needs no check; a run, each of its operands.
 				for _, r := range m.runs[i] {
@@ -235,7 +311,7 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 				past = append(past, parts(r, r.End(), holeNodes)...)
 			}
 			for j, b := range m.args {
-				if j != i && m.texts[j] == "" {
+				if j != i && m.texts[j] == "" && b != nil {
 					past = append(past, b)
 				}
 			}
@@ -270,7 +346,7 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 		// The call, and how this file reaches the function.
 		callee := name
 		if method {
-			callee = operand(cl, m.args[len(m.args)-1]) + "." + fn.Name().Text()
+			callee = operand(cl, m.args[len(holes)]) + "." + fn.Name().Text()
 		} else {
 			r := c.ResolveName(nameNode.Text(), root, ast.SymbolFlagsValue, false)
 			switch {
@@ -299,6 +375,19 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 			if i >= len(fn.Parameters()) {
 				break
 			}
+			if m.obj && objects[i] != nil {
+				var props []string
+				for _, k := range objects[i] {
+					b := m.args[fields[c.GetSymbolAtLocation(fn.Parameters()[i].Name())][k]]
+					if ast.IsIdentifier(b) && b.Text() == k {
+						props = append(props, k)
+					} else {
+						props = append(props, k+": "+cl.source(b))
+					}
+				}
+				args = append(args, "{ "+strings.Join(props, ", ")+" }")
+				continue
+			}
 			s := cl.source(a)
 			if m.texts[i] != "" {
 				s = m.texts[i]
@@ -323,6 +412,84 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 		return nil, 0, nil, fmt.Sprintf("no code matches the body of %s", name)
 	}
 	return edits, folded, skipped, ""
+}
+
+// propertiesOnly returns the properties of the parameter s that body
+// reads, in the order it first reads them, when it uses s only so (s.f,
+// neither assigned nor called) and s is an object other than an array;
+// or nil.
+func propertiesOnly(c *checker.Checker, body *ast.Node, s *ast.Symbol) []string {
+	if s == nil || s.ValueDeclaration == nil {
+		return nil
+	}
+	if t := c.GetTypeAtLocation(s.ValueDeclaration.Name()); t == nil || t.Flags()&checker.TypeFlagsObject == 0 || c.IsArrayType(t) {
+		return nil
+	}
+	var props []string
+	only := true
+	identifiers(body, func(id *ast.Node) {
+		if symbolOf(c, id) != s {
+			return
+		}
+		p := id.Parent
+		if !ast.IsPropertyAccessExpression(p) || p.Expression() != id || !ast.IsIdentifier(p.Name()) || written(p) || ast.IsCallExpression(p.Parent) && p.Parent.Expression() == p {
+			only = false
+			return
+		}
+		if !slices.Contains(props, p.Name().Text()) {
+			props = append(props, p.Name().Text())
+		}
+	})
+	if !only {
+		return nil
+	}
+	return props
+}
+
+// setter is a function whose body is { ...p, f: v }, p and v parameters.
+type setter struct {
+	field               string
+	spread, value       int           // the positions of p and v
+	spreadUse, valueUse *ast.Node     // their uses in the body
+	typ                 *checker.Type // p's type
+}
+
+// setterOf returns fn as a setter, when its body, the expression expr, is
+// { ...p, f: v }; or nil.
+func setterOf(c *checker.Checker, fn, expr *ast.Node, holes map[*ast.Symbol]int) *setter {
+	if expr == nil || !ast.IsObjectLiteralExpression(expr) || !ast.IsFunctionDeclaration(fn) && !ast.IsArrowFunction(fn) && !ast.IsFunctionExpression(fn) {
+		return nil
+	}
+	props := expr.AsObjectLiteralExpression().Properties.Nodes
+	if len(props) != 2 || !ast.IsSpreadAssignment(props[0]) || !ast.IsPropertyAssignment(props[1]) || props[1].Name() == nil || !ast.IsIdentifier(props[1].Name()) {
+		return nil
+	}
+	p, v := props[0].Expression(), props[1].Initializer()
+	if !ast.IsIdentifier(p) || !ast.IsIdentifier(v) {
+		return nil
+	}
+	ps, vs := symbolOf(c, p), symbolOf(c, v)
+	i, ok1 := holes[ps]
+	j, ok2 := holes[vs]
+	if !ok1 || !ok2 || i == j {
+		return nil
+	}
+	return &setter{field: props[1].Name().Text(), spread: i, value: j, spreadUse: p, valueUse: v, typ: c.GetTypeAtLocation(fn.Parameters()[i].Name())}
+}
+
+// sameType reports whether a and b are the same type, or name the same
+// declaration.
+func sameType(a, b *checker.Type) bool {
+	if a == b {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	if a.Symbol() != nil && a.Symbol() == b.Symbol() {
+		return true
+	}
+	return a.Alias() != nil && b.Alias() != nil && a.Alias().Symbol() == b.Alias().Symbol()
 }
 
 // importNames returns the names the file imports sym by.
