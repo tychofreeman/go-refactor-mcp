@@ -657,7 +657,7 @@ func TestEffectsOf(t *testing.T) {
 		"bump()":   {effect: true, reads: true},
 	}
 	g := f.Decls[len(f.Decls)-1].(*ast.FuncDecl)
-	fa := AnalyzeFunc(info, g)
+	fa := AnalyzeFunc(info, g, nil)
 	seen := 0
 	for _, st := range g.Body.List {
 		as, ok := st.(*ast.AssignStmt)

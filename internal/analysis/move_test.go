@@ -71,7 +71,7 @@ func TestMove(t *testing.T) {
 		t.Fatal(err)
 	}
 	fd := file.Decls[len(file.Decls)-1].(*ast.FuncDecl)
-	f := AnalyzeFunc(info, fd)
+	f := AnalyzeFunc(info, fd, nil)
 	e := NewEffects()
 	e.AddPackage([]*ast.File{file}, info)
 	// what each statement of f is, by its text, for the "past" nodes.

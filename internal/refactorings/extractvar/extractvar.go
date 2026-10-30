@@ -139,7 +139,7 @@ func (x *extraction) plan(expr ast.Expr, all bool) (*refactor.Plan, error) {
 	if x.fn == nil {
 		return nil, refactor.Refusef("%s is not inside a function body; only expressions in functions can be extracted", x.Quote(expr))
 	}
-	x.fa = analysis.AnalyzeFunc(x.Info, x.fn)
+	x.fa = analysis.AnalyzeFunc(x.Info, x.fn, x.WS.Effects())
 
 	stmt, container, err := x.place(path)
 	if err != nil {

@@ -175,7 +175,7 @@ func (*ExtractFunction) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 			return nil, err
 		}
 	}
-	x.fa = analysis.AnalyzeFunc(x.Info, x.outermostFunc())
+	x.fa = analysis.AnalyzeFunc(x.Info, x.outermostFunc(), x.WS.Effects())
 	// What the new function can name: before any check spells a type.
 	x.nameable = map[*types.TypeName]bool{}
 	x.findReceiver()
@@ -2249,7 +2249,7 @@ func (x *extraction) calledOnlyInSelection(lit *ast.FuncLit) bool {
 			continue // a write, which runs nothing
 		}
 		call, ok := path[1].(*ast.CallExpr)
-		if !ok || call.Fun != id && !(slices.Contains(call.Args, ast.Expr(id)) && analysis.CallsBeforeReturning(x.Info, call)) {
+		if !ok || call.Fun != id && !(slices.Contains(call.Args, ast.Expr(id)) && analysis.CallsBeforeReturning(x.Info, call, id, x.WS.Effects())) {
 			return false
 		}
 		switch path[2].(type) {
