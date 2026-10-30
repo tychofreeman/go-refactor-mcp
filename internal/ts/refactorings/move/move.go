@@ -106,13 +106,14 @@ type MoveFile struct{ refactor.Named[moveFileArgs] }
 func NewMoveFile() *MoveFile { return &MoveFile{Named: refactor.Called[moveFileArgs]("move_file")} }
 
 func (*MoveFile) Description() string {
-	return `Move or rename a file or directory, with everything in it, and update what refers to it: moving src/plant.ts to src/garden/plant.ts changes import { water } from "./plant" to "./garden/plant" in every file, and the moved file's own relative imports, as the language service's file rename does (the tsconfig's file lists too). Fixtures, docs and data move byte for byte. Give file and to, which must not exist; one undo moves it back.`
+	return `Move or rename a file or directory, with everything in it, and update what refers to it: moving src/plant.ts to src/garden/plant.ts changes import { water } from "./plant" to "./garden/plant" in every file, and the moved file's own relative imports, as the language service's file rename does (the tsconfig's file lists too). Fixtures, docs and data move byte for byte. With copy the original stays and nothing that refers to it changes; the copy's relative imports are updated (a fixture directory copied starts a new case). Give file and to, which must not exist; one undo moves it back or removes the copy.`
 }
 
 // moveFileArgs are the arguments of move_file.
 type moveFileArgs struct {
 	File string `json:"file" desc:"Path of the file or directory to move, relative to the root."`
 	To   string `json:"to" desc:"Its new path, relative to the root; it must not exist."`
+	Copy bool   `json:"copy,omitempty" desc:"Keep the original: copy it to to instead."`
 }
 
 func (*MoveFile) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
@@ -139,6 +140,9 @@ func (*MoveFile) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.P
 	if err != nil {
 		return nil, err
 	}
+	if a.Copy {
+		return copied(ws, from, to, edits), nil
+	}
 	moved, changed := 0, 0
 	for _, fe := range edits {
 		switch {
@@ -156,6 +160,25 @@ func (*MoveFile) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.P
 		summary += fmt.Sprintf(", updating %d file%s that refer to it", changed, map[bool]string{true: "", false: "s"}[changed == 1])
 	}
 	return &refactor.Plan{Summary: summary, Edits: edits}, nil
+}
+
+// copied is the plan that copies from to to: of the edits that move it,
+// those that write the files under to, whose own relative imports they
+// update; the original and what refers to it stay as they are.
+func copied(ws *workspace.Workspace, from, to string, moving []edit.FileEdit) *refactor.Plan {
+	var edits []edit.FileEdit
+	files := map[string]bool{}
+	for _, fe := range moving {
+		if fe.Path == to || strings.HasPrefix(fe.Path, to+string(os.PathSeparator)) {
+			edits = append(edits, fe)
+			files[fe.Path] = true
+		}
+	}
+	summary := fmt.Sprintf("copied %s to %s", ws.Rel(from), ws.Rel(to))
+	if len(files) > 1 {
+		summary += fmt.Sprintf(" (%d files)", len(files))
+	}
+	return &refactor.Plan{Summary: summary, Edits: edits}
 }
 
 // DeleteFile deletes a file or directory nothing imports.

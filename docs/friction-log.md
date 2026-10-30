@@ -3935,3 +3935,12 @@ no tool makes a generic function from two copies over different types,
 and extract_function of the shared part of `alwaysNonZero` was not
 tried, since its early `return false` is not an exit it carries.
 Nothing else by hand.
+## 2026-10-30: move_file copies (roadmap item 38)
+
+Through the CLI, the tests first: create_file of two goldens (a fixture
+directory copied, a Go file copied into its own package refused) and
+add_declaration of TypeScript's test; then add_field of `Copy` in both
+languages, replace_text of the plans and descriptions, add_declaration
+of TypeScript's `copied`. Three calls refused on argument names I
+guessed (add_field's `name`, replace_text's `all_occurrences`), each
+answered with the schema. Nothing by hand.

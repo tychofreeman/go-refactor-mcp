@@ -1888,7 +1888,11 @@ hand or a tool got in the way.
       script). Replacing a whole file is *done* (create_file's
       `overwrite`), and so is copying one through the CLI: create_file
       with `content_file` naming the file to copy. A directory of
-      fixtures, and moving a block of text, are not.
+      fixtures, and moving a block of text, are not. *Copying done*
+      (2026-10-30): move_file's `copy`, both languages, keeps the
+      original; a copied Go file must compile beside it, and a
+      TypeScript copy's relative imports are updated while what refers
+      to the original stays. Moving a block of text is left.
     - **Experiments the session notes leave open:** a hazard as one site
       among many, or a prompt that does not ask to keep behavior
       (cost-history 15); and tasks a model gets wrong by hand, named as

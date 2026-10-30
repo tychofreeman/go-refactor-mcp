@@ -112,9 +112,10 @@ until the MCP is reconnected.
    range that cuts a statement is refused with the range to use. Every
    step can be undone with `undo`.
 
-Known gaps (do these by hand and log them): nothing restores a file to an
+Known gap (do it by hand and log it): nothing restores a file to an
 earlier commit's version (create_file with `overwrite` and the old
-text is the way), and nothing copies a file.
+text is the way). move_file with `copy` copies a file or a directory
+of fixtures.
 
 ## Measuring cost
 

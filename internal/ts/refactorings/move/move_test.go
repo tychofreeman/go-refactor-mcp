@@ -112,6 +112,22 @@ func TestMoveFile(t *testing.T) {
 	refused(t, run(t, ws, NewMoveFile(), `{"file": "src/bed.ts", "to": "src/garden.ts"}`), "already exists")
 }
 
+func TestCopyFile(t *testing.T) {
+	ws, dir := load(t, nil)
+	res := run(t, ws, NewMoveFile(), `{"file": "src/plant.ts", "to": "src/lib/plant.ts", "copy": true}`)
+	if !res.Applied {
+		t.Fatalf("%s", res)
+	}
+	want(t, dir, "src/plant.ts", garden["src/plant.ts"])
+	want(t, dir, "src/garden.ts", garden["src/garden.ts"])
+	want(t, dir, "src/lib/plant.ts", strings.Replace(garden["src/plant.ts"], `"./bed"`, `"../bed"`, 1))
+	if res := run(t, ws, NewMoveFile(), `{"file": "data", "to": "fixtures", "copy": true}`); !res.Applied {
+		t.Fatalf("%s", res)
+	}
+	want(t, dir, "data/rows.json", "[1, 2]\n")
+	want(t, dir, "fixtures/rows.json", "[1, 2]\n")
+}
+
 func TestDeleteFile(t *testing.T) {
 	ws, dir := load(t, map[string]string{"src/old.ts": "export const x = 1;\n"})
 	refused(t, run(t, ws, NewDeleteFile(), `{"file": "src/bed.ts"}`), "src/bed.ts is imported at src/garden.ts:2, src/plant.ts:1")
