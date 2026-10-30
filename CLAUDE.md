@@ -42,7 +42,7 @@ are not gofmt-ed, so this catches them:
     go vet ./...
     go test -race ./...
 
-Each PR also updates the docs it affects: the roadmap in `README.md` (mark
+Each PR also updates the docs it affects: the roadmap in `docs/roadmap.md` (mark
 an item *Done.* when it is), `docs/friction-log.md`, and
 `docs/cost-history.md` for A/B results.
 

@@ -50,11 +50,16 @@ patterns sessions use, with their steps, in `docs/patterns.md`.
 - Stacked PRs: if one fails CI, fix the lowest branch and merge upward;
   do not force-push. (#41 failed on gofmt after an import added with sed.)
 - Record findings, open issues and decisions in the repo, in the PR of
-  the work: the roadmap in README for anything to do later, these notes
+  the work: the roadmap (`docs/roadmap.md`) for anything to do later, these notes
   for context, the friction log and docs/ for the rest. Not in claude.ai
   Project docs or memory: the user works in Claude Code, whose sessions
   read only the repo (2026-10-20, after review follow-ups had reached
   only these notes and the friction log, not the roadmap).
+- The README (2026-10-30, the user): it opens with the pitch for
+  developers who know TDD and refactoring, five sentences the user
+  chose, then Status, then the user's own instructions for Claude
+  ("How to work", "Lessons from earlier sessions", added in #310), kept
+  word for word. The roadmap is `docs/roadmap.md`, numbering unchanged.
 - Releases (2026-10-27, the user): CI makes them. To release, raise
   `mcpserver.Version` in a PR, with the notes in
   `docs/releases/v<version>.md`; once Test passes on main, the Release
@@ -84,7 +89,7 @@ patterns sessions use, with their steps, in `docs/patterns.md`.
   A/B results keep tuning, so it should land once. To keep Go's cost
   and baselines unchanged, descriptions follow what the repo holds
   (Go only: today's text). The plan and its open decisions are
-  `docs/ts-plan.md` (README item 40); the user asked for the plan
+  `docs/ts-plan.md` (roadmap item 40); the user asked for the plan
   before any code.
   The spike (step 0) chose its own project when asked to "pick a
   mid-sized open-source TS repo": Hono, for being TypeScript only,
@@ -178,7 +183,7 @@ patterns sessions use, with their steps, in `docs/patterns.md`.
 
 - **Moving an evaluation is one question** (2026-10-26, the user asked
   for the missing abstractions and then to build them): `analysis.Move`
-  (README, roadmap item 35) judges whether an expression can be
+  (roadmap item 35) judges whether an expression can be
   evaluated elsewhere or another number of times, from its summary and
   the summary of the code it passes. Refactorings state the move (the
   expression, `Past`, `Times`, `Dereferenced`) and word the refusal
@@ -187,7 +192,7 @@ patterns sessions use, with their steps, in `docs/patterns.md`.
   as a Move; where a use sits on its path decides `Times` through
   `analysis.Reach`. All six steps are done: past a call of a module
   function is past its body, by its summary, so "past a function" is
-  `Past: []ast.Node{call}` (README item 35, step 6).
+  `Past: []ast.Node{call}` (roadmap item 35, step 6).
   Ownership is `analysis.Owner` (item 36): a summary's notion of its
   own memory is `body.own`, `ThisFunc` for a function and `ThisCode`
   for an expression judged out of context. `site.Site` (item 37) is
@@ -242,13 +247,13 @@ patterns sessions use, with their steps, in `docs/patterns.md`.
   named by intent built from primitives that are not tools, and only
   then a new tool, which at the budget merges or replaces one. `TestToolBudget` holds
   the count (50: 45 tools today, raised from 44 by the user "for now"; move_method was the 45th, 2026-10-29)
-  and the instructions' size; raise it only with the user. README roadmap item 25.
+  and the instructions' size; raise it only with the user. Roadmap item 25.
 
 - **Renaming a field that fmt prints** (2026-10-29, the user chose
   the third of three: keep refusing, allow in tests only, or allow with
   a note): printed text is allowed to change, and a note lists the
   calls. What may find a field by name (encoding/json, text/template, a
-  function not known) still refuses an exported field. README item 42.
+  function not known) still refuses an exported field. Roadmap item 42.
   extract_struct and remove_dead_code then followed (the user asked
   them "up to par"): any printing is a note, since their changes show
   in `%v` too; remove_dead_code also refuses `reflect.DeepEqual`.
@@ -340,11 +345,11 @@ patterns sessions use, with their steps, in `docs/patterns.md`.
   call passes the variable's value, the user chose to allow it and list
   those calls as edits in a note, over refusing them: the plans that
   wanted it pass `DefaultPolicy()` from other packages, which no proof
-  reaches. README roadmap item 31.
+  reaches. Roadmap item 31.
 - **TypeScript's gaps before its cost** (2026-10-28, the user): "not
   too worried about the cost with TypeScript at the moment", so A/B
-  reruns and more TypeScript tasks wait; the gaps against Go are README
-  roadmap item 41, done in its order. The user then asked for fewer
+  reruns and more TypeScript tasks wait; the gaps against Go are roadmap
+  item 41, done in its order. The user then asked for fewer
   PRs for the rest (2026-10-28): items 6-8 in one, 9-10 in another.
 - **TypeScript's type changes are edits** (2026-10-28, item 41.2):
   change_field_type and change_parameter_type only write the
@@ -431,7 +436,7 @@ patterns sessions use, with their steps, in `docs/patterns.md`.
   preserving behavior: widen the field to `any`, add the interface and
   a guard that calls it, then per kind make the type from the case,
   replace the constant where it flows into the field, and delete the
-  dead case; narrow the field at the end (README, roadmap item 24).
+  dead case; narrow the field at the end (roadmap item 24).
   Asked for alternatives to a tool for one kind's migration, the
   existing refactorings turned out to do the case bodies; what is left
   (sending the values through the type, deleting the case) is an
@@ -576,7 +581,7 @@ patterns sessions use, with their steps, in `docs/patterns.md`.
   the feature session then changed one place. The designs were made
   with edits and the tests, not refactorings: the tools lack "switches
   on a kind into a table" and "functions differing in a field into one
-  taking a selector". What comes next: README roadmap item 26.
+  taking a selector". What comes next: roadmap item 26.
   Over a second change (student, 8 runs): after the step it was one
   table entry, 11% cheaper; without it, a branch and a shared tax
   condition. The preparing session costs twelve times that saving, so

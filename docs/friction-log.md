@@ -3835,3 +3835,10 @@ type and four methods into one value). `WriteThenRemove` cannot infer
 its workspace type from struct arguments, so every call names it; the
 first batch was refused for that. The helper was written by hand into
 create_file: new code. Nothing else by hand.
+
+## 2026-10-30: the README's pitch, and the roadmap in its own file
+
+By hand, and no gorefactor gap: Markdown only. The README's top was
+rewritten with a Python script and the roadmap moved to `docs/roadmap.md`
+whole (2,500 lines); replace_text could have made the reference fixes, but
+this cloud session's gorefactor server ran on the linked computer.
