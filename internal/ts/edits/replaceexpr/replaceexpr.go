@@ -31,30 +31,21 @@ Identify the expression by file, the line it starts on and its source text (whit
 }
 
 func (*ReplaceExpression) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":            {"type": "string",  "description": "Relative to the root."},
-    "line":            {"type": "integer", "description": "1-based line on which the expression starts."},
-    "expression":      {"type": "string",  "description": "Source text of the expression to replace."},
-    "column":          {"type": "integer", "description": "Optional 1-based column where it starts, if the text starts on the line more than once."},
-    "new":             {"type": "string",  "description": "The new expression."},
-    "all_occurrences": {"type": "boolean", "description": "Also replace every other expression in the file that means the same."}
-  },
-  "required": ["file", "line", "expression", "new"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[replaceExpressionArgs]()
+}
+
+// replaceExpressionArgs are the arguments of replace_expression.
+type replaceExpressionArgs struct {
+	File           string `json:"file" desc:"Relative to the root."`
+	Line           int    `json:"line" desc:"1-based line on which the expression starts."`
+	Expression     string `json:"expression" desc:"Source text of the expression to replace."`
+	Column         int    `json:"column,omitempty" desc:"Optional 1-based column where it starts, if the text starts on the line more than once."`
+	New            string `json:"new" desc:"The new expression."`
+	AllOccurrences bool   `json:"all_occurrences,omitempty" desc:"Also replace every other expression in the file that means the same."`
 }
 
 func (*ReplaceExpression) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
-	var a struct {
-		File           string `json:"file"`
-		Line           int    `json:"line"`
-		Expression     string `json:"expression"`
-		Column         int    `json:"column"`
-		New            string `json:"new"`
-		AllOccurrences bool   `json:"all_occurrences"`
-	}
+	var a replaceExpressionArgs
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}

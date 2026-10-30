@@ -2538,6 +2538,19 @@ hand or a tool got in the way.
        exists), 92 argument decodings, 20 "file must exist" checks.
        One struct per operation with field tags, its schema generated,
        shared by Go and TypeScript for the common tools.
+       *Done* (2026-10-30), but for the sharing: `refactor.Schema[T]()`
+       makes each tool's schema from its arguments struct (`desc` tags,
+       omitempty for optional, `enum`, `schema:"-"`, and omit for a tool
+       that shares another's struct), and every published schema came
+       out the same, in the same order, as the text it replaces. About
+       740 lines fewer, not 1,000: the descriptions stay, in the tags.
+       Sharing a struct between the languages was not done: of the 177
+       properties the two give the same tool, 127 are described
+       differently, so one struct would change one language's published
+       text and the A/B baselines with it. Within TypeScript's changesig
+       the file and name every tool takes are one embedded struct
+       (`function`). The server's own inspect, check and batch keep
+       their written schemas (nested objects).
     2. **TypeScript workspace forwarding** (about 300-400 lines): most
        of the 33 functions in `ts/workspace` find the project and call
        the same function on it; one generic helper, as `ws.Edits` is.
@@ -2841,7 +2854,8 @@ updated; exported renames add a note saying so.
   `column` is only needed when the same name means different things on one
   line, and the refusal says which columns to choose from. No byte offsets.
 - **One tool per refactoring**, each with its own
-  JSON schema and a description that says *when* to use it. Unknown argument
+  JSON schema, made from its arguments struct (`refactor.Schema`), and a
+  description that says *when* to use it. Unknown argument
   fields are rejected so a misspelled parameter isn't silently ignored.
 - **Test variants.** Packages are loaded with tests, so a file can appear in
   `p` and `p [p.test]`. Symbols are identified by declaration position, and
@@ -4121,7 +4135,9 @@ standalone module).
 
 1. Create `internal/refactorings/<name>/` implementing `refactor.Refactoring`.
    `Plan` must not write anything; return `refactor.Refusef(...)` for every
-   precondition failure.
+   precondition failure. `InputSchema` returns `refactor.Schema[args]()`
+   of the struct `Plan` decodes: a field per argument with a `desc` tag,
+   and omitempty on the optional ones.
 2. Add golden cases under `testdata/<case>/`: `in/` (a complete module with
    `go.mod`), `args.json`, and either `out/` or `refused.txt`; with `out/`,
    an optional `notes.txt` lists substrings the result's notes must contain,

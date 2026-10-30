@@ -38,33 +38,20 @@ Identify the expression by file, the line it starts on and its source text (whit
 }
 
 func (*ReplaceExpression) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":            {"type": "string",  "description": "Path of the file, relative to the workspace root."},
-    "line":            {"type": "integer", "description": "1-based line on which the expression starts."},
-    "expression":      {"type": "string",  "description": "Source text of the expression to replace."},
-    "column":          {"type": "integer", "description": "Optional 1-based column where it starts, if the text occurs more than once on the line."},
-    "new":             {"type": "string",  "description": "The new expression, as Go source."},
-    "all_occurrences": {"type": "boolean", "description": "Also replace every other expression in the file that means the same."},
-    "imports":         {"type": "array", "items": {"type": "string"}, "description": "Optional: import paths to use for package names the new expression uses, when the name alone is ambiguous."}
-  },
-  "required": ["file", "line", "expression", "new"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[args]()
 }
 
 // ChangesBehavior marks this as an edit.
 func (*ReplaceExpression) ChangesBehavior() {}
 
 type args struct {
-	File           string   `json:"file"`
-	Line           int      `json:"line"`
-	Expression     string   `json:"expression"`
-	Column         int      `json:"column,omitempty"`
-	New            string   `json:"new"`
-	AllOccurrences bool     `json:"all_occurrences,omitempty"`
-	Imports        []string `json:"imports,omitempty"`
+	File           string   `json:"file" desc:"Path of the file, relative to the workspace root."`
+	Line           int      `json:"line" desc:"1-based line on which the expression starts."`
+	Expression     string   `json:"expression" desc:"Source text of the expression to replace."`
+	Column         int      `json:"column,omitempty" desc:"Optional 1-based column where it starts, if the text occurs more than once on the line."`
+	New            string   `json:"new" desc:"The new expression, as Go source."`
+	AllOccurrences bool     `json:"all_occurrences,omitempty" desc:"Also replace every other expression in the file that means the same."`
+	Imports        []string `json:"imports,omitempty" desc:"Optional: import paths to use for package names the new expression uses, when the name alone is ambiguous."`
 }
 
 // Plan checks preconditions and computes the edits.

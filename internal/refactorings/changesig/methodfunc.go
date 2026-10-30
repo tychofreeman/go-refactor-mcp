@@ -31,26 +31,15 @@ Refuses, saying why: a method that some interface in the workspace has, a method
 }
 
 func (*MethodToFunction) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":     {"type": "string",  "description": "Path of a file containing the method's declaration or a call, relative to the workspace root."},
-    "line":     {"type": "integer", "description": "1-based line of that occurrence. Omit it to find name as a symbol of the package of file."},
-    "name":     {"type": "string",  "description": "The method's name; without line, Type.Method."},
-    "column":   {"type": "integer", "description": "Optional 1-based column, only needed to disambiguate."},
-    "new_name": {"type": "string",  "description": "Optional name for the function (default: the method's name)."}
-  },
-  "required": ["file", "name"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[m2fArgs]()
 }
 
 type m2fArgs struct {
-	File    string `json:"file"`
-	Line    int    `json:"line"`
-	Column  int    `json:"column,omitempty"`
-	Name    string `json:"name"`
-	NewName string `json:"new_name,omitempty"`
+	File    string `json:"file" desc:"Path of a file containing the method's declaration or a call, relative to the workspace root."`
+	Line    int    `json:"line,omitempty" desc:"1-based line of that occurrence. Omit it to find name as a symbol of the package of file."`
+	Name    string `json:"name" desc:"The method's name; without line, Type.Method."`
+	Column  int    `json:"column,omitempty" desc:"Optional 1-based column, only needed to disambiguate."`
+	NewName string `json:"new_name,omitempty" desc:"Optional name for the function (default: the method's name)."`
 }
 
 // Plan checks preconditions and computes the edits.

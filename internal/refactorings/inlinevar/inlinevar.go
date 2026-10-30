@@ -54,29 +54,18 @@ Refuses, saying why: a variable assigned after its declaration or whose address 
 }
 
 func (*InlineVariable) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":   {"type": "string",  "description": "Path of the file, relative to the module root."},
-    "line":   {"type": "integer", "description": "1-based line of the variable's declaration or of any use."},
-    "name":   {"type": "string",  "description": "The variable's name."},
-    "function": {"type": "string", "description": "Instead of line: the function (Name or Type.Method) of file that declares the variable."},
-    "column": {"type": "integer", "description": "Optional 1-based column, only needed if the name occurs more than once on the line with different meanings."}
-  },
-  "required": ["file", "name"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[args]()
 }
 
 // LocalsOnly marks it as finding only locals: without line, by function.
 func (*InlineVariable) LocalsOnly() {}
 
 type args struct {
-	File     string `json:"file"`
-	Line     int    `json:"line"`
-	Column   int    `json:"column,omitempty"`
-	Name     string `json:"name"`
-	Function string `json:"function,omitempty"`
+	File     string `json:"file" desc:"Path of the file, relative to the module root."`
+	Line     int    `json:"line,omitempty" desc:"1-based line of the variable's declaration or of any use."`
+	Name     string `json:"name" desc:"The variable's name."`
+	Function string `json:"function,omitempty" desc:"Instead of line: the function (Name or Type.Method) of file that declares the variable."`
+	Column   int    `json:"column,omitempty" desc:"Optional 1-based column, only needed if the name occurs more than once on the line with different meanings."`
 }
 
 type inliner struct {

@@ -38,28 +38,16 @@ A use that cannot follow (its address taken, ++ on an interface) is listed in th
 }
 
 func (*ChangeFieldType) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":   {"type": "string",  "description": "Path of a file containing the field's declaration or a use, relative to the workspace root."},
-    "line":   {"type": "integer", "description": "1-based line of that occurrence. Omit it to find name as Type.Field in the package of file."},
-    "name":   {"type": "string",  "description": "Type.Field without line; with line, the field's name."},
-    "column": {"type": "integer", "description": "Optional 1-based column, only needed to disambiguate."},
-    "type":   {"type": "string",  "description": "The new type, as Go source valid in the declaring file, e.g. UserID or int64."},
-    "values": {"type": "object",  "additionalProperties": {"type": "string"}, "description": "Only narrowing to an interface: for each old constant (\"fern\" or fern), the value of the new type, as the declaring file writes it, put wherever the field is given or compared with that constant, e.g. {\"fern\": \"Fern{}\"}."}
-  },
-  "required": ["file", "name", "type"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[fieldArgs]()
 }
 
 type fieldArgs struct {
-	File   string            `json:"file"`
-	Line   int               `json:"line"`
-	Column int               `json:"column,omitempty"`
-	Name   string            `json:"name"`
-	Type   string            `json:"type"`
-	Values map[string]string `json:"values,omitempty"`
+	File   string            `json:"file" desc:"Path of a file containing the field's declaration or a use, relative to the workspace root."`
+	Line   int               `json:"line,omitempty" desc:"1-based line of that occurrence. Omit it to find name as Type.Field in the package of file."`
+	Name   string            `json:"name" desc:"Type.Field without line; with line, the field's name."`
+	Column int               `json:"column,omitempty" desc:"Optional 1-based column, only needed to disambiguate."`
+	Type   string            `json:"type" desc:"The new type, as Go source valid in the declaring file, e.g. UserID or int64."`
+	Values map[string]string `json:"values,omitempty" desc:"Only narrowing to an interface: for each old constant (\"fern\" or fern), the value of the new type, as the declaring file writes it, put wherever the field is given or compared with that constant, e.g. {\"fern\": \"Fern{}\"}."`
 }
 
 // fieldChange is a field whose type changes, and what its uses need.

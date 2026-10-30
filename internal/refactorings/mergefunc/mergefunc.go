@@ -43,28 +43,16 @@ Refuses, saying why: methods, generic functions, a function to keep that a use c
 }
 
 func (*MergeDuplicate) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":      {"type": "string",  "description": "Path of a file containing the function to delete, at its declaration or a use, relative to the workspace root."},
-    "line":      {"type": "integer", "description": "1-based line of that occurrence. Omit it to find name as a symbol of the package of file."},
-    "name":      {"type": "string",  "description": "The name of the function to delete; without line, the package-level name or Type.Method."},
-    "column":    {"type": "integer", "description": "Optional 1-based column, only needed to disambiguate."},
-    "keep_file": {"type": "string",  "description": "A file of the package declaring the function to keep."},
-    "keep_name": {"type": "string",  "description": "The name of the function to keep."}
-  },
-  "required": ["file", "name", "keep_file", "keep_name"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[args]()
 }
 
 type args struct {
-	File     string `json:"file"`
-	Line     int    `json:"line"`
-	Column   int    `json:"column,omitempty"`
-	Name     string `json:"name"`
-	KeepFile string `json:"keep_file"`
-	KeepName string `json:"keep_name"`
+	File     string `json:"file" desc:"Path of a file containing the function to delete, at its declaration or a use, relative to the workspace root."`
+	Line     int    `json:"line,omitempty" desc:"1-based line of that occurrence. Omit it to find name as a symbol of the package of file."`
+	Name     string `json:"name" desc:"The name of the function to delete; without line, the package-level name or Type.Method."`
+	Column   int    `json:"column,omitempty" desc:"Optional 1-based column, only needed to disambiguate."`
+	KeepFile string `json:"keep_file" desc:"A file of the package declaring the function to keep."`
+	KeepName string `json:"keep_name" desc:"The name of the function to keep."`
 }
 
 // fn is one of the two functions.

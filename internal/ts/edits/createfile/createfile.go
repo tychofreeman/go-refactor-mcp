@@ -29,24 +29,18 @@ The file must not exist, unless overwrite is set to replace all of it; undo remo
 }
 
 func (*CreateFile) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":    {"type": "string", "description": "Path of the new file, relative to the root."},
-    "content": {"type": "string", "description": "The file's complete contents."},
-    "overwrite": {"type": "boolean", "description": "Replace the file if it exists."}
-  },
-  "required": ["file", "content"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[createFileArgs]()
+}
+
+// createFileArgs are the arguments of create_file.
+type createFileArgs struct {
+	File      string `json:"file" desc:"Path of the new file, relative to the root."`
+	Content   string `json:"content" desc:"The file's complete contents."`
+	Overwrite bool   `json:"overwrite,omitempty" desc:"Replace the file if it exists."`
 }
 
 func (*CreateFile) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
-	var a struct {
-		File      string `json:"file"`
-		Content   string `json:"content"`
-		Overwrite bool   `json:"overwrite"`
-	}
+	var a createFileArgs
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}

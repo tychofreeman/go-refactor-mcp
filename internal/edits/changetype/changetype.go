@@ -35,19 +35,7 @@ Give file, name (the type) and type (its new definition as Go source).`
 }
 
 func (*ChangeType) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":    {"type": "string",  "description": "Path of a file containing the type's declaration or a use, relative to the workspace root."},
-    "line":    {"type": "integer", "description": "1-based line of that occurrence. Omit it to find name as a symbol of the package of file."},
-    "name":    {"type": "string",  "description": "The type's name."},
-    "column":  {"type": "integer", "description": "Optional 1-based column, only needed to disambiguate."},
-    "type":    {"type": "string",  "description": "What the type is to be, as Go source, e.g. any or int64."},
-    "imports": {"type": "array", "items": {"type": "string"}, "description": "Optional: import paths to use for package names type uses, when the name alone is ambiguous."}
-  },
-  "required": ["file", "name", "type"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[args]()
 }
 
 // ChangesBehavior marks this as an edit.
@@ -58,12 +46,12 @@ func (*ChangeType) ChangesBehavior() {}
 func (*ChangeType) NotesBreakage() {}
 
 type args struct {
-	File    string   `json:"file"`
-	Line    int      `json:"line"`
-	Column  int      `json:"column,omitempty"`
-	Name    string   `json:"name"`
-	Type    string   `json:"type"`
-	Imports []string `json:"imports,omitempty"`
+	File    string   `json:"file" desc:"Path of a file containing the type's declaration or a use, relative to the workspace root."`
+	Line    int      `json:"line,omitempty" desc:"1-based line of that occurrence. Omit it to find name as a symbol of the package of file."`
+	Name    string   `json:"name" desc:"The type's name."`
+	Column  int      `json:"column,omitempty" desc:"Optional 1-based column, only needed to disambiguate."`
+	Type    string   `json:"type" desc:"What the type is to be, as Go source, e.g. any or int64."`
+	Imports []string `json:"imports,omitempty" desc:"Optional: import paths to use for package names type uses, when the name alone is ambiguous."`
 }
 
 // Plan checks preconditions and computes the edits.

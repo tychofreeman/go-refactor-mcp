@@ -31,24 +31,15 @@ For several files, such as a fixture directory, send the create_file steps toget
 }
 
 func (*CreateFile) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":    {"type": "string", "description": "Path of the new file, relative to the workspace root."},
-    "content": {"type": "string", "description": "The file's complete contents."},
-    "overwrite": {"type": "boolean", "description": "Replace the file if it exists."}
-  },
-  "required": ["file", "content"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[createArgs]()
 }
 
 func (*CreateFile) ChangesBehavior() {}
 
 type createArgs struct {
-	File      string `json:"file"`
-	Content   string `json:"content"`
-	Overwrite bool   `json:"overwrite"`
+	File      string `json:"file" desc:"Path of the new file, relative to the workspace root."`
+	Content   string `json:"content" desc:"The file's complete contents."`
+	Overwrite bool   `json:"overwrite,omitempty" desc:"Replace the file if it exists."`
 }
 
 // Plan checks preconditions and computes the edits.

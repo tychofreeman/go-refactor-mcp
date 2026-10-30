@@ -33,28 +33,16 @@ Refuses, saying why: named results, a call whose result is used inside an expres
 }
 
 func (*AddResult) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":   {"type": "string",  "description": "Path of a file containing the function's declaration or a call, relative to the workspace root."},
-    "line":   {"type": "integer", "description": "1-based line of that occurrence. Omit it to find name as a symbol of the package of file."},
-    "name":   {"type": "string",  "description": "The function's name: with line, just the method name for a method; without line, the package-level name or Type.Method."},
-    "column": {"type": "integer", "description": "Optional 1-based column, only needed to disambiguate."},
-    "type":   {"type": "string",  "description": "Type of the new result, as Go source valid in the declaring file, e.g. error."},
-    "value":  {"type": "string",  "description": "Go expression every return gives the new result, e.g. nil."}
-  },
-  "required": ["file", "name", "type", "value"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[resultArgs]()
 }
 
 type resultArgs struct {
-	File   string  `json:"file"`
-	Line   int     `json:"line"`
-	Column int     `json:"column,omitempty"`
-	Name   string  `json:"name"`
-	Type   string  `json:"type"`
-	Value  literal `json:"value"`
+	File   string  `json:"file" desc:"Path of a file containing the function's declaration or a call, relative to the workspace root."`
+	Line   int     `json:"line,omitempty" desc:"1-based line of that occurrence. Omit it to find name as a symbol of the package of file."`
+	Name   string  `json:"name" desc:"The function's name: with line, just the method name for a method; without line, the package-level name or Type.Method."`
+	Column int     `json:"column,omitempty" desc:"Optional 1-based column, only needed to disambiguate."`
+	Type   string  `json:"type" desc:"Type of the new result, as Go source valid in the declaring file, e.g. error."`
+	Value  literal `json:"value" desc:"Go expression every return gives the new result, e.g. nil."`
 }
 
 // Plan checks preconditions and computes the edits.

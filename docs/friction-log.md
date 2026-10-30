@@ -3793,3 +3793,17 @@ positive one by create_file and delete_file. One golden expected a
 refusal at a column one off. The first write check counted `s.WS` inside
 `&mover{...}` as a write, since it walked the whole operand of `&`; it
 now walks only the path of what is written. Nothing else by hand.
+
+## 2026-10-30: tool schemas from argument structs (item 45.1)
+
+Through the CLI. A throwaway program (not committed) read each published
+schema and the struct its Plan decodes, and wrote one batch of 200 steps:
+replace_declaration of each struct with its tags, replace_statements of
+each InputSchema body, and for a struct declared inside Plan,
+replace_text of the declaration and add_declaration of a named type
+(nothing hoists a local type to the package, so that was two steps). The
+batch took five minutes. A second batch did the eight it could not (two
+tools sharing a struct, an embedded struct, tools whose name is not a
+literal). A dump of every published schema before and after compared
+them. `Schema` itself was written by hand into create_file: new code.
+Nothing else by hand.

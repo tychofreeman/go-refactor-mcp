@@ -44,9 +44,11 @@ func (*RemoveDeadCode) Expand(ws *workspace.Workspace, raw json.RawMessage) ([]r
 // fields value reads.
 type readValue struct{}
 
-func (readValue) Name() string                 { return "remove_dead_code" }
-func (readValue) Description() string          { return "" }
-func (readValue) InputSchema() json.RawMessage { return (*RemoveDeadCode)(nil).InputSchema() }
+func (readValue) Name() string        { return "remove_dead_code" }
+func (readValue) Description() string { return "" }
+func (readValue) InputSchema() json.RawMessage {
+	return refactor.Schema[args]()
+}
 
 func (readValue) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
 	var a args

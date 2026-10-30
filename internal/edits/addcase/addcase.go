@@ -33,31 +33,23 @@ Branches of an if, likewise: at the line of if p.Height > 10 {, content else if 
 }
 
 func (*AddCase) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":    {"type": "string",  "description": "Path of the file, relative to the workspace root."},
-    "line":    {"type": "integer", "description": "1-based line of the switch or if (they go at its end), or of one of its case clauses or branches."},
-    "where":   {"type": "string",  "enum": ["before", "after"], "description": "For the line of a case clause or branch: before or after it (default after)."},
-    "content": {"type": "string",  "description": "One or more clauses, each \"case x:\" or \"default:\" with its statements; or branches, else if c { ... } or else { ... }."},
-    "imports": {"type": "array", "items": {"type": "string"}, "description": "Optional: import paths to use for package names the content uses, when the name alone is ambiguous."}
-  },
-  "required": ["file", "line", "content"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[addCaseArgs]()
+}
+
+// addCaseArgs are the arguments of add_case.
+type addCaseArgs struct {
+	File    string   `json:"file" desc:"Path of the file, relative to the workspace root."`
+	Line    int      `json:"line" desc:"1-based line of the switch or if (they go at its end), or of one of its case clauses or branches."`
+	Where   string   `json:"where,omitempty" desc:"For the line of a case clause or branch: before or after it (default after)." enum:"before,after"`
+	Content string   `json:"content" desc:"One or more clauses, each \"case x:\" or \"default:\" with its statements; or branches, else if c { ... } or else { ... }."`
+	Imports []string `json:"imports,omitempty" desc:"Optional: import paths to use for package names the content uses, when the name alone is ambiguous."`
 }
 
 func (*AddCase) ChangesBehavior() {}
 
 // Plan checks preconditions and computes the edits.
 func (*AddCase) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
-	var a struct {
-		File    string   `json:"file"`
-		Line    int      `json:"line"`
-		Where   string   `json:"where,omitempty"`
-		Content string   `json:"content"`
-		Imports []string `json:"imports,omitempty"`
-	}
+	var a addCaseArgs
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}

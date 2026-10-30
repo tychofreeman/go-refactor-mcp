@@ -321,6 +321,14 @@ patterns sessions use, with their steps, in `docs/patterns.md`.
   error, "" for nil, because this repo's functions return refusals that
   way and all four hand rewrites of 43.10 hit the refusal. Numbers were
   left out on purpose (an early `return 1` is a value, not an exit).
+- **Schemas come from argument structs** (2026-10-30, item 45.1):
+  `refactor.Schema[T]()`; a property is a field with a `desc` tag,
+  optional with omitempty. Published schemas did not change, so the A/B
+  baselines hold. The languages keep separate structs, since most of
+  their descriptions differ; unifying them would change published text,
+  so ask before doing it. To check a change publishes the same
+  schemas, dump `golang.Language{}.Tools()` and
+  `typescript.Language{}.Tools()` before and after.
 - **Instructions by language** (2026-10-29, item 43.4): a project
   without Go gets `TypeScriptInstructions` (internal/mcpserver), whose
   example batch `TestTypeScriptInstructions` runs and whose tool list

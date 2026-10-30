@@ -46,28 +46,16 @@ Refuses, saying why: a new name that would clash with or shadow another, an inte
 }
 
 func (*Rename) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":     {"type": "string",  "description": "Path of a file containing the symbol (declaration or any use), relative to the workspace root."},
-    "line":     {"type": "integer", "description": "1-based line number of that occurrence. Omit it to find name as a symbol of the package of file."},
-    "name":     {"type": "string",  "description": "Current name of the symbol; without line, the package-level name, Type.Method or Type.Field."},
-    "function": {"type": "string",  "description": "Instead of line, for a local: the function (Name or Type.Method) of file that declares it (a variable, constant, parameter or result)."},
-    "column":   {"type": "integer", "description": "Optional 1-based column, only needed to disambiguate."},
-    "new_name": {"type": "string",  "description": "The new name. Must be a valid Go identifier."}
-  },
-  "required": ["file", "name", "new_name"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[args]()
 }
 
 type args struct {
-	File     string `json:"file"`
-	Line     int    `json:"line"`
-	Column   int    `json:"column,omitempty"`
-	Name     string `json:"name"`
-	NewName  string `json:"new_name"`
-	Function string `json:"function,omitempty"`
+	File     string `json:"file" desc:"Path of a file containing the symbol (declaration or any use), relative to the workspace root."`
+	Line     int    `json:"line,omitempty" desc:"1-based line number of that occurrence. Omit it to find name as a symbol of the package of file."`
+	Name     string `json:"name" desc:"Current name of the symbol; without line, the package-level name, Type.Method or Type.Field."`
+	Function string `json:"function,omitempty" desc:"Instead of line, for a local: the function (Name or Type.Method) of file that declares it (a variable, constant, parameter or result)."`
+	Column   int    `json:"column,omitempty" desc:"Optional 1-based column, only needed to disambiguate."`
+	NewName  string `json:"new_name" desc:"The new name. Must be a valid Go identifier."`
 }
 
 // Plan checks preconditions and computes the edits.

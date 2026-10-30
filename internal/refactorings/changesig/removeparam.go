@@ -32,30 +32,17 @@ Refuses, saying why: a body that reads the parameter, a function used as a value
 }
 
 func (*RemoveParameter) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":      {"type": "string",  "description": "Path of a file containing the function's declaration or a call, relative to the workspace root."},
-    "line":      {"type": "integer", "description": "1-based line of that occurrence. Omit it to find name as a symbol of the package of file."},
-    "name":      {"type": "string",  "description": "The function's name: with line, just the method name for a method; without line, the package-level name or Type.Method."},
-    "column":    {"type": "integer", "description": "Optional 1-based column, only needed to disambiguate."},
-    "parameter": {"type": "string",  "description": "Name of the parameter to remove."},
-    "value":     {"type": "string",  "description": "Optional: what every call passes for it, written in the body's terms (the receiver, other parameters); the body's uses become this."},
-    "also":      {"type": "array", "items": {"type": "string"}, "description": "With value: more functions (Type.Method) whose parameter of that name goes in the same step, so that calls among them that pass it on count."}
-  },
-  "required": ["file", "name", "parameter"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[removeArgs]()
 }
 
 type removeArgs struct {
-	File      string   `json:"file"`
-	Line      int      `json:"line"`
-	Column    int      `json:"column,omitempty"`
-	Name      string   `json:"name"`
-	Parameter string   `json:"parameter"`
-	Value     string   `json:"value,omitempty"`
-	Also      []string `json:"also,omitempty"`
+	File      string   `json:"file" desc:"Path of a file containing the function's declaration or a call, relative to the workspace root."`
+	Line      int      `json:"line,omitempty" desc:"1-based line of that occurrence. Omit it to find name as a symbol of the package of file."`
+	Name      string   `json:"name" desc:"The function's name: with line, just the method name for a method; without line, the package-level name or Type.Method."`
+	Column    int      `json:"column,omitempty" desc:"Optional 1-based column, only needed to disambiguate."`
+	Parameter string   `json:"parameter" desc:"Name of the parameter to remove."`
+	Value     string   `json:"value,omitempty" desc:"Optional: what every call passes for it, written in the body's terms (the receiver, other parameters); the body's uses become this."`
+	Also      []string `json:"also,omitempty" desc:"With value: more functions (Type.Method) whose parameter of that name goes in the same step, so that calls among them that pass it on count."`
 }
 
 // cut is a range of source text the refactoring deletes.

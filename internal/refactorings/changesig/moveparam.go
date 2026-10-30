@@ -30,28 +30,16 @@ Refuses, saying why: a call where the new order of evaluation could matter (argu
 }
 
 func (*MoveParameter) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":      {"type": "string",  "description": "Path of a file containing the function's declaration or a call, relative to the workspace root."},
-    "line":      {"type": "integer", "description": "1-based line of that occurrence. Omit it to find name as a symbol of the package of file."},
-    "name":      {"type": "string",  "description": "The function's name: with line, just the method name for a method; without line, the package-level name or Type.Method."},
-    "column":    {"type": "integer", "description": "Optional 1-based column, only needed to disambiguate."},
-    "parameter": {"type": "string",  "description": "Name of the parameter to move."},
-    "before":    {"type": "string",  "description": "Optional: the parameter it should go just before. Default: the end (before a variadic parameter)."}
-  },
-  "required": ["file", "name", "parameter"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[moveArgs]()
 }
 
 type moveArgs struct {
-	File      string `json:"file"`
-	Line      int    `json:"line"`
-	Column    int    `json:"column,omitempty"`
-	Name      string `json:"name"`
-	Parameter string `json:"parameter"`
-	Before    string `json:"before,omitempty"`
+	File      string `json:"file" desc:"Path of a file containing the function's declaration or a call, relative to the workspace root."`
+	Line      int    `json:"line,omitempty" desc:"1-based line of that occurrence. Omit it to find name as a symbol of the package of file."`
+	Name      string `json:"name" desc:"The function's name: with line, just the method name for a method; without line, the package-level name or Type.Method."`
+	Column    int    `json:"column,omitempty" desc:"Optional 1-based column, only needed to disambiguate."`
+	Parameter string `json:"parameter" desc:"Name of the parameter to move."`
+	Before    string `json:"before,omitempty" desc:"Optional: the parameter it should go just before. Default: the end (before a variadic parameter)."`
 }
 
 // Plan checks preconditions and computes the edits.

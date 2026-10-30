@@ -31,26 +31,19 @@ where is "before" the statement that starts on line, "after" the statement that 
 }
 
 func (*InsertStatements) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":    {"type": "string",  "description": "Relative to the root."},
-    "line":    {"type": "integer", "description": "1-based line: where a statement starts (before), ends (after), or a block opens (into)."},
-    "where":   {"type": "string",  "enum": ["before", "after", "into"], "description": "before or after the statement on line, or into the block opened on line."},
-    "content": {"type": "string",  "description": "The new statements."}
-  },
-  "required": ["file", "line", "where", "content"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[insertStatementsArgs]()
+}
+
+// insertStatementsArgs are the arguments of insert_statements.
+type insertStatementsArgs struct {
+	File    string `json:"file" desc:"Relative to the root."`
+	Line    int    `json:"line" desc:"1-based line: where a statement starts (before), ends (after), or a block opens (into)."`
+	Where   string `json:"where" desc:"before or after the statement on line, or into the block opened on line." enum:"before,after,into"`
+	Content string `json:"content" desc:"The new statements."`
 }
 
 func (*InsertStatements) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
-	var a struct {
-		File    string `json:"file"`
-		Line    int    `json:"line"`
-		Where   string `json:"where"`
-		Content string `json:"content"`
-	}
+	var a insertStatementsArgs
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}

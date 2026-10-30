@@ -43,24 +43,14 @@ Refuses, saying why: a switch with an init statement or a label, or in a functio
 }
 
 func (*SwitchToMethod) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":     {"type": "string",  "description": "Path of the file with the switch, relative to the workspace root."},
-    "line":     {"type": "integer", "description": "1-based line on which the switch statement starts."},
-    "function": {"type": "string",  "description": "Instead of line: the function (Name or Type.Method) whose only type switch it is."},
-    "method":   {"type": "string",  "description": "Name of the new method."}
-  },
-  "required": ["file", "method"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[args]()
 }
 
 type args struct {
-	File     string `json:"file"`
-	Line     int    `json:"line,omitempty"`
-	Function string `json:"function,omitempty"`
-	Method   string `json:"method"`
+	File     string `json:"file" desc:"Path of the file with the switch, relative to the workspace root."`
+	Line     int    `json:"line,omitempty" desc:"1-based line on which the switch statement starts."`
+	Function string `json:"function,omitempty" desc:"Instead of line: the function (Name or Type.Method) whose only type switch it is."`
+	Method   string `json:"method" desc:"Name of the new method."`
 }
 
 // A kase is a case of the switch for one type of the package, which gets

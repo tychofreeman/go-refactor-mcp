@@ -36,14 +36,13 @@ func (*CheckpointOf[W]) Description() string {
 }
 
 func (*CheckpointOf[W]) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "run_tests": {"type": "boolean", "description": "Also run go test, which must pass."},
-    "packages":  {"type": "string",  "description": "The package pattern to test (default ./...)."}
-  },
-  "additionalProperties": false
-}`)
+	return Schema[checkpointArgs]()
+}
+
+// checkpointArgs are the arguments of a check step.
+type checkpointArgs struct {
+	RunTests bool   `json:"run_tests,omitempty" desc:"Also run go test, which must pass."`
+	Packages string `json:"packages,omitempty" desc:"The package pattern to test (default ./...)."`
 }
 
 // Plan refuses: a checkpoint is a step of a batch, which runs it itself.
@@ -58,10 +57,7 @@ func (*CheckpointOf[W]) Plan(W, json.RawMessage) (*Plan, error) {
 // not begin with (baseline).
 func checkpoint[W Workspace](ws W, raw json.RawMessage, opts OptionsOf[W], baseline []string, complete func() error) (*Result, error) {
 	res := &Result{Refactoring: "check"}
-	var a struct {
-		RunTests bool   `json:"run_tests"`
-		Packages string `json:"packages"`
-	}
+	var a checkpointArgs
 	if err := DecodeArgs(raw, &a); err != nil {
 		res.Refused = err.Error()
 		return res, nil

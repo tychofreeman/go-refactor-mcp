@@ -18,10 +18,11 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/workspace"
 )
 
-const (
-	fileProp = `"file": {"type": "string", "description": "The file that declares the function, relative to the root."}`
-	nameProp = `"name": {"type": "string", "description": "The function's name, Class.method for a method, or Class.constructor."}`
-)
+// function is the arguments that name the function a tool changes.
+type function struct {
+	File string `json:"file" desc:"The file that declares the function, relative to the root."`
+	Name string `json:"name" desc:"The function's name, Class.method for a method, or Class.constructor."`
+}
 
 // plan makes ch to the function a names, with the summary given.
 func plan(ws *workspace.Workspace, file, name string, ch tsapi.SignatureChange, summary string) (*refactor.Plan, error) {
@@ -55,27 +56,21 @@ Refuses, saying why: a function used as a value (xs.map(f) passes an index), a c
 }
 
 func (*AddParameter) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    ` + fileProp + `,
-    ` + nameProp + `,
-    "parameter": {"type": "string", "description": "Name of the new parameter."},
-    "type":      {"type": "string", "description": "Its type, as TypeScript valid in the declaring file."},
-    "value":     {"type": "string", "description": "The expression every call passes for it, e.g. \"\" or null or DEFAULT_UNIT."},
-    "before":    {"type": "string", "description": "Optional: an existing parameter; the new one goes just before it."},
-    "replace_variable": {"type": "boolean", "description": "The parameter is named like a variable at a module's top level that the body reads, and takes its place. Calls not proven to pass the variable's value are edits, listed in a note."}
-  },
-  "required": ["file", "name", "parameter", "type", "value"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[addParameterArgs]()
+}
+
+// addParameterArgs are the arguments of add_parameter.
+type addParameterArgs struct {
+	function
+	Parameter       string `json:"parameter" desc:"Name of the new parameter."`
+	Type            string `json:"type" desc:"Its type, as TypeScript valid in the declaring file."`
+	Value           string `json:"value" desc:"The expression every call passes for it, e.g. \"\" or null or DEFAULT_UNIT."`
+	Before          string `json:"before,omitempty" desc:"Optional: an existing parameter; the new one goes just before it."`
+	ReplaceVariable bool   `json:"replace_variable,omitempty" desc:"The parameter is named like a variable at a module's top level that the body reads, and takes its place. Calls not proven to pass the variable's value are edits, listed in a note."`
 }
 
 func (*AddParameter) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
-	var a struct {
-		File, Name, Parameter, Type, Value, Before string
-		ReplaceVariable                            bool `json:"replace_variable"`
-	}
+	var a addParameterArgs
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
@@ -108,18 +103,7 @@ Refuses, saying why: a body that reads the parameter or arguments, a parameter p
 }
 
 func (*RemoveParameter) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    ` + fileProp + `,
-    ` + nameProp + `,
-    "parameter": {"type": "string", "description": "Name of the parameter to remove."},
-    "value":     {"type": "string", "description": "Optional: what every call passes for it, written in the body's terms (this, the other parameters); the body's uses become this."},
-    "also":      {"type": "array", "items": {"type": "string"}, "description": "With value: more functions of the file (name or Class.method) whose parameter of that name goes in the same step, so that calls among them that pass it on count."}
-  },
-  "required": ["file", "name", "parameter"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[removeArgs]()
 }
 
 func (*RemoveParameter) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
@@ -132,11 +116,10 @@ func (*RemoveParameter) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 
 // removeArgs are remove_parameter's arguments.
 type removeArgs struct {
-	File      string   `json:"file"`
-	Name      string   `json:"name"`
-	Parameter string   `json:"parameter"`
-	Value     string   `json:"value,omitempty"`
-	Also      []string `json:"also,omitempty"`
+	function
+	Parameter string   `json:"parameter" desc:"Name of the parameter to remove."`
+	Value     string   `json:"value,omitempty" desc:"Optional: what every call passes for it, written in the body's terms (this, the other parameters); the body's uses become this."`
+	Also      []string `json:"also,omitempty" desc:"With value: more functions of the file (name or Class.method) whose parameter of that name goes in the same step, so that calls among them that pass it on count."`
 }
 
 // Expand makes a removal with value two steps for each function it names
@@ -173,10 +156,12 @@ func (*RemoveParameter) Expand(ws *workspace.Workspace, raw json.RawMessage) ([]
 // after it shows that this changed nothing.
 type writeValue struct{}
 
-func (writeValue) Name() string                 { return "remove_parameter" }
-func (writeValue) Description() string          { return "" }
-func (writeValue) InputSchema() json.RawMessage { return (*RemoveParameter)(nil).InputSchema() }
-func (writeValue) ChangesBehavior()             {}
+func (writeValue) Name() string        { return "remove_parameter" }
+func (writeValue) Description() string { return "" }
+func (writeValue) InputSchema() json.RawMessage {
+	return refactor.Schema[removeArgs]()
+}
+func (writeValue) ChangesBehavior() {}
 
 func (writeValue) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
 	var a removeArgs
@@ -201,9 +186,11 @@ func (writeValue) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.
 // is shown to pass value.
 type removeShown struct{}
 
-func (removeShown) Name() string                 { return "remove_parameter" }
-func (removeShown) Description() string          { return "" }
-func (removeShown) InputSchema() json.RawMessage { return (*RemoveParameter)(nil).InputSchema() }
+func (removeShown) Name() string        { return "remove_parameter" }
+func (removeShown) Description() string { return "" }
+func (removeShown) InputSchema() json.RawMessage {
+	return refactor.Schema[removeArgs]()
+}
 
 func (removeShown) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
 	var a removeArgs
@@ -240,21 +227,18 @@ Refuses, saying why: a call where the new order of evaluation could matter (an a
 }
 
 func (*MoveParameter) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    ` + fileProp + `,
-    ` + nameProp + `,
-    "parameter": {"type": "string", "description": "Name of the parameter to move."},
-    "before":    {"type": "string", "description": "Optional: the parameter it should go just before. Default: the end."}
-  },
-  "required": ["file", "name", "parameter"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[moveParameterArgs]()
+}
+
+// moveParameterArgs are the arguments of move_parameter.
+type moveParameterArgs struct {
+	function
+	Parameter string `json:"parameter" desc:"Name of the parameter to move."`
+	Before    string `json:"before,omitempty" desc:"Optional: the parameter it should go just before. Default: the end."`
 }
 
 func (*MoveParameter) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
-	var a struct{ File, Name, Parameter, Before string }
+	var a moveParameterArgs
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
@@ -281,21 +265,19 @@ The expression is then evaluated once, at the call, so it must have no effects a
 }
 
 func (*IntroduceParameter) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    ` + fileProp + `,
-    "function":   {"type": "string", "description": "The function whose body has the expression: name, Class.method or Class.constructor."},
-    "expression": {"type": "string", "description": "Source text of the expression, e.g. \"p.height\"."},
-    "parameter":  {"type": "string", "description": "Name of the new parameter."}
-  },
-  "required": ["file", "function", "expression", "parameter"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[introduceParameterArgs]()
+}
+
+// introduceParameterArgs are the arguments of introduce_parameter.
+type introduceParameterArgs struct {
+	File       string `json:"file" desc:"The file that declares the function, relative to the root."`
+	Function   string `json:"function" desc:"The function whose body has the expression: name, Class.method or Class.constructor."`
+	Expression string `json:"expression" desc:"Source text of the expression, e.g. \"p.height\"."`
+	Parameter  string `json:"parameter" desc:"Name of the new parameter."`
 }
 
 func (*IntroduceParameter) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
-	var a struct{ File, Function, Expression, Parameter string }
+	var a introduceParameterArgs
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
@@ -329,23 +311,17 @@ Refuses, saying why: a body that reads arguments, a rest parameter, a parameter 
 }
 
 func (*ParamsToObject) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    ` + fileProp + `,
-    ` + nameProp + `,
-    "type_name": {"type": "string", "description": "Optional: declare the object's type as an interface of this name."}
-  },
-  "required": ["file", "name"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[paramsToObjectArgs]()
+}
+
+// paramsToObjectArgs are the arguments of convert_params_to_object.
+type paramsToObjectArgs struct {
+	function
+	TypeName string `json:"type_name,omitempty" desc:"Optional: declare the object's type as an interface of this name."`
 }
 
 func (*ParamsToObject) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
-	var a struct {
-		File, Name string
-		TypeName   string `json:"type_name"`
-	}
+	var a paramsToObjectArgs
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
@@ -380,23 +356,20 @@ Refuses, saying why: a function that returns nothing (void), an async function o
 }
 
 func (*AddResult) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    ` + fileProp + `,
-    ` + nameProp + `,
-    "field": {"type": "string", "description": "Name of the new result in the object."},
-    "type":  {"type": "string", "description": "Its type, as TypeScript valid in the declaring file."},
-    "value": {"type": "string", "description": "The expression every return gives it, e.g. null."},
-    "kept":  {"type": "string", "description": "Optional: the name the old result keeps in the object. Default: value."}
-  },
-  "required": ["file", "name", "field", "type", "value"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[addResultArgs]()
+}
+
+// addResultArgs are the arguments of add_result.
+type addResultArgs struct {
+	function
+	Field string `json:"field" desc:"Name of the new result in the object."`
+	Type  string `json:"type" desc:"Its type, as TypeScript valid in the declaring file."`
+	Value string `json:"value" desc:"The expression every return gives it, e.g. null."`
+	Kept  string `json:"kept,omitempty" desc:"Optional: the name the old result keeps in the object. Default: value."`
 }
 
 func (*AddResult) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
-	var a struct{ File, Name, Field, Type, Value, Kept string }
+	var a addResultArgs
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
@@ -448,24 +421,19 @@ Refuses, saying why: a method or accessor, a type alias that is not an object ty
 }
 
 func (*ChangeFieldType) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file": {"type": "string", "description": "The file that declares the type, relative to the root."},
-    "name": {"type": "string", "description": "The property as Type.property."},
-    "type": {"type": "string", "description": "Its new type, as TypeScript valid in the declaring file."},
-    "values": {"type": "object", "additionalProperties": {"type": "string"}, "description": "Optional: for each old constant (\"fern\", or as written), the new type's value, put wherever the property is given, assigned, compared or switched on with it, e.g. {\"fern\": \"FERN\"}."}
-  },
-  "required": ["file", "name", "type"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[changeFieldTypeArgs]()
+}
+
+// changeFieldTypeArgs are the arguments of change_field_type.
+type changeFieldTypeArgs struct {
+	File   string            `json:"file" desc:"The file that declares the type, relative to the root."`
+	Name   string            `json:"name" desc:"The property as Type.property."`
+	Type   string            `json:"type" desc:"Its new type, as TypeScript valid in the declaring file."`
+	Values map[string]string `json:"values,omitempty" desc:"Optional: for each old constant (\"fern\", or as written), the new type's value, put wherever the property is given, assigned, compared or switched on with it, e.g. {\"fern\": \"FERN\"}."`
 }
 
 func (*ChangeFieldType) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
-	var a struct {
-		File, Name, Type string
-		Values           map[string]string
-	}
+	var a changeFieldTypeArgs
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
@@ -492,21 +460,18 @@ Refuses, saying why: a function with overload signatures, a destructured paramet
 }
 
 func (*ChangeParameterType) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    ` + fileProp + `,
-    ` + nameProp + `,
-    "parameter": {"type": "string", "description": "Name of the parameter whose type changes."},
-    "type":      {"type": "string", "description": "Its new type, as TypeScript valid in the declaring file."}
-  },
-  "required": ["file", "name", "parameter", "type"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[changeParameterTypeArgs]()
+}
+
+// changeParameterTypeArgs are the arguments of change_parameter_type.
+type changeParameterTypeArgs struct {
+	function
+	Parameter string `json:"parameter" desc:"Name of the parameter whose type changes."`
+	Type      string `json:"type" desc:"Its new type, as TypeScript valid in the declaring file."`
 }
 
 func (*ChangeParameterType) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
-	var a struct{ File, Name, Parameter, Type string }
+	var a changeParameterTypeArgs
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
@@ -531,23 +496,18 @@ Refuses, saying why: a name the class, a class it extends or one extending it al
 }
 
 func (*FunctionToMethod) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    ` + fileProp + `,
-    "name":     {"type": "string", "description": "The function's name."},
-    "new_name": {"type": "string", "description": "Optional name for the method (default: the function's)."}
-  },
-  "required": ["file", "name"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[functionToMethodArgs]()
+}
+
+// functionToMethodArgs are the arguments of function_to_method.
+type functionToMethodArgs struct {
+	File    string `json:"file" desc:"The file that declares the function, relative to the root."`
+	Name    string `json:"name" desc:"The function's name."`
+	NewName string `json:"new_name,omitempty" desc:"Optional name for the method (default: the function's)."`
 }
 
 func (*FunctionToMethod) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
-	var a struct {
-		File, Name string
-		NewName    string `json:"new_name"`
-	}
+	var a functionToMethodArgs
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
@@ -571,23 +531,18 @@ Refuses, saying why: a method that overrides or implements a member, or that a s
 }
 
 func (*MethodToFunction) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    ` + fileProp + `,
-    "name":     {"type": "string", "description": "The method as Class.method."},
-    "new_name": {"type": "string", "description": "Optional name for the function (default: the method's)."}
-  },
-  "required": ["file", "name"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[methodToFunctionArgs]()
+}
+
+// methodToFunctionArgs are the arguments of method_to_function.
+type methodToFunctionArgs struct {
+	File    string `json:"file" desc:"The file that declares the function, relative to the root."`
+	Name    string `json:"name" desc:"The method as Class.method."`
+	NewName string `json:"new_name,omitempty" desc:"Optional name for the function (default: the method's)."`
 }
 
 func (*MethodToFunction) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
-	var a struct {
-		File, Name string
-		NewName    string `json:"new_name"`
-	}
+	var a methodToFunctionArgs
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
@@ -611,24 +566,19 @@ Refuses, saying why: a use through a value of another class (a Pot extends Soil 
 }
 
 func (*MoveMethod) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file": {"type": "string", "description": "The file that declares the method, relative to the root."},
-    "name": {"type": "string", "description": "The method, as Class.method."},
-    "to":   {"type": "string", "description": "The class to move it to: one that extends Class."},
-    "also": {"type": "array", "items": {"type": "string"}, "description": "Other methods of the same class to move with it (method or Class.method)."}
-  },
-  "required": ["file", "name", "to"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[moveMethodArgs]()
+}
+
+// moveMethodArgs are the arguments of move_method.
+type moveMethodArgs struct {
+	File string   `json:"file" desc:"The file that declares the method, relative to the root."`
+	Name string   `json:"name" desc:"The method, as Class.method."`
+	To   string   `json:"to" desc:"The class to move it to: one that extends Class."`
+	Also []string `json:"also,omitempty" desc:"Other methods of the same class to move with it (method or Class.method)."`
 }
 
 func (*MoveMethod) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
-	var a struct {
-		File, Name, To string
-		Also           []string
-	}
+	var a moveMethodArgs
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}

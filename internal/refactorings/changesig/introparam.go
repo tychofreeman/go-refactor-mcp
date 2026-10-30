@@ -37,28 +37,16 @@ The expression is then evaluated once, at the call, so it must give the same val
 }
 
 func (*IntroduceParameter) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":       {"type": "string",  "description": "Path of the file, relative to the workspace root."},
-    "function":   {"type": "string",  "description": "Instead of line: the function (Name or Type.Method) whose body uses the expression; its first use."},
-    "line":       {"type": "integer", "description": "1-based line on which the expression starts."},
-    "expression": {"type": "string",  "description": "Source text of the expression, e.g. \"p.x\"."},
-    "parameter":  {"type": "string",  "description": "Name of the new parameter."},
-    "column":     {"type": "integer", "description": "Optional 1-based column where the expression starts, only needed if the text occurs more than once on the line."}
-  },
-  "required": ["file", "expression", "parameter"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[introArgs]()
 }
 
 type introArgs struct {
-	File       string `json:"file"`
-	Function   string `json:"function,omitempty"`
-	Line       int    `json:"line"`
-	Column     int    `json:"column,omitempty"`
-	Expression string `json:"expression"`
-	Parameter  string `json:"parameter"`
+	File       string `json:"file" desc:"Path of the file, relative to the workspace root."`
+	Function   string `json:"function,omitempty" desc:"Instead of line: the function (Name or Type.Method) whose body uses the expression; its first use."`
+	Line       int    `json:"line,omitempty" desc:"1-based line on which the expression starts."`
+	Expression string `json:"expression" desc:"Source text of the expression, e.g. \"p.x\"."`
+	Parameter  string `json:"parameter" desc:"Name of the new parameter."`
+	Column     int    `json:"column,omitempty" desc:"Optional 1-based column where the expression starts, only needed if the text occurs more than once on the line."`
 }
 
 // Plan checks preconditions and computes the edits.

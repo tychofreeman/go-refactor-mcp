@@ -29,15 +29,13 @@ func (*MoveFile) Description() string {
 }
 
 func (*MoveFile) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file": {"type": "string", "description": "Path of the file or directory to move, relative to the workspace root."},
-    "to":   {"type": "string", "description": "Its new path, relative to the workspace root; it must not exist."}
-  },
-  "required": ["file", "to"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[moveFileArgs]()
+}
+
+// moveFileArgs are the arguments of move_file.
+type moveFileArgs struct {
+	File string `json:"file" desc:"Path of the file or directory to move, relative to the workspace root."`
+	To   string `json:"to" desc:"Its new path, relative to the workspace root; it must not exist."`
 }
 
 // ChangesBehavior marks this as an edit.
@@ -45,10 +43,7 @@ func (*MoveFile) ChangesBehavior() {}
 
 // Plan checks preconditions and computes the edits.
 func (*MoveFile) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
-	var a struct {
-		File string `json:"file"`
-		To   string `json:"to"`
-	}
+	var a moveFileArgs
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
@@ -96,14 +91,12 @@ func (*DeleteFile) Description() string {
 }
 
 func (*DeleteFile) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file": {"type": "string", "description": "Path of the file or directory to delete, relative to the workspace root."}
-  },
-  "required": ["file"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[deleteFileArgs]()
+}
+
+// deleteFileArgs are the arguments of delete_file.
+type deleteFileArgs struct {
+	File string `json:"file" desc:"Path of the file or directory to delete, relative to the workspace root."`
 }
 
 // ChangesBehavior marks this as an edit.
@@ -111,9 +104,7 @@ func (*DeleteFile) ChangesBehavior() {}
 
 // Plan checks preconditions and computes the edits.
 func (*DeleteFile) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
-	var a struct {
-		File string `json:"file"`
-	}
+	var a deleteFileArgs
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}

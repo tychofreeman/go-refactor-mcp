@@ -40,37 +40,22 @@ Refused with the compiler's errors: a duplicate name; and an unkeyed literal who
 }
 
 func (*AddField) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":    {"type": "string",  "description": "Path of a file containing the struct type's declaration or a use, relative to the workspace root."},
-    "line":    {"type": "integer", "description": "1-based line of that occurrence. Omit it to find name as a symbol of the package of file."},
-    "name":    {"type": "string",  "description": "The struct type's name; without line, it is found among the package-level names."},
-    "column":  {"type": "integer", "description": "Optional 1-based column, only needed to disambiguate."},
-    "field":   {"type": "string",  "description": "The fields to add, as Go source, e.g. \"timeout time.Duration // per try\"."},
-    "type":    {"type": "string",  "description": "Optional: the fields' type, when field gives only their names (field \"owner\", type \"string\")."},
-    "after":   {"type": "string",  "description": "Optional: a field to put them just after."},
-    "before":  {"type": "string",  "description": "Optional: a field to put them just before."},
-    "imports": {"type": "array", "items": {"type": "string"}, "description": "Optional: import paths to use for package names the fields use, when the name alone is ambiguous."}
-  },
-  "required": ["file", "name", "field"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[args]()
 }
 
 // ChangesBehavior marks this as an edit.
 func (*AddField) ChangesBehavior() {}
 
 type args struct {
-	File    string   `json:"file"`
-	Line    int      `json:"line"`
-	Column  int      `json:"column,omitempty"`
-	Name    string   `json:"name"`
-	Field   string   `json:"field"`
-	Type    string   `json:"type,omitempty"`
-	After   string   `json:"after,omitempty"`
-	Before  string   `json:"before,omitempty"`
-	Imports []string `json:"imports,omitempty"`
+	File    string   `json:"file" desc:"Path of a file containing the struct type's declaration or a use, relative to the workspace root."`
+	Line    int      `json:"line,omitempty" desc:"1-based line of that occurrence. Omit it to find name as a symbol of the package of file."`
+	Name    string   `json:"name" desc:"The struct type's name; without line, it is found among the package-level names."`
+	Column  int      `json:"column,omitempty" desc:"Optional 1-based column, only needed to disambiguate."`
+	Field   string   `json:"field" desc:"The fields to add, as Go source, e.g. \"timeout time.Duration // per try\"."`
+	Type    string   `json:"type,omitempty" desc:"Optional: the fields' type, when field gives only their names (field \"owner\", type \"string\")."`
+	After   string   `json:"after,omitempty" desc:"Optional: a field to put them just after."`
+	Before  string   `json:"before,omitempty" desc:"Optional: a field to put them just before."`
+	Imports []string `json:"imports,omitempty" desc:"Optional: import paths to use for package names the fields use, when the name alone is ambiguous."`
 }
 
 // fieldNames matches a field list without a type: "owner", "x, y".

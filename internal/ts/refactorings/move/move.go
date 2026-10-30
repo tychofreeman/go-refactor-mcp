@@ -30,33 +30,23 @@ Refuses, saying why: code that uses a declaration that stays and is not exported
 }
 
 func (*MoveDeclaration) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":    {"type": "string",  "description": "Path of a file containing the declaration or a use of it, relative to the root."},
-    "line":    {"type": "integer", "description": "1-based line of that occurrence. Omit it to find name as a top-level declaration of file."},
-    "name":    {"type": "string",  "description": "The declared name."},
-    "column":  {"type": "integer", "description": "Optional 1-based column, only needed to disambiguate."},
-    "to_file": {"type": "string",  "description": "Destination file, relative to the root; created if it does not exist."},
-    "also":    {"type": "array", "items": {"type": "string"}, "description": "Optional: other top-level declarations of the same file to move with it, by name, e.g. the helpers it uses."},
-    "with_dependencies": {"type": "boolean", "description": "Optional: also move every top-level declaration of the file that the moved code uses, and what those use, in place of naming them in also."}
-  },
-  "required": ["file", "name", "to_file"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[moveDeclarationArgs]()
+}
+
+// moveDeclarationArgs are the arguments of move_declaration.
+type moveDeclarationArgs struct {
+	File     string   `json:"file" desc:"Path of a file containing the declaration or a use of it, relative to the root."`
+	Line     int      `json:"line,omitempty" desc:"1-based line of that occurrence. Omit it to find name as a top-level declaration of file."`
+	Name     string   `json:"name" desc:"The declared name."`
+	Column   int      `json:"column,omitempty" desc:"Optional 1-based column, only needed to disambiguate."`
+	To       string   `json:"to_file" desc:"Destination file, relative to the root; created if it does not exist."`
+	Also     []string `json:"also,omitempty" desc:"Optional: other top-level declarations of the same file to move with it, by name, e.g. the helpers it uses."`
+	WithDeps bool     `json:"with_dependencies,omitempty" desc:"Optional: also move every top-level declaration of the file that the moved code uses, and what those use, in place of naming them in also."`
+	NewName  string   `json:"new_name" schema:"-"`
 }
 
 func (*MoveDeclaration) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
-	var a struct {
-		File     string   `json:"file"`
-		Line     int      `json:"line"`
-		Name     string   `json:"name"`
-		Column   int      `json:"column"`
-		To       string   `json:"to_file"`
-		NewName  string   `json:"new_name"`
-		Also     []string `json:"also"`
-		WithDeps bool     `json:"with_dependencies"`
-	}
+	var a moveDeclarationArgs
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
@@ -124,22 +114,17 @@ func (*MoveFile) Description() string {
 }
 
 func (*MoveFile) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file": {"type": "string", "description": "Path of the file or directory to move, relative to the root."},
-    "to":   {"type": "string", "description": "Its new path, relative to the root; it must not exist."}
-  },
-  "required": ["file", "to"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[moveFileArgs]()
+}
+
+// moveFileArgs are the arguments of move_file.
+type moveFileArgs struct {
+	File string `json:"file" desc:"Path of the file or directory to move, relative to the root."`
+	To   string `json:"to" desc:"Its new path, relative to the root; it must not exist."`
 }
 
 func (*MoveFile) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
-	var a struct {
-		File string `json:"file"`
-		To   string `json:"to"`
-	}
+	var a moveFileArgs
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
@@ -194,20 +179,16 @@ func (*DeleteFile) Description() string {
 }
 
 func (*DeleteFile) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file": {"type": "string", "description": "Path of the file or directory to delete, relative to the root."}
-  },
-  "required": ["file"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[deleteFileArgs]()
+}
+
+// deleteFileArgs are the arguments of delete_file.
+type deleteFileArgs struct {
+	File string `json:"file" desc:"Path of the file or directory to delete, relative to the root."`
 }
 
 func (*DeleteFile) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
-	var a struct {
-		File string `json:"file"`
-	}
+	var a deleteFileArgs
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}

@@ -46,28 +46,16 @@ Refuses, saying why: generic or variadic functions, functions of another package
 }
 
 func (*InlineFunction) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":          {"type": "string",  "description": "Path of the file with the call, relative to the module root."},
-    "line":          {"type": "integer", "description": "1-based line of the call. With all_calls, optional: the line of any call or of the declaration."},
-    "name":          {"type": "string",  "description": "Name of the called function or method (for a method call x.m(), m)."},
-    "column":        {"type": "integer", "description": "Optional 1-based column of the name, only needed if it appears more than once on the line."},
-    "keep_function": {"type": "boolean", "description": "Keep the function even if no other call to it is left. Default false."},
-    "all_calls":     {"type": "boolean", "description": "Inline every call to the function in the module, then delete it (unless keep_function). Without line, name is the function (Name or Type.Method) of file's package."}
-  },
-  "required": ["file", "name"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[args]()
 }
 
 type args struct {
-	File         string `json:"file"`
-	Line         int    `json:"line"`
-	Column       int    `json:"column,omitempty"`
-	Name         string `json:"name"`
-	KeepFunction bool   `json:"keep_function,omitempty"`
-	AllCalls     bool   `json:"all_calls,omitempty"`
+	File         string `json:"file" desc:"Path of the file with the call, relative to the module root."`
+	Line         int    `json:"line,omitempty" desc:"1-based line of the call. With all_calls, optional: the line of any call or of the declaration."`
+	Name         string `json:"name" desc:"Name of the called function or method (for a method call x.m(), m)."`
+	Column       int    `json:"column,omitempty" desc:"Optional 1-based column of the name, only needed if it appears more than once on the line."`
+	KeepFunction bool   `json:"keep_function,omitempty" desc:"Keep the function even if no other call to it is left. Default false."`
+	AllCalls     bool   `json:"all_calls,omitempty" desc:"Inline every call to the function in the module, then delete it (unless keep_function). Without line, name is the function (Name or Type.Method) of file's package."`
 }
 
 // shape is how the call is used, which decides what replaces it.

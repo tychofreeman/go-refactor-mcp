@@ -34,39 +34,27 @@ from adds every element of another variable's literal, written by element as a t
 }
 
 func (*AddElement) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":    {"type": "string",  "description": "Path of the file, relative to the workspace root."},
-    "line":    {"type": "integer", "description": "1-based line the composite literal starts on; or give name."},
-    "name":    {"type": "string",  "description": "The package-level variable the literal initializes; or give line."},
-    "type":    {"type": "string",  "description": "Optional: the literal's type as written, when more than one literal starts on the line."},
-    "element": {"type": "string",  "description": "The element: \"Key: value\" or a value; with from, a template of $key and $value."},
-    "from":    {"type": "string",  "description": "Optional: a package-level variable whose literal's elements to add."},
-    "after":   {"type": "string",  "description": "Optional: put it after the element with this key."},
-    "before":  {"type": "string",  "description": "Optional: put it before the element with this key."},
-    "imports": {"type": "array", "items": {"type": "string"}, "description": "Optional: import paths to use for package names the element uses, when the name alone is ambiguous."}
-  },
-  "required": ["file"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[addElementArgs]()
+}
+
+// addElementArgs are the arguments of add_element.
+type addElementArgs struct {
+	File    string   `json:"file" desc:"Path of the file, relative to the workspace root."`
+	Line    int      `json:"line,omitempty" desc:"1-based line the composite literal starts on; or give name."`
+	Name    string   `json:"name,omitempty" desc:"The package-level variable the literal initializes; or give line."`
+	Type    string   `json:"type,omitempty" desc:"Optional: the literal's type as written, when more than one literal starts on the line."`
+	Element string   `json:"element,omitempty" desc:"The element: \"Key: value\" or a value; with from, a template of $key and $value."`
+	From    string   `json:"from,omitempty" desc:"Optional: a package-level variable whose literal's elements to add."`
+	After   string   `json:"after,omitempty" desc:"Optional: put it after the element with this key."`
+	Before  string   `json:"before,omitempty" desc:"Optional: put it before the element with this key."`
+	Imports []string `json:"imports,omitempty" desc:"Optional: import paths to use for package names the element uses, when the name alone is ambiguous."`
 }
 
 func (*AddElement) ChangesBehavior() {}
 
 // Plan checks preconditions and computes the edits.
 func (*AddElement) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
-	var a struct {
-		File    string   `json:"file"`
-		Line    int      `json:"line,omitempty"`
-		Name    string   `json:"name,omitempty"`
-		Type    string   `json:"type,omitempty"`
-		Element string   `json:"element,omitempty"`
-		From    string   `json:"from,omitempty"`
-		After   string   `json:"after,omitempty"`
-		Before  string   `json:"before,omitempty"`
-		Imports []string `json:"imports,omitempty"`
-	}
+	var a addElementArgs
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}

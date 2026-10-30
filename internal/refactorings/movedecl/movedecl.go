@@ -52,33 +52,18 @@ Refuses, saying why: moving between a test file and a non-test file or to or fro
 }
 
 func (*MoveDeclaration) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":    {"type": "string",  "description": "Path of a file containing the declaration or a use of it, relative to the workspace root."},
-    "line":    {"type": "integer", "description": "1-based line of that occurrence. Omit it to find name as a symbol of the package of file."},
-    "name":    {"type": "string",  "description": "The declared name: with line, just the method name for a method; without line, the package-level name or Type.Method."},
-    "column":  {"type": "integer", "description": "Optional 1-based column, only needed to disambiguate."},
-    "to_file": {"type": "string",  "description": "Destination file, relative to the workspace root; created if it does not exist. In another directory, the declaration moves to that package."},
-    "new_name": {"type": "string", "description": "Optional, when moving to another package: the name in the new package (required for an unexported declaration used outside it, e.g. defaultHost -> DefaultHost)."},
-    "also":     {"type": "array", "items": {"type": "string"}, "description": "Optional: other top-level declarations of the package (in any of its files) to move with it, by name (not methods), e.g. the helpers it uses. They keep their names."},
-    "with_dependencies": {"type": "boolean", "description": "Optional, when moving to another package: also move every top-level declaration of the package that the moved code uses, and what those use, in place of naming them in also. One the package still uses after the move is exported (helper becomes Helper). The result lists each on a chose: line."}
-  },
-  "required": ["file", "name", "to_file"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[moveArgs]()
 }
 
 type moveArgs struct {
-	File    string   `json:"file"`
-	Line    int      `json:"line"`
-	Column  int      `json:"column,omitempty"`
-	Name    string   `json:"name"`
-	ToFile  string   `json:"to_file"`
-	NewName string   `json:"new_name,omitempty"`
-	Also    []string `json:"also,omitempty"`
-
-	WithDependencies bool `json:"with_dependencies,omitempty"`
+	File             string   `json:"file" desc:"Path of a file containing the declaration or a use of it, relative to the workspace root."`
+	Line             int      `json:"line,omitempty" desc:"1-based line of that occurrence. Omit it to find name as a symbol of the package of file."`
+	Name             string   `json:"name" desc:"The declared name: with line, just the method name for a method; without line, the package-level name or Type.Method."`
+	Column           int      `json:"column,omitempty" desc:"Optional 1-based column, only needed to disambiguate."`
+	ToFile           string   `json:"to_file" desc:"Destination file, relative to the workspace root; created if it does not exist. In another directory, the declaration moves to that package."`
+	NewName          string   `json:"new_name,omitempty" desc:"Optional, when moving to another package: the name in the new package (required for an unexported declaration used outside it, e.g. defaultHost -> DefaultHost)."`
+	Also             []string `json:"also,omitempty" desc:"Optional: other top-level declarations of the package (in any of its files) to move with it, by name (not methods), e.g. the helpers it uses. They keep their names."`
+	WithDependencies bool     `json:"with_dependencies,omitempty" desc:"Optional, when moving to another package: also move every top-level declaration of the package that the moved code uses, and what those use, in place of naming them in also. One the package still uses after the move is exported (helper becomes Helper). The result lists each on a chose: line."`
 }
 
 // mover holds what one move needs. The embedded declaration is the one

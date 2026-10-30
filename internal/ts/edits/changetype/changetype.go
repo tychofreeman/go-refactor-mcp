@@ -28,20 +28,18 @@ Give file, name (the alias) and type (what it is to stand for). An interface or 
 }
 
 func (*ChangeType) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file": {"type": "string", "description": "The file that declares the alias, relative to the root."},
-    "name": {"type": "string", "description": "The alias's name."},
-    "type": {"type": "string", "description": "What it is to stand for, as TypeScript valid in that file."}
-  },
-  "required": ["file", "name", "type"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[changeTypeArgs]()
+}
+
+// changeTypeArgs are the arguments of change_type.
+type changeTypeArgs struct {
+	File string `json:"file" desc:"The file that declares the alias, relative to the root."`
+	Name string `json:"name" desc:"The alias's name."`
+	Type string `json:"type" desc:"What it is to stand for, as TypeScript valid in that file."`
 }
 
 func (*ChangeType) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
-	var a struct{ File, Name, Type string }
+	var a changeTypeArgs
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}

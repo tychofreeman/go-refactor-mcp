@@ -38,24 +38,14 @@ Refuses, saying why: functions that differ in more than constants, or not at all
 }
 
 func (*Parameterize) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":       {"type": "string", "description": "Path of a file of the functions' package, relative to the workspace root."},
-    "functions":  {"type": "array", "items": {"type": "string"}, "description": "The functions, Name or Type.Method; the first one's names are the new function's."},
-    "name":       {"type": "string", "description": "Name of the new function (a method of the same type, for methods)."},
-    "parameters": {"type": "array", "items": {"type": "string"}, "description": "A name for each constant that differs, in the order they appear in the first function."}
-  },
-  "required": ["file", "functions", "name", "parameters"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[args]()
 }
 
 type args struct {
-	File       string   `json:"file"`
-	Functions  []string `json:"functions"`
-	Name       string   `json:"name"`
-	Parameters []string `json:"parameters"`
+	File       string   `json:"file" desc:"Path of a file of the functions' package, relative to the workspace root."`
+	Functions  []string `json:"functions" desc:"The functions, Name or Type.Method; the first one's names are the new function's."`
+	Name       string   `json:"name" desc:"Name of the new function (a method of the same type, for methods)."`
+	Parameters []string `json:"parameters" desc:"A name for each constant that differs, in the order they appear in the first function."`
 }
 
 // fun is one of the functions.

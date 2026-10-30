@@ -29,29 +29,18 @@ where is "before" the statement that starts on line, "after" the statement that 
 }
 
 func (*InsertStatements) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":    {"type": "string",  "description": "Path of the file, relative to the workspace root."},
-    "line":    {"type": "integer", "description": "1-based line: where a statement starts (before), ends (after), or a block opens (into)."},
-    "where":   {"type": "string",  "enum": ["before", "after", "into"], "description": "before or after the statement on line, or into the block opened on line."},
-    "content": {"type": "string",  "description": "The new statements, as Go source."},
-    "imports": {"type": "array", "items": {"type": "string"}, "description": "Optional: import paths to use for package names the content uses, when the name alone is ambiguous."}
-  },
-  "required": ["file", "line", "where", "content"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[args]()
 }
 
 // ChangesBehavior marks this as an edit.
 func (*InsertStatements) ChangesBehavior() {}
 
 type args struct {
-	File    string   `json:"file"`
-	Line    int      `json:"line"`
-	Where   string   `json:"where"`
-	Content string   `json:"content"`
-	Imports []string `json:"imports,omitempty"`
+	File    string   `json:"file" desc:"Path of the file, relative to the workspace root."`
+	Line    int      `json:"line" desc:"1-based line: where a statement starts (before), ends (after), or a block opens (into)."`
+	Where   string   `json:"where" desc:"before or after the statement on line, or into the block opened on line." enum:"before,after,into"`
+	Content string   `json:"content" desc:"The new statements, as Go source."`
+	Imports []string `json:"imports,omitempty" desc:"Optional: import paths to use for package names the content uses, when the name alone is ambiguous."`
 }
 
 // Plan checks preconditions and computes the edits.

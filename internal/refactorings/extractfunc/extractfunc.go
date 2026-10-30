@@ -65,32 +65,18 @@ Refuses, saying why: other returns, defer, recover, fallthrough, a break, contin
 }
 
 func (*ExtractFunction) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":       {"type": "string",  "description": "Path of the file, relative to the module root."},
-    "start_line": {"type": "integer", "description": "1-based first line of the statements to extract."},
-    "end_line":   {"type": "integer", "description": "1-based last line of the statements to extract (inclusive)."},
-    "function":   {"type": "string",  "description": "Instead of the lines, with case: the function (Name or Type.Method) with the switch."},
-    "case":       {"type": "string",  "description": "Instead of the lines: the case whose body to extract, its value as written (\"\\\"fern\\\"\", Red) or default."},
-    "split":      {"type": "boolean", "description": "With case, of several values (case \"fern\", \"moss\":): unless false, the value gets a case of its own, the others a copy of the body."},
-    "name":       {"type": "string",  "description": "Name for the new function."},
-    "doc":        {"type": "string",  "description": "Optional doc comment for the new function, without or with the leading //; start it with the function's name."}
-  },
-  "required": ["file", "name"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[args]()
 }
 
 type args struct {
-	File      string `json:"file"`
-	StartLine int    `json:"start_line"`
-	EndLine   int    `json:"end_line"`
-	Function  string `json:"function,omitempty"`
-	Case      string `json:"case,omitempty"`
-	Split     *bool  `json:"split,omitempty"`
-	Name      string `json:"name"`
-	Doc       string `json:"doc,omitempty"`
+	File      string `json:"file" desc:"Path of the file, relative to the module root."`
+	StartLine int    `json:"start_line,omitempty" desc:"1-based first line of the statements to extract."`
+	EndLine   int    `json:"end_line,omitempty" desc:"1-based last line of the statements to extract (inclusive)."`
+	Function  string `json:"function,omitempty" desc:"Instead of the lines, with case: the function (Name or Type.Method) with the switch."`
+	Case      string `json:"case,omitempty" desc:"Instead of the lines: the case whose body to extract, its value as written (\"\\\"fern\\\"\", Red) or default."`
+	Split     *bool  `json:"split,omitempty" desc:"With case, of several values (case \"fern\", \"moss\":): unless false, the value gets a case of its own, the others a copy of the body."`
+	Name      string `json:"name" desc:"Name for the new function."`
+	Doc       string `json:"doc,omitempty" desc:"Optional doc comment for the new function, without or with the leading //; start it with the function's name."`
 }
 
 // extraction holds the state of one planning run.

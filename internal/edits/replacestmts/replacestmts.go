@@ -40,35 +40,21 @@ Imports are added and removed as content needs.`
 }
 
 func (*ReplaceStatements) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":       {"type": "string",  "description": "Relative to the root."},
-    "function":   {"type": "string",  "description": "Instead of the lines: the function (Name or Type.Method)."},
-    "case":       {"type": "string",  "description": "With function: that case's body, by value (\"\\\"fern\\\"\") or default."},
-    "start_line": {"type": "integer", "description": "First line."},
-    "end_line":   {"type": "integer", "description": "Last line."},
-    "content":    {"type": "string",  "description": "The new statements."},
-    "wrap":       {"type": "string",  "description": "Instead of content: code with a line $body."},
-    "imports":    {"type": "array", "items": {"type": "string"}, "description": "Paths to import for ambiguous names (math/rand)."}
-  },
-  "required": ["file"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[args]()
 }
 
 // ChangesBehavior marks this as an edit.
 func (*ReplaceStatements) ChangesBehavior() {}
 
 type args struct {
-	File      string   `json:"file"`
-	Function  string   `json:"function,omitempty"`
-	Case      string   `json:"case,omitempty"`
-	StartLine int      `json:"start_line"`
-	EndLine   int      `json:"end_line"`
-	Content   string   `json:"content"`
-	Wrap      string   `json:"wrap,omitempty"`
-	Imports   []string `json:"imports,omitempty"`
+	File      string   `json:"file" desc:"Relative to the root."`
+	Function  string   `json:"function,omitempty" desc:"Instead of the lines: the function (Name or Type.Method)."`
+	Case      string   `json:"case,omitempty" desc:"With function: that case's body, by value (\"\\\"fern\\\"\") or default."`
+	StartLine int      `json:"start_line,omitempty" desc:"First line."`
+	EndLine   int      `json:"end_line,omitempty" desc:"Last line."`
+	Content   string   `json:"content,omitempty" desc:"The new statements."`
+	Wrap      string   `json:"wrap,omitempty" desc:"Instead of content: code with a line $body."`
+	Imports   []string `json:"imports,omitempty" desc:"Paths to import for ambiguous names (math/rand)."`
 }
 
 // Plan checks preconditions and computes the edits.

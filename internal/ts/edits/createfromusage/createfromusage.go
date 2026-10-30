@@ -33,17 +33,15 @@ Refuses, saying why: a name the file does not call, make or read; a use whose ty
 }
 
 func (*CreateFromUsage) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":  {"type": "string", "description": "The file that calls them, relative to the root."},
-    "names":   {"type": "array", "items": {"type": "string"}, "description": "The names it uses that nothing declares."},
-    "results": {"type": "object", "additionalProperties": {"type": "string"}, "description": "Optional: types by name, for uses that do not tell them: a function's or method's result, a property's type ({\"shade\": \"number\"})."},
-    "to_file": {"type": "string", "description": "Optional: the file, relative to the root, for the stubs of the file's own names, exported and imported; created if new."}
-  },
-  "required": ["file", "names"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[createFromUsageArgs]()
+}
+
+// createFromUsageArgs are the arguments of create_from_usage.
+type createFromUsageArgs struct {
+	File    string            `json:"file" desc:"The file that calls them, relative to the root."`
+	Names   []string          `json:"names" desc:"The names it uses that nothing declares."`
+	Results map[string]string `json:"results,omitempty" desc:"Optional: types by name, for uses that do not tell them: a function's or method's result, a property's type ({\"shade\": \"number\"})."`
+	ToFile  string            `json:"to_file,omitempty" desc:"Optional: the file, relative to the root, for the stubs of the file's own names, exported and imported; created if new."`
 }
 
 func (*CreateFromUsage) ChangesBehavior() {}
@@ -97,12 +95,7 @@ func (*CreateFromUsage) Declared(ws *workspace.Workspace) map[string]bool {
 }
 
 func (*CreateFromUsage) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
-	var a struct {
-		File    string            `json:"file"`
-		Names   []string          `json:"names"`
-		Results map[string]string `json:"results"`
-		ToFile  string            `json:"to_file"`
-	}
+	var a createFromUsageArgs
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
