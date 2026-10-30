@@ -6,18 +6,20 @@ import (
 	"go/token"
 	"go/types"
 	"slices"
+
+	"github.com/tychofreeman/go-refactor-mcp/internal/reorder"
 )
 
 // Times says how often an expression would be evaluated after a move,
 // for each time it is evaluated now.
-type Times int
+type Times = reorder.Times
 
 const (
-	Once    Times = iota // as often as now
-	Maybe                // once or not at all (it moves under a condition)
-	Several              // once for each of several uses, each evaluating it again
-	Shared               // once, with the one value standing for several evaluations
-	Unused               // once more or once less, where nothing uses the value (an argument added or dropped)
+	Once    = reorder.Once
+	Maybe   = reorder.Maybe
+	Several = reorder.Several
+	Shared  = reorder.Shared
+	Unused  = reorder.Unused
 )
 
 // Move is a change to where, or how often, an expression is evaluated:
@@ -84,32 +86,23 @@ func (m Move) Check() *Obstacle {
 	acts := Obstacle{Kind: Acts, In: s.At.Effect, Does: "has side effects (" + s.Effect + ")"}
 	panicking := Obstacle{Kind: Panics, In: panicAt, Does: "could panic: it " + s.Unsafe}
 	reads := Obstacle{Kind: Reads, In: s.At.Reads, Does: s.Reads}
-	switch m.Times {
-	case Maybe, Unused:
-		then := ", which would then not always happen"
-		if m.Times == Unused {
-			then = ", which would then happen another number of times"
-		}
-		if s.Effect != "" {
-			return acts.why(q + " " + acts.Does + then)
-		}
-		if panics != NoPanic {
-			return panicking.why(q + " " + panicking.Does + then)
-		}
-	case Several, Shared:
-		then := ", which would then happen another number of times"
-		if s.Effect != "" {
-			return acts.why(q + " " + acts.Does + then)
-		}
-		if s.Reads != "" && !m.Between {
-			return reads.why(q + " " + s.Reads + ", which could change between evaluations")
-		}
-		if panics != NoPanic && m.Times == Several { // shared, it panics the first time either way
-			return panicking.why(q + " " + panicking.Does + then)
-		}
-		if s.Makes != "" {
-			return (&Obstacle{Kind: Makes, In: s.At.Makes, Does: s.Makes}).why(q + " " + s.Makes + ", and each evaluation makes another")
-		}
+	leaves := Obstacle{Kind: Acts, In: transfers([]ast.Node{m.Expr}), Does: "leaves the code around it"}
+	e := facts(s, panics, []ast.Node{m.Expr})
+	then := ", which would then happen another number of times"
+	if m.Times == Maybe {
+		then = ", which would then not always happen"
+	}
+	switch reorder.Repeat(m.Times, e, m.Between) {
+	case reorder.Writing:
+		return acts.why(q + " " + acts.Does + then)
+	case reorder.Leaving:
+		return leaves.why(q + " " + leaves.Does + then)
+	case reorder.Throwing:
+		return panicking.why(q + " " + panicking.Does + then)
+	case reorder.Reading:
+		return reads.why(q + " " + s.Reads + ", which could change between evaluations")
+	case reorder.Making:
+		return (&Obstacle{Kind: Makes, In: s.At.Makes, Does: s.Makes}).why(q + " " + s.Makes + ", and each evaluation makes another")
 	}
 	if len(m.Past) == 0 {
 		return nil
@@ -134,42 +127,52 @@ func (m Move) Check() *Obstacle {
 		}
 		return nil
 	}
-	if s.Effect != "" {
-		switch {
-		case p.Effect != "":
-			return before(acts, p.At.Effect, p.Effect)
-		case p.Reads != "":
-			return before(acts, p.At.Reads, p.Reads)
-		case p.Stops != "":
-			return before(acts, p.At.Stops, p.Stops)
-		case p.Panics == OtherPanic: // a nil dereference panics either way, only what is printed before differs
-			return before(acts, p.At.OtherPanic, "could panic (it "+p.Unsafe+")")
-		case transfers(m.Past) != nil:
-			return before(acts, transfers(m.Past), "leaves")
-		case where != nil:
-			return before(acts, where, "assigns "+written.Name())
+	pastDoes := func(k reorder.Kind) (ast.Node, string) {
+		switch k {
+		case reorder.Writing:
+			return p.At.Effect, p.Effect
+		case reorder.Reading:
+			return p.At.Reads, p.Reads
+		case reorder.Stopping:
+			return p.At.Stops, p.Stops
+		case reorder.Leaving:
+			return transfers(m.Past), "leaves"
 		}
+		if k == reorder.Throwing && e.Writes {
+			return p.At.OtherPanic, "could panic (it " + p.Unsafe + ")"
+		}
+		return p.At.Panic, "could panic (it " + p.Unsafe + ")"
+	}
+	ek, pk := reorder.Conflict(e, facts(p, p.Panics, m.Past))
+	if ek == reorder.Writing {
+		at, does := pastDoes(pk)
+		return before(acts, at, does)
 	}
 	if written != nil {
+		if s.Effect != "" {
+			return before(acts, where, "assigns "+written.Name())
+		}
 		reads.In, reads.Does = useOf(m.Func.Info, m.Expr, written), "reads "+written.Name()
 		return before(reads, where, "assigns "+written.Name())
 	}
-	if s.Reads != "" && p.Effect != "" {
-		return before(reads, p.At.Effect, p.Effect)
-	}
-	if panics != NoPanic {
-		switch {
-		case p.Stops != "":
-			return before(panicking, p.At.Stops, p.Stops)
-		case transfers(m.Past) != nil:
-			return before(panicking, transfers(m.Past), "leaves")
-		case p.Effect != "" && panics == OtherPanic:
-			return before(panicking, p.At.Effect, p.Effect)
-		case p.Panics != NoPanic && (panics == OtherPanic || p.Panics == OtherPanic):
-			return before(panicking, p.At.Panic, "could panic (it "+p.Unsafe+")")
-		}
+	if ek != reorder.None {
+		at, does := pastDoes(pk)
+		return before(map[reorder.Kind]Obstacle{reorder.Reading: reads, reorder.Throwing: panicking, reorder.Leaving: leaves}[ek], at, does)
 	}
 	return nil
+}
+
+// facts are what the code nodes, summarized as s, may do, as moves
+// judges it, with panics as how it may panic.
+func facts(s Summary, panics PanicKind, nodes []ast.Node) reorder.Facts {
+	throws := reorder.NoThrow
+	switch panics {
+	case NilPanic:
+		throws = reorder.OnNull
+	case OtherPanic:
+		throws = reorder.OtherThrow
+	}
+	return reorder.Facts{Writes: s.Effect != "", Reads: s.Reads != "", Throws: throws, Makes: s.Makes != "", Leaves: transfers(nodes) != nil, Stops: s.Stops != ""}
 }
 
 // why returns o with its sentence.

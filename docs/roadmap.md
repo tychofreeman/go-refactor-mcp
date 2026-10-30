@@ -2613,7 +2613,16 @@ hand or a tool got in the way.
        (about 100 lines): the rules agree since 45.4; a core over
        neutral facts (acts, throws: none, on null, otherwise; reads;
        makes; leaves; locals assigned), each language wording its
-       refusals.
+       refusals. *Done* (2026-10-30): `internal/reorder` holds `Times`,
+       the facts, `Repeat` (another number of times) and `Conflict`
+       (past other code); `analysis.Move.Check` and tsapi's `Check`
+       and `conflict` find their facts and word the result. What it
+       changed: Go also refuses code that leaves (a statement with a
+       return) under a condition or past an act, as TypeScript did;
+       a refusal names an act before a read when both apply, so one
+       Go golden's wording changed. Locals assigned stay with each
+       language, which finds them differently. About the same lines:
+       the gain is one place for the rules.
     3. **A module function that runs its callback only during the
        call**, known from its body, not a table: tsapi's own
        `inspect` and a user's helpers. Open questions for the user
