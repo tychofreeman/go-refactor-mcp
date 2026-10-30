@@ -3906,3 +3906,14 @@ was first called `moves`, a name tsapi's file already used, which the
 batch refused. Two TypeScript tests and one Go golden expected the read
 named before an act; the core names acts first, and the Go golden's
 wording was changed. Nothing else by hand.
+
+## 2026-10-30: callbacks a module function runs only during the call (item 46.3)
+
+Through the CLI, goldens first. The Effects went through `AnalyzeFunc`,
+`FuncAround`, `SyncLit` and `CallsBeforeReturning` by four add_parameter
+steps (value nil at every call), then replace_text gave each refactoring's
+call its own Effects; one caller with no workspace keeps nil. The analysis
+(`during.go`) is new code, written by hand into create_file; its first
+version recursed without end on a visit function that calls itself, which
+the tests caught. A struct literal's alignment was fixed with gofmt -w,
+by hand. Nothing else by hand.

@@ -18,7 +18,7 @@ import (
 // evaluated once on every call. The value may not have side effects at
 // all: they belong to the body, not to every call.
 func (t *target) checkEvaluation(info *types.Info, file *ast.File, expr ast.Expr, q string) error {
-	m := analysis.Move{Effects: t.WS.Effects(), Func: analysis.AnalyzeFunc(info, t.decl), Expr: expr}
+	m := analysis.Move{Effects: t.WS.Effects(), Func: analysis.AnalyzeFunc(info, t.decl, t.WS.Effects()), Expr: expr}
 	if s := m.Effects.Of(m.Func, expr); s.Effect != "" { // the value is evaluated at the call, where the body's effects do not belong
 		return refactor.Refusef("%s has side effects (%s); evaluated at each call instead, they would happen where the body would not", q, t.brief(s.At.Effect))
 	}

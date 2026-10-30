@@ -183,7 +183,7 @@ func (x *inliner) findDeclaration() error {
 	if fn == nil {
 		return refactor.Refusef("%q is not declared inside a function", name)
 	}
-	x.fa = analysis.AnalyzeFunc(x.Info, fn)
+	x.fa = analysis.AnalyzeFunc(x.Info, fn, x.WS.Effects())
 
 	together := fmt.Sprintf("%q is declared together with other names; only a variable declared on its own (x := expr) can be inlined", name)
 	stmtIndex := -1

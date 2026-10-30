@@ -424,7 +424,7 @@ func (f *folder) try(p *packages.Package, file *ast.File, x ast.Expr, stack []as
 		return false, nil
 	}
 	b := a.Bound
-	fa := analysis.FuncAround(info, stack)
+	fa := analysis.FuncAround(info, stack, f.ws.Effects())
 	where := f.ws.Position(x.Pos())
 	skip := func(why string) (bool, error) {
 		f.skipped = append(f.skipped, where+": "+why)
@@ -483,7 +483,7 @@ func (f *folder) trySetter(p *packages.Package, file *ast.File, x ast.Expr, stac
 	}
 	a := f.m.At(info)
 	b := a.Bound
-	fa := analysis.FuncAround(info, stack)
+	fa := analysis.FuncAround(info, stack, f.ws.Effects())
 	b[pattern.HoleKey{Obj: f.self, Field: ""}] = lit
 	var drop []int
 	for _, s := range f.sets {
@@ -1267,7 +1267,7 @@ func pointerStays(info *types.Info, p ast.Expr, seq []ast.Stmt, stack []ast.Node
 	for i := len(stack) - 1; i >= 0; i-- {
 		switch fn := stack[i].(type) {
 		case *ast.FuncDecl, *ast.FuncLit:
-			fa := analysis.AnalyzeFunc(info, fn)
+			fa := analysis.AnalyzeFunc(info, fn, nil)
 			if fa.Addressed[v] || fa.Captured[v] {
 				return "reads " + v.Name() + ", which a closure or pointer can change"
 			}
@@ -1342,7 +1342,7 @@ func (f *folder) foldStmts(p *packages.Package, file *ast.File, list []ast.Stmt,
 			continue
 		}
 		b := a.Bound
-		fa := analysis.FuncAround(info, stack)
+		fa := analysis.FuncAround(info, stack, f.ws.Effects())
 		seq := list[i : i+n]
 		where := f.ws.Position(seq[0].Pos())
 		skip := ""

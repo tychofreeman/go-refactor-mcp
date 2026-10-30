@@ -88,7 +88,7 @@ func (m *MoveStatement) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 	if err != nil {
 		return nil, err
 	}
-	f := analysis.AnalyzeFunc(pkg.TypesInfo, analysis.OutermostFunc(analysis.PathTo(file, first)))
+	f := analysis.AnalyzeFunc(pkg.TypesInfo, analysis.OutermostFunc(analysis.PathTo(file, first)), ws.Effects())
 	effects := ws.Effects()
 	if err := checkIndependent(factsOf(f, tf, first, effects), factsOf(f, tf, second, effects), f, effects); err != nil {
 		return nil, err

@@ -36,7 +36,7 @@ func TestOwner(t *testing.T) {
 		t.Fatal(err)
 	}
 	fd := file.Decls[len(file.Decls)-1].(*ast.FuncDecl)
-	f := AnalyzeFunc(info, fd)
+	f := AnalyzeFunc(info, fd, nil)
 	want := map[string]Owner{"a": ThisCode, "g": Anyone, "p.n": Anyone, "xs[0]": Anyone, `m["k"]`: ThisFunc, "b": ThisFunc, "c": ThisFunc}
 	last := fd.Body.List[len(fd.Body.List)-1].(*ast.AssignStmt).Rhs[0]
 	seen := 0
