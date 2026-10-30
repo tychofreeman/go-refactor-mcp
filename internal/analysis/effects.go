@@ -31,9 +31,11 @@ type Where struct {
 // Effects summarizes calls: of functions known to have no side effects,
 // and of the functions of the packages added to it, from their bodies.
 type Effects struct {
-	decls  map[*types.Func]funcSource
-	memo   map[*types.Func]*Summary
-	active map[*types.Func]bool // being summarized: a call back to one is recursion
+	decls   map[*types.Func]funcSource
+	memo    map[*types.Func]*Summary
+	during  map[during]bool       // RunsOnlyDuring's answers
+	judging map[types.Object]bool // the variables onlyCalledDuring is judging
+	active  map[*types.Func]bool  // being summarized: a call back to one is recursion
 }
 
 // funcSource is a function's declaration and the type information of
@@ -45,7 +47,7 @@ type funcSource struct {
 
 // NewEffects returns an Effects that knows no packages yet.
 func NewEffects() *Effects {
-	return &Effects{decls: map[*types.Func]funcSource{}, memo: map[*types.Func]*Summary{}, active: map[*types.Func]bool{}}
+	return &Effects{decls: map[*types.Func]funcSource{}, memo: map[*types.Func]*Summary{}, active: map[*types.Func]bool{}, during: map[during]bool{}, judging: map[types.Object]bool{}}
 }
 
 // AddPackage lets e summarize the functions declared in files, which
@@ -524,7 +526,7 @@ type body struct {
 // do. Writes to its own local variables, and through those that hold
 // memory it made itself, are not side effects.
 func (e *Effects) summarize(src funcSource) *Summary {
-	f := AnalyzeFunc(src.info, src.decl)
+	f := AnalyzeFunc(src.info, src.decl, e)
 	b := &body{e: e, owned: owned{f: f, own: ThisFunc}, sync: map[*ast.FuncLit]bool{}, callees: map[ast.Expr]bool{}, addressed: addressedIn(src.info, src.decl.Body)}
 	var fill *ast.BlockStmt
 	b.recv, b.cache, fill = cacheOf(src.info, src.decl)

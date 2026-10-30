@@ -302,7 +302,7 @@ func (t *target) checkIntroduced(info *types.Info, file *ast.File, expr ast.Expr
 }
 
 func (t *target) checkReads(info *types.Info, expr ast.Expr, q string) error {
-	fa := analysis.AnalyzeFunc(info, t.decl)
+	fa := analysis.AnalyzeFunc(info, t.decl, t.WS.Effects())
 	isParam := t.paramObjects(info)
 	for _, id := range analysis.ScopeRefs(info, expr) {
 		v, ok := info.Uses[id].(*types.Var)

@@ -340,7 +340,7 @@ func (x *inliner) findCall() error {
 	if x.callerFn == nil {
 		return refactor.Refusef("the call to %q at %s is not inside a function (it initializes a package-level variable); only calls in function bodies can be inlined", name, x.WS.Position(call.Pos()))
 	}
-	x.callerFA = analysis.AnalyzeFunc(x.Info, analysis.OutermostFunc(path))
+	x.callerFA = analysis.AnalyzeFunc(x.Info, analysis.OutermostFunc(path), x.WS.Effects())
 	if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
 		s := x.Info.Selections[sel]
 		switch {
@@ -403,7 +403,7 @@ func (x *inliner) findCallee() error {
 		}
 		x.callee.Src = src
 	}
-	x.calleeFA = analysis.AnalyzeFunc(x.Info, x.decl)
+	x.calleeFA = analysis.AnalyzeFunc(x.Info, x.decl, x.WS.Effects())
 	x.fnScope = x.Info.Scopes[x.decl.Type]
 	return nil
 }

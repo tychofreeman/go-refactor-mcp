@@ -342,6 +342,12 @@ patterns sessions use, with their steps, in `docs/patterns.md`.
   Go's nil dereference (a nullish read may pass code that writes but
   does not throw otherwise or leave), Go takes TypeScript's leaving
   (an effect does not move past a return, break or continue).
+- **A module function that calls its callback only during the call**
+  (2026-10-30, the user, item 46.3): known from its body
+  (`Effects.RunsOnlyDuring`), per parameter, recursion assumed to
+  qualify while judged, interface methods never, Go first. A new
+  caller of `AnalyzeFunc` passes its workspace's Effects, or nil for
+  the table of known functions alone.
 - **Schemas come from argument structs** (2026-10-30, item 45.1):
   `refactor.Schema[T]()`; a property is a field with a `desc` tag,
   optional with omitempty. Published schemas did not change, so the A/B

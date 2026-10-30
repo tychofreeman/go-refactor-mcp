@@ -50,7 +50,7 @@ type Func struct {
 // go or defer), or passed directly to a function known to call it only
 // before returning (sort.Slice, ast.Inspect, ...). goDefer holds the calls
 // of go and defer statements.
-func SyncLit(info *types.Info, lit *ast.FuncLit, parent ast.Node, goDefer map[*ast.CallExpr]bool) bool {
+func SyncLit(info *types.Info, lit *ast.FuncLit, parent ast.Node, goDefer map[*ast.CallExpr]bool, e *Effects) bool {
 	call, ok := parent.(*ast.CallExpr)
 	if !ok || goDefer[call] {
 		return false
@@ -60,16 +60,18 @@ func SyncLit(info *types.Info, lit *ast.FuncLit, parent ast.Node, goDefer map[*a
 	}
 	for _, a := range call.Args {
 		if ast.Unparen(a) == lit {
-			return CallsBeforeReturning(info, call)
+			return CallsBeforeReturning(info, call, a, e)
 		}
 	}
 	return false
 }
 
 // CallsBeforeReturning reports whether call is of a function or method
-// known to call the functions passed to it only before it returns
-// (ast.Inspect, sort.Slice, the TypeScript compiler's ForEachChild).
-func CallsBeforeReturning(info *types.Info, call *ast.CallExpr) bool {
+// that calls the function arg, one of its arguments, only before it
+// returns: one known to (ast.Inspect, sort.Slice, the TypeScript
+// compiler's ForEachChild), or, with e, a function of the module whose
+// body shows it (Effects.RunsOnlyDuring).
+func CallsBeforeReturning(info *types.Info, call *ast.CallExpr, arg ast.Expr, e *Effects) bool {
 	fn, ok := info.Uses[IdentOf(call.Fun)].(*types.Func)
 	if !ok || fn.Pkg() == nil {
 		return false
@@ -78,12 +80,22 @@ func CallsBeforeReturning(info *types.Info, call *ast.CallExpr) bool {
 	if fn.Signature().Recv() != nil {
 		key = fn.FullName()
 	}
-	_, ok = syncCalls[key]
-	return ok
+	if _, ok := syncCalls[key]; ok {
+		return true
+	}
+	if e == nil {
+		return false
+	}
+	for i, a := range call.Args {
+		if ast.Unparen(a) == ast.Unparen(arg) {
+			return e.RunsOnlyDuring(fn, i)
+		}
+	}
+	return false
 }
 
 // AnalyzeFunc computes the facts for fn.
-func AnalyzeFunc(info *types.Info, fn ast.Node) *Func {
+func AnalyzeFunc(info *types.Info, fn ast.Node, e *Effects) *Func {
 	f := &Func{
 		Node: fn, Info: info,
 		Addressed:     map[*types.Var]bool{},
@@ -128,7 +140,7 @@ func AnalyzeFunc(info *types.Info, fn ast.Node) *Func {
 			}
 		case *ast.FuncLit:
 			lits = append(lits, n)
-			sync[n] = SyncLit(info, n, parent, goDefer)
+			sync[n] = SyncLit(info, n, parent, goDefer, e)
 		case *ast.UnaryExpr:
 			if n.Op == token.AND {
 				address(n.X)
@@ -192,7 +204,7 @@ func Outside(info *types.Info) *Func {
 // path, the nodes around it in either order: the outermost FuncDecl or
 // FuncLit, whose facts cover the literals in it; or, when there is none,
 // those of code in no function.
-func FuncAround(info *types.Info, path []ast.Node) *Func {
+func FuncAround(info *types.Info, path []ast.Node, e *Effects) *Func {
 	var fn ast.Node
 	for _, n := range path {
 		switch n.(type) {
@@ -205,7 +217,7 @@ func FuncAround(info *types.Info, path []ast.Node) *Func {
 	if fn == nil {
 		return Outside(info)
 	}
-	return AnalyzeFunc(info, fn)
+	return AnalyzeFunc(info, fn, e)
 }
 
 // Escapes reports whether code other than direct reads and writes in this

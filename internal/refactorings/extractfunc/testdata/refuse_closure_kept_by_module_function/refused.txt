@@ -1,0 +1,1 @@
+n (declared at line 12) is used by a function literal that can run later

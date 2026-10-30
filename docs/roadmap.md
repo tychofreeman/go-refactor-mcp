@@ -2619,6 +2619,20 @@ hand or a tool got in the way.
        `inspect` and a user's helpers. Open questions for the user
        (2026-10-30): what counts as "only during", recursion, per
        parameter, methods, TypeScript too, where the fact lives.
+       *Done for Go* (2026-10-30, the user agreed to the answers):
+       `Effects.RunsOnlyDuring(fn, i)`, per parameter and cached in the
+       Effects, judges a module function's body: the function is
+       called (not with go), passed to a function that does the same,
+       or used in a literal that runs only during the call (called at
+       once, passed on so, or held in a local used only so); stored,
+       returned or passed anywhere else, it does not qualify. While a
+       function or a local is being judged, a use leading back to it
+       counts as qualifying (recursion). Methods of interfaces and
+       variadic parameters do not qualify. `analysis.AnalyzeFunc`,
+       `FuncAround`, `SyncLit` and `CallsBeforeReturning` take the
+       Effects (threaded with add_parameter); the refactorings pass
+       theirs. tsapi's `CaseLines` lookup, refused before, now
+       extracts. TypeScript's own analysis is next if wanted.
     4. **Placing and replacing Go declarations** (about 120 lines):
        add_declaration, add_field, insert_statements and
        extract_struct find where code goes and write it in the
