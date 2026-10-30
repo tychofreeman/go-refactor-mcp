@@ -10,6 +10,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/changetype"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/replacetext"
+	"github.com/tychofreeman/go-refactor-mcp/internal/ts/tstest"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/workspace"
 )
 
@@ -48,37 +49,19 @@ func load(t *testing.T, extra map[string]string) (*workspace.Workspace, string) 
 	for k, v := range extra {
 		files[k] = v
 	}
-	for name, text := range files {
-		p := filepath.Join(dir, name)
-		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(p, []byte(text), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	ws, err := workspace.Load(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ws := tstest.Load(t, dir, files)
 	return ws, dir
 }
 
 func run(t *testing.T, ws *workspace.Workspace, r refactor.RefactoringOf[*workspace.Workspace], args string) *refactor.Result {
 	t.Helper()
-	res, err := refactor.Run(ws, r, json.RawMessage(`{"file": "src/water.ts", `+args[1:]), refactor.OptionsOf[*workspace.Workspace]{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	res := tstest.Run(t, ws, r, `{"file": "src/water.ts", `+args[1:])
 	return res
 }
 
 func mustContain(t *testing.T, dir, file string, wants ...string) {
 	t.Helper()
-	b, err := os.ReadFile(filepath.Join(dir, file))
-	if err != nil {
-		t.Fatal(err)
-	}
+	b := tstest.Read(t, dir, file)
 	for _, w := range wants {
 		if !strings.Contains(string(b), w) {
 			t.Errorf("%s lacks %q:\n%s", file, w, b)
@@ -625,10 +608,7 @@ func TestParamsToObject(t *testing.T) {
 	mustContain(t, dir, "src/water.ts", "export interface PruneOptions {\n  bed: string;\n  height: number;\n}\n\nexport function prune({ bed, height }: PruneOptions): string {")
 	mustContain(t, dir, "src/garden.ts", `prune({ bed: "roses", height: 3 })`)
 
-	res, err := refactor.Run(ws, NewParamsToObject(), json.RawMessage(`{"file": "src/plant.ts", "name": "plant"}`), refactor.OptionsOf[*workspace.Workspace]{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	res := tstest.Run(t, ws, NewParamsToObject(), `{"file": "src/plant.ts", "name": "plant"}`)
 	if want := "plant has a rest parameter"; res.Applied || !strings.Contains(res.Refused, want) {
 		t.Errorf("want a refusal with %q, got %s", want, res)
 	}
@@ -980,10 +960,7 @@ export function rank(x: Plant): number {
 
 export const other = { species: "fern" };
 `})
-	res, err := refactor.Run(ws, NewChangeFieldType(), json.RawMessage(`{"file": "src/plant.ts", "name": "Plant.species", "type": "\"moss\" | Fern", "values": {"fern": "FERN"}}`), refactor.OptionsOf[*workspace.Workspace]{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	res := tstest.Run(t, ws, NewChangeFieldType(), `{"file": "src/plant.ts", "name": "Plant.species", "type": "\"moss\" | Fern", "values": {"fern": "FERN"}}`)
 	if !res.Applied {
 		t.Fatalf("%s", res)
 	}

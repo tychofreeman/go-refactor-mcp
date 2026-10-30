@@ -406,14 +406,14 @@ func (w *Workspace) Apply(label string, fes []edit.FileEdit) (history.Change, er
 		_ = c.Restore()
 		return history.Change{}, err
 	}
-	if err := w.update(paths(c.After)); err != nil {
+	if err := w.update(history.Paths(c.After)); err != nil {
 		// The module does not load with the change: put the files back, and
 		// the workspace as it was with them.
 		if rerr := c.Restore(); rerr != nil {
 			w.History.Push(c) // still on disk: undo can try again
 			return history.Change{}, fmt.Errorf("%w: %v; putting the files back failed too: %v", ErrBreaksLoading, err, rerr)
 		}
-		if uerr := w.update(paths(c.Before)); uerr != nil {
+		if uerr := w.update(history.Paths(c.Before)); uerr != nil {
 			return history.Change{}, fmt.Errorf("%w: %v; the files are back, but reloading them failed: %v", ErrBreaksLoading, err, uerr)
 		}
 		return history.Change{}, fmt.Errorf("%w: %v", ErrBreaksLoading, err)
@@ -449,7 +449,7 @@ func (w *Workspace) Undo() (history.Change, error) {
 	if err != nil {
 		return history.Change{}, err
 	}
-	return inverse, w.update(paths(inverse.After))
+	return inverse, w.update(history.Paths(inverse.After))
 }
 
 // gofmtIfClean formats the edited file, but only if the original was
@@ -517,15 +517,6 @@ func spaceUnit(src []byte) string {
 		return ""
 	}
 	return strings.Repeat(" ", unit)
-}
-
-func paths(files map[string][]byte) []string {
-	var out []string
-	for p := range files {
-		out = append(out, p)
-	}
-	sort.Strings(out)
-	return out
 }
 
 // SaveUndo writes the undo stack to path, its last 50 changes,

@@ -2,8 +2,6 @@ package createfromusage
 
 import (
 	"encoding/json"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -11,6 +9,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/adddecl"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/fiximports"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/edits/replacetext"
+	"github.com/tychofreeman/go-refactor-mcp/internal/ts/tstest"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/workspace"
 )
 
@@ -20,29 +19,13 @@ func load(t *testing.T, files map[string]string) (*workspace.Workspace, string) 
 	t.Helper()
 	dir := t.TempDir()
 	files["tsconfig.json"] = `{"compilerOptions": {"strict": true, "module": "ESNext", "moduleResolution": "Bundler", "noEmit": true, "types": []}, "include": ["src"]}`
-	for name, text := range files {
-		p := filepath.Join(dir, name)
-		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(p, []byte(text), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	ws, err := workspace.Load(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ws := tstest.Load(t, dir, files)
 	return ws, dir
 }
 
 func read(t *testing.T, dir, rel string) string {
 	t.Helper()
-	b, err := os.ReadFile(filepath.Join(dir, rel))
-	if err != nil {
-		t.Fatal(err)
-	}
-	return string(b)
+	return tstest.Read(t, dir, rel)
 }
 
 func mk(r refactor.RefactoringOf[*workspace.Workspace], args map[string]string) step {

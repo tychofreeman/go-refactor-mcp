@@ -1,13 +1,13 @@
 package replaceexpr
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/ts/tstest"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/workspace"
 )
 
@@ -26,10 +26,7 @@ func garden(t *testing.T) (*workspace.Workspace, string) {
 
 func run(t *testing.T, ws *workspace.Workspace, args string) *refactor.Result {
 	t.Helper()
-	res, err := refactor.Run(ws, New(), json.RawMessage(`{"file": "src/garden.ts", `+args[1:]), refactor.OptionsOf[*workspace.Workspace]{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	res := tstest.Run(t, ws, New(), `{"file": "src/garden.ts", `+args[1:])
 	return res
 }
 

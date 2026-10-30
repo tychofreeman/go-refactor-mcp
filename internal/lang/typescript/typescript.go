@@ -166,7 +166,7 @@ func (l *Language) route(args json.RawMessage) (ws *workspace.Workspace, out jso
 	for _, f := range lang.NamedFiles(v) {
 		a, r := abs(f), homeRoot
 		if !home.Has(a) {
-			if c := nearestConfig(existingDir(filepath.Dir(a))); c != "" && !configs[c] {
+			if c := nearestConfig(lang.ExistingDir(filepath.Dir(a))); c != "" && !configs[c] {
 				r = filepath.Dir(c)
 			}
 		}
@@ -179,7 +179,7 @@ func (l *Language) route(args json.RawMessage) (ws *workspace.Workspace, out jso
 	case len(roots) > 1:
 		var parts []string
 		for _, r := range roots {
-			parts = append(parts, fmt.Sprintf("%s (%s)", relTo(homeRoot, r), strings.Join(byRoot[r], ", ")))
+			parts = append(parts, fmt.Sprintf("%s (%s)", lang.RelTo(homeRoot, r), strings.Join(byRoot[r], ", ")))
 		}
 		return nil, nil, "", fmt.Sprintf("this call names files of more than one solution: %s. A call or batch works in one solution; send the steps for each as separate calls.", strings.Join(parts, "; ")), nil
 	case len(roots) == 0 || roots[0] == homeRoot:
@@ -189,8 +189,8 @@ func (l *Language) route(args json.RawMessage) (ws *workspace.Workspace, out jso
 	if ws, err = l.solution(root); err != nil {
 		return nil, nil, "", "", err
 	}
-	out, err = json.Marshal(lang.MapFiles(v, func(p string) string { return relTo(root, abs(p)) }))
-	return ws, out, fmt.Sprintf("In the solution at %s (paths below are relative to it):\n", relTo(homeRoot, root)), "", err
+	out, err = json.Marshal(lang.MapFiles(v, func(p string) string { return lang.RelTo(root, abs(p)) }))
+	return ws, out, fmt.Sprintf("In the solution at %s (paths below are relative to it):\n", lang.RelTo(homeRoot, root)), "", err
 }
 
 // solution returns the workspace of the solution at root, other than the
@@ -232,7 +232,7 @@ func (l *Language) undoSolution() (*workspace.Workspace, string) {
 			}
 		}
 		if best != "" {
-			return l.others[best], fmt.Sprintf("In the solution at %s:\n", relTo(l.ws.Dir(), best))
+			return l.others[best], fmt.Sprintf("In the solution at %s:\n", lang.RelTo(l.ws.Dir(), best))
 		}
 		break
 	}
@@ -242,7 +242,7 @@ func (l *Language) undoSolution() (*workspace.Workspace, string) {
 // nearestConfig returns the tsconfig.json at or above dir, or "".
 func nearestConfig(dir string) string {
 	for {
-		if c := filepath.Join(dir, "tsconfig.json"); exists(c) {
+		if c := filepath.Join(dir, "tsconfig.json"); lang.Exists(c) {
 			return c
 		}
 		parent := filepath.Dir(dir)
@@ -251,28 +251,6 @@ func nearestConfig(dir string) string {
 		}
 		dir = parent
 	}
-}
-
-// exists reports whether there is a file or directory at path.
-func exists(path string) bool {
-	_, err := os.Stat(path)
-	return err == nil
-}
-
-// existingDir is dir, or its nearest ancestor that exists.
-func existingDir(dir string) string {
-	for !exists(dir) && filepath.Dir(dir) != dir {
-		dir = filepath.Dir(dir)
-	}
-	return dir
-}
-
-// relTo is path relative to base, with slashes.
-func relTo(base, path string) string {
-	if r, err := filepath.Rel(base, path); err == nil {
-		return filepath.ToSlash(r)
-	}
-	return path
 }
 
 // Preload starts loading the workspace in the background; the channel

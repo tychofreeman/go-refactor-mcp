@@ -240,7 +240,7 @@ func (w *Workspace) Apply(label string, fes []edit.FileEdit) (history.Change, er
 		_ = c.Restore()
 		return history.Change{}, err
 	}
-	if err := w.update(paths(c.After)); err != nil {
+	if err := w.update(history.Paths(c.After)); err != nil {
 		if rerr := c.Restore(); rerr != nil {
 			w.History.Push(c) // still on disk: undo can try again
 			return history.Change{}, fmt.Errorf("%v; putting the files back failed too: %v", err, rerr)
@@ -257,7 +257,7 @@ func (w *Workspace) Undo() (history.Change, error) {
 	if err != nil {
 		return history.Change{}, err
 	}
-	return inverse, w.update(paths(inverse.After))
+	return inverse, w.update(history.Paths(inverse.After))
 }
 
 // Squash replaces the last n changes on the undo stack with one.
@@ -275,15 +275,6 @@ func (w *Workspace) CanUndo() bool { return w.History.Len() > 0 }
 // before a step, as code written for TypeScript 6 has under 7: a step
 // must add none (the user's choice, 2026-10-27, to revisit).
 func (*Workspace) ToleratesErrors() {}
-
-func paths(files map[string][]byte) []string {
-	out := make([]string, 0, len(files))
-	for p := range files {
-		out = append(out, p)
-	}
-	sort.Strings(out)
-	return out
-}
 
 // isSource reports whether path is a TypeScript source file.
 func isSource(path string) bool {
