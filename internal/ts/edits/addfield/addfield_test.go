@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/ts/tstest"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/workspace"
 )
 
@@ -28,22 +29,10 @@ export type Height = number;
 func load(t *testing.T) (*workspace.Workspace, string) {
 	t.Helper()
 	dir := t.TempDir()
-	for name, text := range map[string]string{
+	ws := tstest.Load(t, dir, map[string]string{
 		"tsconfig.json": `{"compilerOptions": {"strict": true, "module": "ESNext", "moduleResolution": "Bundler", "noEmit": true, "types": []}, "include": ["src"]}`,
 		"src/shapes.ts": shapes,
-	} {
-		p := filepath.Join(dir, name)
-		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(p, []byte(text), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	ws, err := workspace.Load(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
+	})
 	return ws, dir
 }
 

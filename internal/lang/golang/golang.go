@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -104,8 +103,8 @@ func (l *Language) undoModule() (*workspace.Workspace, string) {
 	}
 	home := l.homeRoot()
 	for p := range c.After {
-		if r := workspace.ModuleRoot(existingDir(filepath.Dir(p))); r != home && l.others[r] != nil {
-			return l.others[r], fmt.Sprintf("In the module at %s:\n", relTo(home, r))
+		if r := workspace.ModuleRoot(lang.ExistingDir(filepath.Dir(p))); r != home && l.others[r] != nil {
+			return l.others[r], fmt.Sprintf("In the module at %s:\n", lang.RelTo(home, r))
 		}
 		break
 	}
@@ -131,7 +130,7 @@ func (l *Language) route(args json.RawMessage) (ws *workspace.Workspace, out jso
 		if filepath.IsAbs(p) {
 			return filepath.Clean(p)
 		}
-		if a := filepath.Join(home, p); exists(a) || !exists(filepath.Join(dir, p)) {
+		if a := filepath.Join(home, p); lang.Exists(a) || !lang.Exists(filepath.Join(dir, p)) {
 			return a
 		}
 		return filepath.Join(dir, p)
@@ -139,7 +138,7 @@ func (l *Language) route(args json.RawMessage) (ws *workspace.Workspace, out jso
 	byRoot := map[string][]string{}
 	var roots []string
 	for _, f := range lang.NamedFiles(v) {
-		r := workspace.ModuleRoot(existingDir(filepath.Dir(abs(f))))
+		r := workspace.ModuleRoot(lang.ExistingDir(filepath.Dir(abs(f))))
 		if byRoot[r] == nil {
 			roots = append(roots, r)
 		}
@@ -149,7 +148,7 @@ func (l *Language) route(args json.RawMessage) (ws *workspace.Workspace, out jso
 	case len(roots) > 1:
 		var parts []string
 		for _, r := range roots {
-			parts = append(parts, fmt.Sprintf("%s (%s)", relTo(home, r), strings.Join(byRoot[r], ", ")))
+			parts = append(parts, fmt.Sprintf("%s (%s)", lang.RelTo(home, r), strings.Join(byRoot[r], ", ")))
 		}
 		return nil, nil, "", fmt.Sprintf("this call names files of more than one module: %s. A call or batch works in one module; send the steps for each as separate calls.", strings.Join(parts, "; ")), nil
 	case len(roots) == 0 || roots[0] == home:
@@ -160,8 +159,8 @@ func (l *Language) route(args json.RawMessage) (ws *workspace.Workspace, out jso
 	if ws, err = l.module(root); err != nil {
 		return nil, nil, "", "", err
 	}
-	out, err = json.Marshal(lang.MapFiles(v, func(p string) string { return relTo(root, abs(p)) }))
-	return ws, out, fmt.Sprintf("In the module at %s (paths below are relative to it):\n", relTo(home, root)), "", err
+	out, err = json.Marshal(lang.MapFiles(v, func(p string) string { return lang.RelTo(root, abs(p)) }))
+	return ws, out, fmt.Sprintf("In the module at %s (paths below are relative to it):\n", lang.RelTo(home, root)), "", err
 }
 
 // module returns the workspace of the module at root, other than the
@@ -182,28 +181,6 @@ func (l *Language) module(root string) (*workspace.Workspace, error) {
 	}
 	l.others[root] = ws
 	return ws, nil
-}
-
-// exists reports whether there is a file or directory at path.
-func exists(path string) bool {
-	_, err := os.Stat(path)
-	return err == nil
-}
-
-// existingDir is dir, or its nearest ancestor that exists.
-func existingDir(dir string) string {
-	for !exists(dir) && filepath.Dir(dir) != dir {
-		dir = filepath.Dir(dir)
-	}
-	return dir
-}
-
-// relTo is path relative to base, with slashes.
-func relTo(base, path string) string {
-	if r, err := filepath.Rel(base, path); err == nil {
-		return filepath.ToSlash(r)
-	}
-	return path
 }
 
 // Preload starts loading the workspace in the background, so that the

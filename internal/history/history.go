@@ -161,3 +161,13 @@ func Rel(root, p string) string {
 	}
 	return p
 }
+
+// Paths returns the paths files has, sorted.
+func Paths(files map[string][]byte) []string {
+	out := make([]string, 0, len(files))
+	for p := range files {
+		out = append(out, p)
+	}
+	sort.Strings(out)
+	return out
+}

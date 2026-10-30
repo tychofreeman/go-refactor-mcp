@@ -1,14 +1,12 @@
 package addelement
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
-	"github.com/tychofreeman/go-refactor-mcp/internal/ts/workspace"
+	"github.com/tychofreeman/go-refactor-mcp/internal/ts/tstest"
 )
 
 // edited runs New on a fresh copy of src (as src/g.ts) with args, and
@@ -16,26 +14,11 @@ import (
 func edited(t *testing.T, src, args string) (string, string) {
 	t.Helper()
 	dir := t.TempDir()
-	for name, text := range map[string]string{
+	ws := tstest.Load(t, dir, map[string]string{
 		"tsconfig.json": `{"compilerOptions": {"strict": true, "module": "ESNext", "moduleResolution": "Bundler", "noEmit": true, "types": []}, "include": ["src"]}`,
 		"src/g.ts":      src,
-	} {
-		p := filepath.Join(dir, name)
-		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(p, []byte(text), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	ws, err := workspace.Load(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	res, err := refactor.Run(ws, New(), json.RawMessage(`{"file": "src/g.ts", `+args[1:]), refactor.OptionsOf[*workspace.Workspace]{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	})
+	res := tstest.Run(t, ws, New(), `{"file": "src/g.ts", `+args[1:])
 	if !res.Applied {
 		return "", res.Refused
 	}
