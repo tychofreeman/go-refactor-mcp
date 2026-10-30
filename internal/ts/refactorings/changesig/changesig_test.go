@@ -151,6 +151,77 @@ func TestChangeTypes(t *testing.T) {
 	}
 }
 
+// hoses is a file of an interface, two classes that implement it, a
+// subclass that overrides one, and calls through each.
+const hoses = `export interface Waterer {
+  pour(bed: string, liters: number): string;
+}
+
+export class Hose implements Waterer {
+  pour(bed: string, liters: number): string {
+    return bed + liters;
+  }
+}
+
+export class Can implements Waterer {
+  pour(bed: string, amount: number): string {
+    return bed;
+  }
+}
+
+export class Sprayer extends Hose {
+  pour(bed: string, liters: number): string {
+    return super.pour(bed, liters * 2);
+  }
+}
+
+export function all(w: Waterer): string {
+  return w.pour("roses", 1) + new Can().pour("ferns", 2) + new Sprayer().pour("moss", 3);
+}
+`
+
+// A method that implements an interface's method, or overrides one,
+// changes with its family: the interface, every class that implements
+// it, every override, and the calls through each.
+func TestMethodFamilies(t *testing.T) {
+	in := func(t *testing.T, ws *workspace.Workspace, r refactor.RefactoringOf[*workspace.Workspace], args string) *refactor.Result {
+		t.Helper()
+		res, err := refactor.Run(ws, r, json.RawMessage(`{"file": "src/hoses.ts", `+args[1:]), refactor.OptionsOf[*workspace.Workspace]{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return res
+	}
+	t.Run("add", func(t *testing.T) {
+		for _, name := range []string{"Hose.pour", "Waterer.pour", "Sprayer.pour"} {
+			ws, dir := load(t, map[string]string{"src/hoses.ts": hoses})
+			if res := in(t, ws, NewAdd(), `{"name": "`+name+`", "parameter": "unit", "type": "string", "value": "\"L\""}`); !res.Applied {
+				t.Fatalf("%s: %s", name, res)
+			}
+			mustContain(t, dir, "src/hoses.ts",
+				"  pour(bed: string, liters: number, unit: string): string;\n",
+				"  pour(bed: string, liters: number, unit: string): string {\n    return bed + liters;",
+				"  pour(bed: string, amount: number, unit: string): string {\n    return bed;",
+				`return super.pour(bed, liters * 2, "L");`,
+				`w.pour("roses", 1, "L") + new Can().pour("ferns", 2, "L") + new Sprayer().pour("moss", 3, "L")`)
+		}
+	})
+	t.Run("move", func(t *testing.T) {
+		ws, dir := load(t, map[string]string{"src/hoses.ts": hoses})
+		if res := in(t, ws, NewMove(), `{"name": "Can.pour", "parameter": "amount", "before": "bed"}`); !res.Applied {
+			t.Fatalf("%s", res)
+		}
+		mustContain(t, dir, "src/hoses.ts", "pour(liters: number, bed: string): string;", "pour(amount: number, bed: string): string {", "super.pour(liters * 2, bed)", `w.pour(1, "roses")`)
+	})
+	t.Run("remove", func(t *testing.T) {
+		ws, _ := load(t, map[string]string{"src/hoses.ts": hoses})
+		res := in(t, ws, NewRemove(), `{"name": "Can.pour", "parameter": "amount"}`)
+		if res.Applied || !strings.Contains(res.Refused, "the body of Hose.pour, which changes with Can.pour, reads liters") {
+			t.Errorf("want a refusal naming Hose.pour's body, got %s", res)
+		}
+	})
+}
+
 // A function becomes a method of its first parameter's class and back;
 // the calls in other files follow, with their imports.
 func TestFunctionToMethodAndBack(t *testing.T) {

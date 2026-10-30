@@ -112,7 +112,17 @@ func TestOverviewTargetsAndUses(t *testing.T) {
 		t.Fatal(err)
 	}
 	mustContain(t, out, "src/shed.ts  (TypeScript, 15 lines)", "… lines 7-8   [2 lines]", "33    const height = Math.max(0, p.height - by);")
-	if _, err := RunWith(ws, Query{Uses: []string{"Bed.plant"}}, Options{}); !refactor.IsRefusal(err) {
-		t.Errorf("uses was not refused: %v", err)
+	out, err = RunWith(ws, Query{Uses: []string{"Plant", "Plant.height", "water", "prune", "Nope"}}, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustContain(t, out,
+		"Plant (interface in src/garden.ts): 5 uses\nused as a type (5):\n  src/garden.ts:11  private plants: Plant[] = [];\n",
+		"Plant.height (property of Plant in src/garden.ts): 3 uses\nread (3):\n  src/garden.ts:18  this.plants.sort((a, b) => a.height - b.height);\n  src/garden.ts:18  this.plants.sort((a, b) => a.height - b.height);\n  src/garden.ts:33  const height = Math.max(0, p.height - by);\n",
+		"water (variable in src/garden.ts): no uses",
+		"prune: declared in src/garden.ts, src/shed.ts; inspect it by file",
+		"Nope: no declaration of that name in the solution")
+	if _, err := RunWith(ws, Query{File: "src/garden.ts", Uses: []string{"Plant"}}, Options{}); !refactor.IsRefusal(err) {
+		t.Errorf("uses with a file was not refused: %v", err)
 	}
 }

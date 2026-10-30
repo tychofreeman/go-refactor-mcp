@@ -100,3 +100,24 @@ func TestToolsMerge(t *testing.T) {
 		t.Errorf("tools are %v", names)
 	}
 }
+
+// A tool two languages have takes the properties of both schemas, the
+// first's where both have one, and requires only what both require.
+func TestMergeSchemas(t *testing.T) {
+	a := json.RawMessage(`{"type": "object", "properties": {"file": {"type": "string"}, "line": {"type": "integer"}}, "required": ["file", "line"], "additionalProperties": false}`)
+	b := json.RawMessage(`{"type": "object", "properties": {"file": {"type": "string", "description": "ts"}, "column": {"type": "integer"}}, "required": ["file"], "additionalProperties": false}`)
+	var got struct {
+		Properties map[string]map[string]any `json:"properties"`
+		Required   []string                  `json:"required"`
+		Additional bool                      `json:"additionalProperties"`
+	}
+	if err := json.Unmarshal(mergeSchemas(a, b), &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Properties) != 3 || got.Properties["column"] == nil || got.Properties["file"]["description"] != nil {
+		t.Errorf("properties are %v", got.Properties)
+	}
+	if strings.Join(got.Required, " ") != "file" || got.Additional {
+		t.Errorf("required %v, additionalProperties %v", got.Required, got.Additional)
+	}
+}

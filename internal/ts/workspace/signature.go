@@ -16,6 +16,15 @@ func (w *Workspace) ChangeSignature(path, name string, ch tsapi.SignatureChange)
 	})
 }
 
+// FillLiterals returns the edits that give the property name the value
+// value in every object literal of the type typeName that lacks it
+// (tsapi.Project.FillLiterals).
+func (w *Workspace) FillLiterals(path, typeName, name, value string) ([]edit.FileEdit, string) {
+	return w.merged(path, func(p *tsapi.Project) ([]tsapi.Edit, string) {
+		return p.FillLiterals(context.Background(), path, typeName, name, value)
+	})
+}
+
 // IntroduceParameter returns the edits that replace expr in the body of
 // the function called name with a new parameter param, which every call
 // passes the expression for in its own terms.
