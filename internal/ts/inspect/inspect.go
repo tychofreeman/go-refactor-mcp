@@ -272,19 +272,5 @@ func targets(ws *workspace.Workspace, q Query, o Options) (string, error) {
 	if q.File != "" || q.Function != "" || q.StartLine != 0 || q.EndLine != 0 {
 		return "", refactor.Refusef("give either targets or file (with function or start_line/end_line), not both")
 	}
-	var parts []string
-	for i, t := range q.Targets {
-		if len(t.Targets) > 0 {
-			return "", refactor.Refusef("target %d has targets of its own; give one flat list", i+1)
-		}
-		out, err := RunWith(ws, t, o)
-		switch {
-		case refactor.IsRefusal(err):
-			out = fmt.Sprintf("target %d: %v\n", i+1, err)
-		case err != nil:
-			return "", err
-		}
-		parts = append(parts, out)
-	}
-	return strings.Join(parts, "\n"), nil
+	return refactor.EachTarget(q.Targets, func(t Query) bool { return len(t.Targets) > 0 }, func(t Query) (string, error) { return RunWith(ws, t, o) })
 }

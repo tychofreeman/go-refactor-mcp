@@ -106,8 +106,8 @@ func (*ReplaceDeclaration) Plan(ws *workspace.Workspace, raw json.RawMessage) (*
 		}
 		text = textOf(a.Content, g.Specs[0])
 		start, end = spec.Pos(), spec.End()
-	case docOf(nd) != nil:
-		if d := docOf(decl); d != nil {
+	case gocode.DocOf(nd) != nil:
+		if d := gocode.DocOf(decl); d != nil {
 			start = d.Pos()
 		}
 	}
@@ -139,7 +139,7 @@ func (*ReplaceDeclaration) Plan(ws *workspace.Workspace, raw json.RawMessage) (*
 func deletion(ws *workspace.Workspace, declaring *site.Site, path, name string, decl ast.Decl, spec ast.Spec) (*refactor.Plan, error) {
 	file, src := declaring.File, declaring.Src
 	tf := ws.Fset.File(file.Pos())
-	start, end, doc := decl.Pos(), decl.End(), docOf(decl)
+	start, end, doc := decl.Pos(), decl.End(), gocode.DocOf(decl)
 	if spec != nil {
 		start, end, doc = spec.Pos(), spec.End(), specDoc(spec)
 	}
@@ -264,17 +264,6 @@ func sameKind(old, new ast.Decl) error {
 		return refactor.Refusef("content is another kind of declaration than the old one (a function for a %s, or the reverse)", map[bool]string{true: og.Tok.String(), false: "func"}[oldGen])
 	case oldGen && og.Tok != ng.Tok:
 		return refactor.Refusef("content is a %s declaration, the old one a %s", ng.Tok, og.Tok)
-	}
-	return nil
-}
-
-// docOf is d's doc comment, or nil.
-func docOf(d ast.Decl) *ast.CommentGroup {
-	switch d := d.(type) {
-	case *ast.FuncDecl:
-		return d.Doc
-	case *ast.GenDecl:
-		return d.Doc
 	}
 	return nil
 }

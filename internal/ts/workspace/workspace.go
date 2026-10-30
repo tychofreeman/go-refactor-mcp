@@ -5,7 +5,6 @@
 package workspace
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io/fs"
@@ -187,36 +186,11 @@ func (w *Workspace) Preview(label string, fes []edit.FileEdit) (history.Change, 
 		if !w.Contains(fe.Path) {
 			return history.Change{}, fmt.Errorf("refusing to edit %s: outside workspace %s", fe.Path, w.Root)
 		}
-		before, err := os.ReadFile(fe.Path)
-		created := os.IsNotExist(err)
-		if created {
-			if err := c.AddDirs(filepath.Dir(fe.Path)); err != nil {
-				return history.Change{}, fmt.Errorf("cannot create %s: %w", w.Rel(fe.Path), err)
-			}
-		} else if err != nil {
+		d, err := c.Add(w.Rel(fe.Path), fe, history.Format{})
+		if err != nil {
 			return history.Change{}, err
 		}
-		if fe.Delete {
-			if created {
-				return history.Change{}, fmt.Errorf("cannot delete %s: it does not exist", w.Rel(fe.Path))
-			}
-			c.Deleted[fe.Path] = true
-			c.Before[fe.Path], c.After[fe.Path] = before, nil
-			diffs = append(diffs, edit.Unified(w.Rel(fe.Path), before, nil))
-			continue
-		}
-		after, err := edit.Apply(before, fe.Edits)
-		if err != nil {
-			return history.Change{}, fmt.Errorf("%s: %w", w.Rel(fe.Path), err)
-		}
-		if created {
-			c.Created[fe.Path] = true
-		}
-		if bytes.Equal(before, after) && !created {
-			continue
-		}
-		c.Before[fe.Path], c.After[fe.Path] = before, after
-		diffs = append(diffs, edit.Unified(w.Rel(fe.Path), before, after))
+		diffs = append(diffs, d)
 	}
 	sort.Strings(diffs)
 	c.Diff = strings.Join(diffs, "")

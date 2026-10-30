@@ -21,6 +21,7 @@ import (
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
+	"github.com/tychofreeman/go-refactor-mcp/internal/edits/gocode"
 	"github.com/tychofreeman/go-refactor-mcp/internal/imports"
 	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
@@ -420,7 +421,7 @@ func replaceUses(ws *workspace.Workspace, dup, keep *fn) (*refactor.Plan, error)
 		}
 	}
 	for _, imp := range file.Imports {
-		pn := pkgNameOf(dup.pkg.TypesInfo, imp)
+		pn := gocode.PkgNameOf(dup.pkg.TypesInfo, imp)
 		if pn == nil {
 			continue
 		}
@@ -476,20 +477,4 @@ func dependencies(p *packages.Package) map[string]bool {
 	}
 	walk(p)
 	return deps
-}
-
-// pkgNameOf returns the name an import declares (nil for a blank or dot
-// import).
-func pkgNameOf(info *types.Info, imp *ast.ImportSpec) *types.PkgName {
-	var o types.Object
-	if imp.Name != nil {
-		o = info.Defs[imp.Name]
-	} else {
-		o = info.Implicits[imp]
-	}
-	pn, _ := o.(*types.PkgName)
-	if pn != nil && (pn.Name() == "_" || pn.Name() == ".") {
-		return nil
-	}
-	return pn
 }

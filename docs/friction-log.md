@@ -3917,3 +3917,21 @@ call its own Effects; one caller with no workspace keeps nil. The analysis
 version recursed without end on a visit function that calls itself, which
 the tests caught. A struct literal's alignment was fixed with gofmt -w,
 by hand. Nothing else by hand.
+## 2026-10-30: shared helpers and the rest of the clones (items 46.4, 46.5)
+
+Through the CLI. The helpers copied between Go's edits were derived:
+rename to export gocode's `pkgNameOf`, move_declaration of one
+`nextLine` and one `docOf` to their packages, then for each other copy
+replace_statements of its body with a call of the shared one and
+inline_function with all_calls (12 copies, 11 inlines). One inline
+shadowed: `off := off(f.End())`; inline_variable refused it, so rename
+first, then inline. tsapi's return type helper: extract_function of one
+copy, function_to_method to `lined`; fold refused the four other copies
+(it takes a body of one return), so replace_text replaced them. The
+generic `refactor.EachTarget`, `history.Change.Add`, `lang.Preload`,
+`everyReturn` and `gocode.Idents` are new code written into
+add_declaration, with replace_statements or replace_text at their uses:
+no tool makes a generic function from two copies over different types,
+and extract_function of the shared part of `alwaysNonZero` was not
+tried, since its early `return false` is not an exit it carries.
+Nothing else by hand.

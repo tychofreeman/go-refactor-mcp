@@ -8,6 +8,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/gocode"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 )
 
 // structOf finds the struct type declared for the type name at pos.
@@ -107,7 +108,7 @@ func insertEdit(tf *token.File, st *ast.StructType, src []byte, text, typeName, 
 		if f == nil {
 			return edit.TextEdit{}, refactor.Refusef("%s has no field %s", typeName, after)
 		}
-		at := nextLine(src, off(f.End()))
+		at := textutil.NextLine(src, off(f.End()))
 		return edit.TextEdit{Start: at, End: at, NewText: body}, nil
 	case before != "":
 		f := fieldNamed(st, before)
@@ -123,12 +124,4 @@ func insertEdit(tf *token.File, st *ast.StructType, src []byte, text, typeName, 
 	}
 	at := off(tf.LineStart(tf.Line(close)))
 	return edit.TextEdit{Start: at, End: at, NewText: body}, nil
-}
-
-// nextLine returns the offset just past the newline that ends off's line.
-func nextLine(src []byte, off int) int {
-	if i := strings.IndexByte(string(src[off:]), '\n'); i >= 0 {
-		return off + i + 1
-	}
-	return len(src)
 }

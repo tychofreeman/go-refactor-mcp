@@ -199,3 +199,11 @@ func Numbered(lines []string, start, end int) string {
 func NumberedLine(width, l int, line string) string {
 	return fmt.Sprintf("%*d  %s\n", width, l, strings.TrimRight(line, "\n"))
 }
+
+// NextLine returns the offset just past the newline that ends off's line.
+func NextLine(src []byte, off int) int {
+	if i := strings.IndexByte(string(src[off:]), '\n'); i >= 0 {
+		return off + i + 1
+	}
+	return len(src)
+}

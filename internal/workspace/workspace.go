@@ -335,47 +335,11 @@ func (w *Workspace) Preview(label string, fes []edit.FileEdit) (history.Change, 
 		if !w.Contains(fe.Path) {
 			return history.Change{}, fmt.Errorf("refusing to edit %s: outside workspace %s", fe.Path, w.Root)
 		}
-		before, err := os.ReadFile(fe.Path)
-		created := os.IsNotExist(err)
-		if created {
-			// A new file, in a directory that may have to be created too.
-			if err := c.AddDirs(filepath.Dir(fe.Path)); err != nil {
-				return history.Change{}, fmt.Errorf("cannot create %s: %w", w.Rel(fe.Path), err)
-			}
-		} else if err != nil {
+		d, err := c.Add(w.Rel(fe.Path), fe, goFormat)
+		if err != nil {
 			return history.Change{}, err
 		}
-		if fe.Delete {
-			if created {
-				return history.Change{}, fmt.Errorf("cannot delete %s: it does not exist", w.Rel(fe.Path))
-			}
-			c.Deleted[fe.Path] = true
-			c.Before[fe.Path], c.After[fe.Path] = before, nil
-			diffs = append(diffs, edit.Unified(w.Rel(fe.Path), before, nil))
-			continue
-		}
-		edits := fe.Edits
-		if !created && strings.HasSuffix(fe.Path, ".go") && !fe.Verbatim {
-			edits = followIndent(before, edits)
-		}
-		after, err := edit.Apply(before, edits)
-		if err != nil {
-			return history.Change{}, fmt.Errorf("%s: %w", w.Rel(fe.Path), err)
-		}
-		if created {
-			c.Created[fe.Path] = true
-			// Only Go source: a golden file may parse as Go too.
-			if fa, err := format.Source(after); err == nil && strings.HasSuffix(fe.Path, ".go") && !fe.Verbatim {
-				after = fa
-			}
-		} else {
-			after = gofmtIfClean(fe.Path, before, after)
-		}
-		if bytes.Equal(before, after) {
-			continue
-		}
-		c.Before[fe.Path], c.After[fe.Path] = before, after
-		diffs = append(diffs, edit.Unified(w.Rel(fe.Path), before, after))
+		diffs = append(diffs, d)
 	}
 	sort.Strings(diffs)
 	c.Diff = strings.Join(diffs, "")
@@ -450,6 +414,27 @@ func (w *Workspace) Undo() (history.Change, error) {
 		return history.Change{}, err
 	}
 	return inverse, w.update(history.Paths(inverse.After))
+}
+
+// goFormat keeps edited Go source in the style of the file it edits:
+// indented as the file is, and gofmt-ed when the file was. A created Go
+// file is gofmt-ed; a golden file may parse as Go too, so only .go files.
+var goFormat = history.Format{
+	Edits: func(fe edit.FileEdit, before []byte) []edit.TextEdit {
+		if strings.HasSuffix(fe.Path, ".go") && !fe.Verbatim {
+			return followIndent(before, fe.Edits)
+		}
+		return fe.Edits
+	},
+	Text: func(fe edit.FileEdit, before, after []byte, created bool) []byte {
+		if !created {
+			return gofmtIfClean(fe.Path, before, after)
+		}
+		if fa, err := format.Source(after); err == nil && strings.HasSuffix(fe.Path, ".go") && !fe.Verbatim {
+			return fa
+		}
+		return after
+	},
 }
 
 // gofmtIfClean formats the edited file, but only if the original was

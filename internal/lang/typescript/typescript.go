@@ -256,16 +256,11 @@ func nearestConfig(dir string) string {
 // Preload starts loading the workspace in the background; the channel
 // closes when it is done.
 func (l *Language) Preload() <-chan struct{} {
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		l.mu.Lock()
-		defer l.mu.Unlock()
+	return lang.Preload(&l.mu, func() {
 		if l.ws == nil {
 			l.workspace()
 		}
-	}()
-	return done
+	})
 }
 
 func (l *Language) names() string {

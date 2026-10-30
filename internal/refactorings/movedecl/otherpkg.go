@@ -13,6 +13,7 @@ import (
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
+	"github.com/tychofreeman/go-refactor-mcp/internal/edits/gocode"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 )
@@ -373,7 +374,7 @@ func (m *mover) checkNoCycle(users map[string]bool) error {
 		}
 	}
 	for _, imp := range m.allImports() {
-		path := pkgNameOf(m.Pkg.TypesInfo, imp).Imported().Path()
+		path := gocode.PkgNameOf(m.Pkg.TypesInfo, imp).Imported().Path()
 		if d := m.Pkg.Imports[path]; d != nil && path != m.dest.PkgPath {
 			deps[path] = m.obj.Name()
 			walk(d, m.obj.Name())

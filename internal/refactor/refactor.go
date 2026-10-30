@@ -179,6 +179,27 @@ func IsRefusal(err error) bool {
 	return errors.As(err, &r)
 }
 
+// EachTarget renders each of targets in turn with run and joins the
+// results; one that is refused says so in its place. A target that has
+// targets of its own (nested) is refused: the list is flat.
+func EachTarget[T any](targets []T, nested func(T) bool, run func(T) (string, error)) (string, error) {
+	var parts []string
+	for i, t := range targets {
+		if nested(t) {
+			return "", Refusef("target %d has targets of its own; give one flat list", i+1)
+		}
+		out, err := run(t)
+		switch {
+		case IsRefusal(err):
+			out = fmt.Sprintf("target %d: %v\n", i+1, err)
+		case err != nil:
+			return "", err
+		}
+		parts = append(parts, out)
+	}
+	return strings.Join(parts, "\n"), nil
+}
+
 // Result is returned to the caller (CLI or model) after each step.
 type Result struct {
 	Refactoring string          `json:"refactoring"`

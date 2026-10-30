@@ -149,10 +149,8 @@ func (p *Project) PrepareSwitchForTypes(ctx context.Context, path string, line i
 	}
 	ret := "void"
 	if returning > 0 {
-		if t := fn.Type(); t != nil {
-			ret = l.source(t)
-		} else if sig := c.GetSignatureFromDeclaration(fn); sig != nil {
-			ret = c.TypeToString(c.GetReturnTypeOfSignature(sig))
+		if t := l.returnType(fn, c); t != "" {
+			ret = t
 		}
 	}
 	var ps, args []string
