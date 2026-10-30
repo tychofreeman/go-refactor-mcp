@@ -1,6 +1,7 @@
 package tsapi
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -42,9 +43,11 @@ func (p *Project) ChangeFieldType(path, name, typ string) ([]Edit, string) {
 }
 
 // ChangeParameterType returns the edit that makes typ the declared type
-// of the parameter param of the function or method name (Class.method) in
-// the file at path, as ChangeFieldType does for a property. A function
-// with overload signatures is refused: they type its parameters apart.
+// of the parameter param of the function or method name (Class.method, or
+// Iface.method) in the file at path, and of the parameter at its position
+// in each method of its family, as ChangeFieldType does for a property. A
+// function with overload signatures is refused: they type its parameters
+// apart.
 func (p *Project) ChangeParameterType(path, name, param, typ string) ([]Edit, string) {
 	l, why := p.lined(path)
 	if why != "" {
@@ -52,12 +55,15 @@ func (p *Project) ChangeParameterType(path, name, param, typ string) ([]Edit, st
 	}
 	fn, overloads, _, why := l.function(name)
 	if why != "" {
-		return nil, why
+		if fn = l.interfaceMethod(name); fn == nil {
+			return nil, why
+		}
 	}
 	if len(overloads) > 0 {
 		return nil, fmt.Sprintf("%s has overload signatures, which type its parameters apart; change their types by hand", name)
 	}
-	for _, prm := range fn.Parameters() {
+	list, off := passed(fn)
+	for i, prm := range list.Nodes[off:] {
 		if nm := prm.Name(); nm == nil || !ast.IsIdentifier(nm) || nm.Text() != param {
 			continue
 		}
@@ -65,7 +71,21 @@ func (p *Project) ChangeParameterType(path, name, param, typ string) ([]Edit, st
 			// x => ... takes parentheses to take a type.
 			return []Edit{{File: l.f.FileName(), Start: l.pos(prm), End: prm.End(), NewText: "(" + l.source(prm) + ": " + typ + ")"}}, ""
 		}
-		return []Edit{l.annotate(prm, prm.AsParameterDeclaration().QuestionToken, typ)}, ""
+		edits := []Edit{l.annotate(prm, prm.AsParameterDeclaration().QuestionToken, typ)}
+		c, done := p.prog.GetProgram().GetTypeChecker(context.Background())
+		defer done()
+		family, why := p.family(c, fn)
+		if why != "" {
+			return nil, why
+		}
+		for _, m := range family {
+			ml := newLined(ast.GetSourceFileOfNode(m))
+			if mlist, moff := passed(m); moff+i < len(mlist.Nodes) {
+				mp := mlist.Nodes[moff+i]
+				edits = append(edits, ml.annotate(mp, mp.AsParameterDeclaration().QuestionToken, typ))
+			}
+		}
+		return edits, ""
 	}
 	return nil, fmt.Sprintf("%s has no parameter named %s (a destructured parameter is not changed)", name, param)
 }

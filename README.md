@@ -2370,8 +2370,9 @@ hand or a tool got in the way.
        interface's method (`Iface.method`) can be the one named. Only
        types related by `implements` and `extends` count: a class that
        fits an interface without naming it is left to the type check.
-       Open: add_result, change_parameter_type and
-       convert_params_to_object still change one method.
+       add_result, change_parameter_type and convert_params_to_object
+       change the family too (item 43.10): each method of it binds the
+       object's keys to its own names (`{ bed, liters: amount }`).
     6. **inspect `uses`** is refused. *Done:* each name (`Name` or
        `Class.member`) lists its uses in the solution by role (switch on
        it, compared, written, called, made with new, used as a type,
@@ -2418,6 +2419,14 @@ hand or a tool got in the way.
         case "moss":`) gets a case of its own, the others a copy before it
         (`tsapi.Project.CaseBody`), refused for a body that does not end
         in a jump, declares a name, or cases that are not constants.
+        remove_parameter's `value` and `also` (`tsapi` `WriteValue`, then
+        `target.shown`, two steps per function as Go's `Expand`; the
+        per-call check is introduce_parameter's own, `target.introduced`,
+        so the inverse refuses where introducing would); add_parameter's
+        `replace_variable` (a variable at a module's top level, of the
+        parameter's type after widening a literal type, that no body
+        assigns; a note when the variable is assigned anywhere or the
+        value is not it). A family's method is still refused for `value`.
     Deliberate differences, not gaps: errors already in the code are
     tolerated (item 41.11), type changes are edits (41.2), add_result
     returns an object (`field`, `kept`), extract_struct runs

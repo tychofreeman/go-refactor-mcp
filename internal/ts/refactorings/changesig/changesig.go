@@ -49,7 +49,7 @@ func (*AddParameter) Name() string { return "add_parameter" }
 
 func (*AddParameter) Description() string {
 	return `Add a parameter to a function or method, and pass the same value for it at every call in the solution: with parameter unit, type string and value "L", function water(bed: string, liters: number) becomes water(bed: string, liters: number, unit: string), and water("roses", 2) becomes water("roses", 2, "L"). The body does not use it yet, so behavior is unchanged; add it, then change the body.
-Identify the function by file and name (Class.method for a method; Class.constructor, whose calls are the news of the class and the super calls of classes extending it). A method changes with its family: the interface method it implements (Iface.method names one), the class method it overrides, and every other implementation and override, with the calls through each. value must mean the same at every call (a name every call sees alike); before puts the parameter ahead of that one (default: last, before a rest parameter). A call passing fewer arguments gets undefined for those it skips.
+Identify the function by file and name (Class.method for a method; Class.constructor, whose calls are the news of the class and the super calls of classes extending it). A method changes with its family: the interface method it implements (Iface.method names one), the class method it overrides, and every other implementation and override, with the calls through each. value must mean the same at every call (a name every call sees alike); before puts the parameter ahead of that one (default: last, before a rest parameter). A call passing fewer arguments gets undefined for those it skips. replace_variable makes a variable at a module's top level the body reads a parameter: parameter rate, value rate turns function cost(n: number) { return n * rate; } into cost(n: number, rate: number), and each call passes rate.
 Refuses, saying why: a function used as a value (xs.map(f) passes an index), a call that spreads its arguments, an overload with too few parameters to take it where it goes (overloads change with the implementation), a class extending one without a constructor of its own, a name the body already reads, a value a call cannot see.`
 }
 
@@ -62,7 +62,8 @@ func (*AddParameter) InputSchema() json.RawMessage {
     "parameter": {"type": "string", "description": "Name of the new parameter."},
     "type":      {"type": "string", "description": "Its type, as TypeScript valid in the declaring file."},
     "value":     {"type": "string", "description": "The expression every call passes for it, e.g. \"\" or null or DEFAULT_UNIT."},
-    "before":    {"type": "string", "description": "Optional: an existing parameter; the new one goes just before it."}
+    "before":    {"type": "string", "description": "Optional: an existing parameter; the new one goes just before it."},
+    "replace_variable": {"type": "boolean", "description": "The parameter is named like a variable at a module's top level that the body reads, and takes its place. Calls not proven to pass the variable's value are edits, listed in a note."}
   },
   "required": ["file", "name", "parameter", "type", "value"],
   "additionalProperties": false
@@ -70,12 +71,23 @@ func (*AddParameter) InputSchema() json.RawMessage {
 }
 
 func (*AddParameter) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
-	var a struct{ File, Name, Parameter, Type, Value, Before string }
+	var a struct {
+		File, Name, Parameter, Type, Value, Before string
+		ReplaceVariable                            bool `json:"replace_variable"`
+	}
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
-	ch := tsapi.SignatureChange{Add: &tsapi.NewParameter{Name: a.Parameter, Type: a.Type, Value: a.Value}, Before: a.Before}
-	return plan(ws, a.File, a.Name, ch, fmt.Sprintf("added parameter %s to %s", a.Parameter, a.Name))
+	note := ""
+	if a.ReplaceVariable {
+		note = ws.ReplacedNote(ws.Abs(a.File), a.Name, a.Parameter, a.Value)
+	}
+	ch := tsapi.SignatureChange{Add: &tsapi.NewParameter{Name: a.Parameter, Type: a.Type, Value: a.Value, ReplaceVariable: a.ReplaceVariable}, Before: a.Before}
+	pl, err := plan(ws, a.File, a.Name, ch, fmt.Sprintf("added parameter %s to %s", a.Parameter, a.Name))
+	if err == nil && note != "" {
+		pl.Notes = append(pl.Notes, note)
+	}
+	return pl, err
 }
 
 // RemoveParameter removes a parameter the body does not read, and its
@@ -89,6 +101,7 @@ func (*RemoveParameter) Name() string { return "remove_parameter" }
 
 func (*RemoveParameter) Description() string {
 	return `Remove a parameter the body does not read, and its argument at every call in the solution: removing height, function prune(bed: string, height: number) becomes prune(bed: string), and prune("roses", 3) becomes prune("roses"). Use it last when taking a feature out: first change the body so it no longer reads the parameter.
+With value, a parameter the body reads goes too, when every call passes that expression of this or the other parameters, the inverse of introduce_parameter: value "this.depth" makes describe(p: Plant, depth: number) { return p.name + depth; } describe(p: Plant) { return p.name + this.depth; }, and bed.describe(rose, bed.depth) bed.describe(rose).
 Identify the function by file and name (Class.method for a method), and give the parameter. A method changes with its family: the interface method it implements (Iface.method names one), the class method it overrides, and every other implementation and override, with the calls through each. A dropped argument must plainly have no effects: a name, a literal, this, a property of one, or a function.
 Refuses, saying why: a body that reads the parameter or arguments, a parameter property (constructor(public soil: string)), a function used as a value, a call that spreads its arguments, an argument that could have effects.`
 }
@@ -99,7 +112,9 @@ func (*RemoveParameter) InputSchema() json.RawMessage {
   "properties": {
     ` + fileProp + `,
     ` + nameProp + `,
-    "parameter": {"type": "string", "description": "Name of the parameter to remove."}
+    "parameter": {"type": "string", "description": "Name of the parameter to remove."},
+    "value":     {"type": "string", "description": "Optional: what every call passes for it, written in the body's terms (this, the other parameters); the body's uses become this."},
+    "also":      {"type": "array", "items": {"type": "string"}, "description": "With value: more functions of the file (name or Class.method) whose parameter of that name goes in the same step, so that calls among them that pass it on count."}
   },
   "required": ["file", "name", "parameter"],
   "additionalProperties": false
@@ -107,11 +122,106 @@ func (*RemoveParameter) InputSchema() json.RawMessage {
 }
 
 func (*RemoveParameter) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
-	var a struct{ File, Name, Parameter string }
+	var a removeArgs
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
-	return plan(ws, a.File, a.Name, tsapi.SignatureChange{Remove: a.Parameter}, fmt.Sprintf("removed parameter %s from %s", a.Parameter, a.Name))
+	return planRemove(ws, a)
+}
+
+// removeArgs are remove_parameter's arguments.
+type removeArgs struct {
+	File      string   `json:"file"`
+	Name      string   `json:"name"`
+	Parameter string   `json:"parameter"`
+	Value     string   `json:"value,omitempty"`
+	Also      []string `json:"also,omitempty"`
+}
+
+// Expand makes a removal with value two steps for each function it names
+// (name, then also): the body's uses of the parameter become value, then,
+// once every body has, the parameter goes from each, as each call is shown
+// to pass value. A call among them that passes on its own parameter then
+// passes the value.
+func (*RemoveParameter) Expand(ws *workspace.Workspace, raw json.RawMessage) ([]refactor.StepOf[*workspace.Workspace], error) {
+	var a removeArgs
+	if err := refactor.DecodeArgs(raw, &a); err != nil {
+		return nil, err
+	}
+	if a.Value == "" {
+		return nil, nil
+	}
+	names := append([]string{a.Name}, a.Also...)
+	var write, remove []refactor.StepOf[*workspace.Workspace]
+	for i, n := range names {
+		b := a
+		b.Name = n
+		b.Also = append(append([]string{}, names[:i]...), names[i+1:]...)
+		args, err := json.Marshal(b)
+		if err != nil {
+			return nil, err
+		}
+		write = append(write, refactor.StepOf[*workspace.Workspace]{Refactoring: writeValue{}, Args: args})
+		remove = append(remove, refactor.StepOf[*workspace.Workspace]{Refactoring: removeShown{}, Args: args})
+	}
+	return append(write, remove...), nil
+}
+
+// writeValue is the first step of remove_parameter with value: an edit
+// that writes value for each use of the parameter in the body. The step
+// after it shows that this changed nothing.
+type writeValue struct{}
+
+func (writeValue) Name() string                 { return "remove_parameter" }
+func (writeValue) Description() string          { return "" }
+func (writeValue) InputSchema() json.RawMessage { return (*RemoveParameter)(nil).InputSchema() }
+func (writeValue) ChangesBehavior()             {}
+
+func (writeValue) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
+	var a removeArgs
+	if err := refactor.DecodeArgs(raw, &a); err != nil {
+		return nil, err
+	}
+	path := ws.Abs(a.File)
+	if _, err := os.Stat(path); err != nil {
+		return nil, refactor.Refusef("%s: no such file", a.File)
+	}
+	edits, why := ws.Edits(path, func(p *tsapi.Project) ([]tsapi.Edit, string) {
+		return p.WriteValue(context.Background(), path, a.Name, a.Parameter, a.Value)
+	})
+	if why != "" {
+		return nil, refactor.Refusef("%s", why)
+	}
+	return &refactor.Plan{Summary: fmt.Sprintf("wrote %s for %s in %s", a.Value, a.Parameter, a.Name), Edits: edits}, nil
+}
+
+// removeShown is the second step of remove_parameter with value: the
+// parameter goes, now that the body no longer reads it, once every call
+// is shown to pass value.
+type removeShown struct{}
+
+func (removeShown) Name() string                 { return "remove_parameter" }
+func (removeShown) Description() string          { return "" }
+func (removeShown) InputSchema() json.RawMessage { return (*RemoveParameter)(nil).InputSchema() }
+
+func (removeShown) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
+	var a removeArgs
+	if err := refactor.DecodeArgs(raw, &a); err != nil {
+		return nil, err
+	}
+	return planRemove(ws, a)
+}
+
+// planRemove removes the parameter a names.
+func planRemove(ws *workspace.Workspace, a removeArgs) (*refactor.Plan, error) {
+	if len(a.Also) > 0 && a.Value == "" {
+		return nil, refactor.Refusef("also goes with value: the functions that pass the parameter on, whose parameter goes in the same step")
+	}
+	summary := fmt.Sprintf("removed parameter %s from %s", a.Parameter, a.Name)
+	if a.Value != "" {
+		summary += ", which every call passed as " + a.Value
+	}
+	return plan(ws, a.File, a.Name, tsapi.SignatureChange{Remove: a.Parameter, Value: a.Value, Also: a.Also}, summary)
 }
 
 // MoveParameter moves a parameter, and its argument at every call.
@@ -213,7 +323,7 @@ func (*ParamsToObject) Name() string { return "convert_params_to_object" }
 
 func (*ParamsToObject) Description() string {
 	return `Bundle a function's parameters into one object, destructured so that the body keeps its names, and pass an object literal at every call in the solution: function water(bed: string, liters = 2) becomes water({ bed, liters = 2 }: { bed: string; liters?: number }), and water("roses", 3) becomes water({ bed: "roses", liters: 3 }). With type_name, the object's type is an interface declared just before the function (WaterOptions). When every field is optional, the object defaults to {}.
-Identify the function by file and name (Class.method for a method, Class.constructor).
+Identify the function by file and name (Class.method for a method, Class.constructor). A method changes with its family, as for add_parameter.
 Refuses, saying why: a body that reads arguments, a rest parameter, a parameter that is already destructured or is a parameter property, a function used as a value, a call that spreads its arguments.`
 }
 
@@ -264,7 +374,7 @@ func (*AddResult) Name() string { return "add_result" }
 
 func (*AddResult) Description() string {
 	return `Add a result to a function or method (change_return_type is another name for it in a batch): its result becomes an object holding the old result and the new one, every return gives value for the new one, and every call that uses the result reads the old one: with field error, type string | null and value null, function load(id: string): string becomes load(id: string): { value: string; error: string | null }, return x becomes return { value: x, error: null }, and const v = load("a") becomes const v = load("a").value; a call as a statement stays. Then make the body return real errors. kept names the old result (default value).
-Identify the function by file and name (Class.method for a method). value must plainly have no effects.
+Identify the function by file and name (Class.method for a method). value must plainly have no effects. A method changes with its family, as for add_parameter.
 Refuses, saying why: a function that returns nothing (void), an async function or generator, a function used as a value, a call that spreads its arguments.`
 }
 
@@ -372,7 +482,7 @@ func (*ChangeParameterType) Name() string { return "change_parameter_type" }
 
 func (*ChangeParameterType) Description() string {
 	return `Change the declared type of a function's or method's parameter: with name water, parameter liters and type Liters, function water(bed: string, liters: number) becomes water(bed: string, liters: Liters). Types are erased, so no value changes, but the body and the calls stay as they are: an edit, so that a batch with check "end" can change those that no longer type-check after it; alone, it is refused, listing them.
-Identify the function by file and name (Class.method for a method).
+Identify the function by file and name (Class.method for a method). A method changes with its family, as for add_parameter.
 Refuses, saying why: a function with overload signatures, a destructured parameter.`
 }
 

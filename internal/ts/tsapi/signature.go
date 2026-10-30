@@ -20,12 +20,21 @@ type SignatureChange struct {
 	// Before is the parameter that an added or moved one goes just
 	// before; "" for the end.
 	Before string
+	// Value, with Remove, is what every call passes for the parameter, in
+	// the body's terms, which the body reads in its place (WriteValue);
+	// Also names functions of the file whose parameter of that name goes
+	// in the same step, whose calls pass it on.
+	Value string
+	Also  []string
 }
 
 // NewParameter is a parameter to add, and the value every call passes
 // for it.
 type NewParameter struct {
 	Name, Type, Value string
+	// ReplaceVariable lets the parameter hide a variable at the top level
+	// of a module that the body reads by its name, taking its place.
+	ReplaceVariable bool
 }
 
 // ChangeSignature returns the edits that make ch to the function or
@@ -60,13 +69,10 @@ func (p *Project) ChangeSignature(ctx context.Context, path, name string, ch Sig
 		if index(ch.Add.Name) >= 0 {
 			return nil, fmt.Sprintf("%s already has a parameter %s", name, ch.Add.Name)
 		}
-		if other := l.reads(c, fn.Body(), ch.Add.Name, nil); other != "" {
-			return nil, fmt.Sprintf("the body of %s reads another %s (%s), which the parameter would hide; choose another name", name, ch.Add.Name, other)
+		if why := t.hides(ch.Add, name); why != "" {
+			return nil, why
 		}
 		for _, m := range t.family {
-			if other := newLined(ast.GetSourceFileOfNode(m)).reads(c, m.Body(), ch.Add.Name, nil); other != "" {
-				return nil, fmt.Sprintf("the body of %s, which changes with %s, reads another %s (%s), which the parameter would hide; choose another name", memberName(m), name, ch.Add.Name, other)
-			}
 			if list, moff := passed(m); len(list.Nodes)-moff < at {
 				return nil, fmt.Sprintf("%s, which changes with %s, has %d parameters, fewer than the position the new one takes (%d)", memberName(m), name, len(list.Nodes)-moff, at+1)
 			}
@@ -120,6 +126,11 @@ func (p *Project) ChangeSignature(ctx context.Context, path, name string, ch Sig
 		return nil, why
 	}
 	calls := t.calls
+	if ch.Remove != "" && ch.Value != "" {
+		if why := t.shown(ch, name); why != "" {
+			return nil, why
+		}
+	}
 	if value != nil {
 		if why := sameMeaning(c, value, calls); why != "" {
 			return nil, why
