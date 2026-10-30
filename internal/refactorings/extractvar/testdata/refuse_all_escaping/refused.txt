@@ -1,1 +1,1 @@
-all_occurrences requires an expression whose value cannot change between its occurrences, but `x + 1` could (it involves `x`)
+all_occurrences: "x" is modified at m.go:5:18, after the new variable would be declared

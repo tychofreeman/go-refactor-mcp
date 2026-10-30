@@ -3835,3 +3835,17 @@ type and four methods into one value). `WriteThenRemove` cannot infer
 its workspace type from struct arguments, so every call names it; the
 first batch was refused for that. The helper was written by hand into
 create_file: new code. Nothing else by hand.
+
+## 2026-10-30: extract_variable judges reads between occurrences (item 45.4)
+
+Through the CLI, goldens first, one batch: create_file for the two
+goldens, replace_text in `analysis.Move` and extract_variable,
+add_declaration of `shared`, replace_statements of `laterCopies`. The
+check for reads between occurrences is new code, written by hand into
+those steps. One golden's expected refusal named the wrong words, and
+refuse_all_escaping now refuses through the check of a local modified
+after the declaration, so its expected text changed. The round trip
+with inline_variable then failed, so inline_variable got the same for
+several uses, a second batch; one of its refusal goldens read nothing
+that changed, so it now applies, and a write between was added to the
+refusal's input. Nothing else by hand.

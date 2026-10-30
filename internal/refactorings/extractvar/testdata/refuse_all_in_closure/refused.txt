@@ -1,0 +1,1 @@
+all_occurrences requires an expression whose value cannot change between its occurrences, but `b.depth` could
