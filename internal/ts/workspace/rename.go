@@ -1,6 +1,8 @@
 package workspace
 
 import (
+	"context"
+
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/tsapi"
 )
@@ -77,6 +79,30 @@ func (w *Workspace) Rename(path string, offset int, newName string) (edits []edi
 		edits = append(edits, edit.FileEdit{Path: f, Edits: byFile[f]})
 	}
 	return edits, "", nil
+}
+
+// KeyedUses checks renaming the member at offset in the file at path in
+// every project that has the file (tsapi.Project.KeyedUses): why it could
+// change what code that finds properties by name does, and the calls that
+// print a value of its type.
+func (w *Workspace) KeyedUses(path string, offset int) (refusal string, printed []string) {
+	seen := map[string]bool{}
+	for _, p := range w.projects {
+		if !p.Has(path) {
+			continue
+		}
+		why, ps := p.KeyedUses(context.Background(), path, offset)
+		if why != "" {
+			return why, nil
+		}
+		for _, pr := range ps {
+			if !seen[pr] {
+				seen[pr] = true
+				printed = append(printed, pr)
+			}
+		}
+	}
+	return "", printed
 }
 
 func joinComma(s []string) string {

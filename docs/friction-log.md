@@ -3669,3 +3669,10 @@ by extract_function and function_to_method (whose refusal named the
 `receiver` it needed), so add_field's `value` shares it; a helper's
 name fixed by rename. A test expected a name the fixture declares in two
 files. Nothing by hand.
+
+## 2026-10-29: TypeScript's rename and names found as strings (item 43.9)
+
+Through the CLI, tests first; the check written in a scratch file and
+created with the rename's wiring in one batch checked at its end; the
+test's solution helper generalised by replace_text. The tests' expected
+lines were one off at first. Nothing by hand.

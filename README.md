@@ -2393,7 +2393,14 @@ hand or a tool got in the way.
     9. **rename through string keys.** Nothing refuses or notes a type
        whose values reach `JSON.stringify`, `Object.keys`, `in` or an
        index by a string, as Go's reflection check does for
-       encoding/json and fmt.
+       encoding/json and fmt. *Done* (`tsapi.KeyedUses`): renaming a
+       member of a class, interface or object type is refused where a
+       value holding the type (itself, in an array, a union or a property)
+       reaches `JSON.stringify`, `Object.keys`/`values`/`entries`/
+       `assign`/`getOwnPropertyNames`, `Reflect.ownKeys`, `for...in`,
+       or `"name" in x`; where `console` prints one, it goes ahead with a
+       note, as Go does for fmt. An index by a string literal is renamed
+       by the language service itself.
     10. Rarer, and most compose from existing tools: remove_parameter's
         `value` and `also`; add_element's `name` and `from`; fold's
         setter and parameter-object matches; replace_statements' `wrap`;
