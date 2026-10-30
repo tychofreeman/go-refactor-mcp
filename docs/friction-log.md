@@ -3816,3 +3816,13 @@ with empty content for the thirteen forwarders. The first attempt put
 the rename after the deletions, and a refactoring cannot run on code
 that does not type-check: reordered, rename first, deletions last.
 Nothing by hand.
+
+## 2026-10-30: walking a TypeScript project (item 45.3)
+
+Through the CLI. A throwaway program (not committed) found the visit
+closures that fit `inspect` and wrote a replace_text step for each, the
+closure's body with its `return n.ForEachChild(visit)` (or
+`n.ForEachChild(visit); return false`) made `return true`. `inspect`,
+`sources` and the test were written by hand into create_file: new code.
+The test's first import path lacked the module's /v7. Nothing else by
+hand.

@@ -144,9 +144,8 @@ func oneLine(s string) string {
 func (p *Project) Files(dir string) []string {
 	dir = tspath.NormalizePath(dir)
 	var out []string
-	for _, f := range p.prog.GetSourceFiles() {
-		name := f.FileName()
-		if strings.HasPrefix(name, dir+"/") && !strings.Contains(name, "/node_modules/") && !f.IsDeclarationFile {
+	for _, f := range p.sources() {
+		if name := f.FileName(); strings.HasPrefix(name, dir+"/") {
 			out = append(out, name)
 		}
 	}

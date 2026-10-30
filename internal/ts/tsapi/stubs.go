@@ -70,8 +70,7 @@ func (l *lined) stub(c *checker.Checker, name, result string) (Stub, string) {
 	}
 	var call, made, prop *ast.Node
 	method := false
-	var visit func(n *ast.Node) bool
-	visit = func(n *ast.Node) bool {
+	inspect(l.f.AsNode(), func(n *ast.Node) bool {
 		switch {
 		case call == nil && ast.IsCallExpression(n):
 			callee := n.Expression()
@@ -86,9 +85,8 @@ func (l *lined) stub(c *checker.Checker, name, result string) (Stub, string) {
 		case prop == nil && ast.IsPropertyAccessExpression(n) && n.Name().Text() == name && !isCallee(n) && c.GetSymbolAtLocation(n.Name()) == nil:
 			prop = n
 		}
-		return n.ForEachChild(visit)
-	}
-	visit(l.f.AsNode())
+		return true
+	})
 	export := func(text string) string {
 		if exported {
 			return "export " + text

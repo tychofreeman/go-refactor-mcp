@@ -58,8 +58,7 @@ func (p *Project) abstractMembers(c *checker.Checker, members []*checker.Type) (
 		if f.IsDeclarationFile {
 			continue
 		}
-		var visit func(n *ast.Node) bool
-		visit = func(n *ast.Node) bool {
+		inspect(f.AsNode(), func(n *ast.Node) bool {
 			if ast.IsClassDeclaration(n) && n.Name() != nil {
 				for _, h := range nodes(n.AsClassDeclaration().HeritageClauses) {
 					if h.AsHeritageClause().Token != ast.KindExtendsKeyword {
@@ -75,10 +74,8 @@ func (p *Project) abstractMembers(c *checker.Checker, members []*checker.Type) (
 					}
 				}
 			}
-			n.ForEachChild(visit)
-			return false
-		}
-		visit(f.AsNode())
+			return true
+		})
 	}
 	if why != "" {
 		return nil, nil, why
@@ -552,16 +549,13 @@ func (p *Project) UnionSwitchToMethod(ctx context.Context, path string, line int
 		// The body, with the subject as this.
 		var rs []repl
 		for _, s := range a.body {
-			var visit func(n *ast.Node) bool
-			visit = func(n *ast.Node) bool {
+			inspect(s, func(n *ast.Node) bool {
 				if ast.IsExpression(n) && slices.Equal(tokens(l.source(n)), tokens(subjText)) && slices.Equal(symbolsOf(c, n), symbolsOf(c, subject)) && !propertyName(n) {
 					rs = append(rs, repl{l.pos(n), n.End(), "this"})
 					return false
 				}
-				n.ForEachChild(visit)
-				return false
-			}
-			visit(s)
+				return true
+			})
 		}
 		for _, s := range a.body {
 			for _, id := range free(c, s) {

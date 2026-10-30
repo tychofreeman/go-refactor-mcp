@@ -438,8 +438,7 @@ func (p *Project) family(c *checker.Checker, fn *ast.Node) ([]*ast.Node, string)
 		if f.IsDeclarationFile || strings.Contains(f.FileName(), "/node_modules/") {
 			continue
 		}
-		var visit func(n *ast.Node) bool
-		visit = func(n *ast.Node) bool {
+		inspect(f.AsNode(), func(n *ast.Node) bool {
 			if ast.IsClassDeclaration(n) || ast.IsClassExpression(n) || ast.IsInterfaceDeclaration(n) {
 				types = append(types, n)
 				for _, e := range append(ast.GetExtendsHeritageClauseElements(n), ast.GetImplementsHeritageClauseElements(n)...) {
@@ -454,9 +453,8 @@ func (p *Project) family(c *checker.Checker, fn *ast.Node) ([]*ast.Node, string)
 					}
 				}
 			}
-			return n.ForEachChild(visit)
-		}
-		visit(f.AsNode())
+			return true
+		})
 	}
 	ancestors := func(t *ast.Node) map[*ast.Node]bool {
 		seen := map[*ast.Node]bool{}

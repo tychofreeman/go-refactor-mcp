@@ -52,18 +52,13 @@ func (p *Project) MoveMethod(ctx context.Context, path, name, to string, also []
 	defer done()
 	// The class to: one of the solution's that extends from.
 	var targets []*ast.Node
-	for _, f := range p.prog.GetProgram().GetSourceFiles() {
-		if f.IsDeclarationFile || strings.Contains(f.FileName(), "/node_modules/") {
-			continue
-		}
-		var visit func(n *ast.Node) bool
-		visit = func(n *ast.Node) bool {
+	for _, f := range p.sources() {
+		inspect(f.AsNode(), func(n *ast.Node) bool {
 			if ast.IsClassDeclaration(n) && n.Name() != nil && n.Name().Text() == to && n != from && extends(c, n, from) {
 				targets = append(targets, n)
 			}
-			return n.ForEachChild(visit)
-		}
-		visit(f.AsNode())
+			return true
+		})
 	}
 	switch len(targets) {
 	case 0:
@@ -91,10 +86,7 @@ func (p *Project) MoveMethod(ctx context.Context, path, name, to string, also []
 	}
 	// Every use reaches the methods through a to.
 	reaches := func(cls *ast.Node) bool { return cls == target || cls != nil && extends(c, cls, target) }
-	for _, f := range p.prog.GetProgram().GetSourceFiles() {
-		if f.IsDeclarationFile || strings.Contains(f.FileName(), "/node_modules/") {
-			continue
-		}
+	for _, f := range p.sources() {
 		fl := newLined(f)
 		why := ""
 		identifiers(f.AsNode(), func(id *ast.Node) {

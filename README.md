@@ -2566,6 +2566,16 @@ hand or a tool got in the way.
        checker (29 times) and for walking a tree (36 visit closures);
        an error type in `tsapi` for the `(x, why string)` convention
        (35 `Refusef("%s", why)`).
+       *Done in part* (2026-10-30): `inspect(n, f)` walks a tree as
+       go/ast's Inspect does, and replaced 19 of the 36 visit closures
+       (those whose only exit from the walk is skipping a node's
+       children; the rest stop early, carry a second argument, or start
+       from a node's children); `p.sources()` is the project's own
+       files, for the six loops that skipped declaration files and
+       node_modules. Not done: the checker helper (its two lines would
+       stay two) and the error type, which would touch every function
+       of tsapi for no fewer lines; extract_function already treats the
+       string as an error. About 40 lines fewer with the new file.
     4. **One decision of whether an evaluation can move** (about 200
        lines): `analysis.Move` and tsapi's `Check`, `conflict` and
        `canReorder` decide the same question; a shared core over a

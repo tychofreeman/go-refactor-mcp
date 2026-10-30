@@ -280,8 +280,7 @@ func returnsAtEnd(s *ast.Node) bool {
 // hasReturn reports whether s holds a return of the function it is in.
 func hasReturn(s *ast.Node) bool {
 	found := false
-	var visit func(n *ast.Node) bool
-	visit = func(n *ast.Node) bool {
+	inspect(s, func(n *ast.Node) bool {
 		switch {
 		case found || ast.IsFunctionLike(n) || ast.IsClassLike(n):
 			return false
@@ -289,9 +288,7 @@ func hasReturn(s *ast.Node) bool {
 			found = true
 			return false
 		}
-		n.ForEachChild(visit)
-		return false
-	}
-	visit(s)
+		return true
+	})
 	return found
 }

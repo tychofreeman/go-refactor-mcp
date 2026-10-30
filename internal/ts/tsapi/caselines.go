@@ -39,8 +39,7 @@ func (l *lined) caseClause(function, value string) (*ast.Node, string) {
 		return s == value || s == `"`+value+`"` || s == "'"+value+"'" || strings.Trim(s, `"'`) == strings.Trim(value, `"'`) && strings.ContainsAny(s, `"'`)
 	}
 	var found []*ast.Node
-	var visit func(n *ast.Node) bool
-	visit = func(n *ast.Node) bool {
+	inspect(fn.Body(), func(n *ast.Node) bool {
 		if ast.IsSwitchStatement(n) {
 			for _, cl := range n.AsSwitchStatement().CaseBlock.AsCaseBlock().Clauses.Nodes {
 				if matches(cl) {
@@ -48,10 +47,8 @@ func (l *lined) caseClause(function, value string) (*ast.Node, string) {
 				}
 			}
 		}
-		n.ForEachChild(visit)
-		return false
-	}
-	visit(fn.Body())
+		return true
+	})
 	switch {
 	case len(found) == 0:
 		return nil, fmt.Sprintf("%s has no case %s", function, value)
