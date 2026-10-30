@@ -2523,6 +2523,51 @@ hand or a tool got in the way.
     to refuse: `found` is captured by a closure the compiler's
     `ForEachChild` receives, which could keep it and run it later.
 
+45. **Abstractions the code lacks, and the duplication they would
+    remove** (2026-10-30, the user asked which abstractions the code has
+    and which it lacks). Measured at 748e6b7: 64,500 lines outside
+    tests; exact clones of 40 tokens or more (`dupl`) 1,194 lines, 1.9%.
+    Most duplication is not textual: 38 of the 42 tools exist for both
+    languages (about 34k lines of Go against 17k of TypeScript), and a
+    few idioms repeat around them. Cheap removal is about 2,500-3,500
+    lines (4-5%); the larger gain is that the languages and the schemas
+    can no longer drift. In order of payoff:
+    1. **Schemas from argument structs** (about 1,000-1,300 lines): 83
+       JSON schemas written by hand (about 970 property lines, half
+       repeated between the languages, which is why `mergeSchemas`
+       exists), 92 argument decodings, 20 "file must exist" checks.
+       One struct per operation with field tags, its schema generated,
+       shared by Go and TypeScript for the common tools.
+    2. **TypeScript workspace forwarding** (about 300-400 lines): most
+       of the 33 functions in `ts/workspace` find the project and call
+       the same function on it; one generic helper, as `ws.Edits` is.
+    3. **Walking a TypeScript project** (about 200 lines, and one place
+       for the filter): helpers for the project's own files (12 loops
+       repeat the `.d.ts` and `node_modules` filter), for taking a
+       checker (29 times) and for walking a tree (36 visit closures);
+       an error type in `tsapi` for the `(x, why string)` convention
+       (35 `Refusef("%s", why)`).
+    4. **One decision of whether an evaluation can move** (about 200
+       lines): `analysis.Move` and tsapi's `Check`, `conflict` and
+       `canReorder` decide the same question; a shared core over a
+       small summary interface, so the languages cannot disagree.
+    5. **One "always equals E" proof** (about 200-300 lines):
+       remove_parameter's `value` (both languages), remove_dead_code's
+       `value` and add_parameter's `replace_variable` each prove that
+       a value equals an expression and substitute it; three are the
+       same write-then-remove expander (`refactor.Then`).
+    6. **A golden harness for TypeScript**, as `refactortest` is for Go
+       (about 300 test lines): `load`, `run`, `check` and
+       `mustContain` are redefined 37 times in 17 files.
+    7. **The exact clones** (about 500 lines removable): Go's and
+       TypeScript's inspect, the two workspaces, the two language
+       front ends, and code shared by extract_function and
+       inline_function.
+    Not proposed: one representation of code that both syntax trees map
+    onto, which would remove the parallel implementations but means
+    rewriting most of the engine; sharing at the decision layer (4, 5)
+    is the step short of it.
+
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
 candidates and the evidence for each, gathered from the friction log.
