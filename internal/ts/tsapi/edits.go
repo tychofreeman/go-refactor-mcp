@@ -61,11 +61,15 @@ func (p *Project) ReplaceDeclaration(path, name, content string) ([]Edit, string
 
 // AddElement returns the edit that adds element to the object or array
 // literal that starts on line of the file at path (at column, when more
-// than one does): at its end, or just after or before the element whose
-// key is after or before (a property's name; an array element as
-// written). It follows the literal's layout: on one line, or an element
-// a line with or without a trailing comma.
-func (p *Project) AddElement(path string, line, column int, element, after, before string) ([]Edit, string) {
+// than one does), or that the top-level variable name initializes: at its
+// end, or just after or before the element whose key is after or before
+// (a property's name; an array element as written). It follows the
+// literal's layout: on one line, or an element a line with or without a
+// trailing comma. With from, a top-level variable of the file, it adds
+// every element of from's literal instead, written by element as a
+// template of $key and $value (copied when element is empty); from the
+// literal itself rewrites each element.
+func (p *Project) AddElement(path string, line, column int, name, from, element, after, before string) ([]Edit, string) {
 	l, why := p.lined(path)
 	if why != "" {
 		return nil, why
@@ -73,6 +77,40 @@ func (p *Project) AddElement(path string, line, column int, element, after, befo
 	if after != "" && before != "" {
 		return nil, "give after or before, not both"
 	}
+	var lit *ast.Node
+	if name != "" {
+		if lit, why = l.literalOf(name); why != "" {
+			return nil, why
+		}
+	} else if lit, why = l.literalAt(line, column); why != "" {
+		return nil, why
+	}
+	elems := []string{strings.TrimSpace(element)}
+	if from != "" {
+		src, why := l.literalOf(from)
+		if why != "" {
+			return nil, why
+		}
+		if elems, why = l.written(src, from, strings.TrimSpace(element)); why != "" {
+			return nil, why
+		}
+		if src == lit {
+			var edits []Edit
+			for i, e := range l.elements(lit) {
+				edits = append(edits, Edit{File: l.f.FileName(), Start: l.pos(e), End: e.End(), NewText: elems[i]})
+			}
+			return edits, ""
+		}
+		if len(elems) == 0 {
+			return nil, fmt.Sprintf("the literal of %s has no elements", from)
+		}
+	}
+	return l.addElement(lit, elems, after, before)
+}
+
+// literalAt returns the object or array literal that starts on line (at
+// column, when that is not 0).
+func (l *lined) literalAt(line, column int) (*ast.Node, string) {
 	var lits []*ast.Node
 	var visit func(n *ast.Node) bool
 	visit = func(n *ast.Node) bool {
@@ -93,26 +131,82 @@ func (p *Project) AddElement(path string, line, column int, element, after, befo
 		}
 		return nil, fmt.Sprintf("%d literals start on line %d (columns %s); give column", len(lits), line, strings.Join(at, ", "))
 	}
-	lit := lits[0]
-	return l.addElement(lit, element, after, before)
+	return lits[0], ""
 }
 
-// addElement returns the edit that adds element to the object or array
-// literal lit, as AddElement does.
-func (l *lined) addElement(lit *ast.Node, element string, after string, before string) ([]Edit, string) {
-	var elems []*ast.Node
-	if ast.IsObjectLiteralExpression(lit) {
-		elems = lit.AsObjectLiteralExpression().Properties.Nodes
-	} else {
-		elems = lit.AsArrayLiteralExpression().Elements.Nodes
+// literalOf returns the object or array literal that the variable name,
+// at the top level of the file, is initialized with (through parentheses,
+// as and satisfies).
+func (l *lined) literalOf(name string) (*ast.Node, string) {
+	for _, s := range l.f.Statements.Nodes {
+		if !ast.IsVariableStatement(s) {
+			continue
+		}
+		for _, d := range s.AsVariableStatement().DeclarationList.AsVariableDeclarationList().Declarations.Nodes {
+			if nm := d.Name(); nm == nil || !ast.IsIdentifier(nm) || nm.Text() != name {
+				continue
+			}
+			e := d.Initializer()
+			for e != nil && (ast.IsParenthesizedExpression(e) || ast.IsAsExpression(e) || ast.IsSatisfiesExpression(e)) {
+				e = e.Expression()
+			}
+			if e == nil || !ast.IsObjectLiteralExpression(e) && !ast.IsArrayLiteralExpression(e) {
+				return nil, fmt.Sprintf("%s is not initialized with an object or array literal", name)
+			}
+			return e, ""
+		}
 	}
+	return nil, fmt.Sprintf("no variable %s at the top level of the file", name)
+}
+
+// elements returns the properties of an object literal or the elements of
+// an array literal.
+func (l *lined) elements(lit *ast.Node) []*ast.Node {
+	if ast.IsObjectLiteralExpression(lit) {
+		return lit.AsObjectLiteralExpression().Properties.Nodes
+	}
+	return lit.AsArrayLiteralExpression().Elements.Nodes
+}
+
+// written returns the elements of from, the literal of the variable name,
+// written by the template tmpl, in which $key stands for a property's name
+// and $value for its value; an empty template copies them.
+func (l *lined) written(from *ast.Node, name, tmpl string) ([]string, string) {
+	var out []string
+	for _, e := range l.elements(from) {
+		key, value := "", l.source(e)
+		switch {
+		case ast.IsPropertyAssignment(e):
+			key, value = l.source(e.Name()), l.source(e.Initializer())
+		case ast.IsShorthandPropertyAssignment(e):
+			key, value = l.source(e.Name()), l.source(e.Name())
+		case ast.IsObjectLiteralExpression(from) && tmpl != "":
+			return nil, fmt.Sprintf("%s at %s is not a property key: value; write it by hand, or copy the elements without element", l.source(e), l.where(e))
+		}
+		t := tmpl
+		switch {
+		case t == "":
+			out = append(out, l.source(e))
+			continue
+		case key == "" && strings.Contains(t, "$key"):
+			return nil, fmt.Sprintf("the elements of %s have no keys; element may use $value only", name)
+		}
+		out = append(out, strings.NewReplacer("$key", key, "$value", value).Replace(t))
+	}
+	return out, ""
+}
+
+// addElement returns the edit that adds the elements added to the object
+// or array literal lit, as AddElement does.
+func (l *lined) addElement(lit *ast.Node, added []string, after string, before string) ([]Edit, string) {
+	elems := l.elements(lit)
 	key := func(e *ast.Node) string {
 		if ast.IsObjectLiteralExpression(lit) && e.Name() != nil {
 			return l.source(e.Name())
 		}
 		return l.source(e)
 	}
-	element = strings.TrimSpace(element)
+	element := strings.Join(added, ", ")
 	closing := lit.End() - 1
 	if len(elems) == 0 {
 		return []Edit{{File: l.f.FileName(), Start: l.pos(lit) + 1, End: closing, NewText: map[bool]string{true: " " + element + " ", false: element}[ast.IsObjectLiteralExpression(lit)]}}, ""
@@ -140,6 +234,7 @@ func (l *lined) addElement(lit *ast.Node, element string, after string, before s
 		return []Edit{{File: l.f.FileName(), Start: l.pos(elems[at]), End: l.pos(elems[at]), NewText: element + ", "}}, ""
 	}
 	ind := l.indent(l.line(l.pos(elems[0])))
+	element = strings.Join(added, ",\n"+ind)
 	if at < len(elems) {
 		s := l.start(l.line(l.pos(elems[at])))
 		if strings.TrimSpace(l.text[s:l.pos(elems[at])]) != "" {
@@ -191,7 +286,7 @@ func (p *Project) FillLiterals(ctx context.Context, path, typeName, name, value 
 			if ast.IsObjectLiteralExpression(n) && !mayHave(n, name) {
 				if t := c.GetContextualType(n, checker.ContextFlagsNone); t != nil && target != nil && (t.Symbol() == target || t.Alias() != nil && t.Alias().Symbol() == target) {
 					var es []Edit
-					es, why = fl.addElement(n, name+": "+strings.TrimSpace(value), "", "")
+					es, why = fl.addElement(n, []string{name + ": " + strings.TrimSpace(value)}, "", "")
 					if why != "" {
 						why = fmt.Sprintf("the literal at %s: %s", fl.where(n), why)
 						return true

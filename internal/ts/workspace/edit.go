@@ -43,6 +43,26 @@ func (w *Workspace) Body(path string, blockStart, blockEnd int) (tsapi.Place, st
 	return p.Body(path, blockStart, blockEnd)
 }
 
+// Wrap returns the text that puts lines first-last of the file at path at
+// the hole of template (tsapi.Project.Wrap).
+func (w *Workspace) Wrap(path string, first, last int, template string) (start, end int, text string, notes []string, refusal string) {
+	p := w.project(path)
+	if p == nil {
+		return 0, 0, "", nil, w.none(path)
+	}
+	return p.Wrap(context.Background(), path, first, last, template)
+}
+
+// BodyLines returns the lines of the statements of the function body whose
+// braces are at [blockStart, blockEnd).
+func (w *Workspace) BodyLines(path string, blockStart, blockEnd int) (first, last int, refusal string) {
+	p := w.project(path)
+	if p == nil {
+		return 0, 0, w.none(path)
+	}
+	return p.BodyLines(path, blockStart, blockEnd)
+}
+
 // MemberPlace returns where new members of the type called name go in the
 // file at path, and whether it is a class or an interface.
 func (w *Workspace) MemberPlace(path, name, after, before string) (tsapi.Place, string, string) {
@@ -97,6 +117,17 @@ func (w *Workspace) CaseLines(path, function, value string, withBreak bool) (fir
 		return 0, 0, w.none(path)
 	}
 	return p.CaseLines(path, function, value, withBreak)
+}
+
+// CaseBody returns the lines of the body of the case value of a switch in
+// the function, and, when split and the case shares its body with others,
+// the edits that give it a case of its own (tsapi.Project.CaseBody).
+func (w *Workspace) CaseBody(path, function, value string, split bool) (first, last int, edits []tsapi.Edit, refusal string) {
+	p := w.project(path)
+	if p == nil {
+		return 0, 0, nil, w.none(path)
+	}
+	return p.CaseBody(path, function, value, split)
 }
 
 // FunctionSpan returns the byte offsets of the function (name, or

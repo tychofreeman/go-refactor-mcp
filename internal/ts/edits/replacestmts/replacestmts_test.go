@@ -96,3 +96,35 @@ func TestRefusals(t *testing.T) {
 		}
 	}
 }
+
+// wrap puts statements inside new ones, at the line $body: lines, a
+// whole body, and a closure, whose return the result notes.
+func TestWrap(t *testing.T) {
+	ws, dir := garden(t)
+	res := run(t, ws, `{"file": "src/garden.ts", "start_line": 17, "end_line": 18, "wrap": "if (p.height > 0) {\n$body\n}"}`)
+	if want := "    if (p.height > 0) {\n      this.plants.push(p);\n      this.plants.sort((a, b) => a.height - b.height);\n    }\n  }\n"; !res.Applied || !strings.Contains(source(t, dir), want) {
+		t.Fatalf("%s\n%s", res, source(t, dir))
+	}
+	res = run(t, ws, `{"file": "src/garden.ts", "function": "prune", "wrap": "if (by >= 0) {\n$body\n}\nreturn p;"}`)
+	if want := "  if (by >= 0) {\n    const height = Math.max(0, p.height - by);\n    return { ...p, height };\n  }\n  return p;\n}\n"; !res.Applied || !strings.Contains(source(t, dir), want) {
+		t.Fatalf("%s\n%s", res, source(t, dir))
+	}
+	res = run(t, ws, `{"file": "src/garden.ts", "function": "Bed.tallest", "wrap": "return (() => {\n$body\n})();"}`)
+	if !res.Applied || !strings.Contains(res.String(), "return at line 25 now leaves the new function, not the one it was in") {
+		t.Fatalf("%s\n%s", res, source(t, dir))
+	}
+}
+
+func TestWrapRefusals(t *testing.T) {
+	ws, _ := garden(t)
+	for _, tc := range []struct{ args, want string }{
+		{`{"file": "src/garden.ts", "start_line": 28, "end_line": 28, "wrap": "{\n$body\n}"}`, "ml is declared in the statements and used after them (garden.ts:29"},
+		{`{"file": "src/garden.ts", "start_line": 17, "end_line": 17, "wrap": "if (true) { $body }"}`, "on a line of its own"},
+		{`{"file": "src/garden.ts", "start_line": 17, "end_line": 17, "wrap": "if (true) {\n$body\n}", "content": "x;"}`, "give content or wrap, not both"},
+		{`{"file": "src/garden.ts", "start_line": 17, "end_line": 17}`, "give content, or wrap"},
+	} {
+		if res := run(t, ws, tc.args); res.Applied || !strings.Contains(res.Refused, tc.want) {
+			t.Errorf("%s: want a refusal with %q, got %s", tc.args, tc.want, res)
+		}
+	}
+}

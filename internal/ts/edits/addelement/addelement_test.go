@@ -84,3 +84,32 @@ func TestAddElement(t *testing.T) {
 		{"no literal", `{"line": 2, "element": "x: 1"}`, "", "no object or array literal starts on line 2"},
 	})
 }
+
+const beds = `export const soils = {
+  fern: "peat",
+  moss: "loam",
+};
+
+export const beds: Record<string, { soil: string }> = {
+  oak: { soil: "clay" },
+};
+
+export const kinds = ["fern", "moss"] as const;
+
+export const tags: string[] = ["tall"];
+`
+
+// name finds the literal by the variable it initializes; from adds the
+// elements of another's, written by element as a template.
+func TestFrom(t *testing.T) {
+	check(t, beds, []tcase{
+		{"by name", `{"name": "soils", "element": "cactus: \"sand\""}`, "  moss: \"loam\",\n  cactus: \"sand\",\n};", ""},
+		{"by name, through as const", `{"name": "kinds", "element": "\"oak\""}`, `["fern", "moss", "oak"] as const`, ""},
+		{"from, by a template", `{"name": "beds", "from": "soils", "element": "$key: { soil: $value }"}`, "  oak: { soil: \"clay\" },\n  fern: { soil: \"peat\" },\n  moss: { soil: \"loam\" },\n};", ""},
+		{"from, copied", `{"name": "tags", "from": "kinds"}`, `["tall", "fern", "moss"]`, ""},
+		{"from itself rewrites", `{"name": "soils", "from": "soils", "element": "$key: $value.toUpperCase()"}`, "  fern: \"peat\".toUpperCase(),\n  moss: \"loam\".toUpperCase(),\n};", ""},
+		{"no keys", `{"name": "tags", "from": "kinds", "element": "$key"}`, "", "the elements of kinds have no keys; element may use $value only"},
+		{"no such variable", `{"name": "roses", "element": "x"}`, "", "no variable roses at the top level of the file"},
+		{"line and name", `{"line": 1, "name": "soils", "element": "x: 1"}`, "", "give line, where the literal starts, or name"},
+	})
+}

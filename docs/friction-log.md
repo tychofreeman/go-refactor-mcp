@@ -3676,3 +3676,15 @@ Through the CLI, tests first; the check written in a scratch file and
 created with the rename's wiring in one batch checked at its end; the
 test's solution helper generalised by replace_text. The tests' expected
 lines were one off at first. Nothing by hand.
+
+## 2026-10-29: TypeScript's wrap, add_element's name and from, extract_function's split (item 43.10)
+
+Through the CLI, tests first; each part's tsapi code written in a scratch
+file and created or swapped in with its wiring in one batch. The case
+lookup shared by CaseLines and CaseBody (`caseClause`, `caseBody`) was
+written into CaseLines' replacement rather than extracted: the lines
+return a refusal from three places, and extract_function would have
+given back a result object to unpack at the call (tried in thought only,
+not run). A test expected a path the refusal gives without its
+directory, and wrap's first output put the statements at the block's
+indent, since a template's `$body` is written at it. Nothing by hand.
