@@ -30,7 +30,7 @@ import (
 )
 
 // Version is reported to MCP clients.
-const Version = "0.3.1"
+const Version = "0.4.0"
 
 // BuildVersion is Version with what the build knows of its source: the
 // module version it was installed at, or the commit it was built from
