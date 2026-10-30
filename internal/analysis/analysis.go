@@ -58,17 +58,28 @@ func SyncLit(info *types.Info, lit *ast.FuncLit, parent ast.Node, goDefer map[*a
 	if ast.Unparen(call.Fun) == lit {
 		return true
 	}
-	fn, ok := info.Uses[IdentOf(call.Fun)].(*types.Func)
-	if !ok || fn.Pkg() == nil || fn.Signature().Recv() != nil {
-		return false
-	}
 	for _, a := range call.Args {
 		if ast.Unparen(a) == lit {
-			_, ok := syncCalls[fn.Pkg().Path()+"."+fn.Name()]
-			return ok
+			return CallsBeforeReturning(info, call)
 		}
 	}
 	return false
+}
+
+// CallsBeforeReturning reports whether call is of a function or method
+// known to call the functions passed to it only before it returns
+// (ast.Inspect, sort.Slice, the TypeScript compiler's ForEachChild).
+func CallsBeforeReturning(info *types.Info, call *ast.CallExpr) bool {
+	fn, ok := info.Uses[IdentOf(call.Fun)].(*types.Func)
+	if !ok || fn.Pkg() == nil {
+		return false
+	}
+	key := fn.Pkg().Path() + "." + fn.Name()
+	if fn.Signature().Recv() != nil {
+		key = fn.FullName()
+	}
+	_, ok = syncCalls[key]
+	return ok
 }
 
 // AnalyzeFunc computes the facts for fn.

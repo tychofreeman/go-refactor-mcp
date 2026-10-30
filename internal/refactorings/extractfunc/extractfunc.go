@@ -2226,8 +2226,9 @@ func (x *extraction) writtenAgain(v *types.Var) bool {
 
 // calledOnlyInSelection reports whether lit runs only while the selected
 // lines do: they assign it to a variable they declare (a recursive visit
-// function, say), and only call that variable, directly and not in another
-// function literal of theirs.
+// function, say), and only call that variable, directly or by passing it
+// to a function that calls it before returning (ast.Inspect), and not in
+// another function literal of theirs.
 func (x *extraction) calledOnlyInSelection(lit *ast.FuncLit) bool {
 	if !x.inSelection(lit) {
 		return false
@@ -2247,7 +2248,8 @@ func (x *extraction) calledOnlyInSelection(lit *ast.FuncLit) bool {
 		if as, ok := path[1].(*ast.AssignStmt); ok && slices.Contains(as.Lhs, ast.Expr(id)) {
 			continue // a write, which runs nothing
 		}
-		if call, ok := path[1].(*ast.CallExpr); !ok || call.Fun != id {
+		call, ok := path[1].(*ast.CallExpr)
+		if !ok || call.Fun != id && !(slices.Contains(call.Args, ast.Expr(id)) && analysis.CallsBeforeReturning(x.Info, call)) {
 			return false
 		}
 		switch path[2].(type) {
