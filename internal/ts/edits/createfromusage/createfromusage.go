@@ -167,7 +167,11 @@ func (*CreateFromUsage) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 			}
 			e = edit.TextEdit{Start: len(src), End: len(src), NewText: lead + strings.Join(texts, "\n\n") + "\n"}
 		default:
-			pl, _, why := ws.MemberPlace(k.file, k.owner, "", "")
+			_, p, why := ws.Project(k.file)
+			var pl tsapi.Place
+			if why == "" {
+				pl, _, why = p.MemberPlace(k.file, k.owner, "", "")
+			}
 			if why != "" {
 				return nil, refactor.Refusef("%s", why)
 			}

@@ -16,18 +16,6 @@ func (w *Workspace) ChangeSignature(path, name string, ch tsapi.SignatureChange)
 	})
 }
 
-// ReplacedNote says why adding a parameter that replaces a variable is
-// not proven to keep behavior (tsapi.Project.ReplacedNote), in the first
-// project that has the file.
-func (w *Workspace) ReplacedNote(path, name, param, value string) string {
-	for _, p := range w.projects {
-		if p.Has(path) {
-			return p.ReplacedNote(context.Background(), path, name, param, value)
-		}
-	}
-	return ""
-}
-
 // FillLiterals returns the edits that give the property name the value
 // value in every object literal of the type typeName that lacks it
 // (tsapi.Project.FillLiterals).

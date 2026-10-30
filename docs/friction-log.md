@@ -3807,3 +3807,12 @@ tools sharing a struct, an embedded struct, tools whose name is not a
 literal). A dump of every published schema before and after compared
 them. `Schema` itself was written by hand into create_file: new code.
 Nothing else by hand.
+
+## 2026-10-30: TypeScript workspace forwarders (item 45.2)
+
+Through the CLI, one batch: add_declaration of `Workspace.Project`,
+replace_text at each caller, rename of `fileEdit`, replace_declaration
+with empty content for the thirteen forwarders. The first attempt put
+the rename after the deletions, and a refactoring cannot run on code
+that does not type-check: reordered, rename first, deletions last.
+Nothing by hand.

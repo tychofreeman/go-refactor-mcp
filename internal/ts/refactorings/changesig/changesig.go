@@ -76,7 +76,9 @@ func (*AddParameter) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refact
 	}
 	note := ""
 	if a.ReplaceVariable {
-		note = ws.ReplacedNote(ws.Abs(a.File), a.Name, a.Parameter, a.Value)
+		if path, p, why := ws.Project(a.File); why == "" {
+			note = p.ReplacedNote(context.Background(), path, a.Name, a.Parameter, a.Value)
+		}
 	}
 	ch := tsapi.SignatureChange{Add: &tsapi.NewParameter{Name: a.Parameter, Type: a.Type, Value: a.Value, ReplaceVariable: a.ReplaceVariable}, Before: a.Before}
 	pl, err := plan(ws, a.File, a.Name, ch, fmt.Sprintf("added parameter %s to %s", a.Parameter, a.Name))

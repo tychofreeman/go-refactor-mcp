@@ -5,7 +5,6 @@ package addfield
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
@@ -51,19 +50,19 @@ func (*AddField) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.P
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
-	path := ws.Abs(a.File)
-	if _, err := os.Stat(path); err != nil {
-		return nil, refactor.Refusef("%s: no such file", a.File)
+	path, p, why := ws.Project(a.File)
+	if why != "" {
+		return nil, refactor.Refusef("%s", why)
 	}
 	content := strings.TrimSpace(a.Field)
 	if a.Type != "" {
 		var lines []string
 		for _, n := range strings.Split(content, ",") {
-			lines = append(lines, strings.TrimSpace(n)+": "+strings.TrimSpace(a.Type)+ws.Semi(path))
+			lines = append(lines, strings.TrimSpace(n)+": "+strings.TrimSpace(a.Type)+p.Semi(path))
 		}
 		content = strings.Join(lines, "\n")
 	}
-	pl, kind, why := ws.MemberPlace(path, a.Name, a.After, a.Before)
+	pl, kind, why := p.MemberPlace(path, a.Name, a.After, a.Before)
 	if why != "" {
 		return nil, refactor.Refusef("%s", why)
 	}

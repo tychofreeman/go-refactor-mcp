@@ -45,7 +45,7 @@ func (w *Workspace) AddImports(path string, imports []tsapi.Import) (edit.FileEd
 		return edit.FileEdit{}, w.none(path)
 	}
 	es, refusal := p.AddImports(path, imports)
-	return fileEdit(path, es), refusal
+	return FileEdit(path, es), refusal
 }
 
 // RemoveUnusedImports returns the edit that removes the imports of the
@@ -55,10 +55,11 @@ func (w *Workspace) RemoveUnusedImports(path string) edit.FileEdit {
 	if p == nil {
 		return edit.FileEdit{Path: path}
 	}
-	return fileEdit(path, p.RemoveUnusedImports(path))
+	return FileEdit(path, p.RemoveUnusedImports(path))
 }
 
-func fileEdit(path string, es []tsapi.Edit) edit.FileEdit {
+// FileEdit is the edit of the file at path that es make.
+func FileEdit(path string, es []tsapi.Edit) edit.FileEdit {
 	fe := edit.FileEdit{Path: path}
 	for _, e := range es {
 		fe.Edits = append(fe.Edits, edit.TextEdit{Start: e.Start, End: e.End, NewText: e.NewText})
