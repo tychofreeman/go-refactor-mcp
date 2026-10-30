@@ -16,9 +16,13 @@ import (
 type Effects struct {
 	Writes bool // may change state or run code not known: a call, an assignment, a getter, valueOf through an operator
 	Throws bool // may throw: a property of what may be null or undefined, a call
-	Reads  bool // reads state other code may change: a property, a variable of the module or one a closure assigns
-	Fresh  bool // makes a new object, function or array, which a second evaluation would not share
-	Leaves bool // a return, break or continue that jumps out of the code
+	// OtherThrows says it may throw another way than by reading through
+	// what may be null or undefined; such a read alone may move past code
+	// that writes (as a nil dereference in Go, the user's choice).
+	OtherThrows bool
+	Reads       bool // reads state other code may change: a property, a variable of the module or one a closure assigns
+	Fresh       bool // makes a new object, function or array, which a second evaluation would not share
+	Leaves      bool // a return, break or continue that jumps out of the code
 	// Assigns and Locals are the locals it assigns and reads, each with
 	// the part that does: a local is a variable or parameter of a
 	// function that no function inside it assigns, so only the code
@@ -37,6 +41,7 @@ func (e *Effects) add(o Effects) {
 	}
 	e.Writes = e.Writes || o.Writes
 	e.Throws = e.Throws || o.Throws
+	e.OtherThrows = e.OtherThrows || o.OtherThrows
 	e.Reads = e.Reads || o.Reads
 	e.Fresh = e.Fresh || o.Fresh
 	e.Leaves = e.Leaves || o.Leaves
@@ -91,6 +96,15 @@ func (e Effects) acts() (string, string) {
 	return "", ""
 }
 
+// mayPass reports whether e, whose only act is to throw by reading
+// through what may be null or undefined, may be evaluated on the other
+// side of o, which neither throws another way nor leaves: it throws
+// either way, only what o did first differs (Go's rule for a nil
+// dereference).
+func (e Effects) mayPass(o Effects) bool {
+	return e.Throws && !e.OtherThrows && !e.Writes && !e.Leaves && !o.OtherThrows && !o.Leaves
+}
+
 // conflict returns why a and b may not be evaluated in the other order,
 // or "": both act, one writes what the other reads, or they share a
 // local that one assigns.
@@ -98,7 +112,7 @@ func conflict(a, b Effects) string {
 	ap, av := a.acts()
 	bp, bv := b.acts()
 	switch {
-	case ap != "" && bp != "":
+	case ap != "" && bp != "" && !a.mayPass(b) && !b.mayPass(a):
 		return fmt.Sprintf("%s %s, and %s %s", ap, av, bp, bv)
 	case a.Writes && b.Reads:
 		return fmt.Sprintf("%s may change state, and %s reads state", a.At.Write, b.At.Read)
@@ -235,7 +249,7 @@ func (a *effects) part(n *ast.Node, what string) string {
 // unknown is what code does whose effects are not known.
 func (a *effects) unknown(n *ast.Node, what string) Effects {
 	p := a.part(n, what)
-	e := Effects{Writes: true, Throws: true, Reads: true, Why: p}
+	e := Effects{Writes: true, Throws: true, OtherThrows: true, Reads: true, Why: p}
 	e.At.Write, e.At.Throw, e.At.Read = p, p, p
 	return e
 }
@@ -243,8 +257,16 @@ func (a *effects) unknown(n *ast.Node, what string) Effects {
 // throws is what code does that may throw and nothing else.
 func (a *effects) throws(n *ast.Node, why string) Effects {
 	p := fmt.Sprintf("%s, %s, at %s", a.lined(n).source(n), why, a.lined(n).where(n))
-	e := Effects{Throws: true, Why: p}
+	e := Effects{Throws: true, OtherThrows: true, Why: p}
 	e.At.Throw = p
+	return e
+}
+
+// nullish is what code does that may throw by reading through what may
+// be null or undefined, and nothing else.
+func (a *effects) nullish(n *ast.Node, why string) Effects {
+	e := a.throws(n, why)
+	e.OtherThrows = false
 	return e
 }
 
@@ -430,7 +452,7 @@ func (a *effects) Of(n *ast.Node) Effects {
 		}
 		optional := n.Flags&ast.NodeFlagsOptionalChain != 0
 		if a.maybeNullish(obj) && !optional {
-			out.add(a.throws(n, "which reads a property of what may be null or undefined"))
+			out.add(a.nullish(n, "which reads a property of what may be null or undefined"))
 		}
 		if ast.IsPropertyAccessExpression(n) {
 			if s := a.c.GetSymbolAtLocation(n.Name()); s != nil && s.Flags&ast.SymbolFlagsGetAccessor != 0 {
@@ -549,7 +571,7 @@ func (a *effects) call(n *ast.Node) Effects {
 		if ast.IsPropertyAccessExpression(callee) {
 			out.add(a.Of(callee.Expression()))
 			if a.maybeNullish(callee.Expression()) && n.Flags&ast.NodeFlagsOptionalChain == 0 {
-				out.add(a.throws(n, "a method of what may be null or undefined"))
+				out.add(a.nullish(n, "a method of what may be null or undefined"))
 			}
 		}
 		out.add(a.summary(n, body))
@@ -597,7 +619,7 @@ func (a *effects) call(n *ast.Node) Effects {
 	}
 	out.add(a.Of(recv))
 	if a.maybeNullish(recv) && n.Flags&ast.NodeFlagsOptionalChain == 0 {
-		out.add(a.throws(n, "a method of what may be null or undefined"))
+		out.add(a.nullish(n, "a method of what may be null or undefined"))
 	}
 	return out
 }
@@ -859,7 +881,7 @@ func (w *walk) stmt(n *ast.Node) Effects {
 		return out
 	case ast.IsThrowStatement(n):
 		out.add(a.Of(n.Expression()))
-		t := Effects{Throws: true, Why: a.part(n, "")}
+		t := Effects{Throws: true, OtherThrows: true, Why: a.part(n, "")}
 		t.At.Throw = t.Why
 		out.add(t)
 		return out

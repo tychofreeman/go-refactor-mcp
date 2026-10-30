@@ -144,6 +144,8 @@ func (m Move) Check() *Obstacle {
 			return before(acts, p.At.Stops, p.Stops)
 		case p.Panics == OtherPanic: // a nil dereference panics either way, only what is printed before differs
 			return before(acts, p.At.OtherPanic, "could panic (it "+p.Unsafe+")")
+		case transfers(m.Past) != nil:
+			return before(acts, transfers(m.Past), "leaves")
 		case where != nil:
 			return before(acts, where, "assigns "+written.Name())
 		}
