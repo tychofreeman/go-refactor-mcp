@@ -182,3 +182,20 @@ func lineHint(src, old string, lo int) string {
 	}
 	return ""
 }
+
+// Numbered returns lines start through end (1-based) of a file split into
+// lines, each after its number in a column as wide as end's.
+func Numbered(lines []string, start, end int) string {
+	var sb strings.Builder
+	width := len(fmt.Sprint(end))
+	for l := start; l <= end; l++ {
+		sb.WriteString(NumberedLine(width, l, lines[l-1]))
+	}
+	return sb.String()
+}
+
+// NumberedLine is line l of a file after its number, in a column width
+// wide.
+func NumberedLine(width, l int, line string) string {
+	return fmt.Sprintf("%*d  %s\n", width, l, strings.TrimRight(line, "\n"))
+}

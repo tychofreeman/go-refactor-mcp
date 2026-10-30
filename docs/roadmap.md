@@ -2562,10 +2562,22 @@ hand or a tool got in the way.
     6. **A golden harness for TypeScript**, as `refactortest` is for Go
        (about 300 test lines): `load`, `run`, `check` and
        `mustContain` are redefined 37 times in 17 files.
+       *Done* (2026-10-30): `internal/ts/tstest` writes and loads a
+       solution (`Load`), runs a refactoring (`Run`) and reads a file
+       back (`Read`); the packages' own helpers now call it, 34 bodies
+       in 16 test files, about 200 lines fewer. Not a golden directory
+       harness: the TypeScript tests keep their cases inline.
     7. **The exact clones** (about 500 lines removable): Go's and
        TypeScript's inspect, the two workspaces, the two language
        front ends, and code shared by extract_function and
        inline_function.
+       *Done in part* (2026-10-30): the language front ends' path
+       helpers are `lang.Exists`, `ExistingDir` and `RelTo`; both
+       inspects number source with `textutil.Numbered`; both workspaces
+       take a change's paths from `history.Paths`. Left: inspect's
+       `targets`, the workspaces' per-file part of `Apply` and
+       `Preload`, each a dozen lines over types that differ, and
+       extract_function's and inline_function's shared code.
     Not proposed: one representation of code that both syntax trees map
     onto, which would remove the parallel implementations but means
     rewriting most of the engine; sharing at the decision layer (4, 5)
