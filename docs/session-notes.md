@@ -345,7 +345,6 @@ patterns sessions use, with their steps, in `docs/patterns.md`.
   rules then became one: `internal/reorder` (`Repeat`, `Conflict`),
   which both languages call (item 46.2); change a rule there, not in
   `analysis.Move.Check` or tsapi's `Check`.
-  (an effect does not move past a return, break or continue).
 - **A module function that calls its callback only during the call**
   (2026-10-30, the user, item 46.3): known from its body
   (`Effects.RunsOnlyDuring`), per parameter, recursion assumed to
