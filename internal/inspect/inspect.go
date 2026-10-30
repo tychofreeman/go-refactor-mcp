@@ -203,10 +203,7 @@ func File(ws *workspace.Workspace, q Query, o Options) (string, error) {
 	}
 
 	fmt.Fprintf(&sb, "\nsource (lines %d-%d):\n", start, end)
-	width := len(fmt.Sprint(end))
-	for i := start; i <= end; i++ {
-		sb.WriteString(numbered(width, i, lines[i-1]))
-	}
+	sb.WriteString(textutil.Numbered(lines, start, end))
 	return sb.String(), nil
 }
 
@@ -267,17 +264,12 @@ func skeleton(lines []string, decls []Decl) []string {
 			l = d.BodyEnd
 			continue
 		}
-		out = append(out, numbered(width, l, lines[l-1]))
+		out = append(out, textutil.NumberedLine(width, l, lines[l-1]))
 		if d, ok := byEnd[l]; ok {
 			out = append(out, pad+facts(d)+"\n")
 		}
 	}
 	return out
-}
-
-// numbered is line l of the source, numbered in a column width wide.
-func numbered(width, l int, line string) string {
-	return fmt.Sprintf("%*d  %s\n", width, l, strings.TrimRight(line, "\n"))
 }
 
 // targets renders each of q's targets in turn; one that is refused says
@@ -479,10 +471,7 @@ func declarations(ws *workspace.Workspace, file string, locals []string) (string
 		}
 		sb.WriteString(outlineLine(*d))
 		fmt.Fprintf(&sb, "\nsource (lines %d-%d):\n", d.Start, d.End)
-		width := len(fmt.Sprint(d.End))
-		for l := d.Start; l <= d.End; l++ {
-			sb.WriteString(numbered(width, l, lines[l-1]))
-		}
+		sb.WriteString(textutil.Numbered(lines, d.Start, d.End))
 	}
 	return sb.String(), nil
 }

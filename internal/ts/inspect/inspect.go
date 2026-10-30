@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/tsapi"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/workspace"
 )
@@ -152,10 +153,7 @@ func file(ws *workspace.Workspace, q Query, o Options) (string, error) {
 	}
 	end = min(end, len(lines))
 	fmt.Fprintf(&sb, "\nsource (lines %d-%d):\n", start, end)
-	width := len(fmt.Sprint(end))
-	for i := start; i <= end; i++ {
-		sb.WriteString(numbered(width, i, lines[i-1]))
-	}
+	sb.WriteString(textutil.Numbered(lines, start, end))
 	return sb.String(), nil
 }
 
@@ -177,7 +175,7 @@ func skeleton(lines []string, decls []tsapi.Decl) []string {
 			l = d.BodyEnd
 			continue
 		}
-		out = append(out, numbered(width, l, lines[l-1]))
+		out = append(out, textutil.NumberedLine(width, l, lines[l-1]))
 	}
 	return out
 }
@@ -196,10 +194,6 @@ func outlineLine(d tsapi.Decl) string {
 		f = "   " + f
 	}
 	return fmt.Sprintf("  %4d-%-4d %s%s\n", d.Start, d.End, d.Signature, f)
-}
-
-func numbered(width, l int, line string) string {
-	return fmt.Sprintf("%*d  %s\n", width, l, strings.TrimRight(line, "\n"))
 }
 
 // declarations renders file's header line, then the source of each
@@ -221,10 +215,7 @@ func declarations(ws *workspace.Workspace, rel string, names []string) (string, 
 		}
 		sb.WriteString(outlineLine(*d))
 		fmt.Fprintf(&sb, "\nsource (lines %d-%d):\n", d.Start, d.End)
-		width := len(fmt.Sprint(d.End))
-		for l := d.Start; l <= d.End; l++ {
-			sb.WriteString(numbered(width, l, lines[l-1]))
-		}
+		sb.WriteString(textutil.Numbered(lines, d.Start, d.End))
 	}
 	return sb.String(), nil
 }

@@ -3856,6 +3856,16 @@ rewritten with a Python script and the roadmap moved to `docs/roadmap.md`
 whole (2,500 lines); replace_text could have made the reference fixes, but
 this cloud session's gorefactor server ran on the linked computer.
 
+## 2026-10-30: TypeScript test helpers and shared clones (item 45.6-7)
+
+Through the CLI. A throwaway script found the helper bodies by pattern
+(write files and load, run a refactoring, read a file) and wrote a
+replace_text step for each; `tstest`, `lang`'s path helpers,
+`textutil.Numbered` and `history.Paths` were written by hand into
+create_file and add_declaration: new code, moved from the copies. The
+copies went with replace_declaration of empty content and replace_text
+of their calls. The disk filled during the tests (the Go build cache);
+`go clean -cache`. Nothing else by hand.
 ## 2026-10-30: the move decisions of item 45.4
 
 Through the CLI, tests first, one batch: the Go case in `TestMove`, the

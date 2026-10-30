@@ -1,7 +1,6 @@
 package rename
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/ts/tstest"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/workspace"
 )
 
@@ -27,20 +27,13 @@ func solution(t *testing.T) (*workspace.Workspace, string) {
 
 func run(t *testing.T, ws *workspace.Workspace, args string) *refactor.Result {
 	t.Helper()
-	res, err := refactor.Run(ws, New(), json.RawMessage(args), refactor.OptionsOf[*workspace.Workspace]{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	res := tstest.Run(t, ws, New(), args)
 	return res
 }
 
 func read(t *testing.T, dir, rel string) string {
 	t.Helper()
-	b, err := os.ReadFile(filepath.Join(dir, rel))
-	if err != nil {
-		t.Fatal(err)
-	}
-	return string(b)
+	return tstest.Read(t, dir, rel)
 }
 
 // Renaming a function renames its declaration, imports and calls in every

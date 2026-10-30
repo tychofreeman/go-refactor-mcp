@@ -1,13 +1,13 @@
 package simplify
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/ts/tstest"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/workspace"
 )
 
@@ -18,38 +18,20 @@ func load(t *testing.T, files map[string]string) (*workspace.Workspace, string) 
 	t.Helper()
 	dir := t.TempDir()
 	files["tsconfig.json"] = config
-	for name, text := range files {
-		p := filepath.Join(dir, name)
-		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(p, []byte(text), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	ws, err := workspace.Load(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ws := tstest.Load(t, dir, files)
 	return ws, dir
 }
 
 func run(t *testing.T, ws *workspace.Workspace, r refactor.RefactoringOf[*workspace.Workspace], args string) *refactor.Result {
 	t.Helper()
-	res, err := refactor.Run(ws, r, json.RawMessage(args), refactor.OptionsOf[*workspace.Workspace]{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	res := tstest.Run(t, ws, r, args)
 	return res
 }
 
 // want checks that the file now reads exactly text.
 func want(t *testing.T, dir, file, text string) {
 	t.Helper()
-	b, err := os.ReadFile(filepath.Join(dir, file))
-	if err != nil {
-		t.Fatal(err)
-	}
+	b := tstest.Read(t, dir, file)
 	if string(b) != text {
 		t.Errorf("%s:\n%s\nwant:\n%s", file, b, text)
 	}
