@@ -23,13 +23,14 @@ type MoveFile struct{ refactor.Named[moveFileArgs] }
 func NewMove() *MoveFile { return &MoveFile{Named: refactor.Called[moveFileArgs]("move_file")} }
 
 func (*MoveFile) Description() string {
-	return `Move or rename a file or directory of the module, with everything in it, byte for byte: an edit that does not change what refers to it, for fixtures, docs and data (testdata/old_case to testdata/new_case renames a golden case). A Go file moved to another package must compile there; to move Go declarations, use move_declaration. Give file and to, which must not exist; one undo moves it back.`
+	return `Move or rename a file or directory of the module, with everything in it, byte for byte: an edit that does not change what refers to it, for fixtures, docs and data (testdata/old_case to testdata/new_case renames a golden case). A Go file moved to another package must compile there; to move Go declarations, use move_declaration. With copy the original stays: a copy of testdata/case_a as testdata/case_b starts a golden case from it, and a copied Go file must compile beside the original. Give file and to, which must not exist; one undo moves it back or removes the copy.`
 }
 
 // moveFileArgs are the arguments of move_file.
 type moveFileArgs struct {
 	File string `json:"file" desc:"Path of the file or directory to move, relative to the workspace root."`
 	To   string `json:"to" desc:"Its new path, relative to the workspace root; it must not exist."`
+	Copy bool   `json:"copy,omitempty" desc:"Keep the original: copy it to to instead."`
 }
 
 // ChangesBehavior marks this as an edit.
@@ -62,12 +63,17 @@ func (*MoveFile) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.P
 			return nil, err
 		}
 		dst := filepath.Join(to, strings.TrimPrefix(p, from))
-		fes = append(fes,
-			edit.FileEdit{Path: dst, Edits: []edit.TextEdit{{NewText: string(data)}}, Verbatim: true},
-			edit.FileEdit{Path: p, Delete: true})
+		fes = append(fes, edit.FileEdit{Path: dst, Edits: []edit.TextEdit{{NewText: string(data)}}, Verbatim: true})
+		if !a.Copy {
+			fes = append(fes, edit.FileEdit{Path: p, Delete: true})
+		}
+	}
+	did := "moved"
+	if a.Copy {
+		did = "copied"
 	}
 	return &refactor.Plan{
-		Summary: fmt.Sprintf("moved %s to %s%s", ws.Rel(from), ws.Rel(to), count(paths)),
+		Summary: fmt.Sprintf("%s %s to %s%s", did, ws.Rel(from), ws.Rel(to), count(paths)),
 		Edits:   fes,
 	}, nil
 }

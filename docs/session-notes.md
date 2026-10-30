@@ -526,6 +526,14 @@ patterns sessions use, with their steps, in `docs/patterns.md`.
   refactorings 198 (5%). And reads did not move: Go source read with
   `sed -n`, `cat` or `grep` 492 times against 82 `inspect` calls,
   though since Oct 24 a third of Go reads were `inspect` (34 to 80).
+  On 2026-10-30 (#508, items 46.4-46.5, after promising the user to
+  read by inspect and derive): every write went through the tools (41
+  steps, 14 of them refactorings: rename, move_declaration, inline),
+  but no read did: 7 `sed -n`, 11 grep, 1 Read, 0 `inspect`. The
+  habit holds even when named; a reading rule needs a check, not a
+  resolution. Turns lost to guessed argument names (3 of 13 batches)
+  are what loading the schemas first avoids. The transcript keeps only
+  what follows the last compaction, so measure before one.
 
 - **Would a fresh model recognize it?** (2026-10-22, a probe, $0.23):
   three Sonnet sessions, `claude -p` in a copy of the repo at the
