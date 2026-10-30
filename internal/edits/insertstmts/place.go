@@ -7,6 +7,7 @@ import (
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/gocode"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 )
 
 // place is where new statements go: inserted at offset at, each line
@@ -84,7 +85,7 @@ func after(tf *token.File, file *ast.File, src []byte, line int) (*place, error)
 	if found == nil {
 		return nil, refactor.Refusef("no statement ends on line %d", line)
 	}
-	end := nextLine(src, tf.Offset(found.End()))
+	end := textutil.NextLine(src, tf.Offset(found.End()))
 	if rest := strings.TrimSpace(string(src[tf.Offset(found.End()):end])); rest != "" && !strings.HasPrefix(rest, "//") {
 		return nil, refactor.Refusef("line %d has code after the statement that ends there", line)
 	}
@@ -137,7 +138,7 @@ func into(tf *token.File, file *ast.File, src []byte, line int) (*place, error) 
 		}
 		return &place{at: tf.Offset(open) + 1, end: tf.Offset(close), indent: lineIndent + "\t", closing: lineIndent, pos: open + 1, what: "into the block on line"}, nil
 	}
-	at := nextLine(src, tf.Offset(open)+1)
+	at := textutil.NextLine(src, tf.Offset(open)+1)
 	if rest := strings.TrimSpace(string(src[tf.Offset(open)+1 : at])); rest != "" && !strings.HasPrefix(rest, "//") {
 		return nil, refactor.Refusef("line %d has code after the opening brace; insert before that statement instead", line)
 	}
@@ -155,12 +156,4 @@ func (p *place) text(content string, raw bool) string {
 		return "\n" + body + p.closing
 	}
 	return body
-}
-
-// nextLine returns the offset just past the newline that ends off's line.
-func nextLine(src []byte, off int) int {
-	if i := strings.IndexByte(string(src[off:]), '\n'); i >= 0 {
-		return off + i + 1
-	}
-	return len(src)
 }

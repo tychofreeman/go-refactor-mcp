@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/history"
 )
@@ -256,4 +257,18 @@ func MapFiles(v any, f func(string) string) any {
 		return out
 	}
 	return v
+}
+
+// Preload runs load in the background, holding mu, and returns a channel
+// that closes when it is done: a language starts loading its workspace so
+// that the first call does not wait for all of it.
+func Preload(mu *sync.Mutex, load func()) <-chan struct{} {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		mu.Lock()
+		defer mu.Unlock()
+		load()
+	}()
+	return done
 }

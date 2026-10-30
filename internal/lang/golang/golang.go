@@ -188,16 +188,11 @@ func (l *Language) module(root string) (*workspace.Workspace, error) {
 // first time); the channel closes when it is done. Calls meanwhile wait
 // for it, and a load that fails is tried again by the next call.
 func (l *Language) Preload() <-chan struct{} {
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		l.mu.Lock()
-		defer l.mu.Unlock()
+	return lang.Preload(&l.mu, func() {
 		if l.ws == nil {
 			l.workspace()
 		}
-	}()
-	return done
+	})
 }
 
 // Step runs the refactoring or edit named tool.

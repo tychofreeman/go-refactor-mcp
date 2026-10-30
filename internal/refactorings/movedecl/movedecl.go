@@ -30,6 +30,7 @@ import (
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
+	"github.com/tychofreeman/go-refactor-mcp/internal/edits/gocode"
 	"github.com/tychofreeman/go-refactor-mcp/internal/imports"
 	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
@@ -570,7 +571,7 @@ func (m *mover) collectImports() error {
 	}
 	for _, s := range m.sources {
 		for _, imp := range s.File.Imports {
-			if pn := pkgNameOf(m.Pkg.TypesInfo, imp); pn != nil && used[pn] {
+			if pn := gocode.PkgNameOf(m.Pkg.TypesInfo, imp); pn != nil && used[pn] {
 				s.imports = append(s.imports, imp)
 			}
 		}
@@ -599,22 +600,6 @@ func (m *mover) allImports() []*ast.ImportSpec {
 		out = append(out, s.imports...)
 	}
 	return out
-}
-
-// pkgNameOf returns the name an import declares (nil for a blank or dot
-// import).
-func pkgNameOf(info *types.Info, imp *ast.ImportSpec) *types.PkgName {
-	var o types.Object
-	if imp.Name != nil {
-		o = info.Defs[imp.Name]
-	} else {
-		o = info.Implicits[imp]
-	}
-	pn, _ := o.(*types.PkgName)
-	if pn != nil && (pn.Name() == "_" || pn.Name() == ".") {
-		return nil
-	}
-	return pn
 }
 
 // is reports whether o is a moved declaration's object, in any package
@@ -699,7 +684,7 @@ func (fe *fileEdits) dropUnused(ws *workspace.Workspace) {
 	}
 	fileStart, fileEnd := fe.file.FileStart, fe.file.FileEnd
 	for _, imp := range fe.file.Imports {
-		pn := pkgNameOf(info, imp)
+		pn := gocode.PkgNameOf(info, imp)
 		if pn == nil || fe.needs[pn.Imported().Path()] {
 			continue
 		}
@@ -862,7 +847,7 @@ func (m *mover) newFile(qual func(*types.PkgName) string) (string, error) {
 	byPath := map[string]*source{} // which source first imports a path
 	for _, s := range m.sources {
 		for _, imp := range s.imports {
-			pn := pkgNameOf(m.Pkg.TypesInfo, imp)
+			pn := gocode.PkgNameOf(m.Pkg.TypesInfo, imp)
 			if qual(pn) == "" {
 				continue
 			}
@@ -910,7 +895,7 @@ func (m *mover) newFile(qual func(*types.PkgName) string) (string, error) {
 // importName returns the name the source s imports path as.
 func (m *mover) importName(s *source, path string) string {
 	for _, imp := range s.imports {
-		if pn := pkgNameOf(m.Pkg.TypesInfo, imp); pn != nil && pn.Imported().Path() == path {
+		if pn := gocode.PkgNameOf(m.Pkg.TypesInfo, imp); pn != nil && pn.Imported().Path() == path {
 			return pn.Name()
 		}
 	}
@@ -928,7 +913,7 @@ func (m *mover) appendTo(to, destPath string) error {
 	}
 	names := map[*types.PkgName]string{}
 	for _, imp := range m.allImports() {
-		pn := pkgNameOf(m.Pkg.TypesInfo, imp)
+		pn := gocode.PkgNameOf(m.Pkg.TypesInfo, imp)
 		if pn.Imported().Path() == destPath {
 			names[pn] = ""
 			continue

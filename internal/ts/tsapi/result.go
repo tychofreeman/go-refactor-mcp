@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/buke/typescript-go-internal/v7/pkg/ast"
+	"github.com/buke/typescript-go-internal/v7/pkg/checker"
 	"github.com/buke/typescript-go-internal/v7/pkg/scanner"
 )
 
@@ -88,12 +89,7 @@ func (r *result) edits(m *ast.Node, name string) ([]Edit, string) {
 	case ast.GetFunctionFlags(m)&ast.FunctionFlagsGenerator != 0:
 		return nil, fmt.Sprintf("%s is a generator", name)
 	}
-	old := ""
-	if rt := m.Type(); rt != nil {
-		old = l.source(rt)
-	} else if sig := c.GetSignatureFromDeclaration(m); sig != nil {
-		old = c.TypeToString(c.GetReturnTypeOfSignature(sig))
-	}
+	old := l.returnType(m, c)
 	if old == "" || old == "void" || old == "never" {
 		return nil, fmt.Sprintf("%s returns %s, so it has no result to keep; give it one first", name, map[bool]string{true: "nothing", false: old}[old == ""])
 	}
@@ -163,4 +159,16 @@ func (r *result) edits(m *ast.Node, name string) ([]Edit, string) {
 		body.ForEachChild(visit)
 	}
 	return edits, ""
+}
+
+// returnType is the type fn returns, as written or else as checked by c,
+// or "" when neither is known.
+func (l *lined) returnType(fn *ast.Node, c *checker.Checker) string {
+	ret := ""
+	if rt := fn.Type(); rt != nil {
+		ret = l.source(rt)
+	} else if sig := c.GetSignatureFromDeclaration(fn); sig != nil {
+		ret = c.TypeToString(c.GetReturnTypeOfSignature(sig))
+	}
+	return ret
 }

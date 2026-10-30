@@ -324,25 +324,7 @@ func (x *extraction) alwaysNonZero(fn *types.Func) bool {
 	if n == 0 || decl == nil || decl.Body == nil {
 		return false
 	}
-	for _, f := range decl.Type.Results.List {
-		if len(f.Names) > 0 {
-			return false
-		}
-	}
-	ok := true
-	ast.Inspect(decl.Body, func(node ast.Node) bool {
-		switch node := node.(type) {
-		case *ast.FuncLit:
-			return false
-		case *ast.DeferStmt:
-			ok = false
-		case *ast.ReturnStmt:
-			if len(node.Results) != n || !x.nonZeroValue(info, node.Results[n-1]) {
-				ok = false
-			}
-		}
-		return ok
-	})
+	ok := everyReturn(info, decl, n, x.nonZeroValue)
 	x.nonNilFuncs[fn] = ok
 	return ok
 }
@@ -418,6 +400,16 @@ func (x *extraction) alwaysNonNil(fn *types.Func) bool {
 	if decl == nil || decl.Body == nil {
 		return false
 	}
+	ok := everyReturn(info, decl, n, x.nonNilValue)
+	x.nonNilFuncs[fn] = ok
+	return ok
+}
+
+// everyReturn reports whether decl, a function of n unnamed results that
+// defers nothing, returns a last result that accept takes at each return
+// of its own (not of a function literal in it). `return g()` with several
+// results is not looked into.
+func everyReturn(info *types.Info, decl *ast.FuncDecl, n int, accept func(*types.Info, ast.Expr) bool) bool {
 	for _, f := range decl.Type.Results.List {
 		if len(f.Names) > 0 {
 			return false
@@ -431,14 +423,12 @@ func (x *extraction) alwaysNonNil(fn *types.Func) bool {
 		case *ast.DeferStmt:
 			ok = false // a deferred recover() returns the zero values: a nil error
 		case *ast.ReturnStmt:
-			// `return g()` with several results is not looked into.
-			if len(node.Results) != n || !x.nonNilValue(info, node.Results[n-1]) {
+			if len(node.Results) != n || !accept(info, node.Results[n-1]) {
 				ok = false
 			}
 		}
 		return ok
 	})
-	x.nonNilFuncs[fn] = ok
 	return ok
 }
 

@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
+	"github.com/tychofreeman/go-refactor-mcp/internal/edits/gocode"
 	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
 	"github.com/tychofreeman/go-refactor-mcp/internal/pattern"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
@@ -140,13 +141,7 @@ func (f *fun) checkNames(name string, params []string) error {
 	} else if f.Pkg.Types.Scope().Lookup(name) != nil {
 		return refactor.Refusef("package %s already declares %s", f.Pkg.Name, name)
 	}
-	used := map[string]bool{}
-	ast.Inspect(f.decl, func(n ast.Node) bool {
-		if id, ok := n.(*ast.Ident); ok {
-			used[id.Name] = true
-		}
-		return true
-	})
+	used := gocode.Idents(f.decl)
 	for _, p := range params {
 		if !token.IsIdentifier(p) {
 			return refactor.Refusef("parameter %q is not a Go identifier", p)

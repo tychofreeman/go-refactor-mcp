@@ -10,6 +10,7 @@ import (
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
+	"github.com/tychofreeman/go-refactor-mcp/internal/edits/gocode"
 	"github.com/tychofreeman/go-refactor-mcp/internal/imports"
 	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
@@ -286,13 +287,7 @@ func (g *preparer) supplies() []supply {
 	if !ok || len(out) != sig.Params().Len() {
 		return nil
 	}
-	taken := map[string]bool{}
-	ast.Inspect(g.fd, func(n ast.Node) bool {
-		if id, isID := n.(*ast.Ident); isID {
-			taken[id.Name] = true
-		}
-		return true
-	})
+	taken := gocode.Idents(g.fd)
 	for i := range out {
 		p := sig.Params().At(i)
 		if !types.Identical(out[i].typ, p.Type()) {
@@ -361,13 +356,7 @@ func (g *preparer) methodSig() *types.Signature {
 // fresh returns base, or base with a number, a name that neither the
 // switch nor the call uses.
 func (g *preparer) fresh(base string) string {
-	used := map[string]bool{}
-	ast.Inspect(g.stmt, func(n ast.Node) bool {
-		if id, ok := n.(*ast.Ident); ok {
-			used[id.Name] = true
-		}
-		return true
-	})
+	used := gocode.Idents(g.stmt)
 	for _, v := range g.params {
 		used[v.Name()] = true
 	}

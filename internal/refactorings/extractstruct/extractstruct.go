@@ -579,7 +579,7 @@ func (x *extraction) declEdits() []edit.TextEdit {
 			start = f.Doc.Pos()
 		}
 		from := x.Off(tf.LineStart(tf.Line(start)))
-		to := nextLine(x.Src, x.Off(f.End()))
+		to := textutil.NextLine(x.Src, x.Off(f.End()))
 		lines.Write(x.Src[from:to])
 		text := ""
 		if i == 0 {
@@ -625,14 +625,6 @@ func lineIndent(src []byte, start int) string {
 		i++
 	}
 	return string(src[start:i])
-}
-
-// nextLine returns the offset just past the newline that ends off's line.
-func nextLine(src []byte, off int) int {
-	if i := strings.IndexByte(string(src[off:]), '\n'); i >= 0 {
-		return off + i + 1
-	}
-	return len(src)
 }
 
 func joinAnd(names []string) string {

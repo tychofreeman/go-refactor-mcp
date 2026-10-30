@@ -304,7 +304,7 @@ func (x *extraction) intoDeclEdits() ([]edit.FileEdit, error) {
 			start = f.Doc.Pos()
 		}
 		from := x.Off(tf.LineStart(tf.Line(start)))
-		to := nextLine(x.Src, x.Off(f.End()))
+		to := textutil.NextLine(x.Src, x.Off(f.End()))
 		lines = append(lines, string(x.Src[from:to]))
 		out = append(out, edit.TextEdit{Start: from, End: to})
 	}

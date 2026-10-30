@@ -5,7 +5,9 @@ import (
 	"go/token"
 	"strings"
 
+	"github.com/tychofreeman/go-refactor-mcp/internal/edits/gocode"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 )
 
 // declNamed returns the file's top-level declaration declaring name, or
@@ -85,14 +87,14 @@ func offset(tf *token.File, file *ast.File, src []byte, rel, after, before strin
 		if d == nil {
 			return 0, "", "", refactor.Refusef("%s has no %s %s", rel, kindOf(after), after)
 		}
-		return nextLine(src, tf.Offset(d.End())), "\n", "", nil
+		return textutil.NextLine(src, tf.Offset(d.End())), "\n", "", nil
 	case before != "":
 		d := declNamed(file, before)
 		if d == nil {
 			return 0, "", "", refactor.Refusef("%s has no %s %s", rel, kindOf(before), before)
 		}
 		start := d.Pos()
-		if doc := docOf(d); doc != nil {
+		if doc := gocode.DocOf(d); doc != nil {
 			start = doc.Pos()
 		}
 		return tf.Offset(tf.LineStart(tf.Line(start))), "", "\n", nil
@@ -101,22 +103,4 @@ func offset(tf *token.File, file *ast.File, src []byte, rel, after, before strin
 		return len(src), "\n\n", "", nil
 	}
 	return len(src), "\n", "", nil
-}
-
-func docOf(d ast.Decl) *ast.CommentGroup {
-	switch d := d.(type) {
-	case *ast.FuncDecl:
-		return d.Doc
-	case *ast.GenDecl:
-		return d.Doc
-	}
-	return nil
-}
-
-// nextLine returns the offset just past the newline that ends off's line.
-func nextLine(src []byte, off int) int {
-	if i := strings.IndexByte(string(src[off:]), '\n'); i >= 0 {
-		return off + i + 1
-	}
-	return len(src)
 }

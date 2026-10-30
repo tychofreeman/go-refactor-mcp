@@ -129,23 +129,13 @@ func (l *lined) memberSignature(c *checker.Checker, class, m *ast.Node) (string,
 			}
 			ps = append(ps, dots+l.source(prm.Name())+opt+": "+typeOf(prm.Name(), prm.Type()))
 		}
-		ret := ""
-		if t := m.Type(); t != nil {
-			ret = l.source(t)
-		} else if sig := c.GetSignatureFromDeclaration(m); sig != nil {
-			ret = c.TypeToString(c.GetReturnTypeOfSignature(sig))
-		}
+		ret := l.returnType(m, c)
 		return name + "(" + strings.Join(ps, ", ") + "): " + ret + l.semi(), ""
 	case ast.IsGetAccessorDeclaration(m):
 		setter := slices.ContainsFunc(class.Members(), func(o *ast.Node) bool {
 			return ast.IsSetAccessorDeclaration(o) && o.Name() != nil && l.source(o.Name()) == name
 		})
-		ret := ""
-		if t := m.Type(); t != nil {
-			ret = l.source(t)
-		} else if sig := c.GetSignatureFromDeclaration(m); sig != nil {
-			ret = c.TypeToString(c.GetReturnTypeOfSignature(sig))
-		}
+		ret := l.returnType(m, c)
 		if setter {
 			return name + ": " + ret + l.semi(), ""
 		}
@@ -527,10 +517,8 @@ func (p *Project) UnionSwitchToMethod(ctx context.Context, path string, line int
 	}
 	ret := "void"
 	if returning > 0 {
-		if t := fn.Type(); t != nil {
-			ret = l.source(t)
-		} else if sig := c.GetSignatureFromDeclaration(fn); sig != nil {
-			ret = c.TypeToString(c.GetReturnTypeOfSignature(sig))
+		if t := l.returnType(fn, c); t != "" {
+			ret = t
 		}
 	}
 	var ps, args []string

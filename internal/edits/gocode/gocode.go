@@ -296,7 +296,7 @@ func RemoveImports(pkg *packages.Package, file *ast.File, adder *imports.Adder, 
 	}
 	var removed []string
 	for _, imp := range file.Imports {
-		pn := pkgNameOf(pkg.TypesInfo, imp)
+		pn := PkgNameOf(pkg.TypesInfo, imp)
 		if pn == nil || refs[pn.Name()] {
 			continue
 		}
@@ -334,7 +334,9 @@ func ImportNote(verb string, paths []string) string {
 	return verb + " import " + strings.Join(quoted, ", ")
 }
 
-func pkgNameOf(info *types.Info, imp *ast.ImportSpec) *types.PkgName {
+// PkgNameOf returns the package name imp declares in a file checked into
+// info, or nil for a blank or dot import.
+func PkgNameOf(info *types.Info, imp *ast.ImportSpec) *types.PkgName {
 	var o types.Object
 	if imp.Name != nil {
 		o = info.Defs[imp.Name]
@@ -394,6 +396,18 @@ func keys(m map[string]bool) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// Idents is the set of names the identifiers in n spell.
+func Idents(n ast.Node) map[string]bool {
+	names := map[string]bool{}
+	ast.Inspect(n, func(n ast.Node) bool {
+		if id, ok := n.(*ast.Ident); ok {
+			names[id.Name] = true
+		}
+		return true
+	})
+	return names
 }
 
 func joinOr(xs []string) string {

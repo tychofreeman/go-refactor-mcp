@@ -4,7 +4,6 @@
 package slidestmt
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"go/ast"
@@ -15,6 +14,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/site"
+	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
 
@@ -140,7 +140,7 @@ func stmtAt(tf *token.File, file *ast.File, line int) (list []ast.Stmt, i int) {
 func span(tf *token.File, file *ast.File, src []byte, s ast.Stmt) (start, end int, err error) {
 	line := tf.Line(s.Pos())
 	start = tf.Offset(tf.LineStart(line))
-	end = nextLine(src, tf.Offset(s.End()))
+	end = textutil.NextLine(src, tf.Offset(s.End()))
 	rest := strings.TrimSpace(string(src[tf.Offset(s.End()):end]))
 	if strings.TrimSpace(string(src[start:tf.Offset(s.Pos())])) != "" || (rest != "" && !strings.HasPrefix(rest, "//")) {
 		return 0, 0, refactor.Refusef("line %d has code besides the statement; put each statement on its own line first", line)
@@ -157,12 +157,4 @@ func span(tf *token.File, file *ast.File, src []byte, s ast.Stmt) (start, end in
 		start = first
 	}
 	return start, end, nil
-}
-
-// nextLine returns the offset of the start of the line after off.
-func nextLine(src []byte, off int) int {
-	if i := bytes.IndexByte(src[off:], '\n'); i >= 0 {
-		return off + i + 1
-	}
-	return len(src)
 }

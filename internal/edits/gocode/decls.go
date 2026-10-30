@@ -32,3 +32,14 @@ func ParseDeclarations(text string) (*Code, []ast.Decl, error) {
 	})
 	return c, f.Decls, nil
 }
+
+// DocOf is d's doc comment, or nil.
+func DocOf(d ast.Decl) *ast.CommentGroup {
+	switch d := d.(type) {
+	case *ast.FuncDecl:
+		return d.Doc
+	case *ast.GenDecl:
+		return d.Doc
+	}
+	return nil
+}
