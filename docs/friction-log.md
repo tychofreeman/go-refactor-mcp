@@ -3896,6 +3896,16 @@ it (its `New`), replace_declaration with empty content for the two
 methods. 17 seconds. A dump of every published tool before and after
 compared them. `Named` and `Called` were written by hand into
 add_declaration: new code. Nothing else by hand.
+## 2026-10-30: one decision of whether code can move (item 46.2)
+
+Through the CLI, the test first: create_file of `internal/reorder` and
+its table test, replace_statements of `Move.Check`, replace_text of
+tsapi's `Check`, `conflict` and the `Times` types, add_declaration of
+the facts functions. The core is new code, written by hand. The package
+was first called `moves`, a name tsapi's file already used, which the
+batch refused. Two TypeScript tests and one Go golden expected the read
+named before an act; the core names acts first, and the Go golden's
+wording was changed. Nothing else by hand.
 
 ## 2026-10-30: callbacks a module function runs only during the call (item 46.3)
 

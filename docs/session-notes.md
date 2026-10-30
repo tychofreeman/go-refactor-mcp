@@ -341,6 +341,10 @@ patterns sessions use, with their steps, in `docs/patterns.md`.
   two disagreements were then decided by the user: TypeScript takes
   Go's nil dereference (a nullish read may pass code that writes but
   does not throw otherwise or leave), Go takes TypeScript's leaving
+  (an effect does not move past a return, break or continue). The
+  rules then became one: `internal/reorder` (`Repeat`, `Conflict`),
+  which both languages call (item 46.2); change a rule there, not in
+  `analysis.Move.Check` or tsapi's `Check`.
   (an effect does not move past a return, break or continue).
 - **A module function that calls its callback only during the call**
   (2026-10-30, the user, item 46.3): known from its body
