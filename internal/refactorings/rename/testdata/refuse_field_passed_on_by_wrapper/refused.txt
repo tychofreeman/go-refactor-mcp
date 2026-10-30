@@ -1,0 +1,1 @@
+is passed as an interface to logf at m.go:18:32, where reflection may find fields by name

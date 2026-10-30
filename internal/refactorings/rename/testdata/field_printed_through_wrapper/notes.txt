@@ -1,0 +1,2 @@
+fmt's %+v and %#v show field names
+m.go:15:32 logf
