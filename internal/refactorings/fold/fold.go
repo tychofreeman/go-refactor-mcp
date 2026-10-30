@@ -537,7 +537,7 @@ func (f *folder) trySetter(p *packages.Package, file *ast.File, x ast.Expr, stac
 	}
 	for k, e := range b {
 		if n := f.count(k); k.Obj != f.self && n > 1 {
-			if (analysis.Move{Effects: f.ws.Effects(), Func: fa, Expr: e, Times: analysis.Shared}).Check() != nil {
+			if f.sharedMove(fa, e, []ast.Node{lit}).Check() != nil {
 				return skip(fmt.Sprintf("%s, used %d times in the body, would be evaluated once", types.ExprString(e), n))
 			}
 		}
@@ -1054,16 +1054,16 @@ func (f *folder) evaluatedFirst(fa *analysis.Func, roots []ast.Node, b map[patte
 		}
 		past = append(past, analysis.EvaluatedBefore(r, e.Pos(), nil)...)
 	}
-	m := analysis.Move{Effects: f.ws.Effects(), Func: fa, Expr: e, Past: past}
-	n := f.count(k)
-	if n > 1 {
-		m.Times = analysis.Shared // one value for each use the body makes of it
-	}
-	if o := m.Check(); o != nil {
-		if o.Past == nil {
-			return fmt.Sprintf("%s, used %d times in the body, would be evaluated once", text, n)
-		}
+	if o := (analysis.Move{Effects: f.ws.Effects(), Func: fa, Expr: e, Past: past}).Check(); o != nil {
 		return text + " would be evaluated before the code it is in: " + o.Why
+	}
+	if n := f.count(k); n > 1 { // one value for each use the body makes of it
+		if o := f.sharedMove(fa, e, roots).Check(); o != nil {
+			if o.Past == nil {
+				return fmt.Sprintf("%s, used %d times in the body, would be evaluated once", text, n)
+			}
+			return fmt.Sprintf("%s, used %d times in the body, would be evaluated once, but %s %s between its uses", text, n, types.ExprString(o.Past.(ast.Expr)), o.PastDoes)
+		}
 	}
 	before := func(a ast.Expr) string {
 		if a == nil {
@@ -1105,6 +1105,27 @@ func (f *folder) evaluatedFirst(fa *analysis.Func, roots []ast.Node, b map[patte
 		}
 	}
 	return ""
+}
+
+// sharedMove is the move that makes e one value for each use the body
+// makes of it: what e reads must not change in roots, the code the call
+// replaces (analysis.Move.Between), unless roots hold a function literal,
+// which may run later; then e may read nothing that can change.
+func (f *folder) sharedMove(fa *analysis.Func, e ast.Expr, roots []ast.Node) analysis.Move {
+	m := analysis.Move{Effects: f.ws.Effects(), Func: fa, Expr: e, Times: analysis.Shared}
+	for _, r := range roots {
+		lit := false
+		ast.Inspect(r, func(n ast.Node) bool {
+			_, ok := n.(*ast.FuncLit)
+			lit = lit || ok
+			return !lit
+		})
+		if lit {
+			return m
+		}
+	}
+	m.Past, m.Between = roots, true
+	return m
 }
 
 // staleRead is why e, an argument that may read memory other code can

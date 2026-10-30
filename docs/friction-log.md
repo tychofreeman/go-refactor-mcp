@@ -3855,3 +3855,13 @@ By hand, and no gorefactor gap: Markdown only. The README's top was
 rewritten with a Python script and the roadmap moved to `docs/roadmap.md`
 whole (2,500 lines); replace_text could have made the reference fixes, but
 this cloud session's gorefactor server ran on the linked computer.
+
+## 2026-10-30: the move decisions of item 45.4
+
+Through the CLI, tests first, one batch: the Go case in `TestMove`, the
+TypeScript test, two fold goldens; then replace_text in `analysis.Move`,
+tsapi's effects and fold, and add_declaration of `mayPass` and
+`sharedMove`. The new rules are new code, written by hand into those
+steps. One fold golden's refusal depends on which hole is checked
+first (a map's order), so it names what both refusals say. Nothing else
+by hand.

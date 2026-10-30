@@ -2533,6 +2533,19 @@ hand or a tool got in the way.
          when the code may not finish (`Stops`).
        Which way each should go is the user's to choose; the shared
        core follows from that.
+       *Decided and done* (2026-10-30, the user): TypeScript takes Go's
+       nil dereference: a read through what may be null or undefined
+       may be evaluated on the other side of code that neither throws
+       another way nor leaves (`Effects.OtherThrows`, `mayPass`), so two
+       such reads swap. Go takes TypeScript's leaving: an effect does
+       not move past a return, break or continue (`transfers` in the
+       effect case of `Move.Check`). fold judges a hole used several
+       times in the body by `Move.Between` over the code it replaces,
+       so `c.Get() + c.Get()` folds into `double(c.Get())` when nothing
+       there writes what `Get` reads (strict again when that code holds
+       a function literal). With extract_variable and inline_variable
+       before, only changesig's evaluation still refuses any read under
+       Several; the shared core is still to build.
     5. **One "always equals E" proof** (about 200-300 lines):
        remove_parameter's `value` (both languages), remove_dead_code's
        `value` and add_parameter's `replace_variable` each prove that

@@ -1318,3 +1318,32 @@ export function soak(p: Plant): number {
 `, NewExtractFunction(), `{"function": "soak", "case": "fern", "name": "f"}`, "", "declares n; splitting it would copy the declaration"},
 	})
 }
+
+// TestNullishReadsReorder checks that reads through what may be null or
+// undefined may swap, as nil dereferences may in Go: each throws either
+// way.
+func TestNullishReadsReorder(t *testing.T) {
+	src := `interface Bed { depth: number }
+export function water(a: Bed | undefined, b: Bed | undefined): number {
+  const x = a!.depth;
+  const y = b!.depth;
+  return x + y;
+}
+`
+	check(t, []change{
+		{name: "two nullish reads", src: src, r: NewMoveDown(), args: `{"line": 3}`, out: `interface Bed { depth: number }
+export function water(a: Bed | undefined, b: Bed | undefined): number {
+  const y = b!.depth;
+  const x = a!.depth;
+  return x + y;
+}
+`},
+		{name: "past a throw", src: `interface Bed { depth: number }
+export function water(a: Bed | undefined, d: number): number {
+  const x = a!.depth;
+  if (d < 0) throw new Error("dry");
+  return x;
+}
+`, r: NewMoveDown(), args: `{"line": 3}`, refused: "throw"},
+	})
+}

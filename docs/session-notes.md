@@ -336,8 +336,12 @@ patterns sessions use, with their steps, in `docs/patterns.md`.
   statements (`analysis.Spanning`), so a loop's other iterations count,
   and nothing when a use is in a closure. fold and changesig's
   evaluation still refuse any read, since they pass no code between;
-  give them `Between` with that code to relax them. The other two disagreements of 45.4 (nil dereferences,
-  leaving) are still the user's to decide.
+  give them `Between` with that code to relax them. fold followed
+  (the user, same day), judged over the code it replaces. The other
+  two disagreements were then decided by the user: TypeScript takes
+  Go's nil dereference (a nullish read may pass code that writes but
+  does not throw otherwise or leave), Go takes TypeScript's leaving
+  (an effect does not move past a return, break or continue).
 - **Schemas come from argument structs** (2026-10-30, item 45.1):
   `refactor.Schema[T]()`; a property is a field with a `desc` tag,
   optional with omitempty. Published schemas did not change, so the A/B
