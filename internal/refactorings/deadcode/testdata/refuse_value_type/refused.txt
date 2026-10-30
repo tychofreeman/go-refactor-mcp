@@ -1,0 +1,1 @@
+value WS is of type *example.com/m.Workspace, not name's type string

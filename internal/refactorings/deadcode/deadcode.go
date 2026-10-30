@@ -29,7 +29,7 @@ func New() *RemoveDeadCode { return &RemoveDeadCode{} }
 func (*RemoveDeadCode) Name() string { return "remove_dead_code" }
 
 func (*RemoveDeadCode) Description() string {
-	return `Delete a top-level declaration or a struct field that nothing uses, with its doc comment and the imports only it used: once the last call of legacyFormat went, removing legacyFormat deletes the function and its import of strings; removing Plant.Colour deletes the field once nothing reads, writes or names it in a literal (the end of a change of representation: fold literals through a setter, then remove the old fields). Exported code goes too, with a note that the module's API changed.
+	return `Delete a top-level declaration or a struct field that nothing uses, with its doc comment and the imports only it used: once the last call of legacyFormat went, removing legacyFormat deletes the function and its import of strings; removing Plant.Colour deletes the field once nothing reads, writes or names it in a literal (the end of a change of representation: fold literals through a setter, then remove the old fields). Exported code goes too, with a note that the module's API changed. value removes a field still read when every literal sets it equal to a path of the struct's other fields: value WS turns m.ws into m.WS and drops ws: s.WS from mover{Site: s, ws: s.WS}.
 Identify it by file and name (Name, Type.Method or Type.Field), or by line; also names more declarations of the package to remove with it, such as functions that only call each other, or a type and its methods.
 Refuses, saying why: something still used (its own body aside); init, main or a test function; a declaration with a //go: directive; a constant whose iota value a later one depends on; a method an interface names; an initializer with side effects; a blank name (var _ I = (*T)(nil)); a type with methods left; a field that is embedded, declared with others, given other than a constant in an unkeyed literal (a constant's element goes with it), or of a struct passed where reflection may see its fields (encoding/json, a comparison by reflection; what fmt prints is listed in a note).`
 }
@@ -43,7 +43,8 @@ func (*RemoveDeadCode) InputSchema() json.RawMessage {
     "name":   {"type": "string",  "description": "The declared name: with line, just the method or field name; without line, the package-level name, Type.Method or Type.Field."},
     "exported": {"type": "boolean", "description": "No longer needed: exported code is removed, with a note that the module's API changed."},
     "column": {"type": "integer", "description": "Optional 1-based column, only needed to disambiguate."},
-    "also":   {"type": "array", "items": {"type": "string"}, "description": "Optional: more names of the package to remove with it (Name or Type.Method); uses among them do not count."}
+    "also":   {"type": "array", "items": {"type": "string"}, "description": "Optional: more names of the package to remove with it (Name or Type.Method); uses among them do not count."},
+    "value":  {"type": "string",  "description": "For a field still used: the path of the struct's other fields every literal sets it equal to (WS, or Site.WS); its reads become that."}
   },
   "required": ["file", "name"],
   "additionalProperties": false
@@ -57,6 +58,7 @@ type args struct {
 	Name     string   `json:"name"`
 	Exported bool     `json:"exported,omitempty"`
 	Also     []string `json:"also,omitempty"`
+	Value    string   `json:"value,omitempty"`
 }
 
 // Plan checks preconditions and computes the edits.

@@ -81,9 +81,15 @@ func (r Reflected) Passed() string {
 // ReflectedArgs returns every argument PassedAsInterface would find, with
 // what the callee sees of it.
 func ReflectedArgs(info *types.Info, files []*ast.File, match func(types.Type) bool) []Reflected {
+	return reflectedArgs(info, files, match, wrappersIn([]unit{{info, files}}))
+}
+
+// reflectedArgs is ReflectedArgs, with wrappers the functions that only
+// pass arguments on to a printer (wrappersIn).
+func reflectedArgs(info *types.Info, files []*ast.File, match func(types.Type) bool, wrappers map[string]printer) []Reflected {
 	var refs []Reflected
 	passedAsInterface(info, files, match, func(call *ast.CallExpr, i int, arg ast.Expr) bool {
-		refs = append(refs, Reflected{Arg: arg, Type: info.TypeOf(arg), Callee: types.ExprString(call.Fun), Conv: info.Types[call.Fun].IsType(), Sight: sight(info, call, i)})
+		refs = append(refs, Reflected{Arg: arg, Type: info.TypeOf(arg), Callee: types.ExprString(call.Fun), Conv: info.Types[call.Fun].IsType(), Sight: sight(info, call, i, wrappers)})
 		return true
 	})
 	return refs
@@ -93,12 +99,16 @@ func ReflectedArgs(info *types.Info, files []*ast.File, match func(types.Type) b
 // package variants (a package and its test variant) share.
 func ReflectedIn(pkgs []*packages.Package, fset *token.FileSet, match func(types.Type) bool) []Reflected {
 	seen := map[token.Position]bool{}
-	var refs []Reflected
+	var units []unit
 	for _, p := range pkgs {
-		if p.TypesInfo == nil {
-			continue
+		if p.TypesInfo != nil {
+			units = append(units, unit{p.TypesInfo, p.Syntax})
 		}
-		for _, ref := range ReflectedArgs(p.TypesInfo, p.Syntax, match) {
+	}
+	wrappers := wrappersIn(units)
+	var refs []Reflected
+	for _, u := range units {
+		for _, ref := range reflectedArgs(u.info, u.files, match, wrappers) {
 			if pos := fset.Position(ref.Arg.Pos()); !seen[pos] {
 				seen[pos] = true
 				refs = append(refs, ref)
@@ -197,10 +207,123 @@ var printers = func() map[string]printer {
 	return m
 }()
 
+// unit is a package's files and their type information.
+type unit struct {
+	info  *types.Info
+	files []*ast.File
+}
+
+// wrappersIn returns the functions declared in units that only pass their
+// last, variadic ...any parameter on to a printer, or to another such
+// function, spread in the printer's place for its arguments, with their
+// own string parameter before it as the format when the printer is
+// formatted: logf(format string, args ...any) { fmt.Printf(format,
+// args...) }. They are described by full name as printers describe
+// theirs.
+func wrappersIn(units []unit) map[string]printer {
+	found := map[string]printer{}
+	for changed := true; changed; {
+		changed = false
+		for _, u := range units {
+			for _, f := range u.files {
+				for _, d := range f.Decls {
+					fd, ok := d.(*ast.FuncDecl)
+					if !ok || fd.Body == nil {
+						continue
+					}
+					fn, _ := u.info.Defs[fd.Name].(*types.Func)
+					if fn == nil {
+						continue
+					}
+					if _, done := found[fn.FullName()]; done {
+						continue
+					}
+					if p, ok := wrapperOf(u.info, fd, fn, found); ok {
+						found[fn.FullName()] = p
+						changed = true
+					}
+				}
+			}
+		}
+	}
+	return found
+}
+
+// wrapperOf describes fn, declared by fd, as a printer when it is one
+// wrappersIn looks for; known are the wrappers found so far.
+func wrapperOf(info *types.Info, fd *ast.FuncDecl, fn *types.Func, known map[string]printer) (printer, bool) {
+	sig := fn.Signature()
+	n := sig.Params().Len()
+	if !sig.Variadic() {
+		return printer{}, false
+	}
+	args := sig.Params().At(n - 1)
+	if el, ok := args.Type().(*types.Slice).Elem().Underlying().(*types.Interface); !ok || el.NumMethods() != 0 {
+		return printer{}, false
+	}
+	var format *types.Var
+	if n >= 2 {
+		if b, ok := sig.Params().At(n - 2).Type().Underlying().(*types.Basic); ok && b.Info()&types.IsString != 0 {
+			format = sig.Params().At(n - 2)
+		}
+	}
+	passed := map[*ast.Ident]bool{} // uses of args that a printer call spreads
+	formatted, plain, bad := false, false, false
+	ast.Inspect(fd.Body, func(node ast.Node) bool {
+		switch node := node.(type) {
+		case *ast.AssignStmt:
+			for _, l := range node.Lhs {
+				if id, ok := ast.Unparen(l).(*ast.Ident); ok && (info.Uses[id] == args || format != nil && info.Uses[id] == format) {
+					bad = true // a changed format, or other arguments
+				}
+			}
+		case *ast.CallExpr:
+			if !node.Ellipsis.IsValid() || len(node.Args) == 0 {
+				return true
+			}
+			id, ok := ast.Unparen(node.Args[len(node.Args)-1]).(*ast.Ident)
+			if !ok || info.Uses[id] != args {
+				return true
+			}
+			callee, _ := info.Uses[IdentOf(node.Fun)].(*types.Func)
+			if callee == nil {
+				return true
+			}
+			p, ok := printers[callee.FullName()]
+			if !ok {
+				p, ok = known[callee.FullName()]
+			}
+			if !ok || len(node.Args)-1 != p.args {
+				return true
+			}
+			if p.formatted {
+				fid, ok := ast.Unparen(node.Args[p.args-1]).(*ast.Ident)
+				if !ok || format == nil || info.Uses[fid] != format {
+					return true
+				}
+				formatted = true
+			} else {
+				plain = true
+			}
+			passed[id] = true
+		}
+		return true
+	})
+	if bad || formatted == plain {
+		return printer{}, false // other code, or both kinds of printer
+	}
+	for id, obj := range info.Uses {
+		if obj == args && !passed[id] {
+			return printer{}, false // args used another way
+		}
+	}
+	return printer{args: n - 1, formatted: formatted}, true
+}
+
 // sight says what the callee of call sees of its argument i: a printer
-// prints the value for every verb but %T, its field names only for %+v
-// and %#v, and neither for a value that prints itself.
-func sight(info *types.Info, call *ast.CallExpr, i int) Sight {
+// (or one of wrappers) prints the value for every verb but %T, its field
+// names only for %+v and %#v, and neither for a value that prints itself.
+func sight(info *types.Info, call *ast.CallExpr, i int, wrappers map[string]printer) Sight {
 	fn, _ := info.Uses[IdentOf(call.Fun)].(*types.Func)
 	if fn == nil {
 		return SeesNames
@@ -209,6 +332,9 @@ func sight(info *types.Info, call *ast.CallExpr, i int) Sight {
 		return Compares
 	}
 	p, ok := printers[fn.FullName()]
+	if !ok {
+		p, ok = wrappers[fn.FullName()]
+	}
 	if !ok || i < p.args {
 		return SeesNames
 	}

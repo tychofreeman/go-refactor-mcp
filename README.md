@@ -1900,7 +1900,15 @@ hand or a tool got in the way.
     - **A field the embedded struct already provides.** `rename` rightly
       refuses `mover.ws` to `WS` when the embedded Site promotes a `WS`;
       what was wanted is to drop the field for the promoted one when
-      every use sees the same value (Oct 26, done as text).
+      every use sees the same value (Oct 26, done as text). *Done*
+      (2026-10-30) as remove_dead_code's `value`, by the order of the
+      tool budget (an option, a proof in the engine): `value WS` removes
+      `mover.ws` when every literal of mover sets it to the `WS` of the
+      `Site` it embeds (`ws: s.WS` beside `Site: s`), the literal's
+      element for that field being a name or a path of fields, and
+      nothing writes `ws`, `Site` or `WS` outside literals; its reads
+      become `m.WS`, its elements go, then the field. A path through a
+      pointer is refused (a literal would dereference it).
     - **A bug:** `move_declaration` with `new_name` on an embedded type
       leaves the field name in keyed literals (`inliner{site: site{...}}`)
       and rolls back as a bug in its checks (Oct 26; noted in item 37,
@@ -1928,7 +1936,8 @@ hand or a tool got in the way.
       28). Left, as decisions rather than bugs: add_parameter's lazy
       getter, whose first call assigns a field (an effect, though
       repeating it changes nothing a caller can see), and rename's test
-      that prints a struct with `%+v` (the user's call). The lazy getter
+      that prints a struct with `%+v` (the user's call; *done* as item
+      42's rule: printing is a note, not a refusal). The lazy getter
       is *done* (the user chose to recognise its shape): a method whose
       body is `if r.f == nil { ... }` then `return r.f` counts as
       reading `r.f` and what its block reads, and its writes to the
@@ -2312,7 +2321,15 @@ hand or a tool got in the way.
     - **Wrappers:** a `logf(format string, args ...any)` that passes to
       fmt is a function not known, so it still refuses. vet's printf
       check finds wrappers by facts; a summary could carry "this
-      parameter reaches a printer".
+      parameter reaches a printer". *Done* (2026-10-30,
+      `analysis.wrappersIn`): a function of the module whose last,
+      variadic `...any` parameter only goes, spread, to a printer in its
+      arguments' place (with its string parameter before it as the
+      format, unchanged, when the printer is formatted) counts as that
+      printer, methods too, and so does one that passes on to such a
+      function; the call's own format then decides what is printed. One
+      that also uses its arguments another way (`json.Marshal(args)`), or
+      changes the format, is still not known.
     - **Other users:** extract_struct (the printed shape changes) and
       remove_dead_code still used `PassedAsInterface`, which counts every
       callee. *Done:* both go ahead where fmt prints the value, at any

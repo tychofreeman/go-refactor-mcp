@@ -3783,3 +3783,13 @@ rewrite, not existing code moved. Nothing else by hand.
 
 Version and notes with replace_text and create_file, the notes written
 from the titles of #413-#489. Nothing by hand.
+
+## 2026-10-30: printf wrappers; remove_dead_code's value (items 42, 38)
+
+Through the CLI, goldens first. The wrapper detection and the value
+check were written by hand into add_declaration and create_file: new
+analyses, not code moved. The old refusal golden for a wrapper became a
+positive one by create_file and delete_file. One golden expected a
+refusal at a column one off. The first write check counted `s.WS` inside
+`&mover{...}` as a write, since it walked the whole operand of `&`; it
+now walks only the path of what is written. Nothing else by hand.
