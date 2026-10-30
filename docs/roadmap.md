@@ -2647,9 +2647,21 @@ hand or a tool got in the way.
        extract_struct find where code goes and write it in the
        file's style each their own way; replace_declaration,
        inline_function and move_declaration likewise.
+       *Partly done* (2026-10-30): the copied helpers are one each,
+       `gocode.PkgNameOf`, `gocode.DocOf` and `textutil.NextLine`
+       (eight copies). Where each edit decides code goes is still its
+       own; one placement for all of them is open.
     5. **The rest of the clones** (about 150 lines): inspect's
        `targets`, the workspaces' per-file `Apply` and `Preload`,
        tsapi's type helpers, extract_function and inline_function.
+       *Done* (2026-10-30): `refactor.EachTarget` renders inspect's
+       targets for both languages; `history.Change.Add` is the per-file
+       step of both workspaces' Preview, Go's formatting given as a
+       `history.Format`; `lang.Preload`; tsapi's `lined.returnType`
+       (five copies); extract_function's `everyReturn`, shared by its
+       string and error exits; `gocode.Idents` (three walks). One
+       behavior changed: a created Go file that is empty is now
+       recorded, as TypeScript's already was.
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
