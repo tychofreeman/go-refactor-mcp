@@ -434,7 +434,18 @@ func (a *effects) Of(n *ast.Node) Effects {
 		}
 		if ast.IsPropertyAccessExpression(n) {
 			if s := a.c.GetSymbolAtLocation(n.Name()); s != nil && s.Flags&ast.SymbolFlagsGetAccessor != 0 {
-				out.add(a.unknown(n, "the getter"))
+				d := a.ownGetter(n)
+				if d == nil {
+					out.add(a.unknown(n, "the getter"))
+					return out
+				}
+				out.add(a.summary(n, d))
+				if _, fill := cacheOf(d); fill == nil && !a.primitive(n) {
+					out.Fresh = true
+					if out.At.Fresh == "" {
+						out.At.Fresh = a.part(n, "the getter")
+					}
+				}
 			}
 		}
 		return out
@@ -542,7 +553,8 @@ func (a *effects) call(n *ast.Node) Effects {
 			}
 		}
 		out.add(a.summary(n, body))
-		if t := a.c.GetTypeAtLocation(n); !a.primitive(n) && (t == nil || t.Flags()&(checker.TypeFlagsVoid|checker.TypeFlagsUndefined|checker.TypeFlagsNull) == 0) {
+		_, fill := cacheOf(body)
+		if t := a.c.GetTypeAtLocation(n); fill == nil && !a.primitive(n) && (t == nil || t.Flags()&(checker.TypeFlagsVoid|checker.TypeFlagsUndefined|checker.TypeFlagsNull) == 0) {
 			out.Fresh = true
 			if out.At.Fresh == "" {
 				out.At.Fresh = a.part(n, "the call")
@@ -644,7 +656,9 @@ func (a *effects) summary(call, fn *ast.Node) Effects {
 	a.sums[fn] = nil
 	body := fn.Body()
 	var e Effects
-	if ast.IsBlock(body) {
+	if field, fill := cacheOf(fn); fill != nil {
+		e = a.cached(fn, field, fill)
+	} else if ast.IsBlock(body) {
 		e = a.ofNodes(body.Statements())
 	} else {
 		e = a.Of(body)
@@ -669,10 +683,102 @@ func (a *effects) summary(call, fn *ast.Node) Effects {
 	return a.named(e, call)
 }
 
-// named returns a body's effects e with every part named as call, which
-// refusals name rather than code in the body.
+// ownGetter returns the get accessor that the property access n reads,
+// when the module declares it with a body and no subclass could override
+// it: static or private, as ownFunction takes a method.
+func (a *effects) ownGetter(n *ast.Node) *ast.Node {
+	s := a.c.GetSymbolAtLocation(n.Name())
+	if s == nil {
+		return nil
+	}
+	for _, d := range s.Declarations {
+		if ast.IsGetAccessorDeclaration(d) && d.Body() != nil && !ast.GetSourceFileOfNode(d).IsDeclarationFile &&
+			(d.ModifierFlags()&(ast.ModifierFlagsStatic|ast.ModifierFlagsPrivate) != 0 || ast.IsPrivateIdentifier(d.Name())) {
+			return d
+		}
+	}
+	return nil
+}
+
+// cacheOf returns the property of this that the getter or method fn
+// caches its result in, and the block that makes the result, when its
+// body is if (this.f === undefined) { ... } return this.f; (or == null,
+// === null, !this.f). Its assignments to this.f only fill the cache:
+// whenever the block runs, later calls return what it made, so they do
+// not count as writes, and the result is not a new value each time.
+func cacheOf(fn *ast.Node) (field string, fill *ast.Node) {
+	body := fn.Body()
+	if body == nil || !ast.IsBlock(body) || len(body.Statements()) != 2 {
+		return "", nil
+	}
+	ifs, ret := body.Statements()[0], body.Statements()[1]
+	if !ast.IsIfStatement(ifs) || ifs.AsIfStatement().ElseStatement != nil || !ast.IsReturnStatement(ret) || ret.Expression() == nil {
+		return "", nil
+	}
+	field = thisProperty(ret.Expression())
+	cond := ast.SkipParentheses(ifs.Expression())
+	var tested *ast.Node
+	switch {
+	case ast.IsPrefixUnaryExpression(cond) && cond.AsPrefixUnaryExpression().Operator == ast.KindExclamationToken:
+		tested = cond.AsPrefixUnaryExpression().Operand
+	case ast.IsBinaryExpression(cond):
+		b := cond.AsBinaryExpression()
+		switch b.OperatorToken.Kind {
+		case ast.KindEqualsEqualsEqualsToken, ast.KindEqualsEqualsToken:
+		default:
+			return "", nil
+		}
+		if r := b.Right; r.Kind == ast.KindNullKeyword || ast.IsIdentifier(r) && r.Text() == "undefined" {
+			tested = b.Left
+		}
+	}
+	if field == "" || tested == nil || thisProperty(tested) != field {
+		return "", nil
+	}
+	return field, ifs.AsIfStatement().ThenStatement
+}
+
+// thisProperty returns f when e is this.f, or "".
+func thisProperty(e *ast.Node) string {
+	e = ast.SkipParentheses(e)
+	if ast.IsPropertyAccessExpression(e) && e.Expression().Kind == ast.KindThisKeyword && ast.IsIdentifier(e.Name()) {
+		return e.Name().Text()
+	}
+	return ""
+}
+
+// cached returns the effects of running the body of fn, a getter that
+// caches its result in this.field (cacheOf), whose block fill makes it:
+// its assignments to this.field count only for what they evaluate.
+func (a *effects) cached(fn *ast.Node, field string, fill *ast.Node) Effects {
+	stmts := []*ast.Node{fill}
+	if ast.IsBlock(fill) {
+		stmts = fill.Statements()
+	}
+	ifs := fn.Body().Statements()[0]
+	e := a.Of(ifs.Expression())
+	for _, s := range stmts {
+		if ast.IsExpressionStatement(s) && ast.IsBinaryExpression(s.Expression()) {
+			b := s.Expression().AsBinaryExpression()
+			if b.OperatorToken.Kind == ast.KindEqualsToken && thisProperty(b.Left) == field {
+				e.add(a.Of(b.Right))
+				continue
+			}
+		}
+		e.add(a.ofNodes([]*ast.Node{s}))
+	}
+	e.add(a.Of(fn.Body().Statements()[1].Expression()))
+	return e
+}
+
+// named returns a body's effects e with every part named as call (or the
+// property access that runs a getter), which refusals name rather than
+// code in the body.
 func (a *effects) named(e Effects, call *ast.Node) Effects {
 	at := a.part(call, "the call")
+	if !ast.IsCallExpression(call) {
+		at = a.part(call, "the getter")
+	}
 	for _, f := range []*string{&e.At.Write, &e.At.Throw, &e.At.Read, &e.Why} {
 		if *f != "" {
 			*f = at

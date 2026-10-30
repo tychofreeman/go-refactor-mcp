@@ -16,13 +16,14 @@ import (
 type matcher struct {
 	c        *checker.Checker
 	pl, cl   *lined
-	inP, inC func(*ast.Symbol) bool // whether a symbol is declared in the pattern's, the code's function
-	holes    map[*ast.Symbol]int    // the pattern's parameters that match any expression, by position
-	this     bool                   // this in the pattern is a hole too, at position len(holes)
-	args     []*ast.Node            // what each hole matched, first
-	texts    []string               // for a hole that stands for text other than args' source: that text
-	runs     [][]*ast.Node          // and the code nodes it is made of (none for constant text)
-	uses     [][]*ast.Node          // the pattern's uses of each hole
+	inP, inC func(*ast.Symbol) bool         // whether a symbol is declared in the pattern's, the code's function
+	holes    map[*ast.Symbol]int            // the pattern's parameters that match any expression, by position
+	fields   map[*ast.Symbol]map[string]int // parameters whose properties (d.plants) are holes of their own, at these positions
+	this     bool                           // this in the pattern is a hole too, at position len(holes)
+	args     []*ast.Node                    // what each hole matched, first
+	texts    []string                       // for a hole that stands for text other than args' source: that text
+	runs     [][]*ast.Node                  // and the code nodes it is made of (none for constant text)
+	uses     [][]*ast.Node                  // the pattern's uses of each hole
 	pair     map[*ast.Symbol]*ast.Symbol
 	back     map[*ast.Symbol]*ast.Symbol
 	literals bool // literals may differ: each pair is recorded
@@ -98,7 +99,11 @@ func (m *matcher) match(p, x *ast.Node) bool {
 		return true
 	}
 	hole := -1
-	if ast.IsIdentifier(p) && !propertyName(p) {
+	if fs := m.objectOf(p); fs != nil {
+		if i, ok := fs[p.Name().Text()]; ok {
+			hole = i
+		}
+	} else if ast.IsIdentifier(p) && !propertyName(p) {
 		if i, ok := m.holes[symbolOf(m.c, p)]; ok {
 			hole = i
 		}
@@ -188,6 +193,15 @@ func (m *matcher) match(p, x *ast.Node) bool {
 		return m.differ(p, x)
 	}
 	return m.matchChildren(p, x)
+}
+
+// objectOf returns the holes of the properties of the parameter whose
+// property p reads (p is d.plants), or nil.
+func (m *matcher) objectOf(p *ast.Node) map[string]int {
+	if m.fields == nil || !ast.IsPropertyAccessExpression(p) || !ast.IsIdentifier(p.Expression()) {
+		return nil
+	}
+	return m.fields[symbolOf(m.c, p.Expression())]
 }
 
 // matchChildren reports whether x's children match p's, one by one.

@@ -588,3 +588,81 @@ export function water(p: Plant): number {
 `}, NewUnionSwitchToMethod(), `{"file": "src/water.ts", "line": 4, "method": "water"}`, nil, "Cactus has no case"},
 	})
 }
+
+// A parameter the body uses only by its properties matches what stands
+// for each, and the call passes an object of them; a setter, { ...p, f: v },
+// matches an object literal of p's type that ends with f.
+func TestFoldObjectsAndSetters(t *testing.T) {
+	check(t, []change{
+		{"parameter object", map[string]string{"src/feed.ts": `export function feed(bed: string, plants: number, ml: number): string {
+  return bed + plants * ml;
+}
+
+export interface Dose {
+  plants: number;
+  ml: number;
+}
+
+export function feed2(bed: string, d: Dose): string {
+  return feed(bed, d.plants, d.ml);
+}
+
+export const a = feed("roses", 3, 20);
+
+export function b(n: number): string {
+  return feed("ferns", n, n + 1);
+}
+`}, NewFold(), `{"file": "src/feed.ts", "name": "feed2"}`, map[string]string{"src/feed.ts": `export function feed(bed: string, plants: number, ml: number): string {
+  return bed + plants * ml;
+}
+
+export interface Dose {
+  plants: number;
+  ml: number;
+}
+
+export function feed2(bed: string, d: Dose): string {
+  return feed(bed, d.plants, d.ml);
+}
+
+export const a = feed2("roses", { plants: 3, ml: 20 });
+
+export function b(n: number): string {
+  return feed2("ferns", { plants: n, ml: n + 1 });
+}
+`}, ""},
+		{"setter", map[string]string{"src/p.ts": `export interface Plant {
+  name: string;
+  height?: number;
+}
+
+export function withHeight(p: Plant, h: number): Plant {
+  return { ...p, height: h };
+}
+
+export function rose(n: string): Plant {
+  return { name: n, height: 3 };
+}
+
+export const fern: Plant = { name: "fern", height: 1 + 1 };
+export const moss: Plant = { height: 0, name: "moss" };
+export const other = { name: "x", height: 2 };
+`}, NewFold(), `{"file": "src/p.ts", "name": "withHeight"}`, map[string]string{"src/p.ts": `export interface Plant {
+  name: string;
+  height?: number;
+}
+
+export function withHeight(p: Plant, h: number): Plant {
+  return { ...p, height: h };
+}
+
+export function rose(n: string): Plant {
+  return withHeight({ name: n }, 3);
+}
+
+export const fern: Plant = withHeight({ name: "fern" }, 1 + 1);
+export const moss: Plant = { height: 0, name: "moss" };
+export const other = { name: "x", height: 2 };
+`}, ""},
+	})
+}

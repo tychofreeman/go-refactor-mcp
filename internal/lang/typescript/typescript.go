@@ -51,8 +51,9 @@ type Language struct {
 	dir     string
 	history *history.Stack
 
-	mu sync.Mutex
-	ws *workspace.Workspace // loaded lazily, refreshed before each call
+	mu     sync.Mutex
+	ws     *workspace.Workspace            // loaded lazily, refreshed before each call
+	others map[string]*workspace.Workspace // other solutions a call named a file of, by root
 }
 
 // New returns TypeScript for the solution at or above dir, recording its
@@ -63,7 +64,7 @@ func New(dir string, h *history.Stack) *Language {
 
 // all is TypeScript's refactorings and edits.
 func all() []refactor.RefactoringOf[*workspace.Workspace] {
-	return []refactor.RefactoringOf[*workspace.Workspace]{rename.New(), createfile.New(), adddecl.New(), replacetext.New(), replacestmts.New(), insertstmts.New(), replaceexpr.New(), addfield.New(), createfromusage.New(), changesig.NewAdd(), changesig.NewRemove(), changesig.NewMove(), changesig.NewIntroduce(), changesig.NewParamsToObject(), changesig.NewAddResult(), changesig.NewChangeFieldType(), changesig.NewChangeParameterType(), changetype.New(), changesig.NewFunctionToMethod(), changesig.NewMethodToFunction(),
+	return []refactor.RefactoringOf[*workspace.Workspace]{rename.New(), createfile.New(), adddecl.New(), replacetext.New(), replacestmts.New(), insertstmts.New(), replaceexpr.New(), addfield.New(), createfromusage.New(), changesig.NewAdd(), changesig.NewRemove(), changesig.NewMove(), changesig.NewIntroduce(), changesig.NewParamsToObject(), changesig.NewAddResult(), changesig.NewChangeFieldType(), changesig.NewChangeParameterType(), changetype.New(), changesig.NewFunctionToMethod(), changesig.NewMethodToFunction(), changesig.NewMoveMethod(),
 		simplify.NewExtractVariable(), simplify.NewInlineVariable(), simplify.NewMoveUp(), simplify.NewMoveDown(), simplify.NewInvertIf(), simplify.NewRemoveElse(), simplify.NewExtractFunction(), simplify.NewInlineFunction(),
 		move.NewMoveDeclaration(), move.NewMoveFile(), move.NewDeleteFile(),
 		shapes.NewFold(), shapes.NewParameterize(), shapes.NewMergeDuplicate(), shapes.NewRemoveDeadCode(), shapes.NewExtractInterface(), shapes.NewUnionSwitchToMethod(), shapes.NewPrepareSwitchForTypes(), addcase.New(), addelement.New(), replacedecl.New()}
@@ -135,6 +136,145 @@ func (l *Language) workspace() (*workspace.Workspace, error) {
 	return l.ws, nil
 }
 
+// route returns the workspace for the files args names, and args with
+// their paths relative to its root: the solution's own, unless a file is
+// in none of its projects and the nearest tsconfig.json at or above it is
+// not one of them either; then that tsconfig's solution, with the line
+// that says which. Files of two solutions are refused. Callers hold l.mu.
+func (l *Language) route(args json.RawMessage) (ws *workspace.Workspace, out json.RawMessage, intro, refused string, err error) {
+	home, err := l.workspace()
+	if err != nil {
+		return nil, nil, "", "", err
+	}
+	var v any
+	if json.Unmarshal(args, &v) != nil {
+		return home, args, "", "", nil
+	}
+	homeRoot := home.Dir()
+	abs := func(p string) string {
+		if filepath.IsAbs(p) {
+			return filepath.Clean(p)
+		}
+		return filepath.Join(homeRoot, p)
+	}
+	configs := map[string]bool{}
+	for _, c := range home.Projects() {
+		configs[filepath.Join(homeRoot, c)] = true
+	}
+	byRoot := map[string][]string{}
+	var roots []string
+	for _, f := range lang.NamedFiles(v) {
+		a, r := abs(f), homeRoot
+		if !home.Has(a) {
+			if c := nearestConfig(existingDir(filepath.Dir(a))); c != "" && !configs[c] {
+				r = filepath.Dir(c)
+			}
+		}
+		if byRoot[r] == nil {
+			roots = append(roots, r)
+		}
+		byRoot[r] = append(byRoot[r], f)
+	}
+	switch {
+	case len(roots) > 1:
+		var parts []string
+		for _, r := range roots {
+			parts = append(parts, fmt.Sprintf("%s (%s)", relTo(homeRoot, r), strings.Join(byRoot[r], ", ")))
+		}
+		return nil, nil, "", fmt.Sprintf("this call names files of more than one solution: %s. A call or batch works in one solution; send the steps for each as separate calls.", strings.Join(parts, "; ")), nil
+	case len(roots) == 0 || roots[0] == homeRoot:
+		return home, args, "", "", nil
+	}
+	root := roots[0]
+	if ws, err = l.solution(root); err != nil {
+		return nil, nil, "", "", err
+	}
+	out, err = json.Marshal(lang.MapFiles(v, func(p string) string { return relTo(root, abs(p)) }))
+	return ws, out, fmt.Sprintf("In the solution at %s (paths below are relative to it):\n", relTo(homeRoot, root)), "", err
+}
+
+// solution returns the workspace of the solution at root, other than the
+// directory's own, loading it on first use and refreshing it after.
+// Callers hold l.mu.
+func (l *Language) solution(root string) (*workspace.Workspace, error) {
+	if ws := l.others[root]; ws != nil {
+		_, err := ws.Refresh()
+		return ws, err
+	}
+	ws, err := workspace.Load(root)
+	if err != nil {
+		return nil, err
+	}
+	ws.History = l.history
+	if l.others == nil {
+		l.others = map[string]*workspace.Workspace{}
+	}
+	l.others[root] = ws
+	return ws, nil
+}
+
+// undoSolution returns the workspace of the solution, other than the
+// directory's own, whose files the change on top of the stack changed,
+// and the line that says which; or nil. Callers hold l.mu.
+func (l *Language) undoSolution() (*workspace.Workspace, string) {
+	c, ok := l.history.Last()
+	if !ok || l.ws == nil {
+		return nil, ""
+	}
+	for p := range c.After {
+		if l.ws.Has(p) {
+			return nil, ""
+		}
+		best := ""
+		for root := range l.others {
+			if strings.HasPrefix(p, root+string(filepath.Separator)) && len(root) > len(best) {
+				best = root
+			}
+		}
+		if best != "" {
+			return l.others[best], fmt.Sprintf("In the solution at %s:\n", relTo(l.ws.Dir(), best))
+		}
+		break
+	}
+	return nil, ""
+}
+
+// nearestConfig returns the tsconfig.json at or above dir, or "".
+func nearestConfig(dir string) string {
+	for {
+		if c := filepath.Join(dir, "tsconfig.json"); exists(c) {
+			return c
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return ""
+		}
+		dir = parent
+	}
+}
+
+// exists reports whether there is a file or directory at path.
+func exists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+// existingDir is dir, or its nearest ancestor that exists.
+func existingDir(dir string) string {
+	for !exists(dir) && filepath.Dir(dir) != dir {
+		dir = filepath.Dir(dir)
+	}
+	return dir
+}
+
+// relTo is path relative to base, with slashes.
+func relTo(base, path string) string {
+	if r, err := filepath.Rel(base, path); err == nil {
+		return filepath.ToSlash(r)
+	}
+	return path
+}
+
 // Preload starts loading the workspace in the background; the channel
 // closes when it is done.
 func (l *Language) Preload() <-chan struct{} {
@@ -166,10 +306,16 @@ func (l *Language) Step(tool string, args json.RawMessage) (string, bool, error)
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	ws, err := l.workspace()
-	if err != nil {
-		return "", false, err
+	ws, args, intro, refused, err := l.route(args)
+	if err != nil || refused != "" {
+		return refused, refused != "", err
 	}
+	text, wasRefused, err := l.step(ws, r, args)
+	return intro + text, wasRefused, err
+}
+
+// step runs r in ws. Callers hold l.mu.
+func (l *Language) step(ws *workspace.Workspace, r refactor.RefactoringOf[*workspace.Workspace], args json.RawMessage) (string, bool, error) {
 	res, err := refactor.Run(ws, r, args, refactor.OptionsOf[*workspace.Workspace]{Compact: !l.FullDiffs})
 	if err != nil {
 		return "", false, err
@@ -236,15 +382,15 @@ func testCommand(dir, pattern string) []string {
 
 // Batch runs the steps of one batch call.
 func (l *Language) Batch(args json.RawMessage) (string, error) {
-	batch, refused := refactor.ParseBatch(args, lookup)
-	if refused != "" {
-		return refused, nil
-	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	ws, err := l.workspace()
-	if err != nil {
-		return "", err
+	ws, args, intro, refused, err := l.route(args)
+	if err != nil || refused != "" {
+		return refused, err
+	}
+	batch, refused := refactor.ParseBatch(args, lookup)
+	if refused != "" {
+		return intro + refused, nil
 	}
 	b, err := refactor.RunBatch(ws, batch.Steps, l.options(batch.Unchecked))
 	if err != nil {
@@ -253,7 +399,7 @@ func (l *Language) Batch(args json.RawMessage) (string, error) {
 	if batch.Summary {
 		b.Diff = ""
 	}
-	return b.String(), nil
+	return intro + b.String(), nil
 }
 
 // Inspect reads TypeScript code; a refusal is its text.
@@ -264,18 +410,21 @@ func (l *Language) Inspect(args json.RawMessage) (string, error) {
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	ws, err := l.workspace()
-	if err != nil {
-		return "", err
+	ws, args, intro, refused, err := l.route(args)
+	if err != nil || refused != "" {
+		return refused, err
+	}
+	if err := refactor.DecodeArgs(args, &q); err != nil {
+		return err.Error(), nil
 	}
 	out, err := inspect.RunWith(ws, q, inspect.Options{ByName: l.ReadByName})
 	if err != nil {
 		if refactor.IsRefusal(err) {
-			return err.Error(), nil
+			return intro + err.Error(), nil
 		}
 		return "", err
 	}
-	return out, nil
+	return intro + out, nil
 }
 
 // Check reports whether the solution type-checks, and runs its tests if
@@ -313,8 +462,13 @@ func (l *Language) Check(_ context.Context, args json.RawMessage) (string, error
 func (l *Language) Undo() (string, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	ws, err := l.workspace()
-	if err != nil {
+	if _, err := l.workspace(); err != nil {
+		return "", err
+	}
+	ws, intro := l.undoSolution()
+	if ws == nil {
+		ws = l.ws
+	} else if _, err := ws.Refresh(); err != nil {
 		return "", err
 	}
 	if !ws.CanUndo() {
@@ -324,7 +478,7 @@ func (l *Language) Undo() (string, error) {
 	if c.Label == "" { // not undone
 		return "Cannot undo: " + err.Error(), nil
 	}
-	text := fmt.Sprintf("UNDONE %s\n\n%s", strings.TrimPrefix(c.Label, "undo "), c.Diff)
+	text := fmt.Sprintf("%sUNDONE %s\n\n%s", intro, strings.TrimPrefix(c.Label, "undo "), c.Diff)
 	if err != nil {
 		text += "\nThe solution could not be loaded again: " + err.Error()
 	}

@@ -144,3 +144,103 @@ func TestMove(t *testing.T) {
 		}
 	}
 }
+
+const cache = `let shared = 0;
+
+function bump(): void {
+  shared++;
+}
+
+export class Pots {
+  private made?: number[];
+  private get all(): number[] {
+    if (this.made === undefined) {
+      this.made = [1, 2];
+    }
+    return this.made;
+  }
+  private get counted(): number[] {
+    shared++;
+    return [1];
+  }
+  get open(): number[] {
+    if (!this.made) {
+      this.made = [3];
+    }
+    return this.made;
+  }
+
+  twice(): number {
+    const a = this.all;
+    return a.length;
+  }
+
+  sum(): number {
+    const a = this.all;
+    bump();
+    return a.length;
+  }
+
+  counts(): number {
+    const a = this.counted;
+    return a.length;
+  }
+
+  opened(): number {
+    const a = this.open;
+    return a.length;
+  }
+}
+`
+
+// A getter that makes its result on first use and caches it in a property
+// reads that property; its assignments to it and the value it makes do
+// not count. Only a getter no subclass could override is summarized.
+func TestCachedGetter(t *testing.T) {
+	dir := t.TempDir()
+	for name, text := range map[string]string{
+		"tsconfig.json": `{"compilerOptions": {"strict": true, "noEmit": true, "types": []}, "include": ["src"]}`,
+		"src/a.ts":      cache,
+	} {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, name)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	p, err := Load(filepath.Join(dir, "tsconfig.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	l, why := p.lined(filepath.Join(dir, "src/a.ts"))
+	if why != "" {
+		t.Fatal(why)
+	}
+	c, done := p.prog.GetProgram().GetTypeCheckerForFile(context.Background(), l.f)
+	defer done()
+	a := newEffects(c, l)
+	for _, tc := range []struct {
+		fn       string
+		from, to int
+		times    Times
+		want     string
+	}{
+		{"Pots.twice", 0, 0, Several, ""},
+		{"Pots.twice", 0, 0, Shared, ""},
+		{"Pots.sum", 1, 2, Once, "the call bump() at a.ts:33 may change state, and this.all at a.ts:32 reads state"},
+		{"Pots.counts", 0, 0, Several, "the getter this.counted at a.ts:38 may change state"},
+		{"Pots.opened", 0, 0, Several, "the getter this.open at a.ts:43 may change state"},
+	} {
+		fn, _, _, why := l.function(tc.fn)
+		if why != "" {
+			t.Fatal(why)
+		}
+		stmts := fn.Body().Statements()
+		expr := stmts[0].AsVariableStatement().DeclarationList.AsVariableDeclarationList().Declarations.Nodes[0].Initializer()
+		got := a.Check(Move{Expr: expr, Past: stmts[tc.from:tc.to], Times: tc.times})
+		if tc.want == "" && got != "" || !strings.Contains(got, tc.want) {
+			t.Errorf("%s, %v: want %q, got %q", tc.fn, tc.times, tc.want, got)
+		}
+	}
+}
