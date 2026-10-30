@@ -297,6 +297,13 @@ patterns sessions use, with their steps, in `docs/patterns.md`.
   path assigns it, and a call at a module's top level is still refused
   (its variable would be the module's). Guards with a last return
   still inline as a conditional expression, which comes first.
+- **TypeScript's rename and names found as strings** (2026-10-29,
+  item 43.9): the same rule as Go's for fields that fmt prints. Code
+  that finds properties by name (JSON.stringify, Object.keys and the
+  like, for...in, `"name" in x`) refuses; what console prints is a note.
+  A function not known that takes `unknown` is not checked, unlike Go's
+  interface parameters: in TypeScript that would refuse every value a
+  test's `equal(got: unknown, ...)` sees.
 - **Instructions by language** (2026-10-29, item 43.4): a project
   without Go gets `TypeScriptInstructions` (internal/mcpserver), whose
   example batch `TestTypeScriptInstructions` runs and whose tool list

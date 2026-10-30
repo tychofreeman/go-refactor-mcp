@@ -27,7 +27,7 @@ func (*Rename) Name() string { return "rename" }
 
 func (*Rename) Description() string {
 	return `Rename a function, class, interface, type, variable, parameter, property or method, and every reference to it in every project of the solution, tests included: renaming water in src/plant.ts to irrigate changes its declaration, each import { water } and each call. Identify it by file, line and its current name (column if the name is on the line twice); without line, name is a top-level declaration of file or a member (Bed.plant), and with function a local of that function ("Bed.plant", name "rows").
-Refuses, saying why: a new name that is not an identifier or is reserved, or that a file the rename changes already uses; what the language service cannot rename (a library's declaration, a keyword).`
+Refuses, saying why: a new name that is not an identifier or is reserved, or that a file the rename changes already uses; a member of a type whose values reach code that finds properties by name (JSON.stringify, Object.keys, for...in, "name" in x; what console prints is listed in a note); what the language service cannot rename (a library's declaration, a keyword).`
 }
 
 func (*Rename) InputSchema() json.RawMessage {
@@ -79,6 +79,10 @@ func (*Rename) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Pla
 	if err != nil {
 		return nil, err
 	}
+	keyed, printed := ws.KeyedUses(path, offset)
+	if keyed != "" {
+		return nil, refactor.Refusef("%s", keyed)
+	}
 	edits, why, err := ws.Rename(path, offset, a.NewName)
 	if err != nil {
 		return nil, err
@@ -96,11 +100,15 @@ func (*Rename) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Pla
 			return nil, refactor.Refusef("%q is already used in %s, so the rename could change what a name refers to; choose another name", a.NewName, where)
 		}
 	}
-	return &refactor.Plan{
+	plan := &refactor.Plan{
 		Summary:   fmt.Sprintf("renamed %q to %q (%d occurrence%s in %d file%s)", a.Name, a.NewName, n, textutil.Plural(n), len(edits), textutil.Plural(len(edits))),
 		Edits:     edits,
 		Locations: true,
-	}, nil
+	}
+	if len(printed) > 0 {
+		plan.Notes = append(plan.Notes, "what these calls print changes, since they print property names: "+textutil.FirstFew(printed, 5))
+	}
+	return plan, nil
 }
 
 // locate returns the offset of the occurrence of a.Name that a names:

@@ -2,6 +2,7 @@ package rename
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -92,11 +93,17 @@ export function soak(liters: number): number {
 // withDrip is the solution with src/drip.ts.
 func withDrip(t *testing.T) (*workspace.Workspace, string) {
 	t.Helper()
+	return withFile(t, "src/drip.ts", drip)
+}
+
+// withFile is the solution with one more file.
+func withFile(t *testing.T, name, src string) (*workspace.Workspace, string) {
+	t.Helper()
 	dir := t.TempDir()
 	if err := os.CopyFS(dir, os.DirFS("../../workspace/testdata/solution")); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "src/drip.ts"), []byte(drip), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, name), []byte(src), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	ws, err := workspace.Load(dir)
@@ -140,6 +147,45 @@ func TestRenameMemberAndLocal(t *testing.T) {
 		if res := run(t, ws, tc.args); res.Applied || !strings.Contains(res.Refused, tc.want) {
 			t.Errorf("%s: want a refusal with %q, got %s", tc.args, tc.want, res)
 		}
+	}
+}
+
+// plants is a file whose Plant values reach code that finds properties by
+// name (passed as uses), and console.log.
+const plants = `declare const console: { log(...a: unknown[]): void };
+
+export interface Plant {
+  name: string;
+  height: number;
+}
+
+export const garden: Plant[] = [{ name: "rose", height: 2 }];
+%s
+`
+
+// A member renamed where a value holding its type reaches code that finds
+// properties by name is refused; where console prints one, the rename
+// goes ahead with a note.
+func TestRenameKeyedMember(t *testing.T) {
+	for _, tc := range []struct{ uses, args, want string }{
+		{"export const saved = JSON.stringify(garden);", `{"file": "src/plants.ts", "name": "Plant.height", "new_name": "size"}`, "a value holding Plant is passed to JSON.stringify at plants.ts:9, which finds properties by name"},
+		{"export const keys = Object.keys(garden[0]);", `{"file": "src/plants.ts", "name": "Plant.name", "new_name": "title"}`, "passed to Object.keys at plants.ts:9"},
+		{"export function tall(x: Plant | string): boolean {\n  return typeof x !== \"string\" && \"height\" in x;\n}", `{"file": "src/plants.ts", "name": "Plant.height", "new_name": "size"}`, `"height" in tests a value of Plant for the property by name at plants.ts:10`},
+		{"export function each(p: Plant): void {\n  for (const k in p) {\n    console.log(k);\n  }\n}", `{"file": "src/plants.ts", "name": "Plant.name", "new_name": "title"}`, "looped over with for...in at plants.ts:10"},
+	} {
+		ws, _ := withFile(t, "src/plants.ts", fmt.Sprintf(plants, tc.uses))
+		if res := run(t, ws, tc.args); res.Applied || !strings.Contains(res.Refused, tc.want) {
+			t.Errorf("%s: want a refusal with %q, got %s", tc.uses, tc.want, res)
+		}
+	}
+	ws, _ := withFile(t, "src/plants.ts", fmt.Sprintf(plants, "export function show(p: Plant): void {\n  console.log(p);\n}"))
+	res := run(t, ws, `{"file": "src/plants.ts", "name": "Plant.name", "new_name": "title"}`)
+	if !res.Applied || !strings.Contains(strings.Join(res.Notes, "\n"), "what these calls print changes, since they print property names: plants.ts:10 console.log") {
+		t.Errorf("want a note on console.log, got %s", res)
+	}
+	ws, _ = withFile(t, "src/plants.ts", fmt.Sprintf(plants, "export const n = garden.length;"))
+	if res := run(t, ws, `{"file": "src/plants.ts", "name": "Plant.height", "new_name": "size"}`); !res.Applied {
+		t.Errorf("a member no keyed code reaches: %s", res)
 	}
 }
 
