@@ -534,6 +534,14 @@ patterns sessions use, with their steps, in `docs/patterns.md`.
   resolution. Turns lost to guessed argument names (3 of 13 batches)
   are what loading the schemas first avoids. The transcript keeps only
   what follows the last compaction, so measure before one.
+  So the user asked for the check: `cmd/read-guard`, a PreToolUse hook
+  in `.claude/settings.json` (2026-10-30), refuses Read of a `.go` file
+  and sed, cat, head, tail, less, more, nl, awk or grep naming one,
+  outside testdata/. It denies with a JSON decision and exit 0, since
+  `go run` turns an exit status of 2 into 1, which Claude Code takes
+  for the hook failing and lets the call through. grep over
+  directories (a search, not a read) and git diff stay allowed. It
+  applies to sessions started in the checkout, from the next one.
 
 - **Would a fresh model recognize it?** (2026-10-22, a probe, $0.23):
   three Sonnet sessions, `claude -p` in a copy of the repo at the

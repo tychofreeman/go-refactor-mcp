@@ -3944,3 +3944,10 @@ languages, replace_text of the plans and descriptions, add_declaration
 of TypeScript's `copied`. Three calls refused on argument names I
 guessed (add_field's `name`, replace_text's `all_occurrences`), each
 answered with the schema. Nothing by hand.
+## 2026-10-30: a hook that keeps Go reads in inspect
+
+Through the CLI: create_file of the test, the command and
+`.claude/settings.json` in one batch; replace_statements and
+add_declaration to deny through JSON once running the hook showed that
+`go run` hides exit status 2. Read through inspect for this PR. Nothing
+by hand.

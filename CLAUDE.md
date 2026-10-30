@@ -76,6 +76,9 @@ until the MCP is reconnected.
    (`["Settle", "Ledger.Post"]`, no file). Avoid reading whole files
    with Read or `cat`: each result is sent again on every later turn,
    and whole files were over half of what reading cost in the A/B runs.
+   A hook (`.claude/settings.json`, `cmd/read-guard`) refuses Read of
+   a `.go` file, and sed, cat, head, tail, awk or grep naming one,
+   outside testdata/; searching directories with grep is allowed.
 3. **Don't search before a refactoring.** rename, add_parameter,
    move_declaration and the others find every reference with the type
    checker.
