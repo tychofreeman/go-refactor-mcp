@@ -2362,15 +2362,34 @@ hand or a tool got in the way.
     5. **Method families.** add_parameter and the other signature tools
        on a method that implements an interface or overrides one are
        refused by the type check; Go changes the family together
-       (`changesig` `findFamily`).
-    6. **inspect `uses`** is refused.
+       (`changesig` `findFamily`). *Done* for add_parameter,
+       remove_parameter and move_parameter (`tsapi` `family`): the same
+       method of every type it implements or extends, through types that
+       do not declare it, and of every type that implements or extends one
+       of those, changes with it, and calls through any of them; an
+       interface's method (`Iface.method`) can be the one named. Only
+       types related by `implements` and `extends` count: a class that
+       fits an interface without naming it is left to the type check.
+       Open: add_result, change_parameter_type and
+       convert_params_to_object still change one method.
+    6. **inspect `uses`** is refused. *Done:* each name (`Name` or
+       `Class.member`) lists its uses in the solution by role (switch on
+       it, compared, written, called, made with new, used as a type,
+       read), each with its line; a name declared in two files is refused
+       with both.
     7. **add_field does not fill object literals** of the type that lack
-       the property; they are refused. Go fills unkeyed literals.
+       the property; they are refused. Go fills unkeyed literals. *Done:*
+       add_field's `value` gives one new property to every object literal
+       of the type that lacks it (a literal with a spread is left to the
+       type check), in each literal's layout.
     8. **One schema per tool in a project with both languages**
        (`lang.Dispatcher.Tools` keeps the first language's): TypeScript's
        own options (`add_element`'s `column`, `add_result`'s `field` and
        `kept`) are not advertised, and Go's schema forbids unknown
-       properties. Merge the properties of the two.
+       properties. Merge the properties of the two. *Done:*
+       `lang.mergeSchemas` publishes the properties of both, requiring
+       only what both require; each language still refuses arguments it
+       does not take.
     9. **rename through string keys.** Nothing refuses or notes a type
        whose values reach `JSON.stringify`, `Object.keys`, `in` or an
        index by a string, as Go's reflection check does for

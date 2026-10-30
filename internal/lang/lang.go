@@ -89,8 +89,9 @@ func (d *Dispatcher) For(args json.RawMessage) (Language, string) {
 
 // Tools returns the refactorings and edits of every language, each name
 // once, in the order the languages and their tools come. A name that
-// several languages have keeps the first's schema, and its description
-// is the first's followed by each other's, introduced by the language.
+// several languages have takes the properties of each one's schema
+// (mergeSchemas), and its description is the first's followed by each
+// other's, introduced by the language.
 func (d *Dispatcher) Tools() []Tool {
 	var out []Tool
 	at := map[string]int{}
@@ -98,11 +99,54 @@ func (d *Dispatcher) Tools() []Tool {
 		for _, t := range l.Tools() {
 			if i, ok := at[t.Name]; ok {
 				out[i].Description += "\n\nIn " + l.Name() + " files: " + t.Description
+				out[i].Schema = mergeSchemas(out[i].Schema, t.Schema)
 				continue
 			}
 			at[t.Name] = len(out)
 			out = append(out, t)
 		}
+	}
+	return out
+}
+
+// mergeSchemas returns the schema a with the properties of b that a
+// lacks, requiring only what both require, so that either language's
+// arguments fit it; a itself when either is not an object's schema.
+func mergeSchemas(a, b json.RawMessage) json.RawMessage {
+	var sa, sb map[string]any
+	if json.Unmarshal(a, &sa) != nil || json.Unmarshal(b, &sb) != nil {
+		return a
+	}
+	pa, _ := sa["properties"].(map[string]any)
+	pb, _ := sb["properties"].(map[string]any)
+	if pa == nil || pb == nil {
+		return a
+	}
+	for k, v := range pb {
+		if _, ok := pa[k]; !ok {
+			pa[k] = v
+		}
+	}
+	both := map[string]bool{}
+	rb, _ := sb["required"].([]any)
+	for _, r := range rb {
+		both[fmt.Sprint(r)] = true
+	}
+	ra, _ := sa["required"].([]any)
+	var required []any
+	for _, r := range ra {
+		if both[fmt.Sprint(r)] {
+			required = append(required, r)
+		}
+	}
+	if required == nil {
+		delete(sa, "required")
+	} else {
+		sa["required"] = required
+	}
+	out, err := json.Marshal(sa)
+	if err != nil {
+		return a
 	}
 	return out
 }

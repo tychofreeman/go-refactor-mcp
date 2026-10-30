@@ -27,7 +27,8 @@ func (*AddField) Name() string { return "add_field" }
 
 func (*AddField) Description() string {
 	return `Add properties to an interface, a class or an object type (type Spot = { ... }): an edit, to give a type the state a feature needs (add_property is another name for it in a batch). field "colour: string;" with after "height" adds colour just after height in interface Plant. field is TypeScript, one or more members with their doc comments (in a class, with initializers or methods too); with type, field gives only names (field "colour", type "string"). Without after or before they go at the end. A type on one line is opened up into lines.
-Identify the type by file and name. Refused with the compiler's errors: a duplicate name, an object literal of the type that lacks a new required property.`
+Identify the type by file and name. value gives one new property to each object literal of the type that lacks it: with field "colour: string;", value "'red'" adds colour: 'red' to each.
+Refused with the compiler's errors: a duplicate name, an object literal of the type that lacks a new required property (give value, or make it optional).`
 }
 
 func (*AddField) InputSchema() json.RawMessage {
@@ -39,7 +40,8 @@ func (*AddField) InputSchema() json.RawMessage {
     "field":  {"type": "string", "description": "The members to add, as TypeScript, e.g. \"timeout?: number; // per try\"."},
     "type":   {"type": "string", "description": "Optional: their type, when field gives only names (field \"owner\", type \"string\")."},
     "after":  {"type": "string", "description": "Optional: a member to put them just after."},
-    "before": {"type": "string", "description": "Optional: a member to put them just before."}
+    "before": {"type": "string", "description": "Optional: a member to put them just before."},
+    "value":  {"type": "string", "description": "Optional, with one property: the expression each object literal of the type that lacks it gets for it."}
   },
   "required": ["file", "name", "field"],
   "additionalProperties": false
@@ -54,6 +56,7 @@ func (*AddField) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.P
 		Type   string `json:"type"`
 		After  string `json:"after"`
 		Before string `json:"before"`
+		Value  string `json:"value"`
 	}
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
@@ -82,9 +85,27 @@ func (*AddField) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.P
 		return nil, refactor.Refusef("field has no members")
 	}
 	text := pl.Prefix + gocode.Reindent(content, pl.Indent, multiline) + pl.Suffix
-	return &refactor.Plan{
+	plan := &refactor.Plan{
 		Summary:  fmt.Sprintf("added %s to %s in %s", strings.Join(names, ", "), a.Name, ws.Rel(path)),
 		Edits:    []edit.FileEdit{{Path: path, Edits: []edit.TextEdit{{Start: pl.At, End: pl.End, NewText: text}}}},
 		Supplied: content,
-	}, nil
+	}
+	if a.Value != "" {
+		if len(names) != 1 {
+			return nil, refactor.Refusef("value goes with one property; add them one at a time")
+		}
+		fills, why := ws.FillLiterals(path, a.Name, names[0], a.Value)
+		if why != "" {
+			return nil, refactor.Refusef("%s", why)
+		}
+		n := 0
+		for _, fe := range fills {
+			n += len(fe.Edits)
+		}
+		plan.Edits = edit.Merge(append(plan.Edits, fills...))
+		if n > 0 {
+			plan.Notes = append(plan.Notes, fmt.Sprintf("gave %s %s in %d object literal%s", names[0], strings.TrimSpace(a.Value), n, map[bool]string{true: "", false: "s"}[n == 1]))
+		}
+	}
+	return plan, nil
 }

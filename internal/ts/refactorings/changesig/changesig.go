@@ -49,7 +49,7 @@ func (*AddParameter) Name() string { return "add_parameter" }
 
 func (*AddParameter) Description() string {
 	return `Add a parameter to a function or method, and pass the same value for it at every call in the solution: with parameter unit, type string and value "L", function water(bed: string, liters: number) becomes water(bed: string, liters: number, unit: string), and water("roses", 2) becomes water("roses", 2, "L"). The body does not use it yet, so behavior is unchanged; add it, then change the body.
-Identify the function by file and name (Class.method for a method; Class.constructor, whose calls are the news of the class and the super calls of classes extending it). value must mean the same at every call (a name every call sees alike); before puts the parameter ahead of that one (default: last, before a rest parameter). A call passing fewer arguments gets undefined for those it skips.
+Identify the function by file and name (Class.method for a method; Class.constructor, whose calls are the news of the class and the super calls of classes extending it). A method changes with its family: the interface method it implements (Iface.method names one), the class method it overrides, and every other implementation and override, with the calls through each. value must mean the same at every call (a name every call sees alike); before puts the parameter ahead of that one (default: last, before a rest parameter). A call passing fewer arguments gets undefined for those it skips.
 Refuses, saying why: a function used as a value (xs.map(f) passes an index), a call that spreads its arguments, an overload with too few parameters to take it where it goes (overloads change with the implementation), a class extending one without a constructor of its own, a name the body already reads, a value a call cannot see.`
 }
 
@@ -89,7 +89,7 @@ func (*RemoveParameter) Name() string { return "remove_parameter" }
 
 func (*RemoveParameter) Description() string {
 	return `Remove a parameter the body does not read, and its argument at every call in the solution: removing height, function prune(bed: string, height: number) becomes prune(bed: string), and prune("roses", 3) becomes prune("roses"). Use it last when taking a feature out: first change the body so it no longer reads the parameter.
-Identify the function by file and name (Class.method for a method), and give the parameter. A dropped argument must plainly have no effects: a name, a literal, this, a property of one, or a function.
+Identify the function by file and name (Class.method for a method), and give the parameter. A method changes with its family: the interface method it implements (Iface.method names one), the class method it overrides, and every other implementation and override, with the calls through each. A dropped argument must plainly have no effects: a name, a literal, this, a property of one, or a function.
 Refuses, saying why: a body that reads the parameter or arguments, a parameter property (constructor(public soil: string)), a function used as a value, a call that spreads its arguments, an argument that could have effects.`
 }
 
@@ -124,7 +124,7 @@ func (*MoveParameter) Name() string { return "move_parameter" }
 
 func (*MoveParameter) Description() string {
 	return `Move a parameter to another position, and its argument at every call in the solution: with parameter height and before bed, function prune(bed: string, height: number) becomes prune(height: number, bed: string), and prune("roses", 3) becomes prune(3, "roses").
-Identify the function by file and name (Class.method for a method); before is the parameter it goes ahead of (default: last, before a rest parameter).
+Identify the function by file and name (Class.method for a method); before is the parameter it goes ahead of (default: last, before a rest parameter). A method changes with its family: the interface method it implements (Iface.method names one), the class method it overrides, and every other implementation and override, with the calls through each.
 Refuses, saying why: a call where the new order of evaluation could matter (an argument that could have effects), a call that passes only some of the arguments it reorders, a rest parameter, a function used as a value.`
 }
 

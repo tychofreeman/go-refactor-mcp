@@ -1,10 +1,12 @@
 package tsapi
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
 	"github.com/buke/typescript-go-internal/v7/pkg/ast"
+	"github.com/buke/typescript-go-internal/v7/pkg/checker"
 )
 
 // ReplaceDeclaration returns the edit that puts content in place of the
@@ -92,6 +94,12 @@ func (p *Project) AddElement(path string, line, column int, element, after, befo
 		return nil, fmt.Sprintf("%d literals start on line %d (columns %s); give column", len(lits), line, strings.Join(at, ", "))
 	}
 	lit := lits[0]
+	return l.addElement(lit, element, after, before)
+}
+
+// addElement returns the edit that adds element to the object or array
+// literal lit, as AddElement does.
+func (l *lined) addElement(lit *ast.Node, element string, after string, before string) ([]Edit, string) {
 	var elems []*ast.Node
 	if ast.IsObjectLiteralExpression(lit) {
 		elems = lit.AsObjectLiteralExpression().Properties.Nodes
@@ -109,7 +117,7 @@ func (p *Project) AddElement(path string, line, column int, element, after, befo
 	if len(elems) == 0 {
 		return []Edit{{File: l.f.FileName(), Start: l.pos(lit) + 1, End: closing, NewText: map[bool]string{true: " " + element + " ", false: element}[ast.IsObjectLiteralExpression(lit)]}}, ""
 	}
-	multiline := l.line(l.pos(elems[0])) != line
+	multiline := l.line(l.pos(elems[0])) != l.line(l.pos(lit))
 	at := len(elems) // the element goes before elems[at]
 	if name := after + before; name != "" {
 		at = -1
@@ -146,6 +154,73 @@ func (p *Project) AddElement(path string, line, column int, element, after, befo
 		return []Edit{{File: l.f.FileName(), Start: e, End: e, NewText: "\n" + ind + element + ","}}, ""
 	}
 	return []Edit{{File: l.f.FileName(), Start: last.End(), End: last.End(), NewText: ",\n" + ind + element}}, ""
+}
+
+// FillLiterals returns the edits that add "name: value" to every object
+// literal of the project whose type is the interface, class or object type
+// typeName at the top level of the file at path, and which has no property
+// name (nor a spread, which may give it).
+func (p *Project) FillLiterals(ctx context.Context, path, typeName, name, value string) ([]Edit, string) {
+	l, why := p.lined(path)
+	if why != "" {
+		return nil, why
+	}
+	var decl *ast.Node
+	for _, s := range l.f.Statements.Nodes {
+		if (ast.IsInterfaceDeclaration(s) || ast.IsClassDeclaration(s) || ast.IsTypeAliasDeclaration(s)) && s.Name() != nil && s.Name().Text() == typeName {
+			decl = s
+		}
+	}
+	if decl == nil {
+		return nil, fmt.Sprintf("the file declares no interface, class or object type %s", typeName)
+	}
+	c, done := p.prog.GetProgram().GetTypeChecker(ctx)
+	defer done()
+	target := c.GetSymbolAtLocation(decl.Name())
+	var edits []Edit
+	for _, f := range p.prog.GetProgram().GetSourceFiles() {
+		if f.IsDeclarationFile || strings.Contains(f.FileName(), "/node_modules/") {
+			continue
+		}
+		fl := newLined(f)
+		var visit func(n *ast.Node) bool
+		visit = func(n *ast.Node) bool {
+			if why != "" {
+				return true
+			}
+			if ast.IsObjectLiteralExpression(n) && !mayHave(n, name) {
+				if t := c.GetContextualType(n, checker.ContextFlagsNone); t != nil && target != nil && (t.Symbol() == target || t.Alias() != nil && t.Alias().Symbol() == target) {
+					var es []Edit
+					es, why = fl.addElement(n, name+": "+strings.TrimSpace(value), "", "")
+					if why != "" {
+						why = fmt.Sprintf("the literal at %s: %s", fl.where(n), why)
+						return true
+					}
+					edits = append(edits, es...)
+				}
+			}
+			return n.ForEachChild(visit)
+		}
+		visit(f.AsNode())
+		if why != "" {
+			return nil, why
+		}
+	}
+	return edits, ""
+}
+
+// mayHave reports whether the object literal lit has a property called
+// name, or a spread, which may give it one.
+func mayHave(lit *ast.Node, name string) bool {
+	for _, e := range lit.AsObjectLiteralExpression().Properties.Nodes {
+		if ast.IsSpreadAssignment(e) {
+			return true
+		}
+		if nm := e.Name(); nm != nil && (ast.IsIdentifier(nm) || ast.IsStringLiteral(nm)) && nm.Text() == name {
+			return true
+		}
+	}
+	return false
 }
 
 // AddCase returns the edits that add content to a switch or an if chain

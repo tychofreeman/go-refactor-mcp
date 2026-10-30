@@ -74,6 +74,55 @@ func TestAddField(t *testing.T) {
 	}
 }
 
+// uses has object literals of Plant, one on a line and one over lines,
+// and one of another type.
+const uses = `import type { Plant, Spot } from "./shapes";
+
+export const rose: Plant = { name: "rose", height: 2 };
+export const ferns: Plant[] = [
+  {
+    name: "fern",
+    height: 1,
+  },
+];
+export const spot: Spot = { x: 1, y: 2 };
+`
+
+// value gives a new required property to every object literal of the
+// type, in the literal's layout.
+func TestAddFieldWithValue(t *testing.T) {
+	ws, dir := load(t)
+	if err := os.WriteFile(filepath.Join(dir, "src/uses.ts"), []byte(uses), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ws, err := workspace.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run := func(args string) *refactor.Result {
+		res, err := refactor.Run(ws, New(), json.RawMessage(`{"file": "src/shapes.ts", `+args[1:]), refactor.OptionsOf[*workspace.Workspace]{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return res
+	}
+	if res := run(`{"name": "Plant", "field": "colour: string;"}`); res.Applied || !strings.Contains(res.Refused, "colour") {
+		t.Errorf("without value: want a refusal naming colour, got %s", res)
+	}
+	if res := run(`{"name": "Plant", "field": "colour, scent", "type": "string", "value": "\"red\""}`); res.Applied || !strings.Contains(res.Refused, "value goes with one property") {
+		t.Errorf("value with two properties: want a refusal, got %s", res)
+	}
+	if res := run(`{"name": "Plant", "field": "colour: string;", "value": "\"green\""}`); !res.Applied {
+		t.Fatalf("with value: %s", res)
+	}
+	got, _ := os.ReadFile(filepath.Join(dir, "src/uses.ts"))
+	for _, want := range []string{`{ name: "rose", height: 2, colour: "green" }`, "    height: 1,\n    colour: \"green\",\n  },", "{ x: 1, y: 2 }"} {
+		if !strings.Contains(string(got), want) {
+			t.Errorf("uses.ts:\n%s\nwant it to hold:\n%s", got, want)
+		}
+	}
+}
+
 func TestRefusals(t *testing.T) {
 	ws, _ := load(t)
 	for _, tc := range []struct{ args, want string }{

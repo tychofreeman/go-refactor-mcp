@@ -49,7 +49,10 @@ const MaxLines = 400
 func RunWith(ws *workspace.Workspace, q Query, o Options) (string, error) {
 	switch {
 	case len(q.Uses) > 0:
-		return "", refactor.Refusef("uses does not read TypeScript yet; read the declarations by name")
+		if q.File != "" || q.Function != "" || q.StartLine != 0 || q.EndLine != 0 || len(q.Targets) > 0 || len(q.Names) > 0 {
+			return "", refactor.Refusef("give uses alone: each is found in the solution by its name, without file")
+		}
+		return ws.Uses(q.Uses), nil
 	case len(q.Targets) > 0:
 		return targets(ws, q, o)
 	case len(q.Names) > 0:

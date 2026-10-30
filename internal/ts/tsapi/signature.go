@@ -63,6 +63,14 @@ func (p *Project) ChangeSignature(ctx context.Context, path, name string, ch Sig
 		if other := l.reads(c, fn.Body(), ch.Add.Name, nil); other != "" {
 			return nil, fmt.Sprintf("the body of %s reads another %s (%s), which the parameter would hide; choose another name", name, ch.Add.Name, other)
 		}
+		for _, m := range t.family {
+			if other := newLined(ast.GetSourceFileOfNode(m)).reads(c, m.Body(), ch.Add.Name, nil); other != "" {
+				return nil, fmt.Sprintf("the body of %s, which changes with %s, reads another %s (%s), which the parameter would hide; choose another name", memberName(m), name, ch.Add.Name, other)
+			}
+			if list, moff := passed(m); len(list.Nodes)-moff < at {
+				return nil, fmt.Sprintf("%s, which changes with %s, has %d parameters, fewer than the position the new one takes (%d)", memberName(m), name, len(list.Nodes)-moff, at+1)
+			}
+		}
 	case ch.Remove != "":
 		i := index(ch.Remove)
 		if i < 0 {
@@ -77,6 +85,17 @@ func (p *Project) ChangeSignature(ctx context.Context, path, name string, ch Sig
 		}
 		if where := l.reads(c, fn.Body(), "arguments", nil); where != "" {
 			return nil, fmt.Sprintf("the body of %s reads arguments (%s), whose positions would change", name, where)
+		}
+		for _, m := range t.family {
+			list, moff := passed(m)
+			if len(list.Nodes)-moff <= i {
+				continue
+			}
+			ml, prm := newLined(ast.GetSourceFileOfNode(m)), list.Nodes[moff+i]
+			pname := ml.source(prm.Name())
+			if where := ml.reads(c, m.Body(), pname, c.GetSymbolAtLocation(prm.Name())); where != "" {
+				return nil, fmt.Sprintf("the body of %s, which changes with %s, reads %s (%s); change the body first so that it no longer does", memberName(m), name, pname, where)
+			}
 		}
 	case ch.Move != "":
 		if moved = index(ch.Move); moved < 0 {
@@ -107,7 +126,10 @@ func (p *Project) ChangeSignature(ctx context.Context, path, name string, ch Sig
 		}
 	}
 
-	var edits []Edit
+	edits, why := t.familyEdits(ch, at, moved)
+	if why != "" {
+		return nil, why
+	}
 	decl := fn.ParameterList()
 	switch {
 	case ch.Add != nil:
@@ -192,6 +214,10 @@ type target struct {
 	off       int         // 1 when a this parameter, which is not passed, comes first
 	ctor      bool
 	calls     []*ast.Node
+	// family are the other methods that change with it (Project.family),
+	// and syms the symbols of it and of them, which its calls name.
+	family []*ast.Node
+	syms   map[*ast.Symbol]bool
 }
 
 // target finds the function or method called name in the file at path;
@@ -203,7 +229,11 @@ func (p *Project) target(ctx context.Context, path, name string) (*target, func(
 	}
 	fn, overloads, nameNode, why := l.function(name)
 	if why != "" {
-		return nil, nil, why
+		sig := l.interfaceMethod(name)
+		if sig == nil {
+			return nil, nil, why
+		}
+		fn, overloads, nameNode = sig, nil, sig.Name()
 	}
 	c, done := p.prog.GetProgram().GetTypeChecker(ctx)
 	sym := c.GetSymbolAtLocation(nameNode)
@@ -211,7 +241,18 @@ func (p *Project) target(ctx context.Context, path, name string) (*target, func(
 		done()
 		return nil, nil, fmt.Sprintf("%s has no symbol to find its calls by", name)
 	}
-	t := &target{l: l, fn: fn, overloads: overloads, nameNode: nameNode, c: c, sym: sym, params: fn.Parameters(), ctor: ast.IsConstructorDeclaration(fn)}
+	family, why := p.family(c, fn)
+	if why != "" {
+		done()
+		return nil, nil, why
+	}
+	syms := map[*ast.Symbol]bool{sym: true}
+	for _, m := range family {
+		if s := c.GetSymbolAtLocation(m.Name()); s != nil {
+			syms[s] = true
+		}
+	}
+	t := &target{l: l, fn: fn, overloads: overloads, nameNode: nameNode, c: c, sym: sym, params: fn.Parameters(), ctor: ast.IsConstructorDeclaration(fn), family: family, syms: syms}
 	if len(t.params) > 0 && ast.IsThisParameter(t.params[0]) {
 		t.off = 1
 	}
@@ -234,9 +275,10 @@ func (t *target) isRest(i int) bool {
 	return i >= 0 && i < len(t.params)-t.off && t.params[t.off+i].AsParameterDeclaration().DotDotDotToken != nil
 }
 
-// declares reports whether id is the name of one of t's overloads.
+// declares reports whether id is the name of one of t's overloads, or of
+// a method of its family.
 func (t *target) declares(id *ast.Node) bool {
-	for _, o := range t.overloads {
+	for _, o := range append(t.overloads, t.family...) {
 		if o.Name() == id {
 			return true
 		}
@@ -259,7 +301,7 @@ func (t *target) findCalls(p *Project) string {
 				return true
 			}
 			if ast.IsIdentifier(nd) && nd.Text() == t.sym.Name && nd != t.nameNode && !t.declares(nd) {
-				if s := c.GetSymbolAtLocation(nd); s != nil && c.SkipAlias(s) == t.sym {
+				if s := c.GetSymbolAtLocation(nd); s != nil && t.syms[c.SkipAlias(s)] {
 					var found []*ast.Node
 					var w string
 					if t.ctor {
@@ -347,6 +389,127 @@ func (l *lined) function(name string) (fn *ast.Node, overloads []*ast.Node, name
 	return fn, overloads, nameNode, ""
 }
 
+// interfaceMethod returns the method signature that name ("Iface.method")
+// names in an interface at the top level of the file, or nil.
+func (l *lined) interfaceMethod(name string) *ast.Node {
+	owner, member, ok := strings.Cut(name, ".")
+	if !ok {
+		return nil
+	}
+	for _, s := range l.f.Statements.Nodes {
+		if !ast.IsInterfaceDeclaration(s) || s.Name().Text() != owner {
+			continue
+		}
+		for _, m := range s.Members() {
+			if ast.IsMethodSignatureDeclaration(m) && m.Name() != nil && l.source(m.Name()) == member {
+				return m
+			}
+		}
+	}
+	return nil
+}
+
+// family returns the other methods whose signature must change with the
+// method fn, a member of a class or interface: the same method of the
+// types it implements or extends, through types that do not declare it
+// too, and of every type of the program that implements or extends one
+// of those or fn's own type and declares it; or why one cannot change
+// with it.
+func (p *Project) family(c *checker.Checker, fn *ast.Node) ([]*ast.Node, string) {
+	if !ast.IsMethodDeclaration(fn) && !ast.IsMethodSignatureDeclaration(fn) || fn.Name() == nil {
+		return nil, ""
+	}
+	name := fn.Name().Text()
+	own := fn.Parent
+	var types []*ast.Node
+	bases := map[*ast.Node][]*ast.Node{}
+	for _, f := range p.prog.GetProgram().GetSourceFiles() {
+		if f.IsDeclarationFile || strings.Contains(f.FileName(), "/node_modules/") {
+			continue
+		}
+		var visit func(n *ast.Node) bool
+		visit = func(n *ast.Node) bool {
+			if ast.IsClassDeclaration(n) || ast.IsClassExpression(n) || ast.IsInterfaceDeclaration(n) {
+				types = append(types, n)
+				for _, e := range append(ast.GetExtendsHeritageClauseElements(n), ast.GetImplementsHeritageClauseElements(n)...) {
+					sym := c.GetSymbolAtLocation(e.Expression())
+					if sym == nil {
+						continue
+					}
+					for _, d := range c.SkipAlias(sym).Declarations {
+						if ast.IsClassDeclaration(d) || ast.IsClassExpression(d) || ast.IsInterfaceDeclaration(d) {
+							bases[n] = append(bases[n], d)
+						}
+					}
+				}
+			}
+			return n.ForEachChild(visit)
+		}
+		visit(f.AsNode())
+	}
+	ancestors := func(t *ast.Node) map[*ast.Node]bool {
+		seen := map[*ast.Node]bool{}
+		var up func(t *ast.Node)
+		up = func(t *ast.Node) {
+			for _, b := range bases[t] {
+				if !seen[b] {
+					seen[b] = true
+					up(b)
+				}
+			}
+		}
+		up(t)
+		return seen
+	}
+	declared := func(t *ast.Node) []*ast.Node {
+		var out []*ast.Node
+		for _, m := range t.Members() {
+			if (ast.IsMethodDeclaration(m) || ast.IsMethodSignatureDeclaration(m)) && m.Name() != nil && ast.IsIdentifier(m.Name()) && m.Name().Text() == name {
+				out = append(out, m)
+			}
+		}
+		return out
+	}
+	roots := map[*ast.Node]bool{own: true}
+	for a := range ancestors(own) {
+		if len(declared(a)) > 0 {
+			roots[a] = true
+		}
+	}
+	var family []*ast.Node
+	for _, t := range types {
+		in := roots[t]
+		for a := range ancestors(t) {
+			in = in || roots[a]
+		}
+		if !in || t == own {
+			continue
+		}
+		ms := declared(t)
+		switch {
+		case len(ms) > 1:
+			return nil, fmt.Sprintf("%s.%s, which changes with it, has overloads (%s); change it on its own first", typeName(t), name, newLined(ast.GetSourceFileOfNode(t)).where(ms[0]))
+		case len(ms) == 1:
+			family = append(family, ms[0])
+		}
+	}
+	return family, ""
+}
+
+// typeName is the name of a class or interface, or "the class" for one
+// without a name.
+func typeName(t *ast.Node) string {
+	if t.Name() != nil {
+		return t.Name().Text()
+	}
+	return "the class"
+}
+
+// memberName is a method's name with its type's: "Hose.pour".
+func memberName(m *ast.Node) string {
+	return typeName(m.Parent) + "." + m.Name().Text()
+}
+
 // passed returns the parameter list of the signature o and how many of its
 // parameters are not passed (1 for a this parameter).
 func passed(o *ast.Node) (*ast.NodeList, int) {
@@ -368,6 +531,37 @@ func (t *target) insertInOverloads(at int, text string) ([]Edit, string) {
 			return nil, fmt.Sprintf("the overload at %s has %d parameters, fewer than the position the new one takes (%d): calls matching it would not pass it there", t.l.where(o), k, at+1)
 		}
 		edits = append(edits, t.l.insertAt(list, off+at, text))
+	}
+	return edits, ""
+}
+
+// familyEdits returns the edits that make ch to the parameters of each
+// method of t's family: an added one inserted at position at, a removed
+// one (at index, by t's names) deleted, or the one at moved put at at; or
+// why a method has too few parameters for the move.
+func (t *target) familyEdits(ch SignatureChange, at, moved int) ([]Edit, string) {
+	var edits []Edit
+	for _, m := range t.family {
+		ml := newLined(ast.GetSourceFileOfNode(m))
+		list, moff := passed(m)
+		k := len(list.Nodes) - moff
+		switch {
+		case ch.Add != nil:
+			edits = append(edits, ml.insertAt(list, moff+at, ch.Add.Name+": "+strings.TrimSpace(ch.Add.Type)))
+		case ch.Remove != "":
+			if i := t.index(ch.Remove); i < k {
+				edits = append(edits, ml.removeAt(list, moff+i))
+			}
+		default:
+			lo, hi := min(moved, at), max(moved, at-1)
+			switch {
+			case k <= lo:
+			case k <= hi:
+				return nil, fmt.Sprintf("%s, which changes with it, has only some of the parameters the move reorders", memberName(m))
+			default:
+				edits = append(edits, ml.permute(list.Nodes[moff:moff+hi+1], order(hi+1, moved, at))...)
+			}
+		}
 	}
 	return edits, ""
 }

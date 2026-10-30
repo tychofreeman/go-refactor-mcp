@@ -3654,3 +3654,18 @@ class (`pot`, `Pot`) was skipped as a misspelling, and the class had to
 go before its first use (classes are not hoisted). A predicate's name
 guessed wrong (`ast.IsParameter`, not `IsParameterDeclaration`) was
 refused at the end of its batch. Nothing by hand.
+
+## 2026-10-29: TypeScript signature changes across method families (item 43.5)
+
+Tests first, then `family` written in a scratch file and loaded with the
+signature engine's changes in one batch checked at its end, through the
+CLI. One refusal's wording differed from the test's guess (it names the
+method it changes with). Nothing by hand.
+
+## 2026-10-29: TypeScript's inspect uses, add_field's value, merged schemas (items 43.6-43.8)
+
+Through the CLI, tests first. add_element's tail became `lined.addElement`
+by extract_function and function_to_method (whose refusal named the
+`receiver` it needed), so add_field's `value` shares it; a helper's
+name fixed by rename. A test expected a name the fixture declares in two
+files. Nothing by hand.
