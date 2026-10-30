@@ -14,22 +14,16 @@ import (
 )
 
 // CreateFile creates a file.
-type CreateFile struct{}
+type CreateFile struct{ refactor.Named[createFileArgs] }
 
 // New returns create_file.
-func New() *CreateFile { return &CreateFile{} }
+func New() *CreateFile { return &CreateFile{Named: refactor.Called[createFileArgs]("create_file")} }
 
 func (*CreateFile) ChangesBehavior() {}
-
-func (*CreateFile) Name() string { return "create_file" }
 
 func (*CreateFile) Description() string {
 	return `Create a new file, TypeScript or not (a fixture, JSON), with any missing directories: an edit. A source file a project's include takes joins that project; what it adds must type-check, so a test written first goes with what it calls, in one batch with check "end".
 The file must not exist, unless overwrite is set to replace all of it; undo removes or restores it.`
-}
-
-func (*CreateFile) InputSchema() json.RawMessage {
-	return refactor.Schema[createFileArgs]()
 }
 
 // createFileArgs are the arguments of create_file.

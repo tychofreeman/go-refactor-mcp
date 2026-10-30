@@ -16,21 +16,17 @@ import (
 )
 
 // MoveParameter is the "move_parameter" refactoring.
-type MoveParameter struct{}
+type MoveParameter struct{ refactor.Named[moveArgs] }
 
 // NewMoveParameter returns the move_parameter refactoring.
-func NewMoveParameter() *MoveParameter { return &MoveParameter{} }
-
-func (*MoveParameter) Name() string { return "move_parameter" }
+func NewMoveParameter() *MoveParameter {
+	return &MoveParameter{Named: refactor.Called[moveArgs]("move_parameter")}
+}
 
 func (*MoveParameter) Description() string {
 	return `Move a parameter to another position, and its argument at every call in the workspace: with parameter to and before from, func copy(from, to string) becomes func copy(to, from string), and copy(a, b) becomes copy(b, a).
 Identify the function by file and name, or by line at its declaration or any call; before is the parameter it goes ahead of (default: last).
 Refuses, saying why: a call where the new order of evaluation could matter (arguments with side effects, or that could panic), a variadic parameter, a function used as a value, a method that would start or stop implementing an interface from outside the module.`
-}
-
-func (*MoveParameter) InputSchema() json.RawMessage {
-	return refactor.Schema[moveArgs]()
 }
 
 type moveArgs struct {

@@ -17,22 +17,18 @@ import (
 )
 
 // RemoveParameter is the "remove_parameter" refactoring.
-type RemoveParameter struct{}
+type RemoveParameter struct{ refactor.Named[removeArgs] }
 
 // NewRemoveParameter returns the remove_parameter refactoring.
-func NewRemoveParameter() *RemoveParameter { return &RemoveParameter{} }
-
-func (*RemoveParameter) Name() string { return "remove_parameter" }
+func NewRemoveParameter() *RemoveParameter {
+	return &RemoveParameter{Named: refactor.Called[removeArgs]("remove_parameter")}
+}
 
 func (*RemoveParameter) Description() string {
 	return `Remove a parameter the body does not use, and its argument at every call in the workspace: removing retries, func send(to string, retries int) becomes func send(to string), and send(addr, 3) becomes send(addr). Use it last when taking a feature out: first change the body so it no longer uses the parameter. A body whose first mention of it assigns it (n, err := f()) does not use it.
 With value, a parameter the body uses goes too, when every call passes that expression of the receiver or the other parameters, the inverse of introduce_parameter: value "b.depth" makes func (b *Bed) water(depth int) int { return depth * 2 } func (b *Bed) water() int { return b.depth * 2 }, and x.water(x.depth) x.water().
 Identify the function by file and name, or by line at its declaration or any call, and give the parameter. A dropped argument must have no side effects and not be able to panic.
 Refuses, saying why: a body that reads the parameter, a function used as a value, a method that would start or stop implementing an interface from outside the module, an argument whose removal leaves a variable or import unused; value for an interface method.`
-}
-
-func (*RemoveParameter) InputSchema() json.RawMessage {
-	return refactor.Schema[removeArgs]()
 }
 
 type removeArgs struct {

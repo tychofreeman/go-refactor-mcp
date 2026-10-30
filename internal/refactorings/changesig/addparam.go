@@ -22,22 +22,18 @@ import (
 )
 
 // AddParameter is the "add_parameter" refactoring.
-type AddParameter struct{}
+type AddParameter struct{ refactor.Named[addArgs] }
 
 // NewAddParameter returns the add_parameter refactoring.
-func NewAddParameter() *AddParameter { return &AddParameter{} }
-
-func (*AddParameter) Name() string { return "add_parameter" }
+func NewAddParameter() *AddParameter {
+	return &AddParameter{Named: refactor.Called[addArgs]("add_parameter")}
+}
 
 func (*AddParameter) Description() string {
 	return `Add a parameter to a function or method, and pass the same value for it at every call in the workspace: with name retries, type int and value 3, func send(to string) becomes func send(to string, retries int), and send(addr) becomes send(addr, 3). The body does not use it yet, so behavior is unchanged; add it, then change the body.
 Identify the function by file and name, or by line at its declaration or any call. value is Go source that every call can see (a name of the function's package is qualified at calls in other packages: Dose{} becomes garden.Dose{}); it must have no side effects and not be able to panic. before puts the parameter ahead of that one (default: last).
 replace_variable turns a package variable the body reads into a parameter: with parameter rate, type float64 and value rate, func cost(n int) float64 { return float64(n) * rate } becomes func cost(rate float64, n int) float64 with the same body, and each call passes rate. A call passing another value (defaultRate()) is an edit, and the result lists it.
 Refuses, saying why: a function used as a value, a method that would start or stop implementing an interface from outside the module, a name that clashes, a value that does not type-check at some call.`
-}
-
-func (*AddParameter) InputSchema() json.RawMessage {
-	return refactor.Schema[addArgs]()
 }
 
 type addArgs struct {

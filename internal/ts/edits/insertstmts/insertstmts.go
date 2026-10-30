@@ -15,22 +15,20 @@ import (
 )
 
 // InsertStatements inserts statements.
-type InsertStatements struct{}
+type InsertStatements struct {
+	refactor.Named[insertStatementsArgs]
+}
 
 // New returns insert_statements.
-func New() *InsertStatements { return &InsertStatements{} }
+func New() *InsertStatements {
+	return &InsertStatements{Named: refactor.Called[insertStatementsArgs]("insert_statements")}
+}
 
 func (*InsertStatements) ChangesBehavior() {}
-
-func (*InsertStatements) Name() string { return "insert_statements" }
 
 func (*InsertStatements) Description() string {
 	return `Insert new TypeScript statements before or after a whole statement, or at the start of a block: an edit, to add a step to a function or write an empty body. With where "into" and the line of constructor(soil: string) {}, content this.soil = soil; writes the constructor's body.
 where is "before" the statement that starts on line, "after" the statement that ends on it (the outermost, so after a closing brace means after the whole if or loop), or "into" the block whose opening brace is on line (or the case clause whose colon is). content is re-indented to the block. To change statements that are there, use replace_statements.`
-}
-
-func (*InsertStatements) InputSchema() json.RawMessage {
-	return refactor.Schema[insertStatementsArgs]()
 }
 
 // insertStatementsArgs are the arguments of insert_statements.

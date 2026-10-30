@@ -50,22 +50,18 @@ import (
 )
 
 // ExtractFunction is the "extract_function" refactoring.
-type ExtractFunction struct{}
+type ExtractFunction struct{ refactor.Named[args] }
 
 // New returns the extract_function refactoring.
-func New() *ExtractFunction { return &ExtractFunction{} }
-
-func (*ExtractFunction) Name() string { return "extract_function" }
+func New() *ExtractFunction {
+	return &ExtractFunction{Named: refactor.Called[args]("extract_function")}
+}
 
 func (*ExtractFunction) Description() string {
 	return `Move a run of whole statements into a new function, declared after the one they are in, and call it in their place: in func report(plants []Plant) string, extracting total := 0 and the loop that adds each p.Height to it, as sum, gives total := sum(plants) there and func sum(plants []Plant) int { total := 0; for ...; return total }. Locals the statements use become parameters, and those they set that are used afterwards become results; the result lists both. Statements that use the receiver become a method of its type.
 Identify the statements by file, start_line and end_line: whole statements of one block, as inspect numbers them; or a case's body by function and case ("fern" in function Water, or default), which stays valid after earlier steps; for a value with no case, when the code after the switch is what runs for it, a new case calls a copy of that code. doc becomes the new function's doc comment.
 Returns: when every path returns, the call becomes return sum(...); early error returns (if err != nil { return err }) make the new function return an error, which the call checks; so do early returns of a string last (a refusal: return nil, "no name") known not to be empty.
 Refuses, saying why: other returns, defer, recover, fallthrough, a break, continue or goto out of the lines, a variable they declare that a pointer or closure keeps and that is used after them.`
-}
-
-func (*ExtractFunction) InputSchema() json.RawMessage {
-	return refactor.Schema[args]()
 }
 
 type args struct {

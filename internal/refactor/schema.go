@@ -28,6 +28,30 @@ func Schema[T any](omit ...string) json.RawMessage {
 	return json.RawMessage(fmt.Sprintf(`{"type": "object", "properties": {%s}%s, "additionalProperties": false}`, props.String(), req))
 }
 
+// Named is what a tool is called and the arguments A it takes: embedded
+// in a refactoring or edit, it gives it its Name and its InputSchema.
+type Named[A any] struct {
+	name string
+	omit string // the properties of A left out, comma-separated
+}
+
+// Called returns the Named of the tool name, whose arguments are A without
+// the properties omit names (Schema).
+func Called[A any](name string, omit ...string) Named[A] {
+	return Named[A]{name: name, omit: strings.Join(omit, ",")}
+}
+
+// Name is the tool's name.
+func (n Named[A]) Name() string { return n.name }
+
+// InputSchema is the JSON Schema of the tool's arguments.
+func (n Named[A]) InputSchema() json.RawMessage {
+	if n.omit == "" {
+		return Schema[A]()
+	}
+	return Schema[A](strings.Split(n.omit, ",")...)
+}
+
 // properties writes the properties of struct type t to b and appends the
 // names it requires to required.
 func properties(t reflect.Type, omit []string, b *bytes.Buffer, required *[]string) {

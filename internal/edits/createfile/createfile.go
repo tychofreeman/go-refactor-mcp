@@ -18,20 +18,14 @@ import (
 )
 
 // CreateFile is the "create_file" edit.
-type CreateFile struct{}
+type CreateFile struct{ refactor.Named[createArgs] }
 
 // New returns the create_file edit.
-func New() *CreateFile { return &CreateFile{} }
-
-func (*CreateFile) Name() string { return "create_file" }
+func New() *CreateFile { return &CreateFile{Named: refactor.Called[createArgs]("create_file")} }
 
 func (*CreateFile) Description() string {
 	return `Create a new file, Go or not (go.mod, JSON, a test fixture), with any missing directories: an edit. A Go file must parse and match its directory's package (a test may use the _test package), and is gofmt-ed. What it calls that nothing declares gets a stub, so a test written first compiles and fails: cart_test.go with if got := (&Cart{}).Total(); got != 0 { ... } also declares func (c *Cart) Total() int.
 For several files, such as a fixture directory, send the create_file steps together in one batch. The file must not exist, unless overwrite is set to replace all of it; undo removes or restores it.`
-}
-
-func (*CreateFile) InputSchema() json.RawMessage {
-	return refactor.Schema[createArgs]()
 }
 
 func (*CreateFile) ChangesBehavior() {}

@@ -17,23 +17,21 @@ import (
 )
 
 // ReplaceStatements replaces statements with new ones.
-type ReplaceStatements struct{}
+type ReplaceStatements struct {
+	refactor.Named[replaceStatementsArgs]
+}
 
 // New returns replace_statements.
-func New() *ReplaceStatements { return &ReplaceStatements{} }
+func New() *ReplaceStatements {
+	return &ReplaceStatements{Named: refactor.Called[replaceStatementsArgs]("replace_statements")}
+}
 
 func (*ReplaceStatements) ChangesBehavior() {}
-
-func (*ReplaceStatements) Name() string { return "replace_statements" }
 
 func (*ReplaceStatements) Description() string {
 	return `Replace whole statements of one block with new TypeScript statements: an edit, to write a function's body (a stub becomes the implementation) or change what statements do. With function "Bed.plant" and content this.plants.push(p);, plant's whole body becomes that statement.
 Give start_line and end_line (inclusive, as inspect numbers them) covering whole statements of one block, comments and blank lines included; or function (name, or Class.member, an arrow function bound to a const too) for the whole body, even an empty one, which stays valid after earlier steps; with case too ("fern", or default), the body of that case of its switch. content is re-indented to the block; empty content deletes the statements. wrap instead puts them, as they are, inside new statements, at the line $body: wrap "if (ok) {\n$body\n}".
 Refuses, saying why: lines that cut a statement (naming the lines that would not); content that is not statements, or does not type-check; a wrap that leaves a name the statements declare out of scope where it is used after them.`
-}
-
-func (*ReplaceStatements) InputSchema() json.RawMessage {
-	return refactor.Schema[replaceStatementsArgs]()
 }
 
 // replaceStatementsArgs are the arguments of replace_statements.

@@ -3886,3 +3886,13 @@ selection runs later); reverted with git checkout before the second. The first p
 PR carried only its docs: a `git stash` taken to build the old CLI for a
 comparison did not pop back, and the code was recovered from the stash
 commit afterwards. Nothing else by hand.
+
+## 2026-10-30: tools named once (item 46.1)
+
+Through the CLI. A throwaway program (not committed) found each tool's
+constant `Name` and its `InputSchema` and wrote one batch of 324 steps:
+replace_text of the struct (the embedded `Named`) and of each literal of
+it (its `New`), replace_declaration with empty content for the two
+methods. 17 seconds. A dump of every published tool before and after
+compared them. `Named` and `Called` were written by hand into
+add_declaration: new code. Nothing else by hand.

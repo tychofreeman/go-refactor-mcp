@@ -13,22 +13,16 @@ import (
 )
 
 // ChangeType changes what a type alias stands for.
-type ChangeType struct{}
+type ChangeType struct{ refactor.Named[changeTypeArgs] }
 
 // New returns change_type.
-func New() *ChangeType { return &ChangeType{} }
+func New() *ChangeType { return &ChangeType{Named: refactor.Called[changeTypeArgs]("change_type")} }
 
 func (*ChangeType) ChangesBehavior() {}
-
-func (*ChangeType) Name() string { return "change_type" }
 
 func (*ChangeType) Description() string {
 	return `Change what a type alias stands for: type Liters = number to type Liters = number | string. An edit: every use takes the new type, so run it in a batch with check "end" together with the changes the uses then need.
 Give file, name (the alias) and type (what it is to stand for). An interface or class is refused: change its members with change_field_type.`
-}
-
-func (*ChangeType) InputSchema() json.RawMessage {
-	return refactor.Schema[changeTypeArgs]()
 }
 
 // changeTypeArgs are the arguments of change_type.

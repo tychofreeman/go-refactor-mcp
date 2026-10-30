@@ -22,12 +22,12 @@ import (
 )
 
 // ChangeParameterType is the "change_parameter_type" refactoring.
-type ChangeParameterType struct{}
+type ChangeParameterType struct{ refactor.Named[typeArgs] }
 
 // NewChangeParameterType returns the change_parameter_type refactoring.
-func NewChangeParameterType() *ChangeParameterType { return &ChangeParameterType{} }
-
-func (*ChangeParameterType) Name() string { return "change_parameter_type" }
+func NewChangeParameterType() *ChangeParameterType {
+	return &ChangeParameterType{Named: refactor.Called[typeArgs]("change_parameter_type")}
+}
 
 func (*ChangeParameterType) Description() string {
 	return `Change a parameter's type where every value keeps its meaning, and update the body and every call in the workspace:
@@ -36,10 +36,6 @@ func (*ChangeParameterType) Description() string {
 - To an alias of the old type (type renderArg = string): only the declaration changes; change_type then changes the alias.
 Identify the function by file and name, or by line at its declaration or any call; give the parameter and its new type as Go source.
 Refuses, saying why: a body that compares a parameter of a non-interface type with nil, assigns it or takes its address; generic types; a call that passes another call's results.`
-}
-
-func (*ChangeParameterType) InputSchema() json.RawMessage {
-	return refactor.Schema[typeArgs]()
 }
 
 // ChecksByCompiling: that the body compiles with the new type is checked

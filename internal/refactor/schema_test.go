@@ -66,3 +66,13 @@ func propertyOrder(t *testing.T, s json.RawMessage) []string {
 	}
 	return out
 }
+
+func TestNamed(t *testing.T) {
+	n := Called[sample]("water", "keep")
+	if n.Name() != "water" {
+		t.Errorf("Name() = %q", n.Name())
+	}
+	if got, want := string(n.InputSchema()), string(Schema[sample]("keep")); got != want {
+		t.Errorf("InputSchema() = %s, want %s", got, want)
+	}
+}

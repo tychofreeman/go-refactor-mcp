@@ -16,21 +16,17 @@ import (
 )
 
 // FunctionToMethod is the "function_to_method" refactoring.
-type FunctionToMethod struct{}
+type FunctionToMethod struct{ refactor.Named[f2mArgs] }
 
 // NewFunctionToMethod returns the function_to_method refactoring.
-func NewFunctionToMethod() *FunctionToMethod { return &FunctionToMethod{} }
-
-func (*FunctionToMethod) Name() string { return "function_to_method" }
+func NewFunctionToMethod() *FunctionToMethod {
+	return &FunctionToMethod{Named: refactor.Called[f2mArgs]("function_to_method")}
+}
 
 func (*FunctionToMethod) Description() string {
 	return `Turn a function into a method of its first parameter's type, and change every call: func total(c *Cart) int becomes func (c *Cart) total() int, total(cart) becomes cart.total(), and total(&v) becomes v.total(). The reverse of method_to_function. The first parameter becomes the receiver, or the one receiver names (its argument moves first at each call); its type must be T or *T for a type T of the function's package.
 Identify the function by file and name, or by line at its declaration or any call; new_name gives the method another name.
 Refuses, saying why: a name that makes T implement an interface while a value of T becomes an interface value (String, Error, or a module's interface), or that T or a type embedding it already has as a field or method; a function used as a value, or generic; an unexported name called from another package.`
-}
-
-func (*FunctionToMethod) InputSchema() json.RawMessage {
-	return refactor.Schema[f2mArgs]()
 }
 
 type f2mArgs struct {

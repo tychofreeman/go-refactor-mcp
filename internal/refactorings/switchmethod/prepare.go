@@ -18,12 +18,12 @@ import (
 )
 
 // PrepareForTypes is the "prepare_switch_for_types" refactoring.
-type PrepareForTypes struct{}
+type PrepareForTypes struct{ refactor.Named[prepareArgs] }
 
 // NewPrepareForTypes returns the prepare_switch_for_types refactoring.
-func NewPrepareForTypes() *PrepareForTypes { return &PrepareForTypes{} }
-
-func (*PrepareForTypes) Name() string { return "prepare_switch_for_types" }
+func NewPrepareForTypes() *PrepareForTypes {
+	return &PrepareForTypes{Named: refactor.Called[prepareArgs]("prepare_switch_for_types")}
+}
 
 func (*PrepareForTypes) Description() string {
 	return `Prepare a switch on a value for its cases to move into types one at a time, each case becoming the method of a type that implements an interface: a value that implements the interface runs its method, and the switch handles the rest. No type implements it yet, so nothing changes until a case moves. With interface Species and method Water,
@@ -34,10 +34,6 @@ becomes
 The switch's tag must be an interface (change_field_type to any first). The interface is declared before the function, or gets the method when it exists; a method it already has is used if its signature is the one the cases need, or if fields the cases read can be its parameters (p.Height for height, declared before the switch). The variables the cases use become the method's parameters. Every case must return, or none (then the switch goes in the else). A case of several values (case "fern", "cactus":) is split into a case for each, with a copy of the body, so that each moves alone.
 Identify the switch by file and line, or by function when it is that function's only switch.
 Refuses, saying why: a type that already implements the interface with the method, a case that leaves other than by return or assigns a variable it uses (it could not become a method), a case of several values that declares a label or a type (its body is copied), a tag that would be evaluated again with another value.`
-}
-
-func (*PrepareForTypes) InputSchema() json.RawMessage {
-	return refactor.Schema[prepareArgs]()
 }
 
 type prepareArgs struct {

@@ -17,21 +17,17 @@ import (
 )
 
 // MethodToFunction is the "method_to_function" refactoring.
-type MethodToFunction struct{}
+type MethodToFunction struct{ refactor.Named[m2fArgs] }
 
 // NewMethodToFunction returns the method_to_function refactoring.
-func NewMethodToFunction() *MethodToFunction { return &MethodToFunction{} }
-
-func (*MethodToFunction) Name() string { return "method_to_function" }
+func NewMethodToFunction() *MethodToFunction {
+	return &MethodToFunction{Named: refactor.Called[m2fArgs]("method_to_function")}
+}
 
 func (*MethodToFunction) Description() string {
 	return `Turn a method into a function whose first parameter is the receiver, and change every call: func (c *Cart) total() int becomes func total(c *Cart) int, cart.total() becomes total(cart), and v.total() on a Cart variable total(&v). Use it before moving a method to another package, or when a method uses little of its receiver: then introduce_parameter and remove_parameter to pass only what it uses.
 Identify the method by file and name (Type.Method), or by line at its declaration or any call; new_name gives the function another name.
 Refuses, saying why: a method that some interface in the workspace has, a method used as a value, a generic receiver, a name already taken, an exported method through which the type may implement an interface checked at run time (String, Error, MarshalJSON).`
-}
-
-func (*MethodToFunction) InputSchema() json.RawMessage {
-	return refactor.Schema[m2fArgs]()
 }
 
 type m2fArgs struct {

@@ -25,22 +25,16 @@ import (
 )
 
 // AddField is the "add_field" edit.
-type AddField struct{}
+type AddField struct{ refactor.Named[args] }
 
 // New returns the add_field edit.
-func New() *AddField { return &AddField{} }
-
-func (*AddField) Name() string { return "add_field" }
+func New() *AddField { return &AddField{Named: refactor.Called[args]("add_field")} }
 
 func (*AddField) Description() string {
 	return `Add fields to a struct type: an edit, to give a type the state a feature needs. field "Colour string" with after "Height" adds Colour just after Height in type Plant struct. field is Go source, one or more fields with their comments and tags, or embedded types; without after or before they go at the end. A struct on one line is opened up into lines. Packages the fields' types name are imported. To move fields that are there, use extract_struct.
 Identify the struct by file and name, or by line at its declaration or a use.
 Unkeyed literals of the struct get the new fields' zero values in their place.
 Refused with the compiler's errors: a duplicate name; and an unkeyed literal whose new zero value cannot be written there (a type its file does not import): give it keys first.`
-}
-
-func (*AddField) InputSchema() json.RawMessage {
-	return refactor.Schema[args]()
 }
 
 // ChangesBehavior marks this as an edit.

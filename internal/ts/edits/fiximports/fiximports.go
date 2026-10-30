@@ -18,19 +18,13 @@ import (
 )
 
 // FixImports fixes a file's imports.
-type FixImports struct{}
+type FixImports struct{ refactor.Named[fixImportsArgs] }
 
 // New returns fix_imports.
-func New() *FixImports { return &FixImports{} }
-
-func (*FixImports) Name() string { return "fix_imports" }
+func New() *FixImports { return &FixImports{Named: refactor.Called[fixImportsArgs]("fix_imports")} }
 
 func (*FixImports) Description() string {
 	return "Import the names a file uses that another file exports, and remove the imports nothing uses."
-}
-
-func (*FixImports) InputSchema() json.RawMessage {
-	return refactor.Schema[fixImportsArgs]()
 }
 
 // fixImportsArgs are the arguments of fix_imports.

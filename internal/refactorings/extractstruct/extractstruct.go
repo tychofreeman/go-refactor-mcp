@@ -32,22 +32,16 @@ import (
 )
 
 // ExtractStruct is the "extract_struct" refactoring.
-type ExtractStruct struct{}
+type ExtractStruct struct{ refactor.Named[args] }
 
 // New returns the extract_struct refactoring.
-func New() *ExtractStruct { return &ExtractStruct{} }
-
-func (*ExtractStruct) Name() string { return "extract_struct" }
+func New() *ExtractStruct { return &ExtractStruct{Named: refactor.Called[args]("extract_struct")} }
 
 func (*ExtractStruct) Description() string {
 	return `Move some fields of a struct into a new struct type, embedded in their place, so that every use (m.path) keeps working: moving path and mode of type mover struct { path string; mode int; n int } into source declares type source struct { path string; mode int } and makes mover struct { source; n int }, and mover{path: p} becomes mover{source: source{path: p}}. To hold it as a named field instead, then rename mover.source (to src: m.path becomes m.src.path). Use it to split a struct that holds two things, or to group fields that belong together, before giving the new type methods or a file of its own.
 With into in place of new_type, the fields go to the end of a struct that already exists, one the struct embeds or holds in a field by value: moving depth of Bed into Soil, held as soil, makes b.depth b.soil.depth and Bed{depth: 3} Bed{soil: Soil{depth: 3}}.
 Identify the struct by file and name, or by line at its declaration or a use; fields are the names to move, new_type the new type's name.
 Refuses, saying why: a struct whose values are passed where reflection may look at its fields (encoding/json; what fmt prints is listed in a note), a generic struct, an embedded field or part of a field group to move, a name already taken, an unkeyed literal whose moved fields are not next to each other. For an exported struct the result notes that the module's API changed.`
-}
-
-func (*ExtractStruct) InputSchema() json.RawMessage {
-	return refactor.Schema[args]()
 }
 
 type args struct {

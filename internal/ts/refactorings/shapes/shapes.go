@@ -33,12 +33,10 @@ func plan(ws *workspace.Workspace, file string, summary func() string, change fu
 }
 
 // Fold replaces code that does what a function does with calls of it.
-type Fold struct{}
+type Fold struct{ refactor.Named[foldArgs] }
 
 // NewFold returns fold.
-func NewFold() *Fold { return &Fold{} }
-
-func (*Fold) Name() string { return "fold" }
+func NewFold() *Fold { return &Fold{Named: refactor.Called[foldArgs]("fold")} }
 
 func (*Fold) Description() string {
 	return `Replace code that does what an existing function does with calls to it: every match of the function's body in the solution, its parameters (and this, for a method) standing for any expressions of their types, becomes a call. The function stays. extract_function makes a function from one place; fold reuses one, written or extracted, everywhere else.
@@ -49,10 +47,6 @@ What a body matches:
 - Statements, for a function without a result: the same statements in any block become one call, so near-duplicates become calls of one function you declare: log("water " + bed); count++ ... becomes note(bed) where note's body is those statements with bed its parameter. A string parameter also matches constant text of a template and a run of a + chain: with function record(entries: string[], device: string, bed: string, text: string) { log(` + "`" + `${device} on ${bed}` + "`" + `); entries.push(bed + ": " + text); }, log(` + "`" + `sprinkler on ${bed}` + "`" + `); this.entries.push(bed + ": " + note + "!"); becomes record(this.entries, "sprinkler", bed, note + "!").
 Identify the function by file and name (name or Class.method); with line (and in), only the matches on that line are folded, to move callers over one at a time. A file that does not import the function gets the import.
 A match where the call would not do the same (an argument evaluated in another order or another number of times, a name that means something else there, a function the file cannot import) is left, and the result says why.`
-}
-
-func (*Fold) InputSchema() json.RawMessage {
-	return refactor.Schema[foldArgs]()
 }
 
 // foldArgs are the arguments of fold.
@@ -88,21 +82,19 @@ func (*Fold) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan,
 }
 
 // Parameterize makes functions that differ in literals calls of one.
-type Parameterize struct{}
+type Parameterize struct {
+	refactor.Named[parameterizeArgs]
+}
 
 // NewParameterize returns parameterize.
-func NewParameterize() *Parameterize { return &Parameterize{} }
-
-func (*Parameterize) Name() string { return "parameterize" }
+func NewParameterize() *Parameterize {
+	return &Parameterize{Named: refactor.Called[parameterizeArgs]("parameterize")}
+}
 
 func (*Parameterize) Description() string {
 	return `Make functions that are the same but for literals into calls of one new function that takes those literals as parameters: mist(bed: string) { log("mist on " + bed); } and drip(row: string) { log("drip on " + row); } become calls on(bed, "mist on ") and on(row, "drip on ") of function on(bed: string, what: string) { log(what + bed); }. Each keeps its signature and callers; inline_function with all_calls retires them.
 Give file, functions (two or more of one file with the same signature; methods of one class), name for the new function, and parameters: a name for each literal that differs, in the order they appear.
 Refuses, saying why: functions that differ in more than literals, or not at all (merge_duplicate_function is for that), a name already taken.`
-}
-
-func (*Parameterize) InputSchema() json.RawMessage {
-	return refactor.Schema[parameterizeArgs]()
 }
 
 // parameterizeArgs are the arguments of parameterize.
@@ -126,21 +118,19 @@ func (*Parameterize) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refact
 }
 
 // MergeDuplicate replaces a function with an identical one.
-type MergeDuplicate struct{}
+type MergeDuplicate struct {
+	refactor.Named[mergeDuplicateArgs]
+}
 
 // NewMergeDuplicate returns merge_duplicate_function.
-func NewMergeDuplicate() *MergeDuplicate { return &MergeDuplicate{} }
-
-func (*MergeDuplicate) Name() string { return "merge_duplicate_function" }
+func NewMergeDuplicate() *MergeDuplicate {
+	return &MergeDuplicate{Named: refactor.Called[mergeDuplicateArgs]("merge_duplicate_function")}
+}
 
 func (*MergeDuplicate) Description() string {
 	return `Replace every use of a function with an identical one, and delete it: with function trim(s: string) { return s.trim(); } and function clean(t: string) { return t.trim(); }, merging trim into clean turns trim(x) into clean(x) everywhere, imports included, and deletes trim. Identical means the same signature and bodies that match node for node; parameters and locals may be named differently, every other name must mean the same. The refusal shows the first difference.
 Identify the function to delete by file and name, or by line at its declaration or any use, and the one to keep by keep_file and keep_name.
 Refuses, saying why: methods, generic functions or overloads, a function to keep that a file using the other cannot see (export it first), a re-export of the one to delete.`
-}
-
-func (*MergeDuplicate) InputSchema() json.RawMessage {
-	return refactor.Schema[mergeDuplicateArgs]()
 }
 
 // mergeDuplicateArgs are the arguments of merge_duplicate_function.
@@ -165,21 +155,19 @@ func (*MergeDuplicate) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refa
 }
 
 // RemoveDeadCode deletes declarations nothing uses.
-type RemoveDeadCode struct{}
+type RemoveDeadCode struct {
+	refactor.Named[removeDeadCodeArgs]
+}
 
 // NewRemoveDeadCode returns remove_dead_code.
-func NewRemoveDeadCode() *RemoveDeadCode { return &RemoveDeadCode{} }
-
-func (*RemoveDeadCode) Name() string { return "remove_dead_code" }
+func NewRemoveDeadCode() *RemoveDeadCode {
+	return &RemoveDeadCode{Named: refactor.Called[removeDeadCodeArgs]("remove_dead_code")}
+}
 
 func (*RemoveDeadCode) Description() string {
 	return `Delete a top-level declaration or a member of a class or interface that nothing uses, with the comments above it and the imports only it used: once the last call of oldLabel went, removing oldLabel deletes the function and its import of format; removing Plant.colour deletes the property once nothing reads or writes it. Exported code goes too, with a note that the module's API changed.
 Identify it by file and name (name, Class.member or Interface.member), or by line at its declaration; also names more declarations of the file to remove with it, such as functions that only call each other.
 Refuses, saying why: something still used (its own body aside, imports included); a member that implements or overrides one of a base class or interface; a value whose evaluation does something; a statement declaring several variables; a constructor.`
-}
-
-func (*RemoveDeadCode) InputSchema() json.RawMessage {
-	return refactor.Schema[removeDeadCodeArgs]()
 }
 
 // removeDeadCodeArgs are the arguments of remove_dead_code.
@@ -212,21 +200,19 @@ func (*RemoveDeadCode) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refa
 }
 
 // ExtractInterface names members of a type as a new interface.
-type ExtractInterface struct{}
+type ExtractInterface struct {
+	refactor.Named[extractInterfaceArgs]
+}
 
 // NewExtractInterface returns extract_interface.
-func NewExtractInterface() *ExtractInterface { return &ExtractInterface{} }
-
-func (*ExtractInterface) Name() string { return "extract_interface" }
+func NewExtractInterface() *ExtractInterface {
+	return &ExtractInterface{Named: refactor.Called[extractInterfaceArgs]("extract_interface")}
+}
 
 func (*ExtractInterface) Description() string {
 	return `Name some members of a type as a new interface, so that code can depend on just those. From an interface, the members move into the new one, which the old one extends, so every use keeps working: moving depth and width of interface Bed { depth: number; width: number; name: string } into Size declares interface Size { depth: number; width: number } and makes interface Bed extends Size { name: string }. From a type alias of an object type, the same with type Bed = Size & { name: string }. From a class, the new interface has the members' signatures (a method's parameters and result, an accessor as a property) and the class implements it: class Sprinkler implements Watering.
 Identify the type by file and name, or by line at its declaration or a use; fields are the members, new_type the new interface's name, declared just before the type (exported with it).
 Refuses, saying why: a generic type, a private, protected or static member of a class, a member sharing its line with another, a name already taken.`
-}
-
-func (*ExtractInterface) InputSchema() json.RawMessage {
-	return refactor.Schema[extractInterfaceArgs]()
 }
 
 // extractInterfaceArgs are the arguments of extract_interface.
@@ -252,12 +238,14 @@ func (*ExtractInterface) Plan(ws *workspace.Workspace, raw json.RawMessage) (*re
 }
 
 // UnionSwitchToMethod turns a switch on a union of classes into methods.
-type UnionSwitchToMethod struct{}
+type UnionSwitchToMethod struct {
+	refactor.Named[unionSwitchToMethodArgs]
+}
 
 // NewUnionSwitchToMethod returns union_switch_to_method.
-func NewUnionSwitchToMethod() *UnionSwitchToMethod { return &UnionSwitchToMethod{} }
-
-func (*UnionSwitchToMethod) Name() string { return "union_switch_to_method" }
+func NewUnionSwitchToMethod() *UnionSwitchToMethod {
+	return &UnionSwitchToMethod{Named: refactor.Called[unionSwitchToMethodArgs]("union_switch_to_method")}
+}
 
 func (*UnionSwitchToMethod) Description() string {
 	return `Turn a switch on a union of classes into a method of each class: each case's body becomes that class's method, the subject becomes this, and the switch becomes one call. With type Plant = Fern | Cactus, where each class has a kind ("fern", "cactus"), and method water,
@@ -267,10 +255,6 @@ becomes
 with water(days: number): number { return days * this.mist; } in Fern and water(days: number): number { return 1; } in Cactus. An instanceof chain (if (p instanceof Fern) ... else if (p instanceof Cactus) ...) works the same way. The locals a case uses become parameters. Every case must return, or none.
 Identify the switch by file and line, or by function when it is that function's only one; method is the new method's name.
 Refuses, saying why: a class of the union without a case, a default or a final else, a case that falls through, assigns a local it uses, or uses this; a subject whose evaluation does something; a method name a class already has.`
-}
-
-func (*UnionSwitchToMethod) InputSchema() json.RawMessage {
-	return refactor.Schema[unionSwitchToMethodArgs]()
 }
 
 // unionSwitchToMethodArgs are the arguments of union_switch_to_method.
@@ -293,12 +277,14 @@ func (*UnionSwitchToMethod) Plan(ws *workspace.Workspace, raw json.RawMessage) (
 
 // PrepareSwitchForTypes prepares a switch for its cases to move into
 // classes one at a time.
-type PrepareSwitchForTypes struct{}
+type PrepareSwitchForTypes struct {
+	refactor.Named[prepareSwitchForTypesArgs]
+}
 
 // NewPrepareSwitchForTypes returns prepare_switch_for_types.
-func NewPrepareSwitchForTypes() *PrepareSwitchForTypes { return &PrepareSwitchForTypes{} }
-
-func (*PrepareSwitchForTypes) Name() string { return "prepare_switch_for_types" }
+func NewPrepareSwitchForTypes() *PrepareSwitchForTypes {
+	return &PrepareSwitchForTypes{Named: refactor.Called[prepareSwitchForTypesArgs]("prepare_switch_for_types")}
+}
 
 func (*PrepareSwitchForTypes) Description() string {
 	return `Prepare a switch for its cases to move into classes one at a time, each case becoming the method of a class that implements an interface: a subject that has the method runs it, and the switch handles the rest. No class implements it yet, so nothing changes until a case moves. With interface Species and method water,
@@ -309,10 +295,6 @@ becomes
 The subject must be able to hold an object: widen it first (change_field_type to unknown). The interface is declared before the function, or gets the method when the file has it. The locals the cases use become the method's parameters. Every case must return, or none (then the switch goes in the else). Cases that share a body (case "moss": case "cactus":) are split, each with a copy, so that each moves alone.
 Identify the switch by file and line, or by function when it is that function's only switch.
 Refuses, saying why: a subject that holds no object or would be evaluated again with another value, an interface that already has the method, a case that uses this, leaves other than by return or assigns a local it uses, a shared body that declares something.`
-}
-
-func (*PrepareSwitchForTypes) InputSchema() json.RawMessage {
-	return refactor.Schema[prepareSwitchForTypesArgs]()
 }
 
 // prepareSwitchForTypesArgs are the arguments of prepare_switch_for_types.

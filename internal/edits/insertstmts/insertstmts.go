@@ -16,20 +16,16 @@ import (
 )
 
 // InsertStatements is the "insert_statements" edit.
-type InsertStatements struct{}
+type InsertStatements struct{ refactor.Named[args] }
 
 // New returns the insert_statements edit.
-func New() *InsertStatements { return &InsertStatements{} }
-
-func (*InsertStatements) Name() string { return "insert_statements" }
+func New() *InsertStatements {
+	return &InsertStatements{Named: refactor.Called[args]("insert_statements")}
+}
 
 func (*InsertStatements) Description() string {
 	return `Insert new Go statements before or after a whole statement, or at the start of a block: an edit, to add a step to a function or write an empty body. With where "into" and the line of func (c *Cart) Reset() {}, content c.Items = nil writes Reset's body.
 where is "before" the statement that starts on line, "after" the statement that ends on it (the outermost, so after a closing brace means after the whole if or loop), or "into" the block whose opening brace is on line (or the case clause whose colon is). content is re-indented to the block; packages it names are imported. To change statements that are there, use replace_statements.`
-}
-
-func (*InsertStatements) InputSchema() json.RawMessage {
-	return refactor.Schema[args]()
 }
 
 // ChangesBehavior marks this as an edit.

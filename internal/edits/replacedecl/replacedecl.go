@@ -20,20 +20,16 @@ import (
 )
 
 // ReplaceDeclaration is the "replace_declaration" edit.
-type ReplaceDeclaration struct{}
+type ReplaceDeclaration struct{ refactor.Named[args] }
 
 // New returns the replace_declaration edit.
-func New() *ReplaceDeclaration { return &ReplaceDeclaration{} }
-
-func (*ReplaceDeclaration) Name() string { return "replace_declaration" }
+func New() *ReplaceDeclaration {
+	return &ReplaceDeclaration{Named: refactor.Called[args]("replace_declaration")}
+}
 
 func (*ReplaceDeclaration) Description() string {
 	return `Replace a whole top-level declaration, found by name, with new source: an edit, for a signature and body that change together, or a declaration too long to restate as replace_text's old (a table, a type); for a body alone, use replace_statements with function. With name "Cart.Total" and content func (c *Cart) Total() (int, error) { ... }, Total's signature and body are replaced together.
 content is the new declaration, declaring the same name (to rename, use rename), then any declarations to add after it (a helper it now calls); in a parenthesized group, just its spec. The old doc comment stays unless content has its own. Packages content names are imported, and those only the old declaration used are removed. Empty content deletes the declaration and its doc comment. Callers a new signature or a deletion breaks are refused, or fixed in the same batch with check "end".`
-}
-
-func (*ReplaceDeclaration) InputSchema() json.RawMessage {
-	return refactor.Schema[args]()
 }
 
 // ChangesBehavior marks this as an edit.

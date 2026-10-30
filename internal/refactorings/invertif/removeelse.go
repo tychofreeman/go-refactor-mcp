@@ -16,21 +16,17 @@ import (
 // RemoveElse is the "remove_else" refactoring: when an if branch cannot
 // fall through, its else is redundant, and the else branch can follow the
 // if, un-nested.
-type RemoveElse struct{}
+type RemoveElse struct{ refactor.Named[args] }
 
 // NewRemoveElse returns the remove_else refactoring.
-func NewRemoveElse() *RemoveElse { return &RemoveElse{} }
-
-func (*RemoveElse) Name() string { return "remove_else" }
+func NewRemoveElse() *RemoveElse {
+	return &RemoveElse{Named: refactor.Called[args]("remove_else", "keep_else")}
+}
 
 func (*RemoveElse) Description() string {
 	return `Remove an else after an if branch that cannot fall through, un-nesting it: if err != nil { return 0, err } else { return use(v), nil } becomes if err != nil { return 0, err } followed by return use(v), nil. An else-if becomes a separate if. When it is the else branch that exits, use invert_if instead. With wrap, the inverse: the statements after an if whose branch cannot fall through become its else, each outcome in a branch of its own.
 Identify the if by file and the line of its if keyword (column if the line has two).
 Refuses, saying why: an if branch that can fall through, un-nested names that would clash.`
-}
-
-func (*RemoveElse) InputSchema() json.RawMessage {
-	return refactor.Schema[args]("keep_else")
 }
 
 // Plan checks preconditions and computes the edits.

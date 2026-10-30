@@ -1639,9 +1639,10 @@ standalone module).
 
 1. Create `internal/refactorings/<name>/` implementing `refactor.Refactoring`.
    `Plan` must not write anything; return `refactor.Refusef(...)` for every
-   precondition failure. `InputSchema` returns `refactor.Schema[args]()`
-   of the struct `Plan` decodes: a field per argument with a `desc` tag,
-   and omitempty on the optional ones.
+   precondition failure. Embed `refactor.Named[args]`, set by `New` to
+   `refactor.Called[args]("name")`: it gives the tool its `Name` and its
+   `InputSchema`, made from the struct `Plan` decodes (a field per
+   argument with a `desc` tag, omitempty on the optional ones).
 2. Add golden cases under `testdata/<case>/`: `in/` (a complete module with
    `go.mod`), `args.json`, and either `out/` or `refused.txt`; with `out/`,
    an optional `notes.txt` lists substrings the result's notes must contain,

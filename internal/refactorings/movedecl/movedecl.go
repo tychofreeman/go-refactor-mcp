@@ -38,21 +38,17 @@ import (
 )
 
 // MoveDeclaration is the "move_declaration" refactoring.
-type MoveDeclaration struct{}
+type MoveDeclaration struct{ refactor.Named[moveArgs] }
 
 // New returns the move_declaration refactoring.
-func New() *MoveDeclaration { return &MoveDeclaration{} }
-
-func (*MoveDeclaration) Name() string { return "move_declaration" }
+func New() *MoveDeclaration {
+	return &MoveDeclaration{Named: refactor.Called[moveArgs]("move_declaration")}
+}
 
 func (*MoveDeclaration) Description() string {
 	return `Move a top-level declaration (function, method, type, variable or constant, with its doc comment) to another file of its package or of another package, creating the file and package if needed: moving defaultHost from notify/notify.go to config/config.go with new_name DefaultHost declares func DefaultHost there and turns defaultHost() into config.DefaultHost(). Imports follow the code; a file left with only its package clause is deleted.
 Identify the declaration by file and name, or by line at it or any use; to_file is the destination, relative to the workspace root. also names more declarations of the package to move with it, such as the helpers it uses. A type takes its methods along to another package; a declaration grouped in parentheses moves out as its own. To another package, an unexported declaration used outside it needs an exported new_name.
 Refuses, saying why: moving between a test file and a non-test file or to or from a file with build constraints; init, or a variable whose initializer has side effects; a method on its own to another package; code that uses declarations of its package that stay behind (move them with it, in also, or with with_dependencies); an import cycle.`
-}
-
-func (*MoveDeclaration) InputSchema() json.RawMessage {
-	return refactor.Schema[moveArgs]()
 }
 
 type moveArgs struct {

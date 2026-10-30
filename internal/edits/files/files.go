@@ -17,19 +17,13 @@ import (
 )
 
 // MoveFile is the "move_file" edit.
-type MoveFile struct{}
+type MoveFile struct{ refactor.Named[moveFileArgs] }
 
 // NewMove returns the move_file edit.
-func NewMove() *MoveFile { return &MoveFile{} }
-
-func (*MoveFile) Name() string { return "move_file" }
+func NewMove() *MoveFile { return &MoveFile{Named: refactor.Called[moveFileArgs]("move_file")} }
 
 func (*MoveFile) Description() string {
 	return `Move or rename a file or directory of the module, with everything in it, byte for byte: an edit that does not change what refers to it, for fixtures, docs and data (testdata/old_case to testdata/new_case renames a golden case). A Go file moved to another package must compile there; to move Go declarations, use move_declaration. Give file and to, which must not exist; one undo moves it back.`
-}
-
-func (*MoveFile) InputSchema() json.RawMessage {
-	return refactor.Schema[moveFileArgs]()
 }
 
 // moveFileArgs are the arguments of move_file.
@@ -79,19 +73,15 @@ func (*MoveFile) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.P
 }
 
 // DeleteFile is the "delete_file" edit.
-type DeleteFile struct{}
+type DeleteFile struct{ refactor.Named[deleteFileArgs] }
 
 // NewDelete returns the delete_file edit.
-func NewDelete() *DeleteFile { return &DeleteFile{} }
-
-func (*DeleteFile) Name() string { return "delete_file" }
+func NewDelete() *DeleteFile {
+	return &DeleteFile{Named: refactor.Called[deleteFileArgs]("delete_file")}
+}
 
 func (*DeleteFile) Description() string {
 	return `Delete a file or directory of the module, with everything in it: an edit, for fixtures, docs and data (testdata/old_case/refused.txt, a case's directory). A Go file whose declarations are still used is refused; to delete Go declarations, remove_dead_code checks that nothing uses them. Give file; one undo puts it all back.`
-}
-
-func (*DeleteFile) InputSchema() json.RawMessage {
-	return refactor.Schema[deleteFileArgs]()
 }
 
 // deleteFileArgs are the arguments of delete_file.

@@ -12,22 +12,16 @@ import (
 )
 
 // AddCase is add_case.
-type AddCase struct{}
+type AddCase struct{ refactor.Named[addCaseArgs] }
 
 // New returns add_case.
-func New() *AddCase { return &AddCase{} }
+func New() *AddCase { return &AddCase{Named: refactor.Called[addCaseArgs]("add_case")} }
 
 func (*AddCase) ChangesBehavior() {}
-
-func (*AddCase) Name() string { return "add_case" }
 
 func (*AddCase) Description() string {
 	return `Add case clauses to a switch, or branches to an if chain: an edit, to handle a new value. At the line of switch (p.kind) {, content case "moss": return 1; adds that clause at the end of the switch (before a default that ends it, and the cases that fall into it); at the line of one of its clauses, where "before" or "after" (the default) puts them next to it. content is one or more clauses, each case x: or default: with its statements, re-indented. For the statements inside a clause, use insert_statements or replace_statements.
 Branches of an if, likewise: at the line of if (p.height > 10) {, content else if (p.height > 5) { return 2; } goes at the end of its chain (before its else); at the line of an else if, before or after it. else { ... } goes last, once.`
-}
-
-func (*AddCase) InputSchema() json.RawMessage {
-	return refactor.Schema[addCaseArgs]()
 }
 
 // addCaseArgs are the arguments of add_case.

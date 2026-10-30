@@ -22,22 +22,18 @@ import (
 )
 
 // IntroduceParameter is the "introduce_parameter" refactoring.
-type IntroduceParameter struct{}
+type IntroduceParameter struct{ refactor.Named[introArgs] }
 
 // NewIntroduceParameter returns the introduce_parameter refactoring.
-func NewIntroduceParameter() *IntroduceParameter { return &IntroduceParameter{} }
-
-func (*IntroduceParameter) Name() string { return "introduce_parameter" }
+func NewIntroduceParameter() *IntroduceParameter {
+	return &IntroduceParameter{Named: refactor.Called[introArgs]("introduce_parameter")}
+}
 
 func (*IntroduceParameter) Description() string {
 	return `Replace an expression in a function's body with a new parameter, and pass the expression at every call, written in the call's own terms: introducing u.Name as name, func greet(u User) string { return "hi " + u.Name } becomes func greet(u User, name string) string { return "hi " + name }, and greet(a) becomes greet(a, a.Name). Then remove_parameter u once the body no longer uses it. The receiver works too: m.decl in a method of m becomes mv.decl at the call mv.check().
 In a method of an interface, every method of the interface's types gets it, each for the same expression of its own parameters: p.Name in Fern.Water makes Water(p Plant) Water(p Plant, name string) in Species and every species, and s.Water(p) s.Water(p, p.Name).
 Identify the expression by file and its source text, with function (its first use in that body) or the line it starts on (column if the text is on the line twice). The parameter goes last.
 The expression is then evaluated once, at the call, so it must give the same value and do the same there: one that could panic or reads memory other code can change must be what the body evaluates first, on every call. Refusals say which rule a case breaks.`
-}
-
-func (*IntroduceParameter) InputSchema() json.RawMessage {
-	return refactor.Schema[introArgs]()
 }
 
 type introArgs struct {

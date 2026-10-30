@@ -13,23 +13,21 @@ import (
 )
 
 // ReplaceDeclaration is replace_declaration.
-type ReplaceDeclaration struct{}
+type ReplaceDeclaration struct {
+	refactor.Named[replaceDeclarationArgs]
+}
 
 // New returns replace_declaration.
-func New() *ReplaceDeclaration { return &ReplaceDeclaration{} }
+func New() *ReplaceDeclaration {
+	return &ReplaceDeclaration{Named: refactor.Called[replaceDeclarationArgs]("replace_declaration")}
+}
 
 func (*ReplaceDeclaration) ChangesBehavior() {}
-
-func (*ReplaceDeclaration) Name() string { return "replace_declaration" }
 
 func (*ReplaceDeclaration) Description() string {
 	return `Replace a whole declaration, found by name, with new source: an edit, for a signature and body that change together, or a declaration too long to restate as replace_text's old (a table, a type); for a body alone, use replace_statements with function. With name "Bed.depth" and content depth(extra: number): number { return this.base + extra; }, depth's signature and body are replaced together, indented as it was.
 content is the new declaration; the old doc comment stays unless content has its own. Empty content deletes the declaration and its doc comment. Callers a new signature or a deletion breaks are refused, or fixed in the same batch with check "end".
 Refuses, saying why: a name the file does not declare, or declares more than once (overloads, merged declarations).`
-}
-
-func (*ReplaceDeclaration) InputSchema() json.RawMessage {
-	return refactor.Schema[replaceDeclarationArgs]()
 }
 
 // replaceDeclarationArgs are the arguments of replace_declaration.
