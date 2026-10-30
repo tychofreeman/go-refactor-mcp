@@ -2554,6 +2554,12 @@ hand or a tool got in the way.
     2. **TypeScript workspace forwarding** (about 300-400 lines): most
        of the 33 functions in `ts/workspace` find the project and call
        the same function on it; one generic helper, as `ws.Edits` is.
+       *Done* (2026-10-30), not by a generic helper: the forwarders
+       return different tuples, and each had one caller. They are gone;
+       `ws.Project(file)` gives the path and the project that has it, or
+       the refusal (no such file, in none of the projects), and callers
+       call `tsapi` themselves, which also folded their `os.Stat`
+       checks in. Rename reuses `merged`. 128 lines fewer.
     3. **Walking a TypeScript project** (about 200 lines, and one place
        for the filter): helpers for the project's own files (12 loops
        repeat the `.d.ts` and `node_modules` filter), for taking a

@@ -90,8 +90,11 @@ func (*ReplaceText) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refacto
 		}
 		lo, hi := 0, len(text)
 		if a.Function != "" {
-			var why string
-			if lo, hi, why = ws.FunctionSpan(path, a.Function); why != "" {
+			_, p, why := ws.Project(path)
+			if why == "" {
+				lo, hi, why = p.FunctionSpan(path, a.Function)
+			}
+			if why != "" {
 				return nil, refactor.Refusef("%s", why)
 			}
 		}

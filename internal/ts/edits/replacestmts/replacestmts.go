@@ -3,9 +3,9 @@
 package replacestmts
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
@@ -61,23 +61,23 @@ func (*ReplaceStatements) Plan(ws *workspace.Workspace, raw json.RawMessage) (*r
 	case a.Content == nil && a.Wrap == "":
 		return nil, refactor.Refusef("give content, or wrap to put the statements inside new ones")
 	}
-	path := ws.Abs(a.File)
-	if _, err := os.Stat(path); err != nil {
-		return nil, refactor.Refusef("%s: no such file", a.File)
+	path, p, why := ws.Project(a.File)
+	if why != "" {
+		return nil, refactor.Refusef("%s", why)
 	}
 	if a.Case != "" {
 		// A case's body: its lines, then as lines.
 		if a.Function == "" {
 			return nil, refactor.Refusef("give the function whose switch has the case")
 		}
-		first, last, why := ws.CaseLines(path, a.Function, a.Case, true)
+		first, last, why := p.CaseLines(path, a.Function, a.Case, true)
 		if why != "" {
 			return nil, refactor.Refusef("%s", why)
 		}
 		a.Function, a.StartLine, a.EndLine = "", first, last
 	}
 	if a.Wrap != "" {
-		return wrap(ws, path, a.Function, a.StartLine, a.EndLine, a.Wrap)
+		return wrap(ws, p, path, a.Function, a.StartLine, a.EndLine, a.Wrap)
 	}
 	content := *a.Content
 	empty := strings.TrimSpace(content) == ""
@@ -102,7 +102,7 @@ func (*ReplaceStatements) Plan(ws *workspace.Workspace, raw json.RawMessage) (*r
 		if d == nil || d.BlockEnd == 0 {
 			return nil, refactor.Refusef("%s declares no function %q with a body in braces; give name, or Class.member for a method", a.File, a.Function)
 		}
-		pl, why := ws.Body(path, d.BlockStart, d.BlockEnd)
+		pl, why := p.Body(path, d.BlockStart, d.BlockEnd)
 		if why != "" {
 			return nil, refactor.Refusef("%s", why)
 		}
@@ -112,7 +112,7 @@ func (*ReplaceStatements) Plan(ws *workspace.Workspace, raw json.RawMessage) (*r
 		}
 		plan.Summary = fmt.Sprintf("replaced the body of %s in %s with %d statement%s", a.Function, ws.Rel(path), n, textutil.Plural(n))
 	} else {
-		start, end, indent, old, why := ws.Statements(path, a.StartLine, a.EndLine)
+		start, end, indent, old, why := p.Statements(path, a.StartLine, a.EndLine)
 		if why != "" {
 			return nil, refactor.Refusef("%s", why)
 		}
@@ -128,18 +128,18 @@ func (*ReplaceStatements) Plan(ws *workspace.Workspace, raw json.RawMessage) (*r
 
 // wrap puts the statements of lines first-last, or the whole body of
 // function, at the line $body of template.
-func wrap(ws *workspace.Workspace, path, function string, first, last int, template string) (*refactor.Plan, error) {
+func wrap(ws *workspace.Workspace, p *tsapi.Project, path, function string, first, last int, template string) (*refactor.Plan, error) {
 	if function != "" {
 		d := declaration(ws, path, function)
 		if d == nil {
 			return nil, refactor.Refusef("%s declares no function %q with a body in braces; give name, or Class.member for a method", ws.Rel(path), function)
 		}
 		var why string
-		if first, last, why = ws.BodyLines(path, d.BlockStart, d.BlockEnd); why != "" {
+		if first, last, why = p.BodyLines(path, d.BlockStart, d.BlockEnd); why != "" {
 			return nil, refactor.Refusef("%s", why)
 		}
 	}
-	start, end, text, notes, why := ws.Wrap(path, first, last, template)
+	start, end, text, notes, why := p.Wrap(context.Background(), path, first, last, template)
 	if why != "" {
 		return nil, refactor.Refusef("%s", why)
 	}

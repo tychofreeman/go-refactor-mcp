@@ -45,40 +45,18 @@ func (w *Workspace) Local(path, fn, name string) (int, string) {
 // test file only one project has is renamed too. refusal is why it
 // cannot, when it cannot.
 func (w *Workspace) Rename(path string, offset int, newName string) (edits []edit.FileEdit, refusal string, err error) {
-	byFile := map[string][]edit.TextEdit{}
-	seen := map[tsapi.Edit]bool{}
-	var order []string
-	found := false
-	for _, p := range w.projects {
-		if !p.Has(path) {
-			continue
+	edits, refusal = w.merged(path, func(p *tsapi.Project) ([]tsapi.Edit, string) {
+		es, why, e := p.Rename(path, offset, newName)
+		if e != nil {
+			err = e
+			return nil, e.Error()
 		}
-		found = true
-		es, why, err := p.Rename(path, offset, newName)
-		if err != nil {
-			return nil, "", err
-		}
-		if why != "" {
-			return nil, why, nil
-		}
-		for _, e := range es {
-			if seen[e] || !w.Contains(e.File) {
-				continue
-			}
-			seen[e] = true
-			if byFile[e.File] == nil {
-				order = append(order, e.File)
-			}
-			byFile[e.File] = append(byFile[e.File], edit.TextEdit{Start: e.Start, End: e.End, NewText: e.NewText})
-		}
+		return es, why
+	})
+	if err != nil {
+		return nil, "", err
 	}
-	if !found {
-		return nil, w.Rel(path) + " is in none of the solution's projects (" + joinComma(w.Projects()) + ")", nil
-	}
-	for _, f := range order {
-		edits = append(edits, edit.FileEdit{Path: f, Edits: byFile[f]})
-	}
-	return edits, "", nil
+	return edits, refusal, nil
 }
 
 // KeyedUses checks renaming the member at offset in the file at path in

@@ -304,8 +304,10 @@ func (*ExtractFunction) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 	}
 	var split []tsapi.Edit
 	if a.Case != "" {
-		var why string
-		a.StartLine, a.EndLine, split, why = ws.CaseBody(ws.Abs(a.File), a.Function, a.Case, a.Split == nil || *a.Split)
+		path, p, why := ws.Project(a.File)
+		if why == "" {
+			a.StartLine, a.EndLine, split, why = p.CaseBody(path, a.Function, a.Case, a.Split == nil || *a.Split)
+		}
 		if why != "" {
 			return nil, refactor.Refusef("%s", why)
 		}

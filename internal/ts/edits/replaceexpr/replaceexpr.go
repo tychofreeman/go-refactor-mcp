@@ -4,9 +4,9 @@
 package replaceexpr
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
@@ -49,11 +49,12 @@ func (*ReplaceExpression) Plan(ws *workspace.Workspace, raw json.RawMessage) (*r
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
-	path := ws.Abs(a.File)
-	if _, err := os.Stat(path); err != nil {
-		return nil, refactor.Refusef("%s: no such file", a.File)
+	path, p, why := ws.Project(a.File)
+	if why != "" {
+		return nil, refactor.Refusef("%s", why)
 	}
-	fe, n, why := ws.ReplaceExpression(path, a.Line, a.Expression, a.Column, a.New, a.AllOccurrences)
+	es, why := p.ReplaceExpression(context.Background(), path, a.Line, a.Expression, a.Column, a.New, a.AllOccurrences)
+	fe, n := workspace.FileEdit(path, es), len(es)
 	if why != "" {
 		return nil, refactor.Refusef("%s", why)
 	}

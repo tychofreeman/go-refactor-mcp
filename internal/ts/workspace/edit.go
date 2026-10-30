@@ -1,9 +1,8 @@
 package workspace
 
 import (
-	"context"
+	"os"
 
-	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/tsapi"
 )
 
@@ -22,120 +21,16 @@ func (w *Workspace) none(path string) string {
 	return w.Rel(path) + " is in none of the solution's projects (" + joinComma(w.Projects()) + ")"
 }
 
-// Statements returns the bytes of lines first-last of the file at path
-// when they hold whole statements of one block, with their indentation
-// and how many there are; refusal says why they do not.
-func (w *Workspace) Statements(path string, first, last int) (start, end int, indent string, n int, refusal string) {
-	p := w.project(path)
-	if p == nil {
-		return 0, 0, "", 0, w.none(path)
+// Project returns the absolute path of file and the first project of the
+// solution that has it; refusal is why there is none: no such file, or
+// it is in none of the projects.
+func (w *Workspace) Project(file string) (path string, p *tsapi.Project, refusal string) {
+	path = w.Abs(file)
+	if _, err := os.Stat(path); err != nil {
+		return path, nil, file + ": no such file"
 	}
-	return p.Statements(path, first, last)
-}
-
-// Body returns where the statements of the function body whose braces are
-// at [blockStart, blockEnd) go.
-func (w *Workspace) Body(path string, blockStart, blockEnd int) (tsapi.Place, string) {
-	p := w.project(path)
-	if p == nil {
-		return tsapi.Place{}, w.none(path)
+	if p = w.project(path); p == nil {
+		return path, nil, w.none(path)
 	}
-	return p.Body(path, blockStart, blockEnd)
-}
-
-// Wrap returns the text that puts lines first-last of the file at path at
-// the hole of template (tsapi.Project.Wrap).
-func (w *Workspace) Wrap(path string, first, last int, template string) (start, end int, text string, notes []string, refusal string) {
-	p := w.project(path)
-	if p == nil {
-		return 0, 0, "", nil, w.none(path)
-	}
-	return p.Wrap(context.Background(), path, first, last, template)
-}
-
-// BodyLines returns the lines of the statements of the function body whose
-// braces are at [blockStart, blockEnd).
-func (w *Workspace) BodyLines(path string, blockStart, blockEnd int) (first, last int, refusal string) {
-	p := w.project(path)
-	if p == nil {
-		return 0, 0, w.none(path)
-	}
-	return p.BodyLines(path, blockStart, blockEnd)
-}
-
-// MemberPlace returns where new members of the type called name go in the
-// file at path, and whether it is a class or an interface.
-func (w *Workspace) MemberPlace(path, name, after, before string) (tsapi.Place, string, string) {
-	p := w.project(path)
-	if p == nil {
-		return tsapi.Place{}, "", w.none(path)
-	}
-	return p.MemberPlace(path, name, after, before)
-}
-
-// Semi is what ends a statement or member in the style of the file at
-// path: ";" or nothing.
-func (w *Workspace) Semi(path string) string {
-	if p := w.project(path); p != nil {
-		return p.Semi(path)
-	}
-	return ";"
-}
-
-// Insertion returns where statements go before, after or into what is on
-// line of the file at path.
-func (w *Workspace) Insertion(path string, line int, where string) (tsapi.Place, string) {
-	p := w.project(path)
-	if p == nil {
-		return tsapi.Place{}, w.none(path)
-	}
-	return p.Insertion(path, line, where)
-}
-
-// ReplaceExpression returns the edit that replaces the expression expr
-// starting on line (at column, if not 0) of the file at path with
-// newText, and with all every expression of the file that means the
-// same; n is how many it replaces.
-func (w *Workspace) ReplaceExpression(path string, line int, expr string, column int, newText string, all bool) (fe edit.FileEdit, n int, refusal string) {
-	p := w.project(path)
-	if p == nil {
-		return edit.FileEdit{}, 0, w.none(path)
-	}
-	es, refusal := p.ReplaceExpression(context.Background(), path, line, expr, column, newText, all)
-	fe.Path = path
-	for _, e := range es {
-		fe.Edits = append(fe.Edits, edit.TextEdit{Start: e.Start, End: e.End, NewText: e.NewText})
-	}
-	return fe, len(es), refusal
-}
-
-// CaseLines returns the lines of the body of the case value of a switch in
-// function, in the file at path.
-func (w *Workspace) CaseLines(path, function, value string, withBreak bool) (first, last int, refusal string) {
-	p := w.project(path)
-	if p == nil {
-		return 0, 0, w.none(path)
-	}
-	return p.CaseLines(path, function, value, withBreak)
-}
-
-// CaseBody returns the lines of the body of the case value of a switch in
-// the function, and, when split and the case shares its body with others,
-// the edits that give it a case of its own (tsapi.Project.CaseBody).
-func (w *Workspace) CaseBody(path, function, value string, split bool) (first, last int, edits []tsapi.Edit, refusal string) {
-	p := w.project(path)
-	if p == nil {
-		return 0, 0, nil, w.none(path)
-	}
-	return p.CaseBody(path, function, value, split)
-}
-
-// FunctionSpan returns the byte offsets of the function (name, or
-// Class.method) of the file at path.
-func (w *Workspace) FunctionSpan(path, function string) (start, end int, refusal string) {
-	p := w.project(path)
-	if p == nil {
-		return 0, 0, w.none(path)
-	}
-	return p.FunctionSpan(path, function)
+	return path, p, ""
 }

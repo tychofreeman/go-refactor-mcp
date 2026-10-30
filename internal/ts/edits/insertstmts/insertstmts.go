@@ -5,7 +5,6 @@ package insertstmts
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/gocode"
@@ -47,11 +46,11 @@ func (*InsertStatements) Plan(ws *workspace.Workspace, raw json.RawMessage) (*re
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
-	path := ws.Abs(a.File)
-	if _, err := os.Stat(path); err != nil {
-		return nil, refactor.Refusef("%s: no such file", a.File)
+	path, p, why := ws.Project(a.File)
+	if why != "" {
+		return nil, refactor.Refusef("%s", why)
 	}
-	pl, why := ws.Insertion(path, a.Line, a.Where)
+	pl, why := p.Insertion(path, a.Line, a.Where)
 	if why != "" {
 		return nil, refactor.Refusef("%s", why)
 	}
