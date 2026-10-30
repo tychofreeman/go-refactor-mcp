@@ -26,7 +26,7 @@ func New() *Rename { return &Rename{} }
 func (*Rename) Name() string { return "rename" }
 
 func (*Rename) Description() string {
-	return `Rename a function, class, interface, type, variable, parameter, property or method, and every reference to it in every project of the solution, tests included: renaming water in src/plant.ts to irrigate changes its declaration, each import { water } and each call. Identify it by file, line and its current name (column if the name is on the line twice); without line, name is a top-level declaration of file.
+	return `Rename a function, class, interface, type, variable, parameter, property or method, and every reference to it in every project of the solution, tests included: renaming water in src/plant.ts to irrigate changes its declaration, each import { water } and each call. Identify it by file, line and its current name (column if the name is on the line twice); without line, name is a top-level declaration of file or a member (Bed.plant), and with function a local of that function ("Bed.plant", name "rows").
 Refuses, saying why: a new name that is not an identifier or is reserved, or that a file the rename changes already uses; what the language service cannot rename (a library's declaration, a keyword).`
 }
 
@@ -35,7 +35,8 @@ func (*Rename) InputSchema() json.RawMessage {
   "type": "object",
   "properties": {
     "file":     {"type": "string",  "description": "Path of a file with the symbol, relative to the root."},
-    "line":     {"type": "integer", "description": "1-based line of an occurrence. Omit it to find name as a top-level declaration of file."},
+    "line":     {"type": "integer", "description": "1-based line of an occurrence. Omit it to find name as a top-level declaration of file, or Class.member."},
+    "function": {"type": "string",  "description": "Instead of line, for a local: the function (name or Class.method) of file that declares it (a parameter, variable or constant)."},
     "name":     {"type": "string",  "description": "The current name."},
     "column":   {"type": "integer", "description": "Optional 1-based column, only needed when the name is on the line twice."},
     "new_name": {"type": "string",  "description": "The new name."}
@@ -46,11 +47,12 @@ func (*Rename) InputSchema() json.RawMessage {
 }
 
 type args struct {
-	File    string `json:"file"`
-	Line    int    `json:"line"`
-	Name    string `json:"name"`
-	Column  int    `json:"column"`
-	NewName string `json:"new_name"`
+	File     string `json:"file"`
+	Function string `json:"function"`
+	Line     int    `json:"line"`
+	Name     string `json:"name"`
+	Column   int    `json:"column"`
+	NewName  string `json:"new_name"`
 }
 
 var identifier = regexp.MustCompile(`^[\p{L}_$][\p{L}\p{N}_$]*$`)
@@ -106,6 +108,13 @@ func (*Rename) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Pla
 func locate(ws *workspace.Workspace, path string, a args) (int, error) {
 	if _, err := os.Stat(path); err != nil {
 		return 0, refactor.Refusef("%s: no such file", a.File)
+	}
+	if a.Function != "" && a.Line == 0 {
+		off, why := ws.Local(path, a.Function, a.Name)
+		if why != "" {
+			return 0, refactor.Refusef("%s", why)
+		}
+		return off, nil
 	}
 	if a.Line == 0 {
 		if off, ok := ws.TopLevel(path, a.Name); ok {

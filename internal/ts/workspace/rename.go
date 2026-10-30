@@ -27,6 +27,17 @@ func (w *Workspace) TopLevel(path, name string) (int, bool) {
 	return 0, false
 }
 
+// Local returns the offset of the name of the declaration called name in
+// the function fn of the file at path (tsapi.Project.Local), or why there
+// is none.
+func (w *Workspace) Local(path, fn, name string) (int, string) {
+	p := w.project(path)
+	if p == nil {
+		return 0, w.none(path)
+	}
+	return p.Local(path, fn, name)
+}
+
 // Rename renames the symbol at offset in the file at path to newName in
 // every project that has the file, and returns the edits, each once: a
 // test file only one project has is renamed too. refusal is why it

@@ -8,6 +8,7 @@ import (
 
 	"github.com/buke/typescript-go-internal/v7/pkg/ast"
 	"github.com/buke/typescript-go-internal/v7/pkg/checker"
+	"github.com/buke/typescript-go-internal/v7/pkg/scanner"
 	"github.com/buke/typescript-go-internal/v7/pkg/tspath"
 )
 
@@ -20,16 +21,23 @@ type Stub struct {
 	// function at the top level.
 	Owner string
 	Text  string // the declaration, indented with two spaces a step
+	// Before is, for a class the file itself makes, the offset of the
+	// top-level statement that first makes it, where the class must go
+	// (classes are not hoisted); -1 for the end of the file.
+	Before int
 }
 
-// Stubs returns a stub for each of names that the file at path calls and
-// nothing declares: a function of the file; an exported function of the
-// module the file imports it from; or a method of the class (a signature
-// of the interface) it is called on. It refuses a name the file does not
-// call ("calls no undeclared function name"), and one whose result the
-// call does not tell ("cannot tell the results of name from ..."): the
-// engine leaves such a name out and asks for the rest.
-func (p *Project) Stubs(ctx context.Context, path string, names []string) ([]Stub, string) {
+// Stubs returns a stub for each of names that the file at path uses and
+// nothing declares: a function it calls, of the file or an exported one of
+// the module the file imports it from; a class it makes with new, there
+// too; a method or property of the class (a signature or property of the
+// interface) it calls or reads on. results gives the result type of a
+// function or method, or the type of a property, by name, where its use
+// does not tell it. It refuses a name the file does not use so ("calls no
+// undeclared function name"), and one whose type the use does not tell
+// ("cannot tell the results of name from ..."): the engine leaves such a
+// name out and asks for the rest.
+func (p *Project) Stubs(ctx context.Context, path string, names []string, results map[string]string) ([]Stub, string) {
 	l, refusal := p.lined(path)
 	if refusal != "" {
 		return nil, refusal
@@ -38,7 +46,7 @@ func (p *Project) Stubs(ctx context.Context, path string, names []string) ([]Stu
 	defer done()
 	var stubs []Stub
 	for _, name := range names {
-		s, why := l.stub(c, name)
+		s, why := l.stub(c, name, results[name])
 		if why != "" {
 			return nil, why
 		}
@@ -47,10 +55,12 @@ func (p *Project) Stubs(ctx context.Context, path string, names []string) ([]Stu
 	return stubs, ""
 }
 
-// stub returns the stub of name, from its first call in the file.
-func (l *lined) stub(c *checker.Checker, name string) (Stub, string) {
+// stub returns the stub of name, from its first use in the file: a call,
+// else a new, else a property read or written; result, if not "", is its
+// type.
+func (l *lined) stub(c *checker.Checker, name, result string) (Stub, string) {
 	rel := tspath.GetBaseFileName(l.f.FileName())
-	s := Stub{Name: name, File: l.f.FileName()}
+	s := Stub{Name: name, File: l.f.FileName(), Before: -1}
 	exported := false
 	if from, ok := l.importedFrom(c, name); ok {
 		if from == "" {
@@ -58,14 +68,12 @@ func (l *lined) stub(c *checker.Checker, name string) (Stub, string) {
 		}
 		s.File, exported = from, true
 	}
-	var call *ast.Node
+	var call, made, prop *ast.Node
 	method := false
 	var visit func(n *ast.Node) bool
 	visit = func(n *ast.Node) bool {
-		if call != nil {
-			return true
-		}
-		if ast.IsCallExpression(n) {
+		switch {
+		case call == nil && ast.IsCallExpression(n):
 			callee := n.Expression()
 			switch {
 			case ast.IsIdentifier(callee) && callee.Text() == name:
@@ -73,31 +81,85 @@ func (l *lined) stub(c *checker.Checker, name string) (Stub, string) {
 			case ast.IsPropertyAccessExpression(callee) && callee.Name().Text() == name && c.GetSymbolAtLocation(callee.Name()) == nil:
 				call, method = n, true
 			}
+		case made == nil && ast.IsNewExpression(n) && ast.IsIdentifier(n.Expression()) && n.Expression().Text() == name:
+			made = n
+		case prop == nil && ast.IsPropertyAccessExpression(n) && n.Name().Text() == name && !isCallee(n) && c.GetSymbolAtLocation(n.Name()) == nil:
+			prop = n
 		}
 		return n.ForEachChild(visit)
 	}
 	visit(l.f.AsNode())
-	if call == nil {
-		return Stub{}, fmt.Sprintf("%s calls no undeclared function %s", rel, name)
-	}
-	result, ok := resultType(c, call)
-	if !ok {
-		return Stub{}, fmt.Sprintf("cannot tell the results of %s from how %s uses it: give its call a type (const x: T = %s(...)), or declare it", name, rel, name)
-	}
-	params := parameters(c, call)
-	sig := fmt.Sprintf("%s(%s): %s", name, params, result)
-	body := " {\n  throw new Error(\"not implemented\");\n}"
-	if !method {
-		s.Text = "function " + sig + body
+	export := func(text string) string {
 		if exported {
-			s.Text = "export " + s.Text
+			return "export " + text
+		}
+		return text
+	}
+	switch {
+	case call == nil && made != nil:
+		s.Text = export("class " + name + " {}")
+		if params := parameters(c, made); params != "" {
+			s.Text = export("class " + name + " {\n  constructor(" + params + ") {}\n}")
+		}
+		if !exported {
+			top := made
+			for top.Parent != nil && !ast.IsSourceFile(top.Parent) {
+				top = top.Parent
+			}
+			s.Before = l.start(l.line(scanner.GetTokenPosOfNode(top, l.f, true)))
 		}
 		return s, ""
+	case call == nil && prop != nil:
+		typ := result
+		if typ == "" {
+			var ok bool
+			if typ, ok = propertyType(c, prop); !ok {
+				return Stub{}, fmt.Sprintf("cannot tell the type of %s from how %s uses it: give it a place of a type (const x: T = v.%s), or give results", name, rel, name)
+			}
+		}
+		file, owner, class, why := l.owner(c, prop.Expression(), name)
+		if why != "" {
+			return Stub{}, why
+		}
+		s.File, s.Owner, s.Text = file, owner, name+": "+typ+";"
+		if class {
+			s.Text = name + "!: " + typ + ";"
+		}
+		return s, ""
+	case call == nil:
+		return Stub{}, fmt.Sprintf("%s calls no undeclared function %s", rel, name)
 	}
-	t := c.GetTypeAtLocation(call.Expression().Expression())
+	if result == "" {
+		var ok bool
+		if result, ok = resultType(c, call); !ok {
+			return Stub{}, fmt.Sprintf("cannot tell the results of %s from how %s uses it: give its call a type (const x: T = %s(...)), or declare it", name, rel, name)
+		}
+	}
+	sig := fmt.Sprintf("%s(%s): %s", name, parameters(c, call), result)
+	body := " {\n  throw new Error(\"not implemented\");\n}"
+	if !method {
+		s.Text = export("function " + sig + body)
+		return s, ""
+	}
+	file, owner, class, why := l.owner(c, call.Expression().Expression(), name)
+	if why != "" {
+		return Stub{}, why
+	}
+	s.File, s.Owner, s.Text = file, owner, sig+";"
+	if class {
+		s.Text = sig + body
+	}
+	return s, ""
+}
+
+// owner returns the class or interface of the solution that the value of
+// expr is, which a member name used on it goes in, its file, and whether
+// it is a class; or why there is none.
+func (l *lined) owner(c *checker.Checker, expr *ast.Node, name string) (file, owner string, class bool, why string) {
+	t := c.GetTypeAtLocation(expr)
 	sym := t.Symbol()
 	if sym == nil {
-		return Stub{}, fmt.Sprintf("%s is called on a value whose type is not a class or interface of the solution", name)
+		return "", "", false, fmt.Sprintf("%s is used on a value whose type is not a class or interface of the solution", name)
 	}
 	for _, d := range sym.Declarations {
 		f := ast.GetSourceFileOfNode(d)
@@ -106,14 +168,28 @@ func (l *lined) stub(c *checker.Checker, name string) (Stub, string) {
 		}
 		switch {
 		case ast.IsClassDeclaration(d):
-			s.File, s.Owner, s.Text = f.FileName(), sym.Name, sig+body
-			return s, ""
+			return f.FileName(), sym.Name, true, ""
 		case ast.IsInterfaceDeclaration(d):
-			s.File, s.Owner, s.Text = f.FileName(), sym.Name, sig+";"
-			return s, ""
+			return f.FileName(), sym.Name, false, ""
 		}
 	}
-	return Stub{}, fmt.Sprintf("%s is called on %s, which is not a class or interface declared in the solution", name, c.TypeToString(t))
+	return "", "", false, fmt.Sprintf("%s is used on %s, which is not a class or interface declared in the solution", name, c.TypeToString(t))
+}
+
+// isCallee reports whether n is the function a call calls.
+func isCallee(n *ast.Node) bool {
+	return n.Parent != nil && ast.IsCallExpression(n.Parent) && n.Parent.Expression() == n
+}
+
+// propertyType is the type of a property from its use: what is assigned
+// to it, widened from a literal, or what its place expects (unknown where
+// it takes any value).
+func propertyType(c *checker.Checker, prop *ast.Node) (string, bool) {
+	if p := prop.Parent; p != nil && ast.IsBinaryExpression(p) && p.AsBinaryExpression().OperatorToken.Kind == ast.KindEqualsToken && p.AsBinaryExpression().Left == prop {
+		t := c.GetWidenedType(c.GetBaseTypeOfLiteralType(c.GetTypeAtLocation(p.AsBinaryExpression().Right)))
+		return c.TypeToString(t), true
+	}
+	return resultType(c, prop)
 }
 
 // importedFrom reports whether the file imports name, and from which file

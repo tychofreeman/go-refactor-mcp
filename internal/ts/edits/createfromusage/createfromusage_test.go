@@ -130,6 +130,68 @@ func TestStubWhereAnyValueGoes(t *testing.T) {
 	}
 }
 
+// A class a file makes with new and nothing declares gets a stub: its
+// constructor takes the arguments' types; before the statement that makes
+// it, or in the module the file imports it from, exported, if it does.
+func TestStubAClass(t *testing.T) {
+	files := copyOf(garden)
+	files["src/tray.test.ts"] = "import { Bed } from \"./bed\";\n\nexport const b = new Bed();\n"
+	ws, dir := load(t, files)
+	b := batch(t, ws,
+		mk(adddecl.New(), map[string]string{"file": "src/plant.ts", "content": "export const planter = new Pot(3, \"clay\");"}),
+		mk(replacetext.New(), map[string]string{"file": "src/tray.test.ts", "old": "import { Bed }", "new": "import { Bed, Tray }"}),
+		mk(adddecl.New(), map[string]string{"file": "src/tray.test.ts", "content": "export const tray = new Tray();"}),
+	)
+	if !b.Applied {
+		t.Fatalf("not applied: %s", b)
+	}
+	if got, want := read(t, dir, "src/plant.ts"), "}\n\nclass Pot {\n  constructor(n: number, s: string) {}\n}\n\nexport const planter = new Pot(3, \"clay\");\n"; !strings.HasSuffix(got, want) {
+		t.Errorf("plant.ts:\n%s\nwant it to end (a class goes before its first use):\n%s", got, want)
+	}
+	if got, want := read(t, dir, "src/bed.ts"), "\nexport class Tray {}\n"; !strings.HasSuffix(got, want) {
+		t.Errorf("bed.ts:\n%s\nwant it to end:\n%s", got, want)
+	}
+}
+
+// A property a file reads or writes and its class does not declare gets
+// a stub, typed from where it is read or what is written to it.
+func TestStubAProperty(t *testing.T) {
+	ws, dir := load(t, copyOf(garden))
+	b := batch(t, ws,
+		mk(adddecl.New(), map[string]string{"file": "src/plant.ts", "content": "import { Bed } from \"./bed\";\n\nexport const size: number = new Bed().size;\n\nexport function deepen(b: Bed): void {\n  b.depth = 2;\n}"}),
+	)
+	if !b.Applied {
+		t.Fatalf("not applied: %s", b)
+	}
+	got := read(t, dir, "src/bed.ts")
+	for _, want := range []string{"  size!: number;\n", "  depth!: number;\n"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("bed.ts:\n%s\nwant it to hold:\n%s", got, want)
+		}
+	}
+}
+
+// results gives a result type the use does not tell; to_file puts the
+// stubs of a file's own names in another file, exported and imported.
+func TestStubResultsAndFile(t *testing.T) {
+	ws, dir := load(t, copyOf(garden))
+	cfu := step{Refactoring: New(), Args: json.RawMessage(`{"file": "src/plant.ts", "names": ["shade", "dryness"], "results": {"shade": "number"}, "to_file": "src/weather.ts"}`)}
+	b := batch(t, ws,
+		mk(adddecl.New(), map[string]string{"file": "src/plant.ts", "content": "export const vs = [shade(1)];\n\nexport const dry: boolean = dryness(2);"}),
+		cfu,
+	)
+	if !b.Applied {
+		t.Fatalf("not applied: %s", b)
+	}
+	want := "export function shade(n: number): number {\n  throw new Error(\"not implemented\");\n}\n\nexport function dryness(n: number): boolean {\n  throw new Error(\"not implemented\");\n}\n"
+	if got := read(t, dir, "src/weather.ts"); got != want {
+		t.Errorf("weather.ts:\n%s\nwant:\n%s", got, want)
+	}
+	if got := read(t, dir, "src/plant.ts"); !strings.Contains(got, "import { shade, dryness } from \"./weather\"") {
+		t.Errorf("plant.ts does not import the stubs:\n%s", got)
+	}
+}
+
 // A name not called, or whose result type its place does not tell, gets
 // no stub, and the batch says why.
 func TestNoStub(t *testing.T) {

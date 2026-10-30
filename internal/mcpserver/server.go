@@ -139,6 +139,18 @@ func (s *Server) reads(text string) string {
 	return text
 }
 
+// instructions are Instructions for the languages this server serves:
+// TypeScript's alone, or Go's, naming TypeScript when it serves both.
+func (s *Server) instructions() string {
+	switch {
+	case s.golang == nil:
+		return s.reads(TypeScriptInstructions)
+	case s.typescript != nil:
+		return s.reads(strings.Replace(Instructions, "Refactoring and editing tools for the Go module in this project, and", "Refactoring and editing tools for the Go module in this project and for its TypeScript (the solution of the nearest tsconfig.json; each call goes to the language of the files it names), and", 1))
+	}
+	return s.reads(Instructions)
+}
+
 // New returns a server for the code at dir: Go for the module containing
 // it (also when it holds neither language), TypeScript for the solution
 // of the nearest tsconfig.json at or above it.
@@ -184,7 +196,7 @@ func (s *Server) MCP() *mcp.Server {
 		s.typescript.FullDiffs, s.typescript.ReadByName = s.FullDiffs, s.ReadByName
 	}
 	srv := mcp.NewServer(&mcp.Implementation{Name: "gorefactor", Version: Version}, &mcp.ServerOptions{
-		Instructions: s.reads(Instructions),
+		Instructions: s.instructions(),
 	})
 
 	notDestructive := false

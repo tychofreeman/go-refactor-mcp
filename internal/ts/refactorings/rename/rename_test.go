@@ -69,6 +69,80 @@ func TestRenameByName(t *testing.T) {
 	}
 }
 
+// drip is a file with a class's members and locals of the same name in
+// two functions.
+const drip = `export class Drip {
+  rate = 1;
+  run(liters: number): number {
+    const left = liters - this.rate;
+    return left;
+  }
+}
+
+export function soak(liters: number): number {
+  const left = liters;
+  if (left > 1) {
+    const left = 1;
+    return left;
+  }
+  return left;
+}
+`
+
+// withDrip is the solution with src/drip.ts.
+func withDrip(t *testing.T) (*workspace.Workspace, string) {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.CopyFS(dir, os.DirFS("../../workspace/testdata/solution")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "src/drip.ts"), []byte(drip), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ws, err := workspace.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ws, dir
+}
+
+// Without line, Class.member names a member; with function, name is a
+// local of that function, not of another.
+func TestRenameMemberAndLocal(t *testing.T) {
+	for _, tc := range []struct {
+		args  string
+		wants []string
+	}{
+		{`{"file": "src/drip.ts", "name": "Drip.run", "new_name": "flow"}`, []string{"  flow(liters: number): number {\n"}},
+		{`{"file": "src/drip.ts", "name": "Drip.rate", "new_name": "speed"}`, []string{"  speed = 1;\n", "liters - this.speed;\n"}},
+		{`{"file": "src/drip.ts", "function": "Drip.run", "name": "left", "new_name": "rest"}`, []string{"    const rest = liters - this.rate;\n    return rest;\n", "export function soak(liters: number): number {\n  const left = liters;\n"}},
+		{`{"file": "src/drip.ts", "function": "Drip.run", "name": "liters", "new_name": "amount"}`, []string{"  run(amount: number): number {\n    const left = amount - this.rate;\n", "soak(liters: number)"}},
+	} {
+		ws, dir := withDrip(t)
+		res := run(t, ws, tc.args)
+		if !res.Applied {
+			t.Errorf("%s: not applied: %s", tc.args, res)
+			continue
+		}
+		got := read(t, dir, "src/drip.ts")
+		for _, want := range tc.wants {
+			if !strings.Contains(got, want) {
+				t.Errorf("%s: drip.ts:\n%s\nwant it to hold:\n%s", tc.args, got, want)
+			}
+		}
+	}
+	for _, tc := range []struct{ args, want string }{
+		{`{"file": "src/drip.ts", "name": "Drip.pump", "new_name": "push"}`, `src/drip.ts declares no top-level "Drip.pump"`},
+		{`{"file": "src/drip.ts", "function": "soak", "name": "rate", "new_name": "speed"}`, "soak declares no rate"},
+		{`{"file": "src/drip.ts", "function": "soak", "name": "left", "new_name": "rest"}`, "soak declares left 2 times, on lines 10, 12: give line"},
+	} {
+		ws, _ := withDrip(t)
+		if res := run(t, ws, tc.args); res.Applied || !strings.Contains(res.Refused, tc.want) {
+			t.Errorf("%s: want a refusal with %q, got %s", tc.args, tc.want, res)
+		}
+	}
+}
+
 func TestRenameRefuses(t *testing.T) {
 	for _, tc := range []struct{ args, want string }{
 		{`{"file": "src/bed.ts", "name": "morning", "new_name": "water"}`, `"water" is already used in src/bed.ts:1`},

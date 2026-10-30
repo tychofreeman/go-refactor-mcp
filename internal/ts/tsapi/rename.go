@@ -2,6 +2,7 @@ package tsapi
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/buke/typescript-go-internal/v7/pkg/ast"
@@ -63,10 +64,24 @@ func (p *Project) Identifiers(path string) []Ident {
 
 // TopLevel returns the offset of the name of the file's top-level
 // declaration called name: a function, class, interface, type alias,
-// enum or variable.
+// enum or variable; or of a member, "Class.member", of a class,
+// interface or object type alias.
 func (p *Project) TopLevel(path, name string) (int, bool) {
 	f := p.sourceFile(path)
 	if f == nil {
+		return 0, false
+	}
+	if owner, member, ok := strings.Cut(name, "."); ok {
+		l := newLined(f)
+		members, why := l.members(owner)
+		if why != "" {
+			return 0, false
+		}
+		for _, m := range members {
+			if nm := m.Name(); nm != nil && l.text[l.pos(nm):nm.End()] == member {
+				return l.pos(nm), true
+			}
+		}
 		return 0, false
 	}
 	check := func(n *ast.Node) (int, bool) {
@@ -89,6 +104,43 @@ func (p *Project) TopLevel(path, name string) (int, bool) {
 		}
 	}
 	return 0, false
+}
+
+// Local returns the offset of the name of the declaration called name in
+// the function or method fn of the file ("name" or "Class.method"): a
+// parameter, variable, constant, function or class; or why there is none,
+// or more than one.
+func (p *Project) Local(path, fn, name string) (int, string) {
+	l, refusal := p.lined(path)
+	if refusal != "" {
+		return 0, refusal
+	}
+	node, _, _, why := l.function(fn)
+	if why != "" {
+		return 0, why
+	}
+	var found []*ast.Node
+	var visit func(n *ast.Node) bool
+	visit = func(n *ast.Node) bool {
+		if ast.IsParameterDeclaration(n) || ast.IsVariableDeclaration(n) || ast.IsBindingElement(n) || ast.IsFunctionDeclaration(n) || ast.IsClassDeclaration(n) {
+			if nm := n.Name(); nm != nil && ast.IsIdentifier(nm) && nm.Text() == name {
+				found = append(found, nm)
+			}
+		}
+		return n.ForEachChild(visit)
+	}
+	node.ForEachChild(visit)
+	switch len(found) {
+	case 0:
+		return 0, fmt.Sprintf("%s declares no %s", fn, name)
+	case 1:
+		return l.pos(found[0]), ""
+	}
+	var lines []string
+	for _, nm := range found {
+		lines = append(lines, fmt.Sprint(l.line(l.pos(nm))))
+	}
+	return 0, fmt.Sprintf("%s declares %s %d times, on lines %s: give line", fn, name, len(found), strings.Join(lines, ", "))
 }
 
 // Rename renames the symbol at offset in the file at path to newName in
