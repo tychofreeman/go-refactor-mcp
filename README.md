@@ -2470,8 +2470,20 @@ hand or a tool got in the way.
     after an `if`, and wrote `(*(&found))[0]` at the call; extract_function
     passed `found` by pointer because a closure in the caller uses it,
     though the new function only reads it; add_parameter does not reach a
-    function literal bound to a local (`try := func(...)`), so a mode cannot
-    be threaded through one.
+    function literal bound to a local (`try := func(...)`).
+    Not the only way round: extracting the tail and passing what follows
+    as a parameter (`docs/derivations.md` section 10), and making a
+    closure a function that builds it (section 11), compose today; run
+    five chains per rewrite, they got add_result's per-method edits,
+    CaseLines' lookup and the per-call loop into shared functions in
+    continuation-passing style, and threaded fold's mode. The chains
+    found four more defects: introduce_parameter refuses the method value
+    `t.findCalls` because `fn.Type()` "could change memory" it reads;
+    extract_variable's `all_occurrences` takes `found[0]` to change
+    between two reads with nothing in between; extract_function refuses
+    lines where `more, why := ...` redeclares a variable a closure
+    captures (it would assign the pointer); add_result refuses a return
+    of another call's results rather than splitting it into variables.
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the

@@ -417,6 +417,56 @@ func (p *planner) placeIf(force bool, bed string) {
 It keeps a method, where the first way rewrites the returns in the
 caller; which reads better depends on the code around the call.
 
+## 10. Sharing code that returns a refusal early: extract the tail, pass what follows
+
+Found running the compositions item 43.10's rewrites skipped
+(2026-10-29, README item 44). extract_function refuses lines that
+return on some paths unless the function returns an `error`, but lines
+that return on every path extract, and the end of a function always
+does. So extract from the start of the shared part to the end of the
+function, then make the part that differs between callers a parameter:
+
+1. extract_function the part that differs, at the end (the code that
+   inserts each call's argument; what runs after the per-method edits).
+2. extract_function from the start of the shared part to the end of the
+   function: every path returns, so it extracts, and the call becomes
+   `return shared(...)`.
+3. introduce_parameter of the function step 1 made, in `shared`: it
+   becomes a parameter `then` of function type, and the call passes it.
+4. Where step 2 made a method of the wrong type, method_to_function,
+   then function_to_method with `receiver`.
+
+Another caller then calls `shared` with its own `then`. What it gives
+is code in continuation-passing style, not a function that returns the
+shared result: CaseLines' lookup became `lookup(..., then)`, not
+`caseClause(...) *ast.Node`. Run on three of the four rewrites:
+add_result's per-method edits (A5, 5 steps, `t.forFn(p, fn, l, ...,
+then)`), CaseLines' lookup (B2, 5 steps with one replace_expression),
+introduce_parameter's per-call loop (C1, 3 steps; a fourth that would
+include the checks is refused for a `:=` redeclaring a captured
+variable). What none does: move a statement that may return past
+another that may (`findCalls` above the result-type check), which
+changes which refusal wins.
+
+## 11. A mode through a closure: make it a function that builds the closure
+
+add_parameter does not reach a function literal bound to a local
+(`try := func(...) {...}`), and its body's returns keep extract_function
+from taking the body out. The statement that binds it extracts whole:
+
+1. extract_function the `try := func(...) {...}` statement: it becomes
+   `try := makeTry(...)`, whose result is the closure, its captured
+   locals parameters (pointers where it changes them).
+2. add_parameter to `makeTry` (`fields`, value `nil` at the one call).
+3. insert_statements in the closure's body to use it
+   (`m.fields = fields`), or carry it on with add_parameter to what the
+   closure calls (`newMatcher`, with add_field and add_element for the
+   struct it fills).
+
+A second mode is then a second `makeTry(..., fields)` call. Run on
+fold's object-parameter mode (D2, 4 steps; D5, 3 steps through
+`newMatcher`); what is left is the new behaviour itself.
+
 ## The user's principle
 
 Not every operation will exist. Use the operations there are; where
