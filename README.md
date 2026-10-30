@@ -2407,7 +2407,17 @@ hand or a tool got in the way.
         add_parameter's `replace_variable`; change_field_type's `values`;
         extract_function's `split`; other solutions than the nearest
         tsconfig's; a cached getter read as a read (`analysis.cacheOf`);
-        move_method.
+        move_method. *Done:* replace_statements' `wrap`
+        (`tsapi.Project.Wrap`: the statements as they are at a `$body`
+        line, which TypeScript parses as an identifier, so no placeholder;
+        refused where a name they declare is used after them; notes for a
+        return, break or continue that now acts on the new function, loop
+        or switch); add_element's `name` (a top-level variable of the file,
+        through `as` and `satisfies`) and `from` (`$key`, `$value`);
+        extract_function's `split`: a case sharing its body (`case "fern":
+        case "moss":`) gets a case of its own, the others a copy before it
+        (`tsapi.Project.CaseBody`), refused for a body that does not end
+        in a jump, declares a name, or cases that are not constants.
     Deliberate differences, not gaps: errors already in the code are
     tolerated (item 41.11), type changes are edits (41.2), add_result
     returns an object (`field`, `kept`), extract_struct runs

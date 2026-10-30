@@ -308,7 +308,7 @@ func (*ExtractFunction) Name() string { return "extract_function" }
 
 func (*ExtractFunction) Description() string {
 	return `Move a run of whole statements into a new function, declared after the one they are in, and call it in their place: in function report(beds: Bed[]), extracting let total = 0 and the loop that adds each b.depth to it, as sum, gives const total = sum(beds) there and function sum(beds: Bed[]) { let total = 0; for ...; return total; }. Locals the statements use become parameters; those they declare or assign that are used elsewhere come back as the result (an object of them when several). Statements that use this become a private method of the class; with await, the function is async and the call awaited.
-Identify the statements by file, start_line and end_line: whole statements of one block, as inspect numbers them; or a case's body by function and case ("fern" in function water, or default; a last break stays), which stays valid after earlier steps. doc becomes the new function's doc comment.
+Identify the statements by file, start_line and end_line: whole statements of one block, as inspect numbers them; or a case's body by function and case ("fern" in function water, or default; a last break stays), which stays valid after earlier steps; a case sharing its body with others gets a case of its own unless split is false. doc becomes the new function's doc comment.
 Returns: when the lines end the function's body, their returns stay and the call becomes return sum(...).
 Lines that return before the function's end return a value the call returns unless it is undefined, or whether they returned. Refuses, saying why: an early return of what may be undefined, a break or continue out of the lines, yield, arguments, this outside a class's method, a type parameter or a type declared in the function, a variable declared in a block of the lines and used after them, declaring some results and assigning others.`
 }
@@ -322,6 +322,7 @@ func (*ExtractFunction) InputSchema() json.RawMessage {
     "end_line":   {"type": "integer", "description": "1-based last line of the statements to extract (inclusive)."},
     "function":   {"type": "string",  "description": "Instead of the lines: the function (name or Class.method) with the switch whose case to extract."},
     "case":       {"type": "string",  "description": "With function: the case's value as written (\"fern\", Kind.Fern) or default."},
+    "split":      {"type": "boolean", "description": "With case, sharing its body (case \"fern\": case \"moss\":): unless false, the value gets a case of its own, the others a copy of the body."},
     "name":       {"type": "string",  "description": "Name for the new function."},
     "doc":        {"type": "string",  "description": "Optional doc comment for the new function, its text without /** */."}
   },
@@ -349,19 +350,24 @@ func (*ExtractFunction) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 		return nil, refactor.Refusef("give function and case together, for a case's body; or start_line and end_line")
 	case a.Case != "" && (a.StartLine != 0 || a.EndLine != 0):
 		return nil, refactor.Refusef("give either function and case or start_line and end_line, not both")
-	case a.Case != "":
-		path := ws.Abs(a.File)
-		first, last, why := ws.CaseLines(path, a.Function, a.Case, false)
+	}
+	var split []tsapi.Edit
+	if a.Case != "" {
+		var why string
+		a.StartLine, a.EndLine, split, why = ws.CaseBody(ws.Abs(a.File), a.Function, a.Case, a.Split == nil || *a.Split)
 		if why != "" {
 			return nil, refactor.Refusef("%s", why)
 		}
-		a.StartLine, a.EndLine = first, last
 	}
 	if a.StartLine == 0 || a.EndLine == 0 {
 		return nil, refactor.Refusef("give start_line and end_line")
 	}
 	return plan(ws, a.File, fmt.Sprintf("extracted lines %d-%d as %s", a.StartLine, a.EndLine, a.Name), func(p *tsapi.Project, path string) ([]tsapi.Edit, string) {
-		return p.ExtractFunction(bg, path, a.StartLine, a.EndLine, a.Name, a.Doc)
+		es, why := p.ExtractFunction(bg, path, a.StartLine, a.EndLine, a.Name, a.Doc)
+		if why != "" {
+			return nil, why
+		}
+		return append(es, split...), ""
 	})
 }
 

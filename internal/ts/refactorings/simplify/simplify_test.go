@@ -1228,3 +1228,93 @@ function double(n: number) {
 `, ""},
 	})
 }
+
+const shared = plants + `
+export function soak(p: Plant): number {
+  switch (p.name) {
+    case "fern":
+    case "moss":
+      water();
+      break;
+  }
+  return 0;
+}
+`
+
+// A case that shares its body with others (case "fern": case "moss":)
+// gets a case of its own, the others a copy of the body, unless split is
+// false.
+func TestExtractCaseSplit(t *testing.T) {
+	check(t, []change{
+		{"the first value", shared, NewExtractFunction(), `{"function": "soak", "case": "fern", "name": "fern"}`, plants + `
+export function soak(p: Plant): number {
+  switch (p.name) {
+    case "moss":
+      water();
+      break;
+    case "fern":
+      fern();
+      break;
+  }
+  return 0;
+}
+
+function fern() {
+  water();
+}
+`, ""},
+		{"the last value", shared, NewExtractFunction(), `{"function": "soak", "case": "moss", "name": "moss"}`, plants + `
+export function soak(p: Plant): number {
+  switch (p.name) {
+    case "fern":
+      water();
+      break;
+    case "moss":
+      moss();
+      break;
+  }
+  return 0;
+}
+
+function moss() {
+  water();
+}
+`, ""},
+		{"not split", shared, NewExtractFunction(), `{"function": "soak", "case": "fern", "name": "both", "split": false}`, plants + `
+export function soak(p: Plant): number {
+  switch (p.name) {
+    case "fern":
+    case "moss":
+      both();
+      break;
+  }
+  return 0;
+}
+
+function both() {
+  water();
+}
+`, ""},
+		{"a body that falls out", plants + `
+export function soak(p: Plant): number {
+  switch (p.name) {
+    case "fern":
+    case "moss":
+      water();
+  }
+  return 0;
+}
+`, NewExtractFunction(), `{"function": "soak", "case": "fern", "name": "f"}`, "", "does not end in break, return, throw or continue"},
+		{"a body that declares", plants + `
+export function soak(p: Plant): number {
+  switch (p.name) {
+    case "fern":
+    case "moss":
+      const n = water();
+      return n;
+  }
+  return 0;
+}
+`, NewExtractFunction(), `{"function": "soak", "case": "fern", "name": "f"}`, "", "declares n; splitting it would copy the declaration"},
+	})
+}
