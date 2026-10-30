@@ -2442,6 +2442,15 @@ hand or a tool got in the way.
     r2, value` (`freshNames`). `all_occurrences` on `found[0]` was right
     to refuse: `found` is captured by a closure the compiler's
     `ForEachChild` receives, which could keep it and run it later.
+    *Done* (2026-10-30), the obstacle left: a closure the selected lines
+    hold in a variable and pass to a function or method that calls it
+    before returning (`analysis.CallsBeforeReturning`: `ast.Inspect`,
+    `sort.Slice`, and now the compiler's `Node.ForEachChild`) runs only
+    while the lines do, so what it captures can be returned. Since item
+    45.3 most of tsapi's walks go through its own `inspect`, which no
+    table knows; recognising a module function that only calls its
+    function parameter before returning, from its body, is what would
+    cover those.
 
 45. **Abstractions the code lacks, and the duplication they would
     remove** (2026-10-30, the user asked which abstractions the code has

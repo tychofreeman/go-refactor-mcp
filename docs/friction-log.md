@@ -3855,3 +3855,13 @@ By hand, and no gorefactor gap: Markdown only. The README's top was
 rewritten with a Python script and the roadmap moved to `docs/roadmap.md`
 whole (2,500 lines); replace_text could have made the reference fixes, but
 this cloud session's gorefactor server ran on the linked computer.
+
+## 2026-10-30: closures passed to ForEachChild (item 44)
+
+Through the CLI, the golden first: create_file for it, replace_text in
+`analysis` (`CallsBeforeReturning`, the table's entry) and in
+extract_function's `calledOnlyInSelection`. A first try marked every
+closure held in a variable and only called as running during its
+statement, which four goldens showed wrong (a closure called after the
+selection runs later); reverted with git checkout before the second.
+Nothing else by hand.
