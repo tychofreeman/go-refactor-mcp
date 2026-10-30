@@ -51,14 +51,65 @@ func (p *Project) IntroduceParameter(ctx context.Context, path, name, expr, para
 		return nil, fmt.Sprintf("the body of %s has no expression %s", name, strings.TrimSpace(expr))
 	}
 	for _, o := range occurrences {
-		par := o.Parent
-		if ast.IsBinaryExpression(par) && ast.IsAssignmentOperator(par.AsBinaryExpression().OperatorToken.Kind) && par.AsBinaryExpression().Left == o ||
-			ast.IsPostfixUnaryExpression(par) || ast.IsPrefixUnaryExpression(par) && (par.AsPrefixUnaryExpression().Operator == ast.KindPlusPlusToken || par.AsPrefixUnaryExpression().Operator == ast.KindMinusMinusToken) {
+		if written(o) {
 			return nil, fmt.Sprintf("the body of %s assigns %s (%s), which a parameter cannot stand for", name, strings.TrimSpace(expr), l.where(o))
 		}
 	}
 	e := occurrences[0]
-	if ef := newEffects(c, l).Of(e); !ef.CanDrop() || len(occurrences) > 1 && !ef.CanRepeat() {
+	if why := t.findCalls(p); why != "" {
+		return nil, why
+	}
+	texts, why := t.introduced(e, expr, len(occurrences), name)
+	if why != "" {
+		return nil, why
+	}
+	typ := c.TypeToString(c.GetWidenedType(c.GetBaseTypeOfLiteralType(c.GetTypeAtLocation(e))))
+	n := len(t.params) - t.off
+	at := n
+	if t.isRest(n - 1) {
+		at = n - 1
+	}
+	edits := []Edit{l.insertAt(t.fn.ParameterList(), t.off+at, param+": "+typ)}
+	more, why := t.insertInOverloads(at, param+": "+typ)
+	if why != "" {
+		return nil, why
+	}
+	edits = append(edits, more...)
+	meaning := func(x *ast.Node) bool {
+		if !slices.Equal(tokens(l.source(x)), want) {
+			return false
+		}
+		return slices.Equal(symbolsOf(c, x), symbolsOf(c, e))
+	}
+	for _, o := range occurrences {
+		if meaning(o) {
+			edits = append(edits, Edit{File: l.f.FileName(), Start: l.pos(o), End: o.End(), NewText: param})
+		}
+	}
+	for i, call := range t.calls {
+		cl := newLined(ast.GetSourceFileOfNode(call))
+		args := call.ArgumentList()
+		text := texts[i]
+		m := len(args.Nodes)
+		if m < at {
+			text = strings.Repeat("undefined, ", at-m) + text
+		}
+		edits = append(edits, cl.insertAt(args, min(at, m), text))
+	}
+	return edits, ""
+}
+
+// introduced returns what each call of t (findCalls has found them)
+// would pass for e, an expression written expr in its body that the body
+// evaluates n times, written in the call's own terms: a parameter of the
+// function becomes the call's argument, this the call's receiver. Or why
+// it cannot: the expression is then evaluated once, at the call, so it
+// must have no effects, mean the same there, and read nothing the body
+// changes before it reads it.
+func (t *target) introduced(e *ast.Node, expr string, n int, name string) ([]string, string) {
+	l, c, fn := t.l, t.c, t.fn
+	var why string
+	if ef := newEffects(c, l).Of(e); !ef.CanDrop() || n > 1 && !ef.CanRepeat() {
 		return nil, fmt.Sprintf("every call would evaluate %s instead of the body, and it may not be moved: %s", strings.TrimSpace(expr), ef.Why+map[bool]string{true: "it makes a new value, which the body's uses would then share"}[ef.Why == ""])
 	}
 
@@ -71,7 +122,6 @@ func (p *Project) IntroduceParameter(ctx context.Context, path, name, expr, para
 	}
 	var reads []read
 	mutable := false
-	why = ""
 	var scan func(n *ast.Node) bool
 	scan = func(n *ast.Node) bool {
 		if why != "" {
@@ -134,32 +184,7 @@ func (p *Project) IntroduceParameter(ctx context.Context, path, name, expr, para
 		}
 	}
 
-	if why := t.findCalls(p); why != "" {
-		return nil, why
-	}
-	typ := c.TypeToString(c.GetWidenedType(c.GetBaseTypeOfLiteralType(c.GetTypeAtLocation(e))))
-	n := len(t.params) - t.off
-	at := n
-	if t.isRest(n - 1) {
-		at = n - 1
-	}
-	edits := []Edit{l.insertAt(t.fn.ParameterList(), t.off+at, param+": "+typ)}
-	more, why := t.insertInOverloads(at, param+": "+typ)
-	if why != "" {
-		return nil, why
-	}
-	edits = append(edits, more...)
-	meaning := func(x *ast.Node) bool {
-		if !slices.Equal(tokens(l.source(x)), want) {
-			return false
-		}
-		return slices.Equal(symbolsOf(c, x), symbolsOf(c, e))
-	}
-	for _, o := range occurrences {
-		if meaning(o) {
-			edits = append(edits, Edit{File: l.f.FileName(), Start: l.pos(o), End: o.End(), NewText: param})
-		}
-	}
+	var texts []string
 	for _, call := range t.calls {
 		cl := newLined(ast.GetSourceFileOfNode(call))
 		args := call.ArgumentList()
@@ -200,13 +225,9 @@ func (p *Project) IntroduceParameter(ctx context.Context, path, name, expr, para
 		for _, s := range subs {
 			text = text[:s.start-base] + s.text + text[s.end-base:]
 		}
-		m := len(args.Nodes)
-		if m < at {
-			text = strings.Repeat("undefined, ", at-m) + text
-		}
-		edits = append(edits, cl.insertAt(args, min(at, m), text))
+		texts = append(texts, text)
 	}
-	return edits, ""
+	return texts, ""
 }
 
 // operand is the source of e, parenthesized unless it is a primary

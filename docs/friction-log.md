@@ -3688,3 +3688,15 @@ given back a result object to unpack at the call (tried in thought only,
 not run). A test expected a path the refusal gives without its
 directory, and wrap's first output put the statements at the block's
 indent, since a template's `$body` is written at it. Nothing by hand.
+
+## 2026-10-29: TypeScript's remove_parameter value, replace_variable, families of the rest (item 43.10)
+
+Through the CLI, tests first. introduce_parameter's per-call text became
+`target.introduced` by rewriting IntroduceParameter with a Python script
+that cut its source at two marks, then replace_declaration (extract_function
+was not tried: the lines return refusals from a dozen places and the new
+function needed the calls loop changed inside it). AddResult's body moved
+into `result.edits` the same way, to run once per method of the family.
+One replace_text failed on a test map's trailing comma; one Python
+literal broke on quotes and was replaced by the CLI's replace_text.
+Nothing by hand.

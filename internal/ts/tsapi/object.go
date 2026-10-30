@@ -82,6 +82,40 @@ func (p *Project) ParamsToObject(ctx context.Context, path, name, typeName strin
 		param += " = {}"
 	}
 	edits := []Edit{{File: l.f.FileName(), Start: l.pos(params[0]), End: params[len(params)-1].End(), NewText: param}}
+	// Each method of the family takes the same object, keyed by these
+	// names, binding its own.
+	for _, m := range t.family {
+		ml := newLined(ast.GetSourceFileOfNode(m))
+		list, moff := passed(m)
+		mps := list.Nodes[moff:]
+		if len(mps) != len(params) {
+			return nil, fmt.Sprintf("%s, which changes with %s, has %d parameters, not %d", memberName(m), name, len(mps), len(params))
+		}
+		var mb []string
+		for i, mp := range mps {
+			d := mp.AsParameterDeclaration()
+			nm := mp.Name()
+			if nm == nil || !ast.IsIdentifier(nm) || d.DotDotDotToken != nil {
+				return nil, fmt.Sprintf("%s, which changes with %s, has a rest or destructured parameter (%s)", memberName(m), name, ml.source(mp))
+			}
+			b := params[i].Name().Text()
+			if nm.Text() != b {
+				b += ": " + nm.Text()
+			}
+			if d.Initializer != nil {
+				b += " = " + ml.source(d.Initializer)
+			}
+			mb = append(mb, b)
+		}
+		text := "{ " + strings.Join(mb, ", ") + " }: " + objType
+		if allOptional {
+			text = "{ " + strings.Join(mb, ", ") + " }?: " + objType
+			if m.Body() != nil {
+				text = "{ " + strings.Join(mb, ", ") + " }: " + objType + " = {}"
+			}
+		}
+		edits = append(edits, Edit{File: ml.f.FileName(), Start: ml.pos(mps[0]), End: mps[len(mps)-1].End(), NewText: text})
+	}
 	// Each overload takes an object of its own type, keyed by the
 	// implementation's names.
 	for _, o := range t.overloads {

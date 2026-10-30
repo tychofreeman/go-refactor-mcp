@@ -747,3 +747,200 @@ func TestOverloads(t *testing.T) {
 	mustContain(t, dir, "src/grow.ts", "export function shade({ p }: { p: string }): string;", "export function shade({ p }: { p: number }): number;", "export function shade({ p }: { p: string | number }): string | number {")
 	mustContain(t, dir, "src/use.ts", `shade({ p: "a" })`, "shade({ p: 2 })")
 }
+
+var passed = map[string]string{
+	"src/label.ts": `export interface Plant {
+  name: string;
+  height: number;
+}
+
+export function label(p: Plant, height: number): string {
+  return p.name + " " + height;
+}
+
+export function tall(p: Plant, height: number): boolean {
+  return height > 2;
+}
+
+export function show(p: Plant, height: number): string {
+  return label(p, height) + "!";
+}
+
+export class Bed {
+  depth = 3;
+  describe(p: Plant, depth: number): string {
+    return p.name + depth;
+  }
+  soak(depth: number): number {
+    this.depth++;
+    return depth;
+  }
+}
+`,
+	"src/use.ts": `import { label, tall, show, Bed, Plant } from "./label";
+
+const rose: Plant = { name: "rose", height: 2 };
+export const a = label(rose, rose.height);
+export const t = tall(rose, 5);
+export const s = show(rose, rose.height);
+const bed = new Bed();
+export const b = bed.describe(rose, bed.depth);
+export const k = bed.soak(bed.depth);
+`,
+}
+
+// value removes a parameter the body reads when every call passes that
+// expression: the inverse of introduce_parameter; also takes it from
+// functions that pass it on in the same step.
+func TestRemoveParameterWithValue(t *testing.T) {
+	remove := func(ws *workspace.Workspace, args string) *refactor.Result {
+		t.Helper()
+		res, err := refactor.Run(ws, NewRemove(), json.RawMessage(`{"file": "src/label.ts", `+args[1:]), refactor.OptionsOf[*workspace.Workspace]{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return res
+	}
+	ws, dir := load(t, passed)
+	if res := remove(ws, `{"name": "label", "parameter": "height", "value": "p.height", "also": ["show"]}`); !res.Applied {
+		t.Fatalf("%s", res)
+	}
+	mustContain(t, dir, "src/label.ts", "export function label(p: Plant): string {\n  return p.name + \" \" + p.height;", "export function show(p: Plant): string {\n  return label(p) + \"!\";")
+	mustContain(t, dir, "src/use.ts", "label(rose);", "show(rose);")
+	if res := remove(ws, `{"name": "Bed.describe", "parameter": "depth", "value": "this.depth"}`); !res.Applied {
+		t.Fatalf("%s", res)
+	}
+	mustContain(t, dir, "src/label.ts", "describe(p: Plant): string {\n    return p.name + this.depth;")
+	mustContain(t, dir, "src/use.ts", "bed.describe(rose);")
+
+	ws, _ = load(t, passed)
+	for args, want := range map[string]string{
+		`{"name": "label", "parameter": "height", "value": "p.height"}`:     "the call at label.ts:15 passes height, not p.height",
+		`{"name": "tall", "parameter": "height", "value": "p.height"}`:      "the call at use.ts:5 passes 5, not rose.height",
+		`{"name": "Bed.soak", "parameter": "depth", "value": "this.depth"}`: "the body of Bed.soak assigns this.depth (label.ts:24)",
+		`{"name": "label", "parameter": "height", "value": "height + 0"}`:   "value height + 0 uses height itself",
+		`{"name": "label", "parameter": "height", "also": ["show"]}`:        "also goes with value",
+	} {
+		if res := remove(ws, args); res.Applied || !strings.Contains(res.Refused, want) {
+			t.Errorf("%s: want a refusal with %q, got %s", args, want, res)
+		}
+	}
+}
+
+var rates = map[string]string{
+	"src/rate.ts": `export let rate = 2;
+export const UNIT = "L";
+
+export function cost(n: number): number {
+  return n * rate;
+}
+
+export function label(n: number): string {
+  return n + UNIT;
+}
+
+export function bump(): void {
+  rate = 3;
+}
+
+export function spend(n: number): number {
+  rate = n;
+  return rate;
+}
+`,
+	"src/use.ts": `import { cost, label, rate, UNIT } from "./rate";
+
+export const c = cost(1);
+export const l = label(2);
+export const both = [rate, UNIT];
+`,
+}
+
+// replace_variable makes a variable at a module's top level that the body
+// reads a parameter, which takes its place; a call proven to pass what
+// the body read is a refactoring, others are listed as edits.
+func TestAddParameterReplacingAVariable(t *testing.T) {
+	add := func(ws *workspace.Workspace, args string) *refactor.Result {
+		t.Helper()
+		res, err := refactor.Run(ws, NewAdd(), json.RawMessage(`{"file": "src/rate.ts", `+args[1:]), refactor.OptionsOf[*workspace.Workspace]{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return res
+	}
+	ws, dir := load(t, rates)
+	res := add(ws, `{"name": "label", "parameter": "UNIT", "type": "string", "value": "UNIT", "replace_variable": true}`)
+	if !res.Applied || strings.Contains(res.String(), "note:") {
+		t.Fatalf("want it applied without a note: %s", res)
+	}
+	mustContain(t, dir, "src/rate.ts", "export function label(n: number, UNIT: string): string {\n  return n + UNIT;")
+	mustContain(t, dir, "src/use.ts", "label(2, UNIT)")
+	res = add(ws, `{"name": "cost", "parameter": "rate", "type": "number", "value": "rate", "replace_variable": true}`)
+	if !res.Applied || !strings.Contains(res.String(), "rate is assigned at rate.ts:13, so no call is proven to pass what the body read") {
+		t.Fatalf("want it applied with a note: %s", res)
+	}
+	mustContain(t, dir, "src/use.ts", "cost(1, rate)")
+
+	ws, _ = load(t, rates)
+	res = add(ws, `{"name": "label", "parameter": "UNIT", "type": "string", "value": "\"kg\"", "replace_variable": true}`)
+	if !res.Applied || !strings.Contains(res.String(), `every call passes "kg", not UNIT`) {
+		t.Fatalf("want it applied with a note: %s", res)
+	}
+	for args, want := range map[string]string{
+		`{"name": "spend", "parameter": "rate", "type": "number", "value": "rate", "replace_variable": true}`: "the body of spend assigns rate (rate.ts:17); a parameter would take that write from the variable",
+		`{"name": "cost", "parameter": "rate", "type": "string", "value": "rate", "replace_variable": true}`:  "the parameter's type string is not the type number of the variable rate it would replace",
+		`{"name": "cost", "parameter": "rate", "type": "number", "value": "rate"}`:                            "with replace_variable, the parameter takes its place",
+	} {
+		if res := add(ws, args); res.Applied || !strings.Contains(res.Refused, want) {
+			t.Errorf("%s: want a refusal with %q, got %s", args, want, res)
+		}
+	}
+}
+
+// add_result, change_parameter_type and convert_params_to_object change
+// a method's family with it, as the other signature changes do.
+func TestMoreMethodFamilies(t *testing.T) {
+	in := func(t *testing.T, ws *workspace.Workspace, r refactor.RefactoringOf[*workspace.Workspace], args string) *refactor.Result {
+		t.Helper()
+		res, err := refactor.Run(ws, r, json.RawMessage(`{"file": "src/hoses.ts", `+args[1:]), refactor.OptionsOf[*workspace.Workspace]{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return res
+	}
+	t.Run("add_result", func(t *testing.T) {
+		ws, dir := load(t, map[string]string{"src/hoses.ts": hoses})
+		if res := in(t, ws, NewAddResult(), `{"name": "Hose.pour", "field": "ok", "type": "boolean", "value": "true"}`); !res.Applied {
+			t.Fatalf("%s", res)
+		}
+		mustContain(t, dir, "src/hoses.ts",
+			"  pour(bed: string, liters: number): { value: string; ok: boolean };\n",
+			"  pour(bed: string, liters: number): { value: string; ok: boolean } {\n    return { value: bed + liters, ok: true };",
+			"  pour(bed: string, amount: number): { value: string; ok: boolean } {\n    return { value: bed, ok: true };",
+			"return { value: super.pour(bed, liters * 2).value, ok: true };",
+			`w.pour("roses", 1).value + new Can().pour("ferns", 2).value + new Sprayer().pour("moss", 3).value`)
+	})
+	t.Run("change_parameter_type", func(t *testing.T) {
+		ws, dir := load(t, map[string]string{"src/hoses.ts": hoses})
+		if res := in(t, ws, NewChangeParameterType(), `{"name": "Waterer.pour", "parameter": "liters", "type": "(number)"}`); !res.Applied {
+			t.Fatalf("%s", res)
+		}
+		mustContain(t, dir, "src/hoses.ts",
+			"  pour(bed: string, liters: (number)): string;\n",
+			"  pour(bed: string, liters: (number)): string {\n    return bed + liters;",
+			"  pour(bed: string, amount: (number)): string {",
+			"  pour(bed: string, liters: (number)): string {\n    return super.pour")
+	})
+	t.Run("convert_params_to_object", func(t *testing.T) {
+		ws, dir := load(t, map[string]string{"src/hoses.ts": hoses})
+		if res := in(t, ws, NewParamsToObject(), `{"name": "Hose.pour"}`); !res.Applied {
+			t.Fatalf("%s", res)
+		}
+		mustContain(t, dir, "src/hoses.ts",
+			"  pour({ bed, liters }: { bed: string; liters: number }): string;\n",
+			"  pour({ bed, liters }: { bed: string; liters: number }): string {\n    return bed + liters;",
+			"  pour({ bed, liters: amount }: { bed: string; liters: number }): string {\n    return bed;",
+			"return super.pour({ bed, liters: liters * 2 });",
+			`w.pour({ bed: "roses", liters: 1 })`)
+	})
+}
