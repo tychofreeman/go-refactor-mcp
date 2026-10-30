@@ -29,24 +29,18 @@ Refuses, saying why: a name the file does not declare, or declares more than onc
 }
 
 func (*ReplaceDeclaration) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":    {"type": "string", "description": "The file that declares it, relative to the root."},
-    "name":    {"type": "string", "description": "The declared name: name, or Class.member for a member."},
-    "content": {"type": "string", "description": "The new declaration, with a doc comment to replace the old one; empty to delete it."}
-  },
-  "required": ["file", "name", "content"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[replaceDeclarationArgs]()
+}
+
+// replaceDeclarationArgs are the arguments of replace_declaration.
+type replaceDeclarationArgs struct {
+	File    string `json:"file" desc:"The file that declares it, relative to the root."`
+	Name    string `json:"name" desc:"The declared name: name, or Class.member for a member."`
+	Content string `json:"content" desc:"The new declaration, with a doc comment to replace the old one; empty to delete it."`
 }
 
 func (*ReplaceDeclaration) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
-	var a struct {
-		File    string `json:"file"`
-		Name    string `json:"name"`
-		Content string `json:"content"`
-	}
+	var a replaceDeclarationArgs
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}

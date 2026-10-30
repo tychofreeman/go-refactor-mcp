@@ -30,12 +30,12 @@ func (*FixImports) Description() string {
 }
 
 func (*FixImports) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {"file": {"type": "string", "description": "Relative to the root."}},
-  "required": ["file"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[fixImportsArgs]()
+}
+
+// fixImportsArgs are the arguments of fix_imports.
+type fixImportsArgs struct {
+	File string `json:"file" desc:"Relative to the root."`
 }
 
 func (*FixImports) ChangesBehavior() {}
@@ -56,9 +56,7 @@ func (*FixImports) Clears(err string) (string, bool) {
 }
 
 func (*FixImports) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
-	var a struct {
-		File string `json:"file"`
-	}
+	var a fixImportsArgs
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}

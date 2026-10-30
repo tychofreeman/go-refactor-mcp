@@ -52,26 +52,19 @@ A match where the call would not do the same (an argument evaluated in another o
 }
 
 func (*Fold) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file": {"type": "string",  "description": "Path of the file that declares the function, relative to the root."},
-    "name": {"type": "string",  "description": "The function: name, or Class.method for a method."},
-    "line": {"type": "integer", "description": "Optional: fold only the matches that start on this line of file (or of in)."},
-    "in":   {"type": "string",  "description": "Optional, with line: the file whose line it is, if not file."}
-  },
-  "required": ["file", "name"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[foldArgs]()
+}
+
+// foldArgs are the arguments of fold.
+type foldArgs struct {
+	File string `json:"file" desc:"Path of the file that declares the function, relative to the root."`
+	Name string `json:"name" desc:"The function: name, or Class.method for a method."`
+	Line int    `json:"line,omitempty" desc:"Optional: fold only the matches that start on this line of file (or of in)."`
+	In   string `json:"in,omitempty" desc:"Optional, with line: the file whose line it is, if not file."`
 }
 
 func (*Fold) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
-	var a struct {
-		File string `json:"file"`
-		Name string `json:"name"`
-		Line int    `json:"line"`
-		In   string `json:"in"`
-	}
+	var a foldArgs
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
@@ -109,26 +102,19 @@ Refuses, saying why: functions that differ in more than literals, or not at all 
 }
 
 func (*Parameterize) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":       {"type": "string", "description": "Path of the file declaring the functions, relative to the root."},
-    "functions":  {"type": "array", "items": {"type": "string"}, "description": "The functions, name or Class.method; the first one's names are the new function's."},
-    "name":       {"type": "string", "description": "Name of the new function (a method of the same class, for methods)."},
-    "parameters": {"type": "array", "items": {"type": "string"}, "description": "A name for each literal that differs, in the order they appear in the first function."}
-  },
-  "required": ["file", "functions", "name", "parameters"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[parameterizeArgs]()
+}
+
+// parameterizeArgs are the arguments of parameterize.
+type parameterizeArgs struct {
+	File       string   `json:"file" desc:"Path of the file declaring the functions, relative to the root."`
+	Functions  []string `json:"functions" desc:"The functions, name or Class.method; the first one's names are the new function's."`
+	Name       string   `json:"name" desc:"Name of the new function (a method of the same class, for methods)."`
+	Parameters []string `json:"parameters" desc:"A name for each literal that differs, in the order they appear in the first function."`
 }
 
 func (*Parameterize) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
-	var a struct {
-		File       string   `json:"file"`
-		Functions  []string `json:"functions"`
-		Name       string   `json:"name"`
-		Parameters []string `json:"parameters"`
-	}
+	var a parameterizeArgs
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
@@ -154,30 +140,21 @@ Refuses, saying why: methods, generic functions or overloads, a function to keep
 }
 
 func (*MergeDuplicate) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":      {"type": "string",  "description": "Path of a file containing the function to delete, at its declaration or a use, relative to the root."},
-    "line":      {"type": "integer", "description": "1-based line of that occurrence. Omit it to find name at the top level of file."},
-    "name":      {"type": "string",  "description": "The name of the function to delete."},
-    "column":    {"type": "integer", "description": "Optional 1-based column, only needed to disambiguate."},
-    "keep_file": {"type": "string",  "description": "The file declaring the function to keep."},
-    "keep_name": {"type": "string",  "description": "The name of the function to keep."}
-  },
-  "required": ["file", "name", "keep_file", "keep_name"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[mergeDuplicateArgs]()
+}
+
+// mergeDuplicateArgs are the arguments of merge_duplicate_function.
+type mergeDuplicateArgs struct {
+	File     string `json:"file" desc:"Path of a file containing the function to delete, at its declaration or a use, relative to the root."`
+	Line     int    `json:"line,omitempty" desc:"1-based line of that occurrence. Omit it to find name at the top level of file."`
+	Name     string `json:"name" desc:"The name of the function to delete."`
+	Column   int    `json:"column,omitempty" desc:"Optional 1-based column, only needed to disambiguate."`
+	KeepFile string `json:"keep_file" desc:"The file declaring the function to keep."`
+	KeepName string `json:"keep_name" desc:"The name of the function to keep."`
 }
 
 func (*MergeDuplicate) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
-	var a struct {
-		File     string `json:"file"`
-		Line     int    `json:"line"`
-		Name     string `json:"name"`
-		Column   int    `json:"column"`
-		KeepFile string `json:"keep_file"`
-		KeepName string `json:"keep_name"`
-	}
+	var a mergeDuplicateArgs
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
@@ -202,29 +179,21 @@ Refuses, saying why: something still used (its own body aside, imports included)
 }
 
 func (*RemoveDeadCode) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":   {"type": "string",  "description": "Path of the file declaring it, relative to the root."},
-    "line":   {"type": "integer", "description": "1-based line of its declaration. Omit it to find name at the top level of file."},
-    "name":   {"type": "string",  "description": "The declared name: with line, just the member's name; without line, the top-level name, Class.member or Interface.member."},
-    "column": {"type": "integer", "description": "Optional 1-based column, only needed to disambiguate."},
-    "also":   {"type": "array", "items": {"type": "string"}, "description": "Optional: more names of the file to remove with it (name or Class.member); uses among them do not count."}
-  },
-  "required": ["file", "name"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[removeDeadCodeArgs]()
+}
+
+// removeDeadCodeArgs are the arguments of remove_dead_code.
+type removeDeadCodeArgs struct {
+	File     string   `json:"file" desc:"Path of the file declaring it, relative to the root."`
+	Line     int      `json:"line,omitempty" desc:"1-based line of its declaration. Omit it to find name at the top level of file."`
+	Name     string   `json:"name" desc:"The declared name: with line, just the member's name; without line, the top-level name, Class.member or Interface.member."`
+	Column   int      `json:"column,omitempty" desc:"Optional 1-based column, only needed to disambiguate."`
+	Also     []string `json:"also,omitempty" desc:"Optional: more names of the file to remove with it (name or Class.member); uses among them do not count."`
+	Exported bool     `json:"exported" schema:"-"`
 }
 
 func (*RemoveDeadCode) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
-	var a struct {
-		File     string   `json:"file"`
-		Line     int      `json:"line"`
-		Name     string   `json:"name"`
-		Column   int      `json:"column"`
-		Also     []string `json:"also"`
-		Exported bool     `json:"exported"`
-	}
+	var a removeDeadCodeArgs
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
@@ -257,30 +226,21 @@ Refuses, saying why: a generic type, a private, protected or static member of a 
 }
 
 func (*ExtractInterface) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":     {"type": "string",  "description": "Path of the file declaring the type, relative to the root."},
-    "line":     {"type": "integer", "description": "1-based line of its declaration or a use. Omit it to find name at the top level of file."},
-    "name":     {"type": "string",  "description": "The class, interface or type alias."},
-    "column":   {"type": "integer", "description": "Optional 1-based column, only needed to disambiguate."},
-    "fields":   {"type": "array", "items": {"type": "string"}, "description": "The members to name in the new interface."},
-    "new_type": {"type": "string",  "description": "Name of the new interface."}
-  },
-  "required": ["file", "name", "fields", "new_type"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[extractInterfaceArgs]()
+}
+
+// extractInterfaceArgs are the arguments of extract_interface.
+type extractInterfaceArgs struct {
+	File    string   `json:"file" desc:"Path of the file declaring the type, relative to the root."`
+	Line    int      `json:"line,omitempty" desc:"1-based line of its declaration or a use. Omit it to find name at the top level of file."`
+	Name    string   `json:"name" desc:"The class, interface or type alias."`
+	Column  int      `json:"column,omitempty" desc:"Optional 1-based column, only needed to disambiguate."`
+	Fields  []string `json:"fields" desc:"The members to name in the new interface."`
+	NewType string   `json:"new_type" desc:"Name of the new interface."`
 }
 
 func (*ExtractInterface) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
-	var a struct {
-		File    string   `json:"file"`
-		Line    int      `json:"line"`
-		Name    string   `json:"name"`
-		Column  int      `json:"column"`
-		Fields  []string `json:"fields"`
-		NewType string   `json:"new_type"`
-	}
+	var a extractInterfaceArgs
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
@@ -310,26 +270,19 @@ Refuses, saying why: a class of the union without a case, a default or a final e
 }
 
 func (*UnionSwitchToMethod) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":     {"type": "string",  "description": "Path of the file with the switch, relative to the root."},
-    "line":     {"type": "integer", "description": "1-based line on which the switch, or the first if, starts."},
-    "function": {"type": "string",  "description": "Instead of line: the function (name or Class.method) whose only such switch it is."},
-    "method":   {"type": "string",  "description": "Name of the new method."}
-  },
-  "required": ["file", "method"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[unionSwitchToMethodArgs]()
+}
+
+// unionSwitchToMethodArgs are the arguments of union_switch_to_method.
+type unionSwitchToMethodArgs struct {
+	File     string `json:"file" desc:"Path of the file with the switch, relative to the root."`
+	Line     int    `json:"line,omitempty" desc:"1-based line on which the switch, or the first if, starts."`
+	Function string `json:"function,omitempty" desc:"Instead of line: the function (name or Class.method) whose only such switch it is."`
+	Method   string `json:"method" desc:"Name of the new method."`
 }
 
 func (*UnionSwitchToMethod) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
-	var a struct {
-		File     string `json:"file"`
-		Line     int    `json:"line"`
-		Function string `json:"function"`
-		Method   string `json:"method"`
-	}
+	var a unionSwitchToMethodArgs
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
@@ -359,28 +312,20 @@ Refuses, saying why: a subject that holds no object or would be evaluated again 
 }
 
 func (*PrepareSwitchForTypes) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":      {"type": "string",  "description": "The file with the switch, relative to the root."},
-    "line":      {"type": "integer", "description": "1-based line on which the switch starts."},
-    "function":  {"type": "string",  "description": "Instead of line: the function (name or Class.method) whose only switch it is."},
-    "interface": {"type": "string",  "description": "The interface: declared before the function if the file has none of that name."},
-    "method":    {"type": "string",  "description": "Name of the interface's new method."}
-  },
-  "required": ["file", "interface", "method"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[prepareSwitchForTypesArgs]()
+}
+
+// prepareSwitchForTypesArgs are the arguments of prepare_switch_for_types.
+type prepareSwitchForTypesArgs struct {
+	File      string `json:"file" desc:"The file with the switch, relative to the root."`
+	Line      int    `json:"line,omitempty" desc:"1-based line on which the switch starts."`
+	Function  string `json:"function,omitempty" desc:"Instead of line: the function (name or Class.method) whose only switch it is."`
+	Interface string `json:"interface" desc:"The interface: declared before the function if the file has none of that name."`
+	Method    string `json:"method" desc:"Name of the interface's new method."`
 }
 
 func (*PrepareSwitchForTypes) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
-	var a struct {
-		File      string `json:"file"`
-		Line      int    `json:"line"`
-		Function  string `json:"function"`
-		Interface string `json:"interface"`
-		Method    string `json:"method"`
-	}
+	var a prepareSwitchForTypesArgs
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}

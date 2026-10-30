@@ -42,17 +42,7 @@ Give file, the file with the uses; names limits it to those, to_file sets where 
 }
 
 func (*CreateFromUsage) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":    {"type": "string", "description": "Path of the file with the calls, relative to the workspace root."},
-    "names":   {"type": "array", "items": {"type": "string"}, "description": "Optional: declare only these functions (by name, without package), not every undeclared one the file calls."},
-    "results": {"type": "object", "additionalProperties": {"type": "string"}, "description": "Optional: result lists by function name, as Go source (e.g. {\"Load\": \"(*Config, error)\"}), for uses that do not tell them."},
-    "to_file": {"type": "string", "description": "Optional: the file of the target package to put the stubs in; a new one in its directory is created."}
-  },
-  "required": ["file"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[args]()
 }
 
 func (*CreateFromUsage) ChangesBehavior() {}
@@ -142,10 +132,10 @@ func closeName(ws *workspace.Workspace, file, name string) string {
 }
 
 type args struct {
-	File    string            `json:"file"`
-	Names   []string          `json:"names,omitempty"`
-	Results map[string]string `json:"results,omitempty"`
-	ToFile  string            `json:"to_file,omitempty"`
+	File    string            `json:"file" desc:"Path of the file with the calls, relative to the workspace root."`
+	Names   []string          `json:"names,omitempty" desc:"Optional: declare only these functions (by name, without package), not every undeclared one the file calls."`
+	Results map[string]string `json:"results,omitempty" desc:"Optional: result lists by function name, as Go source (e.g. {\"Load\": \"(*Config, error)\"}), for uses that do not tell them."`
+	ToFile  string            `json:"to_file,omitempty" desc:"Optional: the file of the target package to put the stubs in; a new one in its directory is created."`
 }
 
 // Plan checks preconditions and computes the edits.

@@ -39,19 +39,7 @@ Refuses, saying why: a body that compares a parameter of a non-interface type wi
 }
 
 func (*ChangeParameterType) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":      {"type": "string",  "description": "Path of a file containing the function's declaration or a call, relative to the workspace root."},
-    "line":      {"type": "integer", "description": "1-based line of that occurrence. Omit it to find name as a symbol of the package of file."},
-    "name":      {"type": "string",  "description": "The function's name: with line, just the method name for a method; without line, the package-level name or Type.Method."},
-    "column":    {"type": "integer", "description": "Optional 1-based column, only needed to disambiguate."},
-    "parameter": {"type": "string",  "description": "Name of the parameter whose type changes."},
-    "type":      {"type": "string",  "description": "The new type, as Go source, e.g. io.Writer or UserID."}
-  },
-  "required": ["file", "name", "parameter", "type"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[typeArgs]()
 }
 
 // ChecksByCompiling: that the body compiles with the new type is checked
@@ -59,12 +47,12 @@ func (*ChangeParameterType) InputSchema() json.RawMessage {
 func (*ChangeParameterType) ChecksByCompiling() {}
 
 type typeArgs struct {
-	File      string `json:"file"`
-	Line      int    `json:"line"`
-	Column    int    `json:"column,omitempty"`
-	Name      string `json:"name"`
-	Parameter string `json:"parameter"`
-	Type      string `json:"type"`
+	File      string `json:"file" desc:"Path of a file containing the function's declaration or a call, relative to the workspace root."`
+	Line      int    `json:"line,omitempty" desc:"1-based line of that occurrence. Omit it to find name as a symbol of the package of file."`
+	Name      string `json:"name" desc:"The function's name: with line, just the method name for a method; without line, the package-level name or Type.Method."`
+	Column    int    `json:"column,omitempty" desc:"Optional 1-based column, only needed to disambiguate."`
+	Parameter string `json:"parameter" desc:"Name of the parameter whose type changes."`
+	Type      string `json:"type" desc:"The new type, as Go source, e.g. io.Writer or UserID."`
 }
 
 // Plan checks preconditions and computes the edits.

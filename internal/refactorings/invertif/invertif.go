@@ -47,25 +47,15 @@ Refuses, saying why: an else-if chain in the else branch, an if without else any
 }
 
 func (*InvertIf) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":   {"type": "string",  "description": "Path of the file, relative to the module root."},
-    "line":   {"type": "integer", "description": "1-based line of the if keyword."},
-    "column": {"type": "integer", "description": "Optional 1-based column of the if keyword, only needed if the line has more than one if."},
-    "keep_else": {"type": "boolean", "description": "Only swap the branches of an if/else; do not remove the else even if the new first branch exits."}
-  },
-  "required": ["file", "line"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[args]("wrap")
 }
 
 type args struct {
-	File     string `json:"file"`
-	Line     int    `json:"line"`
-	Column   int    `json:"column,omitempty"`
-	KeepElse bool   `json:"keep_else,omitempty"`
-	Wrap     bool   `json:"wrap,omitempty"`
+	File     string `json:"file" desc:"Path of the file, relative to the module root."`
+	Line     int    `json:"line" desc:"1-based line of the if keyword."`
+	Column   int    `json:"column,omitempty" desc:"Optional 1-based column of the if keyword, only needed if the line has more than one if."`
+	KeepElse bool   `json:"keep_else,omitempty" desc:"Only swap the branches of an if/else; do not remove the else even if the new first branch exits."`
+	Wrap     bool   `json:"wrap,omitempty" desc:"Optional: the inverse, the statements after the if become its else."`
 }
 
 type inversion struct {

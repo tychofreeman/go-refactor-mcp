@@ -30,29 +30,18 @@ A function or method named like a stub (a body of only panic("not implemented"),
 }
 
 func (*AddDeclaration) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":    {"type": "string", "description": "Relative to the workspace root."},
-    "content": {"type": "string", "description": "Go declarations, without package clause or imports."},
-    "after":   {"type": "string", "description": "Optional: put them just after this declaration of file (Name, or Type.Method)."},
-    "before":  {"type": "string", "description": "Optional: put them just before this declaration of file."},
-    "imports": {"type": "array", "items": {"type": "string"}, "description": "Optional: import paths for ambiguous package names."}
-  },
-  "required": ["file", "content"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[args]()
 }
 
 // ChangesBehavior marks this as an edit.
 func (*AddDeclaration) ChangesBehavior() {}
 
 type args struct {
-	File    string   `json:"file"`
-	Content string   `json:"content"`
-	After   string   `json:"after,omitempty"`
-	Before  string   `json:"before,omitempty"`
-	Imports []string `json:"imports,omitempty"`
+	File    string   `json:"file" desc:"Relative to the workspace root."`
+	Content string   `json:"content" desc:"Go declarations, without package clause or imports."`
+	After   string   `json:"after,omitempty" desc:"Optional: put them just after this declaration of file (Name, or Type.Method)."`
+	Before  string   `json:"before,omitempty" desc:"Optional: put them just before this declaration of file."`
+	Imports []string `json:"imports,omitempty" desc:"Optional: import paths for ambiguous package names."`
 }
 
 // Plan checks preconditions and computes the edits.

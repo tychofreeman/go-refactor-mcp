@@ -28,34 +28,23 @@ from adds every element of another variable's literal, written by element as a t
 }
 
 func (*AddElement) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":    {"type": "string",  "description": "The file, relative to the root."},
-    "line":    {"type": "integer", "description": "1-based line the literal starts on; or give name."},
-    "name":    {"type": "string",  "description": "The top-level variable of the file the literal initializes; or give line."},
-    "from":    {"type": "string",  "description": "Optional: a top-level variable whose literal's elements to add."},
-    "column":  {"type": "integer", "description": "Optional 1-based column of its { or [, when more than one literal starts on the line."},
-    "element": {"type": "string",  "description": "The element: key: value for an object, a value for an array; with from, a template of $key and $value."},
-    "after":   {"type": "string",  "description": "Optional: put it after the element with this key."},
-    "before":  {"type": "string",  "description": "Optional: put it before the element with this key."}
-  },
-  "required": ["file"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[addElementArgs]()
+}
+
+// addElementArgs are the arguments of add_element.
+type addElementArgs struct {
+	File    string `json:"file" desc:"The file, relative to the root."`
+	Line    int    `json:"line,omitempty" desc:"1-based line the literal starts on; or give name."`
+	Name    string `json:"name,omitempty" desc:"The top-level variable of the file the literal initializes; or give line."`
+	From    string `json:"from,omitempty" desc:"Optional: a top-level variable whose literal's elements to add."`
+	Column  int    `json:"column,omitempty" desc:"Optional 1-based column of its { or [, when more than one literal starts on the line."`
+	Element string `json:"element,omitempty" desc:"The element: key: value for an object, a value for an array; with from, a template of $key and $value."`
+	After   string `json:"after,omitempty" desc:"Optional: put it after the element with this key."`
+	Before  string `json:"before,omitempty" desc:"Optional: put it before the element with this key."`
 }
 
 func (*AddElement) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
-	var a struct {
-		File    string `json:"file"`
-		Line    int    `json:"line"`
-		Column  int    `json:"column"`
-		Name    string `json:"name"`
-		From    string `json:"from"`
-		Element string `json:"element"`
-		After   string `json:"after"`
-		Before  string `json:"before"`
-	}
+	var a addElementArgs
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}

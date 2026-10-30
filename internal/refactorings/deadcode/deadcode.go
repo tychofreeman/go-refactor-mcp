@@ -35,30 +35,17 @@ Refuses, saying why: something still used (its own body aside); init, main or a 
 }
 
 func (*RemoveDeadCode) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":   {"type": "string",  "description": "Path of the file declaring it, relative to the workspace root."},
-    "line":   {"type": "integer", "description": "1-based line of its declaration. Omit it to find name as a symbol of the package of file."},
-    "name":   {"type": "string",  "description": "The declared name: with line, just the method or field name; without line, the package-level name, Type.Method or Type.Field."},
-    "exported": {"type": "boolean", "description": "No longer needed: exported code is removed, with a note that the module's API changed."},
-    "column": {"type": "integer", "description": "Optional 1-based column, only needed to disambiguate."},
-    "also":   {"type": "array", "items": {"type": "string"}, "description": "Optional: more names of the package to remove with it (Name or Type.Method); uses among them do not count."},
-    "value":  {"type": "string",  "description": "For a field still used: the path of the struct's other fields every literal sets it equal to (WS, or Site.WS); its reads become that."}
-  },
-  "required": ["file", "name"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[args]()
 }
 
 type args struct {
-	File     string   `json:"file"`
-	Line     int      `json:"line"`
-	Column   int      `json:"column,omitempty"`
-	Name     string   `json:"name"`
-	Exported bool     `json:"exported,omitempty"`
-	Also     []string `json:"also,omitempty"`
-	Value    string   `json:"value,omitempty"`
+	File     string   `json:"file" desc:"Path of the file declaring it, relative to the workspace root."`
+	Line     int      `json:"line,omitempty" desc:"1-based line of its declaration. Omit it to find name as a symbol of the package of file."`
+	Name     string   `json:"name" desc:"The declared name: with line, just the method or field name; without line, the package-level name, Type.Method or Type.Field."`
+	Exported bool     `json:"exported,omitempty" desc:"No longer needed: exported code is removed, with a note that the module's API changed."`
+	Column   int      `json:"column,omitempty" desc:"Optional 1-based column, only needed to disambiguate."`
+	Also     []string `json:"also,omitempty" desc:"Optional: more names of the package to remove with it (Name or Type.Method); uses among them do not count."`
+	Value    string   `json:"value,omitempty" desc:"For a field still used: the path of the struct's other fields every literal sets it equal to (WS, or Site.WS); its reads become that."`
 }
 
 // Plan checks preconditions and computes the edits.

@@ -37,36 +37,21 @@ Refuses, saying why: a function used as a value, a method that would start or st
 }
 
 func (*AddParameter) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":      {"type": "string",  "description": "Path of a file containing the function's declaration or a call, relative to the workspace root."},
-    "line":      {"type": "integer", "description": "1-based line of that occurrence. Omit it to find name as a symbol of the package of file."},
-    "name":      {"type": "string",  "description": "The function's name: with line, just the method name for a method; without line, the package-level name or Type.Method."},
-    "column":    {"type": "integer", "description": "Optional 1-based column, only needed to disambiguate."},
-    "parameter": {"type": "string",  "description": "Name of the new parameter."},
-    "type":      {"type": "string",  "description": "Type of the new parameter, as Go source valid in the declaring file, e.g. string or *bytes.Buffer."},
-    "value":     {"type": "string",  "description": "Go expression every call passes for the new parameter, e.g. \"\" or nil or cfg.OutDir."},
-    "before":    {"type": "string",  "description": "Optional: an existing parameter; the new one goes just before it."},
-    "replace_variable": {"type": "boolean", "description": "The parameter is named like a package variable the body reads, and takes its place: the body reads the parameter instead. Calls whose value is not that variable are edits, listed in a note."}
-  },
-  "required": ["file", "name", "parameter", "type", "value"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[addArgs]()
 }
 
 type addArgs struct {
-	File      string  `json:"file"`
-	Line      int     `json:"line"`
-	Column    int     `json:"column,omitempty"`
-	Name      string  `json:"name"`
-	Parameter string  `json:"parameter"`
-	Type      string  `json:"type"`
-	Value     literal `json:"value"`
-	Before    string  `json:"before,omitempty"`
+	File      string  `json:"file" desc:"Path of a file containing the function's declaration or a call, relative to the workspace root."`
+	Line      int     `json:"line,omitempty" desc:"1-based line of that occurrence. Omit it to find name as a symbol of the package of file."`
+	Name      string  `json:"name" desc:"The function's name: with line, just the method name for a method; without line, the package-level name or Type.Method."`
+	Column    int     `json:"column,omitempty" desc:"Optional 1-based column, only needed to disambiguate."`
+	Parameter string  `json:"parameter" desc:"Name of the new parameter."`
+	Type      string  `json:"type" desc:"Type of the new parameter, as Go source valid in the declaring file, e.g. string or *bytes.Buffer."`
+	Value     literal `json:"value" desc:"Go expression every call passes for the new parameter, e.g. \"\" or nil or cfg.OutDir."`
+	Before    string  `json:"before,omitempty" desc:"Optional: an existing parameter; the new one goes just before it."`
 	// ReplaceVariable: the parameter takes the place of the package
 	// variable of the same name that the body reads.
-	ReplaceVariable bool `json:"replace_variable,omitempty"`
+	ReplaceVariable bool `json:"replace_variable,omitempty" desc:"The parameter is named like a package variable the body reads, and takes its place: the body reads the parameter instead. Calls whose value is not that variable are edits, listed in a note."`
 }
 
 // literal is Go source text, given as a JSON string or, for a number or

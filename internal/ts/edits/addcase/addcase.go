@@ -27,26 +27,19 @@ Branches of an if, likewise: at the line of if (p.height > 10) {, content else i
 }
 
 func (*AddCase) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":    {"type": "string",  "description": "The file, relative to the root."},
-    "line":    {"type": "integer", "description": "1-based line of the switch or if (they go at its end), or of one of its clauses or else ifs."},
-    "where":   {"type": "string",  "enum": ["before", "after"], "description": "For the line of a clause or else if: before or after it (default after)."},
-    "content": {"type": "string",  "description": "One or more clauses, each case x: or default: with its statements; or branches, else if (c) { ... } or else { ... }."}
-  },
-  "required": ["file", "line", "content"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[addCaseArgs]()
+}
+
+// addCaseArgs are the arguments of add_case.
+type addCaseArgs struct {
+	File    string `json:"file" desc:"The file, relative to the root."`
+	Line    int    `json:"line" desc:"1-based line of the switch or if (they go at its end), or of one of its clauses or else ifs."`
+	Where   string `json:"where,omitempty" desc:"For the line of a clause or else if: before or after it (default after)." enum:"before,after"`
+	Content string `json:"content" desc:"One or more clauses, each case x: or default: with its statements; or branches, else if (c) { ... } or else { ... }."`
 }
 
 func (*AddCase) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
-	var a struct {
-		File    string `json:"file"`
-		Line    int    `json:"line"`
-		Where   string `json:"where"`
-		Content string `json:"content"`
-	}
+	var a addCaseArgs
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}

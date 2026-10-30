@@ -31,28 +31,16 @@ Refuses, saying why: a new name that is not an identifier or is reserved, or tha
 }
 
 func (*Rename) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":     {"type": "string",  "description": "Path of a file with the symbol, relative to the root."},
-    "line":     {"type": "integer", "description": "1-based line of an occurrence. Omit it to find name as a top-level declaration of file, or Class.member."},
-    "function": {"type": "string",  "description": "Instead of line, for a local: the function (name or Class.method) of file that declares it (a parameter, variable or constant)."},
-    "name":     {"type": "string",  "description": "The current name."},
-    "column":   {"type": "integer", "description": "Optional 1-based column, only needed when the name is on the line twice."},
-    "new_name": {"type": "string",  "description": "The new name."}
-  },
-  "required": ["file", "name", "new_name"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[args]()
 }
 
 type args struct {
-	File     string `json:"file"`
-	Function string `json:"function"`
-	Line     int    `json:"line"`
-	Name     string `json:"name"`
-	Column   int    `json:"column"`
-	NewName  string `json:"new_name"`
+	File     string `json:"file" desc:"Path of a file with the symbol, relative to the root."`
+	Line     int    `json:"line,omitempty" desc:"1-based line of an occurrence. Omit it to find name as a top-level declaration of file, or Class.member."`
+	Function string `json:"function,omitempty" desc:"Instead of line, for a local: the function (name or Class.method) of file that declares it (a parameter, variable or constant)."`
+	Name     string `json:"name" desc:"The current name."`
+	Column   int    `json:"column,omitempty" desc:"Optional 1-based column, only needed when the name is on the line twice."`
+	NewName  string `json:"new_name" desc:"The new name."`
 }
 
 var identifier = regexp.MustCompile(`^[\p{L}_$][\p{L}\p{N}_$]*$`)

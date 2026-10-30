@@ -52,10 +52,12 @@ func (r *RemoveParameter) Expand(ws *workspace.Workspace, raw json.RawMessage) (
 // after it shows that this changed nothing.
 type valueForParam struct{}
 
-func (valueForParam) Name() string                 { return "remove_parameter" }
-func (valueForParam) Description() string          { return "" }
-func (valueForParam) InputSchema() json.RawMessage { return (*RemoveParameter)(nil).InputSchema() }
-func (valueForParam) ChangesBehavior()             {}
+func (valueForParam) Name() string        { return "remove_parameter" }
+func (valueForParam) Description() string { return "" }
+func (valueForParam) InputSchema() json.RawMessage {
+	return refactor.Schema[removeArgs]()
+}
+func (valueForParam) ChangesBehavior() {}
 
 func (valueForParam) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
 	var a removeArgs
@@ -131,9 +133,11 @@ func (valueForParam) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refact
 // shown to pass value and the body to get from it what the call passed.
 type removeShown struct{}
 
-func (removeShown) Name() string                 { return "remove_parameter" }
-func (removeShown) Description() string          { return "" }
-func (removeShown) InputSchema() json.RawMessage { return (*RemoveParameter)(nil).InputSchema() }
+func (removeShown) Name() string        { return "remove_parameter" }
+func (removeShown) Description() string { return "" }
+func (removeShown) InputSchema() json.RawMessage {
+	return refactor.Schema[removeArgs]()
+}
 
 func (removeShown) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
 	var a removeArgs

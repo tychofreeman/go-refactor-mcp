@@ -30,17 +30,7 @@ Refuses, saying why: an if branch that can fall through, un-nested names that wo
 }
 
 func (*RemoveElse) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":   {"type": "string",  "description": "Path of the file, relative to the module root."},
-    "line":   {"type": "integer", "description": "1-based line of the if keyword."},
-    "column": {"type": "integer", "description": "Optional 1-based column of the if keyword, only needed if the line has more than one if."},
-    "wrap":   {"type": "boolean", "description": "Optional: the inverse, the statements after the if become its else."}
-  },
-  "required": ["file", "line"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[args]("keep_else")
 }
 
 // Plan checks preconditions and computes the edits.

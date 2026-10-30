@@ -47,30 +47,17 @@ Refuses, saying why: a struct whose values are passed where reflection may look 
 }
 
 func (*ExtractStruct) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":     {"type": "string",  "description": "Path of a file containing the struct type's declaration or a use, relative to the workspace root."},
-    "line":     {"type": "integer", "description": "1-based line of that occurrence. Omit it to find name as a symbol of the package of file."},
-    "name":     {"type": "string",  "description": "The struct type's name; without line, it is found among the package-level names."},
-    "column":   {"type": "integer", "description": "Optional 1-based column, only needed to disambiguate."},
-    "fields":   {"type": "array", "items": {"type": "string"}, "description": "The fields to move into the new type."},
-    "new_type": {"type": "string",  "description": "Name of the new struct type, which is also the embedded field's name."},
-    "into":     {"type": "string",  "description": "Instead of new_type: an existing struct type the struct embeds or holds in a field, by value, to move the fields into."}
-  },
-  "required": ["file", "name", "fields"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[args]()
 }
 
 type args struct {
-	File    string   `json:"file"`
-	Line    int      `json:"line"`
-	Column  int      `json:"column,omitempty"`
-	Name    string   `json:"name"`
-	Fields  []string `json:"fields"`
-	NewType string   `json:"new_type"`
-	Into    string   `json:"into"`
+	File    string   `json:"file" desc:"Path of a file containing the struct type's declaration or a use, relative to the workspace root."`
+	Line    int      `json:"line,omitempty" desc:"1-based line of that occurrence. Omit it to find name as a symbol of the package of file."`
+	Name    string   `json:"name" desc:"The struct type's name; without line, it is found among the package-level names."`
+	Column  int      `json:"column,omitempty" desc:"Optional 1-based column, only needed to disambiguate."`
+	Fields  []string `json:"fields" desc:"The fields to move into the new type."`
+	NewType string   `json:"new_type,omitempty" desc:"Name of the new struct type, which is also the embedded field's name."`
+	Into    string   `json:"into,omitempty" desc:"Instead of new_type: an existing struct type the struct embeds or holds in a field, by value, to move the fields into."`
 }
 
 // extraction is one planning run.

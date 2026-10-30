@@ -30,32 +30,22 @@ old must be as in the file and occur once, or set all_occurrences; spacing withi
 }
 
 func (*ReplaceText) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":            {"type": "string",  "description": "Path of the file, relative to the root: any file under it, source or not."},
-    "files":           {"type": "array", "items": {"type": "string"}, "description": "Instead of file: several files, to make the same replacement in each."},
-    "old":             {"type": "string",  "description": "The text to replace, as it is in the file."},
-    "new":             {"type": "string",  "description": "The text to put in its place."},
-    "all_occurrences": {"type": "boolean", "description": "Replace every occurrence of old in the file, not just the only one."},
-    "function":        {"type": "string",  "description": "Optional: look for old only in this function of the file (name, or Class.method)."},
-    "append":          {"type": "boolean", "description": "Instead of old: add new at the end of the file."}
-  },
-  "required": ["new"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[replaceTextArgs]()
+}
+
+// replaceTextArgs are the arguments of replace_text.
+type replaceTextArgs struct {
+	File     string   `json:"file,omitempty" desc:"Path of the file, relative to the root: any file under it, source or not."`
+	Files    []string `json:"files,omitempty" desc:"Instead of file: several files, to make the same replacement in each."`
+	Old      string   `json:"old,omitempty" desc:"The text to replace, as it is in the file."`
+	New      string   `json:"new" desc:"The text to put in its place."`
+	All      bool     `json:"all_occurrences,omitempty" desc:"Replace every occurrence of old in the file, not just the only one."`
+	Function string   `json:"function,omitempty" desc:"Optional: look for old only in this function of the file (name, or Class.method)."`
+	Append   bool     `json:"append,omitempty" desc:"Instead of old: add new at the end of the file."`
 }
 
 func (*ReplaceText) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
-	var a struct {
-		File     string   `json:"file"`
-		Files    []string `json:"files"`
-		Old      string   `json:"old"`
-		New      string   `json:"new"`
-		All      bool     `json:"all_occurrences"`
-		Function string   `json:"function"`
-		Append   bool     `json:"append"`
-	}
+	var a replaceTextArgs
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}

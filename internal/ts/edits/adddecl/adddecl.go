@@ -32,26 +32,19 @@ Refuses, saying why: a name after or before does not find; content that does not
 }
 
 func (*AddDeclaration) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":    {"type": "string", "description": "Relative to the root."},
-    "content": {"type": "string", "description": "TypeScript declarations, with their doc comments."},
-    "after":   {"type": "string", "description": "Optional: put them just after this declaration of file (name, or Class.member)."},
-    "before":  {"type": "string", "description": "Optional: put them just before this declaration of file."}
-  },
-  "required": ["file", "content"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[addDeclarationArgs]()
+}
+
+// addDeclarationArgs are the arguments of add_declaration.
+type addDeclarationArgs struct {
+	File    string `json:"file" desc:"Relative to the root."`
+	Content string `json:"content" desc:"TypeScript declarations, with their doc comments."`
+	After   string `json:"after,omitempty" desc:"Optional: put them just after this declaration of file (name, or Class.member)."`
+	Before  string `json:"before,omitempty" desc:"Optional: put them just before this declaration of file."`
 }
 
 func (*AddDeclaration) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
-	var a struct {
-		File    string `json:"file"`
-		Content string `json:"content"`
-		After   string `json:"after"`
-		Before  string `json:"before"`
-	}
+	var a addDeclarationArgs
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}

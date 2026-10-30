@@ -46,20 +46,12 @@ Behavior does not change, so it refuses, saying why, when the order matters: one
 }
 
 func (*MoveStatement) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file": {"type": "string",  "description": "Path of the file, relative to the module root."},
-    "line": {"type": "integer", "description": "1-based line on which the statement to move starts."}
-  },
-  "required": ["file", "line"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[args]()
 }
 
 type args struct {
-	File string `json:"file"`
-	Line int    `json:"line"`
+	File string `json:"file" desc:"Path of the file, relative to the module root."`
+	Line int    `json:"line" desc:"1-based line on which the statement to move starts."`
 }
 
 // Plan checks preconditions and computes the edits.

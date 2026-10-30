@@ -30,19 +30,7 @@ Refuses, saying why: a call on a value no struct of the new type holds, a type t
 }
 
 func (*MoveMethod) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":   {"type": "string",  "description": "Path of a file containing the method's declaration or a call, relative to the workspace root."},
-    "line":   {"type": "integer", "description": "1-based line of that occurrence. Omit it to find name as a symbol of the package of file."},
-    "name":   {"type": "string",  "description": "The method: Type.Method without line, the method's name with it."},
-    "column": {"type": "integer", "description": "Optional 1-based column, only needed to disambiguate."},
-    "to":     {"type": "string",  "description": "The struct type to move it to: one of the package's that embeds the receiver's type."},
-    "also":   {"type": "array", "items": {"type": "string"}, "description": "Other methods of the same type to move with it (Method or Type.Method)."}
-  },
-  "required": ["file", "name", "to"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[moveMethodArgs]()
 }
 
 // ChecksByCompiling makes a compile error after the move a refusal: the
@@ -50,12 +38,12 @@ func (*MoveMethod) InputSchema() json.RawMessage {
 func (*MoveMethod) ChecksByCompiling() {}
 
 type moveMethodArgs struct {
-	File   string   `json:"file"`
-	Line   int      `json:"line"`
-	Column int      `json:"column,omitempty"`
-	Name   string   `json:"name"`
-	To     string   `json:"to"`
-	Also   []string `json:"also,omitempty"`
+	File   string   `json:"file" desc:"Path of a file containing the method's declaration or a call, relative to the workspace root."`
+	Line   int      `json:"line,omitempty" desc:"1-based line of that occurrence. Omit it to find name as a symbol of the package of file."`
+	Name   string   `json:"name" desc:"The method: Type.Method without line, the method's name with it."`
+	Column int      `json:"column,omitempty" desc:"Optional 1-based column, only needed to disambiguate."`
+	To     string   `json:"to" desc:"The struct type to move it to: one of the package's that embeds the receiver's type."`
+	Also   []string `json:"also,omitempty" desc:"Other methods of the same type to move with it (Method or Type.Method)."`
 }
 
 // methodMove is one planning run: the methods that move, from their

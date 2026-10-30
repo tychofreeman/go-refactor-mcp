@@ -16,8 +16,6 @@ import (
 
 var bg = context.Background()
 
-const fileProp = `"file": {"type": "string", "description": "Path of the file, relative to the root."}`
-
 // plan runs change on the file's projects and returns the plan with the
 // summary given.
 func plan(ws *workspace.Workspace, file, summary string, change func(p *tsapi.Project, path string) ([]tsapi.Edit, string)) (*refactor.Plan, error) {
@@ -47,31 +45,22 @@ Refuses, saying why: an expression evaluated only sometimes or more than once wh
 }
 
 func (*ExtractVariable) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    ` + fileProp + `,
-    "line":            {"type": "integer", "description": "1-based line on which the expression starts."},
-    "expression":      {"type": "string",  "description": "Source text of the expression, e.g. \"p.height * 2\"."},
-    "name":            {"type": "string",  "description": "Name for the new constant."},
-    "column":          {"type": "integer", "description": "Optional 1-based column where the expression starts, only needed if the text occurs more than once on the line."},
-    "all_occurrences": {"type": "boolean", "description": "Also replace identical occurrences later in the same block."}
-  },
-  "required": ["file", "line", "expression", "name"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[extractVariableArgs]()
+}
+
+// extractVariableArgs are the arguments of extract_variable.
+type extractVariableArgs struct {
+	File       string `json:"file" desc:"Path of the file, relative to the root."`
+	Line       int    `json:"line" desc:"1-based line on which the expression starts."`
+	Expression string `json:"expression" desc:"Source text of the expression, e.g. \"p.height * 2\"."`
+	Name       string `json:"name" desc:"Name for the new constant."`
+	Column     int    `json:"column,omitempty" desc:"Optional 1-based column where the expression starts, only needed if the text occurs more than once on the line."`
+	All        bool   `json:"all_occurrences,omitempty" desc:"Also replace identical occurrences later in the same block."`
+	Pointer    bool   `json:"pointer" schema:"-"`
 }
 
 func (*ExtractVariable) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
-	var a struct {
-		File       string `json:"file"`
-		Line       int    `json:"line"`
-		Expression string `json:"expression"`
-		Name       string `json:"name"`
-		Column     int    `json:"column"`
-		All        bool   `json:"all_occurrences"`
-		Pointer    bool   `json:"pointer"`
-	}
+	var a extractVariableArgs
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
@@ -113,28 +102,20 @@ Refuses, saying why: a variable assigned after its declaration, exported, or dec
 }
 
 func (*InlineVariable) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    ` + fileProp + `,
-    "line":     {"type": "integer", "description": "1-based line of the variable's declaration or of any use."},
-    "name":     {"type": "string",  "description": "The variable's name."},
-    "function": {"type": "string",  "description": "Instead of line: the function (name or Class.method) of file that declares the variable."},
-    "column":   {"type": "integer", "description": "Optional 1-based column, only needed if the name occurs more than once on the line with different meanings."}
-  },
-  "required": ["file", "name"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[inlineVariableArgs]()
+}
+
+// inlineVariableArgs are the arguments of inline_variable.
+type inlineVariableArgs struct {
+	File     string `json:"file" desc:"Path of the file, relative to the root."`
+	Line     int    `json:"line,omitempty" desc:"1-based line of the variable's declaration or of any use."`
+	Name     string `json:"name" desc:"The variable's name."`
+	Function string `json:"function,omitempty" desc:"Instead of line: the function (name or Class.method) of file that declares the variable."`
+	Column   int    `json:"column,omitempty" desc:"Optional 1-based column, only needed if the name occurs more than once on the line with different meanings."`
 }
 
 func (*InlineVariable) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
-	var a struct {
-		File     string `json:"file"`
-		Line     int    `json:"line"`
-		Name     string `json:"name"`
-		Function string `json:"function"`
-		Column   int    `json:"column"`
-	}
+	var a inlineVariableArgs
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
@@ -178,22 +159,17 @@ Behavior does not change, so it refuses, saying why, when the order matters: one
 }
 
 func (*MoveStatement) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    ` + fileProp + `,
-    "line": {"type": "integer", "description": "1-based line on which the statement to move starts."}
-  },
-  "required": ["file", "line"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[moveStatementArgs]()
+}
+
+// moveStatementArgs are the arguments of move_statement_up and _down.
+type moveStatementArgs struct {
+	File string `json:"file" desc:"Path of the file, relative to the root."`
+	Line int    `json:"line" desc:"1-based line on which the statement to move starts."`
 }
 
 func (m *MoveStatement) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
-	var a struct {
-		File string `json:"file"`
-		Line int    `json:"line"`
-	}
+	var a moveStatementArgs
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
@@ -222,26 +198,19 @@ Refuses, saying why: an else-if in the else branch, an if without else anywhere 
 }
 
 func (*InvertIf) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    ` + fileProp + `,
-    "line":      {"type": "integer", "description": "1-based line of the if keyword."},
-    "column":    {"type": "integer", "description": "Optional 1-based column of the if keyword, only needed if the line has more than one if."},
-    "keep_else": {"type": "boolean", "description": "Only swap the branches of an if/else; do not remove the else even if the new first branch exits."}
-  },
-  "required": ["file", "line"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[invertIfArgs]()
+}
+
+// invertIfArgs are the arguments of invert_if.
+type invertIfArgs struct {
+	File     string `json:"file" desc:"Path of the file, relative to the root."`
+	Line     int    `json:"line" desc:"1-based line of the if keyword."`
+	Column   int    `json:"column,omitempty" desc:"Optional 1-based column of the if keyword, only needed if the line has more than one if."`
+	KeepElse bool   `json:"keep_else,omitempty" desc:"Only swap the branches of an if/else; do not remove the else even if the new first branch exits."`
 }
 
 func (*InvertIf) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
-	var a struct {
-		File     string `json:"file"`
-		Line     int    `json:"line"`
-		Column   int    `json:"column"`
-		KeepElse bool   `json:"keep_else"`
-	}
+	var a invertIfArgs
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
@@ -265,26 +234,19 @@ Refuses, saying why: an if branch that can fall through, un-nested names that wo
 }
 
 func (*RemoveElse) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    ` + fileProp + `,
-    "line":   {"type": "integer", "description": "1-based line of the if keyword."},
-    "column": {"type": "integer", "description": "Optional 1-based column of the if keyword, only needed if the line has more than one if."},
-    "wrap":   {"type": "boolean", "description": "Optional: the inverse, the statements after the if become its else."}
-  },
-  "required": ["file", "line"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[removeElseArgs]()
+}
+
+// removeElseArgs are the arguments of remove_else.
+type removeElseArgs struct {
+	File   string `json:"file" desc:"Path of the file, relative to the root."`
+	Line   int    `json:"line" desc:"1-based line of the if keyword."`
+	Column int    `json:"column,omitempty" desc:"Optional 1-based column of the if keyword, only needed if the line has more than one if."`
+	Wrap   bool   `json:"wrap,omitempty" desc:"Optional: the inverse, the statements after the if become its else."`
 }
 
 func (*RemoveElse) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
-	var a struct {
-		File   string `json:"file"`
-		Line   int    `json:"line"`
-		Column int    `json:"column"`
-		Wrap   bool   `json:"wrap"`
-	}
+	var a removeElseArgs
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
@@ -314,34 +276,23 @@ Lines that return before the function's end return a value the call returns unle
 }
 
 func (*ExtractFunction) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    ` + fileProp + `,
-    "start_line": {"type": "integer", "description": "1-based first line of the statements to extract."},
-    "end_line":   {"type": "integer", "description": "1-based last line of the statements to extract (inclusive)."},
-    "function":   {"type": "string",  "description": "Instead of the lines: the function (name or Class.method) with the switch whose case to extract."},
-    "case":       {"type": "string",  "description": "With function: the case's value as written (\"fern\", Kind.Fern) or default."},
-    "split":      {"type": "boolean", "description": "With case, sharing its body (case \"fern\": case \"moss\":): unless false, the value gets a case of its own, the others a copy of the body."},
-    "name":       {"type": "string",  "description": "Name for the new function."},
-    "doc":        {"type": "string",  "description": "Optional doc comment for the new function, its text without /** */."}
-  },
-  "required": ["file", "name"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[extractFunctionArgs]()
+}
+
+// extractFunctionArgs are the arguments of extract_function.
+type extractFunctionArgs struct {
+	File      string `json:"file" desc:"Path of the file, relative to the root."`
+	StartLine int    `json:"start_line,omitempty" desc:"1-based first line of the statements to extract."`
+	EndLine   int    `json:"end_line,omitempty" desc:"1-based last line of the statements to extract (inclusive)."`
+	Function  string `json:"function,omitempty" desc:"Instead of the lines: the function (name or Class.method) with the switch whose case to extract."`
+	Case      string `json:"case,omitempty" desc:"With function: the case's value as written (\"fern\", Kind.Fern) or default."`
+	Split     *bool  `json:"split,omitempty" desc:"With case, sharing its body (case \"fern\": case \"moss\":): unless false, the value gets a case of its own, the others a copy of the body."`
+	Name      string `json:"name" desc:"Name for the new function."`
+	Doc       string `json:"doc,omitempty" desc:"Optional doc comment for the new function, its text without /** */."`
 }
 
 func (*ExtractFunction) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
-	var a struct {
-		File      string `json:"file"`
-		StartLine int    `json:"start_line"`
-		EndLine   int    `json:"end_line"`
-		Name      string `json:"name"`
-		Doc       string `json:"doc"`
-		Function  string `json:"function"`
-		Case      string `json:"case"`
-		Split     *bool  `json:"split"`
-	}
+	var a extractFunctionArgs
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
@@ -386,30 +337,21 @@ Refuses, saying why: methods a subclass could override (only static and private 
 }
 
 func (*InlineFunction) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":          {"type": "string",  "description": "Path of the file with the call, relative to the root."},
-    "line":          {"type": "integer", "description": "1-based line of the call. With all_calls, optional: the line of any call or of the declaration."},
-    "name":          {"type": "string",  "description": "Name of the called function or method (for a call x.m(), m)."},
-    "column":        {"type": "integer", "description": "Optional 1-based column of the name, only needed if it appears more than once on the line."},
-    "keep_function": {"type": "boolean", "description": "Keep the function even if no other call to it is left. Default false."},
-    "all_calls":     {"type": "boolean", "description": "Inline every call to the function, in every file, then delete it (unless keep_function). Without line, name is a function (name or Class.method) of file."}
-  },
-  "required": ["file", "name"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[inlineFunctionArgs]()
+}
+
+// inlineFunctionArgs are the arguments of inline_function.
+type inlineFunctionArgs struct {
+	File   string `json:"file" desc:"Path of the file with the call, relative to the root."`
+	Line   int    `json:"line,omitempty" desc:"1-based line of the call. With all_calls, optional: the line of any call or of the declaration."`
+	Name   string `json:"name" desc:"Name of the called function or method (for a call x.m(), m)."`
+	Column int    `json:"column,omitempty" desc:"Optional 1-based column of the name, only needed if it appears more than once on the line."`
+	Keep   bool   `json:"keep_function,omitempty" desc:"Keep the function even if no other call to it is left. Default false."`
+	All    bool   `json:"all_calls,omitempty" desc:"Inline every call to the function, in every file, then delete it (unless keep_function). Without line, name is a function (name or Class.method) of file."`
 }
 
 func (*InlineFunction) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
-	var a struct {
-		File   string `json:"file"`
-		Line   int    `json:"line"`
-		Name   string `json:"name"`
-		Column int    `json:"column"`
-		Keep   bool   `json:"keep_function"`
-		All    bool   `json:"all_calls"`
-	}
+	var a inlineFunctionArgs
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}

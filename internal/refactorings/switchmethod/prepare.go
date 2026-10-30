@@ -37,23 +37,15 @@ Refuses, saying why: a type that already implements the interface with the metho
 }
 
 func (*PrepareForTypes) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":      {"type": "string",  "description": "Path of the file with the switch, relative to the workspace root."},
-    "line":      {"type": "integer", "description": "1-based line on which the switch statement starts."},
-    "function":  {"type": "string",  "description": "Instead of line: the function (Name or Type.Method) whose only switch it is."},
-    "interface": {"type": "string",  "description": "The interface: declared before the function if the package has none of that name."},
-    "method":    {"type": "string",  "description": "Name of the interface's new method."}
-  },
-  "required": ["file", "interface", "method"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[prepareArgs]()
 }
 
 type prepareArgs struct {
-	args
-	Interface string `json:"interface"`
+	File      string `json:"file" desc:"Path of the file with the switch, relative to the workspace root."`
+	Line      int    `json:"line,omitempty" desc:"1-based line on which the switch statement starts."`
+	Function  string `json:"function,omitempty" desc:"Instead of line: the function (Name or Type.Method) whose only switch it is."`
+	Interface string `json:"interface" desc:"The interface: declared before the function if the package has none of that name."`
+	Method    string `json:"method" desc:"Name of the interface's new method."`
 }
 
 // A preparer readies a switch on a value for its cases to move into
@@ -85,7 +77,7 @@ func (*PrepareForTypes) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 			return nil, refactor.Refusef("%q is not a valid Go identifier", n)
 		}
 	}
-	s, err := find(ws, a.args, false)
+	s, err := find(ws, args{File: a.File, Line: a.Line, Function: a.Function, Method: a.Method}, false)
 	if err != nil {
 		return nil, err
 	}

@@ -54,30 +54,17 @@ Refuses, saying why: an expression evaluated only sometimes or more than once (a
 }
 
 func (*ExtractVariable) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":            {"type": "string",  "description": "Path of the file, relative to the module root."},
-    "line":            {"type": "integer", "description": "1-based line on which the expression starts."},
-    "expression":      {"type": "string",  "description": "Source text of the expression, e.g. \"len(items) * unitPrice\"."},
-    "name":            {"type": "string",  "description": "Name for the new variable."},
-    "column":          {"type": "integer", "description": "Optional 1-based column where the expression starts, only needed if the text occurs more than once on the line."},
-    "all_occurrences": {"type": "boolean", "description": "Also replace identical occurrences later in the same block."},
-    "pointer":         {"type": "boolean", "description": "Declare a pointer to the expression (name := &e.f) and use *name in its place, so writes still reach the original."}
-  },
-  "required": ["file", "line", "expression", "name"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[args]()
 }
 
 type args struct {
-	File           string `json:"file"`
-	Line           int    `json:"line"`
-	Column         int    `json:"column,omitempty"`
-	Expression     string `json:"expression"`
-	Name           string `json:"name"`
-	AllOccurrences bool   `json:"all_occurrences,omitempty"`
-	Pointer        bool   `json:"pointer,omitempty"`
+	File           string `json:"file" desc:"Path of the file, relative to the module root."`
+	Line           int    `json:"line" desc:"1-based line on which the expression starts."`
+	Expression     string `json:"expression" desc:"Source text of the expression, e.g. \"len(items) * unitPrice\"."`
+	Name           string `json:"name" desc:"Name for the new variable."`
+	Column         int    `json:"column,omitempty" desc:"Optional 1-based column where the expression starts, only needed if the text occurs more than once on the line."`
+	AllOccurrences bool   `json:"all_occurrences,omitempty" desc:"Also replace identical occurrences later in the same block."`
+	Pointer        bool   `json:"pointer,omitempty" desc:"Declare a pointer to the expression (name := &e.f) and use *name in its place, so writes still reach the original."`
 }
 
 // extraction holds the state of one planning run.

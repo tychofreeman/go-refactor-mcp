@@ -49,24 +49,14 @@ A match where the call would not do the same (an argument evaluated in another o
 }
 
 func (*Fold) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file": {"type": "string",  "description": "Path of the file that declares the function, relative to the workspace root."},
-    "name": {"type": "string",  "description": "The function: Name, or Type.Method for a method."},
-    "line": {"type": "integer", "description": "Optional: fold only the matches that start on this line of file (or of in)."},
-    "in":   {"type": "string",  "description": "Optional, with line: the file whose line it is, if not file."}
-  },
-  "required": ["file", "name"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[foldArgs]()
 }
 
 type foldArgs struct {
-	File string `json:"file"`
-	Name string `json:"name"`
-	Line int    `json:"line,omitempty"`
-	In   string `json:"in,omitempty"`
+	File string `json:"file" desc:"Path of the file that declares the function, relative to the workspace root."`
+	Name string `json:"name" desc:"The function: Name, or Type.Method for a method."`
+	Line int    `json:"line,omitempty" desc:"Optional: fold only the matches that start on this line of file (or of in)."`
+	In   string `json:"in,omitempty" desc:"Optional, with line: the file whose line it is, if not file."`
 }
 
 type relaxer struct {

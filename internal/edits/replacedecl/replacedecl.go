@@ -33,31 +33,19 @@ content is the new declaration, declaring the same name (to rename, use rename),
 }
 
 func (*ReplaceDeclaration) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":    {"type": "string",  "description": "Path of a file containing the declaration or a use, relative to the workspace root."},
-    "line":    {"type": "integer", "description": "1-based line of that occurrence. Omit it to find name as a symbol of the package of file."},
-    "name":    {"type": "string",  "description": "The declared name: Name, or Type.Method for a method."},
-    "column":  {"type": "integer", "description": "Optional 1-based column, only needed to disambiguate."},
-    "content": {"type": "string",  "description": "The new declaration, as Go source, with a doc comment to replace the old one; declarations after it are added after it. Empty to delete it."},
-    "imports": {"type": "array", "items": {"type": "string"}, "description": "Optional: import paths to use for package names content uses, when the name alone is ambiguous."}
-  },
-  "required": ["file", "name", "content"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[args]()
 }
 
 // ChangesBehavior marks this as an edit.
 func (*ReplaceDeclaration) ChangesBehavior() {}
 
 type args struct {
-	File    string   `json:"file"`
-	Line    int      `json:"line"`
-	Column  int      `json:"column,omitempty"`
-	Name    string   `json:"name"`
-	Content string   `json:"content"`
-	Imports []string `json:"imports,omitempty"`
+	File    string   `json:"file" desc:"Path of a file containing the declaration or a use, relative to the workspace root."`
+	Line    int      `json:"line,omitempty" desc:"1-based line of that occurrence. Omit it to find name as a symbol of the package of file."`
+	Name    string   `json:"name" desc:"The declared name: Name, or Type.Method for a method."`
+	Column  int      `json:"column,omitempty" desc:"Optional 1-based column, only needed to disambiguate."`
+	Content string   `json:"content" desc:"The new declaration, as Go source, with a doc comment to replace the old one; declarations after it are added after it. Empty to delete it."`
+	Imports []string `json:"imports,omitempty" desc:"Optional: import paths to use for package names content uses, when the name alone is ambiguous."`
 }
 
 // header is what gocode.ParseDeclarations puts before content.

@@ -30,28 +30,16 @@ Refuses, saying why: a name that makes T implement an interface while a value of
 }
 
 func (*FunctionToMethod) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":     {"type": "string",  "description": "Path of a file containing the function's declaration or a call, relative to the workspace root."},
-    "line":     {"type": "integer", "description": "1-based line of that occurrence. Omit it to find name as a symbol of the package of file."},
-    "name":     {"type": "string",  "description": "The function's name; without line, it is found among the package-level names."},
-    "column":   {"type": "integer", "description": "Optional 1-based column, only needed to disambiguate."},
-    "receiver": {"type": "string",  "description": "Optional: the parameter that becomes the receiver (default: the first)."},
-    "new_name": {"type": "string",  "description": "Optional name for the method (default: the function's name)."}
-  },
-  "required": ["file", "name"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[f2mArgs]()
 }
 
 type f2mArgs struct {
-	File     string `json:"file"`
-	Line     int    `json:"line"`
-	Column   int    `json:"column,omitempty"`
-	Name     string `json:"name"`
-	Receiver string `json:"receiver,omitempty"`
-	NewName  string `json:"new_name,omitempty"`
+	File     string `json:"file" desc:"Path of a file containing the function's declaration or a call, relative to the workspace root."`
+	Line     int    `json:"line,omitempty" desc:"1-based line of that occurrence. Omit it to find name as a symbol of the package of file."`
+	Name     string `json:"name" desc:"The function's name; without line, it is found among the package-level names."`
+	Column   int    `json:"column,omitempty" desc:"Optional 1-based column, only needed to disambiguate."`
+	Receiver string `json:"receiver,omitempty" desc:"Optional: the parameter that becomes the receiver (default: the first)."`
+	NewName  string `json:"new_name,omitempty" desc:"Optional name for the method (default: the function's name)."`
 }
 
 // Plan checks preconditions and computes the edits.

@@ -33,32 +33,22 @@ Refuses, saying why: lines that cut a statement (naming the lines that would not
 }
 
 func (*ReplaceStatements) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":       {"type": "string",  "description": "Relative to the root."},
-    "function":   {"type": "string",  "description": "Instead of the lines: the function (name or Class.member) whose body to replace."},
-    "case":       {"type": "string",  "description": "With function: replace the body of this case of its switch instead (\"fern\", or default)."},
-    "start_line": {"type": "integer", "description": "First line (1-based)."},
-    "end_line":   {"type": "integer", "description": "Last line (inclusive)."},
-    "content":    {"type": "string",  "description": "The new statements."},
-    "wrap":       {"type": "string",  "description": "Instead of content: statements around the ones given, with $body on a line of its own where they go."}
-  },
-  "required": ["file"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[replaceStatementsArgs]()
+}
+
+// replaceStatementsArgs are the arguments of replace_statements.
+type replaceStatementsArgs struct {
+	File      string  `json:"file" desc:"Relative to the root."`
+	Function  string  `json:"function,omitempty" desc:"Instead of the lines: the function (name or Class.member) whose body to replace."`
+	Case      string  `json:"case,omitempty" desc:"With function: replace the body of this case of its switch instead (\"fern\", or default)."`
+	StartLine int     `json:"start_line,omitempty" desc:"First line (1-based)."`
+	EndLine   int     `json:"end_line,omitempty" desc:"Last line (inclusive)."`
+	Content   *string `json:"content,omitempty" desc:"The new statements."`
+	Wrap      string  `json:"wrap,omitempty" desc:"Instead of content: statements around the ones given, with $body on a line of its own where they go."`
 }
 
 func (*ReplaceStatements) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
-	var a struct {
-		File      string  `json:"file"`
-		Function  string  `json:"function"`
-		Case      string  `json:"case"`
-		StartLine int     `json:"start_line"`
-		EndLine   int     `json:"end_line"`
-		Content   *string `json:"content"`
-		Wrap      string  `json:"wrap"`
-	}
+	var a replaceStatementsArgs
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}

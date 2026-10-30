@@ -32,32 +32,22 @@ Refused with the compiler's errors: a duplicate name, an object literal of the t
 }
 
 func (*AddField) InputSchema() json.RawMessage {
-	return json.RawMessage(`{
-  "type": "object",
-  "properties": {
-    "file":   {"type": "string", "description": "Relative to the root."},
-    "name":   {"type": "string", "description": "The interface, class or object type's name."},
-    "field":  {"type": "string", "description": "The members to add, as TypeScript, e.g. \"timeout?: number; // per try\"."},
-    "type":   {"type": "string", "description": "Optional: their type, when field gives only names (field \"owner\", type \"string\")."},
-    "after":  {"type": "string", "description": "Optional: a member to put them just after."},
-    "before": {"type": "string", "description": "Optional: a member to put them just before."},
-    "value":  {"type": "string", "description": "Optional, with one property: the expression each object literal of the type that lacks it gets for it."}
-  },
-  "required": ["file", "name", "field"],
-  "additionalProperties": false
-}`)
+	return refactor.Schema[addFieldArgs]()
+}
+
+// addFieldArgs are the arguments of add_field.
+type addFieldArgs struct {
+	File   string `json:"file" desc:"Relative to the root."`
+	Name   string `json:"name" desc:"The interface, class or object type's name."`
+	Field  string `json:"field" desc:"The members to add, as TypeScript, e.g. \"timeout?: number; // per try\"."`
+	Type   string `json:"type,omitempty" desc:"Optional: their type, when field gives only names (field \"owner\", type \"string\")."`
+	After  string `json:"after,omitempty" desc:"Optional: a member to put them just after."`
+	Before string `json:"before,omitempty" desc:"Optional: a member to put them just before."`
+	Value  string `json:"value,omitempty" desc:"Optional, with one property: the expression each object literal of the type that lacks it gets for it."`
 }
 
 func (*AddField) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
-	var a struct {
-		File   string `json:"file"`
-		Name   string `json:"name"`
-		Field  string `json:"field"`
-		Type   string `json:"type"`
-		After  string `json:"after"`
-		Before string `json:"before"`
-		Value  string `json:"value"`
-	}
+	var a addFieldArgs
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
