@@ -2451,6 +2451,27 @@ hand or a tool got in the way.
     Also found: remove_else's `wrap` does not re-indent the moved
     statements in a file that is not formatted (both languages' output
     was right on formatted files).
+44. **Extracting code that returns a refusal** (2026-10-29, found by
+    running the compositions item 43.10's rewrites skipped): Go's
+    extract_function refuses lines that return on some paths unless the
+    function returns an `error`, and this repo's own functions return a
+    refusal `string` (`([]Edit, string)`, `(int, int, string)`). All four
+    rewrites hit it first: add_result's per-method edits (the old result
+    type and the result annotation each refuse early), introduce_parameter's
+    per-call text, and CaseLines' clause lookup. TypeScript's
+    extract_function already handles lines that return early (the call
+    returns what they returned, or whether they did). Candidate: take the
+    last result's zero value as "did not return" for any comparable type,
+    not only a nil `error`: `if a, b, why := f(...); why != "" { return
+    a, b, why }`. This is also the second use that session notes name for
+    giving a function one result variable that each return assigns.
+    Found on the way: introduce_parameter of `(*found)[0]` replaced the
+    first of two occurrences in caseBody, not the one in the refusal
+    after an `if`, and wrote `(*(&found))[0]` at the call; extract_function
+    passed `found` by pointer because a closure in the caller uses it,
+    though the new function only reads it; add_parameter does not reach a
+    function literal bound to a local (`try := func(...)`), so a mode cannot
+    be threaded through one.
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
