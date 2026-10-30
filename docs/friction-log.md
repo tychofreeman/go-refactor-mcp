@@ -3778,3 +3778,8 @@ since nothing moves a test fixture directory. The new code (exitKind,
 nonZeroValue, alwaysNonZero, redeclareEdits, freshNames, WrittenAgain)
 was written by hand into add_declaration: each is a new check or
 rewrite, not existing code moved. Nothing else by hand.
+
+## 2026-10-30: release v0.4.0
+
+Version and notes with replace_text and create_file, the notes written
+from the titles of #413-#489. Nothing by hand.
