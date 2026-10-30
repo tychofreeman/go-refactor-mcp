@@ -297,6 +297,10 @@ var syncCalls = map[string]syncCall{
 	"path/filepath.Walk":    {effect: "walks the file system"},
 	"path/filepath.WalkDir": {effect: "walks the file system"},
 	"io/fs.WalkDir":         {effect: "walks a file system"},
+	// The TypeScript compiler's walk, which this module's tsapi uses. A
+	// method: CallsBeforeReturning consults it, a summary of the call
+	// does not (see SyncLits).
+	"(*github.com/buke/typescript-go-internal/v7/pkg/ast.Node).ForEachChild": reads,
 }
 
 // SyncLits returns the function literals passed to call that run during

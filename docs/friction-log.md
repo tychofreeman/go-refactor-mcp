@@ -3882,5 +3882,7 @@ Through the CLI, the golden first: create_file for it, replace_text in
 extract_function's `calledOnlyInSelection`. A first try marked every
 closure held in a variable and only called as running during its
 statement, which four goldens showed wrong (a closure called after the
-selection runs later); reverted with git checkout before the second.
-Nothing else by hand.
+selection runs later); reverted with git checkout before the second. The first push of this
+PR carried only its docs: a `git stash` taken to build the old CLI for a
+comparison did not pop back, and the code was recovered from the stash
+commit afterwards. Nothing else by hand.
