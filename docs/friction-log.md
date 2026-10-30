@@ -3766,3 +3766,15 @@ two patterns are `docs/derivations.md` sections 10 and 11; the refusals
 that looked wrong are in README item 44. Batches broke twice on a later
 step's line number that an earlier step rewrote, and once on a
 `$2.start` that pointed at three places; both cost a second call.
+
+## 2026-10-30: extract_function's string exits and three false refusals (item 44)
+
+Through the CLI, goldens first. Two batches broke: a Python string held
+`""` inside a Go string literal, so the file stopped parsing and the
+check listed a thousand errors (escaped and resent), and one replacement
+of three was refused for the same reason. The old refusal golden for a
+redeclared pointer became a positive one by create_file and delete_file,
+since nothing moves a test fixture directory. The new code (exitKind,
+nonZeroValue, alwaysNonZero, redeclareEdits, freshNames, WrittenAgain)
+was written by hand into add_declaration: each is a new check or
+rewrite, not existing code moved. Nothing else by hand.

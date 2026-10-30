@@ -60,7 +60,7 @@ func (*ExtractFunction) Name() string { return "extract_function" }
 func (*ExtractFunction) Description() string {
 	return `Move a run of whole statements into a new function, declared after the one they are in, and call it in their place: in func report(plants []Plant) string, extracting total := 0 and the loop that adds each p.Height to it, as sum, gives total := sum(plants) there and func sum(plants []Plant) int { total := 0; for ...; return total }. Locals the statements use become parameters, and those they set that are used afterwards become results; the result lists both. Statements that use the receiver become a method of its type.
 Identify the statements by file, start_line and end_line: whole statements of one block, as inspect numbers them; or a case's body by function and case ("fern" in function Water, or default), which stays valid after earlier steps; for a value with no case, when the code after the switch is what runs for it, a new case calls a copy of that code. doc becomes the new function's doc comment.
-Returns: when every path returns, the call becomes return sum(...); early error returns (if err != nil { return err }) make the new function return an error, which the call checks.
+Returns: when every path returns, the call becomes return sum(...); early error returns (if err != nil { return err }) make the new function return an error, which the call checks; so do early returns of a string last (a refusal: return nil, "no name") known not to be empty.
 Refuses, saying why: other returns, defer, recover, fallthrough, a break, continue or goto out of the lines, a variable they declare that a pointer or closure keeps and that is used after them.`
 }
 
@@ -118,9 +118,10 @@ type extraction struct {
 
 	returns    []*ast.ReturnStmt // in the selection, outside function literals
 	mode       returnMode
-	exitValues []string // errorExit: the non-error values the early returns return
+	exitValues []string   // errorExit: the non-error values the early returns return
+	exitType   types.Type // errorExit: the last result's type, an error or a string or number whose zero means no exit
 
-	nonNilFuncs map[*types.Func]bool // alwaysNonNil's answers
+	nonNilFuncs map[*types.Func]bool // alwaysNonNil's and alwaysNonZero's answers
 
 	toks []tok // the file's tokens, scanned once
 
@@ -783,12 +784,6 @@ func (x *extraction) analyzeDataFlow() error {
 			if v == x.recv && analysis.IsPointer(v.Type()) {
 				return refactor.Refusef("the receiver %s is a pointer whose own address is taken, or a function literal uses it; a method cannot have a pointer-to-pointer receiver", v.Name())
 			}
-			for _, id := range refs[v] {
-				if x.isDefineTarget(id) {
-					return refactor.Refusef("line %d redeclares %s with :=, which is passed to the new function as a pointer (its address is taken, or a function literal uses it); in the new function, := would assign the pointer. Use = there first",
-						x.line(id.Pos()), v.Name())
-				}
-			}
 			f.params = append(f.params, v)
 			f.pointers[v] = true
 			continue
@@ -1286,6 +1281,7 @@ func (x *extraction) isDefineTarget(id *ast.Ident) bool {
 // other uses become *v, or (*v) where an operand needs parentheses.
 func (x *extraction) pointerEdits() []edit.TextEdit {
 	var edits []edit.TextEdit
+	redeclared := map[*ast.AssignStmt]bool{}
 	for _, s := range x.stmts {
 		ast.Inspect(s, func(n ast.Node) bool {
 			id, ok := n.(*ast.Ident)
@@ -1297,6 +1293,12 @@ func (x *extraction) pointerEdits() []edit.TextEdit {
 				return true
 			}
 			path := analysis.PathTo(x.File, id)
+			if as, ok := path[1].(*ast.AssignStmt); ok && x.isDefineTarget(id) && !redeclared[as] {
+				// v := redeclared: v is now a pointer, so declare the new
+				// names with var and assign through it.
+				redeclared[as] = true
+				edits = append(edits, x.redeclareEdits(as)...)
+			}
 			// The operand id is part of, skipping parentheses.
 			var operand ast.Node = id
 			i := 1
@@ -1354,6 +1356,31 @@ func (x *extraction) pointerEdits() []edit.TextEdit {
 		})
 	}
 	return edits
+}
+
+// redeclareEdits returns the edits that make as, a := that redeclares a
+// variable passed to the new function as a pointer, an = after var
+// declarations of the names it declares: a, v := f() becomes var a T,
+// then a, *v = f().
+func (x *extraction) redeclareEdits(as *ast.AssignStmt) []edit.TextEdit {
+	var decls []string
+	for _, l := range as.Lhs {
+		id, ok := l.(*ast.Ident)
+		if !ok {
+			continue
+		}
+		if v, ok := x.Info.Defs[id].(*types.Var); ok && id.Name != "_" {
+			t, err := x.typeString(v.Name(), v.Type())
+			if err != nil {
+				return nil
+			}
+			decls = append(decls, "var "+v.Name()+" "+t+"\n"+x.indentOf(as.Pos()))
+		}
+	}
+	return []edit.TextEdit{
+		{Start: x.Off(as.Pos()), End: x.Off(as.Pos()), NewText: strings.Join(decls, "")},
+		{Start: x.Off(as.TokPos), End: x.Off(as.TokPos) + 2, NewText: "="},
+	}
 }
 
 // isAssignTarget reports whether id is a whole left-hand operand of = or
@@ -1816,9 +1843,9 @@ func (x *extraction) plan() (*refactor.Plan, error) {
 			}
 			zeros = append(zeros, z)
 		}
-		results = append(results, "error")
+		results = append(results, ts("", x.exitType))
 		bodyEdits = x.rewriteExits(zeros)
-		tail = strings.Join(append(names(f.results), "nil"), ", ")
+		tail = strings.Join(append(names(f.results), x.exitZero()), ", ")
 		errName = x.errorName(f.results)
 	default:
 		for _, v := range f.results {
@@ -1927,11 +1954,11 @@ func (x *extraction) callSite(f *flow, sig *types.Signature, indent string, name
 		// The error is only checked: declare it in the if, where it hides
 		// nothing the call or the return needs.
 		name := "err"
-		if slices.ContainsFunc(x.exitValues, func(v string) bool { return slices.Contains(identsIn(v), name) }) {
+		if !x.isError() || slices.ContainsFunc(x.exitValues, func(v string) bool { return slices.Contains(identsIn(v), name) }) {
 			name = errName
 		}
 		vals := strings.Join(append(append([]string(nil), x.exitValues...), name), ", ")
-		return fmt.Sprintf("%sif %s := %s; %s != nil {\n%s\treturn %s\n%s}", indent, name, call, name, indent, vals, indent)
+		return fmt.Sprintf("%sif %s := %s; %s != %s {\n%s\treturn %s\n%s}", indent, name, call, name, x.exitZero(), indent, vals, indent)
 	}
 	switch x.mode {
 	case terminal:
@@ -1952,7 +1979,7 @@ func (x *extraction) callSite(f *flow, sig *types.Signature, indent string, name
 		}
 		if errName != "" {
 			lhs = append(lhs, errName)
-			fresh = append(fresh, fmt.Sprintf("var %s error", errName))
+			fresh = append(fresh, fmt.Sprintf("var %s %s", errName, ts("", x.exitType)))
 		}
 		switch {
 		case len(lhs) == 0:
@@ -1969,7 +1996,7 @@ func (x *extraction) callSite(f *flow, sig *types.Signature, indent string, name
 		}
 		if errName != "" {
 			vals := strings.Join(append(append([]string(nil), x.exitValues...), errName), ", ")
-			fmt.Fprintf(&site, "\n%sif %s != nil {\n%s\treturn %s\n%s}", indent, errName, indent, vals, indent)
+			fmt.Fprintf(&site, "\n%sif %s != %s {\n%s\treturn %s\n%s}", indent, errName, x.exitZero(), indent, vals, indent)
 		}
 	}
 
@@ -2027,7 +2054,11 @@ func (x *extraction) notes(f *flow, names func(vs []*types.Var) []string) []stri
 	case terminal:
 		notes = append(notes, "the selected lines always return, so the call site returns what the new function returns")
 	case errorExit:
-		notes = append(notes, fmt.Sprintf("the early returns now return their error from %s, and the call site returns it when it is not nil", x.name))
+		if x.isError() {
+			notes = append(notes, fmt.Sprintf("the early returns now return their error from %s, and the call site returns it when it is not nil", x.name))
+		} else {
+			notes = append(notes, fmt.Sprintf("the early returns now return their last value from %s, and the call site returns it when it is not %s", x.name, x.exitZero()))
+		}
 	}
 	if len(f.loopCarried) > 0 {
 		notes = append(notes, fmt.Sprintf("%s %s returned because the selected lines are in a loop and may read %s in the next iteration; if not, the result can be dropped",

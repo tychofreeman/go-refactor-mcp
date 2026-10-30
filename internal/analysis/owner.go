@@ -16,16 +16,28 @@ const (
 
 // Owns says who can reach the variable v: a local nothing else reaches
 // is ThisCode; one whose address is taken, or that a closure not known
-// to run only during its statement captures, is ThisFunc; anything else
-// is Anyone.
+// to run only during its statement captures and something writes after
+// its declaration, is ThisFunc; anything else is Anyone. A captured local
+// nothing writes again holds the same value wherever the closure runs.
 func (f *Func) Owns(v *types.Var) Owner {
 	switch {
 	case v == nil || !f.IsLocal(v):
 		return Anyone
-	case f.Addressed[v] || f.CapturedAsync[v]:
+	case f.Addressed[v] || f.CapturedAsync[v] && f.WrittenAgain(v):
 		return ThisFunc
 	}
 	return ThisCode
+}
+
+// WrittenAgain reports whether the function writes v anywhere but where
+// it declares it.
+func (f *Func) WrittenAgain(v *types.Var) bool {
+	for _, n := range f.Modified[v] {
+		if !(n.Pos() <= v.Pos() && v.Pos() < n.End()) {
+			return true
+		}
+	}
+	return false
 }
 
 // Owner says who can reach the memory the assignable expression x names:

@@ -2484,6 +2484,27 @@ hand or a tool got in the way.
     lines where `more, why := ...` redeclares a variable a closure
     captures (it would assign the pointer); add_result refuses a return
     of another call's results rather than splitting it into variables.
+    *Done* (2026-10-30): extract_function treats a string last result as
+    it treats an error, "" for nil (`exitKind`): early returns whose
+    string is known not to be empty (a constant, fmt.Sprintf of a format
+    with text besides its verbs, a variable checked against "", or a
+    call of a function whose every return passes such a string) become
+    the new function's, and the call site checks `why != ""`, named after
+    the enclosing function's last result when it is named. Numbers were
+    left out: an int result returned early reads as a value, not an exit.
+    Run on the old code: introduce_parameter's per-call text now
+    extracts; add_result's per-method part and CaseLines' lookup stop at
+    the next obstacle, a variable that `visit`, a closure passed to the
+    compiler's `ForEachChild`, uses after the lines (no known function
+    that runs it only during the call). Of the four defects: a local a
+    closure captures counts as the function's own memory only when
+    something writes it after its declaration (`Func.WrittenAgain`), so
+    `t.findCalls` introduces; a `:=` that redeclares a variable passed as
+    a pointer becomes `var a T` and `a, *v = f()` (`redeclareEdits`);
+    add_result splits `return f()` into `r1, r2 := f()` and `return r1,
+    r2, value` (`freshNames`). `all_occurrences` on `found[0]` was right
+    to refuse: `found` is captured by a closure the compiler's
+    `ForEachChild` receives, which could keep it and run it later.
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the

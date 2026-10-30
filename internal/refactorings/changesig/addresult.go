@@ -29,7 +29,7 @@ func (*AddResult) Name() string { return "add_result" }
 func (*AddResult) Description() string {
 	return `Add a result to a function or method, last, with the same value at every return, and update every call: with type error and value nil, func load() string becomes func load() (string, error), each return x becomes return x, nil, and v := load() becomes v, _ := load(); a call as a statement stays. Then make the body return real errors.
 Identify the function by file and name, or by line at its declaration or any call. value must have no side effects and not be able to panic.
-Refuses, saying why: named results, a call whose result is used inside an expression or returned by the caller (assign it to a variable first), a return that gives another call's results, a declaration of the call's results that states their type, a function used as a value.`
+Refuses, saying why: named results, a call whose result is used inside an expression or returned by the caller (assign it to a variable first), a declaration of the call's results that states their type, a function used as a value.`
 }
 
 func (*AddResult) InputSchema() json.RawMessage {
@@ -178,7 +178,15 @@ func (t *target) returnEdits(value string) ([]edit.TextEdit, error) {
 				at := t.Off(n.Return) + len("return")
 				es = append(es, edit.TextEdit{Start: at, End: at, NewText: " " + value})
 			case len(n.Results) < before:
-				err = refactor.Refusef("the return at %s gives the results of another call; assign them to variables and return those first", t.WS.Position(n.Pos()))
+				// return f(...): assign its results first, then return them.
+				names := t.freshNames(n.Pos(), before)
+				if names == nil {
+					err = refactor.Refusef("the return at %s gives the results of another call, and no names r1, r2, ... are free there to hold them; assign them to variables and return those first", t.WS.Position(n.Pos()))
+					break
+				}
+				indent := strings.Repeat("\t", t.WS.Fset.Position(n.Pos()).Column-1)
+				list := strings.Join(names, ", ")
+				es = append(es, edit.TextEdit{Start: t.Off(n.Pos()), End: t.Off(n.End()), NewText: list + " := " + string(t.Src[t.Off(n.Results[0].Pos()):t.Off(n.Results[0].End())]) + "\n" + indent + "return " + list + ", " + value})
 			default:
 				at := t.Off(n.Results[len(n.Results)-1].End())
 				es = append(es, edit.TextEdit{Start: at, End: at, NewText: ", " + value})
@@ -201,6 +209,28 @@ func (t *target) returnEdits(value string) ([]edit.TextEdit, error) {
 	}
 	at := t.Off(body.Lbrace) + 1
 	return append(es, edit.TextEdit{Start: at, End: at, NewText: " return " + value + " "}), nil
+}
+
+// freshNames returns n names, r1 to rn (or res1, v1, ...), that nothing
+// visible at pos uses and the block there does not declare; or nil.
+func (t *target) freshNames(pos token.Pos, n int) []string {
+	scope := t.Pkg.Types.Scope().Innermost(pos)
+	for _, base := range []string{"r", "res", "v"} {
+		var names []string
+		for i := 1; i <= n; i++ {
+			name := fmt.Sprintf("%s%d", base, i)
+			if scope != nil {
+				if _, o := scope.LookupParent(name, token.NoPos); o != nil {
+					break
+				}
+			}
+			names = append(names, name)
+		}
+		if len(names) == n {
+			return names
+		}
+	}
+	return nil
 }
 
 // callResultEdit makes call c take the new result too: v, _ := f() for
