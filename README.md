@@ -2337,12 +2337,28 @@ hand or a tool got in the way.
     2. **create_from_usage stubs functions and methods only.** A test
        written first that does `new Cart()` or reads `x.total` gets no
        class or property; no `to_file`, no `results`
-       (`tsapi/stubs.go`).
+       (`tsapi/stubs.go`). *Done:* `new Pot(3)` declares
+       `class Pot { constructor(n: number) {} }`, before the statement
+       that first makes it (classes are not hoisted) or exported from the
+       module the file imports it from; a property read or written on a
+       class or interface becomes `size!: number;` (`size: number;` in
+       an interface), typed from its place or what is assigned;
+       `results` gives types the uses do not tell; `to_file` puts the
+       file's own stubs in another file, exported and imported.
     3. **rename by `Class.member`, and locals by `function`.** A member
        needs a line ("declares no top-level", `ts/refactorings/rename`);
-       the lookup other tools use for members could serve it.
+       the lookup other tools use for members could serve it. *Done:*
+       without line, `Class.member` names a member of a class, interface
+       or object type; `function` (name or `Class.method`) finds a
+       parameter, variable or constant of that function, and refuses one
+       declared twice in it, giving the lines.
     4. **The server's instructions are Go's** in a TypeScript-only
        project ("tools for the Go module"); only inspect's text adapts.
+       *Done:* `TypeScriptInstructions` for a project without Go, with
+       TypeScript's tools, rules (errors already there are tolerated) and
+       a worked batch that `TestTypeScriptInstructions` runs; with both
+       languages, Go's text names TypeScript in its first line. Go alone
+       is unchanged, for its baselines.
     5. **Method families.** add_parameter and the other signature tools
        on a method that implements an interface or overrides one are
        refused by the type check; Go changes the family together

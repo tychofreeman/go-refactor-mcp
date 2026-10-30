@@ -297,6 +297,11 @@ patterns sessions use, with their steps, in `docs/patterns.md`.
   path assigns it, and a call at a module's top level is still refused
   (its variable would be the module's). Guards with a last return
   still inline as a conditional expression, which comes first.
+- **Instructions by language** (2026-10-29, item 43.4): a project
+  without Go gets `TypeScriptInstructions` (internal/mcpserver), whose
+  example batch `TestTypeScriptInstructions` runs and whose tool list
+  must name every tool published; Go's text is unchanged, so Go's A/B
+  baselines hold, and names TypeScript only when both are there.
 - **A parameter may take a package variable's place** (2026-10-25, the
   user): add_parameter's `replace_variable` lets the new parameter hide
   the package variable the body reads. Where the engine cannot prove a

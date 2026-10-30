@@ -3644,3 +3644,13 @@ with the same name in the scratchpad ran first and was undone with
 All with replace_text through the CLI, from an audit run by a subagent
 and checked against the code; replace_statements' text trimmed four
 times to fit its size test. Nothing by hand.
+
+## 2026-10-29: TypeScript stubs for classes and properties, rename by member and local, instructions (items 43.2-43.4)
+
+All through the CLI, tests first in batches checked at their end (new
+code written in scratch files and loaded by Python). Two test
+expectations were wrong at first: a class stub's variable named like the
+class (`pot`, `Pot`) was skipped as a misspelling, and the class had to
+go before its first use (classes are not hoisted). A predicate's name
+guessed wrong (`ast.IsParameter`, not `IsParameterDeclaration`) was
+refused at the end of its batch. Nothing by hand.

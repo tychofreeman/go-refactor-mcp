@@ -28,8 +28,8 @@ func New() *CreateFromUsage { return &CreateFromUsage{} }
 func (*CreateFromUsage) Name() string { return "create_from_usage" }
 
 func (*CreateFromUsage) Description() string {
-	return `Declare stubs for functions and methods a file calls that nothing declares, typed from the calls: an edit, so that a test can be written first. With a test calling shade(10) where const shaded: number = shade(10), it declares function shade(n: number): number { throw new Error("not implemented"); }; in the module the file imports shade from, exported, if it does; a method in the class (a signature in the interface) it is called on. A batch checked at its end declares them for you.
-Refuses, saying why: a name the file does not call; a call whose result type its place does not tell.`
+	return `Declare stubs for what a file uses that nothing declares, typed from the uses: an edit, so that a test can be written first. With a test calling shade(10) where const shaded: number = shade(10), it declares function shade(n: number): number { throw new Error("not implemented"); }; in the module the file imports shade from, exported, if it does. new Pot(3) declares class Pot { constructor(n: number) {} }; a method called on a class (or interface) goes in it, and a property read or written there becomes size!: number. results gives types the uses do not tell; to_file puts the file's own stubs in another file. A batch checked at its end declares them for you.
+Refuses, saying why: a name the file does not call, make or read; a use whose type its place does not tell (give results).`
 }
 
 func (*CreateFromUsage) InputSchema() json.RawMessage {
@@ -37,7 +37,9 @@ func (*CreateFromUsage) InputSchema() json.RawMessage {
   "type": "object",
   "properties": {
     "file":  {"type": "string", "description": "The file that calls them, relative to the root."},
-    "names": {"type": "array", "items": {"type": "string"}, "description": "The names it calls that nothing declares."}
+    "names":   {"type": "array", "items": {"type": "string"}, "description": "The names it uses that nothing declares."},
+    "results": {"type": "object", "additionalProperties": {"type": "string"}, "description": "Optional: types by name, for uses that do not tell them: a function's or method's result, a property's type ({\"shade\": \"number\"})."},
+    "to_file": {"type": "string", "description": "Optional: the file, relative to the root, for the stubs of the file's own names, exported and imported; created if new."}
   },
   "required": ["file", "names"],
   "additionalProperties": false
@@ -96,8 +98,10 @@ func (*CreateFromUsage) Declared(ws *workspace.Workspace) map[string]bool {
 
 func (*CreateFromUsage) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
 	var a struct {
-		File  string   `json:"file"`
-		Names []string `json:"names"`
+		File    string            `json:"file"`
+		Names   []string          `json:"names"`
+		Results map[string]string `json:"results"`
+		ToFile  string            `json:"to_file"`
 	}
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
@@ -109,16 +113,31 @@ func (*CreateFromUsage) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 	if len(a.Names) == 0 {
 		return nil, refactor.Refusef("give the names to declare")
 	}
-	stubs, why := ws.Stubs(path, a.Names)
+	stubs, why := ws.Stubs(path, a.Names, a.Results)
 	if why != "" {
 		return nil, refactor.Refusef("%s", why)
 	}
+	// to_file takes the stubs of the file's own names, exported, and the
+	// file imports them.
+	var moved []tsapi.Import
+	if a.ToFile != "" {
+		to := ws.Abs(a.ToFile)
+		for i, s := range stubs {
+			if s.Owner == "" && s.File == path {
+				stubs[i].File, stubs[i].Text, stubs[i].Before = to, "export "+s.Text, -1
+				moved = append(moved, tsapi.Import{Name: s.Name, From: to})
+			}
+		}
+	}
 	// Stubs going to the same place go in one edit.
-	type place struct{ file, owner string }
+	type place struct {
+		file, owner string
+		before      int
+	}
 	var order []place
 	byPlace := map[place][]tsapi.Stub{}
 	for _, s := range stubs {
-		k := place{s.File, s.Owner}
+		k := place{s.File, s.Owner, s.Before}
 		if byPlace[k] == nil {
 			order = append(order, k)
 		}
@@ -138,17 +157,23 @@ func (*CreateFromUsage) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 			plan.Choices = append(plan.Choices, fmt.Sprintf("%s, in %s", strings.SplitN(s.Text, " {", 2)[0], where))
 		}
 		var e edit.TextEdit
-		if k.owner == "" {
+		switch {
+		case k.before >= 0:
+			e = edit.TextEdit{Start: k.before, End: k.before, NewText: strings.Join(texts, "\n\n") + "\n\n"}
+		case k.owner == "":
 			src, err := os.ReadFile(k.file)
-			if err != nil {
+			if err != nil && !os.IsNotExist(err) {
 				return nil, err
 			}
 			lead := "\n"
-			if len(src) > 0 && src[len(src)-1] != '\n' {
+			switch {
+			case len(src) == 0:
+				lead = ""
+			case src[len(src)-1] != '\n':
 				lead = "\n\n"
 			}
 			e = edit.TextEdit{Start: len(src), End: len(src), NewText: lead + strings.Join(texts, "\n\n") + "\n"}
-		} else {
+		default:
 			pl, _, why := ws.MemberPlace(k.file, k.owner, "", "")
 			if why != "" {
 				return nil, refactor.Refusef("%s", why)
@@ -159,6 +184,16 @@ func (*CreateFromUsage) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 			files = append(files, k.file)
 		}
 		byFile[k.file] = append(byFile[k.file], e)
+	}
+	if len(moved) > 0 {
+		imports, why := ws.AddImports(path, moved)
+		if why != "" {
+			return nil, refactor.Refusef("%s", why)
+		}
+		if byFile[path] == nil {
+			files = append(files, path)
+		}
+		byFile[path] = append(byFile[path], imports.Edits...)
 	}
 	sort.Strings(files)
 	for _, f := range files {

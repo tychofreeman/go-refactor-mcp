@@ -1070,6 +1070,51 @@ func TestGoAndTypeScript(t *testing.T) {
 	mustContain(t, "a batch over both", out, "more than one language")
 }
 
+// A TypeScript-only project gets TypeScript's instructions, which name
+// every tool it publishes, and their example batch runs as written.
+func TestTypeScriptInstructions(t *testing.T) {
+	dir := tsSetup(t, map[string]string{
+		"src/calc.ts":      "export function scale(n: number): number {\n  return n * 2;\n}\n",
+		"src/calc.test.ts": "import { scale } from \"./calc\";\n\nexport const doubled = scale(2);\n",
+	})
+	cs := connect(t, New(dir))
+	got := cs.InitializeResult().Instructions
+	if !strings.HasPrefix(got, "Refactoring and editing tools for the TypeScript") || strings.Contains(got, "Go module") {
+		t.Errorf("the instructions are not TypeScript's: %.80s", got)
+	}
+	if n := len(got); n > 6000 {
+		t.Errorf("the instructions are %d characters, more than 6000", n)
+	}
+	_, groups, _ := strings.Cut(got, "Which tool, by what you want to do:")
+	groups, _, _ = strings.Cut(groups, "\n\n")
+	for name := range toolDescriptions(t, cs) {
+		if !regexp.MustCompile(`\b` + name + `\b`).MatchString(groups) {
+			t.Errorf("%s is not in the TypeScript instructions' list of tools", name)
+		}
+	}
+	_, example, _ := strings.Cut(got, "Example batch")
+	start, end := strings.Index(example, "{"), strings.Index(example, "\n\n")
+	var args map[string]any
+	if start < 0 || end < start || json.Unmarshal([]byte(example[start:end]), &args) != nil {
+		t.Fatalf("the example is not one JSON object:\n%s", example)
+	}
+	out, _ := call(t, cs, "batch", args)
+	mustContain(t, "example batch", out, "APPLIED batch")
+	if src, _ := os.ReadFile(filepath.Join(dir, "src/calc.ts")); strings.Contains(string(src), "not implemented") || !strings.Contains(string(src), "stretch") {
+		t.Errorf("the stub was not replaced, or scale not renamed:\n%s", src)
+	}
+}
+
+// A project with both languages gets Go's instructions, saying that
+// TypeScript files work through the same tools.
+func TestGoAndTypeScriptInstructions(t *testing.T) {
+	dir := tsSetup(t, map[string]string{"go.mod": "module example.com/m\n\ngo 1.22\n", "m.go": "package m\n"})
+	got := connect(t, New(dir)).InitializeResult().Instructions
+	if !strings.HasPrefix(got, "Refactoring and editing tools for the Go module in this project and for its TypeScript") {
+		t.Errorf("the instructions do not name both languages: %.120s", got)
+	}
+}
+
 // The build version starts with Version and may add the module version
 // or commit it was built from.
 func TestBuildVersion(t *testing.T) {
