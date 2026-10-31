@@ -82,3 +82,16 @@ func TestReplaceTextOptions(t *testing.T) {
 		t.Errorf("want a refusal naming prune, got %s", res)
 	}
 }
+
+// function's span takes in its doc comment, as Go's does.
+func TestReplaceTextInFunctionDoc(t *testing.T) {
+	ws, dir := solution(t)
+	src := "/** water gives liters L. */\nexport function water(liters: number): string {\n  return `${liters} L`;\n}\n"
+	if err := os.WriteFile(filepath.Join(dir, "src/plant.ts"), []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res := run(t, ws, `{"file": "src/plant.ts", "function": "water", "old": "water gives", "new": "water pours"}`)
+	if !res.Applied || !strings.Contains(read(t, dir, "src/plant.ts"), "/** water pours liters L. */") {
+		t.Fatalf("doc comment not changed: %s", res)
+	}
+}

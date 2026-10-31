@@ -2721,7 +2721,8 @@ hand or a tool got in the way.
        a pointer indirection's operand, a selector's operand), not a
        variable assigned to. TypeScript's inline_variable not checked.
     3. replace_text with `function` does not search the function's doc
-       comment.
+       comment. *Done* (2026-10-31): Go's search starts at the doc
+       comment; TypeScript's already started at the JSDoc (now tested).
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the

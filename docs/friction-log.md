@@ -4045,3 +4045,10 @@ No code. `refactor-tokens` on two transcripts, and a throwaway script
 in the scratchpad that passed each Bash call through the built guard,
 since refactor-tokens does not tell reads of Go from other Bash
 reads. Docs with replace_text. Nothing by hand.
+
+## 2026-10-31: replace_text's function and doc comments (roadmap 48.3)
+
+A golden with create_file, seen failing; replace_text in `fileEdit`
+made it pass, and in both languages' argument descriptions. The
+TypeScript test, added with add_declaration, passed at once: its span
+already took in the JSDoc. Read through inspect. Nothing by hand.
