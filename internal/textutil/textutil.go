@@ -207,3 +207,15 @@ func NextLine(src []byte, off int) int {
 	}
 	return len(src)
 }
+
+// LineEnd returns the offset of the newline that ends the line of offset
+// at in src, or len(src) on the last line: where code goes after a
+// declaration, so a comment that follows it on its line stays with it.
+func LineEnd(src []byte, at int) int {
+	if j := strings.IndexByte(string(src[at:]), '\n'); j >= 0 {
+		at += j
+	} else {
+		at = len(src)
+	}
+	return at
+}

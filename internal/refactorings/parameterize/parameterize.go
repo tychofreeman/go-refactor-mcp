@@ -284,7 +284,8 @@ func (*Parameterize) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refact
 		}
 		es := []edit.TextEdit{{Start: g.Off(body.Lbrace) + 1, End: g.Off(body.Rbrace), NewText: stmt}}
 		if i == 0 {
-			es = append(es, edit.TextEdit{Start: g.Off(g.decl.End()), End: g.Off(g.decl.End()), NewText: "\n\n" + text})
+			at := textutil.LineEnd(g.Src, g.Off(g.decl.End()))
+			es = append(es, edit.TextEdit{Start: at, End: at, NewText: "\n\n" + text})
 		}
 		edits = append(edits, edit.FileEdit{Path: g.path, Edits: es})
 	}

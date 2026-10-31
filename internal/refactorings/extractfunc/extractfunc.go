@@ -2079,13 +2079,7 @@ func (x *extraction) callExpr(f *flow) string {
 func (x *extraction) insertOffset(decl ast.Decl) int {
 	// Insert after the line on which the enclosing declaration ends, so a
 	// trailing comment there stays with it.
-	at := x.Off(decl.End())
-	if i := strings.IndexByte(string(x.Src[at:]), '\n'); i >= 0 {
-		at += i
-	} else {
-		at = len(x.Src)
-	}
-	return at
+	return textutil.LineEnd(x.Src, x.Off(decl.End()))
 }
 
 // checkSpelledTypes refuses when a type written out in the function body

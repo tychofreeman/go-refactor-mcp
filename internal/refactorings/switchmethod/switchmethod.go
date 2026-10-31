@@ -790,9 +790,10 @@ func (s *switcher) plan() (*refactor.Plan, error) {
 		repl = fmt.Sprintf("if %s == nil {\n%s%s} else {\n%s\t%s\n%s}", s.Text(s.subject), s.body(stays, ind+"\t"), ind, ind, call, ind)
 	}
 
+	at := textutil.LineEnd(s.Src, s.Off(s.fd.End()))
 	edits := []edit.TextEdit{
 		{Start: s.Off(s.ts.Pos()), End: s.Off(s.ts.End()), NewText: repl},
-		{Start: s.Off(s.fd.End()), End: s.Off(s.fd.End()), NewText: "\n\n" + strings.Join(methods, "\n\n")},
+		{Start: at, End: at, NewText: "\n\n" + strings.Join(methods, "\n\n")},
 	}
 	ifaceEdits, ifacePath, err := s.interfaceEdit(path, adder)
 	if err != nil {
