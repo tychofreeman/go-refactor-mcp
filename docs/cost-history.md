@@ -1618,6 +1618,34 @@ purpose in this repo's own sessions was a check where a resolution failed
 (#510), which this run does not measure; whether it pays there needs a
 session's transcript with it against one without (`refactor-tokens`).
 
+## 22. The read guard in this repo's own sessions (Oct 31)
+
+Roadmap 47.3: does the hook change how this project's sessions read Go?
+Two transcripts on the user's workstation, measured with
+`refactor-tokens` and by passing every Bash call through the guard
+(the version of #518, which follows `cd`): the last session before the
+hook (Oct 18-27, 4,162 requests, the TypeScript work among much else)
+and the first with it (Oct 31, 123 requests: #513-#519, small fixes
+and docs).
+
+| per 100 requests | before (no hook) | with the hook |
+|---|---|---|
+| Go read with sed, cat, grep and the like | 20.3 | 0 (2 refused) |
+| Read of a Go file | 0.4 | 0 |
+| inspect | 2.0 | 9.8 |
+| Go text read, characters per request | 560 | 197 |
+| refused reads, % of turns | 0.03 | 3.9 (2 of 4 wrong, fixed in #518) |
+
+The hook did what the resolutions had not: Go was read only through
+inspect, about five times as often as before, and about a third as much
+Go text per request. The cost was four refused turns in 103, two of
+them fixture reads it should have allowed. What it saved in tokens
+cannot be read from these two: input per request was 295K before and
+148K with it, but the sessions differ in length, compactions and work,
+and Go reading was a few percent of input in both. Derived share was
+19% in both. One session each; the comparison is of habit, which the
+hook changed completely, not of cost. Kept.
+
 ## What made the difference
 
 - **Smaller results** (#75, rename locations): the largest single win when

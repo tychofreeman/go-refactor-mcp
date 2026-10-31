@@ -580,7 +580,9 @@ patterns sessions use, with their steps, in `docs/patterns.md`.
   failed `go test` on main there). On a machine where an import of
   `strings` is refused, suspect the GOROOT layout first.
   It is not a saving for a fresh model; its case is this repo's own
-  sessions, not yet measured. Two of its refusals were wrong (a fixture
+  sessions: there it ended reading Go by shell (20 reads per 100
+  requests before, none after) for 4% of turns refused (cost-history
+  22, 2026-10-31), so it stays. Two of its refusals were wrong (a fixture
   read after `cd` into testdata/), and its advice named a CLI the A/B
   arms lack; both fixed 2026-10-31 (roadmap 47.1-47.2: paths resolved
   from the hook's `cwd`, the `cd`s and `NAME=value`s before them; the

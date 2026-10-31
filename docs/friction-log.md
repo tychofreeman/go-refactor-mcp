@@ -4038,3 +4038,10 @@ replace_text and add_declaration made them pass, and
 replace_declaration deleted the `advice` constant that `adviceFor`
 replaced. inspect with `names` and `file` together was refused (names
 alone). Read through inspect. Nothing by hand.
+
+## 2026-10-31: measuring the read guard (roadmap 47.3)
+
+No code. `refactor-tokens` on two transcripts, and a throwaway script
+in the scratchpad that passed each Bash call through the built guard,
+since refactor-tokens does not tell reads of Go from other Bash
+reads. Docs with replace_text. Nothing by hand.
