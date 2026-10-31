@@ -4,6 +4,11 @@
 // refused, and what reading cost by kind.
 //
 //	refactor-tokens [transcript.jsonl | dir]...
+//	refactor-tokens -log .claude/session-log/BRANCH.jsonl
+//
+// With -log it reads session logs (cmd/session-log) instead: what went
+// through gorefactor, what was done by hand, and what was done by hand
+// after gorefactor refused, without token counts.
 //
 // With no arguments it reads every session of the project in the current
 // directory (~/.claude/projects/<project>/*.jsonl).
@@ -20,6 +25,8 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/tokens"
 )
 
+var sessionLog = flag.Bool("log", false, "read session logs (cmd/session-log), not transcripts")
+
 func main() {
 	flag.Usage = func() {
 		fmt.Fprintln(flag.CommandLine.Output(), "usage: refactor-tokens [transcript.jsonl | dir]...")
@@ -28,6 +35,16 @@ func main() {
 	flag.Parse()
 	log.SetFlags(0)
 	args := flag.Args()
+	if *sessionLog {
+		for _, f := range args {
+			w, err := analyzeLog(f)
+			if err != nil {
+				log.Fatalf("%s: %v", f, err)
+			}
+			fmt.Print(w.Markdown())
+		}
+		return
+	}
 	if len(args) == 0 {
 		dir, err := projectDir()
 		if err != nil {
@@ -91,4 +108,13 @@ func analyzeFile(path string) (*tokens.Report, error) {
 	}
 	defer f.Close()
 	return tokens.Analyze(f)
+}
+
+func analyzeLog(path string) (*tokens.WorkReport, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return tokens.AnalyzeWork(f)
 }

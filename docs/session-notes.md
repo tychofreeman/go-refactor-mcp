@@ -23,6 +23,15 @@ patterns sessions use, with their steps, in `docs/patterns.md`.
   same place, so parallel PRs conflicted there one after another
   (2026-10-22, #263-#267).
 - When the user says "do X, then Y", do them in order, each in its own PR.
+- **"What's next?"** (2026-10-31, the user): the `whats-next` skill
+  offers the next items and keeps a record of each in
+  `docs/sessions/<branch>.md`, so the user can assess whether a session
+  used the tools or worked around them. The user chose both an objective
+  log (the hook `cmd/session-log`, every call, read by `refactor-tokens
+  -log`) and the model's own notes (why a hand edit, what followed a
+  refusal, what a read answered), and a file per item in docs/ over a
+  summary in the friction log. A hook, because a habit named in the
+  instructions did not change (the read guard's story, below).
 - **Look for a composition before logging a gap** (2026-10-29, the
   user). The 34 calls of `set` (Oct 25) were logged as "no tool
   replaces each call with a call chosen by its argument"; the user saw
