@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -25,6 +26,7 @@ type call struct {
 		FilePath string `json:"file_path"`
 		Command  string `json:"command"`
 	} `json:"tool_input"`
+	Cwd string `json:"cwd"`
 }
 
 // decision is a PreToolUse hook's answer that denies the call, with the
@@ -36,9 +38,6 @@ type decision struct {
 		PermissionDecisionReason string `json:"permissionDecisionReason"`
 	} `json:"hookSpecificOutput"`
 }
-
-// advice says how to read Go instead.
-const advice = `Read Go through inspect: a file's outline (inspect with file), declarations by name (names: ["F", "T.M"]), or lines (targets with file, start_line and end_line). From the CLI: refactor inspect file=PATH, or refactor inspect '{"names":["F"]}'. Files under testdata/ may be read directly.`
 
 func main() {
 	var c call
@@ -55,7 +54,8 @@ func main() {
 	var out decision
 	out.HookSpecificOutput.HookEventName = "PreToolUse"
 	out.HookSpecificOutput.PermissionDecision = "deny"
-	out.HookSpecificOutput.PermissionDecisionReason = why + "\n" + advice
+	_, err := exec.LookPath("refactor")
+	out.HookSpecificOutput.PermissionDecisionReason = why + "\n" + adviceFor(err == nil)
 	json.NewEncoder(os.Stdout).Encode(out)
 }
 
@@ -68,8 +68,29 @@ func refusal(c call) string {
 			return "Read of " + c.ToolInput.FilePath + " refused."
 		}
 	case "Bash":
+		dir, vars := c.Cwd, map[string]string{}
+		at := func(p string) string { // where p points, from dir
+			p = os.Expand(p, func(k string) string {
+				if v, ok := vars[k]; ok {
+					return v
+				}
+				return "$" + k
+			})
+			if dir != "" && !filepath.IsAbs(p) {
+				p = filepath.Join(dir, p)
+			}
+			return p
+		}
 		for _, words := range commands(c.ToolInput.Command) {
-			if f := readsGo(words); f != "" {
+			if len(words) == 2 && words[0] == "cd" {
+				dir = at(words[1])
+				continue
+			}
+			if name, value, ok := strings.Cut(words[0], "="); ok && len(words) == 1 && name != "" && !strings.ContainsAny(name, "-$") {
+				vars[name] = value
+				continue
+			}
+			if f := readsGo(words, at); f != "" {
 				return fmt.Sprintf("%s of %s refused.", words[0], f)
 			}
 		}
@@ -90,8 +111,9 @@ var readers = map[string]bool{"sed": true, "cat": true, "head": true, "tail": tr
 // valued are grep's and rg's flags whose value is the next word.
 var valued = map[string]bool{"-e": true, "-f": true, "-A": true, "-B": true, "-C": true, "-m": true, "-g": true, "-t": true, "-T": true, "-d": true, "-D": true}
 
-// readsGo is the Go source file the command words reads, or "".
-func readsGo(words []string) string {
+// readsGo is the Go source file the command words reads, or ""; at
+// says where an operand points.
+func readsGo(words []string, at func(string) string) string {
 	for len(words) > 0 && strings.Contains(words[0], "=") && !strings.HasPrefix(words[0], "-") {
 		words = words[1:] // VAR=value before the command
 	}
@@ -121,7 +143,7 @@ func readsGo(words []string) string {
 		}
 	}
 	for _, o := range operands {
-		if goSource(o) {
+		if goSource(at(o)) {
 			return o
 		}
 	}
@@ -190,4 +212,14 @@ func commands(line string) [][]string {
 	}
 	endCommand()
 	return out
+}
+
+// adviceFor says how to read Go instead, naming the CLI when cli says it
+// is installed.
+func adviceFor(cli bool) string {
+	a := `Read Go through inspect: a file's outline (inspect with file), declarations by name (names: ["F", "T.M"]), or lines (targets with file, start_line and end_line).`
+	if cli {
+		a += ` From the CLI: refactor inspect file=PATH, or refactor inspect '{"names":["F"]}'.`
+	}
+	return a + ` Files under testdata/ may be read directly.`
 }

@@ -4026,3 +4026,15 @@ step with two package patterns (`./a/... ./b/...`) matched no package:
 `packages` takes one pattern. The read guard refused two fixture reads
 under testdata/ (a relative path after `cd`, and a path in a shell
 variable): roadmap 47.1. Read through inspect. Nothing by hand.
+
+## 2026-10-31: the read guard follows cd (roadmap 47.1-47.2)
+
+In TDD's order as CLAUDE.md now gives it: the tests with
+add_declaration (stubs for `call.Cwd` and `adviceFor`), seen failing;
+the least code needed a new parameter of `readsGo`, a refactoring, so
+the tests were undone, add_parameter gave `readsGo` an `at` function
+(the identity) while green, and the tests were added again; then
+replace_text and add_declaration made them pass, and
+replace_declaration deleted the `advice` constant that `adviceFor`
+replaced. inspect with `names` and `file` together was refused (names
+alone). Read through inspect. Nothing by hand.

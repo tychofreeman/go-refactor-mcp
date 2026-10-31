@@ -2677,10 +2677,15 @@ hand or a tool got in the way.
        path as given. Met again on 2026-10-31 (48.2): `cat in/m.go`
        after `cd` into a testdata directory, and `cat $d/in/m.go` with
        `d` a testdata path (a variable is not expanded either). Resolve paths against the `cd`s before them, and
-       the hook input's `cwd`.
+       the hook input's `cwd`. *Done* (2026-10-31): a path is judged
+       after the hook's `cwd`, each `cd` before it and the line's
+       `NAME=value` assignments (`$d`, `${d}`); a variable set
+       elsewhere stays as written.
     2. **Advice for where it runs.** The refusal names the `refactor`
        CLI, which a session with the MCP does not need and the A/B arms
-       do not have (one turn lost to `which refactor`).
+       do not have (one turn lost to `which refactor`). *Done*
+       (2026-10-31): the CLI is named only when `refactor` is on the
+       PATH.
     3. **Measure it where it was meant to work**: this repo's own
        sessions, a transcript with the hook against one before it
        (`refactor-tokens`, reads by kind and requests per step), before
