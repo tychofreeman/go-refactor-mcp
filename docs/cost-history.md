@@ -76,6 +76,7 @@ refactorings, through gorefactor.
 | ab-features-denied | #133–#134: create_file for any file in the instructions; replace_text `files` | $2.34 · 5.21M · 7/8 | | |
 | ab-features-type-errors | #181–#190: type-error help (`claude-md-refactor-first-bash`) | $2.22 · 4.93M · 6/8 | | |
 | ab-features-descriptions | #255–#259: every description shorter (8,700 words to 5,200), with examples | $2.09 · 4.51M · 7/8 | | |
+| ab-features-read-guard | read guard (#510): mcp $2.71 · 7.62M · 6/8 against guarded $2.95 · 9.15M · 5/8, from a cloud session (section 21) | | | |
 
 The shorter descriptions, against `ab-features-type-errors` (same
 CLAUDE.md): cost 6% lower, input 9% lower, 111 turns with tool calls
@@ -1540,6 +1541,59 @@ gorefactor call, against one denied Edit for manual. By cause:
 
 Reading was through inspect and Bash alike (inspect 18K tokens of
 results, Bash 32K, Grep 13K).
+
+## 21. The read guard on the feature tasks (Oct 30)
+
+Whether `cmd/read-guard` (#510), the hook that refuses reading Go other
+than through `inspect`, makes a fresh model cheaper. The four feature
+tasks, Sonnet, 2 runs each, in two arms that differ only by the hook: mcp,
+and guarded (the mcp arm with the hook given through `claude -p
+--settings`), both with `eval-tasks/claude-md-refactor-first-bash`
+(`guarded.md` is a copy of `mcp.md`, which already says to read Go with
+inspect). `eval-runs/ab-features-read-guard`, $5.66.
+
+The run was made from a claude.ai cloud session, whose nested `claude -p`
+starts with about 43K tokens of context (61K a request here, against
+about 39K in the earlier feature runs), so its totals are not
+comparable with the rows above; compare the two arms with each other.
+
+| task | mcp | guarded |
+|---|---|---|
+| symbol-addressing | $0.37 · 21.5 turns · 0/2 | $0.37 · 33.0 · 0/2 |
+| case-clause | $0.27 · 29.0 · 2/2 | $0.37 · 46.5 · 1/2 |
+| no-echo | $0.37 · 27.5 · 2/2 | $0.35 · 27.0 · 2/2 |
+| compact-diffs | $0.35 · 25.0 · 2/2 | $0.38 · 34.0 · 2/2 |
+| all | $2.71 · 7.62M · 124 requests · 6/8 | $2.95 · 9.15M · 149 · 5/8 |
+
+The hook did what it is for: no Go file was read whole. Read and Bash
+reads fell from 411K tokens of context to 148K, and every Read left was of
+a fixture. But the reading moved to inspect (695K to 1,121K) and Grep (667K
+to 867K), so reading as a whole rose 15% (1.87M to 2.14M), and the arm took
+20% more requests and cost 9% more. Turns with tool calls: 116 against 141;
+refused Bash reads 4 against 11, 6 of them the hook's; refused gorefactor
+calls 6 against 8. The cost difference is within the noise of 2 runs a
+task, the turns are not: the guarded arm took more in three of the four
+tasks, reading in smaller pieces (inspect 34 calls against 48, Grep 24
+against 38).
+
+Of the hook's 6 refusals, 4 were what it means to refuse (`grep -n
+"^func" internal/workspace/*.go` and the like) and 2 were wrong: a fixture
+read as `cat in/a.go` after `cd` into `testdata/`, since the guard judges a
+path without the `cd` before it. Its advice names the `refactor` CLI, which
+these arms do not have; one run spent a turn on `which refactor`. The
+failures are not the hook's: symbol-addressing fails on the interface method
+`Shape.Area` in every arm, as in the earlier runs, and the guarded
+case-clause run deleted its goldens' `go.mod` files while creating them
+(create_file sent first with `path`, then again), after which the golden
+test found no packages.
+
+So on these tasks reading Go only through inspect did not make a fresh
+model cheaper: what it read whole before it now reads in more, smaller
+calls, and each call is a turn. That fits section 12 and the session notes
+(reads are about 15% of input; requests are what cost). The hook's
+purpose in this repo's own sessions was a check where a resolution failed
+(#510), which this run does not measure; whether it pays there needs a
+session's transcript with it against one without (`refactor-tokens`).
 
 ## What made the difference
 

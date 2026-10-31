@@ -3951,3 +3951,12 @@ Through the CLI: create_file of the test, the command and
 add_declaration to deny through JSON once running the hook showed that
 `go run` hides exit status 2. Read through inspect for this PR. Nothing
 by hand.
+## 2026-10-30: the read guard's A/B (cost-history 21)
+
+Through the CLI: add_declaration of `TestGuardedArm` first, add_field of
+`guard` and `ReadGuard`, replace_text of `claudeArgs`, `armTools` and
+`ExtraArms`, insert_statements to build the guard in `main`; move_file
+with `copy` for `guarded.md`. Two add_field arguments guessed (`type`,
+`comment`) and one move_file's (`from`), caught by reading `refactor
+list` before sending or by its refusal. Read through inspect. Nothing by
+hand.
