@@ -3960,3 +3960,12 @@ with `copy` for `guarded.md`. Two add_field arguments guessed (`type`,
 `comment`) and one move_file's (`from`), caught by reading `refactor
 list` before sending or by its refusal. Read through inspect. Nothing by
 hand.
+## 2026-10-31: argument names a model guesses
+
+Through the user's gorefactor server on their workstation, from a cloud
+session (git through a local MCP command runner). The test first:
+replace_text of `echo`'s schema and `TestArgumentAliases`; then
+add_declaration of `nameAliases` and `fromStrings`, replace_text of
+`aliasArgs`. One batch was refused for replace_text's `function`, which
+the server did not take: it runs a release from before Oct 28, not this
+checkout. Read through inspect. Nothing by hand.

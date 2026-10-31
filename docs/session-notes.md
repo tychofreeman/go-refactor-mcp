@@ -392,6 +392,13 @@ patterns sessions use, with their steps, in `docs/patterns.md`.
   server resolves a name, in batch steps and the CLI, for either
   language. Aliases are not published tools, so they cost nothing
   against the budget; a direct MCP call can only use a published name.
+  Argument names work the same way (`aliasArgs`): a word of the given
+  name, `contentAliases`, and `nameAliases` (2026-10-31: `path` and
+  `from` for file, `struct` for name, the refusals the read-guard A/B
+  runs counted most: create_file's `path` 9 times in 16 runs), and a
+  number or boolean sent as a string is converted. Add a synonym only
+  when it can mean one argument and a run shows it refused; `query`
+  (replace_text, once) could be old or a search, so it stays refused.
 - **Options over new tools** (2026-10-21): the pointer alias (gap A)
   is `pointer` on `extract_variable`, not a tool of its own: the model
   already reaches for extract_variable, and its refusal for a field
