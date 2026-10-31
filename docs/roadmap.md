@@ -2773,7 +2773,8 @@ hand or a tool got in the way.
     6. `refactor-tokens` reports `inspect` by `names` as "module
        overview" (found in the first record,
        `docs/sessions/ts-during-callers.md`): count names and uses as
-       their own kinds.
+       their own kinds. *Done* (2026-10-31): "inspect: names" and
+       "inspect: uses", in transcripts and logs alike (`readKind`).
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the

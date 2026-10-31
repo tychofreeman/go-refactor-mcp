@@ -5,7 +5,7 @@
   call; extract_variable, fold and inline_function pass nil to
   `timesIn`. And a local that such a literal assigns counts as state.
 - **Date:** 2026-10-31
-- **Branch:** ts-during-callers, PR #N
+- **Branch:** ts-during-callers, PR #528
 
 ## Plan
 
