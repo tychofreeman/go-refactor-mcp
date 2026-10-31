@@ -542,6 +542,13 @@ patterns sessions use, with their steps, in `docs/patterns.md`.
   for the hook failing and lets the call through. grep over
   directories (a search, not a read) and git diff stay allowed. It
   applies to sessions started in the checkout, from the next one.
+  Measured on a fresh model (cost-history 21, the `guarded` arm of
+  refactor-ab): no Go file read whole, but reading moved to more and
+  smaller inspect and Grep calls, so 20% more requests and 9% more cost
+  on the feature tasks. It is not a saving for a fresh model; its case is
+  this repo's own sessions, not yet measured. Two of its refusals were
+  wrong (a fixture read after `cd` into testdata/), and its advice names a
+  CLI the A/B arms lack (roadmap item 47).
 
 - **Would a fresh model recognize it?** (2026-10-22, a probe, $0.23):
   three Sonnet sessions, `claude -p` in a copy of the repo at the

@@ -59,6 +59,13 @@ func main() {
 			log.Fatalf("building refactor-mcp: %v\n%s", err, b)
 		}
 	}
+	readGuard, err := filepath.Abs(filepath.Join(*out, "read-guard"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	if b, err := exec.Command("go", "build", "-o", readGuard, "./cmd/read-guard").CombinedOutput(); err != nil {
+		log.Fatalf("building read-guard: %v\n%s", err, b)
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
@@ -66,7 +73,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	cfg := ab.Config{Claude: *claude, MCPServer: *mcpServer, Model: *model, BudgetUSD: *budget,
+	cfg := ab.Config{Claude: *claude, MCPServer: *mcpServer, ReadGuard: readGuard, Model: *model, BudgetUSD: *budget,
 		Timeout: *timeout, Runs: *runs, Arms: strings.Split(*arms, ","), OutDir: *out, ClaudeMD: mds}
 	results, err := ab.RunAll(ctx, cfg, tasks)
 	if err != nil {

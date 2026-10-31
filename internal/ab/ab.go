@@ -52,8 +52,10 @@ var Arms = []string{"mcp", "manual"}
 
 // ExtraArms are run only when asked for: hybrid has the refactoring tools
 // and Claude's own editing tools too; names is the mcp arm reading Go
-// code only by name (refactor-mcp -read-by-name, and no other reads).
-var ExtraArms = []string{"hybrid", "names"}
+// code only by name (refactor-mcp -read-by-name, and no other reads);
+// guarded is the mcp arm with the read-guard hook, which refuses reading
+// Go other than through inspect (cmd/read-guard).
+var ExtraArms = []string{"hybrid", "names", "guarded"}
 
 // checking is the Bash every arm that may not write may run to check
 // TypeScript: the type check and the tests.
@@ -81,6 +83,7 @@ type toolSet struct {
 	server     []string // the server's flags beyond -C
 	allowed    []string
 	disallowed []string // beyond what no arm may use
+	guard      bool     // the read-guard hook (Config.ReadGuard) on Read and Bash
 }
 
 // armTools are the tools of each arm.
@@ -97,6 +100,12 @@ var armTools = map[string]toolSet{
 	"manual": {
 		allowed: []string{"Read", "Edit", "Write", "MultiEdit", "Bash", "Grep", "Glob"},
 	},
+	"guarded": {
+		mcp:        true,
+		guard:      true,
+		allowed:    append([]string{"mcp__gorefactor", "Read", "Grep", "Glob"}, lookingBash...),
+		disallowed: []string{"Edit", "Write", "MultiEdit", "NotebookEdit"},
+	},
 	"names": {
 		mcp:        true,
 		server:     []string{"-read-by-name"},
@@ -109,6 +118,7 @@ var armTools = map[string]toolSet{
 type Config struct {
 	Claude    string            // the claude binary
 	MCPServer string            // the refactor-mcp binary, for the mcp arm
+	ReadGuard string            // the read-guard binary, for the guarded arm
 	Model     string            // passed to claude --model, if set
 	BudgetUSD float64           // per run, passed to claude --max-budget-usd
 	Timeout   time.Duration     // per run, including the check
@@ -200,6 +210,13 @@ func claudeArgs(cfg Config, arm, dir, prompt string) []string {
 			"gorefactor": map[string]any{"command": cfg.MCPServer, "args": append([]string{"-C", dir}, tools.server...)},
 		}})
 		args = append(args, "--mcp-config", string(server))
+	}
+	if tools.guard {
+		hook := map[string]any{"type": "command", "command": cfg.ReadGuard}
+		settings, _ := json.Marshal(map[string]any{"hooks": map[string]any{"PreToolUse": []any{
+			map[string]any{"matcher": "Read|Bash", "hooks": []any{hook}},
+		}}})
+		args = append(args, "--settings", string(settings))
 	}
 	args = append(append(args, "--allowedTools"), tools.allowed...)
 	disallowed = append(disallowed, tools.disallowed...)

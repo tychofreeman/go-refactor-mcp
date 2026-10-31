@@ -2667,6 +2667,21 @@ hand or a tool got in the way.
        behavior changed: a created Go file that is empty is now
        recorded, as TypeScript's already was.
 
+47. **The read guard, after its A/B** (2026-10-30, cost-history 21):
+    on the feature tasks a fresh model with the hook read no Go file
+    whole but took 20% more requests and cost 9% more. Open:
+    1. **Follow `cd`.** A fixture read as `cat in/a.go` after `cd` into
+       `testdata/` is refused (2 of 6 refusals); the guard judges each
+       path as given. Resolve paths against the `cd`s before them, and
+       the hook input's `cwd`.
+    2. **Advice for where it runs.** The refusal names the `refactor`
+       CLI, which a session with the MCP does not need and the A/B arms
+       do not have (one turn lost to `which refactor`).
+    3. **Measure it where it was meant to work**: this repo's own
+       sessions, a transcript with the hook against one before it
+       (`refactor-tokens`, reads by kind and requests per step), before
+       deciding whether to keep it.
+
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
 candidates and the evidence for each, gathered from the friction log.
