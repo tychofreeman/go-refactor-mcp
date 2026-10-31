@@ -2689,7 +2689,10 @@ hand or a tool got in the way.
     3. **Measure it where it was meant to work**: this repo's own
        sessions, a transcript with the hook against one before it
        (`refactor-tokens`, reads by kind and requests per step), before
-       deciding whether to keep it.
+       deciding whether to keep it. *Done* (2026-10-31, cost-history
+       22): Go read by shell went from 20 per 100 requests to none,
+       inspect up fivefold, a third of the Go text per request, 4% of
+       turns refused. Kept; a saving in tokens is not shown.
     4. **Standard-library imports at the feature tasks' revisions.** On
        the user's workstation, goldens that expect `strings`, `fmt`,
        `time`, `strconv` or `math/rand` to be imported are refused ("no
