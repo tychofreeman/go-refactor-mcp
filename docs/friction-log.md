@@ -4087,3 +4087,18 @@ already refused. replace_text added a case to `parts` that leaves out a
 name `=` assigns to, and its doc comment. Read through inspect; one grep
 naming a Go file refused by the guard. By hand: the rebase conflict
 with #523's entry here (both appended), its markers removed with sed.
+
+## 2026-10-31: TypeScript's callbacks run only during a call (roadmap 46.3)
+
+`TestRunsOnlyDuring` with add_declaration, seen failing; recast with
+replace_declaration when its third case failed for another reason (a
+local the literal assigns counts as state). The least code needed
+`timesIn` to take a predicate, a refactoring: the test was deleted with
+replace_declaration, add_parameter gave `timesIn` a `during` function
+(nil at its six calls) while green, and the test was added again. Then
+one batch of add_field, add_declaration and replace_text made it pass,
+and replace_text folded `calledDuring`'s pass-on check into
+`runsDuring`. Read through inspect; two greps naming a Go file refused.
+By hand: the rebase conflict with #524's entry. A `sed` meant for this
+entry's last line rewrote every line of the log reading "Nothing by
+hand."; the file was restored from main and the entry appended again.

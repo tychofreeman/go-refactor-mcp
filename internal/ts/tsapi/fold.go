@@ -301,7 +301,7 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 			times := Once
 			if len(m.uses[i]) > 1 {
 				times = Shared
-			} else if t, _, why := l.timesIn(m.uses[i][0], body); why != "" {
+			} else if t, _, why := l.timesIn(m.uses[i][0], body, nil); why != "" {
 				times = Several
 			} else if t != Once {
 				times = Maybe
