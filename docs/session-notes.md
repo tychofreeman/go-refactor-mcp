@@ -544,11 +544,15 @@ patterns sessions use, with their steps, in `docs/patterns.md`.
   applies to sessions started in the checkout, from the next one.
   Measured on a fresh model (cost-history 21, the `guarded` arm of
   refactor-ab): no Go file read whole, but reading moved to more and
-  smaller inspect and Grep calls, so 20% more requests and 9% more cost
-  on the feature tasks. It is not a saving for a fresh model; its case is
-  this repo's own sessions, not yet measured. Two of its refusals were
-  wrong (a fixture read after `cd` into testdata/), and its advice names a
-  CLI the A/B arms lack (roadmap item 47).
+  smaller inspect and Grep calls: 20% more requests and 9% more cost
+  on the feature tasks from a cloud session, the same cost and 4% fewer
+  requests on the user's workstation. On the workstation the feature
+  tasks' goldens that add a standard-library import fail whatever the
+  run does, so read `check_output` before trusting a pass rate there.
+  It is not a saving for a fresh model; its case is this repo's own
+  sessions, not yet measured. Two of its refusals were wrong (a fixture
+  read after `cd` into testdata/), and its advice names a CLI the A/B
+  arms lack (roadmap item 47).
 
 - **Would a fresh model recognize it?** (2026-10-22, a probe, $0.23):
   three Sonnet sessions, `claude -p` in a copy of the repo at the

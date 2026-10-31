@@ -2669,7 +2669,8 @@ hand or a tool got in the way.
 
 47. **The read guard, after its A/B** (2026-10-30, cost-history 21):
     on the feature tasks a fresh model with the hook read no Go file
-    whole but took 20% more requests and cost 9% more. Open:
+    whole but took 20% more requests and cost 9% more (from a cloud
+    session; the same cost on the user's workstation). Open:
     1. **Follow `cd`.** A fixture read as `cat in/a.go` after `cd` into
        `testdata/` is refused (2 of 6 refusals); the guard judges each
        path as given. Resolve paths against the `cd`s before them, and
@@ -2681,6 +2682,12 @@ hand or a tool got in the way.
        sessions, a transcript with the hook against one before it
        (`refactor-tokens`, reads by kind and requests per step), before
        deciding whether to keep it.
+    4. **Standard-library imports at the feature tasks' revisions.** On
+       the user's workstation, goldens that expect `strings`, `fmt`,
+       `time`, `strconv` or `math/rand` to be imported are refused ("no
+       package of that name was found") in every run, so 14 of 16 runs
+       failed there for that alone. Find what in that environment the
+       old revisions' package lookup misses.
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the

@@ -1587,8 +1587,29 @@ case-clause run deleted its goldens' `go.mod` files while creating them
 (create_file sent first with `path`, then again), after which the golden
 test found no packages.
 
+The same run on the user's workstation (`ab-features-read-guard-local`,
+$4.60), without the cloud session's extra context (40K a request):
+
+| | mcp | guarded |
+|---|---|---|
+| cost | $2.30 | $2.30 |
+| input | 5.64M | 5.31M (-6%) |
+| requests | 141 | 135 |
+| Bash reads (context) | 740K | 159K |
+| inspect (context) | 486K | 1,052K |
+| all reading (context) | 1.96M | 1.88M (-4%) |
+| refused Bash reads | 11 | 20 |
+
+The same shift (Bash reads down four fifths, inspect up twofold) at the
+same cost. Only 2 of 16 runs passed (1/8 each), and not for either arm:
+on that machine every golden that expects a standard-library import to
+be added (`strings`, `fmt`, `time`, `strconv`, `math/rand`) was refused
+with "no package of that name was found", whatever the run had done; the
+other two failures are symbol-addressing's `Shape.Area`. Its pass column
+says nothing until that is found (roadmap item 47).
+
 So on these tasks reading Go only through inspect did not make a fresh
-model cheaper: what it read whole before it now reads in more, smaller
+model cheaper (+9% in the cloud, even on the workstation): what it read whole before it now reads in more, smaller
 calls, and each call is a turn. That fits section 12 and the session notes
 (reads are about 15% of input; requests are what cost). The hook's
 purpose in this repo's own sessions was a check where a resolution failed
