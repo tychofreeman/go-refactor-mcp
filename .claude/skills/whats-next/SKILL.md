@@ -70,6 +70,13 @@ happens, at the time, not reconstructed at the end:
 - `read:` a body you read, and the question it answered. Reading to
   write the new behavior is expected; reading to find uses or check that
   a refactoring is safe is what the tools do for you.
+- `bulk:` a write of 20 lines of Go or more in one call, by any route
+  (create_file, replace_statements, replace_declaration, a large
+  replace_text, Write, a heredoc, a scratch file passed to the CLI):
+  whether the lines are new behavior or existing code typed out again,
+  and, if existing code, which operation could have moved it and why it
+  was written instead. "Writing it out was easier than the edits or
+  refactorings" is a valid answer; say it when it is the reason.
 - `plan:` the plan changed, and why.
 
 A line is a sentence. Write it as it is, including when the tools were
@@ -82,14 +89,27 @@ Before pushing:
 
 1. Append the measurement under "Measured":
    `go run ./cmd/refactor-tokens -log .claude/session-log/<branch>.jsonl`.
-   If the log is missing (a session started outside the checkout, or a
-   cloud clone using the `refactor` CLI, whose steps it counts but cannot
-   measure), say so there; then measure the session's transcript with
-   `refactor-tokens` instead, if you can find it.
+   It reports what the log shows (steps through gorefactor, writes by
+   hand, refusals followed by hand edits, large writes, scratch files,
+   denied calls, derived share), then the tokens and turns of the same
+   calls from the session's transcript, which the log names: only the
+   requests from the item's first call to its last. If the log is
+   missing (a session started outside the checkout), say so there, and
+   run `refactor-tokens` on the session's transcript instead, if you can
+   find it. In a cloud clone the `refactor` CLI's calls are counted, not
+   measured, and the content of its scratch files is not seen: say what
+   they carried.
 2. Write "Assessment", a few lines, plainly, including what went badly:
    - **Through the tools or around them:** derived share; writes by hand;
      refusals followed by hand edits; edit steps that rewrote existing Go
      where a refactoring could have carried it.
+   - **Large writes:** take each one Measured lists, and each `bulk:`
+     note, and answer: new behavior, or existing code written again? If
+     existing code, was it written because writing lines was easier than
+     the edits or refactoring tools? Name the operation that would have
+     moved it, or the gap if none would.
+   - **Cost:** requests and input tokens from the transcript part of
+     Measured; turns lost to refusals or schema loads.
    - **Did the plan hold?** Which operations it named were used, and what
      replaced the others.
    - **Reading:** denied reads, and bodies read for what the tools would
@@ -114,6 +134,8 @@ asked the record to show.
 - **Working around:** Edit, Write or a shell command changing files; a
   refusal followed by a hand edit that makes the same change; replace_text
   or replace_statements rewriting existing code an operation could have
-  moved (the same edit at many sites is the clearest sign); reading whole
+  moved (the same edit at many sites is the clearest sign); writing a
+  whole file or body again to change a few lines of it (a stub replaced by
+  overwriting the file, not by add_declaration); reading whole
   files or many bodies before planning; repeated attempts at reads the
   hook denies.

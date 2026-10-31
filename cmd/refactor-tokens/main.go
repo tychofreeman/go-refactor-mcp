@@ -8,7 +8,8 @@
 //
 // With -log it reads session logs (cmd/session-log) instead: what went
 // through gorefactor, what was done by hand, and what was done by hand
-// after gorefactor refused, without token counts.
+// after gorefactor refused, and large writes; then the tokens and turns
+// of the logged calls, from the transcripts the log names.
 //
 // With no arguments it reads every session of the project in the current
 // directory (~/.claude/projects/<project>/*.jsonl).
@@ -42,6 +43,7 @@ func main() {
 				log.Fatalf("%s: %v", f, err)
 			}
 			fmt.Print(w.Markdown())
+			fmt.Print(transcriptTokens(w))
 		}
 		return
 	}
@@ -117,4 +119,34 @@ func analyzeLog(path string) (*tokens.WorkReport, error) {
 	}
 	defer f.Close()
 	return tokens.AnalyzeWork(f)
+}
+
+// transcriptTokens is the tokens and turns of the calls w logged, from the
+// session transcripts the log names: only the requests from the first of
+// those calls to the last, so a session that did other work before or
+// after counts this item alone.
+func transcriptTokens(w *tokens.WorkReport) string {
+	var sb strings.Builder
+	sb.WriteString("\n### Tokens and turns, from the transcript\n\n")
+	if len(w.Transcripts) == 0 {
+		sb.WriteString("The log names no transcript.\n")
+		return sb.String()
+	}
+	total := &tokens.Report{}
+	for _, path := range w.Transcripts {
+		f, err := os.Open(path)
+		if err != nil {
+			fmt.Fprintf(&sb, "- not read: %v\n", err)
+			continue
+		}
+		r, err := tokens.AnalyzeOnly(f, w.ToolUseIDs)
+		f.Close()
+		if err != nil {
+			fmt.Fprintf(&sb, "- not read: %s: %v\n", path, err)
+			continue
+		}
+		total.Merge(r)
+	}
+	sb.WriteString(total.Markdown())
+	return sb.String()
 }

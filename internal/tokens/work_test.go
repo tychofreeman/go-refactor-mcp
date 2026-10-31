@@ -11,7 +11,7 @@ import (
 type sessionLog struct{ lines []string }
 
 func (l *sessionLog) add(hook, id, tool string, input map[string]any, result string) {
-	e := map[string]any{"hook_event_name": hook, "tool_use_id": id, "tool_name": tool, "tool_input": input}
+	e := map[string]any{"hook_event_name": hook, "tool_use_id": id, "tool_name": tool, "tool_input": input, "cwd": "/repo", "transcript_path": "/t.jsonl"}
 	if hook == "PostToolUse" {
 		e["result"], e["result_chars"] = result, len(result)
 	}
@@ -94,4 +94,43 @@ func TestAnalyzeWorkRefusalThenTool(t *testing.T) {
 
 func equalStrings(a, b []string) bool {
 	return strings.Join(a, "\x00") == strings.Join(b, "\x00") && len(a) == len(b)
+}
+
+func TestAnalyzeWorkLargeWrites(t *testing.T) {
+	lines := func(n int) string { return strings.Repeat("x\n", n) }
+	var l sessionLog
+	l.add("PostToolUse", "t1", "mcp__gorefactor__create_file", map[string]any{"file": "internal/x.go", "content": lines(30), "overwrite": true}, "APPLIED create_file: replaced internal/x.go (30 lines)")
+	l.add("PostToolUse", "t2", "mcp__gorefactor__replace_statements", map[string]any{"file": "a.go", "function": "F", "content": lines(25)}, "APPLIED replace_statements: replaced the body of F in a.go")
+	l.add("PostToolUse", "t3", "mcp__gorefactor__replace_text", map[string]any{"file": "a.go", "old": "a", "new": "b\nc"}, "APPLIED replace_text: replaced 1 occurrence")
+	l.call("t4", "Write", map[string]any{"file_path": "/repo/b.go", "content": lines(40)}, "ok")
+	l.call("t5", "Write", map[string]any{"file_path": "/tmp/steps.json", "content": lines(3)}, "ok")
+	l.call("t6", "Bash", map[string]any{"command": "cat > c.go <<'EOF'\n" + lines(24) + "EOF"}, "")
+	w, err := AnalyzeWork(strings.NewReader(l.String()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"create_file internal/x.go: 30 lines, replacing the file",
+		"replace_statements a.go: 25 lines",
+		"Write /repo/b.go: 40 lines",
+		"Bash: cat > c.go <<'EOF': 25 lines",
+	}
+	if !equalStrings(w.LargeWrites, want) {
+		t.Errorf("LargeWrites = %q, want %q", w.LargeWrites, want)
+	}
+	if want := []string{"Write /tmp/steps.json"}; !equalStrings(w.ScratchWrites, want) {
+		t.Errorf("ScratchWrites = %q, want %q", w.ScratchWrites, want)
+	}
+	if want := []string{"Write /repo/b.go", "Bash: cat > c.go <<'EOF'"}; !equalStrings(w.HandWrites, want) {
+		t.Errorf("HandWrites = %q, want %q", w.HandWrites, want)
+	}
+	if !w.ToolUseIDs["t1"] || len(w.ToolUseIDs) != 6 {
+		t.Errorf("ToolUseIDs = %v", w.ToolUseIDs)
+	}
+	if want := []string{"/t.jsonl"}; !equalStrings(w.Transcripts, want) {
+		t.Errorf("Transcripts = %q, want %q", w.Transcripts, want)
+	}
+	if md := w.Markdown(); !strings.Contains(md, "- large writes (20 lines or more in one call): 4") || !strings.Contains(md, "- written to scratch files: 1") {
+		t.Errorf("Markdown lacks the large or scratch writes:\n%s", md)
+	}
 }
