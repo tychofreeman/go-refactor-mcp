@@ -36,7 +36,8 @@ func stmtOf(n *ast.Node) *ast.Node {
 // timesIn returns how often n is evaluated for each time stmt runs: Once,
 // Maybe (after && or ||, in a branch, after ?.) or Shared (in a loop's
 // condition or body), with the part that makes it so; or a refusal when a
-// function lies between them.
+// function lies between them, unless during (which may be nil) says it runs
+// only during the call it is passed to: then Shared, as in a loop.
 func (l *lined) timesIn(n, stmt *ast.Node, during func(*ast.Node) bool) (Times, string, string) {
 	times, why := Once, ""
 	for x := n; x != stmt && x.Parent != nil; x = x.Parent {

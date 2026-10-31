@@ -125,6 +125,52 @@ export function morning(): void {
   note("roses");
 }
 `}, ""},
+		// ys is used in a literal that count runs during its call, so the
+		// match's [1, 2], made there for each element, may be made once,
+		// as for a use in a loop.
+		{"a hole in a literal run during the call", map[string]string{"src/f.ts": `export interface Plant {
+  height: number;
+}
+
+function count(xs: number[], f: (x: number) => boolean): number {
+  let n = 0;
+  for (const x of xs) {
+    if (f(x)) {
+      n++;
+    }
+  }
+  return n;
+}
+
+function within(xs: number[], ys: number[]): number {
+  return count(xs, (x) => ys.includes(x));
+}
+
+export function small(xs: number[]): number {
+  return count(xs, (x) => [1, 2].includes(x));
+}
+`}, NewFold(), `{"file": "src/f.ts", "name": "within"}`, map[string]string{"src/f.ts": `export interface Plant {
+  height: number;
+}
+
+function count(xs: number[], f: (x: number) => boolean): number {
+  let n = 0;
+  for (const x of xs) {
+    if (f(x)) {
+      n++;
+    }
+  }
+  return n;
+}
+
+function within(xs: number[], ys: number[]): number {
+  return count(xs, (x) => ys.includes(x));
+}
+
+export function small(xs: number[]): number {
+  return within(xs, [1, 2]);
+}
+`}, ""},
 		{"refuse statements that compute a result", map[string]string{"src/two.ts": `export function two(): number {
   const x = 2;
   return x;

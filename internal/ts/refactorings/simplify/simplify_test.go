@@ -1412,5 +1412,46 @@ export function scaled(p: Plant, xs: number[]): number {
   return n * p.height;
 }
 `, ""},
+		// t is assigned only in a literal that runs during the call, so it
+		// stays a local: declaring it changes no state p.height reads.
+		{"past a local the literal assigns", each + `
+export function total(p: Plant, xs: number[]): number {
+  const h = p.height;
+  let t = 0;
+  count(xs, (x) => {
+    t += x;
+    return true;
+  });
+  return t * h;
+}
+`, NewInlineVariable(), `{"function": "total", "name": "h"}`, each + `
+export function total(p: Plant, xs: number[]): number {
+  let t = 0;
+  count(xs, (x) => {
+    t += x;
+    return true;
+  });
+  return t * p.height;
+}
+`, ""},
+		// h is used in a literal that runs during count's call, so the
+		// argument may take its place there.
+		{"inline a call whose parameter a literal uses", each + `
+function above(xs: number[], h: number): number {
+  return count(xs, (x) => x > h);
+}
+
+export function taller(xs: number[]): number {
+  let limit = 1;
+  limit += xs.length;
+  return above(xs, limit);
+}
+`, NewInlineFunction(), `{"line": 37, "name": "above"}`, each + `
+export function taller(xs: number[]): number {
+  let limit = 1;
+  limit += xs.length;
+  return count(xs, (x) => x > limit);
+}
+`, ""},
 	})
 }

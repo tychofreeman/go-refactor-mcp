@@ -339,7 +339,8 @@ func (a *effects) nullish(n *ast.Node, why string) Effects {
 }
 
 // isLocal reports whether s is a local: a variable or parameter of a
-// function that no function inside that function assigns.
+// function that no function inside that function assigns, but for a
+// literal that runs only during the call it is passed to.
 func (a *effects) isLocal(s *ast.Symbol) bool {
 	if v, ok := a.local[s]; ok {
 		return v
@@ -363,7 +364,7 @@ func (a *effects) assignedInside(n *ast.Node, s *ast.Symbol, nested bool) bool {
 		if found {
 			return true
 		}
-		if ast.IsFunctionLike(x) {
+		if ast.IsFunctionLike(x) && !a.runsDuring(x) {
 			nested = true
 		}
 		if nested {
