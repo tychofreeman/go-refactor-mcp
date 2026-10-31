@@ -32,6 +32,12 @@ patterns sessions use, with their steps, in `docs/patterns.md`.
   refusal, what a read answered), and a file per item in docs/ over a
   summary in the friction log. A hook, because a habit named in the
   instructions did not change (the read guard's story, below).
+  The user then asked for the transcript's tokens in the record, and to
+  know whether any write was made because writing lines was easier than
+  the edits or refactorings: the report lists large writes, and the
+  record answers for each. The record `tokens-in-records` found
+  that reason twice: a stub overwritten with a whole file (#527) and a
+  function about to be written out again (dropped for five edits).
 - **Look for a composition before logging a gap** (2026-10-29, the
   user). The 34 calls of `set` (Oct 25) were logged as "no tool
   replaces each call with a call chosen by its argument"; the user saw

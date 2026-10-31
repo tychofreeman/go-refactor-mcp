@@ -121,6 +121,7 @@ type call struct {
 	input                   json.RawMessage
 	refused                 string       // the kind of refusal it got (Refused...), or ""
 	alg                     *algebraCall // for an applied gorefactor call, what it wrote and changed
+	id                      string       // the tool_use id
 }
 
 type request struct {
@@ -132,6 +133,12 @@ type request struct {
 
 // Analyze reads one transcript.
 func Analyze(r io.Reader) (*Report, error) {
+	return analyze(r, nil)
+}
+
+// analyze reads one transcript; with ids, only its requests from the first
+// that called one of those tools to the last.
+func analyze(r io.Reader, ids map[string]bool) (*Report, error) {
 	var reqs []*request
 	calls := map[string]*call{}
 	seen := map[string]bool{}
@@ -164,7 +171,7 @@ func Analyze(r io.Reader) (*Report, error) {
 			cur := reqs[len(reqs)-1]
 			for _, b := range blocks(l.Message.Content) {
 				if b.Type == "tool_use" {
-					c := &call{name: b.Name, inputChars: len(b.Input), after: len(reqs), input: b.Input}
+					c := &call{id: b.ID, name: b.Name, inputChars: len(b.Input), after: len(reqs), input: b.Input}
 					calls[b.ID] = c
 					cur.calls = append(cur.calls, c)
 				}
@@ -199,9 +206,39 @@ func Analyze(r io.Reader) (*Report, error) {
 	if err := sc.Err(); err != nil {
 		return nil, err
 	}
+	if ids != nil {
+		reqs = only(reqs, ids)
+		cost, turns, finished = 0, 0, false
+	}
 	rep := report(reqs)
 	rep.CostUSD, rep.Turns, rep.Finished = cost, turns, finished
 	return rep, nil
+}
+
+// only is reqs from the first request that called a tool in ids to the
+// last, each call's after rebased to the new indices; nil if none did.
+func only(reqs []*request, ids map[string]bool) []*request {
+	first, last := -1, -1
+	for i, q := range reqs {
+		for _, c := range q.calls {
+			if ids[c.id] {
+				if first < 0 {
+					first = i
+				}
+				last = i
+			}
+		}
+	}
+	if first < 0 {
+		return nil
+	}
+	reqs = reqs[first : last+1]
+	for _, q := range reqs {
+		for _, c := range q.calls {
+			c.after -= first
+		}
+	}
+	return reqs
 }
 
 func blocks(raw json.RawMessage) []block {
@@ -747,4 +784,11 @@ func (r *Report) Markdown() string {
 		arow(all)
 	}
 	return sb.String()
+}
+
+// AnalyzeOnly reads one transcript, counting only its requests from the
+// first that called a tool in ids to the last: one piece of work in a
+// longer session, such as the calls a session log recorded on a branch.
+func AnalyzeOnly(r io.Reader, ids map[string]bool) (*Report, error) {
+	return analyze(r, ids)
 }

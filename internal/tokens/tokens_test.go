@@ -320,6 +320,30 @@ func TestAnalyzeAlgebra(t *testing.T) {
 	}
 }
 
+func TestAnalyzeOnly(t *testing.T) {
+	var tr transcript
+	tr.request("r1", 1000, 10, callOf("t1", "Read", map[string]any{"file_path": "a.go"}))
+	tr.textResult("t1", "x")
+	tr.request("r2", 1100, 10, callOf("t2", "mcp__gorefactor__rename", map[string]any{"file": "a.go", "name": "X", "new_name": "Y"}))
+	tr.textResult("t2", "APPLIED rename: renamed \"X\" to \"Y\"\n\nchanged lines:\n  a.go: 3\n")
+	tr.request("r3", 1200, 10, callOf("t3", "Bash", map[string]any{"command": "go test ./..."}))
+	tr.textResult("t3", "ok")
+	tr.request("r4", 1300, 10, map[string]any{"type": "text", "text": "done"})
+
+	r, err := AnalyzeOnly(strings.NewReader(tr.String()), map[string]bool{"t2": true, "t3": true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Requests != 2 || r.RefactoringSteps != 1 {
+		t.Errorf("Requests = %d, RefactoringSteps = %d; want 2 and 1", r.Requests, r.RefactoringSteps)
+	}
+	for _, s := range r.Tools {
+		if s.Name == "Read" {
+			t.Errorf("Tools has the Read before the item: %+v", r.Tools)
+		}
+	}
+}
+
 // TestReadKindOfInspect checks that each view inspect gives is its own kind
 // of read: names and uses are not the module overview.
 func TestReadKindOfInspect(t *testing.T) {

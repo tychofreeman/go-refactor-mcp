@@ -28,8 +28,11 @@ func TestEntry(t *testing.T) {
 	if string(e.Input) != `{"file":"a.go"}` {
 		t.Errorf("Input = %s", e.Input)
 	}
-	if strings.Contains(string(line), "transcript_path") || strings.Contains(string(line), "tool_response") {
-		t.Errorf("line keeps fields it should drop: %s", line)
+	if e.Transcript != "/t.jsonl" || e.Cwd != "/repo" {
+		t.Errorf("Transcript = %q, Cwd = %q", e.Transcript, e.Cwd)
+	}
+	if strings.Contains(string(line), "tool_response") {
+		t.Errorf("line keeps the response: %s", line)
 	}
 }
 

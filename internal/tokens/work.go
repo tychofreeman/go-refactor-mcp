@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -22,6 +23,8 @@ type Event struct {
 	Input       json.RawMessage `json:"tool_input"`
 	Result      string          `json:"result,omitempty"`
 	ResultChars int             `json:"result_chars,omitempty"`
+	Cwd         string          `json:"cwd,omitempty"`             // the session's working directory
+	Transcript  string          `json:"transcript_path,omitempty"` // the session's transcript
 }
 
 // WorkReport is how a piece of work used the tools, from its session log:
@@ -40,7 +43,11 @@ type WorkReport struct {
 	Algebra          []AlgebraStats // applied gorefactor calls, as Report.Algebra
 	RefactoringSteps int
 	EditSteps        int
-	CLI              int // calls of the refactor CLI through Bash, which are not measured
+	CLI              int             // calls of the refactor CLI through Bash, which are not measured
+	ToolUseIDs       map[string]bool // the calls logged, to find them in a transcript
+	LargeWrites      []string
+	ScratchWrites    []string
+	Transcripts      []string
 }
 
 // cliCommand matches a Bash command that runs the refactor CLI.
@@ -75,17 +82,26 @@ func AnalyzeWork(r io.Reader) (*WorkReport, error) {
 		return nil, err
 	}
 
-	w := &WorkReport{Calls: len(order), Reads: map[string]int{}, Refused: map[string]int{}}
+	w := &WorkReport{Calls: len(order), Reads: map[string]int{}, Refused: map[string]int{}, ToolUseIDs: map[string]bool{}}
 	var alg Report
 	var refused []string // refusals not yet followed by an applied call or a write by hand
 	for _, c := range order {
+		w.ToolUseIDs[c.ToolUseID] = true
+		if c.Transcript != "" && !slices.Contains(w.Transcripts, c.Transcript) {
+			w.Transcripts = append(w.Transcripts, c.Transcript)
+		}
 		k := &call{name: c.Tool, input: c.Input}
 		what := describe(c.Tool, c.Input)
 		switch {
 		case !c.ran:
 			w.NoResult = append(w.NoResult, what)
+		case writesByHand(k) && outside(c.Cwd, filePath(c.Input)):
+			w.ScratchWrites = append(w.ScratchWrites, what)
 		case writesByHand(k):
 			w.HandWrites = append(w.HandWrites, what)
+			if n := handLines(k); n >= largeWrite {
+				w.LargeWrites = append(w.LargeWrites, fmt.Sprintf("%s: %d lines", what, n))
+			}
 			for _, r := range refused {
 				w.AfterRefusal = append(w.AfterRefusal, r+", then "+what)
 			}
@@ -113,6 +129,7 @@ func AnalyzeWork(r io.Reader) (*WorkReport, error) {
 				alg.addAlgebra(a)
 			}
 			if strings.HasPrefix(c.Result, "APPLIED ") {
+				w.LargeWrites = append(w.LargeWrites, largeSteps(k)...)
 				refused = nil
 			}
 		}
@@ -133,6 +150,103 @@ func writesByHand(c *call) bool {
 		return !cliCommand.MatchString(cmd) && !checks.MatchString(cmd) && writesFiles.MatchString(cmd)
 	}
 	return false
+}
+
+// largeWrite is how many lines of Go written in one call make it a large
+// write: a sign that writing the lines was taken over an edit or a
+// refactoring, which a session record asks about.
+const largeWrite = 20
+
+// handLines counts the lines of Go a write by hand put in: Write's
+// content, Edit's new text, or the lines of a Bash command that names a Go
+// file (a heredoc); 0 for anything else.
+func handLines(c *call) int {
+	var a struct {
+		FilePath  string `json:"file_path"`
+		Content   string `json:"content"`
+		NewString string `json:"new_string"`
+		Edits     []struct {
+			NewString string `json:"new_string"`
+		} `json:"edits"`
+		Command string `json:"command"`
+	}
+	json.Unmarshal(c.input, &a)
+	if c.name == "Bash" {
+		if !strings.Contains(a.Command, ".go") {
+			return 0
+		}
+		return strings.Count(a.Command, "\n")
+	}
+	if !strings.HasSuffix(a.FilePath, ".go") {
+		return 0
+	}
+	n := textLines(a.Content) + textLines(a.NewString)
+	for _, e := range a.Edits {
+		n += textLines(e.NewString)
+	}
+	return n
+}
+
+// largeSteps names the steps of an applied gorefactor call that wrote
+// largeWrite lines of Go or more, with how many.
+func largeSteps(c *call) []string {
+	type step struct {
+		Tool string          `json:"tool"`
+		Args json.RawMessage `json:"args"`
+	}
+	steps := []step{{Tool: strings.TrimPrefix(c.name, "mcp__gorefactor__"), Args: c.input}}
+	if steps[0].Tool == "batch" {
+		var in struct {
+			Steps []step `json:"steps"`
+		}
+		json.Unmarshal(c.input, &in)
+		steps = in.Steps
+	}
+	var large []string
+	for _, s := range steps {
+		f := argFile(s.Args)
+		n := writtenLines(s.Args)
+		if !strings.HasSuffix(f, ".go") || n < largeWrite {
+			continue
+		}
+		var a struct {
+			Overwrite bool `json:"overwrite"`
+		}
+		json.Unmarshal(s.Args, &a)
+		desc := fmt.Sprintf("%s %s: %d lines", s.Tool, f, n)
+		if a.Overwrite {
+			desc += ", replacing the file"
+		}
+		large = append(large, desc)
+	}
+	return large
+}
+
+// textLines counts the lines of s, a final newline not starting another.
+func textLines(s string) int {
+	if strings.TrimSpace(s) == "" {
+		return 0
+	}
+	return strings.Count(strings.TrimRight(s, "\n"), "\n") + 1
+}
+
+// filePath is the file a call of Write, Edit, Read and the like names.
+func filePath(input json.RawMessage) string {
+	var a struct {
+		FilePath     string `json:"file_path"`
+		NotebookPath string `json:"notebook_path"`
+	}
+	json.Unmarshal(input, &a)
+	if a.FilePath != "" {
+		return a.FilePath
+	}
+	return a.NotebookPath
+}
+
+// outside reports whether path is an absolute path outside the directory
+// cwd: a scratch file rather than the repository's.
+func outside(cwd, path string) bool {
+	return cwd != "" && filepath.IsAbs(path) && !strings.HasPrefix(path, strings.TrimSuffix(cwd, "/")+"/")
 }
 
 // describe names a call for the report: the tool and the file or command.
@@ -188,6 +302,8 @@ func (w *WorkReport) Markdown() string {
 	}
 	list("by hand", w.HandWrites)
 	list("refused, then done by hand", w.AfterRefusal)
+	list(fmt.Sprintf("large writes (%d lines or more in one call)", largeWrite), w.LargeWrites)
+	list("written to scratch files", w.ScratchWrites)
 	list("denied or failed (no result)", w.NoResult)
 	if len(w.Reads) > 0 {
 		kinds := make([]string, 0, len(w.Reads))

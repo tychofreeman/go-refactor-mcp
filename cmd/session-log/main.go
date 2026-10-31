@@ -1,9 +1,11 @@
 // Command session-log is a Claude Code hook (PreToolUse and PostToolUse)
-// that appends each tool call to a log of the branch being worked on,
+// that appends each tool call, with the session's transcript and working
+// directory, to a log of the branch being worked on,
 // .claude/session-log/<branch>.jsonl, gitignored. A call logged before it
 // ran and never after was denied (by read-guard or the user) or failed.
 // `refactor-tokens -log` reports on a log: what went through gorefactor,
-// what was done by hand, and what was done by hand after a refusal. The
+// what was done by hand, by hand after a refusal, or in large writes, and
+// the tokens of those calls from the transcript. The
 // whats-next skill (.claude/skills/whats-next) writes that report into
 // the item's session record in docs/sessions/.
 //

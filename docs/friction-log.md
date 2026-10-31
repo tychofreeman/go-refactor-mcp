@@ -4128,3 +4128,13 @@ replace_text edits made them pass. Read through inspect. Nothing by hand.
 The session record is `docs/sessions/tokens-names-reads.md`. The test
 with add_declaration, seen failing; two replace_text edits in `readKind`
 made it pass. Nothing by hand.
+
+## 2026-10-31: tokens and large writes in session records
+
+Through the CLI (a cloud session, no MCP), batches as JSON by Python.
+extract_function and add_parameter split `Analyze` while green; the
+tests with add_declaration, create_from_usage and add_field (as the
+first refusal named); the rest small replace_text edits and
+add_declaration. Nothing by hand. A whole-function rewrite of
+`AnalyzeWork` was drafted and dropped for five edits;
+`docs/sessions/tokens-in-records.md` has the details.
