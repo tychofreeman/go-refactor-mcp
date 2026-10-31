@@ -35,7 +35,7 @@ patterns sessions use, with their steps, in `docs/patterns.md`.
   The user then asked for the transcript's tokens in the record, and to
   know whether any write was made because writing lines was easier than
   the edits or refactorings: the report lists large writes, and the
-  record answers for each. The first record (`tokens-in-records`) found
+  record answers for each. The record `tokens-in-records` found
   that reason twice: a stub overwritten with a whole file (#527) and a
   function about to be written out again (dropped for five edits).
 - **Look for a composition before logging a gap** (2026-10-29, the

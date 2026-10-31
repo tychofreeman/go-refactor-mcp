@@ -4123,6 +4123,12 @@ The session record is `docs/sessions/ts-during-callers.md`. Tests with
 replace_text, two of them recast after passing at red; three
 replace_text edits made them pass. Read through inspect. Nothing by hand.
 
+## 2026-10-31: refactor-tokens counts inspect by names and uses (roadmap 49.6)
+
+The session record is `docs/sessions/tokens-names-reads.md`. The test
+with add_declaration, seen failing; two replace_text edits in `readKind`
+made it pass. Nothing by hand.
+
 ## 2026-10-31: tokens and large writes in session records
 
 Through the CLI (a cloud session, no MCP), batches as JSON by Python.

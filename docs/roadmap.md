@@ -2770,7 +2770,12 @@ hand or a tool got in the way.
     4. The hook adds a `go run` to every call (two for reads and writes);
        if sessions feel slower, build it once.
     5. After a few records: whether they show what the user wanted.
-    6. **Tokens and large writes in the record** (2026-10-31, the user).
+    6. `refactor-tokens` reports `inspect` by `names` as "module
+       overview" (found in the first record,
+       `docs/sessions/ts-during-callers.md`): count names and uses as
+       their own kinds. *Done* (2026-10-31): "inspect: names" and
+       "inspect: uses", in transcripts and logs alike (`readKind`).
+    7. **Tokens and large writes in the record** (2026-10-31, the user).
        The log keeps each call's transcript path and working directory;
        `refactor-tokens -log` adds the tokens and turns of the logged calls
        from the transcript (`tokens.AnalyzeOnly`: only the requests from
@@ -2779,10 +2784,6 @@ hand or a tool got in the way.
        scratch files. The skill's `bulk:` note and its assessment ask, of
        each large write, whether it was existing code written again
        because writing was easier than the tools. *Done.*
-    6. `refactor-tokens` reports `inspect` by `names` as "module
-       overview" (found in the first record,
-       `docs/sessions/ts-during-callers.md`): count names and uses as
-       their own kinds.
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the

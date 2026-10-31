@@ -309,11 +309,17 @@ func readKind(c *call) string {
 			Function  string            `json:"function"`
 			StartLine int               `json:"start_line"`
 			Targets   []json.RawMessage `json:"targets"`
+			Names     []string          `json:"names"`
+			Uses      []string          `json:"uses"`
 		}
 		json.Unmarshal(c.input, &a)
 		switch {
 		case len(a.Targets) > 0:
 			return "inspect: targets"
+		case len(a.Names) > 0:
+			return "inspect: names"
+		case len(a.Uses) > 0:
+			return "inspect: uses"
 		case a.File == "":
 			return "inspect: module overview"
 		case a.Function != "" || a.StartLine != 0:

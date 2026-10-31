@@ -343,3 +343,21 @@ func TestAnalyzeOnly(t *testing.T) {
 		}
 	}
 }
+
+// TestReadKindOfInspect checks that each view inspect gives is its own kind
+// of read: names and uses are not the module overview.
+func TestReadKindOfInspect(t *testing.T) {
+	for in, want := range map[string]string{
+		`{}`:                                "inspect: module overview",
+		`{"file": "a.go"}`:                  "inspect: file",
+		`{"file": "a.go", "function": "F"}`: "inspect: part of a file",
+		`{"targets": [{"file": "a.go"}]}`:   "inspect: targets",
+		`{"names": ["F", "T.M"]}`:           "inspect: names",
+		`{"uses": ["T.f"]}`:                 "inspect: uses",
+	} {
+		c := &call{name: "mcp__gorefactor__inspect", input: json.RawMessage(in)}
+		if got := readKind(c); got != want {
+			t.Errorf("readKind(%s) = %q, want %q", in, got, want)
+		}
+	}
+}
