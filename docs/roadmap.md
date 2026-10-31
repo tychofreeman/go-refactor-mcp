@@ -2687,7 +2687,25 @@ hand or a tool got in the way.
        `time`, `strconv` or `math/rand` to be imported are refused ("no
        package of that name was found") in every run, so 14 of 16 runs
        failed there for that alone. Find what in that environment the
-       old revisions' package lookup misses.
+       old revisions' package lookup misses. *Done* (2026-10-31): Debian's
+       Go makes `$GOROOT/src` a symlink (`/usr/lib/go-1.26/src ->
+       ../../share/go-1.26/src`), and `filepath.WalkDir` does not follow
+       a symlinked root, so `gocode.stdPackages` found no package. It
+       resolves the root first (`stdPackagesIn`). Current main failed the
+       same way there (15 golden and server tests), not only the old
+       revisions; the feature tasks' pass rates on the workstation can be
+       measured again.
+
+48. **Refusals met deriving 47.4's fix** (2026-10-31, friction log):
+    1. A refactoring in a batch with check "end", after edits, is
+       refused with "the change fixes none of the errors" when the only
+       errors are a test's use of a function not yet declared; alone,
+       a refactoring may start from errors in test files.
+    2. inline_variable counts the variable assigned to (`stdMap =
+       pkgs`) as read before the initializer's call, so it refuses to
+       make `stdMap = stdPackagesIn(...)`.
+    3. replace_text with `function` does not search the function's doc
+       comment.
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the

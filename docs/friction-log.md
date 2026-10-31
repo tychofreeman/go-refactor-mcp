@@ -3969,3 +3969,28 @@ add_declaration of `nameAliases` and `fromStrings`, replace_text of
 `aliasArgs`. One batch was refused for replace_text's `function`, which
 the server did not take: it runs a release from before Oct 28, not this
 checkout. Read through inspect. Nothing by hand.
+
+## 2026-10-31: standard-library imports behind a symlinked GOROOT/src
+
+First written by retyping the 20-line walk into add_declaration's
+content; asked how well the tools were used, redone as a derivation,
+so the fix is three lines: replace_text makes `stdMap` a local `pkgs`
+in the closure (three steps) and insert_statements assigns `stdMap =
+pkgs` after it; move_statement_up puts the GOROOT read first (refused
+while the first statement wrote the package variable);
+extract_function makes `stdPackagesIn` returning `pkgs`;
+introduce_parameter takes `build.Default.GOROOT` as `goroot`; then
+replace_text adds `filepath.EvalSymlinks`. A check between showed the
+test fail first. By hand: `git checkout main --` of gocode.go to
+undo the first version (the known gap: nothing restores a file to a
+commit's version).
+
+Friction, for the roadmap (item 48): with the new test calling
+`stdPackagesIn` before it existed, move_statement_up in a batch with
+check "end" was refused ("the change fixes none of the errors")
+though every error was in a test file, which a refactoring may start
+from; the test was deleted with replace_declaration and added again
+at the batch's end. inline_variable of `pkgs := stdPackagesIn(...);
+stdMap = pkgs` is refused: the assignment "reads" `stdMap` before the
+call, though assigning a variable reads nothing. And replace_text
+with `function` does not reach the function's doc comment.
