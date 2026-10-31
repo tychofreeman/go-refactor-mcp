@@ -512,7 +512,7 @@ func (in *inliner) inline(l *lined, call *ast.Node) ([]Edit, string) {
 		case len(useNodes) == 0:
 			times = Unused
 		case len(useNodes) == 1:
-			t, _, why := fl.timesIn(useNodes[0], bodyRoot, nil)
+			t, _, why := fl.timesIn(useNodes[0], bodyRoot, in.ef.runsDuring)
 			switch {
 			case why != "":
 				times = Several

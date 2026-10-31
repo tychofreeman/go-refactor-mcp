@@ -2654,9 +2654,14 @@ hand or a tool got in the way.
        summary count nothing. `timesIn` takes a `during` predicate, so a
        use in a literal that runs during the call is `Shared`, not
        refused; only inline_variable passes it (`effects.runsDuring`),
-       the other five callers pass nil. Open: those callers; and a
-       local that a literal assigns counts as state, so `let t = 0`
-       before such a call is refused as a write ("may change state").
+       the other five callers pass nil. *Done* (2026-10-31,
+       `docs/sessions/ts-during-callers.md`): fold and inline_function's
+       use of a parameter pass it too (a hole fold makes once, a
+       reassigned `let` inlined into the literal); the other three
+       cannot reach a literal, since `stmtOf` stops at functions. A
+       local that only such literals assign stays a local
+       (`assignedInside`), so `let t = 0` before the call is no write
+       of state.
     4. **Placing and replacing Go declarations** (about 120 lines):
        add_declaration, add_field, insert_statements and
        extract_struct find where code goes and write it in the
@@ -2765,6 +2770,10 @@ hand or a tool got in the way.
     4. The hook adds a `go run` to every call (two for reads and writes);
        if sessions feel slower, build it once.
     5. After a few records: whether they show what the user wanted.
+    6. `refactor-tokens` reports `inspect` by `names` as "module
+       overview" (found in the first record,
+       `docs/sessions/ts-during-callers.md`): count names and uses as
+       their own kinds.
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the

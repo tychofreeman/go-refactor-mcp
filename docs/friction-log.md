@@ -4116,3 +4116,9 @@ with create_file in a batch, then the implementations with create_file
 with replace_text and add_declaration, the docs and settings with
 replace_text and create_file. Batches were written as JSON by Python in
 the scratchpad. Nothing by hand.
+
+## 2026-10-31: TypeScript's callbacks for fold and inline_function (roadmap 46.3)
+
+The session record is `docs/sessions/ts-during-callers.md`. Tests with
+replace_text, two of them recast after passing at red; three
+replace_text edits made them pass. Read through inspect. Nothing by hand.
