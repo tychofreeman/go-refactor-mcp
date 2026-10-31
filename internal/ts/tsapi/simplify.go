@@ -37,12 +37,15 @@ func stmtOf(n *ast.Node) *ast.Node {
 // Maybe (after && or ||, in a branch, after ?.) or Shared (in a loop's
 // condition or body), with the part that makes it so; or a refusal when a
 // function lies between them.
-func (l *lined) timesIn(n, stmt *ast.Node) (Times, string, string) {
+func (l *lined) timesIn(n, stmt *ast.Node, during func(*ast.Node) bool) (Times, string, string) {
 	times, why := Once, ""
 	for x := n; x != stmt && x.Parent != nil; x = x.Parent {
 		p := x.Parent
 		maybe := false
 		switch {
+		case ast.IsFunctionLike(p) && during != nil && during(p):
+			times, why = Shared, l.part(p)
+			continue
 		case ast.IsFunctionLike(p), ast.IsClassLike(p):
 			return 0, "", fmt.Sprintf("it is inside %s, which runs at another time", l.part(p))
 		case ast.IsBinaryExpression(p):
@@ -86,7 +89,8 @@ func (l *lined) part(n *ast.Node) string {
 
 // parts returns the largest pieces of root, statements or expressions,
 // that run before the offset until and overlap none of skip: what runs
-// in root before the node there.
+// in root before the node there. A name that = assigns to is left out,
+// since it is not read.
 func parts(root *ast.Node, until int, skip []*ast.Node) []*ast.Node {
 	var out []*ast.Node
 	var visit func(n *ast.Node)
@@ -102,6 +106,8 @@ func parts(root *ast.Node, until int, skip []*ast.Node) []*ast.Node {
 				if !ast.IsFunctionLike(c) {
 					visit(c)
 				}
+			case ast.IsIdentifier(c) && ast.IsBinaryExpression(n) && n.AsBinaryExpression().OperatorToken.Kind == ast.KindEqualsToken && n.AsBinaryExpression().Left == c:
+				// a name assigned to is not read before the value
 			case ast.IsExpression(c) || ast.IsStatement(c):
 				out = append(out, c)
 			}
@@ -328,7 +334,7 @@ func (p *Project) ExtractVariable(ctx context.Context, path string, line int, ex
 		return nil, fmt.Sprintf("%s is in no statement of a block (an arrow's expression body, a parameter's default or a class field); give it a block first", src)
 	}
 	ef := newEffects(c, l)
-	times, place, why := l.timesIn(e, stmt)
+	times, place, why := l.timesIn(e, stmt, nil)
 	if why != "" {
 		return nil, fmt.Sprintf("%s cannot be evaluated before its statement: %s", src, why)
 	}
@@ -364,7 +370,7 @@ func (p *Project) ExtractVariable(ctx context.Context, path string, line int, ex
 			if s == nil || s.Parent != stmt.Parent {
 				return
 			}
-			if t, _, why := l.timesIn(n, s); why != "" || t != Once {
+			if t, _, why := l.timesIn(n, s, nil); why != "" || t != Once {
 				return
 			}
 			j := slices.Index(list, s)
@@ -536,7 +542,7 @@ func (p *Project) InlineVariable(ctx context.Context, path string, line int, fun
 				break
 			}
 		}
-		times, place, why := l.timesIn(r, at)
+		times, place, why := l.timesIn(r, at, ef.runsDuring)
 		if why != "" {
 			if !ie.CanRepeat() || ie.Reads || len(ie.Locals) > 0 {
 				return nil, fmt.Sprintf("%s is used at %s, and %s, so %s would be evaluated then", name, l.where(r), why, src)

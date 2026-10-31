@@ -260,6 +260,36 @@ export function later(p: Plant): () => number {
   return () => h;
 }
 `, NewInlineVariable(), `{"line": 15, "name": "h"}`, "", "runs at another time"},
+		// The variable assigned to is not read, so water() may run where w is used.
+		{"assigned to a module variable", plants + `
+let total = 0;
+
+export function fill(): void {
+  const w = water();
+  total = w;
+}
+`, NewInlineVariable(), `{"function": "fill", "name": "w"}`, plants + `
+let total = 0;
+
+export function fill(): void {
+  total = water();
+}
+`, ""},
+		// An element's object is evaluated before the right-hand side: cache
+		// is read before reset() replaces it.
+		{"index target written", plants + `
+let cache: number[] = [];
+
+function reset(): number {
+  cache = [];
+  return 1;
+}
+
+export function fill(): void {
+  const n = reset();
+  cache[0] = n;
+}
+`, NewInlineVariable(), `{"function": "fill", "name": "n"}`, "", "reset()"},
 	})
 }
 
@@ -1327,5 +1357,60 @@ export function water(a: Bed | undefined, d: number): number {
   return x;
 }
 `, r: NewMoveDown(), args: `{"line": 3}`, refused: "throw"},
+	})
+}
+
+const each = plants + `
+function count(xs: number[], f: (x: number) => boolean): number {
+  let n = 0;
+  for (const x of xs) {
+    if (f(x)) {
+      n++;
+    }
+  }
+  return n;
+}
+
+let saved: (x: number) => boolean = () => false;
+
+function keep(f: (x: number) => boolean): void {
+  saved = f;
+}
+`
+
+// TestRunsOnlyDuring checks that a function literal passed to a function
+// of the module that calls it only before returning runs during the
+// call, as Go's Effects.RunsOnlyDuring judges: a use in it may take the
+// variable's value, and the call does what the literal does.
+func TestRunsOnlyDuring(t *testing.T) {
+	check(t, []change{
+		{"use in a literal run during the call", each + `
+export function taller(p: Plant, xs: number[]): number {
+  const h = p.height;
+  return count(xs, (x) => x > h);
+}
+`, NewInlineVariable(), `{"function": "taller", "name": "h"}`, each + `
+export function taller(p: Plant, xs: number[]): number {
+  return count(xs, (x) => x > p.height);
+}
+`, ""},
+		{"use in a literal kept", each + `
+export function store(p: Plant): void {
+  const h = p.height;
+  keep((x) => x > h);
+}
+`, NewInlineVariable(), `{"function": "store", "name": "h"}`, "", "runs at another time"},
+		{"past a call that runs a literal", each + `
+export function scaled(p: Plant, xs: number[]): number {
+  const h = p.height;
+  const n = count(xs, (x) => x > 1);
+  return n * h;
+}
+`, NewInlineVariable(), `{"function": "scaled", "name": "h"}`, each + `
+export function scaled(p: Plant, xs: number[]): number {
+  const n = count(xs, (x) => x > 1);
+  return n * p.height;
+}
+`, ""},
 	})
 }

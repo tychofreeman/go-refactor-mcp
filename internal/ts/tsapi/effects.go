@@ -214,15 +214,84 @@ func (a *effects) Check(m Move) string {
 
 // effects is the analysis of code of one program.
 type effects struct {
-	c     *checker.Checker
-	l     *lined
-	files map[*ast.SourceFile]*lined
-	local map[*ast.Symbol]bool
-	sums  map[*ast.Node]*Effects // a module function's body; nil while it is summarized
+	c      *checker.Checker
+	l      *lined
+	files  map[*ast.SourceFile]*lined
+	local  map[*ast.Symbol]bool
+	sums   map[*ast.Node]*Effects // a module function's body; nil while it is summarized
+	during map[during]bool        // runsOnlyDuring's answers; true while judged
 }
 
 func newEffects(c *checker.Checker, l *lined) *effects {
-	return &effects{c: c, l: l, files: map[*ast.SourceFile]*lined{l.f: l}, local: map[*ast.Symbol]bool{}, sums: map[*ast.Node]*Effects{}}
+	return &effects{c: c, l: l, files: map[*ast.SourceFile]*lined{l.f: l}, local: map[*ast.Symbol]bool{}, sums: map[*ast.Node]*Effects{}, during: map[during]bool{}}
+}
+
+// during is a parameter of a function: the parameter i of fn.
+type during struct {
+	fn *ast.Node
+	i  int
+}
+
+// runsOnlyDuring reports whether fn, a function of the module, calls the
+// function its parameter i holds only before it returns: the body calls
+// it, passes it to a function that does the same, or uses it in a
+// function literal that runs only during the call; nothing else. A rest
+// parameter, or one bound by a pattern, does not qualify. While fn is
+// being judged, a use leading back to it (recursion) counts as
+// qualifying.
+func (a *effects) runsOnlyDuring(fn *ast.Node, i int) bool {
+	params := fn.Parameters()
+	if i >= len(params) || !ast.IsIdentifier(params[i].Name()) || params[i].AsParameterDeclaration().DotDotDotToken != nil {
+		return false
+	}
+	k := during{fn, i}
+	if v, ok := a.during[k]; ok {
+		return v
+	}
+	a.during[k] = true
+	name := params[i].Name()
+	sym := a.c.GetSymbolAtLocation(name)
+	v := true
+	identifiers(fn.Body(), func(id *ast.Node) {
+		if v && id != name && a.c.GetSymbolAtLocation(id) == sym {
+			v = a.calledDuring(id, fn)
+		}
+	})
+	a.during[k] = v
+	return v
+}
+
+// calledDuring reports whether id, a use in fn's body of the function a
+// parameter holds, calls it only during fn's call: it is called, or passed
+// to a function of the module that calls it only during its own call, and
+// every function literal around it runs only during the call too.
+func (a *effects) calledDuring(id, fn *ast.Node) bool {
+	p := id.Parent
+	if !ast.IsCallExpression(p) {
+		return false
+	}
+	if p.Expression() != id && !a.runsDuring(id) {
+		return false
+	}
+	for x := p; x != fn; x = x.Parent {
+		if ast.IsFunctionLike(x) && !a.runsDuring(x) {
+			return false
+		}
+	}
+	return true
+}
+
+// runsDuring reports whether lit, a function literal or a name holding a
+// function, runs only during the call it is passed to: a call of a
+// function of the module that calls that parameter only before it
+// returns.
+func (a *effects) runsDuring(lit *ast.Node) bool {
+	p := lit.Parent
+	if !ast.IsCallExpression(p) || p.Expression() == lit {
+		return false
+	}
+	g := a.ownFunction(p.Expression())
+	return g != nil && a.runsOnlyDuring(g, slices.Index(p.Arguments(), lit))
 }
 
 // lined returns the file of n.
@@ -574,6 +643,19 @@ func (a *effects) call(n *ast.Node) Effects {
 			}
 		}
 		out.add(a.summary(n, body))
+		// What a function it calls only during the call does.
+		for j, arg := range n.Arguments() {
+			if !a.runsOnlyDuring(body, j) {
+				continue
+			}
+			if ast.IsArrowFunction(arg) || ast.IsFunctionExpression(arg) {
+				out.add(a.summary(n, arg))
+			} else if g := a.ownFunction(arg); g != nil {
+				out.add(a.summary(n, g))
+			} else {
+				out.add(a.unknown(n, "the call"))
+			}
+		}
 		_, fill := cacheOf(body)
 		if t := a.c.GetTypeAtLocation(n); fill == nil && !a.primitive(n) && (t == nil || t.Flags()&(checker.TypeFlagsVoid|checker.TypeFlagsUndefined|checker.TypeFlagsNull) == 0) {
 			out.Fresh = true
@@ -582,6 +664,14 @@ func (a *effects) call(n *ast.Node) Effects {
 			}
 		}
 		return out
+	}
+	if s := a.c.GetSymbolAtLocation(callee); ast.IsIdentifier(callee) && s != nil && s.ValueDeclaration != nil && ast.IsParameterDeclaration(s.ValueDeclaration) {
+		// A parameter run only during its function's call: the caller
+		// counts what the function passed for it does.
+		fn := s.ValueDeclaration.Parent
+		if a.runsOnlyDuring(fn, slices.Index(fn.Parameters(), s.ValueDeclaration)) {
+			return out
+		}
 	}
 	if !ast.IsPropertyAccessExpression(callee) {
 		out.add(a.unknown(n, "the call"))
