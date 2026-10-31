@@ -2646,7 +2646,17 @@ hand or a tool got in the way.
        `FuncAround`, `SyncLit` and `CallsBeforeReturning` take the
        Effects (threaded with add_parameter); the refactorings pass
        theirs. tsapi's `CaseLines` lookup, refused before, now
-       extracts. TypeScript's own analysis is next if wanted.
+       extracts. *Done for TypeScript* (2026-10-31): tsapi's
+       `effects.runsOnlyDuring(fn, i)` judges the same way (rest
+       parameters and patterns do not qualify), and a call of such a
+       function counts what the literal or module function passed
+       there does, not an unknown call; its parameter's calls in the
+       summary count nothing. `timesIn` takes a `during` predicate, so a
+       use in a literal that runs during the call is `Shared`, not
+       refused; only inline_variable passes it (`effects.runsDuring`),
+       the other five callers pass nil. Open: those callers; and a
+       local that a literal assigns counts as state, so `let t = 0`
+       before such a call is refused as a write ("may change state").
     4. **Placing and replacing Go declarations** (about 120 lines):
        add_declaration, add_field, insert_statements and
        extract_struct find where code goes and write it in the

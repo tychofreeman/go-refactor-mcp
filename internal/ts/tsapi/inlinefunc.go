@@ -512,7 +512,7 @@ func (in *inliner) inline(l *lined, call *ast.Node) ([]Edit, string) {
 		case len(useNodes) == 0:
 			times = Unused
 		case len(useNodes) == 1:
-			t, _, why := fl.timesIn(useNodes[0], bodyRoot)
+			t, _, why := fl.timesIn(useNodes[0], bodyRoot, nil)
 			switch {
 			case why != "":
 				times = Several
@@ -552,7 +552,7 @@ func (in *inliner) inline(l *lined, call *ast.Node) ([]Edit, string) {
 		if stmt == nil {
 			return nil, fmt.Sprintf("the call at %s is in no statement of a block, before which its arguments could be declared", l.where(call))
 		}
-		if t, place, why := l.timesIn(call, stmt); why != "" || t != Once {
+		if t, place, why := l.timesIn(call, stmt, nil); why != "" || t != Once {
 			return nil, fmt.Sprintf("the call at %s is evaluated only sometimes or more than once (in %s), so its arguments cannot be declared before it", l.where(call), place+why)
 		}
 		before := parts(stmt, l.pos(call), nil)
