@@ -577,8 +577,10 @@ patterns sessions use, with their steps, in `docs/patterns.md`.
   `strings` is refused, suspect the GOROOT layout first.
   It is not a saving for a fresh model; its case is this repo's own
   sessions, not yet measured. Two of its refusals were wrong (a fixture
-  read after `cd` into testdata/), and its advice names a CLI the A/B
-  arms lack (roadmap item 47).
+  read after `cd` into testdata/), and its advice named a CLI the A/B
+  arms lack; both fixed 2026-10-31 (roadmap 47.1-47.2: paths resolved
+  from the hook's `cwd`, the `cd`s and `NAME=value`s before them; the
+  CLI named only when on the PATH).
 
 - **Would a fresh model recognize it?** (2026-10-22, a probe, $0.23):
   three Sonnet sessions, `claude -p` in a copy of the repo at the
