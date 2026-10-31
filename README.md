@@ -52,10 +52,11 @@ change, rolled back as a whole, and every step can be undone.
 
 ## How to work
 
-Work test first:
-* Write the tests we need next first.
+Work test first, refactoring only while every test passes:
+* Make the change easy: if it would be hard, refactor before writing the test.
+* Write the test we need next, and see it fail.
 * Then make the tests pass with the minimal amount of code.
-* Rerun the tests.
+* Then refactor away any duplication left, and rerun the tests.
 
 Make every change in two phases: "make the change easy, then make the easy change".
 

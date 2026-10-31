@@ -10,14 +10,18 @@ about 95% of coding through the tools, this project's own code included.
 
 ## How we work
 
-TDD:
-* Write the tests we need next first.
-* Then make the tests pass with the minimal amount of code.
-* Then refactor, keeping in mind the changes we will want to make next.
-* Rerun the tests.
+TDD, in this order; refactor only while every test passes:
+1. Green: make the change easy. If the change would be hard, refactor
+   first, before writing the test, until it is small and local.
+2. Red: write the next test and see it fail.
+3. Green: make it pass with the least code, even code that duplicates
+   what is there.
+4. Green: refactor, removing that duplication and shaping the code for
+   the changes we will want next. Rerun the tests.
 
-"Make the change easy, then make the easy change": through small
-refactorings, change the design so that the next change is simpler.
+When a test is failing or does not compile, the next step is code that
+makes it pass, not a refactoring. If you find you need one, undo the
+test (or set it aside), refactor while green, and add the test again.
 
 Use the gorefactor MCP for every refactoring and edit it can do. When no
 tool covers a change, make it by hand and log it in `docs/friction-log.md`

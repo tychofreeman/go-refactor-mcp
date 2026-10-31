@@ -23,12 +23,12 @@ Which tool, by what you want to do:
 
 How to work with them:
 1. Call inspect (no arguments) for an overview. Inspect a file to see its declarations without their bodies, with line numbers. Then read what you will change: inspect with function, or start_line/end_line, or several at once with targets; or several declarations by name alone with names; how each use treats a declaration (called, compared, written, read), with uses.
-2. To change a feature, first refactor so the change is easy, then make the change with an edit: "make the change easy, then make the easy change".
+2. Refactor only while tests pass: first to make the change easy, after it to remove duplication. A failing test needs passing code first.
 3. Apply ONE tool per call, or, when you can plan several steps from what you have read, send them together with batch: one call, rolled back as a whole if any step is refused. A step's args are that tool's own arguments, so if your client loads tool schemas on demand, first load the schema of every tool its steps use, all in one request, rather than guessing their names. Load schemas in the same response as another call, never in a turn of their own. Each call returns APPLIED with what changed, or REFUSED with the reason; a refusal changes nothing, so read it and choose differently.
 4. Line numbers change after edits. Before a single step that needs them, re-inspect the code an earlier step changed. In a batch, give line numbers as they were when the batch began: the batch moves them past the earlier steps. To address what an earlier step of the batch made, give a reference instead of a number: "$prev.end", "$2.start" (see batch). Tools that target a declaration (rename, add_parameter, move_declaration, ...) also accept file and name without line: a top-level declaration of file, or a member (Class.method), which stays valid after edits.
 5. Use check (with run_tests) at the end, and undo if a step made the code worse. Every step can be undone.
 
-Example batch, for a feature added test first: the test imports and calls discount, which calc.ts does not export, so it gets a stub there; the next step replaces the stub with the real function; the last renames by name. One call, one turn:
+Example batch, for a feature added test first: the test imports and calls discount, which calc.ts does not export, so it gets a stub there; the next step replaces the stub with the least code that passes; then a rename. One call, one turn:
 {"report": "summary", "steps": [
   {"tool": "replace_text", "args": {"file": "src/calc.test.ts", "old": "import { scale }", "new": "import { scale, discount }"}},
   {"tool": "add_declaration", "args": {"file": "src/calc.test.ts", "content": "export const discounted: number = discount(200, 10);"}},
