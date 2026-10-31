@@ -9,6 +9,26 @@
             "command": "cd \"$CLAUDE_PROJECT_DIR\" && go run ./cmd/read-guard"
           }
         ]
+      },
+      {
+        "matcher": "Read|Bash|Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$CLAUDE_PROJECT_DIR\" && go run ./cmd/session-log"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$CLAUDE_PROJECT_DIR\" && go run ./cmd/session-log"
+          }
+        ]
       }
     ]
   }

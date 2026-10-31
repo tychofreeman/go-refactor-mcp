@@ -61,6 +61,12 @@ do not reach sessions on other machines.
 
 @docs/session-notes.md
 
+When the user asks "what's next?", the `whats-next` skill
+(`.claude/skills/whats-next`) offers the next items, and keeps a record
+of the chosen one in `docs/sessions/<branch>.md`: the plan before code,
+notes of hand edits, refusals and reads, and what the hook
+`cmd/session-log` logged (`refactor-tokens -log`).
+
 ## Using gorefactor well
 
 The server is started from this checkout (`.mcp.json` runs

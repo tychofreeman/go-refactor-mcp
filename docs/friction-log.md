@@ -4102,3 +4102,12 @@ and replace_text folded `calledDuring`'s pass-on check into
 By hand: the rebase conflict with #524's entry. A `sed` meant for this
 entry's last line rewrote every line of the log reading "Nothing by
 hand."; the file was restored from main and the entry appended again.
+
+## 2026-10-31: the whats-next skill and the session log
+
+Through the CLI (a cloud session, no MCP): the tests first and stubs
+with create_file in a batch, then the implementations with create_file
+`overwrite` (new files, so nothing to derive), `refactor-tokens -log`
+with replace_text and add_declaration, the docs and settings with
+replace_text and create_file. Batches were written as JSON by Python in
+the scratchpad. Nothing by hand.
