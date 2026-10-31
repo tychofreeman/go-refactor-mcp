@@ -68,9 +68,14 @@ patterns sessions use, with their steps, in `docs/patterns.md`.
   only these notes and the friction log, not the roadmap).
 - The README (2026-10-30, the user): it opens with the pitch for
   developers who know TDD and refactoring, five sentences the user
-  chose, then Status, then the user's own instructions for Claude
-  ("How to work", "Lessons from earlier sessions", added in #310), kept
-  word for word. The roadmap is `docs/roadmap.md`, numbering unchanged.
+  chose, then Status. The roadmap is `docs/roadmap.md`, numbering
+  unchanged. On 2026-10-31 the user asked for repetition cut: "How to
+  work" and "Lessons from earlier sessions" (#310, an A/B arm's
+  instructions) went, since the README reaches no session (CLAUDE.md
+  does) and `examples/CLAUDE.md` is what a user copies; the derivations
+  are in `docs/derivations.md`. What each tool checks is
+  `docs/checks.md`. Keep the README to what a developer needs to judge
+  and install the tools; instructions for Claude go in CLAUDE.md.
 - Releases (2026-10-27, the user): CI makes them. To release, raise
   `mcpserver.Version` in a PR, with the notes in
   `docs/releases/v<version>.md`; once Test passes on main, the Release

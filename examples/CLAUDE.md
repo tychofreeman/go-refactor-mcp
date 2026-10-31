@@ -7,18 +7,14 @@ helped: docs/cost-history.md sections 8, 9 and 14. Keep it short:
 longer recipes cost turns. -->
 
 Work in this order, refactoring only while every test passes:
-make the change easy (refactor first, if it would be hard); write the
-next test and see it fail; make it pass with the least code; then
-refactor away the duplication; rerun the tests.
-
-Make every change in two phases: make the change easy, then make the
-easy change.
-1. Refactor first, with the gorefactor tools, until the change is small
-   and local: rename to what a thing will mean, extract what you will
-   change, add the parameter or field the change needs. Tests pass after
-   every step.
-2. Then make the behaviour change, with the edit tools
+1. Make the change easy: if it would be hard, refactor first, with the
+   gorefactor tools, until it is small and local (rename to what a thing
+   will mean, extract what you will change, add the parameter or field
+   the change needs).
+2. Write the next test and see it fail.
+3. Make it pass with the least code, with the edit tools
    (replace_statements, insert_statements, add_declaration, create_file).
+4. Refactor away the duplication, and rerun the tests.
 
 ## Work as a derivation
 

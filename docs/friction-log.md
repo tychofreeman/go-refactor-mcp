@@ -4002,3 +4002,17 @@ servers' instructions, `docs/patterns.md`, the session notes and the
 roadmap, all with replace_text (one step with `files` for the line the
 two instruction texts share). Read through inspect and sed of Markdown.
 Nothing by hand.
+
+## 2026-10-31: the README cut down
+
+By hand: one shell step (sed -n of line ranges) moved the README's
+"what it checks" sections and the edits' (1,234 lines) to
+`docs/checks.md` and dropped "How to work", "Lessons", the old Layout,
+Ollama and refactor-eval sections. No tool moves or deletes a range of
+lines in a file that is not Go: replace_text needs the old text
+written out (about 60,000 characters here), and create_file the whole
+new file. Tried in thought: move_file with `copy` then replace_text
+deletions, the same text in each. A candidate: replace_text, or a
+tool of its own, taking `start_line`/`end_line` in any file, and a
+`to_file` for moving them. The new sections were written with
+replace_text, anchored on the headings.
