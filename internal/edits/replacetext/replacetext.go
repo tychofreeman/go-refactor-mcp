@@ -45,7 +45,7 @@ type replaceTextArgs struct {
 	Old            string   `json:"old,omitempty" desc:"The text to replace, as it is in the file."`
 	New            string   `json:"new" desc:"The text to put in its place."`
 	AllOccurrences bool     `json:"all_occurrences,omitempty" desc:"Replace every occurrence of old in the file, not just the only one."`
-	Function       string   `json:"function,omitempty" desc:"Optional: look for old only in this function of the Go file (Name, or Type.Method)."`
+	Function       string   `json:"function,omitempty" desc:"Optional: look for old only in this function of the Go file (Name, or Type.Method), its doc comment included."`
 	Append         bool     `json:"append,omitempty" desc:"Instead of old: add new at the end of the file."`
 	Imports        []string `json:"imports,omitempty" desc:"Optional: import paths to use for package names new uses, when the name alone is ambiguous."`
 }
@@ -146,6 +146,9 @@ func fileEdit(ws *workspace.Workspace, file, old, new string, all bool, function
 			return fe, 0, false, refactor.Refusef("no function %s in %s", function, rel)
 		}
 		lo, hi = ws.Fset.Position(fd.Pos()).Offset, ws.Fset.Position(fd.End()).Offset
+		if fd.Doc != nil {
+			lo = ws.Fset.Position(fd.Doc.Pos()).Offset
+		}
 	}
 	spans, loose, why := textutil.Locate(string(src), old, lo, hi, all, rel)
 	if why != "" {

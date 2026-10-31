@@ -36,7 +36,7 @@ type replaceTextArgs struct {
 	Old      string   `json:"old,omitempty" desc:"The text to replace, as it is in the file."`
 	New      string   `json:"new" desc:"The text to put in its place."`
 	All      bool     `json:"all_occurrences,omitempty" desc:"Replace every occurrence of old in the file, not just the only one."`
-	Function string   `json:"function,omitempty" desc:"Optional: look for old only in this function of the file (name, or Class.method)."`
+	Function string   `json:"function,omitempty" desc:"Optional: look for old only in this function of the file (name, or Class.method), its doc comment included."`
 	Append   bool     `json:"append,omitempty" desc:"Instead of old: add new at the end of the file."`
 }
 
