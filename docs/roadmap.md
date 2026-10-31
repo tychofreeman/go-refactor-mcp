@@ -2656,6 +2656,17 @@ hand or a tool got in the way.
        `gocode.PkgNameOf`, `gocode.DocOf` and `textutil.NextLine`
        (eight copies). Where each edit decides code goes is still its
        own; one placement for all of them is open.
+       *Done* (2026-10-31) for what they share: a new top-level
+       declaration after another goes after the line it ends on,
+       `textutil.LineEnd`, in extract_function, parameterize and
+       type_switch_to_method; the last two inserted at the closing
+       brace, so a `} // comment` there moved onto the new code (goldens
+       `trailing_comment`). movedecl's copy of `textutil.NextLine` is
+       gone. Fields (add_field), statements (insert_statements) and
+       interface methods (create_from_usage) are other kinds of place,
+       each with its own rules (a struct or block on one line opened
+       up); no placement common to them was found worth the
+       abstraction.
     5. **The rest of the clones** (about 150 lines): inspect's
        `targets`, the workspaces' per-file `Apply` and `Preload`,
        tsapi's type helpers, extract_function and inline_function.

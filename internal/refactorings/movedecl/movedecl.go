@@ -35,6 +35,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/site"
+	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
 
@@ -491,7 +492,7 @@ func (m *mover) setRange(d *moved) {
 		d.start = m.Off(doc.Pos())
 	}
 	d.end = m.Off(d.node().End())
-	if rest := d.from.Src[d.end:d.from.nextLine(d.end)]; strings.HasPrefix(strings.TrimSpace(string(rest)), "//") {
+	if rest := d.from.Src[d.end:textutil.NextLine(d.from.Src, d.end)]; strings.HasPrefix(strings.TrimSpace(string(rest)), "//") {
 		d.end += len(strings.TrimRight(string(rest), "\n"))
 	}
 }
@@ -645,7 +646,7 @@ func (m *mover) deleteDecls() {
 // deleteDecl deletes the declaration's lines from the source file.
 func (m *mover) deleteDecl(d *moved) {
 	fe, _ := m.fileFor(d.from.path) // the source file is loaded
-	fe.edits = append(fe.edits, edit.TextEdit{Start: d.from.lineStart(d.start), End: d.from.nextLine(d.end)})
+	fe.edits = append(fe.edits, edit.TextEdit{Start: d.from.lineStart(d.start), End: textutil.NextLine(d.from.Src, d.end)})
 	fe.cuts = append(fe.cuts, [2]int{d.start, d.end})
 }
 
@@ -938,14 +939,6 @@ func (m *mover) appendTo(to, destPath string) error {
 
 func (s *source) lineStart(off int) int {
 	return strings.LastIndexByte(string(s.Src[:off]), '\n') + 1
-}
-
-// nextLine returns the offset just past the newline that ends off's line.
-func (s *source) nextLine(off int) int {
-	if i := strings.IndexByte(string(s.Src[off:]), '\n'); i >= 0 {
-		return off + i + 1
-	}
-	return len(s.Src)
 }
 
 // hasEffect reports whether evaluating the spec's values could have a
