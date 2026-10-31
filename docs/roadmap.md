@@ -2,7 +2,8 @@
 
 Moved out of the README on 2026-10-30, numbering unchanged, so "roadmap
 item N" anywhere in the repository still means item N here. Sections it
-names in quotes, such as "Rename: what it checks", are in the README.
+names in quotes, such as "Rename: what it checks", are in
+`docs/checks.md` (moved out of the README on 2026-10-31).
 
 The goal is a workflow for AI-driven development: during a story, Claude
 picks the refactorings that make the change easy, the tools perform them
