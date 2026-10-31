@@ -309,6 +309,41 @@ func TestNamesArm(t *testing.T) {
 	}
 }
 
+// The guarded arm is the mcp arm with the read-guard hook: a PreToolUse
+// hook on Read and Bash, given through --settings, that runs the binary
+// in the config. Its tools are the mcp arm's.
+func TestGuardedArm(t *testing.T) {
+	args := claudeArgs(Config{MCPServer: "/bin/refactor-mcp", ReadGuard: "/bin/read-guard"}, "guarded", "/work", "do it")
+	i := slices.Index(args, "--settings")
+	if i < 0 {
+		t.Fatalf("guarded arm: no --settings in %q", args)
+	}
+	var settings struct {
+		Hooks struct {
+			PreToolUse []struct {
+				Matcher string
+				Hooks   []struct{ Type, Command string }
+			}
+		}
+	}
+	if err := json.Unmarshal([]byte(args[i+1]), &settings); err != nil {
+		t.Fatalf("guarded arm: settings %q: %v", args[i+1], err)
+	}
+	pre := settings.Hooks.PreToolUse
+	if len(pre) != 1 || pre[0].Matcher != "Read|Bash" || len(pre[0].Hooks) != 1 || pre[0].Hooks[0].Command != "/bin/read-guard" {
+		t.Errorf("guarded arm: want a Read|Bash hook running /bin/read-guard, got %s", args[i+1])
+	}
+	if !slices.Equal(allowedTools(args), allowedTools(claudeArgs(Config{}, "mcp", "/work", "do it"))) {
+		t.Errorf("guarded arm's tools differ from the mcp arm's: %q", allowedTools(args))
+	}
+	if slices.Contains(claudeArgs(Config{ReadGuard: "/bin/read-guard"}, "mcp", "/work", "do it"), "--settings") {
+		t.Errorf("mcp arm has the hook")
+	}
+	if _, err := RunAll(context.Background(), Config{Arms: []string{"guarded"}, OutDir: t.TempDir()}, nil); err != nil {
+		t.Errorf("guarded should be a known arm: %v", err)
+	}
+}
+
 // An arm can start from its own CLAUDE.md, part of the starting state and
 // so not of the run's diff.
 func TestClaudeMDPerArm(t *testing.T) {
