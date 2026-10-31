@@ -2696,6 +2696,17 @@ hand or a tool got in the way.
        revisions; the feature tasks' pass rates on the workstation can be
        measured again.
 
+48. **Refusals met deriving 47.4's fix** (2026-10-31, friction log):
+    1. A refactoring in a batch with check "end", after edits, is
+       refused with "the change fixes none of the errors" when the only
+       errors are a test's use of a function not yet declared; alone,
+       a refactoring may start from errors in test files.
+    2. inline_variable counts the variable assigned to (`stdMap =
+       pkgs`) as read before the initializer's call, so it refuses to
+       make `stdMap = stdPackagesIn(...)`.
+    3. replace_text with `function` does not search the function's doc
+       comment.
+
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
 candidates and the evidence for each, gathered from the friction log.

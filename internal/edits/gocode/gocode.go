@@ -244,7 +244,8 @@ var (
 // stdPackages maps package names to the standard library's import paths.
 func stdPackages() map[string][]string {
 	stdOnce.Do(func() {
-		stdMap = stdPackagesIn(build.Default.GOROOT)
+		pkgs := stdPackagesIn(build.Default.GOROOT)
+		stdMap = pkgs
 	})
 	return stdMap
 }
@@ -252,11 +253,11 @@ func stdPackages() map[string][]string {
 // stdPackagesIn maps package names to the import paths of the standard
 // library under goroot. A src that is a symlink is followed.
 func stdPackagesIn(goroot string) map[string][]string {
-	pkgs := map[string][]string{}
 	root := filepath.Join(goroot, "src")
 	if r, err := filepath.EvalSymlinks(root); err == nil {
-		root = r
+		root = r // WalkDir does not follow a root that is a symlink
 	}
+	pkgs := map[string][]string{}
 	_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil || !d.IsDir() {
 			return nil
