@@ -18,7 +18,7 @@ The measurement comes from the session log: the hook `cmd/session-log`
     - **Item:** what was chosen, and from where (roadmap item N, a
       friction-log entry, a measurement)
     - **Date:** YYYY-MM-DD
-    - **Branch:** <branch>, PR #N
+    - **Branch:** <branch>
 
     ## Plan
 

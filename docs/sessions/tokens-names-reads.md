@@ -4,7 +4,7 @@
   (`docs/sessions/ts-during-callers.md`): `refactor-tokens` reports
   `inspect` by `names` as "module overview".
 - **Date:** 2026-10-31
-- **Branch:** tokens-names-reads, PR #N
+- **Branch:** tokens-names-reads
 
 ## Plan
 
