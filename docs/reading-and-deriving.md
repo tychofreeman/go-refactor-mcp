@@ -1,7 +1,8 @@
 # Does deriving let the model read less?
 
-A plan, written to be run in a later session. The user's hypothesis
-(2026-10-22), not yet supported by data: a model that thinks
+A plan in three steps, written on 2026-10-22, with what each step
+found; "Where it stands" below says what has happened since. The
+user's hypothesis (2026-10-22): a model that thinks
 algebraically, deriving a change as operations rather than rewriting
 text, needs to read the code much less; perhaps the names of the
 functions in a call tree are enough to decide where a change goes; and
@@ -18,6 +19,45 @@ So far every learner run (`docs/learning-transfer.md`) used the five
 shapes the user's moves were written for: billing and freight-xl are
 notify under other names. They show the model applying moves it was
 given, not deriving.
+
+## Where it stands (2026-10-31)
+
+Steps 1-3 ran on 2026-10-22, and bodies read and not used were counted
+on 2026-10-23. The answers so far:
+
+- **Reading:** from names and signatures alone a model finds where a
+  change goes and plans the derivation (step 2; Haiku as well as
+  Sonnet, cost-history 16). But in a session it reads by habit before
+  it plans, in every arm, and an instruction not to did not change that
+  (steps 1 and 3). Reading is a small part of a session's input (about
+  4%; unused bodies under 1%): what costs is requests.
+- **Deriving:** the method transfers only where an operation fits; on
+  shapes no operation fits, no arm derived (step 3).
+
+Since then:
+
+- **Planning without bodies went on in the plan-then-execute loop**
+  (`docs/plan-and-execute.md`, cost-history 16-19). A plan from names
+  derives where its steps can be addressed by name. Kinds needed the
+  cases' bodies until extract_function and replace_statements took
+  `case` with `function` (roadmap item 32), and with bodies in view the
+  models wrote the code out rather than derive it: reads make a model
+  default to edits.
+- **The read guard** (`cmd/read-guard`, cost-history 21-22) makes Go
+  readable only through `inspect`. For a fresh model reading moved to
+  more, smaller calls, with no saving. In this repo's own sessions it
+  ended reading Go by shell (about 20 reads per 100 requests to none)
+  and cut the Go text read per request by about two thirds.
+- **The gaps the steps found:** rename's `function` trap and fold's
+  unused imports are fixed (step 2); rename makes an embedded field a
+  named one, and a switch on a kind moves into types one kind at a
+  time (step 3). The test files' uses no view showed were given to
+  later probes as the test files' literals (cost-history 16).
+  `remove_dead_code` refusing `var policy = DefaultPolicy()` (step 3)
+  is not recorded as fixed.
+- **Open:** the `names` run, planning from names with bodies read only
+  by name ("Bodies read and not used", below). Ask the user before
+  running it (about $5).
 
 ## Why it is plausible
 
@@ -209,6 +249,10 @@ fixable in the tools: rename by name where `function` repeats it, fold
 removing the imports it leaves unused, and the test files' uses shown
 or reported. Step 3, on shapes no move names, is the open test.
 
+The two tool fixes are done (roadmap item 24): `function` set to the
+function's own name means the function, and fold removes the imports
+its folds leave unused.
+
 ## Step 3: shapes no move names, on a large module
 
 **Set C.** A new module the size of freight-xl, with many uses of
@@ -370,7 +414,11 @@ from the cases). The first is done: the address task is now
 `extract_struct`, then `rename` of `Member.Address` to `Home`, which
 names the field in every selector that reached through it. For the
 second the user chose two general operations: `type_switch_to_method`
-(done), and a type code into types (next).
+(done), and a type code into types. The user then replaced the second
+with a derivation one kind at a time, every step keeping behavior:
+widen the field to `any`, `prepare_switch_for_types`, a type per case,
+narrow the field, delete the dead case (#283, #284; run in
+cost-history 10).
 
 ## Bodies read and not used (Oct 23, no new runs)
 
@@ -411,7 +459,21 @@ bracket it, and four sessions checked by hand agreed.
 Next: a server option that lets `inspect` read source only by name
 (roadmap item 24), so a run can test planning from names and
 signatures with the bodies a name asks for. Built: `refactor-mcp
--read-by-name`; the run is still to do.
+-read-by-name`, and the `names` arm of `cmd/refactor-ab`, the mcp arm
+with that server and no other way to read Go
+(`eval-tasks/claude-md-names`). The run is still to do (about $5):
+
+    go run ./cmd/refactor-ab -tasks eval-tasks/derivations-freight.json \
+      -model sonnet -arms mcp,names -runs 4 \
+      -only freight-dispatch,freight-routes,freight-tail,freight-run \
+      -claude-md eval-tasks/claude-md-names -out eval-runs/names-freight
+
+Measure passes, cost, turns, refused reads and bodies read
+(`eval-tasks/learning/bodies.py`). The read guard (cost-history 21)
+already stops Read and shell reads of Go; what `names` adds over it is
+refusing line ranges in `inspect`. The guard moved a fresh model's
+reading into more, smaller calls at no saving, so expect the same
+unless naming changes what the model asks for.
 
 ## Recording
 

@@ -4078,3 +4078,8 @@ The gap logged in 46.4 tried first as a composition, in a scratch file
 TypeScript test case with replace_text, seen failing; replace_text on
 each refusal made them pass. Read through inspect; two reads of Go by
 shell refused by the guard. Nothing by hand.
+
+## 2026-10-31: reading-and-deriving.md brought up to date
+
+Nothing by hand: the doc with replace_text in one batch, through the
+CLI (a cloud session, no MCP).
