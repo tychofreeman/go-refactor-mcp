@@ -204,7 +204,10 @@ func nodeText(n ast.Node) string {
 // EvaluatedBefore returns the code inside root that is evaluated before
 // pos: the largest nodes that end before it and do not enclose it, in
 // order, skipping the node skip. Bodies of function literals are kept
-// (they run only when called, which a summary of them says).
+// (they run only when called, which a summary of them says). Of an
+// assignment whose right-hand side holds pos, the left-hand side gives
+// only what the spec evaluates first: the operands of index expressions
+// and pointer indirections, not a variable assigned to.
 func EvaluatedBefore(root ast.Node, pos token.Pos, skip ast.Node) []ast.Node {
 	var out []ast.Node
 	ast.Inspect(root, func(n ast.Node) bool {
@@ -215,9 +218,36 @@ func EvaluatedBefore(root ast.Node, pos token.Pos, skip ast.Node) []ast.Node {
 			out = append(out, n)
 			return false
 		}
+		if a, ok := n.(*ast.AssignStmt); ok && a.Lhs[len(a.Lhs)-1].End() <= pos {
+			for _, l := range a.Lhs {
+				out = append(out, assignedOperands(l)...)
+			}
+			for _, r := range a.Rhs {
+				out = append(out, EvaluatedBefore(r, pos, skip)...)
+			}
+			return false
+		}
 		return true // it encloses pos; look inside
 	})
 	return out
+}
+
+// assignedOperands returns what assigning to e evaluates before the
+// right-hand side: nothing for a variable, the operands of an index
+// expression or pointer indirection, and the operand of a selector (read
+// when it is a pointer; kept either way).
+func assignedOperands(e ast.Expr) []ast.Node {
+	switch e := ast.Unparen(e).(type) {
+	case *ast.Ident:
+		return nil
+	case *ast.IndexExpr:
+		return []ast.Node{e.X, e.Index}
+	case *ast.StarExpr:
+		return []ast.Node{e.X}
+	case *ast.SelectorExpr:
+		return []ast.Node{e.X}
+	}
+	return []ast.Node{e}
 }
 
 // EvaluatedAfter returns the code inside root that is evaluated after

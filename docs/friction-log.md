@@ -4016,3 +4016,13 @@ deletions, the same text in each. A candidate: replace_text, or a
 tool of its own, taking `start_line`/`end_line` in any file, and a
 `to_file` for moving them. The new sections were written with
 replace_text, anchored on the headings.
+
+## 2026-10-31: inline_variable into an assignment (roadmap 48.2)
+
+Two goldens with create_file (one applying, one refused that must stay
+refused), seen failing at a check step, then replace_declaration of
+`analysis.EvaluatedBefore` with `assignedOperands` after it. A check
+step with two package patterns (`./a/... ./b/...`) matched no package:
+`packages` takes one pattern. The read guard refused two fixture reads
+under testdata/ (a relative path after `cd`, and a path in a shell
+variable): roadmap 47.1. Read through inspect. Nothing by hand.
