@@ -2674,7 +2674,9 @@ hand or a tool got in the way.
     session; the same cost on the user's workstation). Open:
     1. **Follow `cd`.** A fixture read as `cat in/a.go` after `cd` into
        `testdata/` is refused (2 of 6 refusals); the guard judges each
-       path as given. Resolve paths against the `cd`s before them, and
+       path as given. Met again on 2026-10-31 (48.2): `cat in/m.go`
+       after `cd` into a testdata directory, and `cat $d/in/m.go` with
+       `d` a testdata path (a variable is not expanded either). Resolve paths against the `cd`s before them, and
        the hook input's `cwd`.
     2. **Advice for where it runs.** The refusal names the `refactor`
        CLI, which a session with the MCP does not need and the A/B arms
@@ -2705,7 +2707,11 @@ hand or a tool got in the way.
        refusal stays.
     2. inline_variable counts the variable assigned to (`stdMap =
        pkgs`) as read before the initializer's call, so it refuses to
-       make `stdMap = stdPackagesIn(...)`.
+       make `stdMap = stdPackagesIn(...)`. *Done* (2026-10-31):
+       `analysis.EvaluatedBefore` takes from an assignment's left side
+       only what the spec evaluates before the right (index operands,
+       a pointer indirection's operand, a selector's operand), not a
+       variable assigned to. TypeScript's inline_variable not checked.
     3. replace_text with `function` does not search the function's doc
        comment.
 
