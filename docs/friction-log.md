@@ -4078,3 +4078,12 @@ The gap logged in 46.4 tried first as a composition, in a scratch file
 TypeScript test case with replace_text, seen failing; replace_text on
 each refusal made them pass. Read through inspect; two reads of Go by
 shell refused by the guard. Nothing by hand.
+
+## 2026-10-31: TypeScript's inline_variable and an assignment's target (roadmap 48.2)
+
+Two cases in `TestInlineVariable` with replace_text, from Go's goldens:
+assigning to a module variable failed as Go's had, an index target
+already refused. replace_text added a case to `parts` that leaves out a
+name `=` assigns to, and its doc comment. Read through inspect; one grep
+naming a Go file refused by the guard. By hand: the rebase conflict
+with #523's entry here (both appended), its markers removed with sed.

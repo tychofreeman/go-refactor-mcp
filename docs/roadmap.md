@@ -2730,7 +2730,9 @@ hand or a tool got in the way.
        `analysis.EvaluatedBefore` takes from an assignment's left side
        only what the spec evaluates before the right (index operands,
        a pointer indirection's operand, a selector's operand), not a
-       variable assigned to. TypeScript's inline_variable not checked.
+       variable assigned to. TypeScript's had the same refusal; *done*
+       (2026-10-31): `parts` leaves out a name that `=` assigns to (a
+       compound assignment reads it, an element's object is evaluated).
     3. replace_text with `function` does not search the function's doc
        comment. *Done* (2026-10-31): Go's search starts at the doc
        comment; TypeScript's already started at the JSDoc (now tested).

@@ -86,7 +86,8 @@ func (l *lined) part(n *ast.Node) string {
 
 // parts returns the largest pieces of root, statements or expressions,
 // that run before the offset until and overlap none of skip: what runs
-// in root before the node there.
+// in root before the node there. A name that = assigns to is left out,
+// since it is not read.
 func parts(root *ast.Node, until int, skip []*ast.Node) []*ast.Node {
 	var out []*ast.Node
 	var visit func(n *ast.Node)
@@ -102,6 +103,8 @@ func parts(root *ast.Node, until int, skip []*ast.Node) []*ast.Node {
 				if !ast.IsFunctionLike(c) {
 					visit(c)
 				}
+			case ast.IsIdentifier(c) && ast.IsBinaryExpression(n) && n.AsBinaryExpression().OperatorToken.Kind == ast.KindEqualsToken && n.AsBinaryExpression().Left == c:
+				// a name assigned to is not read before the value
 			case ast.IsExpression(c) || ast.IsStatement(c):
 				out = append(out, c)
 			}
