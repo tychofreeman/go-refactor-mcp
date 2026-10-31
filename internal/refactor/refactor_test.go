@@ -1163,11 +1163,12 @@ func (echo) Description() string { return "" }
 func (echo) InputSchema() json.RawMessage {
 	return json.RawMessage(`{"type": "object", "properties": {
   "file": {"type": "string"}, "name": {"type": "string"}, "parameter": {"type": "string"},
-  "old": {"type": "string"}, "new": {"type": "string"}, "content": {"type": "string"}
+  "old": {"type": "string"}, "new": {"type": "string"}, "content": {"type": "string"},
+  "line": {"type": "integer"}
 }, "required": ["file"]}`)
 }
 func (echo) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
-	var a map[string]string
+	var a map[string]any
 	json.Unmarshal(raw, &a)
 	b, _ := json.Marshal(a)
 	return &refactor.Plan{Summary: string(b)}, nil
@@ -1181,6 +1182,14 @@ func TestArgumentAliases(t *testing.T) {
 		{`{"file": "m.go", "old_text": "a", "new_text": "b"}`, `{"file":"m.go","new":"b","old":"a"}`, `took "new_text" as new and "old_text" as old`},
 		{`{"file": "m.go", "name": "F", "parameter_name": "p"}`, `{"file":"m.go","name":"F","parameter":"p"}`, `took "parameter_name" as parameter`},
 		{`{"file": "m.go", "new": "a", "new_code": "b"}`, `{"content":"b","file":"m.go","new":"a"}`, `took "new_code" as content`},
+		// Names a model reaches for that contain no word of the argument.
+		{`{"path": "m.go", "old": "a"}`, `{"file":"m.go","old":"a"}`, `took "path" as file`},
+		{`{"from": "m.go"}`, `{"file":"m.go"}`, `took "from" as file`},
+		{`{"file": "m.go", "struct": "T"}`, `{"file":"m.go","name":"T"}`, `took "struct" as name`},
+		// A number or a boolean sent as a string, where the schema says which.
+		{`{"file": "m.go", "line": "12"}`, `{"file":"m.go","line":12}`, ""},
+		// file is given, so path is left to be refused.
+		{`{"file": "m.go", "path": "x"}`, `{"file":"m.go","path":"x"}`, ""},
 		// parameter_name could be parameter or name.
 		{`{"file": "m.go", "parameter_name": "p"}`, `{"file":"m.go","parameter_name":"p"}`, ""},
 	} {

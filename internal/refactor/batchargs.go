@@ -92,11 +92,16 @@ func argsProblem(schema, args json.RawMessage) string {
 // contentAliases are names a model gives content (the new code) by.
 var contentAliases = []string{"new_text", "new_code", "new_content", "code", "body", "statements", "source"}
 
+// nameAliases are names a model gives an argument that share no word with
+// it: a path for the file, the struct whose field it means for the name.
+var nameAliases = map[string]string{"path": "file", "from": "file", "struct": "name"}
+
 // aliasArgs renames each argument of args that schema does not have to
 // the one it can only mean: an argument schema has and args does not
-// give, whose name is a word of the given name (old_text: old), or else,
-// for content, one of contentAliases. It returns args unchanged if there
-// are none, and a note on the names it took.
+// give, whose name is a word of the given name (old_text: old), or else
+// one of contentAliases for content or of nameAliases (path: file). It also
+// converts what fromStrings converts. It returns args unchanged if there
+// is nothing to do, and a note on the names it took.
 func aliasArgs(schema, args json.RawMessage) (json.RawMessage, string) {
 	var s struct {
 		Properties map[string]json.RawMessage `json:"properties"`
@@ -127,6 +132,9 @@ func aliasArgs(schema, args json.RawMessage) (json.RawMessage, string) {
 		if len(fits) == 0 && slices.Contains(contentAliases, k) && free("content") {
 			fits = []string{"content"}
 		}
+		if to, ok := nameAliases[k]; len(fits) == 0 && ok && free(to) {
+			fits = []string{to}
+		}
 		if len(fits) != 1 {
 			continue
 		}
@@ -134,14 +142,45 @@ func aliasArgs(schema, args json.RawMessage) (json.RawMessage, string) {
 		delete(given, k)
 		took = append(took, fmt.Sprintf("%q as %s", k, fits[0]))
 	}
-	if len(took) == 0 {
+	converted := fromStrings(s.Properties, given)
+	if len(took) == 0 && !converted {
 		return args, ""
 	}
 	out, err := json.Marshal(given)
 	if err != nil {
 		return args, ""
 	}
+	if len(took) == 0 {
+		return out, ""
+	}
 	return out, "took " + orList(took, "and")
+}
+
+// fromStrings converts each argument of given sent as a string that props
+// declares an integer or a boolean ("12", "true") to that type, and
+// reports whether it converted any.
+func fromStrings(props, given map[string]json.RawMessage) bool {
+	converted := false
+	for k, v := range given {
+		var p struct {
+			Type string `json:"type"`
+		}
+		var s string
+		if json.Unmarshal(props[k], &p) != nil || json.Unmarshal(v, &s) != nil {
+			continue
+		}
+		switch s = strings.TrimSpace(s); p.Type {
+		case "integer":
+			if n, err := strconv.Atoi(s); err == nil {
+				given[k], converted = json.RawMessage(strconv.Itoa(n)), true
+			}
+		case "boolean":
+			if b, err := strconv.ParseBool(s); err == nil {
+				given[k], converted = json.RawMessage(strconv.FormatBool(b)), true
+			}
+		}
+	}
+	return converted
 }
 
 // fileArgOf returns the argument the given argument k stands for when it
