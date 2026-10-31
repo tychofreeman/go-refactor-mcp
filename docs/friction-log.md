@@ -4078,3 +4078,12 @@ The gap logged in 46.4 tried first as a composition, in a scratch file
 TypeScript test case with replace_text, seen failing; replace_text on
 each refusal made them pass. Read through inspect; two reads of Go by
 shell refused by the guard. Nothing by hand.
+
+## 2026-10-31: the whats-next skill and the session log
+
+Through the CLI (a cloud session, no MCP): the tests first and stubs
+with create_file in a batch, then the implementations with create_file
+`overwrite` (new files, so nothing to derive), `refactor-tokens -log`
+with replace_text and add_declaration, the docs and settings with
+replace_text and create_file. Batches were written as JSON by Python in
+the scratchpad. Nothing by hand.

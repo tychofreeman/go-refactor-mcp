@@ -2735,6 +2735,25 @@ hand or a tool got in the way.
        comment. *Done* (2026-10-31): Go's search starts at the doc
        comment; TypeScript's already started at the JSDoc (now tested).
 
+49. **Is the work going through the tools?** (2026-10-31, the user): the
+    `whats-next` skill offers the next items, and the chosen one is done
+    with a session record in `docs/sessions/`: the plan before code, notes
+    of hand edits, refusals and reads as they happen, and what the hook
+    `cmd/session-log` logged, reported by `refactor-tokens -log`. *Done.*
+    Open:
+    1. `refactor-tokens` counts fold, parameterize, move_method,
+       type_switch_to_method and prepare_switch_for_types as edits: its
+       `refactoringTools` predates them, so the derived share of work that
+       uses them comes out too low, from transcripts and logs alike.
+       Adding them changes earlier cost-history rows; ask the user.
+    2. A failed call and a denied one look the same in the log (a
+       PreToolUse with no PostToolUse).
+    3. In a cloud clone the `refactor` CLI's calls are counted, not
+       measured: their steps are in a file the log does not see.
+    4. The hook adds a `go run` to every call (two for reads and writes);
+       if sessions feel slower, build it once.
+    5. After a few records: whether they show what the user wanted.
+
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
 candidates and the evidence for each, gathered from the friction log.
