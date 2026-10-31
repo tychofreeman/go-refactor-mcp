@@ -45,6 +45,17 @@ patterns sessions use, with their steps, in `docs/patterns.md`.
   the inverse of introduce_parameter), and only then descend to tools,
   names and lines. Asked after #283, where reasoning at the level of
   lines added a second flag to what was already a type code.
+- **TDD's order: refactor only while green** (2026-10-31, the user:
+  "not the only session to make this mistake"). Sessions read TDD and
+  "make the change easy" as test, refactor, change: in 47.4 the test
+  was written, then the code refactored while it did not compile (the
+  test deleted to get past the refusal). The order is: refactor to make
+  the change easy while green, before the test; red; the least code
+  that passes, a copy included; then refactor (fold the copy). A
+  refactoring refused because a new test does not compile is right.
+  CLAUDE.md, the README, `examples/CLAUDE.md`, the server's
+  instructions (both languages, published text: A/B baselines before
+  this saw the old wording) and `docs/patterns.md` now say so.
 - Report results plainly, including when a change did not help (#119 was
   reverted in #120 after its rerun showed nothing).
 - Stacked PRs: if one fails CI, fix the lowest branch and merge upward;
@@ -693,7 +704,9 @@ patterns sessions use, with their steps, in `docs/patterns.md`.
   test calls are declared automatically, and an edit may start from
   broken code if it fixes some errors and adds none. Since 2026-10-20 a
   refactoring may too, when every error is in a test file (a test
-  written against what the refactoring makes); the user agreed.
+  written against what the refactoring makes); the user agreed. That
+  is for a refactoring before the test or after it passes, not one
+  between red and green (2026-10-31, below).
 - **Claude via MCP is the product**, not the Ollama loop or standalone
   evaluation (2026-10-17): the user said those were not what they need.
   Revisited (2026-10-25): after cost-history 14, the user asked

@@ -3994,3 +3994,11 @@ at the batch's end. inline_variable of `pkgs := stdPackagesIn(...);
 stdMap = pkgs` is refused: the assignment "reads" `stdMap` before the
 call, though assigning a variable reads nothing. And replace_text
 with `function` does not reach the function's doc comment.
+
+## 2026-10-31: TDD's order in the instructions
+
+Wording only: CLAUDE.md, the README, `examples/CLAUDE.md`, the two
+servers' instructions, `docs/patterns.md`, the session notes and the
+roadmap, all with replace_text (one step with `files` for the line the
+two instruction texts share). Read through inspect and sed of Markdown.
+Nothing by hand.

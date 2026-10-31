@@ -138,7 +138,11 @@ again.
   1. `add_declaration` (or `create_file`) of the test. The functions,
      fields and types it uses that nothing declares get stubs that
      panic.
-  2. `add_declaration` of the real one replaces its stub.
+  2. `add_declaration` of the least code that passes replaces its
+     stub, even a copy of code that is there.
+  3. Once it passes, refactor: `fold` replaces the copy's original
+     with a call (47.4: a copy of the walk plus `EvalSymlinks` to
+     pass, then the old walk folded). Never refactor between 1 and 2.
 
   In a batch, put the test before the code, with `"check": "end"`.
 - **Where:** every PR since #117.

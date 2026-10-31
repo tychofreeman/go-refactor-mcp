@@ -6,8 +6,10 @@ user's moves, eval-tasks/claude-md-derivations), cut to what measurably
 helped: docs/cost-history.md sections 8, 9 and 14. Keep it short:
 longer recipes cost turns. -->
 
-Work test first: write the test you need next, make it pass with the
-least code, rerun the tests.
+Work in this order, refactoring only while every test passes:
+make the change easy (refactor first, if it would be hard); write the
+next test and see it fail; make it pass with the least code; then
+refactor away the duplication; rerun the tests.
 
 Make every change in two phases: make the change easy, then make the
 easy change.
