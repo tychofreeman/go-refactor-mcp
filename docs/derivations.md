@@ -467,6 +467,23 @@ A second mode is then a second `makeTry(..., fields)` call. Run on
 fold's object-parameter mode (D2, 4 steps; D5, 3 steps through
 `newMatcher`); what is left is the new behaviour itself.
 
+## 12. Reusing a function whose statements compute its result
+
+fold matches a body that is one return, a setter, or statements without
+results. A function that computes a variable and returns it
+(`textutil.LineEnd`: an if that moves `at`, then `return at`) is none of
+those, so its copies elsewhere do not fold. Two steps per copy:
+
+1. extract_function the copied statements: what they set and is used
+   after becomes the result, what they read the parameters, so the new
+   function has the same body as the one to reuse, names aside.
+2. merge_duplicate_function the new function into the one to reuse
+   (`keep_file`, `keep_name`), in another package too: the call becomes
+   `off = textutil.LineEnd(src, off)` and the copy is gone.
+
+Found after 46.4, which had made two copies one-line edits by hand and
+logged fold's refusal as a gap; fold's refusal now names these steps.
+
 ## The user's principle
 
 Not every operation will exist. Use the operations there are; where

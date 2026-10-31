@@ -4065,8 +4065,16 @@ move_declaration took it to textutil as `LineEnd`. `fold` refused it:
 it takes a function whose body is one return, a setter, or one without
 results, and LineEnd computes a variable and returns it. So the other
 two copies became one-line calls by replace_text and replace_statements
-(the gap: fold of a function whose last statement returns a variable
-the statements before it compute, matched against those statements
-followed by a use of the variable). movedecl's `nextLine`, a copy of
+(not a gap, as logged here first: extract_function of each copy, then
+merge_duplicate_function into LineEnd, does it; derivations section 12). movedecl's `nextLine`, a copy of
 `textutil.NextLine`: its body replaced by the call, then inline_function
 with all_calls. Read through inspect. Nothing by hand.
+
+## 2026-10-31: fold's refusal names extract and merge
+
+The gap logged in 46.4 tried first as a composition, in a scratch file
+(create_file, extract_function, merge_duplicate_function into
+`textutil.LineEnd`, then undo): it works. The refusal's golden and a
+TypeScript test case with replace_text, seen failing; replace_text on
+each refusal made them pass. Read through inspect; two reads of Go by
+shell refused by the guard. Nothing by hand.

@@ -1,1 +1,1 @@
-whose body is one return statement
+extract_function each copy of its statements, then merge_duplicate_function the result into two

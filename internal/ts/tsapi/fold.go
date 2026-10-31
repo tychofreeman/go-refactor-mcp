@@ -74,7 +74,7 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 		}
 		body.ForEachChild(visit)
 		if returns {
-			return nil, 0, nil, fmt.Sprintf("%s returns from inside its body; only a body that is one return, or statements that do not return, is folded", name)
+			return nil, 0, nil, fmt.Sprintf("%s returns from inside its body; only a body that is one return, or statements that do not return, is folded. To reuse it where its statements are copied, extract_function each copy of its statements, then merge_duplicate_function the result into %s", name, name)
 		}
 		stmts = body.Statements()
 		if len(stmts) == 0 {
