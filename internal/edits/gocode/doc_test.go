@@ -1,6 +1,8 @@
 package gocode
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -41,5 +43,25 @@ func TestDocComment(t *testing.T) {
 		if got := DocComment(c.doc, 45); got != c.want {
 			t.Errorf("%s: got\n%s\nwant\n%s", c.name, got, c.want)
 		}
+	}
+}
+
+// A GOROOT whose src is a symlink, as Debian's golang packages lay it
+// out (/usr/lib/go-1.26/src -> ../../share/go-1.26/src), still lists
+// the standard library.
+func TestStdPackagesThroughSymlinkedSrc(t *testing.T) {
+	share := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(share, "src", "strconv"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(share, "src", "strconv", "atoi.go"), []byte("package strconv\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	if err := os.Symlink(filepath.Join(share, "src"), filepath.Join(root, "src")); err != nil {
+		t.Skip("no symlinks:", err)
+	}
+	if got := stdPackagesIn(root)["strconv"]; len(got) != 1 || got[0] != "strconv" {
+		t.Errorf("strconv: got %v, want [strconv]", got)
 	}
 }

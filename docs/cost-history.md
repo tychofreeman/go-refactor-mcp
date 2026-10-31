@@ -1606,7 +1606,9 @@ on that machine every golden that expects a standard-library import to
 be added (`strings`, `fmt`, `time`, `strconv`, `math/rand`) was refused
 with "no package of that name was found", whatever the run had done; the
 other two failures are symbol-addressing's `Shape.Area`. Its pass column
-says nothing until that is found (roadmap item 47).
+says nothing until that is found (roadmap item 47). Found (item 47.4):
+the machine's `$GOROOT/src` is a symlink, which the standard-library
+lookup did not follow; the costs above stand, the pass rates do not.
 
 So on these tasks reading Go only through inspect did not make a fresh
 model cheaper (+9% in the cloud, even on the workstation): what it read whole before it now reads in more, smaller

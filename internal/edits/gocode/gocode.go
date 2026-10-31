@@ -244,29 +244,39 @@ var (
 // stdPackages maps package names to the standard library's import paths.
 func stdPackages() map[string][]string {
 	stdOnce.Do(func() {
-		stdMap = map[string][]string{}
-		root := filepath.Join(build.Default.GOROOT, "src")
-		_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
-			if err != nil || !d.IsDir() {
-				return nil
-			}
-			name := d.Name()
-			rel, _ := filepath.Rel(root, p)
-			if rel != "." && (name == "internal" || name == "vendor" || name == "testdata" || strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") || rel == "cmd") {
-				return filepath.SkipDir
-			}
-			if rel == "." || !hasGoFiles(p) {
-				return nil
-			}
-			path := filepath.ToSlash(rel)
-			stdMap[importName(path)] = append(stdMap[importName(path)], path)
-			return nil
-		})
-		for _, ps := range stdMap {
-			sort.Strings(ps)
-		}
+		stdMap = stdPackagesIn(build.Default.GOROOT)
 	})
 	return stdMap
+}
+
+// stdPackagesIn maps package names to the import paths of the standard
+// library under goroot. A src that is a symlink is followed.
+func stdPackagesIn(goroot string) map[string][]string {
+	pkgs := map[string][]string{}
+	root := filepath.Join(goroot, "src")
+	if r, err := filepath.EvalSymlinks(root); err == nil {
+		root = r
+	}
+	_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+		if err != nil || !d.IsDir() {
+			return nil
+		}
+		name := d.Name()
+		rel, _ := filepath.Rel(root, p)
+		if rel != "." && (name == "internal" || name == "vendor" || name == "testdata" || strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") || rel == "cmd") {
+			return filepath.SkipDir
+		}
+		if rel == "." || !hasGoFiles(p) {
+			return nil
+		}
+		path := filepath.ToSlash(rel)
+		pkgs[importName(path)] = append(pkgs[importName(path)], path)
+		return nil
+	})
+	for _, ps := range pkgs {
+		sort.Strings(ps)
+	}
+	return pkgs
 }
 
 func hasGoFiles(dir string) bool {

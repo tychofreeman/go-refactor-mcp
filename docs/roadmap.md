@@ -2687,7 +2687,14 @@ hand or a tool got in the way.
        `time`, `strconv` or `math/rand` to be imported are refused ("no
        package of that name was found") in every run, so 14 of 16 runs
        failed there for that alone. Find what in that environment the
-       old revisions' package lookup misses.
+       old revisions' package lookup misses. *Done* (2026-10-31): Debian's
+       Go makes `$GOROOT/src` a symlink (`/usr/lib/go-1.26/src ->
+       ../../share/go-1.26/src`), and `filepath.WalkDir` does not follow
+       a symlinked root, so `gocode.stdPackages` found no package. It
+       resolves the root first (`stdPackagesIn`). Current main failed the
+       same way there (15 golden and server tests), not only the old
+       revisions; the feature tasks' pass rates on the workstation can be
+       measured again.
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the

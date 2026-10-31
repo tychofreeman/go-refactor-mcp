@@ -3969,3 +3969,15 @@ add_declaration of `nameAliases` and `fromStrings`, replace_text of
 `aliasArgs`. One batch was refused for replace_text's `function`, which
 the server did not take: it runs a release from before Oct 28, not this
 checkout. Read through inspect. Nothing by hand.
+
+## 2026-10-31: standard-library imports behind a symlinked GOROOT/src
+
+The test first with add_declaration (a temp GOROOT whose src is a
+symlink; its imports added by the tool), add_declaration of
+`stdPackagesIn` with the walk and `filepath.EvalSymlinks`, then
+replace_statements of the closure in `stdPackages` to call it, all in
+one batch checked at the end. The walk moved by retyping it in the new
+function rather than extract_function: it assigns the package variable
+`stdMap`, so extracting it and then making the root a parameter and the
+map a result would have taken three refactorings for 20 lines copied.
+Read through inspect. Nothing by hand.
