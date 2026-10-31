@@ -260,6 +260,36 @@ export function later(p: Plant): () => number {
   return () => h;
 }
 `, NewInlineVariable(), `{"line": 15, "name": "h"}`, "", "runs at another time"},
+		// The variable assigned to is not read, so water() may run where w is used.
+		{"assigned to a module variable", plants + `
+let total = 0;
+
+export function fill(): void {
+  const w = water();
+  total = w;
+}
+`, NewInlineVariable(), `{"function": "fill", "name": "w"}`, plants + `
+let total = 0;
+
+export function fill(): void {
+  total = water();
+}
+`, ""},
+		// An element's object is evaluated before the right-hand side: cache
+		// is read before reset() replaces it.
+		{"index target written", plants + `
+let cache: number[] = [];
+
+function reset(): number {
+  cache = [];
+  return 1;
+}
+
+export function fill(): void {
+  const n = reset();
+  cache[0] = n;
+}
+`, NewInlineVariable(), `{"function": "fill", "name": "n"}`, "", "reset()"},
 	})
 }
 
