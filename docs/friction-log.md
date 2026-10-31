@@ -4103,6 +4103,11 @@ By hand: the rebase conflict with #524's entry. A `sed` meant for this
 entry's last line rewrote every line of the log reading "Nothing by
 hand."; the file was restored from main and the entry appended again.
 
+## 2026-10-31: reading-and-deriving.md brought up to date
+
+Nothing by hand: the doc with replace_text in one batch, through the
+CLI (a cloud session, no MCP).
+
 ## 2026-10-31: the whats-next skill and the session log
 
 Through the CLI (a cloud session, no MCP): the tests first and stubs
