@@ -56,6 +56,10 @@ patterns sessions use, with their steps, in `docs/patterns.md`.
   CLAUDE.md, the README, `examples/CLAUDE.md`, the server's
   instructions (both languages, published text: A/B baselines before
   this saw the old wording) and `docs/patterns.md` now say so.
+  When red reveals a missing step (the least code needs a refactoring
+  first), roll back to green, take the step there, and redo what
+  followed: the user prefers that to refactoring while red and does
+  not mind the extra turns (2026-10-31; #518 did it with undo).
 - Report results plainly, including when a change did not help (#119 was
   reverted in #120 after its rerun showed nothing).
 - Stacked PRs: if one fails CI, fix the lowest branch and merge upward;
