@@ -125,6 +125,11 @@ export function morning(): void {
   note("roses");
 }
 `}, ""},
+		{"refuse statements that compute a result", map[string]string{"src/two.ts": `export function two(): number {
+  const x = 2;
+  return x;
+}
+`}, NewFold(), `{"file": "src/two.ts", "name": "two"}`, nil, "extract_function each copy of its statements, then merge_duplicate_function the result into two"},
 		{"method", map[string]string{"src/bed.ts": `export class Bed {
   depth = 3;
   private twice(): number {

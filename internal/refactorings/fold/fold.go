@@ -136,7 +136,7 @@ func (f *folder) pattern(id *ast.Ident) error {
 	} else if sig.Results().Len() == 1 && f.setter(list) {
 		f.root = f.decl.Body
 	} else if sig.Results().Len() > 0 {
-		return refactor.Refusef("fold takes a function whose body is one return statement of one value, sets fields of a struct parameter and returns it, or has no results; %s is none of these", name)
+		return refactor.Refusef("fold takes a function whose body is one return statement of one value, sets fields of a struct parameter and returns it, or has no results; %s is none of these. To reuse it where its statements are copied, extract_function each copy of its statements, then merge_duplicate_function the result into %s", name, name)
 	} else if why := statementsOnly(f.decl.Body); why != "" {
 		return refactor.Refusef("%s %s, which a call of it would not do in place of its statements", name, why)
 	} else {
