@@ -39,7 +39,7 @@ func New() *Rename { return &Rename{Named: refactor.Called[args]("rename")} }
 
 func (*Rename) Description() string {
 	return `Rename a variable, constant, function, type, type parameter, struct field or method, and every reference to it in the workspace: renaming the field nm of Plant to Name changes the declaration, every p.nm and Plant{nm: x}, and a doc comment that starts with the old name; other comments that mention it are listed in a note. Renaming an embedded field (Bed.Soil to Ground) makes it the named field Ground Soil, and what reached through it names it: b.PH becomes b.Ground.PH.
-Identify the symbol by file, line and its current name (column if the name is on the line twice with different meanings); for a local, function ("Name" or "Type.Method") can take the place of line and stays valid after edits.
+Identify the symbol by file, line and its current name (column if the name is on the line twice with different meanings); for a local, function ("Name" or "Type.Method") can take the place of line and stays valid after edits; name "_" with function "Type.Method" names an unnamed or blank receiver.
 Refuses, saying why: a new name that would clash with or shadow another, an interface method, a type embedded in a struct, a function whose new name changes whether or how go test runs it, an import or a label, an exported name used in another package that would become unexported, a method whose new name would change which interfaces its type implements, an embedded field whose methods give a type an interface or are reached by a method expression, an exported field of a struct passed where reflection may find it by name (encoding/json; what fmt's %+v prints, itself or through a function that only passes its arguments on to fmt, is listed in a note), a symbol declared outside the workspace.`
 }
 
@@ -60,6 +60,11 @@ func (*Rename) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Pla
 	}
 	if a.NewName == "" {
 		return nil, refactor.Refusef("new_name is required")
+	}
+	if a.Name == "_" && a.Function != "" {
+		if plan, ok, err := nameReceiver(ws, a.File, a.Function, a.NewName); ok {
+			return plan, err
+		}
 	}
 	pkg, id, err := locate.Ident(ws, locate.IdentQuery{File: a.File, Line: a.Line, Column: a.Column, Name: a.Name, Function: a.Function})
 	if err != nil {
@@ -91,6 +96,41 @@ func (*Rename) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Pla
 		}
 	}
 	return r.plan()
+}
+
+// nameReceiver names the receiver of the method function of file new,
+// when it is unnamed or blank; ok is false when the receiver has a name.
+func nameReceiver(ws *workspace.Workspace, file, function, new string) (plan *refactor.Plan, ok bool, err error) {
+	path := ws.Abs(file)
+	pkg, f := ws.FileSyntax(path)
+	if f == nil {
+		return nil, false, nil
+	}
+	fd := locate.Func(f, function)
+	if fd == nil || fd.Recv == nil || len(fd.Recv.List) != 1 {
+		return nil, false, nil
+	}
+	recv := fd.Recv.List[0]
+	if len(recv.Names) == 1 && recv.Names[0].Name != "_" {
+		return nil, false, nil
+	}
+	if fd.Body != nil {
+		for id, o := range pkg.TypesInfo.Uses {
+			if id.Name == new && fd.Body.Pos() <= id.Pos() && id.Pos() < fd.Body.End() && (o.Pos() < fd.Pos() || o.Pos() >= fd.End()) {
+				return nil, true, refactor.Refusef("naming the receiver %q would hide the %s %q declared at %s, which is used at %s",
+					new, kind(o), new, site.DeclaredAt(ws, o), ws.Position(id.Pos()))
+			}
+		}
+	}
+	tf := ws.Fset.File(f.Pos())
+	te := edit.TextEdit{Start: tf.Offset(recv.Type.Pos()), End: tf.Offset(recv.Type.Pos()), NewText: new + " "}
+	if len(recv.Names) == 1 {
+		te = edit.TextEdit{Start: tf.Offset(recv.Names[0].Pos()), End: tf.Offset(recv.Names[0].End()), NewText: new}
+	}
+	return &refactor.Plan{
+		Summary: fmt.Sprintf("named the receiver of %s %s", function, new),
+		Edits:   []edit.FileEdit{{Path: path, Edits: []edit.TextEdit{te}}},
+	}, true, nil
 }
 
 // objectOf is ObjectOf extended to the symbolic variable of a type switch

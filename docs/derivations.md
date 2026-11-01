@@ -483,6 +483,27 @@ those, so its copies elsewhere do not fold. Two steps per copy:
 
 Found after 46.4, which had made two copies one-line edits by hand and
 logged fold's refusal as a gap; fold's refusal now names these steps.
+It fails when the copy evaluates its parts in another order than the
+function (49.13: `field.End()` read after a call the function makes
+first): extract_function then gives a different body, and
+introduce_parameter or move_statement_up refuses to swap two calls
+that could panic. The call then goes in by replace_statements.
+
+## 13. Moving a struct field: delete it, add it back where it belongs
+
+No tool moves a field within its struct (extract_struct moves fields
+into a new one). Two steps:
+
+1. Delete it: remove_dead_code of `Type.Field` when nothing uses it
+   (gap L), or replace_declaration of `Type.Field` with empty content,
+   an edit, which also deletes one whose struct is printed.
+2. add_field with `after` (or `before`) and the field as it was, its
+   doc and line comment included.
+
+A field in use cannot be deleted first (the code no longer
+type-checks); a stub field that create_from_usage put at the end, which
+nothing uses yet, can. Found as a gap in `refuse-code-by-text` (49.13),
+which had missed that remove_dead_code takes a field.
 
 ## The user's principle
 

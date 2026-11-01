@@ -4162,3 +4162,13 @@ insert_statements and add_field. By hand: a receiver named with
 replace_text (no tool names an unnamed receiver), and a stub field's
 line deleted with replace_text to re-add it in its place (no tool
 deletes or moves a field): roadmap 49.13.
+
+## 2026-11-01: fields and receivers by edit (roadmap 49.13)
+
+The session record is `docs/sessions/fields-by-edit.md`. Goldens with
+create_file; the code with insert_statements and add_declaration; the
+line extent shared by extract_function. By hand: one replace_statements
+put the shared `wholeLines` call in place of its copy, since the copy
+read `field.End()` after a call the original makes first, and
+introduce_parameter and move_statement_up refuse to swap two calls that
+could panic (`docs/derivations.md` section 12).
