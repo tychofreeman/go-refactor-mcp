@@ -2810,12 +2810,20 @@ hand or a tool got in the way.
         insert_statements, replace_expression). The read guard's
         story: a habit changes when a check meets it. Through the
         tool, behind a server option first, since it changes published
-        behavior.
+        behavior. *Done* (2026-10-31): `refactor-mcp -no-code-by-text`,
+        on in this repo's `.mcp.json`; the tokens of a Go file other
+        than strings and comments must be the same after the edit. Not
+        yet: the `refactor` CLI, TypeScript, an A/B arm (costs money).
     12. **Add an argument to a call** (2026-10-31,
         `docs/sessions/tokens-text-edits.md`): no tool does; an
         `Fprintf` given one more value was retyped whole with
         replace_expression. add_element takes a composite literal's
         elements; a call's arguments are the same shape.
+    13. **Fields and receivers by edit** (2026-10-31,
+        `docs/sessions/refuse-code-by-text.md`): no tool deletes or
+        moves a field (replace_declaration takes top-level
+        declarations), and none names an unnamed receiver. Both were
+        replace_text on code, which `-no-code-by-text` now refuses.
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the

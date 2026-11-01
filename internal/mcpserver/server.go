@@ -105,6 +105,10 @@ type Server struct {
 	// the tool's description, schema and the instructions do not offer
 	// them.
 	ReadByName bool
+	// NoCodeByText makes replace_text change a Go file only inside
+	// string literals and comments: code is changed by the structured
+	// edits. Published text is the same.
+	NoCodeByText bool
 
 	golang     *golang.Language     // nil when the root holds no Go
 	typescript *typescript.Language // nil when it holds no TypeScript
@@ -191,6 +195,7 @@ func above(dir, name string) bool {
 func (s *Server) MCP() *mcp.Server {
 	if s.golang != nil {
 		s.golang.FullDiffs, s.golang.ReadByName = s.FullDiffs, s.ReadByName
+		s.golang.NoCodeByText = s.NoCodeByText
 	}
 	if s.typescript != nil {
 		s.typescript.FullDiffs, s.typescript.ReadByName = s.FullDiffs, s.ReadByName

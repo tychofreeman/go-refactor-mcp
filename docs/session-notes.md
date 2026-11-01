@@ -84,7 +84,11 @@ patterns sessions use, with their steps, in `docs/patterns.md`.
   gorefactor". replace_text is for literals, comments and other files;
   on code, find the structured edit, and note `hand:` when there is
   none. Roadmap 49.10-49.11 measure and check it: `refactor-tokens`
-  reports how many edit steps were text edits of Go.
+  reports how many edit steps were text edits of Go. This repo's
+  server runs with `-no-code-by-text` (`.mcp.json`, to try): a
+  replace_text that changes Go code, not a string or comment, is
+  refused with the structured edits to use. If it costs more turns than
+  it saves, say so and take it out of `.mcp.json`.
 - Report results plainly, including when a change did not help (#119 was
   reverted in #120 after its rerun showed nothing).
 - Stacked PRs: if one fails CI, fix the lowest branch and merge upward;

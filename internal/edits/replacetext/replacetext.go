@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"go/ast"
 	"go/parser"
+	"go/scanner"
 	"go/token"
 	"os"
 	"slices"
@@ -28,6 +29,9 @@ import (
 // ReplaceText is the "replace_text" edit.
 type ReplaceText struct {
 	refactor.Named[replaceTextArgs]
+	// TextOnly refuses a change to a Go file outside its string
+	// literals and comments.
+	TextOnly bool
 }
 
 // New returns the replace_text edit.
@@ -53,7 +57,7 @@ type replaceTextArgs struct {
 func (*ReplaceText) ChangesBehavior() {}
 
 // Plan checks preconditions and computes the edits.
-func (*ReplaceText) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
+func (r *ReplaceText) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
 	var a replaceTextArgs
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
@@ -84,6 +88,11 @@ func (*ReplaceText) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refacto
 			return nil, err
 		}
 		loose = loose || l
+		if r.TextOnly {
+			if err := codeChanged(ws, fe); err != nil {
+				return nil, err
+			}
+		}
 		paths, err := addImports(ws, &fe, a.Imports)
 		if err != nil {
 			return nil, err
@@ -158,6 +167,64 @@ func fileEdit(ws *workspace.Workspace, file, old, new string, all bool, function
 		fe.Edits = append(fe.Edits, edit.TextEdit{Start: s[0], End: s[1], NewText: bracketed(ws, path, s[0], string(src[s[0]:s[1]]), new)})
 	}
 	return fe, len(spans), loose, nil
+}
+
+// codeChanged refuses fe, an edit of a file, when the file is Go and the
+// edit changes its tokens other than string literals and comments: its
+// code.
+func codeChanged(ws *workspace.Workspace, fe edit.FileEdit) error {
+	if !strings.HasSuffix(fe.Path, ".go") {
+		return nil
+	}
+	src, err := os.ReadFile(fe.Path)
+	if err != nil {
+		return err
+	}
+	out, err := edit.Apply(src, fe.Edits)
+	if err != nil {
+		return err
+	}
+	before, after := codeTokens(src), codeTokens(out)
+	for i := range max(len(before), len(after)) {
+		if i < len(before) && i < len(after) && before[i].tok == after[i].tok && before[i].lit == after[i].lit {
+			continue
+		}
+		line := 1
+		if i < len(after) {
+			line = after[i].line
+		} else if len(after) > 0 {
+			line = after[len(after)-1].line
+		}
+		return refactor.Refusef("replace_text changes Go only inside string literals and comments, and this changes code in %s at line %d. For code, use the edit that says what changes: replace_expression (an expression), add_element (an entry or field of a literal), add_case (a case or branch), insert_statements (new statements), add_field, add_declaration, or replace_statements; or a refactoring", ws.Rel(fe.Path), line)
+	}
+	return nil
+}
+
+// codeToken is a token of Go code: a string literal's text is left out.
+type codeToken struct {
+	tok  token.Token
+	lit  string
+	line int
+}
+
+// codeTokens returns the tokens of the Go source src, without comments,
+// with string and character literals' text and how a semicolon was
+// written left out.
+func codeTokens(src []byte) []codeToken {
+	var s scanner.Scanner
+	file := token.NewFileSet().AddFile("", -1, len(src))
+	s.Init(file, src, nil, 0)
+	var toks []codeToken
+	for {
+		pos, tok, lit := s.Scan()
+		if tok == token.EOF {
+			return toks
+		}
+		if tok == token.STRING || tok == token.CHAR || tok == token.SEMICOLON {
+			lit = ""
+		}
+		toks = append(toks, codeToken{tok, lit, file.Line(pos)})
+	}
 }
 
 // bracketed returns new, to replace old at offset off of the Go file

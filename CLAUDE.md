@@ -117,7 +117,9 @@ until the MCP is reconnected.
    files that are not Go (README, docs, JSON fixtures); `files` makes
    the same replacement in several files, `function` looks only in one
    function, and `append` adds `new` at the end of the file (the
-   friction log's entry). `old` must match the file, though spacing
+   friction log's entry). In this repo the server runs with
+   `-no-code-by-text`: replace_text on a `.go` file may change only
+   string literals and comments. `old` must match the file, though spacing
    within lines may differ; a refusal names the nearest lines.
    Through the CLI, `content_file` (or `new_file`) takes a text
    argument from a file, so long content needs no quoting.

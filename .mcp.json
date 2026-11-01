@@ -3,7 +3,7 @@
     "gorefactor": {
       "type": "stdio",
       "command": "go",
-      "args": ["run", "./cmd/refactor-mcp"]
+      "args": ["run", "./cmd/refactor-mcp", "-no-code-by-text"]
     }
   }
 }
