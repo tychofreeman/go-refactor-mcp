@@ -2824,6 +2824,18 @@ hand or a tool got in the way.
         moves a field (replace_declaration takes top-level
         declarations), and none names an unnamed receiver. Both were
         replace_text on code, which `-no-code-by-text` now refuses.
+        *Done* (2026-11-01, `docs/sessions/fields-by-edit.md`):
+        replace_declaration takes `Type.Field` (content replaces the
+        field, empty content deletes it), and rename with `function`
+        and name `_` names an unnamed or blank receiver. Moving a field
+        is a composition (`docs/derivations.md` section 13); deleting
+        an unused one was already remove_dead_code's (gap L).
+    14. **Text edits of Go, by what they change** (2026-11-01,
+        `docs/sessions/fields-by-edit.md`): `refactor-tokens` counts
+        replace_text of a string literal or comment (a tool's
+        description) as a text edit of Go, as it does one of code, so 4
+        of the record's 5 were edits `-no-code-by-text` allows. Count
+        the two apart, by the same token comparison the server uses.
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the

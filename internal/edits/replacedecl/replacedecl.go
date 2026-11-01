@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"go/ast"
+	"go/parser"
 	"go/token"
 	"slices"
 	"strings"
@@ -29,7 +30,7 @@ func New() *ReplaceDeclaration {
 
 func (*ReplaceDeclaration) Description() string {
 	return `Replace a whole top-level declaration, found by name, with new source: an edit, for a signature and body that change together, or a declaration too long to restate as replace_text's old (a table, a type); for a body alone, use replace_statements with function. With name "Cart.Total" and content func (c *Cart) Total() (int, error) { ... }, Total's signature and body are replaced together.
-content is the new declaration, declaring the same name (to rename, use rename), then any declarations to add after it (a helper it now calls); in a parenthesized group, just its spec. The old doc comment stays unless content has its own. Packages content names are imported, and those only the old declaration used are removed. Empty content deletes the declaration and its doc comment. Callers a new signature or a deletion breaks are refused, or fixed in the same batch with check "end".`
+content is the new declaration, declaring the same name (to rename, use rename), then any declarations to add after it (a helper it now calls); in a parenthesized group, just its spec. The old doc comment stays unless content has its own. Packages content names are imported, and those only the old declaration used are removed. Empty content deletes the declaration and its doc comment. A struct field by Type.Field likewise: content Rows float64 replaces it, empty content deletes it (to move it, then add_field with after). Callers a new signature or a deletion breaks are refused, or fixed in the same batch with check "end".`
 }
 
 // ChangesBehavior marks this as an edit.
@@ -38,7 +39,7 @@ func (*ReplaceDeclaration) ChangesBehavior() {}
 type args struct {
 	File    string   `json:"file" desc:"Path of a file containing the declaration or a use, relative to the workspace root."`
 	Line    int      `json:"line,omitempty" desc:"1-based line of that occurrence. Omit it to find name as a symbol of the package of file."`
-	Name    string   `json:"name" desc:"The declared name: Name, or Type.Method for a method."`
+	Name    string   `json:"name" desc:"The declared name: Name, Type.Method for a method, or Type.Field for a struct field."`
 	Column  int      `json:"column,omitempty" desc:"Optional 1-based column, only needed to disambiguate."`
 	Content string   `json:"content" desc:"The new declaration, as Go source, with a doc comment to replace the old one; declarations after it are added after it. Empty to delete it."`
 	Imports []string `json:"imports,omitempty" desc:"Optional: import paths to use for package names content uses, when the name alone is ambiguous."`
@@ -67,6 +68,9 @@ func (*ReplaceDeclaration) Plan(ws *workspace.Workspace, raw json.RawMessage) (*
 		return nil, err
 	}
 	dpkg, file := declaring.Pkg, declaring.File
+	if field := fieldOf(file, obj.Pos()); field != nil {
+		return fieldPlan(ws, declaring, path, obj.Name(), a.Content, field)
+	}
 	decl, spec := declOf(file, obj.Pos())
 	if decl == nil {
 		return nil, refactor.Refusef("%s is not a top-level declaration", a.Name)
@@ -146,12 +150,7 @@ func deletion(ws *workspace.Workspace, declaring *site.Site, path, name string, 
 	if doc != nil {
 		start = doc.Pos()
 	}
-	from := tf.Offset(tf.LineStart(tf.Line(start)))
-	to := tf.Offset(end)
-	for to < len(src) && src[to] != '\n' {
-		to++
-	}
-	to = min(to+1, len(src))
+	from, to := wholeLines(tf, start, end, src)
 	switch {
 	case spec != nil:
 	case to < len(src) && src[to] == '\n':
@@ -173,6 +172,84 @@ func deletion(ws *workspace.Workspace, declaring *site.Site, path, name string, 
 		plan.Notes = append(plan.Notes, gocode.ImportNote("removed", removed)+", which only the deleted declaration used")
 	}
 	return plan, nil
+}
+
+// wholeLines are the offsets of the lines from start's to end's, the
+// newline after end's included.
+func wholeLines(tf *token.File, start token.Pos, end token.Pos, src []byte) (int, int) {
+	from := tf.Offset(tf.LineStart(tf.Line(start)))
+	to := tf.Offset(end)
+	for to < len(src) && src[to] != '\n' {
+		to++
+	}
+	to = min(to+1, len(src))
+	return from, to
+}
+
+// fieldOf is the field of a struct in file that declares the name at pos.
+func fieldOf(file *ast.File, pos token.Pos) *ast.Field {
+	var found *ast.Field
+	ast.Inspect(file, func(n ast.Node) bool {
+		st, ok := n.(*ast.StructType)
+		if !ok || found != nil {
+			return found == nil
+		}
+		for _, f := range st.Fields.List {
+			for _, id := range f.Names {
+				if id.Pos() == pos {
+					found = f
+				}
+			}
+		}
+		return found == nil
+	})
+	return found
+}
+
+// fieldPlan replaces field, which declares name, with content, or with
+// empty content deletes it, its doc and line comment.
+func fieldPlan(ws *workspace.Workspace, declaring *site.Site, path, name, content string, field *ast.Field) (*refactor.Plan, error) {
+	if len(field.Names) > 1 {
+		var others []string
+		for _, id := range field.Names {
+			if id.Name != name {
+				others = append(others, id.Name)
+			}
+		}
+		return nil, refactor.Refusef("%s is declared with %s in one field; replace the struct type to change it", name, strings.Join(others, ", "))
+	}
+	src := declaring.Src
+	tf := ws.Fset.File(declaring.File.Pos())
+	if strings.TrimSpace(content) != "" {
+		e, err := parser.ParseExpr("struct{\n" + content + "\n}")
+		if err != nil {
+			return nil, refactor.Refusef("content is not a field: %v", err)
+		}
+		fields := e.(*ast.StructType).Fields.List
+		if len(fields) != 1 || len(fields[0].Names) != 1 || fields[0].Names[0].Name != name {
+			var names []string
+			for _, f := range fields {
+				for _, id := range f.Names {
+					names = append(names, id.Name)
+				}
+			}
+			return nil, refactor.Refusef("content declares %s, not %s; to rename it, use rename", strings.Join(names, ", "), name)
+		}
+		return &refactor.Plan{
+			Summary:  fmt.Sprintf("replaced field %s in %s", name, ws.Rel(path)),
+			Edits:    []edit.FileEdit{{Path: path, Edits: []edit.TextEdit{{Start: tf.Offset(field.Pos()), End: tf.Offset(field.End()), NewText: strings.TrimSpace(content)}}}},
+			Supplied: content,
+		}, nil
+	}
+	start := field.Pos()
+	if field.Doc != nil {
+		start = field.Doc.Pos()
+	}
+	from, to := wholeLines(tf, start, field.End(), src)
+	return &refactor.Plan{
+		Summary: fmt.Sprintf("deleted field %s from %s", name, ws.Rel(path)),
+		Edits:   []edit.FileEdit{{Path: path, Edits: []edit.TextEdit{{Start: from, End: to}}}},
+	}, nil
 }
 
 // specDoc is the doc comment of a spec of a group.
