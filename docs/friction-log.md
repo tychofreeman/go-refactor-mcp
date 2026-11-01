@@ -4152,3 +4152,13 @@ insert_statements and add_declaration (a stub field declared by the
 first); the code with add_field, add_declaration and insert_statements.
 One call retyped with replace_expression: no tool adds an argument to
 a call (roadmap 49.12).
+
+## 2026-10-31: replace_text refuses Go code, behind -no-code-by-text (roadmap 49.11)
+
+The session record is `docs/sessions/refuse-code-by-text.md`. The
+golden cases moved with move_file, tests with create_file and
+add_declaration (stub fields declared), the code with add_declaration,
+insert_statements and add_field. By hand: a receiver named with
+replace_text (no tool names an unnamed receiver), and a stub field's
+line deleted with replace_text to re-add it in its place (no tool
+deletes or moves a field): roadmap 49.13.

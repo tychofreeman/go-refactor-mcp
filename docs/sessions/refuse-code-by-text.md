@@ -48,9 +48,54 @@ Derivation:
 
 ## Measured
 
+`refactor-tokens -log .claude/session-log/refuse-code-by-text.jsonl`,
+before the record was finished:
+
+- tool calls: 53
+- through gorefactor: 0 refactoring steps, 23 edit steps (4 of them
+  text edits of Go: the test's path string, the `TextOnly` comment, the
+  receiver, the field's line deleted)
+- refused by gorefactor: 4 (two ambiguous imports, a batch's call
+  before its declaration, replace_declaration of a field)
+- by hand: 1 (a Python script that wrote the move batch's JSON to the
+  scratchpad, then unused: the batch went inline)
+- large writes: 1 (add_declaration of `codeChanged`, `codeToken` and
+  `codeTokens`, 57 lines)
+- denied: 1 (a leftover `sed` of a Go file in a grep command)
+- reads: inspect: targets 5, names 3, file 2; Bash 12 (testdata, CI)
+- transcript: 39 requests, 6.67M input tokens, 27.8K output; 4 turns
+  lost to refusals, 1 to the guard, 1 to a schema load
+
 ## Assessment
 
+- **Through the tools or around them:** through, with two exceptions,
+  both where no tool reached: the receiver and the field's deletion
+  (roadmap 49.13). Both would now be refused by the option this item
+  adds, which is the point: the session would have had to stop and say
+  so. The other two text edits of Go were a string literal and a
+  comment, which the option allows.
+- **Large writes:** the 57 lines are new behavior (the token
+  comparison), not existing code typed again.
+- **Cost:** 39 requests. Two refusals were ambiguous package names
+  (scanner, replacetext), the kind `imports` answers; one was a call
+  placed before its declaration in a batch without check "end".
+- **Did the plan hold?** Yes, in its order: move the goldens while
+  green, red cases, the field and the comparison, then the server
+  test, the language's `strict` and the flag.
+- **Reading:** the bodies read were to write the check (Plan,
+  fileEdit, edit.Apply, the harness's Run) and the server's option
+  plumbing; none to find uses.
+- **One change that would have helped:** an edit that deletes or moves
+  a field, and one that names a receiver (roadmap 49.13).
+
 ## Follow-ups
+
+- Try it: from the next session (after a reconnect), replace_text on
+  Go code is refused here. Watch whether sessions then reach for the
+  structured edits or for replace_statements, which is still allowed.
+- Not yet: the `refactor` CLI, TypeScript, an A/B arm (costs money).
+- Roadmap 49.12 (an argument to a call) and 49.13 (fields, receivers)
+  are the gaps the option will meet first.
 - refusal: replace_declaration of `Server.NoCodeByText` (to move the
   stub field beside `ReadByName`): "not a top-level declaration".
 - hand: so the stub field's line was deleted with replace_text, then
