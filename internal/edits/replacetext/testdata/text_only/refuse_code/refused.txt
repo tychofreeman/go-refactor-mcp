@@ -1,0 +1,1 @@
+replace_text changes Go only inside string literals and comments, and this changes code in m.go at line 3

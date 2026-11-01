@@ -458,6 +458,20 @@ func TestInspectReadByName(t *testing.T) {
 	}
 }
 
+// With NoCodeByText, replace_text changes Go only inside string literals
+// and comments, alone and in a batch.
+func TestReplaceTextNoCodeByText(t *testing.T) {
+	_, dir := setup(t)
+	s := New(dir)
+	s.NoCodeByText = true
+	cs := connect(t, s)
+	args := map[string]any{"file": "calc/calc.go", "old": "func Apply", "new": "func Apply2"}
+	out, _ := call(t, cs, "replace_text", args)
+	mustContain(t, "replace_text", out, "only inside string literals and comments")
+	out, _ = call(t, cs, "batch", map[string]any{"steps": []any{map[string]any{"tool": "replace_text", "args": args}}})
+	mustContain(t, "batch", out, "only inside string literals and comments")
+}
+
 // A batch runs several steps in one call, addressed by name so that a
 // later step can use what an earlier one made, and undoes as one.
 func TestBatch(t *testing.T) {

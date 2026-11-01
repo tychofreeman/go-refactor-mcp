@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/tychofreeman/go-refactor-mcp/internal/edits/replacetext"
 	"github.com/tychofreeman/go-refactor-mcp/internal/history"
 	"github.com/tychofreeman/go-refactor-mcp/internal/inspect"
 	"github.com/tychofreeman/go-refactor-mcp/internal/lang"
@@ -26,6 +27,9 @@ type Language struct {
 	FullDiffs bool
 	// ReadByName makes inspect show source only for what a request names.
 	ReadByName bool
+	// NoCodeByText makes replace_text change a Go file only inside string
+	// literals and comments.
+	NoCodeByText bool
 
 	dir      string
 	patterns []string
@@ -201,6 +205,7 @@ func (l *Language) Step(tool string, args json.RawMessage) (string, bool, error)
 	if !ok {
 		return "", false, fmt.Errorf("unknown tool %q", tool)
 	}
+	r = l.strict(r)
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	ws, args, intro, refused, err := l.route(args)
@@ -209,6 +214,15 @@ func (l *Language) Step(tool string, args json.RawMessage) (string, bool, error)
 	}
 	text, wasRefused, err := refactorings.RunStep(ws, r, args, refactor.Options{Compact: !l.FullDiffs})
 	return intro + text, wasRefused, err
+}
+
+// strict returns r, or for replace_text with NoCodeByText, the
+// replace_text that changes Go only inside string literals and comments.
+func (l *Language) strict(r refactor.Refactoring) refactor.Refactoring {
+	if t, ok := r.(*replacetext.ReplaceText); ok && l.NoCodeByText {
+		return &replacetext.ReplaceText{Named: t.Named, TextOnly: true}
+	}
+	return r
 }
 
 // Inspect reads Go code; a refusal is its text.
@@ -289,6 +303,9 @@ func (l *Language) Batch(args json.RawMessage) (string, error) {
 	batch, refused := refactorings.ParseBatch(args)
 	if refused != "" {
 		return intro + refused, nil
+	}
+	for i := range batch.Steps {
+		batch.Steps[i].Refactoring = l.strict(batch.Steps[i].Refactoring)
 	}
 	b, err := refactor.RunBatch(ws, batch.Steps, refactor.Options{Compact: !l.FullDiffs, Unchecked: batch.Unchecked, Declare: refactorings.Declarer(), Imports: refactorings.Importer()})
 	if err != nil {
