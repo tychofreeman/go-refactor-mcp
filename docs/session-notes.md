@@ -75,6 +75,15 @@ patterns sessions use, with their steps, in `docs/patterns.md`.
   first), roll back to green, take the step there, and redo what
   followed: the user prefers that to refactoring while red and does
   not mind the extra turns (2026-10-31; #518 did it with undo).
+- **Edits as a paste** (2026-10-31, the user: "the edit tools have
+  been used too much as an impediment"): sessions write the Go
+  themselves and have replace_text paste it, counting that as through
+  the tools. #524, #528, #529 and #532 each made their change with
+  replace_text on Go where add_case, add_element, replace_expression
+  or add_parameter fit; #532's record first called it "through
+  gorefactor". replace_text is for literals, comments and other files;
+  on code, find the structured edit, and note `hand:` when there is
+  none. Roadmap 49.10-49.11 measure and check it.
 - Report results plainly, including when a change did not help (#119 was
   reverted in #120 after its rerun showed nothing).
 - Stacked PRs: if one fails CI, fix the lowest branch and merge upward;
