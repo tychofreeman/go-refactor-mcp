@@ -71,6 +71,21 @@ func TestAnalyzeWork(t *testing.T) {
 	}
 }
 
+// Go written as text is counted apart from structured edits.
+func TestAnalyzeWorkTextEdits(t *testing.T) {
+	var l sessionLog
+	l.add("PostToolUse", "t1", "mcp__gorefactor__replace_text", map[string]any{"file": "a.go", "old": "x", "new": "y"}, "APPLIED replace_text: replaced 1 occurrence\n")
+	l.add("PostToolUse", "t2", "mcp__gorefactor__add_element", map[string]any{"file": "a.go", "name": "m", "element": "1: 2"}, "APPLIED add_element: added an element\n")
+
+	w, err := AnalyzeWork(strings.NewReader(l.String()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if md := w.Markdown(); !strings.Contains(md, "- through gorefactor: 0 refactoring steps, 2 edit steps (1 of them text edits of Go)") {
+		t.Errorf("Markdown lacks the text edits:\n%s", md)
+	}
+}
+
 // A refusal followed by another gorefactor call that applies is not a
 // workaround, even if a hand edit comes later.
 func TestAnalyzeWorkRefusalThenTool(t *testing.T) {

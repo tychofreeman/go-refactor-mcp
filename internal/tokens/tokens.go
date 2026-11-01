@@ -73,6 +73,7 @@ type Report struct {
 	RefactoringSteps int            // applied steps that were refactorings (a batch's steps counted one by one)
 	EditSteps        int            // and that were edits
 	Tools            []ToolStats    // most ContextTokens first
+	TextEditSteps    int            // of the edits, those that wrote Go as text (replace_text, replace_statements, replace_declaration)
 }
 
 // The kinds of refused call in Report.Refused.
@@ -443,6 +444,7 @@ type algebraCall struct {
 	written, changed    int
 	measured            bool // the result reported its changed lines
 	refactorings, edits int  // steps of each kind
+	textEdits           int  // of the edits, those that wrote Go as text
 }
 
 // refactoringTools are the operations that restructure code, as opposed
@@ -457,6 +459,10 @@ var refactoringTools = map[string]bool{
 	"fold": true, "parameterize": true, "move_method": true, "type_switch_to_method": true,
 	"prepare_switch_for_types": true,
 }
+
+// textEditTools are the edits that write Go as text, where a structured
+// edit (add_element, add_case, insert_statements) says what changes.
+var textEditTools = map[string]bool{"replace_text": true, "replace_statements": true, "replace_declaration": true}
 
 var (
 	stepLine = regexp.MustCompile(`(?m)^\d+\. (\w+):`)
@@ -509,6 +515,9 @@ func measureAlgebra(c *call, text string) *algebraCall {
 			a.refactorings++
 		case s.Tool != "check":
 			a.edits++
+			if textEditTools[s.Tool] {
+				a.textEdits++
+			}
 		}
 	}
 	if a.refactorings == 0 && a.edits == 0 {
@@ -609,6 +618,7 @@ func changedLines(text string) (n int, ok bool) {
 func (r *Report) addAlgebra(a *algebraCall) {
 	r.RefactoringSteps += a.refactorings
 	r.EditSteps += a.edits
+	r.TextEditSteps += a.textEdits
 	s := AlgebraStats{Kind: a.kind, Calls: 1, Written: a.written}
 	if a.measured {
 		s.Changed, s.Derived = a.changed, max(a.changed-a.written, 0)
@@ -686,6 +696,7 @@ func (r *Report) Merge(o *Report) {
 	r.Algebra = mergeAlgebra(r.Algebra, o.Algebra)
 	r.RefactoringSteps += o.RefactoringSteps
 	r.EditSteps += o.EditSteps
+	r.TextEditSteps += o.TextEditSteps
 	r.sortTools()
 }
 
@@ -770,7 +781,7 @@ func (r *Report) Markdown() string {
 		}
 	}
 	if len(r.Algebra) > 0 {
-		fmt.Fprintf(&sb, "\nsteps: %d refactorings, %d edits\n\n| algebra | calls | written | changed | derived | derived share | unmeasured |\n|---|---|---|---|---|---|---|\n", r.RefactoringSteps, r.EditSteps)
+		fmt.Fprintf(&sb, "\nsteps: %d refactorings, %d edits%s\n\n| algebra | calls | written | changed | derived | derived share | unmeasured |\n|---|---|---|---|---|---|---|\n", r.RefactoringSteps, r.EditSteps, textEditsNote(r.TextEditSteps, r.EditSteps))
 		all := AlgebraStats{Kind: "all"}
 		arow := func(s AlgebraStats) {
 			share := "-"

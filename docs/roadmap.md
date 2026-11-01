@@ -2802,6 +2802,8 @@ hand or a tool got in the way.
         edit step like add_element, so a record cannot show code typed
         out and pasted. Report replace_text, replace_statements and
         replace_declaration on Go as text edits of their own.
+        *Done* (2026-10-31): "N edit steps (M of them text edits of
+        Go)" in both reports (`TextEditSteps`).
     11. **Refuse code pasted by text** (2026-10-31, the user, to try):
         replace_text on a Go file outside string literals and comments
         is refused, naming the structured edit (add_element, add_case,
@@ -2809,6 +2811,11 @@ hand or a tool got in the way.
         story: a habit changes when a check meets it. Through the
         tool, behind a server option first, since it changes published
         behavior.
+    12. **Add an argument to a call** (2026-10-31,
+        `docs/sessions/tokens-text-edits.md`): no tool does; an
+        `Fprintf` given one more value was retyped whole with
+        replace_expression. add_element takes a composite literal's
+        elements; a call's arguments are the same shape.
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the

@@ -83,7 +83,8 @@ patterns sessions use, with their steps, in `docs/patterns.md`.
   or add_parameter fit; #532's record first called it "through
   gorefactor". replace_text is for literals, comments and other files;
   on code, find the structured edit, and note `hand:` when there is
-  none. Roadmap 49.10-49.11 measure and check it.
+  none. Roadmap 49.10-49.11 measure and check it: `refactor-tokens`
+  reports how many edit steps were text edits of Go.
 - Report results plainly, including when a change did not help (#119 was
   reverted in #120 after its rerun showed nothing).
 - Stacked PRs: if one fails CI, fix the lowest branch and merge upward;
