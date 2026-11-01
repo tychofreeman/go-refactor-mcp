@@ -2797,6 +2797,18 @@ hand or a tool got in the way.
     9. `inspect` `names` refuses `tokens.call` (a type) as declared
        twice, because a test file of the package declares a function
        `call`: the same record.
+    10. **Text edits of Go apart from structured edits** (2026-10-31,
+        the user): `refactor-tokens` counts replace_text on Go as an
+        edit step like add_element, so a record cannot show code typed
+        out and pasted. Report replace_text, replace_statements and
+        replace_declaration on Go as text edits of their own.
+    11. **Refuse code pasted by text** (2026-10-31, the user, to try):
+        replace_text on a Go file outside string literals and comments
+        is refused, naming the structured edit (add_element, add_case,
+        insert_statements, replace_expression). The read guard's
+        story: a habit changes when a check meets it. Through the
+        tool, behind a server option first, since it changes published
+        behavior.
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
