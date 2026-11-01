@@ -315,8 +315,14 @@ func TestAnalyzeAlgebra(t *testing.T) {
 	if r.RefactoringSteps != 2 || r.EditSteps != 3 {
 		t.Errorf("steps: %d refactoring, %d edit; want 2 and 3", r.RefactoringSteps, r.EditSteps)
 	}
+	if r.TextEditSteps != 2 {
+		t.Errorf("text edits of Go: %d, want 2 (replace_statements, replace_text on a.go)", r.TextEditSteps)
+	}
 	if md := r.Markdown(); !strings.Contains(md, "| all | 4 | 4 | 22 | 19 | 86% | 1 |") {
 		t.Errorf("Markdown lacks the totals row:\n%s", md)
+	}
+	if md := r.Markdown(); !strings.Contains(md, "steps: 2 refactorings, 3 edits (2 of them text edits of Go)") {
+		t.Errorf("Markdown lacks the text edits:\n%s", md)
 	}
 }
 

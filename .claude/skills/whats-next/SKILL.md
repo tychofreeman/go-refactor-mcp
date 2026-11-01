@@ -101,6 +101,8 @@ Before pushing:
    they carried.
 2. Write "Assessment", a few lines, plainly, including what went badly:
    - **Through the tools or around them:** derived share; writes by hand;
+     text edits of Go (Measured counts them), and for each, the
+     structured edit or refactoring that fit, or the gap;
      refusals followed by hand edits; edit steps that rewrote existing Go
      where a refactoring could have carried it.
    - **Large writes:** take each one Measured lists, and each `bulk:`

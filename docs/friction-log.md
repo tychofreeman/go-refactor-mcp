@@ -4144,3 +4144,11 @@ add_declaration. Nothing by hand. A whole-function rewrite of
 The session record is `docs/sessions/tokens-all-refactorings.md`. The
 test with add_declaration, seen failing; one replace_text added the five
 names to `refactoringTools`. Nothing by hand.
+
+## 2026-10-31: refactor-tokens reports text edits of Go (roadmap 49.10)
+
+The session record is `docs/sessions/tokens-text-edits.md`. Tests with
+insert_statements and add_declaration (a stub field declared by the
+first); the code with add_field, add_declaration and insert_statements.
+One call retyped with replace_expression: no tool adds an argument to
+a call (roadmap 49.12).

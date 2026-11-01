@@ -43,6 +43,7 @@ type WorkReport struct {
 	Algebra          []AlgebraStats // applied gorefactor calls, as Report.Algebra
 	RefactoringSteps int
 	EditSteps        int
+	TextEditSteps    int
 	CLI              int             // calls of the refactor CLI through Bash, which are not measured
 	ToolUseIDs       map[string]bool // the calls logged, to find them in a transcript
 	LargeWrites      []string
@@ -135,6 +136,7 @@ func AnalyzeWork(r io.Reader) (*WorkReport, error) {
 		}
 	}
 	w.Algebra, w.RefactoringSteps, w.EditSteps = alg.Algebra, alg.RefactoringSteps, alg.EditSteps
+	w.TextEditSteps = alg.TextEditSteps
 	return w, nil
 }
 
@@ -289,6 +291,7 @@ func (w *WorkReport) Markdown() string {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "- tool calls: %d\n", w.Calls)
 	fmt.Fprintf(&sb, "- through gorefactor: %d refactoring steps, %d edit steps", w.RefactoringSteps, w.EditSteps)
+	sb.WriteString(textEditsNote(w.TextEditSteps, w.EditSteps))
 	if w.CLI > 0 {
 		fmt.Fprintf(&sb, ", and %d calls of the CLI (not counted in steps)", w.CLI)
 	}
@@ -330,4 +333,13 @@ func (w *WorkReport) Markdown() string {
 		}
 	}
 	return sb.String()
+}
+
+// textEditsNote says how many of edits steps wrote Go as text, or is
+// empty when there were no edits.
+func textEditsNote(text, edits int) string {
+	if edits == 0 {
+		return ""
+	}
+	return fmt.Sprintf(" (%d of them text edits of Go)", text)
 }
