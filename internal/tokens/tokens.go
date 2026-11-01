@@ -454,6 +454,8 @@ var refactoringTools = map[string]bool{
 	"introduce_parameter": true, "change_parameter_type": true, "add_result": true, "change_field_type": true,
 	"change_type": true, "merge_duplicate_function": true, "function_to_method": true,
 	"method_to_function": true, "remove_dead_code": true, "invert_if": true, "remove_else": true,
+	"fold": true, "parameterize": true, "move_method": true, "type_switch_to_method": true,
+	"prepare_switch_for_types": true,
 }
 
 var (
