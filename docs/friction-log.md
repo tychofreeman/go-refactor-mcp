@@ -4138,3 +4138,9 @@ first refusal named); the rest small replace_text edits and
 add_declaration. Nothing by hand. A whole-function rewrite of
 `AnalyzeWork` was drafted and dropped for five edits;
 `docs/sessions/tokens-in-records.md` has the details.
+
+## 2026-10-31: refactor-tokens counts every refactoring (roadmap 49.1)
+
+The session record is `docs/sessions/tokens-all-refactorings.md`. The
+test with add_declaration, seen failing; one replace_text added the five
+names to `refactoringTools`. Nothing by hand.

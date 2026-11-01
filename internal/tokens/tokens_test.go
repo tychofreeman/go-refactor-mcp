@@ -320,6 +320,16 @@ func TestAnalyzeAlgebra(t *testing.T) {
 	}
 }
 
+func TestRefactoringToolsCountAsRefactorings(t *testing.T) {
+	for _, tool := range []string{"fold", "parameterize", "move_method", "type_switch_to_method", "prepare_switch_for_types"} {
+		c := &call{name: "mcp__gorefactor__" + tool, input: json.RawMessage(`{"file": "a.go"}`)}
+		a := measureAlgebra(c, "APPLIED "+tool+": done\n")
+		if a == nil || a.kind != AlgebraRefactoring {
+			t.Errorf("%s: %+v, want a refactoring", tool, a)
+		}
+	}
+}
+
 func TestAnalyzeOnly(t *testing.T) {
 	var tr transcript
 	tr.request("r1", 1000, 10, callOf("t1", "Read", map[string]any{"file_path": "a.go"}))

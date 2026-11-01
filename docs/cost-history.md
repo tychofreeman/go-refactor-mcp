@@ -1646,6 +1646,17 @@ and Go reading was a few percent of input in both. Derived share was
 19% in both. One session each; the comparison is of habit, which the
 hook changed completely, not of cost. Kept.
 
+## 23. Refactorings counted as edits (Oct 31, no new runs)
+
+Until roadmap 49.1, `refactor-tokens` counted steps of fold,
+parameterize, move_method, type_switch_to_method and
+prepare_switch_for_types as edits: its list of refactorings predated
+them. So the derived share and the refactoring steps of every row above
+that used them are low, from section 8 on (fold from Oct 21, the kind
+tools from section 10): a fold's lines counted as changed, not derived.
+The rows stay as they were measured; to compare a new run with one of
+them, measure both again with the current `refactor-tokens`.
+
 ## What made the difference
 
 - **Smaller results** (#75, rename locations): the largest single win when

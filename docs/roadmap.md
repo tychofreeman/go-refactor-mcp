@@ -2763,6 +2763,8 @@ hand or a tool got in the way.
        `refactoringTools` predates them, so the derived share of work that
        uses them comes out too low, from transcripts and logs alike.
        Adding them changes earlier cost-history rows; ask the user.
+       *Done* (2026-10-31, the user chose it): the five count as
+       refactorings; cost-history section 23 says which rows undercount.
     2. A failed call and a denied one look the same in the log (a
        PreToolUse with no PostToolUse).
     3. In a cloud clone the `refactor` CLI's calls are counted, not
@@ -2784,6 +2786,17 @@ hand or a tool got in the way.
        scratch files. The skill's `bulk:` note and its assessment ask, of
        each large write, whether it was existing code written again
        because writing was easier than the tools. *Done.*
+    8. **Keep `refactoringTools` in step with the tools** (2026-10-31,
+       `docs/sessions/tokens-all-refactorings.md`): 49.1's five drifted
+       because nothing ties the set to what the server publishes. A test
+       that every published tool is a refactoring or an edit would catch
+       the next. change_type is in the set but is an edit, and
+       TypeScript's change_field_type and change_parameter_type are
+       edits where Go's are refactorings: the set cannot tell the
+       languages apart.
+    9. `inspect` `names` refuses `tokens.call` (a type) as declared
+       twice, because a test file of the package declares a function
+       `call`: the same record.
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
