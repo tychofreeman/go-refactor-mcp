@@ -28,7 +28,7 @@ func (f *fake) Step(tool string, args json.RawMessage) (string, bool, error) {
 func (f *fake) Batch(json.RawMessage) (string, error)                  { return f.name + " batch", nil }
 func (f *fake) Inspect(json.RawMessage) (string, error)                { return f.name + " inspect", nil }
 func (f *fake) Check(context.Context, json.RawMessage) (string, error) { return f.name + " check", nil }
-func (f *fake) Undo() (string, error)                                  { return f.name + " undo", nil }
+func (f *fake) Undo(args json.RawMessage) (string, error)              { return f.name + " undo", nil }
 
 func twoLanguages() (*Dispatcher, *fake, *fake) {
 	d := &Dispatcher{History: &history.Stack{}}

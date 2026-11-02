@@ -24,7 +24,7 @@ func (s *Server) SaveUndo(path string) error { return s.langs.History.Save(path)
 
 // Undo reverts the last change, in the language whose files it changed,
 // as the undo tool does.
-func (s *Server) Undo() (string, error) { return s.langs.ForUndo().Undo() }
+func (s *Server) Undo() (string, error) { return s.langs.ForUndo().Undo(nil) }
 
 // Call runs the tool (inspect, batch, or a refactoring or edit) with args
 // in the language of the files they name, as a tool call does: its text,

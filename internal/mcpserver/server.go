@@ -251,7 +251,7 @@ func (s *Server) MCP() *mcp.Server {
 		InputSchema: json.RawMessage(`{"type": "object", "properties": {}, "additionalProperties": false}`),
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: &notDestructive},
 	}, func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return s.undo(), nil
+		return s.undo(req.Params.Arguments), nil
 	})
 
 	srv.AddTool(&mcp.Tool{
@@ -355,8 +355,8 @@ func (s *Server) inspect(args json.RawMessage) *mcp.CallToolResult {
 	return textResult(text)
 }
 
-func (s *Server) undo() *mcp.CallToolResult {
-	text, err := s.langs.ForUndo().Undo()
+func (s *Server) undo(args json.RawMessage) *mcp.CallToolResult {
+	text, err := s.langs.ForUndo().Undo(args)
 	if err != nil {
 		return toolError(err)
 	}

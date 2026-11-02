@@ -130,6 +130,14 @@ func (l *Language) route(args json.RawMessage) (ws *workspace.Workspace, out jso
 		ws, err = l.workspace()
 		return ws, args, "", "", err
 	}
+	// The caller's worktree, which cmd/worktree-paths adds: the module of a
+	// call that names no file.
+	from := lang.TakeWorktree(v)
+	if from != "" {
+		if args, err = json.Marshal(v); err != nil {
+			return nil, nil, "", "", err
+		}
+	}
 	abs := func(p string) string {
 		if filepath.IsAbs(p) {
 			return filepath.Clean(p)
@@ -147,6 +155,9 @@ func (l *Language) route(args json.RawMessage) (ws *workspace.Workspace, out jso
 			roots = append(roots, r)
 		}
 		byRoot[r] = append(byRoot[r], f)
+	}
+	if len(roots) == 0 && from != "" {
+		roots = append(roots, workspace.ModuleRoot(lang.ExistingDir(from)))
 	}
 	switch {
 	case len(roots) > 1:
@@ -248,9 +259,12 @@ func (l *Language) Inspect(args json.RawMessage) (string, error) {
 }
 
 // Undo reverts the change on top of the stack.
-func (l *Language) Undo() (string, error) {
+func (l *Language) Undo(args json.RawMessage) (string, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if refused := lang.UndoElsewhere(args, l.history); refused != "" {
+		return refused, nil
+	}
 	// Undoing only needs the files, so it goes ahead even when the module
 	// does not load (a go.mod broken by hand, say), and says so.
 	var loadErr error

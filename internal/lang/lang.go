@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -42,7 +43,7 @@ type Language interface {
 	Check(ctx context.Context, args json.RawMessage) (string, error)
 	// Undo reverts the change on top of the shared stack, which is this
 	// language's.
-	Undo() (string, error)
+	Undo(args json.RawMessage) (string, error)
 }
 
 // Dispatcher chooses the language for each call.
@@ -257,6 +258,43 @@ func MapFiles(v any, f func(string) string) any {
 		return out
 	}
 	return v
+}
+
+// TakeWorktree removes from v, a call's decoded arguments, the caller's
+// worktree that cmd/worktree-paths adds, and returns it, or "" when v
+// has none. A call that names no file works in that worktree's module.
+func TakeWorktree(v any) string {
+	m, ok := v.(map[string]any)
+	if !ok {
+		return ""
+	}
+	w, _ := m["worktree"].(string)
+	delete(m, "worktree")
+	return w
+}
+
+// UndoElsewhere is undo's refusal when args, its arguments, carry the
+// caller's worktree and the last change on h is not in it: the stack is
+// the session's, shared by every agent, and undo reverts only its top;
+// "" otherwise.
+func UndoElsewhere(args json.RawMessage, h *history.Stack) string {
+	var a struct {
+		Worktree string `json:"worktree"`
+	}
+	if json.Unmarshal(args, &a) != nil || a.Worktree == "" {
+		return ""
+	}
+	c, ok := h.Last()
+	if !ok {
+		return ""
+	}
+	for p := range c.After {
+		if r, err := filepath.Rel(a.Worktree, p); err != nil || r == ".." || strings.HasPrefix(r, "../") {
+			return fmt.Sprintf("Cannot undo: the session's last change (%s) is not in this worktree (%s); another agent of the session made it, and undo reverts only the last change.", strings.TrimPrefix(c.Label, "undo "), a.Worktree)
+		}
+		break
+	}
+	return ""
 }
 
 // Preload runs load in the background, holding mu, and returns a channel

@@ -4182,3 +4182,13 @@ add_declaration and replace_statements, the settings by replace_text.
 Nothing by hand in the repo. The roots probe was a scratch server
 outside it (Write, and Edit once), since it was an experiment, not
 this module's code.
+
+## 2026-11-02: inspect, check and undo from a worktree (roadmap 50)
+
+The session record is `docs/sessions/worktree-home-calls.md`. By text
+edits where no operation fit: two blocks made helpers
+(`lang.TakeWorktree`, `lang.UndoElsewhere`) by add_declaration and
+replace_statements, since extract_function refuses code that returns
+through the enclosing function's results (roadmap 50.5); a dead local
+removed with replace_statements, since remove_dead_code does not take
+locals.

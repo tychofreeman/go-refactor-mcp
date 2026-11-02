@@ -59,15 +59,15 @@ func main() {
 }
 
 // place returns in, the arguments of a gorefactor call made from cwd,
-// with its relative paths made absolute in cwd's worktree; nil when cwd
-// is not in a worktree other than project, the main checkout, or no path
-// changes. A path into project outside the worktree is refused instead.
+// with its relative paths made absolute in cwd's worktree and the
+// worktree under "worktree"; nil when cwd is not in a worktree other than
+// project, the main checkout. A path into project outside the worktree
+// is refused instead.
 func place(in map[string]any, cwd string, project string) (map[string]any, string) {
 	tree := worktree(cwd)
 	if tree == "" || tree == filepath.Clean(project) {
 		return nil, ""
 	}
-	changed := false
 	var refused string
 	out := lang.MapFiles(in, func(p string) string {
 		if filepath.IsAbs(p) {
@@ -77,16 +77,19 @@ func place(in map[string]any, cwd string, project string) (map[string]any, strin
 			}
 			return p
 		}
-		changed = true
 		if a := filepath.Join(tree, p); lang.Exists(a) || !lang.Exists(filepath.Join(cwd, p)) {
 			return a
 		}
 		return filepath.Join(cwd, p)
 	})
-	if refused != "" || !changed {
+	if refused != "" {
 		return nil, refused
 	}
-	return out.(map[string]any), ""
+	// What names no file (undo, inspect's overview, check) goes to the
+	// worktree's module too: the server reads this and drops it.
+	m := out.(map[string]any)
+	m["worktree"] = tree
+	return m, ""
 }
 
 // worktree is the root of the git working tree holding dir: the nearest

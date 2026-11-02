@@ -38,9 +38,19 @@ func TestPlaceInWorktree(t *testing.T) {
 	want := map[string]any{"report": "summary", "steps": []any{
 		map[string]any{"tool": "rename", "args": map[string]any{"file": filepath.Join(tree, "internal/plant/plant.go"), "name": "Water", "new_name": "Irrigate"}},
 		map[string]any{"tool": "replace_text", "args": map[string]any{"files": []any{filepath.Join(tree, "README.md"), filepath.Join(tree, "docs/a.md")}, "old": "x", "new": "y"}},
-	}}
+	}, "worktree": tree}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v\nwant %v", got, want)
+	}
+}
+
+// A call that names no file (undo, inspect's overview, check) still
+// says which worktree it came from.
+func TestPlaceWithoutFiles(t *testing.T) {
+	project, tree := checkout(t)
+	got, refused := place(map[string]any{}, tree, project)
+	if want := map[string]any{"worktree": tree}; refused != "" || !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, refused %q; want %v", got, refused, want)
 	}
 }
 
@@ -65,7 +75,7 @@ func TestPlaceKeepsOtherModules(t *testing.T) {
 	project, tree := checkout(t)
 	other := filepath.Join(filepath.Dir(project), "tools", "a.go")
 	in := map[string]any{"file": other}
-	if got, refused := place(in, tree, project); got != nil || refused != "" {
-		t.Errorf("a module outside the checkout: got %v, refused %q; want the call unchanged", got, refused)
+	if got, refused := place(in, tree, project); refused != "" || got["file"] != other {
+		t.Errorf("a module outside the checkout: got %v, refused %q; want its path unchanged", got, refused)
 	}
 }
