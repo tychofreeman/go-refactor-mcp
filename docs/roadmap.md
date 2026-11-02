@@ -2868,6 +2868,10 @@ hand or a tool got in the way.
        results (a named `err`, a refusal string), so two blocks became
        helpers by hand. The call could return the new function's
        results when they are the same, as early error returns already do.
+    6. **merge_duplicate_function and qualified names**
+       (`docs/sessions/worktree-roots.md`): a body calling `Exists` in
+       package `lang` and one calling `lang.Exists` elsewhere are
+       refused as different, though both name the same function.
     The tools stay the original checkout's build in a session that moves:
     only a session started in the worktree runs its branch's server.
     *Steps 1-2 done, by another way* (2026-11-02,
@@ -2887,7 +2891,12 @@ hand or a tool got in the way.
     `refactor-tokens -log` reading the transcript of a session that
     entered a worktree: *done* (2026-11-02,
     `docs/sessions/worktree-transcripts.md`): one transcript per file
-    name, the path that exists. Open: the hook is in this repo's settings and
+    name, the path that exists. A session without the hook that
+    entered a worktree: *done* (2026-11-02, `docs/sessions/worktree-roots.md`,
+    on deprecated roots, the user's choice): the server asks a client
+    that offers roots for them on each call without `worktree`, adds it
+    when the root is another git working tree, and relative paths are
+    then the worktree's. Open: the hook is in this repo's settings and
     `examples/settings.json`, not in what the server publishes, so a
     user without it keeps the hazard.
 

@@ -72,6 +72,50 @@ func connect(t *testing.T, s *Server) *mcp.ClientSession {
 	return cs
 }
 
+// A session that entered a worktree, without cmd/worktree-paths: the
+// server asks the client for its roots, and a relative path is the
+// worktree's file, not the main checkout's.
+func TestRootsInWorktree(t *testing.T) {
+	t.Setenv("GOWORK", "off")
+	dir := t.TempDir()
+	tree := filepath.Join(dir, ".claude", "worktrees", "w")
+	for name, src := range map[string]string{
+		".git/HEAD":                        "ref: refs/heads/main\n",
+		"go.mod":                           "module example.com/demo\n\ngo 1.22\n",
+		"calc/calc.go":                     calcSrc,
+		".claude/worktrees/w/.git":         "gitdir: " + dir + "/.git/worktrees/w\n",
+		".claude/worktrees/w/go.mod":       "module example.com/demo\n\ngo 1.22\n",
+		".claude/worktrees/w/calc/calc.go": calcSrc,
+	} {
+		p := filepath.Join(dir, name)
+		os.MkdirAll(filepath.Dir(p), 0o755)
+		os.WriteFile(p, []byte(src), 0o644)
+	}
+	ctx := context.Background()
+	st, ct := mcp.NewInMemoryTransports()
+	if _, err := New(dir).MCP().Connect(ctx, st, nil); err != nil {
+		t.Fatal(err)
+	}
+	client := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "1"}, nil)
+	client.AddRoots(&mcp.Root{URI: "file://" + tree})
+	cs, err := client.Connect(ctx, ct, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { cs.Close() })
+
+	res, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: "replace_text", Arguments: map[string]any{"file": "calc/calc.go", "old": "var Rate = 3", "new": "var Rate = 4"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(tree, "calc/calc.go")); !strings.Contains(string(b), "Rate = 4") {
+		t.Errorf("the worktree's calc.go is unchanged; result:\n%v", res.Content)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, "calc/calc.go")); !strings.Contains(string(b), "Rate = 3") {
+		t.Errorf("the main checkout's calc.go changed:\n%s", b)
+	}
+}
+
 // Preload loads the workspace before the first call, without blocking.
 func TestPreload(t *testing.T) {
 	t.Setenv("GOWORK", "off")

@@ -16,6 +16,7 @@ package mcpserver
 import (
 	"context"
 	"encoding/json"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime/debug"
@@ -110,6 +111,7 @@ type Server struct {
 	// edits. Published text is the same.
 	NoCodeByText bool
 
+	home       string               // the git working tree of the server's directory, or ""
 	golang     *golang.Language     // nil when the root holds no Go
 	typescript *typescript.Language // nil when it holds no TypeScript
 	langs      *lang.Dispatcher     // chooses the language of each call
@@ -161,6 +163,9 @@ func (s *Server) instructions() string {
 func New(dir string, patterns ...string) *Server {
 	h := &history.Stack{}
 	s := &Server{langs: &lang.Dispatcher{History: h}}
+	if abs, err := filepath.Abs(dir); err == nil {
+		s.home = lang.WorkingTree(abs) // compared with the client's roots, which are absolute
+	}
 	goMod, tsconfig := above(dir, "go.mod"), above(dir, "tsconfig.json")
 	if goMod || !tsconfig {
 		s.golang = golang.New(dir, patterns, h)
@@ -212,9 +217,7 @@ func (s *Server) MCP() *mcp.Server {
 			Description: t.Description + "\nApplies the change and returns what changed; undo reverts it.",
 			InputSchema: t.Schema,
 			Annotations: &mcp.ToolAnnotations{DestructiveHint: &notDestructive},
-		}, func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			return s.refactor(name, req.Params.Arguments), nil
-		})
+		}, s.handler(func(_ context.Context, args json.RawMessage) *mcp.CallToolResult { return s.refactor(name, args) }))
 	}
 
 	srv.AddTool(&mcp.Tool{
@@ -241,18 +244,14 @@ func (s *Server) MCP() *mcp.Server {
   "additionalProperties": false
 }`)),
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
-	}, func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return s.inspect(req.Params.Arguments), nil
-	})
+	}, s.handler(func(_ context.Context, args json.RawMessage) *mcp.CallToolResult { return s.inspect(args) }))
 
 	srv.AddTool(&mcp.Tool{
 		Name:        "undo",
 		Description: "Revert the most recent refactoring or edit applied in this session and return the reverting diff. Can be called repeatedly to step further back. Refuses if a changed file was edited since. Works while the module does not load.",
 		InputSchema: json.RawMessage(`{"type": "object", "properties": {}, "additionalProperties": false}`),
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: &notDestructive},
-	}, func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return s.undo(req.Params.Arguments), nil
-	})
+	}, s.handler(func(_ context.Context, args json.RawMessage) *mcp.CallToolResult { return s.undo(args) }))
 
 	srv.AddTool(&mcp.Tool{
 		Name:        "check",
@@ -267,9 +266,7 @@ func (s *Server) MCP() *mcp.Server {
   "additionalProperties": false
 }`),
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
-	}, func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return s.check(ctx, req.Params.Arguments), nil
-	})
+	}, s.handler(s.check))
 	srv.AddTool(&mcp.Tool{
 		Name: "batch",
 		Description: `Run several refactorings and edits in order, in one call, planned from one inspect. Each step is {tool, args}: a tool and the arguments it takes when called alone; each runs on the code the earlier steps left.
@@ -300,10 +297,50 @@ check "end" type-checks only after the last step, so edits may pass through code
   "additionalProperties": false
 }`),
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: &notDestructive},
-	}, func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return s.batch(req.Params.Arguments), nil
-	})
+	}, s.handler(func(_ context.Context, args json.RawMessage) *mcp.CallToolResult { return s.batch(args) }))
 	return srv
+}
+
+// arguments are a tool call's arguments; or, when the call must first ask
+// the client something, the result that asks it.
+func (s *Server) arguments(req *mcp.CallToolRequest) (json.RawMessage, *mcp.CallToolResult) {
+	args := req.Params.Arguments
+	v := map[string]any{}
+	if len(args) > 0 && json.Unmarshal(args, &v) != nil || v["worktree"] != nil {
+		return args, nil // not an object, or cmd/worktree-paths gave the worktree
+	}
+	if r, ok := req.Params.InputResponses["roots"]; ok {
+		if res, ok := r.(*mcp.ListRootsResult); ok && len(res.Roots) > 0 {
+			if u, err := url.Parse(res.Roots[0].URI); err == nil && u.Scheme == "file" {
+				if tree := lang.WorkingTree(u.Path); tree != "" && tree != s.home {
+					v["worktree"] = tree
+					if b, err := json.Marshal(v); err == nil {
+						return b, nil
+					}
+				}
+			}
+		}
+		return args, nil
+	}
+	// A session that entered a worktree shares this server; its roots say
+	// where it is now. They are asked on each call, since a client sends no
+	// notice when the session moves.
+	if p := req.Session.InitializeParams(); p == nil || p.Capabilities == nil || p.Capabilities.RootsV2 == nil && !p.Capabilities.Roots.ListChanged {
+		return args, nil
+	}
+	return nil, &mcp.CallToolResult{InputRequests: mcp.InputRequestMap{"roots": &mcp.ListRootsParams{}}, RequestState: "roots"}
+}
+
+// handler is a tool's handler that runs run with the call's arguments,
+// once arguments has what it asks the client.
+func (s *Server) handler(run func(ctx context.Context, args json.RawMessage) *mcp.CallToolResult) mcp.ToolHandler {
+	return func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		args, ask := s.arguments(req)
+		if ask != nil {
+			return ask, nil
+		}
+		return run(ctx, args), nil
+	}
 }
 
 // Preload starts loading the workspace in the background, so that the
