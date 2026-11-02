@@ -4208,3 +4208,10 @@ of the enclosing function's parameter), and the server's copy of the
 working-tree lookup made a call, since merge_duplicate_function counts
 `lang.Exists` and `Exists` (the same function, in and out of its
 package) as different names.
+
+## 2026-11-02: extract_function passes on early returns of any values (roadmap 50.5)
+
+The session record is `docs/sessions/extract-returns.md`. By hand: a
+constant declared on its own (`const valueExit = errorExit + 1`), since
+no tool adds a spec to a const group. Ten golden refusals became
+extractions; their `out/` were written by the golden test's `-update`.

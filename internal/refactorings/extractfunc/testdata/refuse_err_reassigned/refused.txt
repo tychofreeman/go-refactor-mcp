@@ -1,1 +1,0 @@
-returns `err`, which might be nil

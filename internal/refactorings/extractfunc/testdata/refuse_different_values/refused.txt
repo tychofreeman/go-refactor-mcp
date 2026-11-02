@@ -1,1 +1,1 @@
-the returns at lines 7 and 10 return different values besides the error
+return early with a value and set a

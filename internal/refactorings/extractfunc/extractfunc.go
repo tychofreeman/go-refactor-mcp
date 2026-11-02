@@ -60,8 +60,8 @@ func New() *ExtractFunction {
 func (*ExtractFunction) Description() string {
 	return `Move a run of whole statements into a new function, declared after the one they are in, and call it in their place: in func report(plants []Plant) string, extracting total := 0 and the loop that adds each p.Height to it, as sum, gives total := sum(plants) there and func sum(plants []Plant) int { total := 0; for ...; return total }. Locals the statements use become parameters, and those they set that are used afterwards become results; the result lists both. Statements that use the receiver become a method of its type.
 Identify the statements by file, start_line and end_line: whole statements of one block, as inspect numbers them; or a case's body by function and case ("fern" in function Water, or default), which stays valid after earlier steps; for a value with no case, when the code after the switch is what runs for it, a new case calls a copy of that code. doc becomes the new function's doc comment.
-Returns: when every path returns, the call becomes return sum(...); early error returns (if err != nil { return err }) make the new function return an error, which the call checks; so do early returns of a string last (a refusal: return nil, "no name") known not to be empty.
-Refuses, saying why: other returns, defer, recover, fallthrough, a break, continue or goto out of the lines, a variable they declare that a pointer or closure keeps and that is used after them.`
+Returns: when every path returns, the call becomes return sum(...); early error returns (if err != nil { return err }) make the new function return an error, which the call checks; so do early returns of a string last (a refusal: return nil, "no name") known not to be empty. Other early returns make it also return whether they ran: if done, v, err := f(...); done { return v, err }.
+Refuses, saying why: an early return when the lines also set a variable used after them, a return through named results, defer, recover, fallthrough, a break, continue or goto out of the lines, a variable they declare that a pointer or closure keeps and that is used after them.`
 }
 
 type args struct {
@@ -1829,6 +1829,24 @@ func (x *extraction) plan() (*refactor.Plan, error) {
 		bodyEdits = x.rewriteExits(zeros)
 		tail = strings.Join(append(names(f.results), x.exitZero()), ", ")
 		errName = x.errorName(f.results)
+	case valueExit:
+		if len(f.results) > 0 {
+			return nil, refactor.Refusef("the selected lines return early with a value and set %s, used after them; the new function cannot return both. Select fewer lines, or move what sets %s out of them", strings.Join(names(f.results), ", "), strings.Join(names(f.results), ", "))
+		}
+		results = append(results, "bool")
+		var zeros []string
+		for i := 0; i < sig.Results().Len(); i++ {
+			results = append(results, ts("", sig.Results().At(i).Type()))
+			z, err := x.zeroValue(sig.Results().At(i).Type())
+			if err != nil {
+				return nil, err
+			}
+			zeros = append(zeros, z)
+		}
+		for _, r := range x.returns {
+			bodyEdits = append(bodyEdits, edit.TextEdit{Start: x.Off(r.Results[0].Pos()), End: x.Off(r.Results[0].Pos()), NewText: "true, "})
+		}
+		tail = strings.Join(append([]string{"false"}, zeros...), ", ")
 	default:
 		for _, v := range f.results {
 			results = append(results, ts(v.Name(), v.Type()))
@@ -1931,6 +1949,10 @@ func (x *extraction) callSite(f *flow, sig *types.Signature, indent string, name
 	var site strings.Builder
 	if final != nil {
 		return fmt.Sprintf("%sreturn %s", indent, strings.Join(append(append([]string(nil), x.exitValues...), call), ", "))
+	}
+	if x.mode == valueExit {
+		vs := strings.Join(exitNames(sig), ", ")
+		return fmt.Sprintf("%sif done, %s := %s; done {\n%s\treturn %s\n%s}", indent, vs, call, indent, vs, indent)
 	}
 	if errName != "" && len(f.results) == 0 {
 		// The error is only checked: declare it in the if, where it hides
@@ -2041,6 +2063,8 @@ func (x *extraction) notes(f *flow, names func(vs []*types.Var) []string) []stri
 		} else {
 			notes = append(notes, fmt.Sprintf("the early returns now return their last value from %s, and the call site returns it when it is not %s", x.name, x.exitZero()))
 		}
+	case valueExit:
+		notes = append(notes, fmt.Sprintf("the selected lines return early, so %s also returns whether they did, and the call site returns its values when it says so", x.name))
 	}
 	if len(f.loopCarried) > 0 {
 		notes = append(notes, fmt.Sprintf("%s %s returned because the selected lines are in a loop and may read %s in the next iteration; if not, the result can be dropped",
