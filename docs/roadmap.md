@@ -2836,6 +2836,46 @@ hand or a tool got in the way.
         description) as a text edit of Go, as it does one of code, so 4
         of the record's 5 were edits `-no-code-by-text` allows. Count
         the two apart, by the same token comparison the server uses.
+50. **Sessions that move into a git worktree** (2026-11-02, the user
+    asked whether the server works with worktrees). A session started in
+    a worktree gets that worktree's `.mcp.json`, server and hooks, and
+    should work. But a session or subagent that moves into one after it
+    starts (`EnterWorktree`, an agent with `isolation: "worktree"`) keeps
+    the MCP server and hooks of the checkout it started in: the server is
+    bound to `$CLAUDE_PROJECT_DIR` at start, and `route` resolves a
+    relative path against that module first, so an edit meant for the
+    worktree changes the original checkout, unrefused, while Edit, Write
+    and the shell change the worktree. An absolute path into the
+    worktree is routed to it as "another module". Steps:
+    1. **Reproduce, and find what the server can know.** Move this
+       session into a worktree and see which tree a relative path
+       changes; find whether Claude Code gives the server MCP roots, and
+       sends `roots/list_changed` when the session's directory changes.
+    2. **Refuse the dangerous case.** A relative path while the
+       session's tree is not the server's home is refused, saying to give
+       the path from the worktree's root as an absolute path (or whatever
+       step 1 makes possible).
+    3. **Follow the session's tree.** Re-bind the home workspace and its
+       undo history when the roots change (`l.others` keeps the
+       workspaces already loaded); if Claude Code sends no roots, an
+       explicit switch instead, weighed against the tool budget.
+    4. **The hooks.** `read-guard` and `session-log` `cd` into
+       `$CLAUDE_PROJECT_DIR`: judge paths and take the branch from the
+       hook input's `cwd`.
+    The tools stay the original checkout's build in a session that moves:
+    only a session started in the worktree runs its branch's server.
+    *Steps 1-2 done, by another way* (2026-11-02,
+    `docs/sessions/worktree-sessions.md`): roots follow EnterWorktree
+    (asked by an input request under MCP 2026-07-28; no change
+    notification) but not a worktree subagent, which gets the parent's;
+    a PreToolUse hook's `cwd` is the caller's in both. So the user chose
+    a hook, `cmd/worktree-paths`: relative paths become absolute in the
+    caller's worktree, and a path into the main checkout from a worktree
+    is refused. Step 3 (the server following roots) is not needed for
+    it. Open: `inspect` and `check` without a file, and `undo`, still
+    act on the server's home; the hook is in this repo's settings and
+    `examples/settings.json`, not in what the server publishes, so a
+    user without it keeps the hazard.
 
 Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the

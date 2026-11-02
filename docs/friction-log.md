@@ -4172,3 +4172,13 @@ put the shared `wholeLines` call in place of its copy, since the copy
 read `field.End()` after a call the original makes first, and
 introduce_parameter and move_statement_up refuse to swap two calls that
 could panic (`docs/derivations.md` section 12).
+
+## 2026-11-02: gorefactor calls from a git worktree (roadmap 50)
+
+The session record is `docs/sessions/worktree-sessions.md`. The hook
+`cmd/worktree-paths` written test first: the test and `main.go` by
+create_file with a create_from_usage step for the stub, the code by
+add_declaration and replace_statements, the settings by replace_text.
+Nothing by hand in the repo. The roots probe was a scratch server
+outside it (Write, and Edit once), since it was an experiment, not
+this module's code.

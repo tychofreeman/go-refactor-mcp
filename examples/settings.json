@@ -1,0 +1,10 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "mcp__gorefactor__.*",
+        "hooks": [{ "type": "command", "command": "worktree-paths" }]
+      }
+    ]
+  }
+}

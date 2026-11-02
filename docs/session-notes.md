@@ -75,6 +75,17 @@ patterns sessions use, with their steps, in `docs/patterns.md`.
   first), roll back to green, take the step there, and redo what
   followed: the user prefers that to refactoring while red and does
   not mind the extra turns (2026-10-31; #518 did it with undo).
+- **Worktrees** (2026-11-02, the user asked; roadmap 50): the server
+  and the hooks belong to the session's starting checkout, and a
+  subagent with `isolation: "worktree"` shares them; its MCP roots are
+  the parent's, but a hook's `cwd` is its own. `cmd/worktree-paths`
+  (PreToolUse on `mcp__gorefactor__.*`) makes relative paths absolute
+  in the caller's worktree and refuses paths into the main checkout from
+  one: a subagent never needs the main checkout (the user: isolation is
+  the point). `updatedInput` without a permission decision worked for an
+  MCP tool, unprompted. To try a new MCP server in a session: `claude
+  mcp add` (local scope), then restart; `/mcp` reconnects one already
+  loaded.
 - **Edits as a paste** (2026-10-31, the user: "the edit tools have
   been used too much as an impediment"): sessions write the Go
   themselves and have replace_text paste it, counting that as through

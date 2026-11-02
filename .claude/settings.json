@@ -11,6 +11,15 @@
         ]
       },
       {
+        "matcher": "mcp__gorefactor__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$CLAUDE_PROJECT_DIR\" && go run ./cmd/worktree-paths"
+          }
+        ]
+      },
+      {
         "matcher": "Read|Bash|Edit|Write|MultiEdit|NotebookEdit",
         "hooks": [
           {

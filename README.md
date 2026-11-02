@@ -58,6 +58,7 @@ cmd/refactor/         the CLI: a step, a batch, inspect, check or undo per invoc
 cmd/refactor-ab/      A/B runs: tasks with claude -p, through the tools and by hand
 cmd/refactor-tokens/  where a Claude Code session's tokens went, by tool
 cmd/read-guard/       the hook that sends this repo's Go reads through inspect
+cmd/worktree-paths/   the hook that sends a call made from a git worktree to it
 internal/
   refactor/           the engine: Refactoring, Edit, Refusal, Run, batch
   refactorings/       one package per Go refactoring, with golden testdata/
@@ -129,6 +130,14 @@ path as the command. The server works on the module containing `-C`, or
 Setup notes:
 - Claude Code reads `.mcp.json` when a session starts: one added during a
   session takes effect in the next.
+- Git worktrees: the server stays on the checkout its session started in,
+  also for a subagent with `isolation: "worktree"` and after
+  `EnterWorktree`, so a relative path would edit the main checkout. The
+  hook `cmd/worktree-paths` sends each call to the caller's worktree and
+  refuses paths into the main checkout from one: `go install
+  github.com/tychofreeman/go-refactor-mcp/cmd/worktree-paths@latest`,
+  then add `examples/settings.json` to the project's
+  `.claude/settings.json`.
 - The tools need Go 1.26 or later. With `GOTOOLCHAIN=auto` (the default)
   `go install` fetches it; with `GOTOOLCHAIN=local` an older Go fails.
 - Tool names carry the server's name as Claude Code sees it:
