@@ -4192,3 +4192,9 @@ replace_statements, since extract_function refuses code that returns
 through the enclosing function's results (roadmap 50.5); a dead local
 removed with replace_statements, since remove_dead_code does not take
 locals.
+
+## 2026-11-02: refactor-tokens and worktree transcripts (roadmap 50)
+
+The session record is `docs/sessions/worktree-transcripts.md`. Nothing
+by hand: the test with create_file and create_from_usage, the code with
+add_declaration and replace_expression.

@@ -2883,7 +2883,11 @@ hand or a tool got in the way.
     the hook adds `worktree` (the caller's directory) to every call from
     one, which both languages' `route` reads and drops, so a call that
     names no file works in the worktree's module; undo refuses when the
-    session's last change is not in the caller's worktree. Open: the hook is in this repo's settings and
+    session's last change is not in the caller's worktree.
+    `refactor-tokens -log` reading the transcript of a session that
+    entered a worktree: *done* (2026-11-02,
+    `docs/sessions/worktree-transcripts.md`): one transcript per file
+    name, the path that exists. Open: the hook is in this repo's settings and
     `examples/settings.json`, not in what the server publishes, so a
     user without it keeps the hazard.
 
