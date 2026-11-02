@@ -97,7 +97,10 @@ before the docs:
   1 (the probe's heredoc, by the read guard)
 - Two transcripts were not read: the log names a transcript under
   the worktree's project directory for the calls made while in a
-  worktree, and none exists there.
+  worktree, and none exists there. With that fixed
+  (`docs/sessions/worktree-transcripts.md`): requests 67, input tokens
+  15.0M, output 39.3K; the figures above left out the requests made in
+  the worktrees.
 
 ## Assessment
 

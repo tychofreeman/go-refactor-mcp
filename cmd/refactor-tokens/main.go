@@ -133,7 +133,7 @@ func transcriptTokens(w *tokens.WorkReport) string {
 		return sb.String()
 	}
 	total := &tokens.Report{}
-	for _, path := range w.Transcripts {
+	for _, path := range toRead(w.Transcripts) {
 		f, err := os.Open(path)
 		if err != nil {
 			fmt.Fprintf(&sb, "- not read: %v\n", err)
@@ -149,4 +149,31 @@ func transcriptTokens(w *tokens.WorkReport) string {
 	}
 	sb.WriteString(total.Markdown())
 	return sb.String()
+}
+
+// toRead is the transcripts to read of the paths a log names: one per
+// file name (a session's id), the first of that name that exists, else
+// the first. The hook names a session's transcript under the directory
+// the session is in, but a session that entered a worktree still has
+// one transcript, under the project it started in.
+func toRead(paths []string) []string {
+	var out []string
+	at := map[string]int{} // file name -> index in out
+	for _, p := range paths {
+		i, seen := at[filepath.Base(p)]
+		switch {
+		case !seen:
+			at[filepath.Base(p)] = len(out)
+			out = append(out, p)
+		case !exists(out[i]) && exists(p):
+			out[i] = p
+		}
+	}
+	return out
+}
+
+// exists reports whether a file is at path.
+func exists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
