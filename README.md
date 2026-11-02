@@ -130,11 +130,13 @@ path as the command. The server works on the module containing `-C`, or
 Setup notes:
 - Claude Code reads `.mcp.json` when a session starts: one added during a
   session takes effect in the next.
-- Git worktrees: the server stays on the checkout its session started in,
-  also for a subagent with `isolation: "worktree"` and after
-  `EnterWorktree`, so a relative path would edit the main checkout. The
-  hook `cmd/worktree-paths` sends each call to the caller's worktree and
-  refuses paths into the main checkout from one: `go install
+- Git worktrees: the server stays on the checkout its session started in.
+  After `EnterWorktree` it follows the session by asking Claude Code for
+  its MCP roots on each call; a subagent with `isolation: "worktree"`
+  gets the parent's roots, so there a relative path would edit the main
+  checkout. The hook `cmd/worktree-paths` sends each call to the
+  caller's worktree, subagents' too, and refuses paths into the main
+  checkout from one: `go install
   github.com/tychofreeman/go-refactor-mcp/cmd/worktree-paths@latest`,
   then add `examples/settings.json` to the project's
   `.claude/settings.json`.

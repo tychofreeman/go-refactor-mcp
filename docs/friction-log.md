@@ -4198,3 +4198,13 @@ locals.
 The session record is `docs/sessions/worktree-transcripts.md`. Nothing
 by hand: the test with create_file and create_from_usage, the code with
 add_declaration and replace_expression.
+
+## 2026-11-02: the server follows a session into a worktree by roots (roadmap 50)
+
+The session record is `docs/sessions/worktree-roots.md`. Text edits
+where no operation fit: the five handler bodies made to take the
+arguments from a new function (no tool replaces an argument with a call
+of the enclosing function's parameter), and the server's copy of the
+working-tree lookup made a call, since merge_duplicate_function counts
+`lang.Exists` and `Exists` (the same function, in and out of its
+package) as different names.

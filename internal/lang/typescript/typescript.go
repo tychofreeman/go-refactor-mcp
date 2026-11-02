@@ -150,8 +150,9 @@ func (l *Language) route(args json.RawMessage) (ws *workspace.Workspace, out jso
 	if json.Unmarshal(args, &v) != nil {
 		return home, args, "", "", nil
 	}
-	// The caller's worktree, which cmd/worktree-paths adds: the solution of
-	// a call that names no file.
+	// The caller's worktree, which cmd/worktree-paths adds (or the server,
+	// from the client's roots): relative paths are in it, and a call that
+	// names no file works in its solution.
 	from := lang.TakeWorktree(v)
 	if from != "" {
 		if args, err = json.Marshal(v); err != nil {
@@ -162,6 +163,9 @@ func (l *Language) route(args json.RawMessage) (ws *workspace.Workspace, out jso
 	abs := func(p string) string {
 		if filepath.IsAbs(p) {
 			return filepath.Clean(p)
+		}
+		if from != "" {
+			return filepath.Join(from, p) // relative to the caller's worktree
 		}
 		return filepath.Join(homeRoot, p)
 	}

@@ -83,7 +83,10 @@ patterns sessions use, with their steps, in `docs/patterns.md`.
   in the caller's worktree and refuses paths into the main checkout from
   one: a subagent never needs the main checkout (the user: isolation is
   the point). `updatedInput` without a permission decision worked for an
-  MCP tool, unprompted. To try a new MCP server in a session: `claude
+  MCP tool, unprompted. Without the hook, the server asks for roots on
+  each call (roots are deprecated by SEP-2577 as of 2026-07-28; the
+  user chose to build on them while they last), which covers a session
+  that entered a worktree, not a subagent. To try a new MCP server in a session: `claude
   mcp add` (local scope), then restart; `/mcp` reconnects one already
   loaded.
 - **Edits as a paste** (2026-10-31, the user: "the edit tools have

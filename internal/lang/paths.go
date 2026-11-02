@@ -27,3 +27,16 @@ func RelTo(base, path string) string {
 	}
 	return path
 }
+
+// WorkingTree is the root of the git working tree holding dir: the nearest
+// directory at or above it with a .git entry, or "".
+func WorkingTree(dir string) string {
+	for d := filepath.Clean(dir); ; d = filepath.Dir(d) {
+		if Exists(filepath.Join(d, ".git")) {
+			return d
+		}
+		if filepath.Dir(d) == d {
+			return ""
+		}
+	}
+}

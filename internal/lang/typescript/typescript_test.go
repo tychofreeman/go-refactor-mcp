@@ -164,12 +164,21 @@ func TestWorktreeCalls(t *testing.T) {
 	if err != nil || !strings.HasPrefix(out, "In the solution at .claude/worktrees/w") {
 		t.Errorf("check from the worktree: %v\n%s", err, out)
 	}
-	text, refused, err := l.Step("replace_text", []byte(`{"file": "src/a.ts", "old": "return 1", "new": "return 3", "worktree": "`+tree+`"}`))
+	text, refused, err := l.Step("replace_text", []byte(`{"file": "src/a.ts", "old": "return 1", "new": "return 3"}`))
 	if err != nil || refused {
-		t.Fatalf("step naming a file, with the worktree: %v %v\n%s", err, refused, text)
+		t.Fatalf("step in the home solution: %v %v\n%s", err, refused, text)
 	}
 	out, err = l.Undo([]byte(`{"worktree": "` + tree + `"}`))
 	if err != nil || !strings.Contains(out, "not in this worktree") {
 		t.Errorf("undo from the worktree of a change in the home solution: %v\n%s", err, out)
+	}
+	// A relative path with the worktree is the worktree's file, as when the
+	// server takes the worktree from the client's roots.
+	text, refused, err = l.Step("replace_text", []byte(`{"file": "src/a.ts", "old": "return 1", "new": "return 4", "worktree": "`+tree+`"}`))
+	if err != nil || refused {
+		t.Fatalf("step by a relative path from the worktree: %v %v\n%s", err, refused, text)
+	}
+	if b, _ := os.ReadFile(filepath.Join(tree, "src/a.ts")); !strings.Contains(string(b), "return 4") {
+		t.Errorf("the worktree's src/a.ts:\n%s", b)
 	}
 }

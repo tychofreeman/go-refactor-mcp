@@ -64,7 +64,7 @@ func main() {
 // project, the main checkout. A path into project outside the worktree
 // is refused instead.
 func place(in map[string]any, cwd string, project string) (map[string]any, string) {
-	tree := worktree(cwd)
+	tree := lang.WorkingTree(cwd)
 	if tree == "" || tree == filepath.Clean(project) {
 		return nil, ""
 	}
@@ -90,19 +90,6 @@ func place(in map[string]any, cwd string, project string) (map[string]any, strin
 	m := out.(map[string]any)
 	m["worktree"] = tree
 	return m, ""
-}
-
-// worktree is the root of the git working tree holding dir: the nearest
-// directory at or above it with a .git entry, or "".
-func worktree(dir string) string {
-	for d := filepath.Clean(dir); ; d = filepath.Dir(d) {
-		if lang.Exists(filepath.Join(d, ".git")) {
-			return d
-		}
-		if filepath.Dir(d) == d {
-			return ""
-		}
-	}
 }
 
 // inside reports whether path is dir or under it.

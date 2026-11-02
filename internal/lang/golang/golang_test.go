@@ -102,4 +102,12 @@ func TestWorktreeCalls(t *testing.T) {
 	if b, _ := os.ReadFile(filepath.Join(root, "a.go")); !strings.Contains(string(b), "return 3") {
 		t.Errorf("a.go was undone from the worktree:\n%s", b)
 	}
+	// A relative path with the worktree is the worktree's file, as when the
+	// server takes the worktree from the client's roots.
+	if text, refused, err := l.Step("replace_text", []byte(`{"file": "a.go", "old": "return 2", "new": "return 4", "worktree": "`+tree+`"}`)); err != nil || refused {
+		t.Fatalf("step by a relative path from the worktree: %v %v\n%s", err, refused, text)
+	}
+	if b, _ := os.ReadFile(filepath.Join(tree, "a.go")); !strings.Contains(string(b), "return 4") {
+		t.Errorf("the worktree's a.go:\n%s", b)
+	}
 }
