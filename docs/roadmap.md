@@ -2862,6 +2862,12 @@ hand or a tool got in the way.
     4. **The hooks.** `read-guard` and `session-log` `cd` into
        `$CLAUDE_PROJECT_DIR`: judge paths and take the branch from the
        hook input's `cwd`.
+    5. **Extract code that returns the function's results**
+       (`docs/sessions/worktree-home-calls.md`): extract_function
+       refuses statements that return through the enclosing function's
+       results (a named `err`, a refusal string), so two blocks became
+       helpers by hand. The call could return the new function's
+       results when they are the same, as early error returns already do.
     The tools stay the original checkout's build in a session that moves:
     only a session started in the worktree runs its branch's server.
     *Steps 1-2 done, by another way* (2026-11-02,
@@ -2872,8 +2878,12 @@ hand or a tool got in the way.
     a hook, `cmd/worktree-paths`: relative paths become absolute in the
     caller's worktree, and a path into the main checkout from a worktree
     is refused. Step 3 (the server following roots) is not needed for
-    it. Open: `inspect` and `check` without a file, and `undo`, still
-    act on the server's home; the hook is in this repo's settings and
+    it. `inspect` and `check` without a file, and `undo`, from a
+    worktree: *done* (2026-11-02, `docs/sessions/worktree-home-calls.md`):
+    the hook adds `worktree` (the caller's directory) to every call from
+    one, which both languages' `route` reads and drops, so a call that
+    names no file works in the worktree's module; undo refuses when the
+    session's last change is not in the caller's worktree. Open: the hook is in this repo's settings and
     `examples/settings.json`, not in what the server publishes, so a
     user without it keeps the hazard.
 

@@ -150,6 +150,14 @@ func (l *Language) route(args json.RawMessage) (ws *workspace.Workspace, out jso
 	if json.Unmarshal(args, &v) != nil {
 		return home, args, "", "", nil
 	}
+	// The caller's worktree, which cmd/worktree-paths adds: the solution of
+	// a call that names no file.
+	from := lang.TakeWorktree(v)
+	if from != "" {
+		if args, err = json.Marshal(v); err != nil {
+			return nil, nil, "", "", err
+		}
+	}
 	homeRoot := home.Dir()
 	abs := func(p string) string {
 		if filepath.IsAbs(p) {
@@ -174,6 +182,11 @@ func (l *Language) route(args json.RawMessage) (ws *workspace.Workspace, out jso
 			roots = append(roots, r)
 		}
 		byRoot[r] = append(byRoot[r], f)
+	}
+	if len(roots) == 0 && from != "" {
+		if c := nearestConfig(lang.ExistingDir(from)); c != "" && !configs[c] {
+			roots = append(roots, filepath.Dir(c))
+		}
 	}
 	switch {
 	case len(roots) > 1:
@@ -318,6 +331,11 @@ func (l *Language) options(unchecked bool) refactor.OptionsOf[*workspace.Workspa
 // one, else node --test; a pattern other than ./... names the test files.
 func (l *Language) test(pattern string) (string, error) {
 	root := l.root()
+	return testIn(root, pattern)
+}
+
+// testIn runs the tests of the project at root, as test does.
+func testIn(root string, pattern string) (string, error) {
 	argv := testCommand(root, pattern)
 	cmd := exec.Command(argv[0], argv[1:]...)
 	cmd.Dir = root
@@ -378,9 +396,6 @@ func (l *Language) Batch(args json.RawMessage) (string, error) {
 // Inspect reads TypeScript code; a refusal is its text.
 func (l *Language) Inspect(args json.RawMessage) (string, error) {
 	var q inspect.Query
-	if err := refactor.DecodeArgs(args, &q); err != nil {
-		return err.Error(), nil
-	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	ws, args, intro, refused, err := l.route(args)
@@ -403,6 +418,16 @@ func (l *Language) Inspect(args json.RawMessage) (string, error) {
 // Check reports whether the solution type-checks, and runs its tests if
 // asked (Language.test).
 func (l *Language) Check(_ context.Context, args json.RawMessage) (string, error) {
+	l.mu.Lock()
+	ws, args, intro, refused, err := l.route(args)
+	var errs []string
+	if err == nil && refused == "" {
+		errs = ws.Errors()
+	}
+	l.mu.Unlock()
+	if err != nil || refused != "" {
+		return refused, err
+	}
 	var a struct {
 		RunTests bool   `json:"run_tests"`
 		Packages string `json:"packages"`
@@ -410,31 +435,30 @@ func (l *Language) Check(_ context.Context, args json.RawMessage) (string, error
 	if err := refactor.DecodeArgs(args, &a); err != nil {
 		return err.Error(), nil
 	}
-	l.mu.Lock()
-	ws, err := l.workspace()
-	var errs []string
-	if err == nil {
-		errs = ws.Errors()
+	// Paths are reported from the directory, and tests run at the root, of
+	// the home solution, or of the worktree's.
+	root, tests := l.dir, l.root()
+	if intro != "" {
+		root, tests = ws.Dir(), ws.Dir()
 	}
-	l.mu.Unlock()
-	if err != nil {
-		return "", err
-	}
-	report, _, err := refactor.CheckReport(errs, l.dir, json.RawMessage(`{}`))
+	report, _, err := refactor.CheckReport(errs, root, json.RawMessage(`{}`))
 	if err != nil {
 		return err.Error(), nil
 	}
 	if a.RunTests {
-		out, testErr := l.test(a.Packages)
+		out, testErr := testIn(tests, a.Packages)
 		report += refactor.TestsReport(out, testErr)
 	}
-	return report, nil
+	return intro + report, nil
 }
 
 // Undo reverts the change on top of the stack.
-func (l *Language) Undo() (string, error) {
+func (l *Language) Undo(args json.RawMessage) (string, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if refused := lang.UndoElsewhere(args, l.history); refused != "" {
+		return refused, nil
+	}
 	if _, err := l.workspace(); err != nil {
 		return "", err
 	}
