@@ -2868,10 +2868,21 @@ hand or a tool got in the way.
        results (a named `err`, a refusal string), so two blocks became
        helpers by hand. The call could return the new function's
        results when they are the same, as early error returns already do.
+       *Done in part* (2026-11-02, `docs/sessions/extract-returns.md`):
+       other early returns that write out each result give the new
+       function a first bool result, `if done, v, err := f(...); done
+       { return v, err }`, which also turned ten refusals into
+       extractions. Open: such returns when the lines also set a
+       variable used after them, and returns through a named result
+       (`TakeWorktree`'s block).
     6. **merge_duplicate_function and qualified names**
        (`docs/sessions/worktree-roots.md`): a body calling `Exists` in
        package `lang` and one calling `lang.Exists` elsewhere are
        refused as different, though both name the same function.
+    7. **check's `packages` as several patterns**
+       (`docs/sessions/extract-returns.md`): `check` takes one package
+       pattern; given two separated by a space (as `go test` takes them)
+       it fails at setup, which cost two turns in one day. Split it.
     The tools stay the original checkout's build in a session that moves:
     only a session started in the worktree runs its branch's server.
     *Steps 1-2 done, by another way* (2026-11-02,

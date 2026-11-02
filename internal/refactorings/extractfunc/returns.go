@@ -3,8 +3,8 @@ package extractfunc
 // Return statements in the selection.
 //
 // A return in the selected statements would return from the new function
-// instead of the enclosing one, so the call site has to pass it on. Two
-// shapes can be passed on without changing behavior:
+// instead of the enclosing one, so the call site has to pass it on. Three
+// shapes are passed on without changing behavior:
 //
 //   - terminal: every path through the statements ends in a return (or
 //     another terminating statement, such as panic). The new function gets
@@ -26,8 +26,17 @@ package extractfunc
 //     same way, with "" for nil: each early return must give a string
 //     known not to be empty.
 //
-// Anything else (an early return of a success value, say) is refused: the
-// caller could not tell whether the statements returned or fell through.
+//   - value exit: any other early returns that write out each result.
+//     The new function also returns whether they ran, first:
+//
+//         if done, v, err := f(...); done {
+//             return v, err
+//         }
+//
+//     Not yet when the statements also set variables used after them.
+//
+// An error exit is chosen over a value exit when it fits: its call site
+// is the shorter.
 
 import (
 	"fmt"
@@ -46,6 +55,11 @@ import (
 )
 
 type returnMode int
+
+// valueExit is the mode of early returns of any values: the new function
+// also returns whether the statements returned, and the call site checks
+// it, since the values alone cannot tell.
+const valueExit = errorExit + 1
 
 const (
 	noReturns returnMode = iota
@@ -95,7 +109,14 @@ func (x *extraction) decideReturns() error {
 		x.mode = terminal
 		return nil
 	}
-	return x.checkErrorExits(sig)
+	errExit := x.checkErrorExits(sig)
+	if errExit == nil || !refactor.IsRefusal(errExit) {
+		return errExit
+	}
+	if x.checkValueExits(sig) {
+		return nil
+	}
+	return errExit
 }
 
 // checkNamedResults refuses statements that use the enclosing function's
@@ -171,6 +192,49 @@ func (x *extraction) checkErrorExits(sig *types.Signature) error {
 	}
 	x.exitValues = parts
 	return nil
+}
+
+// checkValueExits accepts returns that write out each of the enclosing
+// function's results, none named, when they are not error exits: the new
+// function returns whether they ran, and their values.
+func (x *extraction) checkValueExits(sig *types.Signature) bool {
+	n := sig.Results().Len()
+	if n == 0 || x.checkNamedResults(sig) != nil {
+		return false
+	}
+	for _, r := range x.returns {
+		if len(r.Results) != n {
+			return false
+		}
+	}
+	x.mode = valueExit
+	return true
+}
+
+// exitNames are the call site's names for the results of a value exit,
+// declared in its if: err for an error, v for the one other result, or
+// v1, v2 and so on.
+func exitNames(sig *types.Signature) []string {
+	var others int
+	for i := 0; i < sig.Results().Len(); i++ {
+		if !types.Identical(sig.Results().At(i).Type(), types.Universe.Lookup("error").Type()) {
+			others++
+		}
+	}
+	var out []string
+	k := 0
+	for i := 0; i < sig.Results().Len(); i++ {
+		switch {
+		case types.Identical(sig.Results().At(i).Type(), types.Universe.Lookup("error").Type()):
+			out = append(out, "err")
+		case others == 1:
+			out = append(out, "v")
+		default:
+			k++
+			out = append(out, fmt.Sprintf("v%d", k))
+		}
+	}
+	return out
 }
 
 // notConstantLike explains why e cannot be repeated at the call site, or
