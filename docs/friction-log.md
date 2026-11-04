@@ -4215,3 +4215,9 @@ The session record is `docs/sessions/extract-returns.md`. By hand: a
 constant declared on its own (`const valueExit = errorExit + 1`), since
 no tool adds a spec to a const group. Ten golden refusals became
 extractions; their `out/` were written by the golden test's `-update`.
+
+## 2026-11-04: the tools against Fowler's catalog and IntelliJ (roadmap 51)
+
+Docs only, through create_file and replace_text. Three entries the
+comparison first took as missing were run as compositions with the CLI
+on a scratch module (derivations 14-16); what they left is gaps P and Q.

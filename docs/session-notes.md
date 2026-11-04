@@ -794,6 +794,15 @@ patterns sessions use, with their steps, in `docs/patterns.md`.
   lookups, but grep was about 5% of an arm's input tokens. Revisit only
   with new evidence, and check gopls's MCP server first.
 
+- **Fowler's catalog and IntelliJ** (2026-11-04, the user asked for
+  the comparison): `docs/catalog.md`, entry by entry. Run a
+  composition before calling an entry missing: Encapsulate Variable and
+  Record and Replace Function with Command first looked missing and are
+  folds (derivations 14-16). What is left is roadmap 51, in the user's
+  order: `split` (variable, loop and phase in one tool), Extract
+  Interface for Go, Inline Struct (discuss first), query/modifier and
+  flag arguments as options, then Go and TypeScript at parity.
+
 ## A/B findings to remember
 
 - TypeScript tasks (2026-10-28, cost-history 20): a seeded module is a
