@@ -2915,5 +2915,34 @@ Alongside: **edits**, steps that change behavior on purpose, so the
 change itself is a tool call too (Step 5 above); `docs/edits.md` lists the
 candidates and the evidence for each, gathered from the friction log.
 
+51. **Fowler's and IntelliJ's refactorings we lack** (2026-11-04, the
+    user asked for the comparison, `docs/catalog.md`). Several entries
+    first taken as missing compose from the tools (derivations 14-16);
+    what is left, in the order the user chose:
+    1. **`split`, one tool for Split Variable, Split Loop and Split
+       Phase** (the user: all under a single tool). A variable assigned
+       again with a value that does not depend on the old one becomes
+       a new variable from there; a loop doing two independent things
+       becomes two loops; a function computing in two phases becomes
+       two functions joined by a struct of what the first computes.
+    2. **Extract Interface for Go:** TypeScript has `extract_interface`;
+       GoLand has it for Go. An interface of a type's methods, named,
+       and optionally the parameters that only call those methods
+       retyped to it.
+    3. **Inline Struct:** the inverse of `extract_struct`, so an
+       extraction can be undone as `inline_function` undoes
+       `extract_function` (Fowler's Inline Class and Collapse
+       Hierarchy for an embedded struct). To be discussed with the user
+       first.
+    4. **Separate Query from Modifier and Remove Flag Argument,**
+       as options of existing tools where they can be (the budget,
+       item 25).
+    5. **Smaller gaps found on the way:** a compound assignment (`x++`,
+       `p.f += e`) that fold could take as `x = x + 1` (gap P), a local
+       made a field of the receiver (gap Q), and Consolidate
+       Conditional Expression.
+    Then Go and TypeScript as equal in their tools as makes sense (the
+    user, same day; item 43 has what differed on 2026-10-29).
+
 Parked: the Ollama loop (`refactor-agent`). It works and stays, but Claude
 through MCP is the priority.

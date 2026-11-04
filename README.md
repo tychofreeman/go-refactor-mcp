@@ -48,6 +48,7 @@ change, rolled back as a whole, and every step can be undone.
 - **Evidence:** A/B runs against editing by hand in
   `docs/cost-history.md`, every hand edit in `docs/friction-log.md`, and
   the derivations found so far in `docs/derivations.md`.
+- **Against Fowler and IntelliJ:** `docs/catalog.md`, entry by entry.
 - **Roadmap:** `docs/roadmap.md`.
 
 ## Layout

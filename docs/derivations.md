@@ -505,6 +505,55 @@ type-checks); a stub field that create_from_usage put at the end, which
 nothing uses yet, can. Found as a gap in `refuse-code-by-text` (49.13),
 which had missed that remove_dead_code takes a field.
 
+## 14. Encapsulate a package variable (Fowler's Encapsulate Variable)
+
+`MinMoisture`, read and assigned in its package and others, is to be
+reached only through functions.
+
+**Derivation:** add_declaration of `Threshold() int { return
+MinMoisture }` and `SetThreshold(v int) { MinMoisture = v }`, then
+fold each: reads become `Threshold()` and assignments
+`SetThreshold(10)`, in every package. Then rename the variable to an
+unexported name, once no other package uses it.
+
+**Run (2026-11-04, the CLI on a scratch module):** the batch of three
+applied; fold left `MinMoisture++` (an assignment, so not a read, and
+not the setter's statement): gap P.
+
+## 15. Encapsulate a record's fields (Encapsulate Record)
+
+`Plant.Moisture` is to be reached only through methods.
+
+**Derivation:** add_declaration of a getter `func (p Plant) Moist()
+int`, a pointer setter `func (p *Plant) SetMoist(v int)`, and a literal
+setter `func WithMoist(p Plant, v int) Plant { p.Moisture = v; return
+p }`; fold the literal setter, then the getter, then the pointer setter.
+Literals become `WithMoist(Plant{Name: "fern"}, 20)`, reads `p.Moist()`,
+assignments `p.SetMoist(40)`.
+
+**Run (same day):** applied, in that order. Folding the pointer setter
+first rewrote the literal setter's own body into `p.SetMoist(v)`, after
+which it no longer had the setter's shape; and the literal setter must
+be exported to fold literals in other packages. `p.Moisture += 5` was
+left: gap P.
+
+## 16. A function into a command (Replace Function with Command)
+
+`Score(p Plant, depth int) int` becomes `Scorer{Plant, Depth}.Execute()`.
+
+**Derivation (delegate, redirect, inline):** add_declaration of `type
+Scorer struct { Plant Plant; Depth int }` and `func Execute(s Scorer)
+int { return Score(s.Plant, s.Depth) }`; fold it (each `Score(a, 3)`
+becomes `Execute(Scorer{Plant: a, Depth: 3})`); inline_function of
+`Score`, which deletes it; function_to_method of `Execute`.
+
+**Run (same day):** applied in one batch. fold's struct shape takes a
+parameter, not a receiver, hence the function first. The calls came out
+as `(garden.Scorer{...}).Execute()`, with parentheses gofmt keeps. What
+the derivation cannot do is the step a command is for: a local of the
+body (`base`) becoming a field, so the body can be split into methods
+that share it: gap Q.
+
 ## The user's principle
 
 Not every operation will exist. Use the operations there are; where
@@ -535,6 +584,9 @@ nothing, as well as by the derived share.
 | M | Inlining substitutes a constant argument used more than once | analysis |
 | N | Remove exported code the module no longer uses, when asked to. *Done:* `remove_dead_code` with `exported` | operation |
 | O | Fold through a pointer parameter: `*sent` in the body matches `s.Sent`, passed as `&s.Sent`, so only one method needs the alias of A | operation |
+| P | Fold a compound assignment: `x++` or `p.f += e` taken as `x = x + 1`, so a getter and setter fold it (derivations 14-15) | operation |
+
+| Q | A local made a field of the receiver, so a command's body can split into methods sharing it (derivations 16) | operation |
 
 The user's derivations reshape without changing behavior, then make
 one small edit; the reshaping falls in three families: naming and
