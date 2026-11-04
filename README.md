@@ -34,7 +34,7 @@ change, rolled back as a whole, and every step can be undone.
   functions and variables; add, remove, move and introduce parameters,
   change parameter, result and field types (an interface method with its
   implementations); method to function and back, move a method, extract a
-  struct or an interface; `fold` (replace code that does what a function does with calls
+  struct or an interface, inline a struct; `fold` (replace code that does what a function does with calls
   to it), `parameterize`, merge duplicate functions; a type switch into
   methods; invert if, remove else, slide statements, split a variable, a
   loop or a phase, remove dead code.

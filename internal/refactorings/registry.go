@@ -30,6 +30,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/extractvar"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/fold"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/inlinefunc"
+	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/inlinestruct"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/inlinevar"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/invertif"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/mergefunc"
@@ -88,6 +89,7 @@ func All() []refactor.Refactoring {
 		replacedecl.New(),
 		split.New(),
 		extractiface.New(),
+		inlinestruct.New(),
 	}
 }
 
