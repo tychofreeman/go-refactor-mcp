@@ -2933,12 +2933,21 @@ candidates and the evidence for each, gathered from the friction log.
     2. **Extract Interface for Go:** TypeScript has `extract_interface`;
        GoLand has it for Go. An interface of a type's methods, named,
        and optionally the parameters that only call those methods
-       retyped to it.
+       retyped to it. *Done* (2026-11-04,
+       `docs/sessions/extract-interface.md`), but for retyping the
+       parameters (IntelliJ's Use Interface Where Possible).
     3. **Inline Struct:** the inverse of `extract_struct`, so an
        extraction can be undone as `inline_function` undoes
        `extract_function` (Fowler's Inline Class and Collapse
-       Hierarchy for an embedded struct). To be discussed with the user
-       first.
+       Hierarchy for an embedded struct). The user's decisions
+       (2026-11-04): a separate tool, `inline_struct`; when the struct
+       is used outside its holder, an argument chooses (`elsewhere`:
+       refuse by default, or keep the struct for those uses and inline a
+       copy); the struct's methods move with it, with a check on what
+       that changes; a name both types have is refused unless an
+       argument says which wins (`prefer`: outer or inner, for methods;
+       a field both have is always refused); Go first, then TypeScript,
+       kept at parity where possible.
     4. **Separate Query from Modifier and Remove Flag Argument,**
        as options of existing tools where they can be (the budget,
        item 25).

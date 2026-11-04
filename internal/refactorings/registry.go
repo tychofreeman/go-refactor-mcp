@@ -25,6 +25,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/changesig"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/deadcode"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/extractfunc"
+	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/extractiface"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/extractstruct"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/extractvar"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/fold"
@@ -86,6 +87,7 @@ func All() []refactor.Refactoring {
 		files.NewDelete(),
 		replacedecl.New(),
 		split.New(),
+		extractiface.New(),
 	}
 }
 
