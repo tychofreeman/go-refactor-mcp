@@ -36,7 +36,8 @@ change, rolled back as a whole, and every step can be undone.
   implementations); method to function and back, move a method, extract a
   struct; `fold` (replace code that does what a function does with calls
   to it), `parameterize`, merge duplicate functions; a type switch into
-  methods; invert if, remove else, slide statements, remove dead code.
+  methods; invert if, remove else, slide statements, split a variable or
+  a loop, remove dead code.
 - **Edits**, which change behavior on purpose and are still type-checked
   and undoable: create, move and delete files, add declarations, fields,
   cases and elements, replace statements, expressions, declarations and

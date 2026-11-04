@@ -36,6 +36,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/parameterize"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/rename"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/slidestmt"
+	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/split"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/switchmethod"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
@@ -84,6 +85,7 @@ func All() []refactor.Refactoring {
 		files.NewMove(),
 		files.NewDelete(),
 		replacedecl.New(),
+		split.New(),
 	}
 }
 

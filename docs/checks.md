@@ -938,6 +938,70 @@ The two must be independent, which it checks conservatively:
 Defining a function literal runs nothing, so what its body does does not
 count, until something calls it.
 
+## Split: what it checks
+
+`split` takes a `kind`: `variable` or `loop` (Fowler's Split Variable
+and Split Loop; Split Phase is roadmap 51.1's next step).
+
+### kind variable
+
+The assignment on `line` (`name = e`, or `name, err = f()`) gives
+`name` a value that does not depend on its old one, and `new_name`, a
+new variable, takes its place from there: `new_name := e` when `e` has
+the variable's type, `var new_name T = e` when it does not (an untyped
+constant, a concrete value for an interface, where `:=` would change
+the type), and `var new_name T` before an assignment of several values,
+so `:=` cannot redeclare the others. Every use after the assignment is
+renamed. Refused:
+
+- an assignment that reads the variable (`n = n * 2`, or `a[n], n = ...`),
+  or a compound one (`n += 3`): the new value depends on the old;
+- an assignment in a block inside the one that declares the variable:
+  its value could reach code after that block, which the old value
+  reaches too;
+- a variable whose address is taken, or that a closure not known to run
+  only during its statement uses (`analysis.Func.Owns`): code holding the
+  pointer or the closure would see the old variable;
+- goto anywhere in the function, which could run code before the
+  assignment again after it (a loop's body declares its variables on
+  each iteration, so a variable declared in the same block as the
+  assignment cannot carry a value round a loop);
+- a variable not read before the assignment, or not after it: the split
+  would leave one of the two unused, which Go does not compile; the
+  refusal says to remove the dead assignment instead;
+- a new name already declared in the block, or used from the assignment
+  on, where the new variable would hide what it names.
+
+### kind loop
+
+The statements of the loop on `line` from `at` on move to a second loop
+after it, with the same header. Running the first part for every
+iteration and then the second is the same as interleaving them when
+each statement of the second part could swap with each of the first
+(move_statement_up's checks, `slidestmt.Independent`), since a second
+part's statement then moves past the first part's statements of every
+later iteration. Also refused:
+
+- a statement of the body that returns, breaks, continues or jumps out;
+- a range over a map (its order can differ between the loops), a
+  channel (the first loop drains it) or a function (it would run twice),
+  and a range that assigns variables declared outside it;
+- a three-clause loop whose init does not declare its variables, whose
+  post statement changes a variable it does not declare (the second loop
+  would start where the first ended), or whose variables the body
+  changes;
+- a header expression (the range's operand, the condition, the init's
+  values, the post statement's operands) that the second loop could not
+  evaluate again with the same result (`analysis.Move` past the body,
+  `Several` times): it has effects, can panic, or reads what the body
+  changes;
+- a label on the loop.
+
+A range variable one loop does not use becomes `_` or is left out
+(`for i := range beds`, `for range beds`), since Go does not compile an
+unused one. Comments directly above the second part's first statement
+go with it.
+
 ## Type switch to method: what it checks
 
 `type_switch_to_method` turns `switch k := v.(type)` into a method of

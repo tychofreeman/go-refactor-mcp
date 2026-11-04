@@ -87,7 +87,7 @@ func factsOf(f *analysis.Func, tf *token.File, s ast.Stmt, effects *analysis.Eff
 		}
 	}
 	sort.Slice(ft.writes, func(i, j int) bool { return ft.writes[i].v.Pos() < ft.writes[j].v.Pos() })
-	ft.jump, ft.crossable = leaves(s)
+	ft.jump, ft.crossable = Leaves(s)
 	return ft
 }
 
@@ -121,10 +121,10 @@ func (ft *facts) addDeclared(info *types.Info, s ast.Stmt) {
 	}
 }
 
-// leaves describes how s transfers control out of itself, or returns "";
+// Leaves describes how s transfers control out of itself, or returns "";
 // crossable reports whether a statement may move past it (it returns,
 // breaks or continues, rather than using goto or being a label).
-func leaves(s ast.Stmt) (how string, crossable bool) {
+func Leaves(s ast.Stmt) (how string, crossable bool) {
 	if _, ok := s.(*ast.LabeledStmt); ok {
 		return "is labeled", false
 	}
@@ -245,4 +245,11 @@ func checkIndependent(a, b *facts, f *analysis.Func, effects *analysis.Effects) 
 		}
 	}
 	return nil
+}
+
+// Independent refuses, as move_statement_up would, when a and b (a
+// first, both statements of f's body) could not be swapped without
+// changing what the code does.
+func Independent(f *analysis.Func, tf *token.File, a, b ast.Stmt, effects *analysis.Effects) error {
+	return checkIndependent(factsOf(f, tf, a, effects), factsOf(f, tf, b, effects), f, effects)
 }
