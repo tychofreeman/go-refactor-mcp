@@ -2950,7 +2950,11 @@ candidates and the evidence for each, gathered from the friction log.
        kept at parity where possible. *Done* for Go (2026-11-04,
        `docs/sessions/inline-struct.md`).
     4. **Separate Query from Modifier and Remove Flag Argument,**
-       as options of existing tools where they can be (the budget,
+       as options of existing tools where they can be. *Remove Flag
+       Argument done* (2026-11-04,
+       `docs/sessions/inline-constant-branches.md`): inline_function
+       keeps only the branch a constant condition runs, which makes it
+       derivations 17 (the budget,
        item 25).
     5. **Smaller gaps found on the way:** a compound assignment (`x++`,
        `p.f += e`) that fold could take as `x = x + 1` (gap P), a local

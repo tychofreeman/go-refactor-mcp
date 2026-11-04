@@ -496,6 +496,16 @@ follows each call's line and column through the steps before it. Refused
 up front: a function that calls itself. The engine runs such a step through `refactor.Expander`: a refactoring that
 expands to steps of its own runs them as one batch, one undo.
 
+**Constant conditions.** An `if` in the body whose condition, with the
+arguments substituted, is a boolean constant where the call is
+(`if deep` with `true` passed, `if !dry`, an `else if` chain) keeps only
+the branch that runs: evaluating a constant does nothing, so the other
+branch could never run. The kept branch keeps its braces when it
+declares a name or a label at its top, so that scope does not change; an
+`if` with an init statement, or with a return inside, is left as it is.
+This is what makes Fowler's Remove Flag Argument a derivation
+(`docs/derivations.md` section 17).
+
 ## Invert if and remove else: what they check
 
 `invert_if` negates an if statement's condition and swaps its branches,

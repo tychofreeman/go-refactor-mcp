@@ -2,6 +2,7 @@ package inlinefunc
 
 import (
 	"go/ast"
+	"go/constant"
 	"go/token"
 	"go/types"
 	"sort"
@@ -520,4 +521,143 @@ func (x *inliner) parenText(e ast.Expr) string {
 		return "(" + x.Text(e) + ")"
 	}
 	return x.Text(e)
+}
+
+// foldConstantBranches drops the branches of an if in the body that its
+// condition rules out once the arguments are substituted: a constant
+// condition runs one branch, and evaluating it does nothing, so only that
+// branch stays (Fowler's Remove Flag Argument, after a wrapper per value
+// is folded and this is inlined into it). The branch that runs keeps its
+// braces when it declares names, so their scope stays its own. An if with
+// an init statement, or with a return inside, is left as it is.
+func (x *inliner) foldConstantBranches() error {
+	var ifs []*ast.IfStmt
+	elseIf := map[*ast.IfStmt]bool{}
+	ast.Inspect(x.decl.Body, func(n ast.Node) bool {
+		s, ok := n.(*ast.IfStmt)
+		if !ok {
+			return true
+		}
+		if _, ok := x.constantCond(s); ok && !hasReturn(s) && !x.edited(s) {
+			ifs = append(ifs, s)
+			return false
+		}
+		if next, ok := s.Else.(*ast.IfStmt); ok {
+			elseIf[next] = true
+		}
+		return true
+	})
+	for _, s := range ifs {
+		keep := x.taken(s)
+		start, end := x.callee.Off(s.Pos()), x.callee.Off(s.End())
+		ind := indentOf(x.callee.Src, x.callee.TF, s.Pos())
+		var text string
+		if elseIf[s] { // after else: a block, or an if
+			text = "{}"
+			if keep != nil {
+				text = x.rewrite(x.callee.Off(keep.Pos()), x.callee.Off(keep.End()))
+			}
+			x.bodyEdits = append(x.bodyEdits, edit.TextEdit{Start: start, End: end, NewText: text})
+			continue
+		}
+		switch k := keep.(type) {
+		case nil:
+			x.bodyEdits = append(x.bodyEdits, x.deleteLine(x.callee.Src, x.callee.TF, s))
+			continue
+		case *ast.BlockStmt:
+			if declaresAtTop(k.List) {
+				text = x.rewrite(x.callee.Off(k.Pos()), x.callee.Off(k.End()))
+				text = textutil.Reindent(text, indentOf(x.callee.Src, x.callee.TF, k.Pos()), ind)
+			} else {
+				inner := strings.Trim(x.rewrite(x.callee.Off(k.Lbrace)+1, x.callee.Off(k.Rbrace)), "\n")
+				from := ""
+				if len(k.List) > 0 {
+					from = indentOf(x.callee.Src, x.callee.TF, k.List[0].Pos())
+				}
+				text = strings.TrimLeft(textutil.Reindent(inner, from, ind), " \t")
+			}
+		default:
+			text = textutil.Reindent(x.rewrite(x.callee.Off(k.Pos()), x.callee.Off(k.End())), ind, ind)
+		}
+		x.bodyEdits = append(x.bodyEdits, edit.TextEdit{Start: start, End: end, NewText: strings.TrimLeft(text, " \t")})
+	}
+	return nil
+}
+
+// constantCond returns the value of s's condition with the arguments
+// substituted, evaluated where the call is, when it mentions a
+// substituted parameter, s has no init statement, and the value is a
+// boolean constant.
+func (x *inliner) constantCond(s *ast.IfStmt) (bool, bool) {
+	if s.Init != nil || !x.mentionsSubst(s.Cond) {
+		return false, false
+	}
+	text := x.rewrite(x.callee.Off(s.Cond.Pos()), x.callee.Off(s.Cond.End()))
+	tv, err := types.Eval(x.WS.Fset, x.Pkg.Types, x.call.Pos(), text)
+	if err != nil || tv.Value == nil || tv.Value.Kind() != constant.Bool {
+		return false, false
+	}
+	return constant.BoolVal(tv.Value), true
+}
+
+// taken returns what of s runs: its body or its else, following an else
+// if whose condition is constant too; nil when nothing does.
+func (x *inliner) taken(s *ast.IfStmt) ast.Stmt {
+	v, ok := x.constantCond(s)
+	if !ok {
+		return s
+	}
+	if v {
+		return s.Body
+	}
+	if next, ok := s.Else.(*ast.IfStmt); ok {
+		return x.taken(next)
+	}
+	if s.Else == nil {
+		return nil
+	}
+	return s.Else
+}
+
+// mentionsSubst reports whether e uses a parameter whose argument is
+// substituted for it.
+func (x *inliner) mentionsSubst(e ast.Expr) bool {
+	for _, p := range x.params {
+		if !p.subst {
+			continue
+		}
+		for _, u := range p.uses {
+			if u.Pos() >= e.Pos() && u.End() <= e.End() {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// edited reports whether an edit already made to the body overlaps s.
+func (x *inliner) edited(s ast.Node) bool {
+	start, end := x.callee.Off(s.Pos()), x.callee.Off(s.End())
+	for _, e := range x.bodyEdits {
+		if e.Start < end && start < e.End {
+			return true
+		}
+	}
+	return false
+}
+
+// declaresAtTop reports whether list declares a name or a label at its
+// top level, which would reach the enclosing block without braces.
+func declaresAtTop(list []ast.Stmt) bool {
+	for _, s := range list {
+		switch s := s.(type) {
+		case *ast.AssignStmt:
+			if s.Tok == token.DEFINE {
+				return true
+			}
+		case *ast.DeclStmt, *ast.LabeledStmt:
+			return true
+		}
+	}
+	return false
 }

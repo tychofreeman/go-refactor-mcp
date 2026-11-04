@@ -4249,3 +4249,8 @@ create_file, which formats Go; the check it would test stays.
 ## 2026-11-04: inline_struct (roadmap 51.3)
 
 The session record is `docs/sessions/inline-struct.md`. Nothing by hand.
+
+## 2026-11-04: inline_function drops branches a constant rules out (roadmap 51.4)
+
+The session record is `docs/sessions/inline-constant-branches.md`.
+Nothing by hand.
