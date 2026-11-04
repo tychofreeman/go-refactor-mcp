@@ -887,8 +887,11 @@ func (x *inliner) hoist(r *ast.ReturnStmt, s ast.Stmt, targets, pre []string) (s
 // call's variables, declared before the body when the call declares
 // them, or a temporary of the result's type where a variable's type is
 // another (assigning a nil *T to an error is not assigning a *T), copied
-// after the body. A call statement's values go to _, and nil means
-// there are none.
+// after the body. A temporary is also used for a variable the call
+// assigns with an operator (n += f(k): each return gives the temporary,
+// then n += it), and for one whose name a block of the body declares
+// around a return (there it would assign the block's). A call
+// statement's values go to _, and nil means there are none.
 func (x *inliner) tailTargets() (targets, pre, post []string, err error) {
 	results := x.sig.Results()
 	if results.Len() == 0 {
@@ -896,6 +899,8 @@ func (x *inliner) tailTargets() (targets, pre, post []string, err error) {
 	}
 	var lhs []ast.Expr
 	declared := map[int]string{} // positions the call declares, by type
+	op := "="
+	taken := map[string]bool{} // the temporaries already named
 	switch s := x.stmt.(type) {
 	case *ast.ExprStmt:
 		for range results.Len() {
@@ -904,6 +909,9 @@ func (x *inliner) tailTargets() (targets, pre, post []string, err error) {
 		return targets, nil, nil, nil
 	case *ast.AssignStmt:
 		lhs = s.Lhs
+		if s.Tok != token.ASSIGN && s.Tok != token.DEFINE {
+			op = s.Tok.String()
+		}
 		for i, l := range lhs {
 			if id, ok := l.(*ast.Ident); ok && s.Tok == token.DEFINE && x.Info.Defs[id] != nil {
 				declared[i] = ""
@@ -934,7 +942,8 @@ func (x *inliner) tailTargets() (targets, pre, post []string, err error) {
 			}
 			pre = append(pre, "var "+x.Text(l)+" "+typ)
 		}
-		if types.Identical(x.Info.TypeOf(l), want) {
+		id, _ := l.(*ast.Ident)
+		if types.Identical(x.Info.TypeOf(l), want) && op == "=" && (id == nil || !x.shadowedAtReturns(id.Name)) {
 			targets = append(targets, x.Text(l))
 			continue
 		}
@@ -943,11 +952,32 @@ func (x *inliner) tailTargets() (targets, pre, post []string, err error) {
 			return nil, nil, nil, err
 		}
 		tmp := x.freshName("result")
+		for i := 2; taken[tmp]; i++ {
+			tmp = x.freshName(fmt.Sprintf("result%d", i))
+		}
+		taken[tmp] = true
 		pre = append(pre, "var "+tmp+" "+s)
-		post = append(post, x.Text(l)+" = "+tmp)
+		post = append(post, x.Text(l)+" "+op+" "+tmp)
 		targets = append(targets, tmp)
 	}
 	return targets, pre, post, nil
+}
+
+// shadowedAtReturns reports whether a declaration in a block of the body,
+// in scope at one of its returns, has name: an assignment there of the
+// call's variable of that name would assign the block's.
+func (x *inliner) shadowedAtReturns(name string) bool {
+	top := x.Info.Scopes[x.decl.Type]
+	for _, r := range x.returns {
+		scope := x.Pkg.Types.Scope().Innermost(r.Pos())
+		if scope == nil {
+			continue
+		}
+		if s, o := scope.LookupParent(name, r.Pos()); o != nil && s != top && o.Pos() > x.decl.Pos() && o.Pos() < x.decl.End() {
+			return true
+		}
+	}
+	return false
 }
 
 // freshName returns base, or base with a number, that nothing in the

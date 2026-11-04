@@ -496,6 +496,18 @@ follows each call's line and column through the steps before it. Refused
 up front: a function that calls itself. The engine runs such a step through `refactor.Expander`: a refactoring that
 expands to steps of its own runs them as one batch, one undo.
 
+**Where returns assign.** A return of the body assigns the call's
+variables directly, except through a temporary of the result's type,
+copied after the body, when: the variable's type is another; the call
+assigns with an operator (`n += count(k)` becomes `result = 12` at each
+return, then `n += result`); or a block of the body declares the
+variable's name around a return (`if n, err := ...; err == nil { ...
+return v, err }`), where the assignment would reach the block's
+variable. Each temporary has a name of its own. Found by the stress
+test with each module's tests (2026-11-04): jsonschema-go's `resolve`
+and `jsonNumber`, x/tools' `readAll`, `rvToExpr` and `popcount` changed
+what they did when inlined, and pass now.
+
 **Constant conditions.** An `if` in the body whose condition, with the
 arguments substituted, is a boolean constant where the call is
 (`if deep` with `true` passed, `if !dry`, an `else if` chain) keeps only

@@ -4254,3 +4254,10 @@ The session record is `docs/sessions/inline-struct.md`. Nothing by hand.
 
 The session record is `docs/sessions/inline-constant-branches.md`.
 Nothing by hand.
+
+## 2026-11-04: inline_function returns assign through temporaries where needed
+
+The session record is `docs/sessions/inline-return-targets.md`. Nothing
+by hand. Found by running inline_function's stress test with
+`STRESS_TESTS=1` on jsonschema-go and x/tools: two silent behavior
+changes already on main.

@@ -803,6 +803,15 @@ patterns sessions use, with their steps, in `docs/patterns.md`.
   Interface for Go, Inline Struct (discuss first), query/modifier and
   flag arguments as options, then Go and TypeScript at parity.
 
+- **Run the stress tests with the modules' tests** (`STRESS_TESTS=1`)
+  when a refactoring changes what it writes (2026-11-04): that run found
+  two silent behavior changes in inline_function on main, a return in a
+  block that declares the call's variable's name, and a call assigned
+  with `+=`, which no golden had. jsonschema-go, uritemplate and x/tools
+  from the module cache, copied to a scratch directory, are enough; in
+  x/tools, `go/analysis/passes/modernize` fails without a Go toolchain
+  binary, whatever the change.
+
 ## A/B findings to remember
 
 - TypeScript tasks (2026-10-28, cost-history 20): a seeded module is a
