@@ -27,7 +27,7 @@ it; IntelliJ's and GoLand's lists are from JetBrains' help pages
 | Change Function Declaration | `rename`, `add_parameter`, `remove_parameter`, `move_parameter`, `add_result`, `change_parameter_type` |
 | Encapsulate Variable | composition, run: `add_declaration` of a getter and a setter, `fold` each (derivations 14). Compound assignments (`x++`) are left: gap P |
 | Rename Variable | `rename` |
-| Introduce Parameter Object | composition, run: derivations 5 (a wrapper taking the struct, `fold`, `inline_function`) |
+| Introduce Parameter Object | `convert_params_to_object` (derivations 5 as one change) |
 | Combine Functions into Class | `function_to_method` per function, `move_method` |
 | Combine Functions into Transform | missing |
 | Split Phase | missing; `split` (roadmap 51.1) |
@@ -137,7 +137,7 @@ Delete; IntelliJ adds, for Java, the entries below Safe Delete.
 | Convert to Instance Method / Make Static | `function_to_method` / `method_to_function` |
 | Find and Replace Code Duplicates | `fold`, `merge_duplicate_function` |
 | Extract Parameter | `introduce_parameter` |
-| Extract Parameter Object | derivations 5 |
+| Extract Parameter Object | `convert_params_to_object` |
 | Extract Delegate, Extract Superclass | `extract_struct` |
 | Replace Temp with Query | composition (Fowler's, above) |
 | Remove Middleman | `inline_function` |

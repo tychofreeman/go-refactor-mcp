@@ -2960,8 +2960,28 @@ candidates and the evidence for each, gathered from the friction log.
        `p.f += e`) that fold could take as `x = x + 1` (gap P), a local
        made a field of the receiver (gap Q), and Consolidate
        Conditional Expression.
+    Separate Query from Modifier is *shelved* (2026-11-04, the user):
+    asked for an example of the query as a backward slice of the
+    function, the user found it copies too much code and does not drive
+    toward a new design, better or worse, and wants to read more examples
+    before having an opinion.
     Then Go and TypeScript as equal in their tools as makes sense (the
     user, same day; item 43 has what differed on 2026-10-29).
+52. **Go and TypeScript at parity** (2026-11-04, the user, chosen from
+    "what's next?"). The published tools differed: TypeScript alone had
+    convert_params_to_object; Go alone has split and inline_struct
+    (extract_interface is now in both). One PR each:
+    1. **convert_params_to_object for Go.** *Done* (2026-11-04,
+       `docs/sessions/go-params-to-object.md`): derivations 5 as one
+       change, an expander of add_declaration, fold, inline_function and
+       rename.
+    2. **split for TypeScript** (variable, loop, phase).
+    3. **inline_struct's counterpart for TypeScript:** a class held in a
+       property inlined into the class that holds it.
+    The budget (item 25): Go publishes 49 of 50 tools with this, and the
+    instructions are at their 6,000 characters; each tool listed there
+    has needed a cut. The next Go tool needs the user to raise one or
+    merge two.
 
 Parked: the Ollama loop (`refactor-agent`). It works and stays, but Claude
 through MCP is the priority.

@@ -32,6 +32,7 @@ change, rolled back as a whole, and every step can be undone.
 
 - **Refactorings:** rename and move declarations; extract and inline
   functions and variables; add, remove, move and introduce parameters,
+  bundle them into a struct,
   change parameter, result and field types (an interface method with its
   implementations); method to function and back, move a method, extract a
   struct or an interface, inline a struct; `fold` (replace code that does what a function does with calls
