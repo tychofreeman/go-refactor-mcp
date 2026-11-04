@@ -4231,3 +4231,11 @@ add_declaration, registered by add_element. Two refusals cost a turn
 each: add_declaration asked which `workspace` and `json` to import
 (`internal/ts/workspace` and `encoding/json/v2` exist too), and
 add_element's `after` takes a key, not a slice element.
+
+## 2026-11-04: split, kind phase (roadmap 51.1)
+
+The session record is `docs/sessions/split-phase.md`. By text: one
+argument of one `Refusef` call removed with replace_text (no tool
+removes an argument of a single call). Fixed on the way: `runExpanded`
+indexed `steps[-1]` when a batch was refused before any step (an
+argument check), which crashed the server's step.

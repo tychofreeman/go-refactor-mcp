@@ -13,3 +13,7 @@ func TestVariable(t *testing.T) {
 func TestLoop(t *testing.T) {
 	refactortest.Run(t, New(), "testdata/loop")
 }
+
+func TestPhase(t *testing.T) {
+	refactortest.Run(t, New(), "testdata/phase")
+}

@@ -940,8 +940,8 @@ count, until something calls it.
 
 ## Split: what it checks
 
-`split` takes a `kind`: `variable` or `loop` (Fowler's Split Variable
-and Split Loop; Split Phase is roadmap 51.1's next step).
+`split` takes a `kind`: `variable`, `loop` or `phase` (Fowler's Split
+Variable, Split Loop and Split Phase).
 
 ### kind variable
 
@@ -1001,6 +1001,43 @@ A range variable one loop does not use becomes `_` or is left out
 (`for i := range beds`, `for range beds`), since Go does not compile an
 unused one. Comments directly above the second part's first statement
 go with it.
+
+### kind phase
+
+The statements of a function's body from `line` on are its second
+phase; what the statements before it compute and the second phase uses
+goes into `type`, a new struct, and the second phase becomes the
+function `new_name` of it (Fowler's Split Phase):
+
+```go
+litres := b.Area * 2                    litres := b.Area * 2
+extra := b.Plants / 3                   extra := b.Plants / 3
+total := (litres + extra) * days   =>   usage := Usage{litres: litres, extra: extra}
+return total * rate                     return price(usage, days, rate)
+```
+
+It runs as two steps, one change: `extract_function` of the second
+phase, with every check of its own (results, returns, pointers), then
+a step that is not a tool: the new function's parameters that its call
+passes locals of the caller become the struct's fields, the call passes
+a value of the struct declared just before it, and the body reads the
+fields. The caller's parameters stay parameters. The second step finds
+the function by name, since the first rewrote the lines a batch could
+address. Refused:
+
+- a line that is not a statement of a function declaration's body, or
+  its first statement;
+- a second phase that uses nothing the first computes
+  (extract_function is the tool for that);
+- a second phase that assigns a variable the first computed: the field
+  would be a copy. The refusal says to split that variable first
+  (kind variable), so the second phase has its own;
+- a type name already declared in the package, or a universe name.
+
+The struct's value is named after the type (`usage` for `Usage`), or
+`usageData` or `data` when the function already uses that name. To make
+the first phase a function too, extract_function its statements with
+the struct's declaration: they return the struct.
 
 ## Type switch to method: what it checks
 

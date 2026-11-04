@@ -1,8 +1,9 @@
 package split
 
 // Opt-in stress test: applies split to a real module, kind loop at each
-// statement but the first of every loop's body and kind variable at each
-// assignment of a single name, and reports every change that broke the
+// statement but the first of every loop's body, kind variable at each
+// assignment of a single name and kind phase at each statement but the
+// first of every function's body, and reports every change that broke the
 // build (a rollback means a precondition is missing) or, with
 // STRESS_TESTS=1, made the package's own tests fail (a behavior change).
 // It modifies STRESS_DIR, so point it at a copy:
@@ -60,6 +61,12 @@ func TestStress(t *testing.T) {
 					body = n.Body
 				case *ast.RangeStmt:
 					body = n.Body
+				case *ast.FuncDecl:
+					if n.Body != nil {
+						for _, s := range n.Body.List[min(1, len(n.Body.List)):] {
+							cands = append(cands, map[string]any{"kind": "phase", "file": file, "line": line(s), "new_name": "secondPhase", "type": "PhaseData"})
+						}
+					}
 				case *ast.AssignStmt:
 					if n.Tok == token.ASSIGN && len(n.Lhs) == 1 {
 						if id, ok := n.Lhs[0].(*ast.Ident); ok && id.Name != "_" {
@@ -99,6 +106,7 @@ func TestStress(t *testing.T) {
 				cmd := refactortest.GoTestCommand(ws.Root, c["file"].(string))
 				if out, err := cmd.CombinedOutput(); err != nil {
 					bugs = append(bugs, fmt.Sprintf("TESTS FAIL %s:\n%s\n%s", args, res.Diff, tailLines(string(out), 15)))
+					t.Logf("%s", bugs[len(bugs)-1])
 				}
 			}
 			if _, err := ws.Undo(); err != nil {
@@ -119,7 +127,7 @@ func TestStress(t *testing.T) {
 		keys = append(keys, k)
 	}
 	sort.Slice(keys, func(i, j int) bool { return refused[keys[i]] > refused[keys[j]] })
-	t.Logf("tried %d: applied %d loops and %d variables, bugs %d", n, applied["loop"], applied["variable"], len(bugs))
+	t.Logf("tried %d: applied %v, bugs %d", n, applied, len(bugs))
 	for _, k := range keys {
 		t.Logf("  %4d refused: %s", refused[k], k)
 	}
