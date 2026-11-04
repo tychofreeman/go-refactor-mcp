@@ -238,6 +238,9 @@ recorders as one-line wrappers over `set` instead of extracting them
 works the same, and is what fresh models chose
 (`docs/composition-probe.md`).
 
+Since 2026-11-04 `convert_params_to_object` makes this one change,
+for all of a function's parameters.
+
 ## 8. A value a getter makes on first use, passed in
 
 A getter that makes its result on first use and caches it in a field:

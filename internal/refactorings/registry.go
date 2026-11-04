@@ -90,6 +90,7 @@ func All() []refactor.Refactoring {
 		split.New(),
 		extractiface.New(),
 		inlinestruct.New(),
+		changesig.NewParamsToObject(),
 	}
 }
 

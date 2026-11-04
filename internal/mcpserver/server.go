@@ -73,12 +73,12 @@ Which tool, by what you want to do:
 - Read the code: inspect.
 - Rename or move: rename, move_declaration.
 - Split or join code (refactorings): extract_function, inline_function, extract_variable, inline_variable, extract_struct, extract_interface, inline_struct, merge_duplicate_function, function_to_method, method_to_function, move_method (to a struct embedding its receiver's type); fold replaces code that does what a function does with calls to it; parameterize makes functions that differ only in constants calls of one that takes them; type_switch_to_method makes each case of a type switch a method of its type; prepare_switch_for_types prepares a switch on a value for its cases to move into types one at a time.
-- Change a signature and every call (refactorings): add_parameter, remove_parameter, move_parameter, introduce_parameter, change_parameter_type, add_result, change_field_type; an interface method changes with its implementations.
+- Change a signature and every call (refactorings): add_parameter, remove_parameter, move_parameter, introduce_parameter, change_parameter_type, add_result, change_field_type, convert_params_to_object; an interface method changes with its implementations.
 - Simplify control flow (refactorings): invert_if, remove_else, move_statement_up, move_statement_down, split, remove_dead_code.
 - Add code (edits): create_file for any new file, Go or not (fixtures, JSON, go.mod; several in one batch), add_declaration, add_field, add_case, add_element, insert_statements; create_from_usage declares the functions, methods, types and fields code uses before they exist, and the methods a type lacks to implement an interface it is used as.
-- Change code (edits): replace_statements, replace_expression, replace_declaration (a whole declaration, by name); change_type for what a type (an alias) is, with the fixes it lists in the same batch; replace_text for string literals, comments and files that are not Go.
+- Change code (edits): replace_statements, replace_expression, replace_declaration (a whole one, by name); change_type for what a type (an alias) is, with the fixes it lists in the same batch; replace_text for string literals, comments and files that are not Go.
 - Move or delete files and directories (fixtures, docs): move_file, delete_file.
-- Several steps in one call: batch. Then: check, and undo to revert a step.
+- Several steps in one call: batch; then check, and undo.
 
 How to work with them:
 1. Call inspect (no arguments) for an overview. Inspect a file to see its declarations without their bodies, with line numbers: a third to a half of reading the whole file. Then read what you will change: inspect with function, or start_line/end_line, or several at once with targets; or several declarations by name alone with names; how each use treats a field or function, with uses. Each function shows its complexity, nesting, and whether calling it has side effects (calls of a function without them are easier to move or reorder).

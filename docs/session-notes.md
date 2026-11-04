@@ -803,6 +803,14 @@ patterns sessions use, with their steps, in `docs/patterns.md`.
   Interface for Go, Inline Struct (discuss first), query/modifier and
   flag arguments as options, then Go and TypeScript at parity.
 
+- **Go and TypeScript at parity** (2026-11-04, the user, roadmap 52):
+  one tool per PR, Go first where Go lacks it. Separate Query from
+  Modifier is shelved (51.4): the user found the example copies too
+  much code and drives toward no design. An expander that folds must
+  export the struct's fields when any call is in another package, an
+  external test package (`x_test`) included; the stress run, not a
+  golden, found that.
+
 - **Run the stress tests with the modules' tests** (`STRESS_TESTS=1`)
   when a refactoring changes what it writes (2026-11-04): that run found
   two silent behavior changes in inline_function on main, a return in a

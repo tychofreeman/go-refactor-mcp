@@ -4261,3 +4261,9 @@ The session record is `docs/sessions/inline-return-targets.md`. Nothing
 by hand. Found by running inline_function's stress test with
 `STRESS_TESTS=1` on jsonschema-go and x/tools: two silent behavior
 changes already on main.
+
+## 2026-11-04: convert_params_to_object for Go (Go/TypeScript parity)
+
+The session record is `docs/sessions/go-params-to-object.md`. By hand:
+the rebase onto the stack, whose conflicts (instructions' tool list,
+registry) were resolved by a script keeping both sides.

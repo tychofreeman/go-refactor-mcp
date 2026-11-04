@@ -922,6 +922,32 @@ of S that uses its receiver as a whole; S generic, in a group of types,
 or declared, or with methods, in another file than T (move_declaration
 it first).
 
+## Convert parameters to an object: what it checks
+
+`convert_params_to_object` (Go's, with TypeScript's name and arguments:
+`file`, `name`, `type_name`) bundles a function's parameters into one
+struct that every call builds (Fowler's Introduce Parameter Object). It
+is derivations 5 as one change of four steps: add_declaration of the
+struct, declared just before the function, and of a function taking it
+that calls the old one with its fields (carrying the old one's doc
+comment); fold of that function, so every call builds the struct;
+inline_function of the old function into it, which deletes it; and
+rename back to the old name. Each step checks what it always does, so
+the body reads `args.bed` where the argument can stand for the
+parameter, and keeps a variable of the parameter's name where the body
+assigns it.
+
+The struct is named `type_name`, or after the function (`waterArgs`,
+exported with the function); its fields are the parameters' names,
+exported when a call is in another package, where fold could not build
+the struct otherwise. Refused up front, since the steps would leave the
+change half done: a function used as a value (fold would leave the use,
+inline would keep the function, the rename would clash), a function
+that calls itself, a generic function, a variadic, unnamed or blank
+parameter, an unnamed receiver, a call passing one call of several
+results, two parameters that would export to one field name, and a type
+name already declared.
+
 ## Merge duplicate function: what it checks
 
 `merge_duplicate_function` replaces every use of a function (calls and
