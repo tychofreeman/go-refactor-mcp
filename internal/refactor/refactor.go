@@ -383,6 +383,10 @@ func runExpanded[W Workspace](ws W, steps []StepOf[W], opts OptionsOf[W], res *R
 		return nil, err
 	}
 	if !b.Applied {
+		if b.FailedStep == 0 {
+			res.Refused = fmt.Sprintf("this is %d steps of %s, run one after another, and none was applied: %s", b.Total, res.Refactoring, b.Refused)
+			return res, nil
+		}
 		res.Refused = fmt.Sprintf("this is %d steps of %s, run one after another; step %d%s was refused, so none was applied: %s",
 			b.Total, res.Refactoring, b.FailedStep, stepPlace(steps[b.FailedStep-1].Args), b.Refused)
 		return res, nil

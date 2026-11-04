@@ -1,5 +1,6 @@
 // Package split implements split: a variable assigned again into two
-// variables, and a loop doing two independent things into two loops.
+// variables, a loop doing two independent things into two loops, and a
+// function computing in two phases into two, joined by a struct.
 package split
 
 import (
@@ -8,6 +9,7 @@ import (
 	"go/ast"
 	"go/token"
 	"go/types"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -15,6 +17,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/gocode"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/extractfunc"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/slidestmt"
 	"github.com/tychofreeman/go-refactor-mcp/internal/site"
 	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
@@ -29,19 +32,21 @@ func New() *Split { return &Split{Named: refactor.Called[args]("split")} }
 
 func (*Split) Description() string {
 	return `Split code that does two things into two, without changing what it does.
-kind variable: a variable given a new value that does not depend on its old one becomes a new variable from there. With n := len(plants); fmt.Println(n); n = 3 * len(plants); fmt.Println(n), splitting n at the assignment with new_name waterings gives waterings := 3 * len(plants) and the uses after it waterings.
-kind loop: a loop doing two independent things becomes two loops over the same values: for _, b := range beds { water += b.Water; plants += len(b.Plants) } split at the second statement becomes for _, b := range beds { water += b.Water } then for _, b := range beds { plants += len(b.Plants) }; a range variable one loop does not use is dropped.
-Identify a variable by file, line (the assignment) and name; a loop by file, line (the for) and at (the first statement of the second loop).
-Refuses, saying why: an assignment that reads the old value or is in a block inside the variable's; a variable whose address is taken or that a closure may use later; a new name that would hide another; goto; loop parts that leave the loop, depend on each other or both have side effects; a loop over a map, channel or function, or whose header the body changes.`
+kind variable: a variable given a new value that does not depend on its old one becomes a new variable from there: in n := len(plants); fmt.Println(n); n = 3 * len(plants); fmt.Println(n), new_name waterings at the assignment gives waterings := 3 * len(plants), and the uses after it waterings.
+kind loop: a loop doing two independent things becomes two: for _, b := range beds { water += b.Water; plants += len(b.Plants) } at the second statement becomes for _, b := range beds { water += b.Water } then for _, b := range beds { plants += len(b.Plants) }.
+kind phase: what the statements before line compute for the rest goes into a new struct type, and the rest becomes the function new_name of it: litres := b.Rows * 2; total := litres * days; return total * rate at the second line, with type Usage and new_name price, gives usage := Usage{litres: litres}; return price(usage, days, rate).
+Identify a variable by file, line (the assignment) and name; a loop by file, line (the for) and at (the second loop's first statement); a phase by file and line (its first statement).
+Refuses, saying why: an assignment that reads the old value or is in a block inside the variable's; a variable whose address is taken or that a closure may use later; a name that would hide another; goto; loop parts that leave the loop, depend on each other or both have side effects; a loop over a map, channel or function, or whose header the body changes; a second phase that changes what the first computes (split it first).`
 }
 
 type args struct {
-	Kind    string `json:"kind" desc:"variable or loop."`
+	Kind    string `json:"kind" desc:"variable, loop or phase."`
 	File    string `json:"file" desc:"Path of the file, relative to the module root."`
-	Line    int    `json:"line" desc:"variable: the line of the assignment from which the variable is a new one; loop: the line of the for statement."`
+	Line    int    `json:"line" desc:"variable: the line of the assignment from which the variable is a new one; loop: the line of the for statement; phase: the line of the second phase's first statement."`
 	Name    string `json:"name,omitempty" desc:"variable: the variable's name."`
-	NewName string `json:"new_name,omitempty" desc:"variable: the new variable's name."`
+	NewName string `json:"new_name,omitempty" desc:"variable: the new variable's name; phase: the second phase's new function."`
 	At      int    `json:"at,omitempty" desc:"loop: the line of the first statement of the body that goes to the second loop."`
+	Type    string `json:"type,omitempty" desc:"phase: the new struct type of what the first phase computes."`
 }
 
 // Plan checks preconditions and computes the edits.
@@ -62,13 +67,230 @@ func (*Split) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan
 	case "loop":
 		plan, err = splitLoop(st, a)
 	default:
-		return nil, refactor.Refusef("kind is variable or loop, not %q", a.Kind)
+		return nil, refactor.Refusef("kind is variable, loop or phase, not %q", a.Kind)
 	}
 	if err != nil {
 		return nil, err
 	}
 	plan.Edits[0].Path = path
 	return plan, nil
+}
+
+// Expand makes kind phase two steps: extract_function makes the second
+// phase a function, then the parameters it takes from what the first
+// phase computed go into a struct (dataStep).
+func (*Split) Expand(ws *workspace.Workspace, raw json.RawMessage) ([]refactor.Step, error) {
+	var a args
+	if err := refactor.DecodeArgs(raw, &a); err != nil {
+		return nil, err
+	}
+	if a.Kind != "phase" {
+		return nil, nil
+	}
+	if !token.IsIdentifier(a.NewName) || !token.IsIdentifier(a.Type) {
+		return nil, refactor.Refusef("kind phase takes new_name, the second phase's function, and type, the struct of what the first phase computes")
+	}
+	st, err := site.At(ws, ws.Abs(a.File))
+	if err != nil {
+		return nil, err
+	}
+	p, err := phaseAt(st, a.Line)
+	if err != nil {
+		return nil, err
+	}
+	extract, err := json.Marshal(map[string]any{"file": a.File, "start_line": a.Line, "end_line": st.TF.Line(p.body.List[len(p.body.List)-1].End()), "name": a.NewName})
+	if err != nil {
+		return nil, err
+	}
+	// The second step finds the function by name: its lines are the ones
+	// the first step rewrote, which a batch cannot address.
+	data, err := json.Marshal(map[string]any{"kind": a.Kind, "file": a.File, "new_name": a.NewName, "type": a.Type})
+	if err != nil {
+		return nil, err
+	}
+	return []refactor.Step{{Refactoring: extractfunc.New(), Args: extract}, {Refactoring: dataStep, Args: data}}, nil
+}
+
+// dataStep is the second step of kind phase. Its arguments are args
+// without the line: the function it changes is found by name.
+var dataStep = refactor.Inner{Tool: "split", Schema: refactor.Schema[dataArgs](), Do: planData}
+
+// dataArgs are dataStep's arguments.
+type dataArgs struct {
+	Kind    string `json:"kind" desc:"phase."`
+	File    string `json:"file" desc:"Path of the file, relative to the module root."`
+	NewName string `json:"new_name" desc:"The second phase's function."`
+	Type    string `json:"type" desc:"The new struct type of what the first phase computes."`
+}
+
+// phase is where a function's second phase starts: at statement i of
+// the body of decl.
+type phase struct {
+	decl *ast.FuncDecl
+	body *ast.BlockStmt
+	i    int
+}
+
+// phaseAt finds the second phase that starts on line.
+func phaseAt(st *site.Site, line int) (*phase, error) {
+	list, i := slidestmt.StmtAt(st.TF, st.File, line)
+	if i < 0 {
+		return nil, refactor.Refusef("no statement starts on line %d", line)
+	}
+	path := analysis.PathTo(st.File, list[i])
+	var decl *ast.FuncDecl
+	if len(path) > 2 {
+		decl, _ = path[2].(*ast.FuncDecl)
+	}
+	if decl == nil || decl.Body != path[1] {
+		return nil, refactor.Refusef("line %d is not a statement of the function's body; the second phase starts at one", line)
+	}
+	if i == 0 {
+		return nil, refactor.Refusef("line %d is the function's first statement, so there would be no first phase", line)
+	}
+	return &phase{decl: decl, body: decl.Body, i: i}, nil
+}
+
+// planData plans dataStep, after extract_function made the second phase
+// the function a.NewName: its parameters that its one call passes locals
+// of the caller (what the first phase computed) become the fields of
+// a.Type, a new struct, whose value is declared just before the call and
+// passed in their place; the body reads the fields.
+func planData(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
+	var a args
+	if err := refactor.DecodeArgs(raw, &a); err != nil {
+		return nil, err
+	}
+	path := ws.Abs(a.File)
+	st, err := site.At(ws, path)
+	if err != nil {
+		return nil, err
+	}
+	if st.Pkg.Types.Scope().Lookup(a.Type) != nil || types.Universe.Lookup(a.Type) != nil {
+		return nil, refactor.Refusef("%s is already declared; give type another name", a.Type)
+	}
+	var callee, caller *ast.FuncDecl
+	var call *ast.CallExpr
+	var stmt ast.Stmt
+	for _, d := range st.File.Decls {
+		fd, ok := d.(*ast.FuncDecl)
+		if !ok || fd.Body == nil {
+			continue
+		}
+		if fd.Name.Name == a.NewName && fd.Recv == nil {
+			callee = fd
+		}
+		for _, s := range fd.Body.List {
+			ast.Inspect(s, func(n ast.Node) bool {
+				if c, ok := n.(*ast.CallExpr); ok {
+					if id, ok := c.Fun.(*ast.Ident); ok && id.Name == a.NewName {
+						caller, call, stmt = fd, c, s
+					}
+				}
+				return true
+			})
+		}
+	}
+	if callee == nil || call == nil {
+		return nil, refactor.Refusef("extract_function did not make a call of %s to split the phases at", a.NewName)
+	}
+	params := callee.Type.Params.List
+	var objs []*types.Var
+	for _, field := range params {
+		for _, n := range field.Names {
+			v, _ := st.Info.Defs[n].(*types.Var)
+			objs = append(objs, v)
+		}
+	}
+	scope := st.Info.Scopes[caller.Type]
+	bundled := make([]bool, len(objs))
+	var fields []*types.Var
+	for i, arg := range call.Args {
+		id, ok := arg.(*ast.Ident)
+		if !ok {
+			continue
+		}
+		if v, ok := st.Info.Uses[id].(*types.Var); ok && v.Parent() == scope && v.Pos() > caller.Body.Pos() {
+			bundled[i] = true
+			fields = append(fields, objs[i])
+		}
+	}
+	if len(fields) == 0 {
+		return nil, refactor.Refusef("the second phase's statements use nothing the ones before compute, so the phases share no data; extract_function them instead")
+	}
+	f := analysis.AnalyzeFunc(st.Info, callee, ws.Effects())
+	for _, v := range fields {
+		if len(f.Modified[v]) > 0 {
+			return nil, refactor.Refusef("the second phase assigns %s, which the first computes; split %s with kind variable where the second phase assigns it, then split the phase", v.Name(), v.Name())
+		}
+	}
+	named := map[string]bool{}
+	for _, fd := range []*ast.FuncDecl{caller, callee} {
+		ast.Inspect(fd, func(n ast.Node) bool {
+			if id, ok := n.(*ast.Ident); ok {
+				named[id.Name] = true
+			}
+			return true
+		})
+	}
+	lower, name := strings.ToLower(a.Type[:1])+a.Type[1:], ""
+	for _, alt := range []string{lower, lower + "Data", "data"} {
+		if alt != a.Type && !named[alt] {
+			name = alt
+			break
+		}
+	}
+	if name == "" {
+		return nil, refactor.Refusef("the function already uses the names %s, %sData and data; rename one of them first", lower, lower)
+	}
+	var lits, decls, sig, passed []string
+	for i, v := range objs {
+		typ, err := typeIn(st, v.Type())
+		if err != nil {
+			return nil, err
+		}
+		if !bundled[i] {
+			sig = append(sig, v.Name()+" "+typ)
+			passed = append(passed, st.Text(call.Args[i]))
+			continue
+		}
+		if len(lits) == 0 {
+			sig = append(sig, name+" "+a.Type)
+			passed = append(passed, name)
+		}
+		lits = append(lits, v.Name()+": "+st.Text(call.Args[i]))
+		decls = append(decls, "\t"+v.Name()+" "+typ)
+	}
+	src := st.Src
+	at := lineStart(src, st.Off(stmt.Pos()))
+	indent := gocode.IndentOf(src, at)
+	edits := []edit.TextEdit{
+		{Start: at, End: at, NewText: indent + name + " := " + a.Type + "{" + strings.Join(lits, ", ") + "}\n"},
+		{Start: st.Off(call.Lparen) + 1, End: st.Off(call.Rparen), NewText: strings.Join(passed, ", ")},
+		{Start: st.Off(caller.End()), End: st.Off(caller.End()), NewText: fmt.Sprintf("\n\n// %s holds what %s computes first, for the rest of it.\ntype %s struct {\n%s\n}", a.Type, caller.Name.Name, a.Type, strings.Join(decls, "\n"))},
+		{Start: st.Off(callee.Type.Params.Opening) + 1, End: st.Off(callee.Type.Params.Closing), NewText: strings.Join(sig, ", ")},
+	}
+	ast.Inspect(callee.Body, func(n ast.Node) bool {
+		if id, ok := n.(*ast.Ident); ok {
+			if v, ok := st.Info.Uses[id].(*types.Var); ok && slices.Contains(fields, v) {
+				edits = append(edits, edit.TextEdit{Start: st.Off(id.Pos()), End: st.Off(id.End()), NewText: name + "." + id.Name})
+			}
+		}
+		return true
+	})
+	return &refactor.Plan{
+		Summary: fmt.Sprintf("declared %s, the struct of what %s computes first (%s), and passed it to %s", a.Type, caller.Name.Name, strings.Join(fieldNames(fields), ", "), a.NewName),
+		Edits:   []edit.FileEdit{{Path: path, Edits: edits}},
+	}, nil
+}
+
+// fieldNames returns the names of vs.
+func fieldNames(vs []*types.Var) []string {
+	var names []string
+	for _, v := range vs {
+		names = append(names, v.Name())
+	}
+	return names
 }
 
 // splitVariable plans kind variable: the assignment on a.Line gives

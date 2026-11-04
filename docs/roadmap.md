@@ -2925,11 +2925,11 @@ candidates and the evidence for each, gathered from the friction log.
        a new variable from there; a loop doing two independent things
        becomes two loops; a function computing in two phases becomes
        two functions joined by a struct of what the first computes.
-       *Done in part* (2026-11-04, `docs/sessions/split.md`): kinds
-       `variable` and `loop`. Phase is next, as an expander:
-       extract_function of the second phase, then a step that is not a
-       tool bundling the parameters the first phase computes into a
-       struct (derivations 5 does that in four steps).
+       *Done* (2026-11-04, `docs/sessions/split.md`,
+       `docs/sessions/split-phase.md`): kinds `variable`, `loop` and
+       `phase`, the last an expander: extract_function of the second
+       phase, then a step that is not a tool bundling the parameters the
+       first phase computed into a struct.
     2. **Extract Interface for Go:** TypeScript has `extract_interface`;
        GoLand has it for Go. An interface of a type's methods, named,
        and optionally the parameters that only call those methods
