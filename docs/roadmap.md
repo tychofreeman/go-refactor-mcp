@@ -2947,7 +2947,8 @@ candidates and the evidence for each, gathered from the friction log.
        that changes; a name both types have is refused unless an
        argument says which wins (`prefer`: outer or inner, for methods;
        a field both have is always refused); Go first, then TypeScript,
-       kept at parity where possible.
+       kept at parity where possible. *Done* for Go (2026-11-04,
+       `docs/sessions/inline-struct.md`).
     4. **Separate Query from Modifier and Remove Flag Argument,**
        as options of existing tools where they can be (the budget,
        item 25).

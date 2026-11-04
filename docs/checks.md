@@ -864,6 +864,42 @@ reflection or printing. Retyping the parameters that only call these
 methods to the interface (IntelliJ's Use Interface Where Possible) is
 not done yet.
 
+## Inline struct: what it checks
+
+`inline_struct` moves the fields and methods of a struct S that a struct
+T holds, embedded (`Soil`) or in a named field (`soil Soil`), into T,
+and deletes S: the inverse of `extract_struct`. The user's decisions
+(2026-11-04) set its arguments:
+
+- `elsewhere`: S used outside T (a parameter, another struct) is refused,
+  unless `keep`: then S stays for those uses, and T gets a copy of its
+  fields and methods.
+- `prefer`: a method both have is refused, unless `outer` (T's stays, S's
+  is dropped) or `inner` (S's replaces T's; a note says the calls of T's
+  method now do what S's did, a change of behavior on request). With
+  `outer`, a call of S's method through the field (`b.Soil.deep()`) is
+  refused, since it would call T's.
+- A field name both have, or a field of one named as a method of the
+  other, is always refused.
+
+What changes: the field becomes S's fields, with their comments and
+tags, where it was; `b.Soil.depth` becomes `b.depth` in every package;
+`Bed{Soil: Soil{depth: 3}}` becomes `Bed{depth: 3}`; S's methods take T
+as their receiver's type (or are copied, with `keep`), so `b.Soil.till()`
+becomes `b.till()`. An embedded S's methods were promoted already, so
+T's method set is the same; for a named field it grows, so a method
+named as one the standard library looks for (`String`, `Error`,
+`MarshalJSON`, ...) or as a method of an interface of the module is
+refused. fmt prints the fields one level up (a note lists the calls);
+other reflection is refused, as `extract_struct` does.
+
+Also refused: S used as a whole (`b.Soil`, `&b.Soil`); S held by
+pointer, whose nil would become zero fields; a literal of T or S without
+keys, or one giving the field something other than a literal; a method
+of S that uses its receiver as a whole; S generic, in a group of types,
+or declared, or with methods, in another file than T (move_declaration
+it first).
+
 ## Merge duplicate function: what it checks
 
 `merge_duplicate_function` replaces every use of a function (calls and

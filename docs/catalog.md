@@ -41,7 +41,7 @@ it; IntelliJ's and GoLand's lists are from JetBrains' help pages
 | Replace Primitive with Object | `change_field_type`, `change_parameter_type`, `change_type` |
 | Replace Temp with Query | composition: `extract_function` of the temp's computation, `inline_variable` |
 | Extract Class | `extract_struct` |
-| Inline Class | missing; roadmap 51.3 |
+| Inline Class | `inline_struct` |
 | Hide Delegate | composition by fold's one-return shape: a method `func (a A) c() C { return a.b.c }`, folded |
 | Remove Middle Man | `inline_function` of each delegating method |
 | Substitute Algorithm | an edit: `replace_statements`, checked by the tests |
@@ -111,7 +111,7 @@ allows.
 | Replace Type Code with Subclasses | `change_field_type` to `any`, `prepare_switch_for_types`, `type_switch_to_method` (derivations 6) |
 | Remove Subclass | missing |
 | Extract Superclass | `extract_struct` (its new type is embedded) |
-| Collapse Hierarchy | missing; Inline Struct (roadmap 51.3) of an embedded struct |
+| Collapse Hierarchy | `inline_struct` of an embedded struct |
 | Replace Subclass with Delegate | `rename` of an embedded field to a named one |
 | Replace Superclass with Delegate | the same |
 

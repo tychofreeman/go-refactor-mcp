@@ -4245,3 +4245,7 @@ argument check), which crashed the server's step.
 The session record is `docs/sessions/extract-interface.md`. Nothing by
 hand. One golden (a method sharing its line) cannot be made through
 create_file, which formats Go; the check it would test stays.
+
+## 2026-11-04: inline_struct (roadmap 51.3)
+
+The session record is `docs/sessions/inline-struct.md`. Nothing by hand.
