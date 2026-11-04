@@ -4239,3 +4239,9 @@ argument of one `Refusef` call removed with replace_text (no tool
 removes an argument of a single call). Fixed on the way: `runExpanded`
 indexed `steps[-1]` when a batch was refused before any step (an
 argument check), which crashed the server's step.
+
+## 2026-11-04: extract_interface for Go (roadmap 51.2)
+
+The session record is `docs/sessions/extract-interface.md`. Nothing by
+hand. One golden (a method sharing its line) cannot be made through
+create_file, which formats Go; the check it would test stays.

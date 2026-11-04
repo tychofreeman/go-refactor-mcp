@@ -837,6 +837,33 @@ Not supported yet: a generic struct, an embedded field among those to
 move, part of a field group (`x, y int`), and a multi-line literal with
 comments between its elements (rewriting it would lose them).
 
+## Extract interface: what it checks
+
+`extract_interface` names some methods of a type as a new interface,
+declared just before the type (TypeScript's tool of the same name, with
+the same arguments: `file`, `name`, `fields`, `new_type`).
+
+- **From a struct or another named type:** the interface lists the
+  methods with the signatures of the type's method set (of `*T`, so value
+  and pointer receivers both count, promoted methods included), with
+  their parameters' and results' names, spelled as the file must
+  (`time.Duration`, `...string`). `var _ I = (*T)(nil)` follows it, Go's
+  way of saying that T implements I, which the compiler checks.
+- **From an interface:** the methods it declares move into the new
+  interface with their doc comments, and the old one embeds it where the
+  first of them was, so its method set, and every use, is the same. A
+  method it gets by embedding another interface is refused: extract from
+  that one.
+
+Refused: a generic type, an alias, a method the type does not have, a
+method sharing its line with another (only in a file gofmt has not
+formatted), a type from a package the file does not import, a name
+already declared in the package or the universe. Declaring an interface
+and an assertion changes nothing that runs, so nothing is checked for
+reflection or printing. Retyping the parameters that only call these
+methods to the interface (IntelliJ's Use Interface Where Possible) is
+not done yet.
+
 ## Merge duplicate function: what it checks
 
 `merge_duplicate_function` replaces every use of a function (calls and
