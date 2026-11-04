@@ -67,7 +67,7 @@ func (m *MoveStatement) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 	}
 	pkg, file, src := opened.Pkg, opened.File, opened.Src
 	tf := opened.TF
-	list, i := stmtAt(tf, file, a.Line)
+	list, i := StmtAt(tf, file, a.Line)
 	if i < 0 {
 		return nil, refactor.Refusef("no statement starts on line %d", a.Line)
 	}
@@ -80,17 +80,17 @@ func (m *MoveStatement) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 		return nil, refactor.Refusef("the statement on line %d is the %s in its block; there is nothing to move it %s", a.Line, end, where)
 	}
 	first, second := list[min(i, j)], list[max(i, j)]
-	aStart, aEnd, err := span(tf, file, src, first)
+	aStart, aEnd, err := Span(tf, file, src, first)
 	if err != nil {
 		return nil, err
 	}
-	bStart, bEnd, err := span(tf, file, src, second)
+	bStart, bEnd, err := Span(tf, file, src, second)
 	if err != nil {
 		return nil, err
 	}
 	f := analysis.AnalyzeFunc(pkg.TypesInfo, analysis.OutermostFunc(analysis.PathTo(file, first)), ws.Effects())
 	effects := ws.Effects()
-	if err := checkIndependent(factsOf(f, tf, first, effects), factsOf(f, tf, second, effects), f, effects); err != nil {
+	if err := Independent(f, tf, first, second, effects); err != nil {
 		return nil, err
 	}
 	swapped := string(src[bStart:bEnd]) + string(src[aEnd:bStart]) + string(src[aStart:aEnd])
@@ -100,9 +100,9 @@ func (m *MoveStatement) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 	}, nil
 }
 
-// stmtAt finds the outermost statement starting on line and the list it
+// StmtAt finds the outermost statement starting on line and the list it
 // is an element of: a block's statements, or a case clause's.
-func stmtAt(tf *token.File, file *ast.File, line int) (list []ast.Stmt, i int) {
+func StmtAt(tf *token.File, file *ast.File, line int) (list []ast.Stmt, i int) {
 	i = -1
 	ast.Inspect(file, func(n ast.Node) bool {
 		if i >= 0 || n == nil {
@@ -132,12 +132,12 @@ func stmtAt(tf *token.File, file *ast.File, line int) (list []ast.Stmt, i int) {
 	return list, i
 }
 
-// span returns the byte range of the lines s is on, with the comments
+// Span returns the byte range of the lines s is on, with the comments
 // directly above it (no blank line between): from the start of the first
 // to the start of the line after s. It refuses a statement that shares a
 // line with other code; a comment at the end of its last line moves with
 // it.
-func span(tf *token.File, file *ast.File, src []byte, s ast.Stmt) (start, end int, err error) {
+func Span(tf *token.File, file *ast.File, src []byte, s ast.Stmt) (start, end int, err error) {
 	line := tf.Line(s.Pos())
 	start = tf.Offset(tf.LineStart(line))
 	end = textutil.NextLine(src, tf.Offset(s.End()))

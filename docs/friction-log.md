@@ -4221,3 +4221,13 @@ extractions; their `out/` were written by the golden test's `-update`.
 Docs only, through create_file and replace_text. Three entries the
 comparison first took as missing were run as compositions with the CLI
 on a scratch module (derivations 14-16); what they left is gaps P and Q.
+
+## 2026-11-04: split, kinds variable and loop (roadmap 51.1)
+
+The session record is `docs/sessions/split.md`. Nothing by hand in the
+code: slidestmt's helpers exported by rename, `Independent` added and
+folded into its use; the goldens and test by create_file, the code by
+add_declaration, registered by add_element. Two refusals cost a turn
+each: add_declaration asked which `workspace` and `json` to import
+(`internal/ts/workspace` and `encoding/json/v2` exist too), and
+add_element's `after` takes a key, not a slice element.
