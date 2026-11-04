@@ -87,7 +87,7 @@ it; IntelliJ's and GoLand's lists are from JetBrains' help pages
 |---|---|
 | Separate Query from Modifier | missing; roadmap 51.4 |
 | Parameterize Function | `parameterize` |
-| Remove Flag Argument | partly: a wrapper per value (`func waterDeep(b Bed) { water(b, true) }`) folds the calls with that constant, but nothing then simplifies `if true` in the inlined body; roadmap 51.4 |
+| Remove Flag Argument | composition, run: a wrapper per value, `fold`, `inline_function` (derivations 17) |
 | Preserve Whole Object | composition: a wrapper taking the whole value, `fold` (stage 2 of fold); unverified whether it passes `r` or rebuilds `Range{Low: r.Low, ...}` |
 | Replace Parameter with Query | `remove_parameter` with `value` |
 | Replace Query with Parameter | `introduce_parameter`; `add_parameter` with `replace_variable` |

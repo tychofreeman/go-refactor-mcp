@@ -554,6 +554,22 @@ the derivation cannot do is the step a command is for: a local of the
 body (`base`) becoming a field, so the body can be split into methods
 that share it: gap Q.
 
+## 17. A flag argument into a function per value (Remove Flag Argument)
+
+`water(bed, deep bool)`, called with `true` and `false`, becomes
+`waterDeep(bed)` and `waterShallow(bed)`.
+
+**Derivation (delegate, redirect, inline):** add_declaration of
+`func waterDeep(bed string) { water(bed, true) }` and the same for
+`false`; fold each, so that every `water(x, true)` becomes
+`waterDeep(x)`; inline_function of `water` with `all_calls`. Inlining
+substitutes the constant for `deep`, and the `if deep` whose condition is
+now constant keeps only the branch that runs.
+
+**Run (2026-11-04, the CLI on a scratch module):** the batch of four
+applied; each wrapper's body is the right branch alone, and `water` is
+deleted. Before this, inlining left `if true { ... } else { ... }`.
+
 ## The user's principle
 
 Not every operation will exist. Use the operations there are; where
