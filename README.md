@@ -72,8 +72,8 @@ cmd/refactor-mcp/     the MCP server (stdio), for Claude Code and other MCP clie
 cmd/refactor/         the CLI: a step, a batch, inspect, check or undo per invocation
 cmd/refactor-ab/      A/B runs: tasks with claude -p, through the tools and by hand
 cmd/refactor-tokens/  where a Claude Code session's tokens went, by tool
-cmd/read-guard/       the hook that sends this repo's Go reads through inspect
-cmd/write-guard/      the hook that sends this repo's Go writes through the tools
+cmd/read-guard/       the hook that sends Go reads through inspect
+cmd/write-guard/      the hook that sends Go writes through the tools (an experiment)
 cmd/worktree-paths/   the hook that sends a call made from a git worktree to it
 internal/
   refactor/           the engine: Refactoring, Edit, Refusal, Run, batch
@@ -143,24 +143,8 @@ Claude Code sets), or its working directory.
 **2. Tell Claude to use it.** Without instructions that ask for them, a
 fresh model never calls the tools: it edits files as it always has. Copy
 `examples/CLAUDE.md` into your project's CLAUDE.md, or merge it into the one
-you have, and put your project's name in its heading. It asks for three
-things:
-- **TDD with refactoring first:** make the change easy while the tests
-  pass, then write the failing test, then the least code, then remove the
-  duplication. Models extend the code that is there unless told to
-  reshape it first.
-- **Work as a derivation:** plan a change as operations that keep
-  behaviour, ending in the one edit that changes it, sent as one `batch`,
-  with the moves that have worked (near-duplicates folded onto one copy, a
-  wrapper to change a signature, a getter before a change of
-  representation).
-- **Use the tools well:** load the schemas at once, read through
-  `inspect`, address declarations by name, read refusals.
-
-Of the instructions we tried, these got a fresh model to work through the
-tools, and derive its changes, at the lowest cost; on the tasks we tried,
-working through the tools has not yet cost less than editing by hand
-([docs/cost-history.md](docs/cost-history.md)).
+you have, and put your project's name in its heading. What it asks for, and
+the hooks that hold a session to it, are in "Using the tools well" below.
 
 **3. Try it:** in a Go or TypeScript project, ask something like *"use the
 gorefactor tools to simplify calc.go"* (or `calc.ts`). Run `/mcp` in Claude Code to
@@ -196,6 +180,81 @@ workspace per session so `undo` works across calls, and it
 re-checks the files on disk before every call: if the model or you edit a
 file directly in between, it updates instead of applying edits at stale
 offsets, and `undo` refuses to clobber those edits.
+
+## Using the tools well
+
+The tools pay off when the model treats a change as a sequence of
+operations it can name, and lets the tools carry each one to every place it
+reaches. `examples/CLAUDE.md` asks for that in three parts; the hooks below
+hold a session to it where the instructions alone did not. Of the
+instructions we tried, these got a fresh model to work through the tools,
+and derive its changes, at the lowest cost; on the tasks we tried, working
+through the tools has not yet cost less than editing by hand
+([docs/cost-history.md](docs/cost-history.md)).
+
+**Refactor first, while the tests pass.** Make the change easy, then make
+the easy change: refactor (rename to what a thing will mean, extract what
+you will change, add the parameter or field the change needs) until the
+change is small and local; then write the failing test; then the least code
+that passes, even a copy; then refactor the duplication away. A refactoring
+is refused while code does not compile, and a test that is red needs code,
+not a refactoring. Models extend the code that is there unless told to
+reshape it first.
+
+**Work as a derivation.** Before editing, write the change as operations
+that keep behaviour, ending in the one small edit that changes it, and send
+them as one `batch`. Where no operation does a step, keep the hand edit as
+small as it can be. Moves that have worked:
+- **Near-duplicates:** extract_function from one copy, then `fold` the
+  others onto it. Copies that differ only in constants: `parameterize`.
+- **Room in a loop:** extract_function the loop with what it builds; the
+  change is then one guard line.
+- **Change a representation:** put a getter or setter in front of every
+  use (add_declaration, then `fold`), change the representation inside it,
+  then remove_dead_code the old field.
+- **Move behaviour or change a signature (expand, migrate, contract):**
+  add_declaration the new function as a wrapper over the old one, `fold`
+  the callers onto it, inline_function the old one with `all_calls`, then
+  rename. One parameter or result: add_parameter, remove_parameter,
+  change_parameter_type or add_result in one step.
+- **A test written first** gets stubs for what it calls and nothing
+  declares, so the code still compiles.
+
+More are in `docs/derivations.md` and `docs/patterns.md`.
+
+**Use the tools economically.** Load every schema you will need in one
+ToolSearch, since a guessed argument costs a refused call and a turn. Read
+code with `inspect`: a file first, without bodies, then only what you will
+change, by `names` or `targets`; a whole file read once is sent again on
+every later turn. Don't search before a refactoring: it finds every
+reference with the type checker. Address declarations by name rather than
+line, use `"check": "end"` when a test comes before the code it tests, and
+read refusals: they say what to send instead.
+
+**Guards (optional hooks, Go only).** Sessions read and wrote Go by shell
+out of habit even when asked to use the tools, in this repo's own work as in
+fresh ones. Two PreToolUse hooks turn the habit into a refusal that names
+the tool to use:
+- `read-guard` refuses Read of a `.go` file, and `sed`, `cat`, `head`,
+  `tail`, `awk` or `grep` naming one, and points to `inspect`. In this
+  repo it ended reading Go by shell for about 4% of turns refused; for a
+  fresh model in the A/B runs it saved nothing, since reads moved to more,
+  smaller `inspect` calls (`docs/cost-history.md` sections 21 and 22).
+- `write-guard` refuses Edit, Write and MultiEdit of a `.go` file, and
+  shell commands that write one (`sed -i`, `perl -i`, `tee`, `cp`, `mv`,
+  `rm`, a redirection), and points to the edits. It is an experiment, on
+  in this repo since 2026-11-05 (roadmap item 53): with it, every change
+  goes through the tools, and what none can make is asked of you and
+  logged.
+
+Both allow files under `testdata/`, and `gofmt -w` and git. To use them,
+install them and add `examples/guards.json` to your project's
+`.claude/settings.json`:
+
+```sh
+go install github.com/tychofreeman/go-refactor-mcp/cmd/read-guard@latest
+go install github.com/tychofreeman/go-refactor-mcp/cmd/write-guard@latest
+```
 
 ## Help improve the tools
 
