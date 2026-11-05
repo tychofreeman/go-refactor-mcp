@@ -73,6 +73,7 @@ cmd/refactor/         the CLI: a step, a batch, inspect, check or undo per invoc
 cmd/refactor-ab/      A/B runs: tasks with claude -p, through the tools and by hand
 cmd/refactor-tokens/  where a Claude Code session's tokens went, by tool
 cmd/read-guard/       the hook that sends this repo's Go reads through inspect
+cmd/write-guard/      the hook that sends this repo's Go writes through the tools
 cmd/worktree-paths/   the hook that sends a call made from a git worktree to it
 internal/
   refactor/           the engine: Refactoring, Edit, Refusal, Run, batch

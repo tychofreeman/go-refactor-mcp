@@ -4281,3 +4281,14 @@ Nothing by hand in Go: versionOf was extracted first (green), then its
 test, then the returns changed with replace_expression; the constant's
 uses were replaced, the constant deleted and BuildVersion renamed to
 Version. The workflow was rewritten with create_file.
+
+## 2026-11-05: the write guard (roadmap 53)
+
+Nothing by hand. read-guard's plumbing moved to internal/hook first, by
+extract_variable, move_statement_up, extract_function (twice),
+introduce_parameter (the per-command check of `Each`) and
+move_declaration. Two refusals: move_statement_up at a fixed line in a
+loop moved the wrong statements (each move renumbers them; done again
+one line at a time), and create_file of a test in a new package could
+not hold the stub it needs (a main.go first). The write guard's code is
+new behavior, written with replace_declaration over the stub.
