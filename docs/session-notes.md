@@ -73,7 +73,10 @@ working patterns, with their steps, are in `docs/patterns.md`.
   sentence at the top on their parity, not a version for each; the README
   says what the example asks for and why, with one honest sentence on the
   evidence and a link, and the friction log is a "Help improve the tools"
-  section, not part of the example (2026-11-05, the user).
+  section, not part of the example (2026-11-05, the user). "Using the
+  tools well" (the user, same day) carries the example's structure and the
+  guards, which users install from `examples/guards.json`; keep it and
+  `examples/CLAUDE.md` saying the same.
 - **Releases** (2026-11-05, the user): every push to main that passes Test
   is released by `.github/workflows/release.yml`, with notes generated
   from the merged PRs. The PR's label picks the version: `major` or
