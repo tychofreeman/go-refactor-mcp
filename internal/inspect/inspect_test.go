@@ -492,3 +492,38 @@ func TestModule(t *testing.T) {
 		}
 	}
 }
+
+// A pattern lists the lines that match it, with their numbers, in one file
+// or in every Go file of the module.
+func TestPattern(t *testing.T) {
+	ws := load(t)
+	out, err := Run(ws, Query{Pattern: `return "\w+"`})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, `shapes.go  3 lines match /return "\w+"/:`) ||
+		!strings.Contains(out, `21  		return "neg"`) || strings.Contains(out, "func Classify") {
+		t.Errorf("pattern view:\n%s", out)
+	}
+	out, err = Run(ws, Query{File: "shapes.go", Pattern: `^func Classify`})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "shapes.go  1 line matches /^func Classify/:\n19  func Classify") {
+		t.Errorf("pattern in a file:\n%s", out)
+	}
+	out, err = Run(ws, Query{Pattern: `nothing here`})
+	if err != nil || !strings.Contains(out, "No line matches /nothing here/") {
+		t.Errorf("no match: %q, %v", out, err)
+	}
+	for _, q := range []Query{
+		{Pattern: `(`},
+		{File: "shapes.go", Pattern: `x`, StartLine: 3},
+		{File: "shapes.go", Pattern: `x`, Function: "Classify"},
+		{Pattern: `x`, Names: []string{"Classify"}},
+	} {
+		if _, err := Run(ws, q); !refactor.IsRefusal(err) {
+			t.Errorf("%+v: want refusal, got %v", q, err)
+		}
+	}
+}

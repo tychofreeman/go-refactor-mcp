@@ -1214,6 +1214,16 @@ patterns sessions use, with their steps, in `docs/patterns.md`.
   arms lack; both fixed 2026-10-31 (roadmap 47.1-47.2: paths resolved
   from the hook's `cwd`, the `cd`s and `NAME=value`s before them; the
   CLI named only when on the PATH).
+  On 2026-11-05, prompted by java-refactor-mcp's port of this guard, it
+  was relaxed to allow a grep whose flags print no text of the file
+  (`-c`, `-l`, `-L`, `-q`; #559), and that relaxation was reverted the
+  same day: the user asked whether `inspect` should cover the search
+  instead, and chose to give it `pattern` (the lines that match a
+  regular expression, in a file or the module, each file's count first)
+  and point the guard's advice at it. The rule stays as it was: Go is
+  read only through `inspect`, and a search that needs a tool gets one
+  there. The full sequence is in java-refactor-mcp's
+  `docs/how-this-project-was-built.md`.
 
 - **Would a fresh model recognize it?** (2026-10-22, a probe, $0.23):
   three Sonnet sessions, `claude -p` in a copy of the repo at the

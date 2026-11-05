@@ -234,6 +234,7 @@ func (s *Server) MCP() *mcp.Server {
 - file + start_line/end_line: those lines.
 - targets: several of these in one call, e.g. [{"file": "a.go", "function": "F"}, {"file": "b.go", "start_line": 10, "end_line": 30}].
 - names: declarations by name, wherever in the module they are, without file: functions, methods, types, variables and constants, e.g. ["Water", "Bed.Plant", "Schedule"]. A name declared in several packages is refused with where each is: qualify it as "pkg.Name". One nothing declares is said to be free to declare, or why not (predeclared, an import's name): check new names so.
+- pattern: the lines that match a Go regular expression, with their numbers, in file or, without it, every Go file of the module, e.g. "Plant\\.Species" or "^func .*Bed": to find a line or a call where no name says what to look for. At most 100 lines.
 - uses: how each use treats something, before changing what it holds or means: every use of a field, function, method, variable or constant in the module, found by the type checker, under what is done with it (switch on it, compared, asserted, written, passed as an interface, called, read; for a type also type switch cases, conversions and literals), each with its line, e.g. ["Plant.Species"] lists "compared (2):  garden/bed.go:85  p.Species == \"cactus\"" and the switches with their cases.`),
 		InputSchema: json.RawMessage(s.reads(`{
   "type": "object",
@@ -244,7 +245,8 @@ func (s *Server) MCP() *mcp.Server {
     "end_line":   {"type": "integer", "description": "Last line to show (inclusive)."},
     "targets":    {"type": "array", "description": "Several views in one call, in place of the arguments above: each a file, with function or start_line/end_line to read part of it.", "items": {"type": "object", "properties": {"file": {"type": "string"}, "function": {"type": "string"}, "start_line": {"type": "integer"}, "end_line": {"type": "integer"}}, "required": ["file"], "additionalProperties": false}},
     "names":      {"type": "array", "description": "Declarations to read by name, in place of the arguments above: Name, Type.Method, or pkg.Name.", "items": {"type": "string"}},
-    "uses":       {"type": "array", "description": "Names whose every use to list by what it does with them, in place of the arguments above: Name, Type.Field, Type.Method, or pkg.Name.", "items": {"type": "string"}}
+    "uses":       {"type": "array", "description": "Names whose every use to list by what it does with them, in place of the arguments above: Name, Type.Field, Type.Method, or pkg.Name.", "items": {"type": "string"}},
+    "pattern":    {"type": "string",  "description": "A Go regular expression: list the lines that match it, in file or in every Go file of the module. Takes only file."}
   },
   "additionalProperties": false
 }`)),

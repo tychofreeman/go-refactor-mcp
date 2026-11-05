@@ -16,6 +16,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -49,7 +50,13 @@ type Query struct {
 	// Type.Method, pkg.Name), found by the type checker, under what is
 	// done with it, in place of the fields above.
 	Uses []string `json:"uses,omitempty"`
+	// Pattern lists the lines that match a regular expression, with their
+	// numbers, in File or, without it, in every Go file of the module.
+	Pattern string `json:"pattern,omitempty"`
 }
+
+// MaxMatches is the largest number of lines a pattern lists.
+const MaxMatches = 100
 
 // Options set what a read may show.
 type Options struct {
@@ -682,6 +689,12 @@ func typeKind(fset *token.FileSet, e ast.Expr) string {
 // bodies, or the function or lines asked for; or each of its targets, or
 // each declaration it names.
 func RunWith(ws *workspace.Workspace, q Query, o Options) (string, error) {
+	if q.Pattern != "" {
+		if q.Function != "" || q.StartLine != 0 || q.EndLine != 0 || len(q.Targets) > 0 || len(q.Names) > 0 || len(q.Uses) > 0 {
+			return "", refactor.Refusef("pattern takes only file: send the other arguments in a call of their own")
+		}
+		return pattern(ws, q.File, q.Pattern)
+	}
 	if len(q.Uses) > 0 {
 		return uses(ws, q)
 	}
@@ -698,4 +711,80 @@ func RunWith(ws *workspace.Workspace, q Query, o Options) (string, error) {
 		return Module(ws, o), nil
 	}
 	return File(ws, q, o)
+}
+
+// pattern lists the lines of file, or of every Go file of the module when
+// file is empty, that match the regular expression expr, grouped by file.
+func pattern(ws *workspace.Workspace, file, expr string) (string, error) {
+	re, err := regexp.Compile(expr)
+	if err != nil {
+		return "", refactor.Refusef("pattern is not a Go regular expression: %v", err)
+	}
+	var paths []string
+	if file != "" {
+		path := ws.Abs(file)
+		if _, f := ws.FileSyntax(path); f == nil {
+			return "", refactor.Refusef("file %s is not part of the module's packages (call inspect without arguments to list files)", file)
+		}
+		paths = []string{path}
+	} else {
+		seen := map[string]bool{}
+		for _, p := range ws.Pkgs {
+			for _, f := range p.Syntax {
+				tf := ws.Fset.File(f.Pos())
+				if tf == nil || seen[tf.Name()] || !ws.Contains(tf.Name()) {
+					continue
+				}
+				seen[tf.Name()] = true
+				paths = append(paths, tf.Name())
+			}
+		}
+		sort.Slice(paths, func(i, j int) bool { return ws.Rel(paths[i]) < ws.Rel(paths[j]) })
+	}
+	var sb strings.Builder
+	shown, total := 0, 0
+	for _, path := range paths {
+		src, err := os.ReadFile(path)
+		if err != nil {
+			return "", err
+		}
+		lines := strings.SplitAfter(string(src), "\n")
+		if lines[len(lines)-1] == "" {
+			lines = lines[:len(lines)-1]
+		}
+		var hits []int
+		for i, line := range lines {
+			if re.MatchString(strings.TrimRight(line, "\n")) {
+				hits = append(hits, i+1)
+			}
+		}
+		if len(hits) == 0 {
+			continue
+		}
+		total += len(hits)
+		if shown == MaxMatches {
+			continue
+		}
+		verb := "lines match"
+		if len(hits) == 1 {
+			verb = "line matches"
+		}
+		if sb.Len() > 0 {
+			sb.WriteByte('\n')
+		}
+		fmt.Fprintf(&sb, "%s  %d %s /%s/:\n", ws.Rel(path), len(hits), verb, expr)
+		hits = hits[:min(len(hits), MaxMatches-shown)]
+		shown += len(hits)
+		width := len(fmt.Sprint(hits[len(hits)-1]))
+		for _, l := range hits {
+			sb.WriteString(textutil.NumberedLine(width, l, lines[l-1]))
+		}
+	}
+	if total == 0 {
+		return fmt.Sprintf("No line matches /%s/.\n", expr), nil
+	}
+	if shown < total {
+		fmt.Fprintf(&sb, "\nShown %d of %d matching lines; narrow the pattern, or pass file.\n", shown, total)
+	}
+	return sb.String(), nil
 }
