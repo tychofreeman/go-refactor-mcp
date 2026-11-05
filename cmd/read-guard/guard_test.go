@@ -30,7 +30,8 @@ func TestRefusal(t *testing.T) {
 		bash("awk '{print}' plant.go"),
 		bash("cat < plant.go"),
 		bash("git status; sed -n 5,9p a.go"),
-		bash("LC_ALL=C grep -c x plant.go"),
+		bash("LC_ALL=C grep -n x plant.go"),
+		bash("rg -L Water plant.go"),
 	}
 	for _, c := range refused {
 		if refusal(c) == "" {
@@ -43,6 +44,10 @@ func TestRefusal(t *testing.T) {
 		bash("gofmt -l $(git ls-files '*.go' | grep -v /testdata/)"),
 		bash(`grep -rn "plant.go" docs`),
 		bash("grep -e Water -rn internal"),
+		bash("grep -c Water internal/plant/plant.go"),
+		bash("grep -rlq Water plant.go"),
+		bash("grep --files-with-matches Water plant.go"),
+		bash("rg -c Water plant.go"),
 		bash("git diff internal/plant/plant.go"),
 		bash("go test ./..."),
 		bash("sed -n 1,5p docs/roadmap.md"),
