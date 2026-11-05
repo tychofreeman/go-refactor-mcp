@@ -17,30 +17,12 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/tychofreeman/go-refactor-mcp/internal/hook"
 )
 
-// call is the part of a hook's input read-guard looks at.
-type call struct {
-	ToolName  string `json:"tool_name"`
-	ToolInput struct {
-		FilePath string `json:"file_path"`
-		Command  string `json:"command"`
-	} `json:"tool_input"`
-	Cwd string `json:"cwd"`
-}
-
-// decision is a PreToolUse hook's answer that denies the call, with the
-// reason Claude Code shows the model.
-type decision struct {
-	HookSpecificOutput struct {
-		HookEventName            string `json:"hookEventName"`
-		PermissionDecision       string `json:"permissionDecision"`
-		PermissionDecisionReason string `json:"permissionDecisionReason"`
-	} `json:"hookSpecificOutput"`
-}
-
 func main() {
-	var c call
+	var c hook.Call
 	if err := json.NewDecoder(os.Stdin).Decode(&c); err != nil {
 		return // not a call to judge
 	}
@@ -48,60 +30,33 @@ func main() {
 	if why == "" {
 		return
 	}
-	// A decision on stdout with exit status 0, since go run turns the
-	// program's exit status 2, the other way to deny, into 1, which Claude
-	// Code takes for the hook's own failure.
-	var out decision
-	out.HookSpecificOutput.HookEventName = "PreToolUse"
-	out.HookSpecificOutput.PermissionDecision = "deny"
 	_, err := exec.LookPath("refactor")
-	out.HookSpecificOutput.PermissionDecisionReason = why + "\n" + adviceFor(err == nil)
-	json.NewEncoder(os.Stdout).Encode(out)
+	reason := why + "\n" + adviceFor(err == nil)
+	hook.Deny(reason)
 }
 
 // refusal says why c reads Go source other than through inspect, or is
 // "" when it does not.
-func refusal(c call) string {
+func refusal(c hook.Call) string {
 	switch c.ToolName {
 	case "Read":
-		if goSource(c.ToolInput.FilePath) {
+		if hook.GoSource(c.ToolInput.FilePath) {
 			return "Read of " + c.ToolInput.FilePath + " refused."
 		}
 	case "Bash":
-		dir, vars := c.Cwd, map[string]string{}
-		at := func(p string) string { // where p points, from dir
-			p = os.Expand(p, func(k string) string {
-				if v, ok := vars[k]; ok {
-					return v
-				}
-				return "$" + k
-			})
-			if dir != "" && !filepath.IsAbs(p) {
-				p = filepath.Join(dir, p)
-			}
-			return p
-		}
-		for _, words := range commands(c.ToolInput.Command) {
-			if len(words) == 2 && words[0] == "cd" {
-				dir = at(words[1])
-				continue
-			}
-			if name, value, ok := strings.Cut(words[0], "="); ok && len(words) == 1 && name != "" && !strings.ContainsAny(name, "-$") {
-				vars[name] = value
-				continue
-			}
-			if f := readsGo(words, at); f != "" {
-				return fmt.Sprintf("%s of %s refused.", words[0], f)
-			}
+		if why := hook.Each(c, readRefusal); why != "" {
+			return why
 		}
 	}
 	return ""
 }
 
-// goSource reports whether path names a Go file of the module: a .go
-// file not under testdata/.
-func goSource(path string) bool {
-	return strings.HasSuffix(path, ".go") && !strings.Contains("/"+filepath.ToSlash(path), "/testdata/")
+// readRefusal says why the command words reads Go source, or is "".
+func readRefusal(words []string, at func(p string) string) string {
+	if f := readsGo(words, at); f != "" {
+		return fmt.Sprintf("%s of %s refused.", words[0], f)
+	}
+	return ""
 }
 
 // readers are the commands that show a file's text. grep's first
@@ -143,75 +98,11 @@ func readsGo(words []string, at func(string) string) string {
 		}
 	}
 	for _, o := range operands {
-		if goSource(at(o)) {
+		if hook.GoSource(at(o)) {
 			return o
 		}
 	}
 	return ""
-}
-
-// commands splits a shell command line into its simple commands, each
-// as its words with quotes removed: at ;, &, |, newlines, parentheses,
-// backquotes and $(, outside quotes. Redirections count as spaces, so
-// that cat < f.go names f.go. It is not a shell parser, only enough to
-// find what each command is given.
-func commands(line string) [][]string {
-	var out [][]string
-	var words []string
-	var word strings.Builder
-	inWord := false
-	endWord := func() {
-		if inWord {
-			words = append(words, word.String())
-			word.Reset()
-			inWord = false
-		}
-	}
-	endCommand := func() {
-		endWord()
-		if len(words) > 0 {
-			out = append(out, words)
-			words = nil
-		}
-	}
-	var quote rune
-	rs := []rune(line)
-	for i := 0; i < len(rs); i++ {
-		r := rs[i]
-		switch {
-		case quote == '\'':
-			if r == '\'' {
-				quote = 0
-			} else {
-				word.WriteRune(r)
-			}
-		case quote == '"':
-			switch {
-			case r == '"':
-				quote = 0
-			case r == '\\' && i+1 < len(rs):
-				i++
-				word.WriteRune(rs[i])
-			default:
-				word.WriteRune(r)
-			}
-		case r == '\'' || r == '"':
-			quote, inWord = r, true
-		case r == '\\' && i+1 < len(rs):
-			i++
-			word.WriteRune(rs[i])
-			inWord = true
-		case strings.ContainsRune(";&|()`\n", r) || r == '$' && i+1 < len(rs) && rs[i+1] == '(':
-			endCommand()
-		case r == ' ' || r == '\t' || r == '<' || r == '>':
-			endWord()
-		default:
-			word.WriteRune(r)
-			inWord = true
-		}
-	}
-	endCommand()
-	return out
 }
 
 // adviceFor says how to read Go instead, naming the CLI when cli says it
