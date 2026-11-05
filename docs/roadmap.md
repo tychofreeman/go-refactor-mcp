@@ -93,7 +93,11 @@ part left. What is open, the newest priority first:
    version, and possibly a Claude Code plugin for a one-step install.
    *Done: a release follows a change of `mcpserver.Version` on main
    (`.github/workflows/release.yml`, notes from `docs/releases/`); the
-   first is v0.3.0 (2026-10-27). Left: the plugin.*
+   first is v0.3.0 (2026-10-27). Since 2026-11-05 every push to main
+   that passes Test is released, the version bumped by the merged PR's
+   label (`major`, `minor`, else the patch), with generated notes; the
+   binary reports the tag it was installed at, and `mcpserver.Version`
+   is a function of the build. Left: the plugin.*
 8. **Test run time.** CI's test step grew from about 13 s to 75 s per Go
    version between Oct 16 and Oct 19, in step with the golden cases (132 to
    824): about 9 s per 100 cases under `-race`. Each case loads a module

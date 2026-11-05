@@ -161,7 +161,7 @@ func connect(ctx context.Context, dir string, patterns []string) (*mcp.ClientSes
 	if err != nil {
 		return nil, nil, fmt.Errorf("agent: starting the tool server: %w", err)
 	}
-	client := mcp.NewClient(&mcp.Implementation{Name: "refactor-agent", Version: mcpserver.Version}, nil)
+	client := mcp.NewClient(&mcp.Implementation{Name: "refactor-agent", Version: mcpserver.Version()}, nil)
 	cs, err := client.Connect(ctx, ct, nil)
 	if err != nil {
 		ss.Close()

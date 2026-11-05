@@ -253,7 +253,7 @@ func TestListAndVersion(t *testing.T) {
 		t.Errorf("list replace_expression:\n%s", got)
 	}
 	out.Reset()
-	if code := run([]string{"-version"}); code != 0 || !strings.HasPrefix(out.String(), "refactor "+mcpserver.Version) {
+	if code := run([]string{"-version"}); code != 0 || !strings.HasPrefix(out.String(), "refactor "+mcpserver.Version()) {
 		t.Errorf("-version: exit status %d: %q", code, out.String())
 	}
 }

@@ -59,7 +59,7 @@ func run(argv []string) int {
 		return 1
 	}
 	if *version {
-		fmt.Fprintln(stdout, "refactor", mcpserver.BuildVersion())
+		fmt.Fprintln(stdout, "refactor", mcpserver.Version())
 		return 0
 	}
 	if fs.NArg() == 0 {
