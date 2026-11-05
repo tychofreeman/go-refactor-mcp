@@ -58,8 +58,10 @@ var Arms = []string{"mcp", "manual"}
 var ExtraArms = []string{"hybrid", "names", "guarded"}
 
 // checking is the Bash every arm that may not write may run to check
-// TypeScript: the type check and the tests.
-var checking = []string{"Bash(tsc:*)", "Bash(npx tsc:*)", "Bash(node --test:*)", "Bash(npm test:*)"}
+// TypeScript and Java (java-refactor-mcp's tasks): the type check and the
+// tests.
+var checking = []string{"Bash(tsc:*)", "Bash(npx tsc:*)", "Bash(node --test:*)", "Bash(npm test:*)",
+	"Bash(./mvnw:*)", "Bash(mvn:*)"}
 
 // lookingBash is the Bash the mcp arm may run: building, testing and
 // looking, but nothing that edits a file, so its edits go through the MCP.
