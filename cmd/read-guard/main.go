@@ -85,6 +85,10 @@ func readsGo(words []string, at func(string) string) string {
 	for i := 1; i < len(words); i++ {
 		w := words[i]
 		switch {
+		case strings.Contains(w, ">"): // a redirection: what it writes is not read
+			if strings.HasSuffix(w, ">") {
+				i++
+			}
 		case grep && (w == "-e" || w == "-f"):
 			pattern = false
 			i++

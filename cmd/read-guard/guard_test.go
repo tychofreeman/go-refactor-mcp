@@ -48,6 +48,7 @@ func TestRefusal(t *testing.T) {
 		bash("sed -n 1,5p docs/roadmap.md"),
 		bash("cat internal/plant/testdata/water/args.json"),
 		bash(`echo "cat plant.go"`),
+		bash("grep -c Water docs > count.go"),
 	}
 	for _, c := range allowed {
 		if why := refusal(c); why != "" {

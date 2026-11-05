@@ -45,9 +45,10 @@ type Call struct {
 
 // Commands splits a shell command line into its simple commands, each
 // as its words with quotes removed: at ;, &, |, newlines, parentheses,
-// backquotes and $(, outside quotes. Redirections count as spaces, so
-// that cat < f.go names f.go. It is not a shell parser, only enough to
-// find what each command is given.
+// backquotes and $(, outside quotes. < counts as a space, so that
+// cat < f.go names f.go; >, >> and their forms with descriptors (2>&1)
+// are words of their own. It is not a shell parser, only enough to find
+// what each command is given.
 func Commands(line string) [][]string {
 	var out [][]string
 	var words []string
@@ -96,7 +97,20 @@ func Commands(line string) [][]string {
 			inWord = true
 		case strings.ContainsRune(";&|()`\n", r) || r == '$' && i+1 < len(rs) && rs[i+1] == '(':
 			endCommand()
-		case r == ' ' || r == '\t' || r == '<' || r == '>':
+		case r == '>':
+			// A redirection is a word of its own: >, >>, or with the descriptors
+			// it names (2>&1, &>), so that the file after it is told apart.
+			if !inWord || !isDescriptor(word.String()) {
+				endWord()
+			}
+			word.WriteRune(r)
+			for i+1 < len(rs) && (rs[i+1] == '>' || rs[i+1] == '&' || inWord && rs[i] == '&' && rs[i+1] >= '0' && rs[i+1] <= '9') {
+				i++
+				word.WriteRune(rs[i])
+			}
+			inWord = true
+			endWord()
+		case r == ' ' || r == '\t' || r == '<':
 			endWord()
 		default:
 			word.WriteRune(r)
@@ -105,6 +119,12 @@ func Commands(line string) [][]string {
 	}
 	endCommand()
 	return out
+}
+
+// isDescriptor reports whether s is a file descriptor's number, or &,
+// as written before a redirection (2>, &>).
+func isDescriptor(s string) bool {
+	return s == "&" || s != "" && strings.Trim(s, "0123456789") == ""
 }
 
 // GoSource reports whether path names a Go file of the module: a .go
