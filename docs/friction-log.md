@@ -4267,3 +4267,10 @@ changes already on main.
 The session record is `docs/sessions/go-params-to-object.md`. By hand:
 the rebase onto the stack, whose conflicts (instructions' tool list,
 registry) were resolved by a script keeping both sides.
+
+## 2026-11-05: docs cleanup (CLAUDE.md, session notes, README, roadmap)
+
+The user asked for the cleanup the Java project's docs had had. Three
+PRs (#551, #552 and this one), all through create_file and replace_text;
+nothing by hand. The roadmap's index of open work came from a subagent's
+read of all 52 items (317 rows: 183 done, 69 partly, 46 open).
