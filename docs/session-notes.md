@@ -76,7 +76,14 @@ working patterns, with their steps, are in `docs/patterns.md`.
   section, not part of the example (2026-11-05, the user). "Using the
   tools well" (the user, same day) carries the example's structure and the
   guards, which users install from `examples/guards.json`; keep it and
-  `examples/CLAUDE.md` saying the same.
+  `examples/CLAUDE.md` saying the same. Order (2026-11-05, the user asked
+  for a review for programmers who let models do most of the work): the
+  pitch, then "What you get today, and what is not proven yet" with a real
+  applied and refused step, Status, install, Claude Code, using the tools
+  well, troubleshooting, the CLI, helping. What a contributor needs
+  (layout, design decisions, testing, adding a refactoring, measuring) is
+  in `CONTRIBUTING.md`. Keep the evidence sentences in step with
+  `docs/cost-history.md`.
 - **Releases** (2026-11-05, the user): every push to main that passes Test
   is released by `.github/workflows/release.yml`, with notes generated
   from the merged PRs. The PR's label picks the version: `major` or
