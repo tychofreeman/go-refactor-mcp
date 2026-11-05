@@ -80,6 +80,13 @@ func readsGo(words []string, at func(string) string) string {
 		return ""
 	}
 	grep := strings.HasSuffix(name, "grep") || name == "rg"
+	if grep {
+		for _, w := range words[1:] {
+			if showsNoText(w, name == "rg") {
+				return ""
+			}
+		}
+	}
 	pattern := grep
 	var operands []string
 	for i := 1; i < len(words); i++ {
@@ -107,6 +114,24 @@ func readsGo(words []string, at func(string) string) string {
 		}
 	}
 	return ""
+}
+
+// showsNoText reports whether a grep flag makes it print no text of the
+// files: a count, file names, or only its exit status (-c, -l, -L, -q,
+// alone or among other short flags). For rg, -L follows links instead.
+func showsNoText(w string, rg bool) bool {
+	switch w {
+	case "--count", "--files-with-matches", "--files-without-match", "--quiet", "--silent":
+		return true
+	}
+	if !strings.HasPrefix(w, "-") || strings.HasPrefix(w, "--") || len(w) < 2 {
+		return false
+	}
+	quiet := "clLq"
+	if rg {
+		quiet = "clq"
+	}
+	return strings.ContainsAny(w[1:], quiet) && strings.Trim(w[1:], "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ") == ""
 }
 
 // adviceFor says how to read Go instead, naming the CLI when cli says it
