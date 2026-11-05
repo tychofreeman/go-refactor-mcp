@@ -158,12 +158,11 @@ Setup notes:
   project, name the tools without the prefix, as `examples/CLAUDE.md` does.
 - `refactor-mcp -version` and `refactor -version` say which build runs:
   the release, or the commit it was built from.
-- `refactor list [tool...]` prints each tool's description and arguments.
 
 Then, in a Go project, ask something like *"use the gorefactor tools to
 simplify calc/calc.go"*. Run `/mcp` in Claude Code to see the server's status.
 
-`refactor list` prints every tool with its description and arguments,
+`refactor list [tool...]` prints each tool's description and arguments,
 as the model sees them. The server also sends the model instructions at
 startup: which tool for what, and how to read and batch. It keeps one
 workspace per session so `undo` works across calls, and it
@@ -269,9 +268,10 @@ inlining the new variable must give back the original code (after gofmt).
 `go test -bench . ./internal/workspace` measures an edit-and-undo cycle against
 a full load.
 
-Seven opt-in tests try the
-refactorings on real code; each modifies the module it is pointed at, so use
-a copy:
+Opt-in stress tests (`TestStress` and `TestRoundTrip` in a refactoring's
+package; `grep -rl STRESS_DIR internal` lists them) try the refactorings on
+real code. Each modifies the module it is pointed at, so use a copy. For
+example:
 
 ```sh
 cp -r path/to/module /tmp/target
