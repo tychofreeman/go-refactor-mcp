@@ -28,11 +28,14 @@ The measurement comes from the session log: the hook `cmd/session-log`
 
     ## Notes
 
-    One line each, as it happens: `hand:`, `refusal:`, `read:`, `plan:`.
+    One line each, as it happens: `hand:`, `refusal:`, `read:`, `bulk:`,
+    `plan:`.
 
     ## Measured
 
-    The output of `refactor-tokens -log`.
+    The output of `refactor-tokens -log`, or "not measured" and why when
+    the branch has no session log (a cloud clone: say what the CLI's
+    scratch files carried).
 
     ## Assessment
 

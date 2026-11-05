@@ -12,6 +12,43 @@ feature. The order below follows what that workflow needed in practice;
 `docs/friction-log.md` records each time a refactoring had to be done by
 hand or a tool got in the way.
 
+## Where it stands (2026-11-05)
+
+Items keep their numbers; each says in its own text which parts are done.
+Finished: 2, 10, 17, 22, 30, 31, 34, 35, 37, 40 (through 41 and 43), 41,
+46, 47 and 48. Item 3 is a practice, not a task (the friction log, and the
+comparison it asked for is `cmd/refactor-ab`). Waiting on the user: 29
+(whether a loop of our own is worth a second step). Every other item has a
+part left. What is open, the newest priority first:
+
+1. **52** Go and TypeScript at parity: `split` for TypeScript (52.2), then
+   inline_struct's counterpart (52.3, also 51.3's other half). Before the
+   next Go tool the user raises the budget of 50 or two tools merge (25).
+2. **51** the rest of Fowler's and IntelliJ's catalog: Use Interface Where
+   Possible (51.2), fold of compound assignments, a local made a field and
+   Consolidate Conditional Expression (51.5). Separate Query from Modifier
+   is shelved (51.4).
+3. **50** worktrees: extract returns that also set a variable used after
+   (50.5), merge_duplicate_function across `lang.` (50.6), `check` with
+   several patterns (50.7), the branch from `cwd` in session-log (50.4).
+4. **49** whether the work goes through the tools: 49.2, 49.3, 49.8, 49.9,
+   49.12 and 49.14 open; 49.11 for the CLI, TypeScript and an A/B arm;
+   49.4 and 49.5 wait on a measurement.
+5. **Defects found on the way and not yet fixed:** introduce_parameter on
+   `(*found)[0]`, extract_function by pointer, add_parameter on a local
+   function literal (44); remove_else's `wrap` in unformatted files (43);
+   values reaching reflection through interfaces (42c); TypeScript's copy
+   of the code after a switch with no case for the value (41.8); move_file
+   into another module (39g); move_declaration's `new_name` on an embedded
+   type, if it still fails (38e).
+6. **Older items with parts left**, by number: 1, 4-9 and 11-16 (signature,
+   inline, statements, rename, packaging, test time, intent tools, recipes,
+   smaller results, generators, large modules, teaching, third-party A/B),
+   18-21 (type reasoning, algebra, loops and containers, experience for a
+   fresh model), 23-28 (fold, reading and deriving, the budget, the design
+   step, the matcher, parameters), 32, 33, 36, 38, 39, 42-45. Each item's
+   text lists what is left, in its own order where it states one.
+
 1. **Changing a signature** at every call site. The most common by-hand
    step so far. *`add_parameter`, `remove_parameter` and `move_parameter`
    done, for exported methods too (see "Add parameter", "Remove parameter",
