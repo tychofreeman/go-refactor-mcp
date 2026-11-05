@@ -110,6 +110,15 @@ working patterns, with their steps, are in `docs/patterns.md`.
   model it saved nothing (cost-history 21); it stays for this repo's own
   sessions, where it ended shell reads for 4% of turns refused
   (cost-history 22).
+- **The write guard** (`cmd/write-guard`, 2026-11-05, the user: "I would
+  like to experiment with a write guard"): the read guard's counterpart for
+  changes, on in this repo. It refuses Edit, Write and MultiEdit of a `.go`
+  file outside testdata/, and Bash commands that write one (`sed -i`,
+  `perl -i`, `tee`, `cp`/`install`/`ln` into one, `mv`, `rm`, a
+  redirection); `gofmt -w` and git are allowed. Its refusal names the
+  edits and says to log a change no tool makes and ask the user. The
+  guards share `internal/hook` (the call, the denial, `Commands`, `Each`).
+  What to watch: roadmap 53.
 - **Worktrees** (2026-11-02, roadmap 50): the server and hooks belong to
   the session's starting checkout; a subagent with `isolation: "worktree"`
   shares them, with the parent's MCP roots but its own `cwd` in hooks.

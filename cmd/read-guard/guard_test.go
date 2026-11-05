@@ -3,20 +3,22 @@ package main
 import (
 	"strings"
 	"testing"
+
+	"github.com/tychofreeman/go-refactor-mcp/internal/hook"
 )
 
 func TestRefusal(t *testing.T) {
-	read := func(path string) call {
-		var c call
+	read := func(path string) hook.Call {
+		var c hook.Call
 		c.ToolName, c.ToolInput.FilePath = "Read", path
 		return c
 	}
-	bash := func(cmd string) call {
-		var c call
+	bash := func(cmd string) hook.Call {
+		var c hook.Call
 		c.ToolName, c.ToolInput.Command = "Bash", cmd
 		return c
 	}
-	refused := []call{
+	refused := []hook.Call{
 		read("/home/u/m/internal/plant/plant.go"),
 		read("bed_test.go"),
 		bash("sed -n 1,20p internal/plant/plant.go"),
@@ -35,7 +37,7 @@ func TestRefusal(t *testing.T) {
 			t.Errorf("%+v was allowed", c.ToolInput)
 		}
 	}
-	allowed := []call{
+	allowed := []hook.Call{
 		read("docs/roadmap.md"),
 		read("internal/plant/testdata/water/in/plant.go"),
 		bash("gofmt -l $(git ls-files '*.go' | grep -v /testdata/)"),
@@ -46,6 +48,7 @@ func TestRefusal(t *testing.T) {
 		bash("sed -n 1,5p docs/roadmap.md"),
 		bash("cat internal/plant/testdata/water/args.json"),
 		bash(`echo "cat plant.go"`),
+		bash("grep -c Water docs > count.go"),
 	}
 	for _, c := range allowed {
 		if why := refusal(c); why != "" {
@@ -57,12 +60,12 @@ func TestRefusal(t *testing.T) {
 // A path is judged where it points: after the cds before it, from the
 // hook's working directory, with variables the line set expanded.
 func TestRefusalResolvesPaths(t *testing.T) {
-	bash := func(cwd, cmd string) call {
-		var c call
+	bash := func(cwd, cmd string) hook.Call {
+		var c hook.Call
 		c.Cwd, c.ToolName, c.ToolInput.Command = cwd, "Bash", cmd
 		return c
 	}
-	refused := []call{
+	refused := []hook.Call{
 		bash("/home/u/m", "cd internal/plant && cat plant.go"),
 		bash("/home/u/m", "cd internal/plant/testdata/.. && cat plant.go"),
 		bash("/home/u/m", "d=internal/plant; cat $d/plant.go"),
@@ -73,7 +76,7 @@ func TestRefusalResolvesPaths(t *testing.T) {
 			t.Errorf("%q in %s was allowed", c.ToolInput.Command, c.Cwd)
 		}
 	}
-	allowed := []call{
+	allowed := []hook.Call{
 		bash("/home/u/m/internal/plant/testdata/water", "cat in/plant.go"),
 		bash("/home/u/m", "cd internal/plant/testdata/water && cat in/plant.go"),
 		bash("/home/u/m", "d=/home/u/m/internal/plant/testdata/water; cat $d/in/plant.go"),

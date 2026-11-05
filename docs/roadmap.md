@@ -3024,5 +3024,20 @@ candidates and the evidence for each, gathered from the friction log.
     has needed a cut. The next Go tool needs the user to raise one or
     merge two.
 
+53. **The write guard, an experiment** (2026-11-05, the user):
+    `cmd/write-guard` refuses changing Go other than through the tools,
+    as the read guard refuses reading it. *Built and on in this repo.*
+    What to learn from it, before keeping it or offering it to users:
+    1. In this repo's sessions: how many writes it refuses, what each was
+       (`refactor-tokens -log` counts denied calls), and whether the
+       change then went through a tool or stalled. The friction log
+       should then hold only gaps, not workarounds.
+    2. Whether it costs turns: the read guard cost 4% of turns refused
+       here (cost-history 22). Compare a few sessions before and after.
+    3. With a fresh model: an A/B arm with both guards against the read
+       guard alone (a few dollars; ask first).
+    4. The Java repo gets the same two guards (its roadmap #15 and a row
+       for the write guard).
+
 Parked: the Ollama loop (`refactor-agent`). It works and stays, but Claude
 through MCP is the priority.

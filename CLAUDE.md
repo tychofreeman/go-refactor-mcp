@@ -82,6 +82,9 @@ with no MCP, build `cmd/refactor` and send the same steps through it
    (`["Settle", "Ledger.Post"]`, no file). A hook (`cmd/read-guard`)
    refuses Read of a `.go` file, and sed, cat, head, tail, awk or grep
    naming one, outside testdata/; grep over directories is allowed.
+   Another (`cmd/write-guard`, an experiment) refuses Edit, Write and
+   MultiEdit of a `.go` file and shell commands that write one (`sed -i`,
+   a redirection, `tee`, `cp`, `mv`, `rm`); change Go through the tools.
 3. **Don't search before a refactoring.** The refactorings find every
    reference with the type checker.
 4. **Plan from one read, send one batch.** Steps that build on each other
