@@ -1,11 +1,12 @@
 name: Release
 
-# A release follows a change of version: when the Test workflow passes on
-# a push to main and no tag yet names mcpserver.Version, this tags that
-# commit v<Version> and creates its GitHub release, with the notes in
-# docs/releases/v<Version>.md if there are any, else notes made from the
-# merged pull requests. Run it by hand (workflow_dispatch) to release the
-# head of main.
+# Every push to main whose Test run passes is released: this tags the
+# commit with the next version after the latest tag and creates its GitHub
+# release, with notes made from the merged pull requests. The pull request
+# a push merged chooses the step: a "major" or "minor" label bumps that
+# part, anything else the patch. Pushes of docs alone run no Test, so they
+# are not released. Run it by hand (workflow_dispatch) to release the head
+# of main the same way.
 on:
   workflow_run:
     workflows: [Test]
@@ -15,6 +16,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: read
 
 concurrency:
   group: release
@@ -30,24 +32,30 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ env.SHA }}
+          fetch-depth: 0
 
-      - name: Release the version if it has no tag
+      - name: Tag and release the next version
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          version=$(sed -n 's/^const Version = "\(.*\)"$/\1/p' internal/mcpserver/server.go)
-          if [ -z "$version" ]; then
-            echo "::error title=No version::internal/mcpserver/server.go has no const Version"
-            exit 1
-          fi
-          tag="v$version"
-          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null; then
-            echo "$tag is already tagged; nothing to release"
+          if [ -n "$(git tag --points-at "$SHA" --list 'v*')" ]; then
+            echo "$SHA is already tagged; nothing to release"
             exit 0
           fi
-          notes="docs/releases/$tag.md"
-          if [ -f "$notes" ]; then
-            gh release create "$tag" --target "$SHA" --title "$tag" --notes-file "$notes"
-          else
-            gh release create "$tag" --target "$SHA" --title "$tag" --generate-notes
+          last=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n 1)
+          last=${last:-v0.0.0}
+          if git rev-parse -q --verify "refs/tags/$last" >/dev/null &&
+            ! git merge-base --is-ancestor "$last" "$SHA"; then
+            echo "$SHA is not after $last (a later push was released first); nothing to release"
+            exit 0
           fi
+          labels=$(gh api "repos/$GITHUB_REPOSITORY/commits/$SHA/pulls" --jq '[.[].labels[].name] | join(" ")')
+          IFS=. read -r major minor patch <<< "${last#v}"
+          case " $labels " in
+            *" major "*) tag="v$((major + 1)).0.0" ;;
+            *" minor "*) tag="v$major.$((minor + 1)).0" ;;
+            *) tag="v$major.$minor.$((patch + 1))" ;;
+          esac
+          echo "releasing $tag after $last (labels: ${labels:-none})"
+          gh release create "$tag" --target "$SHA" --title "$tag" \
+            --generate-notes --notes-start-tag "$last"

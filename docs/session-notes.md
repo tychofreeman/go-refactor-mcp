@@ -74,10 +74,15 @@ working patterns, with their steps, are in `docs/patterns.md`.
   says what the example asks for and why, with one honest sentence on the
   evidence and a link, and the friction log is a "Help improve the tools"
   section, not part of the example (2026-11-05, the user).
-- **Releases** (2026-10-27): CI makes them. Raise `mcpserver.Version` in a
-  PR, with the notes in `docs/releases/v<version>.md`; once Test passes on
-  main, the Release workflow tags and releases. Sessions may not push tags
-  or create releases (HTTP 403).
+- **Releases** (2026-11-05, the user): every push to main that passes Test
+  is released by `.github/workflows/release.yml`, with notes generated
+  from the merged PRs. The PR's label picks the version: `major` or
+  `minor` bumps that part, anything else the patch; label a PR that adds
+  a tool `minor`. There is no version constant to raise: the binary
+  reports the tag it was installed at, or "devel" and a commit
+  (`mcpserver.Version()`). `docs/releases/` holds the notes of v0.3.0 to
+  v0.5.0, written by hand. Sessions may not push tags or create releases
+  (HTTP 403); the workflow's token can.
 - **CI minutes** (2026-10-27): 5,000 Actions minutes a month, so Test
   skips changes to docs alone; it runs on go.mod's minimum (1.26.x) and the
   newest Go. Keep CI runs few: batch small fixes that belong together.

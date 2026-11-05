@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime/debug"
 	"strings"
 	"testing"
 
@@ -1173,10 +1174,31 @@ func TestGoAndTypeScriptInstructions(t *testing.T) {
 	}
 }
 
-// The build version starts with Version and may add the module version
-// or commit it was built from.
-func TestBuildVersion(t *testing.T) {
-	if v := BuildVersion(); !strings.HasPrefix(v, Version) {
-		t.Errorf("BuildVersion() = %q, want it to start with %q", v, Version)
+// The build version is the tag it was installed at, or "devel" with the
+// commit it was built from.
+func TestVersion(t *testing.T) {
+	if v := Version(); !strings.HasPrefix(v, "v") && !strings.HasPrefix(v, "devel") {
+		t.Errorf("Version() = %q, want a tag or devel", v)
+	}
+}
+
+// The version is the tag a build was installed at, or "devel" with the
+// commit it was built from.
+func TestVersionOf(t *testing.T) {
+	tests := []struct {
+		bi   debug.BuildInfo
+		want string
+	}{
+		{debug.BuildInfo{Main: debug.Module{Version: "v0.6.3"}}, "v0.6.3"},
+		{debug.BuildInfo{Main: debug.Module{Version: "(devel)"}, Settings: []debug.BuildSetting{
+			{Key: "vcs.revision", Value: "abcdef0123456789"},
+			{Key: "vcs.modified", Value: "true"},
+		}}, "devel (commit abcdef012345, modified)"},
+		{debug.BuildInfo{}, "devel"},
+	}
+	for _, tt := range tests {
+		if got := versionOf(&tt.bi); got != tt.want {
+			t.Errorf("versionOf(%+v) = %q, want %q", tt.bi.Main, got, tt.want)
+		}
 	}
 }

@@ -4274,3 +4274,10 @@ The user asked for the cleanup the Java project's docs had had. Three
 PRs (#551, #552 and this one), all through create_file and replace_text;
 nothing by hand. The roadmap's index of open work came from a subagent's
 read of all 52 items (317 rows: 183 done, 69 partly, 46 open).
+
+## 2026-11-05: a release on every push (the user)
+
+Nothing by hand in Go: versionOf was extracted first (green), then its
+test, then the returns changed with replace_expression; the constant's
+uses were replaced, the constant deleted and BuildVersion renamed to
+Version. The workflow was rewritten with create_file.

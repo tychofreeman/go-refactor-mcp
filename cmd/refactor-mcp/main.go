@@ -36,7 +36,7 @@ func main() {
 	version := flag.Bool("version", false, "print the version and exit")
 	flag.Parse()
 	if *version {
-		fmt.Println("refactor-mcp", mcpserver.BuildVersion())
+		fmt.Println("refactor-mcp", mcpserver.Version())
 		return
 	}
 	if *dir == "" {

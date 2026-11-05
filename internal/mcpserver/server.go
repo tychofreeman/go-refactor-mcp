@@ -30,17 +30,22 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/lang/typescript"
 )
 
-// Version is reported to MCP clients.
-const Version = "0.5.0"
-
-// BuildVersion is Version with what the build knows of its source: the
-// module version it was installed at, or the commit it was built from
-// and whether the tree had changes.
-func BuildVersion() string {
+// Version is what the build knows of its source, reported to MCP clients
+// and by -version: the tag it was installed at (go install ...@v0.6.0); for
+// a build in a clone, the pseudo-version Go stamps from the last tag and
+// the commit (v0.6.1-0.20261105153911-7e489f7e7532, +dirty with changes);
+// else "devel" with the commit. CI tags each release
+// (.github/workflows/release.yml).
+func Version() string {
 	bi, ok := debug.ReadBuildInfo()
 	if !ok {
-		return Version
+		return "devel"
 	}
+	return versionOf(bi)
+}
+
+// versionOf is Version for the build bi.
+func versionOf(bi *debug.BuildInfo) string {
 	rev, modified := "", ""
 	for _, s := range bi.Settings {
 		switch {
@@ -52,11 +57,11 @@ func BuildVersion() string {
 	}
 	switch {
 	case bi.Main.Version != "" && bi.Main.Version != "(devel)":
-		return Version + " (" + bi.Main.Version + ")"
+		return bi.Main.Version
 	case rev != "":
-		return Version + " (commit " + rev[:min(len(rev), 12)] + modified + ")"
+		return "devel (commit " + rev[:min(len(rev), 12)] + modified + ")"
 	}
-	return Version
+	return "devel"
 }
 
 // Instructions are sent to the client at initialization; MCP clients such
@@ -205,7 +210,7 @@ func (s *Server) MCP() *mcp.Server {
 	if s.typescript != nil {
 		s.typescript.FullDiffs, s.typescript.ReadByName = s.FullDiffs, s.ReadByName
 	}
-	srv := mcp.NewServer(&mcp.Implementation{Name: "gorefactor", Version: Version}, &mcp.ServerOptions{
+	srv := mcp.NewServer(&mcp.Implementation{Name: "gorefactor", Version: Version()}, &mcp.ServerOptions{
 		Instructions: s.instructions(),
 	})
 

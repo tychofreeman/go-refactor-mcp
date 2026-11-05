@@ -56,7 +56,9 @@ change, rolled back as a whole, and every step can be undone.
 - **TypeScript:** the same tools under the same names, chosen by the
   file's extension, built on the Go port of the TypeScript compiler; a
   few are still Go's alone (roadmap item 52).
-- **Releases:** tagged by CI from v0.3.0 (`docs/releases/`).
+- **Releases:** every change to main that passes the tests is tagged and
+  released by CI, `go install ...@latest` gets the newest, and
+  `refactor-mcp -version` says which you have.
 - **Evidence:** A/B runs against editing by hand in
   `docs/cost-history.md`, every hand edit in `docs/friction-log.md`, and
   the derivations found so far in `docs/derivations.md`.
