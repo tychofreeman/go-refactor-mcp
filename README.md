@@ -1,5 +1,8 @@
 # go-refactor-mcp
 
+It works on Go and TypeScript: the same tools under the same names, at
+near parity (roadmap item 52 tracks what still differs).
+
 **gorefactor gives the discipline of refactoring to an AI
 coding assistant.** It's an MCP server with about 45 Go transformations 
 (refactorings and edits), much of Fowler's catalog as type-checked tools: 
@@ -50,8 +53,9 @@ change, rolled back as a whole, and every step can be undone.
   cases and elements, replace statements, expressions, declarations and
   text, and `create_from_usage`, which declares what a test written first
   uses.
-- **TypeScript:** most of the same tools under the same names, chosen by the
-  file's extension, built on the Go port of the TypeScript compiler.
+- **TypeScript:** the same tools under the same names, chosen by the
+  file's extension, built on the Go port of the TypeScript compiler; a
+  few are still Go's alone (roadmap item 52).
 - **Releases:** tagged by CI from v0.3.0 (`docs/releases/`).
 - **Evidence:** A/B runs against editing by hand in
   `docs/cost-history.md`, every hand edit in `docs/friction-log.md`, and
@@ -87,7 +91,8 @@ with the same tools; they work but are no longer developed.
 
 ## Getting started
 
-Install the MCP server and the CLI:
+The server is written in Go, so installing it needs Go 1.26 or later, for a
+TypeScript project too. Install the MCP server and the CLI:
 
 ```sh
 go install github.com/tychofreeman/go-refactor-mcp/cmd/refactor-mcp@latest
@@ -109,7 +114,7 @@ add that to your `PATH`, or install elsewhere with `GOBIN=~/bin go install ...`.
 
 ## Using it from Claude Code
 
-Register the server once for all your projects (user scope):
+**1. Register the server,** once for all your projects (user scope):
 
 ```sh
 claude mcp add --scope user gorefactor -- refactor-mcp
@@ -126,15 +131,37 @@ Or share it with a project by committing a `.mcp.json` at its root (see
 }
 ```
 
-For the instructions, `examples/CLAUDE.md` is a CLAUDE.md to copy into
-your project: the one that did best in the A/B runs (the user's moves of
-`eval-tasks/claude-md-derivations`, cut to what measurably helped;
-`docs/cost-history.md` sections 8, 9 and 14). Without a CLAUDE.md that asks
-for them, a fresh model does not use the tools.
-
 If `refactor-mcp` is not on the `PATH` Claude Code sees, use its absolute
-path as the command. The server works on the module containing `-C`, or
-`$CLAUDE_PROJECT_DIR` (which Claude Code sets), or its working directory.
+path as the command. The server works on the Go module (the nearest
+`go.mod`) and the TypeScript solution (the nearest `tsconfig.json` and the
+projects it references) at or above `-C`, `$CLAUDE_PROJECT_DIR` (which
+Claude Code sets), or its working directory.
+
+**2. Tell Claude to use it.** Without instructions that ask for them, a
+fresh model never calls the tools: it edits files as it always has. Copy
+`examples/CLAUDE.md` into your project's CLAUDE.md, or merge it into the one
+you have, and put your project's name in its heading. It asks for three
+things:
+- **TDD with refactoring first:** make the change easy while the tests
+  pass, then write the failing test, then the least code, then remove the
+  duplication. Models extend the code that is there unless told to
+  reshape it first.
+- **Work as a derivation:** plan a change as operations that keep
+  behaviour, ending in the one edit that changes it, sent as one `batch`,
+  with the moves that have worked (near-duplicates folded onto one copy, a
+  wrapper to change a signature, a getter before a change of
+  representation).
+- **Use the tools well:** load the schemas at once, read through
+  `inspect`, address declarations by name, read refusals.
+
+Of the instructions we tried, these got a fresh model to work through the
+tools, and derive its changes, at the lowest cost; on the tasks we tried,
+working through the tools has not yet cost less than editing by hand
+([docs/cost-history.md](docs/cost-history.md)).
+
+**3. Try it:** in a Go or TypeScript project, ask something like *"use the
+gorefactor tools to simplify calc.go"* (or `calc.ts`). Run `/mcp` in Claude Code to
+see the server's status.
 
 Setup notes:
 - Claude Code reads `.mcp.json` when a session starts: one added during a
@@ -149,8 +176,8 @@ Setup notes:
   github.com/tychofreeman/go-refactor-mcp/cmd/worktree-paths@latest`,
   then add `examples/settings.json` to the project's
   `.claude/settings.json`.
-- The tools need Go 1.26 or later. With `GOTOOLCHAIN=auto` (the default)
-  `go install` fetches it; with `GOTOOLCHAIN=local` an older Go fails.
+- With `GOTOOLCHAIN=auto` (the default) `go install` fetches Go 1.26 if
+  yours is older; with `GOTOOLCHAIN=local` an older Go fails.
 - Tool names carry the server's name as Claude Code sees it:
   `mcp__gorefactor__inspect` here, `mcp__remote-devices__gorefactor__inspect`
   through the desktop app's bridge. Instructions copied from this repo's
@@ -159,9 +186,6 @@ Setup notes:
 - `refactor-mcp -version` and `refactor -version` say which build runs:
   the release, or the commit it was built from.
 
-Then, in a Go project, ask something like *"use the gorefactor tools to
-simplify calc/calc.go"*. Run `/mcp` in Claude Code to see the server's status.
-
 `refactor list [tool...]` prints each tool's description and arguments,
 as the model sees them. The server also sends the model instructions at
 startup: which tool for what, and how to read and batch. It keeps one
@@ -169,6 +193,27 @@ workspace per session so `undo` works across calls, and it
 re-checks the files on disk before every call: if the model or you edit a
 file directly in between, it updates instead of applying edits at stale
 offsets, and `undo` refuses to clobber those edits.
+
+## Help improve the tools
+
+Which tool to build next is chosen from evidence: each time a change had to
+be made by hand because no tool, or no sequence of two or three tools, made
+it. If you would like to help, have Claude keep that record in your project
+too, by adding this to your CLAUDE.md:
+
+```markdown
+## Friction log
+
+When no gorefactor tool covers a step, make it by hand, as small as it can
+be, and log it in `docs/friction-log.md`. Append one entry per change at
+the end of the file: what you did by hand, why no tool did it (none exists,
+one refused and why, or an argument was missing), and the operation that
+would have done it. Log refusals that cost a turn too. Edits to files that
+are not code, made with replace_text, need no entry.
+```
+
+Then open an issue with the entries, or a link to them. This repository's
+own log is `docs/friction-log.md`.
 
 ## Measuring whether the tools help
 

@@ -69,7 +69,11 @@ working patterns, with their steps, are in `docs/patterns.md`.
   know TDD and refactoring, five sentences the user chose, then Status.
   Keep it to what a developer needs to judge and install the tools;
   instructions for Claude go in CLAUDE.md, and `examples/CLAUDE.md` is what
-  a user copies.
+  a user copies. The README is for Go and TypeScript alike, with one
+  sentence at the top on their parity, not a version for each; the README
+  says what the example asks for and why, with one honest sentence on the
+  evidence and a link, and the friction log is a "Help improve the tools"
+  section, not part of the example (2026-11-05, the user).
 - **Releases** (2026-10-27): CI makes them. Raise `mcpserver.Version` in a
   PR, with the notes in `docs/releases/v<version>.md`; once Test passes on
   main, the Release workflow tags and releases. Sessions may not push tags
