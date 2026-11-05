@@ -1,20 +1,26 @@
 # go-refactor-mcp
 
-**You know the discipline (small behavior-preserving steps, make the change
-easy then make the easy change, two hats), and gorefactor gives it to an AI
-coding assistant.** It's an MCP server with about 45 Go refactorings and
-edits, much of Fowler's catalog as type-checked tools: the model picks the
-step, and the engine checks preconditions (evaluation order, side effects,
-panics, name capture), applies it everywhere with the type checker, and
-rolls back anything that doesn't compile. Refactorings refuse anything that
-would change behavior, behavior changes go through separate edit tools, and
-test-first works because what a failing test calls is stubbed so the code
-still compiles. Like junior developers, models don't refactor on their own:
-they extend what's there, unless "make the change easy" is a step of its
-own, which found the right design in all 15 runs we tried. And because
-writing code costs a model almost nothing, refactoring first pays off where
-a change reaches many places, not on small local edits, so the open question
-is the one you'd ask: can the craft be taught to the machine, not just
+**gorefactor gives the discipline of refactoring to an AI
+coding assistant.** It's an MCP server with about 45 Go transformations 
+(refactorings and edits), much of Fowler's catalog as type-checked tools: 
+the model picks the step, and the engine checks preconditions (evaluation
+order, side effects, panics, name capture), applies it everywhere with the 
+type checker, and rolls back anything that doesn't compile. 
+
+**Why?** Because thinking in terms of transformations is thinking at a higher
+level of abstraction, and I believe that makes programming faster and better.
+I believe that a refactoring editor like IntelliJ or Eclipse is a force
+multiplier. And I suspect that AI models will get the same effect.
+
+**Refactorings specifically**
+refuse anything that would change behavior; behavior changes go through
+**separate edit tools**, and test-first works because what a failing test calls 
+is stubbed so the code still compiles. Like junior developers, models don't
+refactor on their own: they extend what's there, unless "make the change easy"
+is a step of its own, which found the right design in all 15 runs we tried. 
+And because writing code costs a model almost nothing, refactoring first pays
+off where a change reaches many places, not on small local edits, so the open
+question is the one you'd ask: can the craft be taught to the machine, not just
 handed to it as tools?
 
 ```
