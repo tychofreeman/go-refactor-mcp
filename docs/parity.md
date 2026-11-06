@@ -41,21 +41,55 @@ baselines keep working. `docs/tool-contract.md` records the result.
 | Operation | Go and TS today | Java today | Shared name |
 |---|---|---|---|
 | extract a function | extract_function | extract_method | **extract_function** (a method is a function) |
-| move a declaration | move_declaration | move_type | **move_declaration** |
-| move a method | move_method | move_member | **move_member** |
+| move a declaration | move_declaration | move_type | **move** |
+| move a method or field | move_method | move_member | **move** |
 | move a statement | move_statement_up, _down | move_statement | **move_statement**, with a direction |
 | extract an interface or base | extract_interface | extract_supertype | **extract_supertype** |
 | a parameter object, extract class | convert_params_to_object, (Go) extract_struct | extract_struct (`fields` for a class) | **extract_struct**; TS's `extract_struct` alias for extract_interface moves to extract_supertype |
 | an expression made a parameter | introduce_parameter | extract_variable `as=parameter` | **extract_variable** `as` |
 | change a type | change_type, change_field_type, change_parameter_type | change_type | **change_type** |
-| move, copy, delete a file | move_file, delete_file | move_file | **move_file** |
+| move, copy, delete a file | move_file, delete_file | move_file | **move** (a path); a file renamed in place is also **rename** |
 | a type switch to methods | type_switch_to_method (TS: union_switch_to_method) | none yet | **type_switch_to_method** |
 | a method to a function and back | method_to_function, function_to_method | move_member to its own class, function_to_method | keep the pair: function_to_method is in all three, and Go's method_to_function is not a move; Java adds method_to_function as an alias |
+
+**One `move`** (2026-11-05, the user: "easier for the model to reach
+for"; worth trying). Everything that takes a named thing to another place
+and updates its references is one tool, `move`, which works out the case
+from what it is given, with no `kind` argument:
+
+- a top-level name (`file` + `name`): a declaration, to `to_file` or a
+  `package` (Go's and TypeScript's move_declaration, Java's move_type);
+- `Type.member`: a method or field, to `to` (a type) in any file (Go's and
+  TypeScript's move_method, Java's move_member and its row 109, which adds
+  static fields and constants);
+- a path with no name: the file or directory, to `to` (move_file;
+  `copy` and delete as options, for delete_file).
+
+**One `inline`** (2026-11-05, the user, the same reasoning). The three
+inverses of extract are one tool, `inline`, which works out the case from
+what the name resolves to: a function or `Type.Method` inlines its calls
+(the one at `line`, or every call with `all_calls`; Go's and TypeScript's
+inline_function, Java's); a local variable or constant inlines its uses
+(inline_variable); `Holder.field` whose field holds a struct or class
+inlines that type into the holder (Go's inline_struct, TypeScript's 52.3,
+Java's inline class). Unlike `extract`, nothing is ambiguous: an
+extracted expression could become a variable or a function, so extract
+stays several tools (or takes `as`) until a run says otherwise. Go goes
+from 41 to 39 published tools.
+
+`rename` given a file path and a new name renames the file in place,
+the same as `move` within its directory. Not part of `move`: move_statement
+(order within a block) and move_parameter (order of a signature), which
+reorder rather than relocate. The description stays short by trusting
+"move" to be read generically: one sentence of what it moves, one example
+per case. The old names stay aliases, and the merged description gets an
+A/B check against the baselines before it replaces them (ask first).
 
 Merging under one name also frees budget in Go and TypeScript: six
 published tools become options of others (move_statement_down,
 convert_params_to_object, introduce_parameter, change_field_type,
-change_parameter_type, delete_file), taking Go from 49 to 43. Each merged
+change_parameter_type, delete_file), taking Go from 49 to 43, and one
+`move` for move_declaration, move_method and move_file takes it to 41. Each merged
 schema must stay under `TestLoadedToolsStaySmall`'s 1,700 characters, and
 a merge changes what the baselines saw, so it waits for an A/B check of
 the merged descriptions (ask before running it).
@@ -147,7 +181,7 @@ user will review the list below first, and expects to raise it.
 ## 6. Every tool, for the budget review
 
 Go publishes 49 tools (TypeScript 46, Java 37); the budget is 50 in both
-repos. After the merges in section 2, Go publishes 43.
+repos. After the merges in section 2, Go publishes 39.
 
 | Kind | Go | TS | Java |
 |---|---|---|---|
