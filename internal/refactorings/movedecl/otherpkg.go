@@ -296,6 +296,19 @@ func (m *mover) updateReferences() (map[string]bool, int, error) {
 				return true
 			})
 			for id, o := range p.TypesInfo.Uses {
+				if d := m.embeddedField(o); d != nil {
+					// The field an embedded moved type gives a struct is named after
+					// it, so its uses outside the moved code take the new name.
+					if id.Pos() >= f.FileStart && id.Pos() < f.FileEnd && !m.inMoved(path, m.Off(id.Pos())) {
+						fe, err := m.fileFor(path)
+						if err != nil {
+							return nil, 0, err
+						}
+						fe.edits = append(fe.edits, edit.TextEdit{Start: m.Off(id.Pos()), End: m.Off(id.End()), NewText: d.newName})
+						refs++
+					}
+					continue
+				}
 				d := m.movedOf(o)
 				if d == nil || recvTypeName(o) != nil || id.Pos() < f.FileStart || id.Pos() >= f.FileEnd {
 					continue // a method is used through a value, whose type it follows
@@ -340,6 +353,27 @@ func (m *mover) updateReferences() (map[string]bool, int, error) {
 		}
 	}
 	return users, refs, nil
+}
+
+// embeddedField returns the moved type that o, a struct's embedded field,
+// is named after, when the move gives that type a new name; or nil.
+func (m *mover) embeddedField(o types.Object) *moved {
+	v, ok := o.(*types.Var)
+	if !ok || !v.Embedded() {
+		return nil
+	}
+	t := v.Type()
+	if p, ok := t.(*types.Pointer); ok {
+		t = p.Elem()
+	}
+	n, ok := t.(*types.Named)
+	if !ok {
+		return nil
+	}
+	if d := m.movedOf(n.Obj()); d != nil && d.newName != d.obj.Name() {
+		return d
+	}
+	return nil
 }
 
 // inMoved reports whether an offset of the file at path is in the moved
