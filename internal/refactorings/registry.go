@@ -94,6 +94,7 @@ func All() []refactor.Refactoring {
 		changesig.NewParamsToObject(),
 		newMove(),
 		inline.New(),
+		slidestmt.New(),
 	}
 }
 

@@ -71,7 +71,7 @@ func all() []refactor.RefactoringOf[*workspace.Workspace] {
 	return []refactor.RefactoringOf[*workspace.Workspace]{rename.New(), createfile.New(), adddecl.New(), replacetext.New(), replacestmts.New(), insertstmts.New(), replaceexpr.New(), addfield.New(), createfromusage.New(), changesig.NewAdd(), changesig.NewRemove(), changesig.NewMove(), changesig.NewIntroduce(), changesig.NewParamsToObject(), changesig.NewAddResult(), changesig.NewChangeFieldType(), changesig.NewChangeParameterType(), changetype.New(), changesig.NewFunctionToMethod(), changesig.NewMethodToFunction(), changesig.NewMoveMethod(),
 		simplify.NewExtractVariable(), simplify.NewInlineVariable(), simplify.NewMoveUp(), simplify.NewMoveDown(), simplify.NewInvertIf(), simplify.NewRemoveElse(), simplify.NewExtractFunction(), simplify.NewInlineFunction(),
 		move.NewMoveDeclaration(), move.NewMoveFile(), move.NewDeleteFile(),
-		shapes.NewFold(), shapes.NewParameterize(), shapes.NewMergeDuplicate(), shapes.NewRemoveDeadCode(), shapes.NewExtractInterface(), shapes.NewUnionSwitchToMethod(), shapes.NewPrepareSwitchForTypes(), addcase.New(), addelement.New(), replacedecl.New(), simplify.NewSplit(), newMove(), simplify.NewInline(), simplify.NewInlineStruct()}
+		shapes.NewFold(), shapes.NewParameterize(), shapes.NewMergeDuplicate(), shapes.NewRemoveDeadCode(), shapes.NewExtractInterface(), shapes.NewUnionSwitchToMethod(), shapes.NewPrepareSwitchForTypes(), addcase.New(), addelement.New(), replacedecl.New(), simplify.NewSplit(), newMove(), simplify.NewInline(), simplify.NewMoveStatement(), simplify.NewInlineStruct()}
 }
 
 // goNames are Go tools' names for the TypeScript tool that does their
@@ -110,9 +110,18 @@ func (*Language) Owns(path string) bool {
 func (*Language) Tools() []lang.Tool {
 	var out []lang.Tool
 	for _, r := range refactor.Published(all()) {
-		out = append(out, lang.Tool{Name: r.Name(), Description: r.Description(), Schema: r.InputSchema()})
+		out = append(out, lang.Tool{Name: r.Name(), Description: r.Description(), Schema: schemaOf(r)})
 	}
 	return out
+}
+
+// schemaOf is r's published schema: with preserve_exceptions for a
+// refactoring, which refactor.Run takes off before r sees it.
+func schemaOf(r refactor.RefactoringOf[*workspace.Workspace]) json.RawMessage {
+	if _, edit := r.(refactor.Edit); edit {
+		return r.InputSchema()
+	}
+	return refactor.WithPreserveExceptions(r.InputSchema())
 }
 
 // Loaded reports whether the workspace has been loaded.
@@ -298,7 +307,7 @@ func (l *Language) Step(tool string, args json.RawMessage) (string, bool, error)
 	if !ok {
 		return fmt.Sprintf("REFUSED %s: it does not work on TypeScript files yet; for them there is %s.", tool, l.names()), true, nil
 	}
-	r = refactor.Routed(r, args, lookup)
+	r, args = refactor.Routed(r, args, lookup)
 	if t, ok := r.(*createfile.CreateFile); ok && l.SkeletonOnly {
 		r = createfile.Skeleton{CreateFile: t}
 	}

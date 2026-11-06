@@ -31,11 +31,13 @@ type Where struct {
 // Effects summarizes calls: of functions known to have no side effects,
 // and of the functions of the packages added to it, from their bodies.
 type Effects struct {
-	decls   map[*types.Func]funcSource
-	memo    map[*types.Func]*Summary
-	during  map[during]bool       // RunsOnlyDuring's answers
-	judging map[types.Object]bool // the variables onlyCalledDuring is judging
-	active  map[*types.Func]bool  // being summarized: a call back to one is recursion
+	decls    map[*types.Func]funcSource
+	memo     map[*types.Func]*Summary
+	during   map[during]bool       // RunsOnlyDuring's answers
+	judging  map[types.Object]bool // the variables onlyCalledDuring is judging
+	active   map[*types.Func]bool  // being summarized: a call back to one is recursion
+	Preserve bool                  // a nil dereference may not move past other code (preserve_exceptions)
+	changes  []string              // the moves Preserve would have refused, since TakeChanges
 }
 
 // funcSource is a function's declaration and the type information of

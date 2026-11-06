@@ -115,13 +115,19 @@ func (e Effects) does(k reorder.Kind) (string, string) {
 // or "": both act, one writes what the other reads (reorder.Conflict), or
 // they share a local that one assigns.
 func conflict(a, b Effects) string {
-	if ak, bk := reorder.Conflict(a.facts(), b.facts()); ak != reorder.None {
-		if ak == reorder.Reading { // the writer first
-			a, b, ak, bk = b, a, bk, ak
+	if ak, _ := reorder.Conflict(a.facts(), b.facts()); ak == reorder.None {
+		if sk, sbk := reorder.Conflict(strictly(a.facts()), strictly(b.facts())); sk != reorder.None {
+			why := described(a, b, sk, sbk)
+			if exceptions.preserve {
+				return why
+			}
+			if !slices.Contains(exceptions.changes, why) {
+				exceptions.changes = append(exceptions.changes, why)
+			}
 		}
-		ap, av := a.does(ak)
-		bp, bv := b.does(bk)
-		return fmt.Sprintf("%s %s, and %s %s", ap, av, bp, bv)
+	}
+	if ak, bk := reorder.Conflict(a.facts(), b.facts()); ak != reorder.None {
+		return described(a, b, ak, bk)
 	}
 	for _, s := range sortedSymbols(a.Assigns) {
 		if w, ok := b.Assigns[s]; ok {
@@ -137,6 +143,48 @@ func conflict(a, b Effects) string {
 		}
 	}
 	return ""
+}
+
+// described says what keeps a, doing ak, and b, doing bk, in their order,
+// the writer first.
+func described(a Effects, b Effects, ak, bk reorder.Kind) string {
+	if ak == reorder.Reading { // the writer first
+		a, b, ak, bk = b, a, bk, ak
+	}
+	ap, av := a.does(ak)
+	bp, bv := b.does(bk)
+	return fmt.Sprintf("%s %s, and %s %s", ap, av, bp, bv)
+}
+
+// exceptions is the preserve_exceptions setting of the call being run, and
+// the moves it would have refused since TakeExceptionChanges. Package
+// state, since the analysis is made afresh at each use, from the checker
+// and the file alone, and the server runs one call at a time.
+var exceptions struct {
+	preserve bool
+	changes  []string
+}
+
+// PreserveExceptions sets whether a read through what may be null or
+// undefined may still move past code that writes (off) or not (on).
+func PreserveExceptions(on bool) { exceptions.preserve = on }
+
+// TakeExceptionChanges returns, and forgets, the moves made since it was
+// last called that let a read through what may be null or undefined throw
+// on the other side of other code.
+func TakeExceptionChanges() []string {
+	c := exceptions.changes
+	exceptions.changes = nil
+	return c
+}
+
+// strictly returns f with a throw through null or undefined counted as any
+// other.
+func strictly(f reorder.Facts) reorder.Facts {
+	if f.Throws == reorder.OnNull {
+		f.Throws = reorder.OtherThrow
+	}
+	return f
 }
 
 // sortedSymbols returns m's symbols by name, so that refusals do not

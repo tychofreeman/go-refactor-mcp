@@ -1448,6 +1448,22 @@ export function water(a: Bed | undefined, d: number): number {
 	})
 }
 
+// Swapping two reads through what may be null or undefined is noted, and
+// with preserve_exceptions refused: the first to throw would change.
+func TestNullishReadsPreserved(t *testing.T) {
+	src := "interface Bed { depth: number }\nexport function water(a: Bed | undefined, b: Bed | undefined): number {\n  const x = a!.depth;\n  const y = b!.depth;\n  return x + y;\n}\n"
+	ws, _ := load(t, map[string]string{"src/g.ts": src})
+	res := run(t, ws, NewMoveDown(), `{"file": "src/g.ts", "line": 3}`)
+	if !res.Applied || !strings.Contains(strings.Join(res.Notes, "\n"), "may throw") {
+		t.Errorf("want the swap applied with a note that says what may throw, got %s", res)
+	}
+	ws, _ = load(t, map[string]string{"src/g.ts": src})
+	res = run(t, ws, NewMoveDown(), `{"file": "src/g.ts", "line": 3, "preserve_exceptions": true}`)
+	if res.Applied || !strings.Contains(res.Refused, "may throw") {
+		t.Errorf("want a refusal that says what may throw, got %s", res)
+	}
+}
+
 const each = plants + `
 function count(xs: number[], f: (x: number) => boolean): number {
   let n = 0;
@@ -1693,4 +1709,35 @@ export function tally(beds: number[][]): void {
 }
 `, NewSplit(), `{"kind": "loop", "line": 15, "at": 17}`, "", "water"},
 	})
+}
+
+// kind phase: the second phase becomes a function of an object holding
+// what the first computes, as Go's split does.
+func TestSplitPhase(t *testing.T) {
+	const cost = "interface Bed { area: number; plants: number }\nexport function cost(b: Bed, days: number, rate: number): number {\n  const litres = b.area * 2;\n  const extra = b.plants / 3;\n  const total = (litres + extra) * days;\n  return total * rate;\n}\n"
+	ws, dir := load(t, map[string]string{"src/g.ts": cost})
+	res := run(t, ws, NewSplit(), `{"file": "src/g.ts", "kind": "phase", "line": 5, "new_name": "price", "type": "Usage"}`)
+	if !res.Applied {
+		t.Fatalf("%s", res)
+	}
+	got := string(tstest.Read(t, dir, "src/g.ts"))
+	for _, want := range []string{"interface Usage {\n  litres: number;\n  extra: number;\n}", "price({ litres, extra }", "function price({ litres, extra }: Usage", "const total = (litres + extra) * days;"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("no %q in:\n%s", want, got)
+		}
+	}
+	for _, c := range []struct {
+		src, args, refused string
+	}{
+		{cost, `{"kind": "phase", "line": 3, "new_name": "price", "type": "Usage"}`, "first statement"},
+		{cost, `{"kind": "phase", "line": 5, "new_name": "price", "type": "Bed"}`, "Bed is already declared"},
+		{"export function f(n: number): number {\n  const a = n * 2;\n  if (n > 0) {\n    return a;\n  }\n  return 0;\n}\n", `{"kind": "phase", "line": 4, "new_name": "g", "type": "T"}`, "statement of the function's body"},
+		{"export function f(n: number): number {\n  const a = n * 2;\n  return n + 1;\n}\n", `{"kind": "phase", "line": 3, "new_name": "g", "type": "T"}`, "nothing the ones before compute"},
+		{"export function f(n: number): number {\n  let a = n * 2;\n  a = a + 1;\n  return a;\n}\n", `{"kind": "phase", "line": 3, "new_name": "g", "type": "T"}`, "kind variable"},
+	} {
+		ws, _ := load(t, map[string]string{"src/g.ts": c.src})
+		if res := run(t, ws, NewSplit(), `{"file": "src/g.ts", `+c.args[1:]); res.Applied || !strings.Contains(res.Refused, c.refused) {
+			t.Errorf("%s: want a refusal with %q, got %s", c.args, c.refused, res)
+		}
+	}
 }

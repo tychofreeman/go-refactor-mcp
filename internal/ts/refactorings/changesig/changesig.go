@@ -278,7 +278,7 @@ func NewParamsToObject() *ParamsToObject {
 }
 
 func (*ParamsToObject) Description() string {
-	return `Bundle a function's parameters into one object, destructured so that the body keeps its names, and pass an object literal at every call in the solution: function water(bed: string, liters = 2) becomes water({ bed, liters = 2 }: { bed: string; liters?: number }), and water("roses", 3) becomes water({ bed: "roses", liters: 3 }). With type_name, the object's type is an interface declared just before the function (WaterOptions). When every field is optional, the object defaults to {}.
+	return `Bundle a function's parameters into one object, destructured so that the body keeps its names, and pass an object literal at every call in the solution: function water(bed: string, liters = 2) becomes water({ bed, liters = 2 }: { bed: string; liters?: number }), and water("roses", 3) becomes water({ bed: "roses", liters: 3 }). With type_name, the object's type is an interface declared just before the function (WaterOptions). When every field is optional, the object defaults to {}. With parameters, only those go into it, in the place of the first: sow(bed: string, rows: number, depth: number) with ["rows", "depth"] becomes sow(bed: string, { rows, depth }: ...).
 Identify the function by file and name (Class.method for a method, Class.constructor). A method changes with its family, as for add_parameter.
 Refuses, saying why: a body that reads arguments, a rest parameter, a parameter that is already destructured or is a parameter property, a function used as a value, a call that spreads its arguments.`
 }
@@ -286,7 +286,8 @@ Refuses, saying why: a body that reads arguments, a rest parameter, a parameter 
 // paramsToObjectArgs are the arguments of convert_params_to_object.
 type paramsToObjectArgs struct {
 	function
-	TypeName string `json:"type_name,omitempty" desc:"Optional: declare the object's type as an interface of this name."`
+	TypeName   string   `json:"type_name,omitempty" desc:"Optional: declare the object's type as an interface of this name."`
+	Parameters []string `json:"parameters,omitempty" desc:"Optional: only these parameters go into the object, in the place of the first; the others stay."`
 }
 
 func (*ParamsToObject) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
@@ -298,7 +299,7 @@ func (*ParamsToObject) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refa
 	if _, err := os.Stat(path); err != nil {
 		return nil, refactor.Refusef("%s: no such file", a.File)
 	}
-	edits, why := ws.ParamsToObject(path, a.Name, a.TypeName)
+	edits, why := ws.ParamsToObject(path, a.Name, a.TypeName, a.Parameters)
 	if why != "" {
 		return nil, refactor.Refusef("%s", why)
 	}

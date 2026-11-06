@@ -148,7 +148,7 @@ func run(argv []string) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	r = refactor.Routed(r, args, refactorings.Lookup)
+	r, args = refactor.Routed(r, args, refactorings.Lookup)
 
 	ws, err := workspace.Load(*dir, *pattern)
 	if err != nil {
