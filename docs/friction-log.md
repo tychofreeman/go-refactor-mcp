@@ -4426,3 +4426,9 @@ The TypeScript side was written before its test (TDD's order broken):
 the test came after and passed at once. A `key_file=-` with no heredoc
 waits on the terminal for its text: a slip of mine hung a command until
 it was stopped.
+
+## 2026-11-06: rename of a file path (roadmap 54.1)
+
+Through the CLI; nothing by hand. rename with file and new_name alone
+renames the file through move_file, in Go and TypeScript. Record:
+`docs/sessions/rename-file.md`.

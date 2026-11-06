@@ -368,3 +368,28 @@ func TestInline(t *testing.T) {
 		t.Errorf("published: %v", names)
 	}
 }
+
+// rename with a file and no name renames the file, updating its imports.
+func TestRenameFile(t *testing.T) {
+	root := t.TempDir()
+	for name, text := range map[string]string{
+		"tsconfig.json": `{"compilerOptions": {"strict": true, "noEmit": true, "types": []}, "include": ["src"]}`,
+		"src/plant.ts":  "export const water = 1;\n",
+		"src/bed.ts":    "import { water } from \"./plant\";\n\nexport const morning = water;\n",
+	} {
+		p := filepath.Join(root, name)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	l := New(root, &history.Stack{})
+	if text, refused, err := l.Step("rename", []byte(`{"file": "src/plant.ts", "new_name": "water.ts"}`)); err != nil || refused {
+		t.Fatalf("rename of a file: %v %v\n%s", err, refused, text)
+	}
+	if b, _ := os.ReadFile(filepath.Join(root, "src/bed.ts")); !strings.Contains(string(b), "./water") {
+		t.Errorf("bed.ts does not import from ./water:\n%s", b)
+	}
+}

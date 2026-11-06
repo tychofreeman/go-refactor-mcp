@@ -190,7 +190,7 @@ func TestToolsAndInstructions(t *testing.T) {
 	}
 	if tool := names["rename"]; tool != nil {
 		schema, _ := tool.InputSchema.(map[string]any)
-		if req, _ := schema["required"].([]any); len(req) != 3 {
+		if req, _ := schema["required"].([]any); len(req) != 2 {
 			t.Errorf("rename schema not passed through: %v", tool.InputSchema)
 		}
 	}

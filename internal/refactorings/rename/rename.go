@@ -24,6 +24,7 @@ import (
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
+	"github.com/tychofreeman/go-refactor-mcp/internal/edits/files"
 	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/site"
@@ -39,6 +40,7 @@ func New() *Rename { return &Rename{Named: refactor.Called[args]("rename")} }
 
 func (*Rename) Description() string {
 	return `Rename a variable, constant, function, type, type parameter, struct field or method, and every reference to it in the workspace: renaming the field nm of Plant to Name changes the declaration, every p.nm and Plant{nm: x}, and a doc comment that starts with the old name; other comments that mention it are listed in a note. Renaming an embedded field (Bed.Soil to Ground) makes it the named field Ground Soil, and what reached through it names it: b.PH becomes b.Ground.PH.
+With file and new_name alone, the file itself is renamed in its directory (testdata/old_case.txt to new_case.txt), as move does.
 Identify the symbol by file, line and its current name (column if the name is on the line twice with different meanings); for a local, function ("Name" or "Type.Method") can take the place of line and stays valid after edits; name "_" with function "Type.Method" names an unnamed or blank receiver.
 Refuses, saying why: a new name that would clash with or shadow another, an interface method, a type embedded in a struct, a function whose new name changes whether or how go test runs it, an import or a label, an exported name used in another package that would become unexported, a method whose new name would change which interfaces its type implements, an embedded field whose methods give a type an interface or are reached by a method expression, an exported field of a struct passed where reflection may find it by name (encoding/json; what fmt's %+v prints, itself or through a function that only passes its arguments on to fmt, is listed in a note), a symbol declared outside the workspace.`
 }
@@ -46,7 +48,7 @@ Refuses, saying why: a new name that would clash with or shadow another, an inte
 type args struct {
 	File     string `json:"file" desc:"Path of a file containing the symbol (declaration or any use), relative to the workspace root."`
 	Line     int    `json:"line,omitempty" desc:"1-based line number of that occurrence. Omit it to find name as a symbol of the package of file."`
-	Name     string `json:"name" desc:"Current name of the symbol; without line, the package-level name, Type.Method or Type.Field."`
+	Name     string `json:"name,omitempty" desc:"Current name of the symbol; without line, the package-level name, Type.Method or Type.Field. Omit it, and line, to rename file itself to new_name."`
 	Function string `json:"function,omitempty" desc:"Instead of line, for a local: the function (Name or Type.Method) of file that declares it (a variable, constant, parameter or result)."`
 	Column   int    `json:"column,omitempty" desc:"Optional 1-based column, only needed to disambiguate."`
 	NewName  string `json:"new_name" desc:"The new name. Must be a valid Go identifier."`
@@ -57,6 +59,13 @@ func (*Rename) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Pla
 	var a args
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
+	}
+	if a.Name == "" && a.Line == 0 && a.Function == "" {
+		moveArgs, err := refactor.FileRename(a.File, a.NewName)
+		if err != nil {
+			return nil, err
+		}
+		return files.NewMove().Plan(ws, moveArgs)
 	}
 	if a.NewName == "" {
 		return nil, refactor.Refusef("new_name is required")
