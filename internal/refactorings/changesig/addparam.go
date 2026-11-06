@@ -31,7 +31,7 @@ func NewAddParameter() *AddParameter {
 
 func (*AddParameter) Description() string {
 	return `Add a parameter to a function or method, and pass the same value for it at every call in the workspace: with name retries, type int and value 3, func send(to string) becomes func send(to string, retries int), and send(addr) becomes send(addr, 3). The body does not use it yet, so behavior is unchanged; add it, then change the body.
-Identify the function by file and name, or by line at its declaration or any call. value is Go source that every call can see (a name of the function's package is qualified at calls in other packages: Dose{} becomes garden.Dose{}); it must have no side effects and not be able to panic. before puts the parameter ahead of that one (default: last).
+Identify the function by file and name, or by line at its declaration or any call; a local function (try := func(...) {...}) too. value is Go source that every call can see (a name of the function's package is qualified at calls in other packages: Dose{} becomes garden.Dose{}); it must have no side effects and not be able to panic. before puts the parameter ahead of that one (default: last).
 replace_variable turns a package variable the body reads into a parameter: with parameter rate, type float64 and value rate, func cost(n int) float64 { return float64(n) * rate } becomes func cost(rate float64, n int) float64 with the same body, and each call passes rate. A call passing another value (defaultRate()) is an edit, and the result lists it.
 Refuses, saying why: a function used as a value, a method that would start or stop implementing an interface from outside the module, a name that clashes, a value that does not type-check at some call.`
 }
@@ -88,7 +88,11 @@ func (*AddParameter) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refact
 	case value == "":
 		return nil, refactor.Refusef("value is required: the expression every call passes for the new parameter")
 	}
-	t, err := findFamily(ws, locate.IdentQuery{File: a.File, Line: a.Line, Column: a.Column, Name: a.Name})
+	q := locate.IdentQuery{File: a.File, Line: a.Line, Column: a.Column, Name: a.Name}
+	t, err := findLocal(ws, q)
+	if t == nil && err == nil {
+		t, err = findFamily(ws, q)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -181,13 +185,13 @@ func (t *target) checkNewName(name string) error {
 // one package variable of the function's package by that name, which the
 // parameter is to take the place of; hides returns it.
 func (t *target) hides(name string, replace bool) (*types.Var, error) {
-	if t.decl == nil {
+	if t.fnNode() == nil {
 		return nil, nil // an interface method: a parameter's name there is only documentation
 	}
 	info := t.Pkg.TypesInfo
-	if fs := info.Scopes[t.decl.Type]; fs != nil {
+	if fs := info.Scopes[t.ftype]; fs != nil {
 		if o := fs.Lookup(name); o != nil {
-			if t.decl.Body.Pos() <= o.Pos() && o.Pos() < t.decl.Body.End() {
+			if t.body().Pos() <= o.Pos() && o.Pos() < t.body().End() {
 				return nil, refactor.Refusef("the body of %s declares %q at its top level (at %s), which a parameter of that name would clash with",
 					t.obj.Name(), name, t.WS.Position(o.Pos()))
 			}
@@ -196,13 +200,13 @@ func (t *target) hides(name string, replace bool) (*types.Var, error) {
 	}
 	var hidden *types.Var
 	for id, o := range info.Uses {
-		if id.Name != name || id.Pos() < t.decl.Body.Pos() || id.Pos() >= t.decl.Body.End() {
+		if id.Name != name || id.Pos() < t.body().Pos() || id.Pos() >= t.body().End() {
 			continue
 		}
 		if o.Parent() == nil {
 			continue // a field or method, not found through scope
 		}
-		if o.Pos().IsValid() && t.decl.Pos() <= o.Pos() && o.Pos() < t.decl.End() {
+		if o.Pos().IsValid() && t.fnNode().Pos() <= o.Pos() && o.Pos() < t.fnNode().End() {
 			continue // declared inside the function, in a nested scope
 		}
 		v, isVar := o.(*types.Var)
@@ -228,12 +232,12 @@ func (t *target) hides(name string, replace bool) (*types.Var, error) {
 // shadowNote says where the body declares name in an inner scope, which
 // hides the new parameter there; "" if it does not.
 func (t *target) shadowNote(name string) string {
-	if t.decl == nil || t.decl.Body == nil {
+	if t.body() == nil {
 		return ""
 	}
 	var first *ast.Ident
 	for id, o := range t.Pkg.TypesInfo.Defs {
-		if o != nil && id.Name == name && t.decl.Body.Pos() <= id.Pos() && id.Pos() < t.decl.Body.End() && (first == nil || id.Pos() < first.Pos()) {
+		if o != nil && id.Name == name && t.body().Pos() <= id.Pos() && id.Pos() < t.body().End() && (first == nil || id.Pos() < first.Pos()) {
 			first = id
 		}
 	}
@@ -255,7 +259,7 @@ func (t *target) checkReplaced(v *types.Var, replace bool, typ types.Type) error
 		return refactor.Refusef("the parameter's type %s is not the type %s of the variable %s it would replace",
 			types.TypeString(typ, types.RelativeTo(t.Pkg.Types)), types.TypeString(v.Type(), types.RelativeTo(t.Pkg.Types)), v.Name())
 	}
-	if pos := writeTo(t.Pkg.TypesInfo, t.decl.Body, v); pos.IsValid() {
+	if pos := writeTo(t.Pkg.TypesInfo, t.body(), v); pos.IsValid() {
 		return refactor.Refusef("the body of %s assigns %s (at %s); a parameter would take that write from the variable",
 			t.obj.Name(), v.Name(), t.WS.Position(pos))
 	}

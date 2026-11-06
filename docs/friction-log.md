@@ -4440,3 +4440,17 @@ inline_struct replaced the holder's whole line with the inner struct's
 fields, breaking the file. It now replaces only the field when the field
 shares its line with the braces (`type Bed struct{ depth int }`); golden
 `one_line`. Through the CLI; nothing by hand.
+
+## 2026-11-06: add_parameter on a local function (roadmap 44)
+
+Through the CLI, refactoring first while green: a `lit` field (add_field),
+`fnNode` and `body` (add_declaration), and seven replace_expression steps
+in hides and shadowNote, one with all_occurrences. Two refusals on the
+way, each answered by a different step: an expression that was not a
+subtree (`a && b && c` groups left; the whole condition instead), and a
+replace_statements that cut a case clause (add_case for the new clause
+and a one-line replace_statements for its return). Then the goldens
+(red), newTarget's case for a `:=` literal, and `findLocal`. A first
+version resolved locals in the shared `locateFunc`, which would have
+handed them to the other signature refactorings that read `t.decl`;
+moved to add_parameter alone. Nothing by hand.
