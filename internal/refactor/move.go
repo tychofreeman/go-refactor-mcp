@@ -24,6 +24,7 @@ type moveArgs struct {
 	Also             []string `json:"also,omitempty" desc:"Optional: more declarations (or methods) to move with it, by name."`
 	WithDependencies bool     `json:"with_dependencies,omitempty" desc:"Optional, for a declaration: also move what it uses that would be left behind."`
 	Copy             bool     `json:"copy,omitempty" desc:"Optional, for a file: copy it instead."`
+	Delete           bool     `json:"delete,omitempty" desc:"Optional, for a file: delete it (or the directory, with everything in it) instead."`
 }
 
 // NewMove returns move, described by description.
@@ -31,12 +32,19 @@ func NewMove[W Workspace](description string) *MoveOf[W] {
 	return &MoveOf[W]{Named: Called[moveArgs]("move"), text: description}
 }
 
-// Route names the tool args ask for: move_declaration for to_file,
-// move_method for to with name, move_file for to without name.
+// Route names the tool args ask for: delete_file for delete,
+// move_declaration for to_file, move_method for to with name, move_file
+// for to without name.
 func (m *MoveOf[W]) Route(args json.RawMessage) (string, error) {
 	var a moveArgs
 	if err := DecodeArgs(args, &a); err != nil {
 		return "", err
+	}
+	if a.Delete {
+		if a.To != "" || a.ToFile != "" || a.Name != "" || a.Copy {
+			return "", Refusef("delete takes only file, the file or directory to delete; give it without to, to_file, name or copy")
+		}
+		return "delete_file", nil
 	}
 	switch {
 	case a.ToFile != "" && a.To != "":
@@ -59,7 +67,7 @@ func (m *MoveOf[W]) Route(args json.RawMessage) (string, error) {
 
 // Covers names the tools move stands for.
 func (m *MoveOf[W]) Covers() []string {
-	return []string{"move_declaration", "move_method", "move_file"}
+	return []string{"move_declaration", "move_method", "move_file", "delete_file"}
 }
 
 // A Router is a Covering tool that chooses among the tools it stands for
@@ -76,22 +84,23 @@ type Covering interface {
 	Covers() []string
 }
 
-// Routed returns the tool r stands for with args when r is a Router,
-// found by lookup; otherwise, or when Route refuses args, r, whose Plan
-// gives the refusal.
-func Routed[W Workspace](r RefactoringOf[W], args json.RawMessage, lookup func(string) (RefactoringOf[W], bool)) RefactoringOf[W] {
+// Routed returns the tool r stands for with args when r is a Router, found
+// by lookup, with args less what only r takes; otherwise, or when Route
+// refuses args, r and args, whose Plan gives the refusal.
+func Routed[W Workspace](r RefactoringOf[W], args json.RawMessage, lookup func(string) (RefactoringOf[W], bool)) (RefactoringOf[W], json.RawMessage) {
 	rt, ok := r.(Router)
 	if !ok {
-		return r
+		return r, args
 	}
 	name, err := rt.Route(args)
 	if err != nil {
-		return r
+		return r, args
 	}
-	if to, ok := lookup(name); ok {
-		return to
+	to, ok := lookup(name)
+	if !ok {
+		return r, args
 	}
-	return r
+	return to, withoutOwn(args, r.InputSchema(), to.InputSchema())
 }
 
 // Published returns rs without the tools a Covering tool among them

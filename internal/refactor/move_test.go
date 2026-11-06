@@ -7,9 +7,9 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
 
-// move stands for move_declaration, move_method and move_file, chosen by
-// its arguments: to_file for a declaration, to with name for a method, to
-// without name for a file.
+// move stands for move_declaration, move_method, move_file and
+// delete_file, chosen by its arguments: to_file for a declaration, to with
+// name for a method, to without name for a file, delete to delete one.
 func TestMoveRoutes(t *testing.T) {
 	m := NewMove[*workspace.Workspace]("")
 	for args, want := range map[string]string{
@@ -17,6 +17,7 @@ func TestMoveRoutes(t *testing.T) {
 		`{"file": "a.go", "name": "Water", "to_file": "x/b.go", "also": ["dry"]}`: "move_declaration",
 		`{"file": "a.go", "name": "Bed.Water", "to": "Garden"}`:                   "move_method",
 		`{"file": "testdata/old", "to": "testdata/new", "copy": true}`:            "move_file",
+		`{"file": "testdata/old", "delete": true}`:                                "delete_file",
 	} {
 		got, err := m.Route(json.RawMessage(args))
 		if err != nil || got != want {
@@ -28,8 +29,8 @@ func TestMoveRoutes(t *testing.T) {
 			t.Errorf("Route(%s): want a refusal, got %v", args, err)
 		}
 	}
-	if got := m.Covers(); len(got) != 3 {
-		t.Errorf("Covers() = %v; want the three move tools", got)
+	if got := m.Covers(); len(got) != 4 {
+		t.Errorf("Covers() = %v; want the three move tools and delete_file", got)
 	}
 }
 

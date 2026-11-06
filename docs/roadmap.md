@@ -3094,7 +3094,9 @@ candidates and the evidence for each, gathered from the friction log.
        change_field_type and change_parameter_type (*done*: change_type
        is a Router, `refactor.ChangeTypeRoute`: parameter, values or a
        name Type.Field route to the others, and it keeps its own case,
-       so each keeps its markers); delete_file into `move`.
+       so each keeps its markers); delete_file into `move` (*done*:
+       `delete`; `refactor.Routed` now drops a router's own arguments
+       that the tool it routes to lacks).
 
 55. **Constructive transformations, as java-refactor-mcp's #212-#215**
     (2026-11-05, the user: "I'd like go/ts to work the same way"): create

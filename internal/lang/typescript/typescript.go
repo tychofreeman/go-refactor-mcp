@@ -298,7 +298,7 @@ func (l *Language) Step(tool string, args json.RawMessage) (string, bool, error)
 	if !ok {
 		return fmt.Sprintf("REFUSED %s: it does not work on TypeScript files yet; for them there is %s.", tool, l.names()), true, nil
 	}
-	r = refactor.Routed(r, args, lookup)
+	r, args = refactor.Routed(r, args, lookup)
 	if t, ok := r.(*createfile.CreateFile); ok && l.SkeletonOnly {
 		r = createfile.Skeleton{CreateFile: t}
 	}
