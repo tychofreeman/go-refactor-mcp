@@ -4317,3 +4317,9 @@ add_declaration and insert_statements. The descriptions went through
 - A test that names a field nothing declares is refused with "Pattern was
   not declared for you": stubs cover functions, not struct fields, so the
   field went first with add_field.
+- Reading around the tools: this session (started outside the checkout,
+  so without the read guard) found Go lines with `grep -n` on files and
+  printed one with `sed -n`, five times, where `inspect` with `pattern`
+  answers the same. The user caught it. The guard only reaches sessions
+  started in the checkout; a cloud session that clones the repo later has
+  none.

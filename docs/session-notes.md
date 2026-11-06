@@ -110,6 +110,11 @@ working patterns, with their steps, are in `docs/patterns.md`.
   `refactor check run_tests=true`, `refactor undo` (its stack is kept per
   module in the cache directory). Read through inspect there too, so the
   session reads as the tools intend.
+- **A session started outside the checkout has no guards** (2026-11-05):
+  hooks load from where the session starts, so a cloud session that clones
+  the repo later can grep and sed Go files unrefused; one did, and the user
+  caught it. Read through `refactor inspect` (with `pattern` for a line)
+  all the same.
 - **Disk:** every test binary that reaches the TypeScript checker links
   the whole compiler, so the build cache grows to about 27 GB; on "no space
   left on device", `go clean -cache`.
