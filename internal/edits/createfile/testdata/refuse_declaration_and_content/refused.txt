@@ -1,0 +1,1 @@
+give content or declaration, not both

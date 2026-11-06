@@ -4357,3 +4357,16 @@ stdin with `-`. Go and TypeScript alike, since the CLI serves both.
   `new_file=-` that replaced text ending mid-line left a blank line in a
   bullet of the session notes. Fixed by a second replace_text; whether
   `-` should drop one final newline when `old` has none is open.
+
+## 2026-11-05: create_file with declaration (roadmap 55.1)
+
+Nothing by hand: the CLI with `content_file=-` heredocs for the new code
+(the declaration helpers in both languages, `tsapi.ClassMembers`, the
+tests), goldens written as testdata.
+
+- A heredoc's final newline again made a blank line inside a
+  description string through `new_file=-`; the JSON form of replace_text
+  fixed it.
+- `TestExamplesAvoidEvalTasks` refused the first Go example (`Price`
+  is a name of an eval task); the description now uses `io.Writer` on a
+  `Sprinkler`.
