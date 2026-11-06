@@ -3053,10 +3053,15 @@ candidates and the evidence for each, gathered from the friction log.
        names as aliases, an A/B check of the description before it
        replaces them; then Java's move_type and move_member (its row 109).
        *Go and TypeScript built* (`refactor.MoveOf`, a `Router`; record
-       `docs/sessions/one-move-tool.md`); left: the A/B check, `rename`
-       of a file path, Java.
+       `docs/sessions/one-move-tool.md`); left: the A/B check and Java;
+       `rename` of a file path (file and new_name, no name) renames the
+       file through move_file, in Go and TypeScript (`refactor.FileRename`).
     2. One `inline` for functions, variables and a held struct or class
-       (2026-11-05, the user), in the same way, after `move`.
+       (2026-11-05, the user), in the same way, after `move`. *Go and
+       TypeScript built*: `inline` decides by what name is (`locate.Ident`
+       in Go, `tsapi.Callable` in TypeScript), a `refactor.Covering` tool
+       rather than a `Router`, since arguments alone cannot tell a call
+       from a local; Java's is left (with its inline class, when built).
 
 55. **Constructive transformations, as java-refactor-mcp's #212-#215**
     (2026-11-05, the user: "I'd like go/ts to work the same way"): create

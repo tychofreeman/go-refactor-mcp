@@ -24,6 +24,7 @@ Cheap, and each one costs a fresh model a refusal or a wrong result today.
 | Go | merge_duplicate_function does not see `Exists` and `lang.Exists` as one | 50.6 |
 | Go | reflection through interface variables not followed, so rename can miss a JSON field | 42c |
 | Go | move_file into another module; move_declaration `new_name` on an embedded type | 39g, 38e |
+| Go | inline_struct breaks one-line struct declarations (`type Bed struct{ Soil }`) | *Done* (#573) |
 | Java | replace_text matches `old` inside a line's indentation and writes at the wrong indent, silently | Java friction log 2026-11-05, no row |
 | Java | replace_text refuses an `old` that differs only in indentation, without naming the nearest lines (Go does) | Java #106 |
 | Java | a stub is not replaced by a declaration with the same erasure | Java #107 |

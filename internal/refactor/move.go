@@ -1,6 +1,10 @@
 package refactor
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"path"
+	"strings"
+)
 
 // MoveOf is the "move" tool of a workspace W.
 type MoveOf[W Workspace] struct {
@@ -58,10 +62,17 @@ func (m *MoveOf[W]) Covers() []string {
 	return []string{"move_declaration", "move_method", "move_file"}
 }
 
-// A Router is a tool that stands for others, published in their place:
-// Route names the one its arguments ask for, or refuses them.
+// A Router is a Covering tool that chooses among the tools it stands for
+// by its arguments alone: Route names the one they ask for, or refuses
+// them. A Covering tool that is not a Router chooses in its Plan.
 type Router interface {
+	Covering
 	Route(args json.RawMessage) (string, error)
+}
+
+// A Covering tool is published in place of the tools Covers names, and
+// stands for them.
+type Covering interface {
 	Covers() []string
 }
 
@@ -83,11 +94,12 @@ func Routed[W Workspace](r RefactoringOf[W], args json.RawMessage, lookup func(s
 	return r
 }
 
-// Published returns rs without the tools a Router among them stands for.
+// Published returns rs without the tools a Covering tool among them
+// stands for.
 func Published[W Workspace](rs []RefactoringOf[W]) []RefactoringOf[W] {
 	covered := map[string]bool{}
 	for _, r := range rs {
-		if rt, ok := r.(Router); ok {
+		if rt, ok := r.(Covering); ok {
 			for _, name := range rt.Covers() {
 				covered[name] = true
 			}
@@ -113,4 +125,14 @@ func (m *MoveOf[W]) Plan(_ W, args json.RawMessage) (*Plan, error) {
 		return nil, err
 	}
 	return nil, Refusef("move would run %s, which this language does not have", name)
+}
+
+// FileRename returns move_file's arguments for renaming file to newName
+// in its directory: what rename does with a file and no name. newName is
+// a name, not a path; a path is refused, naming move.
+func FileRename(file, newName string) (json.RawMessage, error) {
+	if newName == "" || strings.ContainsAny(newName, `/\`) {
+		return nil, Refusef("to rename the file %s, give new_name as a file name in its directory (%s); to put it elsewhere, use move with to", file, path.Base(file))
+	}
+	return json.Marshal(map[string]string{"file": file, "to": path.Join(path.Dir(file), newName)})
 }
