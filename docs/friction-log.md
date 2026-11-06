@@ -4330,3 +4330,7 @@ stdin with `-`. Go and TypeScript alike, since the CLI serves both.
 - insert_statements placed the TypeScript case before the test's last
   undo check, which then found one more change to undo; undo, then the
   line after it.
+- A heredoc's text ends with a newline, and replace_text keeps it: a
+  `new_file=-` that replaced text ending mid-line left a blank line in a
+  bullet of the session notes. Fixed by a second replace_text; whether
+  `-` should drop one final newline when `old` has none is open.
