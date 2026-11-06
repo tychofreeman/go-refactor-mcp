@@ -4357,3 +4357,11 @@ stdin with `-`. Go and TypeScript alike, since the CLI serves both.
   `new_file=-` that replaced text ending mid-line left a blank line in a
   bullet of the session notes. Fixed by a second replace_text; whether
   `-` should drop one final newline when `old` has none is open.
+
+## 2026-11-06: inline_struct on one-line structs
+
+Found while building `inline` (#571): with `type Bed struct{ Soil }`,
+inline_struct replaced the holder's whole line with the inner struct's
+fields, breaking the file. It now replaces only the field when the field
+shares its line with the braces (`type Bed struct{ depth int }`); golden
+`one_line`. Through the CLI; nothing by hand.
