@@ -48,6 +48,7 @@ type target struct {
 	members []*target
 	// familyKeys are the members' keys, in each member.
 	familyKeys map[string]bool
+	lit        *ast.FuncLit // for a local function, the literal its variable holds
 }
 
 type param struct {
@@ -132,6 +133,26 @@ func locateFunc(ws *workspace.Workspace, q locate.IdentQuery) (*types.Func, erro
 	return fn, nil
 }
 
+// findLocal is findTarget for a local function, a variable that holds a
+// function literal (try := func(...) {...}); nil, nil when q names
+// something else.
+func findLocal(ws *workspace.Workspace, q locate.IdentQuery) (*target, error) {
+	pkg, id, err := locate.Ident(ws, q)
+	if err != nil {
+		return nil, nil // findFamily says why
+	}
+	v, ok := pkg.TypesInfo.ObjectOf(id).(*types.Var)
+	if !ok || v.IsField() || v.Pkg() == nil || v.Parent() == nil || v.Parent() == v.Pkg().Scope() {
+		return nil, nil
+	}
+	sig, ok := v.Type().(*types.Signature)
+	if !ok {
+		return nil, nil
+	}
+	// A function of no scope stands for it; newTarget finds the literal.
+	return newTarget(ws, types.NewFunc(v.Pos(), v.Pkg(), v.Name(), sig))
+}
+
 // newTarget finds fn's declaration (for an interface method, its line in
 // the interface), its parameters and every call of it.
 func newTarget(ws *workspace.Workspace, fn *types.Func) (*target, error) {
@@ -140,6 +161,9 @@ func newTarget(ws *workspace.Workspace, fn *types.Func) (*target, error) {
 	if recv := fn.Signature().Recv(); recv != nil && types.IsInterface(recv.Type()) {
 		iface = true
 	}
+	// A local function: a variable holding a literal, which findLocal
+	// stands for by a function of no scope.
+	local := fn.Parent() == nil && fn.Signature().Recv() == nil
 	var declFile *ast.File
 	for _, p := range ws.Pkgs {
 		if t.ftype != nil {
@@ -152,7 +176,16 @@ func newTarget(ws *workspace.Workspace, fn *types.Func) (*target, error) {
 					if !iface && keyOf(ws.Fset, p.TypesInfo.Defs[n.Name]) == t.key {
 						t.Pkg, t.decl, t.ftype, declFile = p, n, n.Type, f
 					}
-					return false
+					return local && t.ftype == nil
+				case *ast.AssignStmt:
+					if !local || n.Tok != token.DEFINE || len(n.Lhs) != 1 || len(n.Rhs) != 1 {
+						break
+					}
+					id, isID := n.Lhs[0].(*ast.Ident)
+					lit, isLit := n.Rhs[0].(*ast.FuncLit)
+					if isID && isLit && keyOf(ws.Fset, p.TypesInfo.Defs[id]) == t.key {
+						t.Pkg, t.lit, t.ftype, declFile = p, lit, lit.Type, f
+					}
 				case *ast.InterfaceType:
 					for _, m := range n.Methods.List {
 						ft, ok := m.Type.(*ast.FuncType)
@@ -165,7 +198,10 @@ func newTarget(ws *workspace.Workspace, fn *types.Func) (*target, error) {
 			})
 		}
 	}
-	if t.ftype == nil || !iface && t.decl.Body == nil {
+	if local && t.ftype == nil {
+		return nil, refactor.Refusef("%s is not declared as %s := func(...) {...}; of local functions, only those can change", fn.Name(), fn.Name())
+	}
+	if t.ftype == nil || !iface && t.lit == nil && t.decl.Body == nil {
 		return nil, refactor.Refusef("%s has no body in Go source (it may be implemented in assembly)", fn.Name())
 	}
 	var err error
@@ -216,6 +252,29 @@ func (t *target) declPos() token.Pos {
 		return t.decl.Pos()
 	}
 	return t.ftype.Pos()
+}
+
+// fnNode is t's function: its declaration, or the literal a local holds;
+// nil for an interface method.
+func (t *target) fnNode() ast.Node {
+	switch {
+	case t.decl != nil:
+		return t.decl
+	case t.lit != nil:
+		return t.lit
+	}
+	return nil
+}
+
+// body is the body of t's function, or nil.
+func (t *target) body() *ast.BlockStmt {
+	switch {
+	case t.decl != nil:
+		return t.decl.Body
+	case t.lit != nil:
+		return t.lit.Body
+	}
+	return nil
 }
 
 func (t *target) declFile() string { return t.WS.Fset.Position(t.declPos()).Filename }

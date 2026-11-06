@@ -1,0 +1,1 @@
+the body of try uses the variable "b"

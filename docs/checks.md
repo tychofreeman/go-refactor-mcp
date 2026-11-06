@@ -606,6 +606,13 @@ before a variadic parameter. Next to parameters of the same type it joins
 their group (`src, dst, skip string`); inside a group of another type it
 splits it (`lo int, label string, hi int`).
 
+A local function, a variable that holds a function literal
+(`try := func(a int) int {...}`), is changed like a function: its
+literal's parameters and every call of the variable. It must be declared
+by `:=` with the literal, only ever called (not assigned or passed), and
+the new name must not hide what its body uses, a variable it captures
+included. Only add_parameter takes local functions so far.
+
 The body does not use the new parameter yet; using it is the edit that
 follows. So that the step changes nothing, the value must be safe to
 evaluate where nothing evaluated before:

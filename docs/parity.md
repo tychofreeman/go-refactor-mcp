@@ -20,7 +20,8 @@ Cheap, and each one costs a fresh model a refusal or a wrong result today.
 | TS | extract_function by `case`: no copy of the code after the switch for a value with no case | *Done* (`tsapi.MissingCase`) |
 | Go, TS | remove_else `wrap` does not re-indent in an unformatted file | *Done* (TS also kept template literals' text) |
 | Go | introduce_parameter on `(*found)[0]` | *Done* (`derefOf`) |
-| Go | extract_function passes a read-only variable by pointer; add_parameter misses a local function literal | 44 |
+| Go | add_parameter misses a local function literal | *Done* (`findLocal`; the other signature tools still refuse one) |
+| Go | extract_function passes a read-only variable by pointer | 44 |
 | Go | inspect `names` refuses a type as declared twice when a test file declares a function of the same name | 49.9 |
 | Go | merge_duplicate_function does not see `Exists` and `lang.Exists` as one | 50.6 |
 | Go | reflection through interface variables not followed, so rename can miss a JSON field | 42c |
