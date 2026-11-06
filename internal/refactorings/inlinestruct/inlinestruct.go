@@ -403,6 +403,15 @@ func (x *inlining) moveFields() error {
 	if x.fld.Doc != nil {
 		start = x.fld.Doc.Pos()
 	}
+	if !aloneOnLine(x.Src, x.Off(start), x.Off(x.fld.End())) {
+		// A struct on one line (struct{ Soil }) keeps one line.
+		var parts []string
+		for _, f := range x.innerAST.Fields.List {
+			parts = append(parts, x.Text(f))
+		}
+		x.add(x.TF.Name(), x.fld.Pos(), x.fld.End(), strings.Join(parts, "; "))
+		return nil
+	}
 	from := lineStart(x.Src, x.Off(start))
 	indent := gocode.IndentOf(x.Src, from)
 	var lines []string
@@ -589,4 +598,12 @@ func lineStart(src []byte, off int) int {
 		off--
 	}
 	return off
+}
+
+// aloneOnLine reports whether src[from:to] is all its lines hold but
+// blanks and a trailing comment.
+func aloneOnLine(src []byte, from, to int) bool {
+	before := strings.TrimSpace(string(src[lineStart(src, from):from]))
+	after := strings.TrimSpace(string(src[to:textutil.NextLine(src, to)]))
+	return before == "" && (after == "" || strings.HasPrefix(after, "//"))
 }

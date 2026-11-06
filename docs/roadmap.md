@@ -38,10 +38,7 @@ part left. What is open, the newest priority first:
 5. **49** whether the work goes through the tools: 49.2, 49.3, 49.8, 49.9,
    49.12 and 49.14 open; 49.11 for the CLI, TypeScript and an A/B arm;
    49.4 and 49.5 wait on a measurement.
-6. **Defects found on the way and not yet fixed:** inline_struct writes broken code
-   when the holder and the held struct are declared on one line each
-   (`type Bed struct{ Soil }`: it replaces the declarations with the
-   field, 2026-11-06); introduce_parameter on
+6. **Defects found on the way and not yet fixed:** introduce_parameter on
    `(*found)[0]`, extract_function by pointer, add_parameter on a local
    function literal (44); remove_else's `wrap` in unformatted files (43);
    values reaching reflection through interfaces (42c); TypeScript's copy
