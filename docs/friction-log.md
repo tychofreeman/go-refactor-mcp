@@ -4532,3 +4532,11 @@ Back to red, then the behavior in one batch of nine structured steps.
 fold's goldens the same way; one expectation was wrong (fold leaves an
 occurrence rather than refusing), corrected in the golden's files with
 a short script (testdata). Nothing by hand in Go.
+
+## 2026-11-06: preserve_exceptions for TypeScript (roadmap 54.4)
+
+Through the CLI, test first. The least code first (the strict check
+repeated the lines that word a conflict), then those lines extracted into
+`described` (extract_function; its parameters reordered by
+move_parameter) and used twice. The disk filled once (`go clean -cache`).
+Nothing by hand.

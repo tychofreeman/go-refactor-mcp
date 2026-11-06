@@ -3089,8 +3089,8 @@ candidates and the evidence for each, gathered from the friction log.
     4. `preserve_exceptions` (2026-11-06, the user: per call on every
        refactoring, and a note for each change made without it). *Go
        done* (`analysis.Move` judges strictly and as before;
-       `refactor.ExceptionKeeper`; fold's `movedAddress`); TypeScript
-       next.
+       `refactor.ExceptionKeeper`; fold's `movedAddress`); *TypeScript
+       done* (`tsapi.conflict`, package state for the call).
 
 55. **Constructive transformations, as java-refactor-mcp's #212-#215**
     (2026-11-05, the user: "I'd like go/ts to work the same way"): create

@@ -1417,6 +1417,22 @@ export function water(a: Bed | undefined, d: number): number {
 	})
 }
 
+// Swapping two reads through what may be null or undefined is noted, and
+// with preserve_exceptions refused: the first to throw would change.
+func TestNullishReadsPreserved(t *testing.T) {
+	src := "interface Bed { depth: number }\nexport function water(a: Bed | undefined, b: Bed | undefined): number {\n  const x = a!.depth;\n  const y = b!.depth;\n  return x + y;\n}\n"
+	ws, _ := load(t, map[string]string{"src/g.ts": src})
+	res := run(t, ws, NewMoveDown(), `{"file": "src/g.ts", "line": 3}`)
+	if !res.Applied || !strings.Contains(strings.Join(res.Notes, "\n"), "may throw") {
+		t.Errorf("want the swap applied with a note that says what may throw, got %s", res)
+	}
+	ws, _ = load(t, map[string]string{"src/g.ts": src})
+	res = run(t, ws, NewMoveDown(), `{"file": "src/g.ts", "line": 3, "preserve_exceptions": true}`)
+	if res.Applied || !strings.Contains(res.Refused, "may throw") {
+		t.Errorf("want a refusal that says what may throw, got %s", res)
+	}
+}
+
 const each = plants + `
 function count(xs: number[], f: (x: number) => boolean): number {
   let n = 0;
