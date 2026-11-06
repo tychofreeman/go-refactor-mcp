@@ -3078,8 +3078,9 @@ candidates and the evidence for each, gathered from the friction log.
        methods with bodies in `create_file`; types, struct fields, consts
        and vars pass (the user's choice over refusing fields too). *Done*:
        the server flag `-skeleton-only` (off by default) wraps
-       create_file in `createfile.Skeleton` for Go and TypeScript; an A/B
-       arm with it on waits for the user's yes.
+       create_file in `createfile.Skeleton` for Go and TypeScript, on in
+       this repo's `.mcp.json` (the user, 2026-11-05); an A/B arm with it
+       on waits for the user's yes.
 
 Parked: the Ollama loop (`refactor-agent`). It works and stays, but Claude
 through MCP is the priority.
