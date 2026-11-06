@@ -4440,3 +4440,14 @@ inline_struct replaced the holder's whole line with the inner struct's
 fields, breaking the file. It now replaces only the field when the field
 shares its line with the braces (`type Bed struct{ depth int }`); golden
 `one_line`. Through the CLI; nothing by hand.
+
+## 2026-11-06: remove_else's wrap in unformatted files (roadmap 43)
+
+Through the CLI, tests first: a space-indented Go golden, and two
+TypeScript cases (wrap, and inline_function's early return) with a blank
+line and a template literal in the moved code. Go's wrap left indenting to
+gofmt; TypeScript's indented every line, blank lines and a template
+literal's continuation included, which changed the string. Both edits
+by replace_statements of the loop or the plan's tail, and
+`lined.indentable` by add_declaration. The golden's files are testdata,
+written with the shell. Nothing by hand.

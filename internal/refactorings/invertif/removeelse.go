@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"go/ast"
 	"go/token"
+	"strings"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
@@ -131,8 +132,20 @@ func wrapElse(x *inversion, s *ast.IfStmt) (*refactor.Plan, error) {
 		}
 	}
 	rb, end := x.Off(s.Body.Rbrace), x.Off(rest[len(rest)-1].End())
+	// The moved lines go one step deeper, by the file's own step, so a
+	// file gofmt will not touch is indented too.
+	indent := x.indentOf(s.Pos())
+	step := strings.TrimPrefix(x.indentOf(s.Body.List[0].Pos()), indent)
+	if step == "" {
+		step = "\t"
+	}
+	tail := string(x.Src[rb+1 : end])
+	head, body, found := strings.Cut(tail, "\n")
+	if found {
+		body = textutil.Reindent("\n"+body, indent, indent+step)
+	}
 	return &refactor.Plan{
 		Summary: fmt.Sprintf("moved the %d statement%s after the if at line %d into its else", len(rest), textutil.Plural(len(rest)), line),
-		Edits:   []edit.FileEdit{{Path: x.path, Edits: []edit.TextEdit{{Start: rb, End: rb + 1, NewText: "} else {"}, {Start: end, End: end, NewText: "\n" + x.indentOf(s.Pos()) + "}"}}}},
+		Edits:   []edit.FileEdit{{Path: x.path, Edits: []edit.TextEdit{{Start: rb, End: end, NewText: "} else {" + head + body + "\n" + indent + "}"}}}},
 	}, nil
 }
