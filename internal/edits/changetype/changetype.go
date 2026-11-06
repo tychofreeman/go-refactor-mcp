@@ -26,10 +26,18 @@ type ChangeType struct{ refactor.Named[args] }
 // New returns the change_type edit.
 func New() *ChangeType { return &ChangeType{Named: refactor.Called[args]("change_type")} }
 
+// Route names the tool the arguments ask for (refactor.ChangeTypeRoute).
+func (*ChangeType) Route(args json.RawMessage) (string, error) { return refactor.ChangeTypeRoute(args) }
+
+// Covers names the tools change_type stands for.
+func (*ChangeType) Covers() []string { return refactor.ChangeTypeCovers }
+
 func (*ChangeType) Description() string {
-	return `Change what a type of the module is: an alias's target (type renderArg = string to = any) or a defined type's underlying type (type ID int32 to int64). An edit, not a refactoring: every use takes the new type.
-It is the last step of changing a parameter's type: change_parameter_type to an alias of the old type, then change the alias here, in a batch with check "end" together with the fixes its result lists (a body that still reads the old type).
-Give file, name (the type) and type (its new definition as Go source).`
+	return `Change a type; what you give says which:
+- name Type.Field: the field's type, every value keeping its meaning: converted where it is written and, where its type matters, read. ID string to ID PlantID turns Plant{ID: s} into Plant{ID: PlantID(s)} and strings.ToUpper(p.ID) into strings.ToUpper(string(p.ID)). values, narrowing to an interface, maps old constants to new values.
+- name (a function, or Type.Method) and parameter: the parameter's type, with the body and every call: to an interface the old type implements (func save(b *bytes.Buffer) to b io.Writer, calls unchanged), to a type with the same underlying type (find(name string) to name UserID: calls convert, find(UserID(n))), or to an alias of the old type.
+- name, a type of the module: what it is, an alias's target (type renderArg = string to any) or a defined type's underlying type. An edit: every use takes the new type. After a parameter is changed to an alias, change the alias here, in a batch with check "end" with the fixes its result lists.
+Refuses, saying why: a use that cannot follow (an address taken), an embedded field, generic types, a parameter the body compares with nil, assigns or takes the address of.`
 }
 
 // ChangesBehavior marks this as an edit.
@@ -40,12 +48,14 @@ func (*ChangeType) ChangesBehavior() {}
 func (*ChangeType) NotesBreakage() {}
 
 type args struct {
-	File    string   `json:"file" desc:"Path of a file containing the type's declaration or a use, relative to the workspace root."`
-	Line    int      `json:"line,omitempty" desc:"1-based line of that occurrence. Omit it to find name as a symbol of the package of file."`
-	Name    string   `json:"name" desc:"The type's name."`
-	Column  int      `json:"column,omitempty" desc:"Optional 1-based column, only needed to disambiguate."`
-	Type    string   `json:"type" desc:"What the type is to be, as Go source, e.g. any or int64."`
-	Imports []string `json:"imports,omitempty" desc:"Optional: import paths to use for package names type uses, when the name alone is ambiguous."`
+	File      string            `json:"file" desc:"Path of a file containing the type's declaration or a use, relative to the workspace root."`
+	Line      int               `json:"line,omitempty" desc:"1-based line of that occurrence. Omit it to find name as a symbol of the package of file."`
+	Name      string            `json:"name" desc:"The type's name; Type.Field for a field; the function (or Type.Method) with parameter."`
+	Column    int               `json:"column,omitempty" desc:"Optional 1-based column, only needed to disambiguate."`
+	Type      string            `json:"type" desc:"What the type is to be, as Go source, e.g. any or int64."`
+	Imports   []string          `json:"imports,omitempty" desc:"Optional: import paths to use for package names type uses, when the name alone is ambiguous."`
+	Parameter string            `json:"parameter,omitempty" desc:"For a parameter: its name; name is then the function."`
+	Values    map[string]string `json:"values,omitempty" desc:"For a field narrowed to an interface: for each old constant (\"fern\" or fern), the value of the new type, e.g. {\"fern\": \"Fern{}\"}."`
 }
 
 // Plan checks preconditions and computes the edits.
