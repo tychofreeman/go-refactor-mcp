@@ -1242,6 +1242,19 @@ func TestArgumentFromFile(t *testing.T) {
 	}
 }
 
+// A number or a boolean given for an argument the tool takes as a string
+// (expression=1500 through the CLI's key=value) is taken as that text.
+func TestScalarForAString(t *testing.T) {
+	ws, _ := setup(t, src)
+	res, err := refactor.Run(ws, echo{}, json.RawMessage(`{"file": "m.go", "old": 1500, "new": true, "line": "3"}`), refactor.Options{DryRun: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := `{"file":"m.go","line":3,"new":"true","old":"1500"}`; res.Summary != want {
+		t.Errorf("got %s, want %s (refused: %s)", res.Summary, want, res.Refused)
+	}
+}
+
 // check names the module's Go files that are not gofmt-ed, where edits
 // follow the file's own indentation.
 func TestCheckReportNamesUnformattedFiles(t *testing.T) {

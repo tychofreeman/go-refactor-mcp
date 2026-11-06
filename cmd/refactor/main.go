@@ -20,6 +20,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -52,7 +53,7 @@ func run(argv []string) int {
 	asJSON := fs.Bool("json", false, "print the result as JSON (without declaring what an edit calls)")
 	version := fs.Bool("version", false, "print the version and exit")
 	fs.Usage = func() {
-		fmt.Fprintf(fs.Output(), "usage: refactor [flags] list [tool...]   (descriptions and arguments)\n       refactor [flags] <refactoring> key=value... | '<json>' | @file | -\n       refactor [flags] batch '<json>' | @file | -\n       refactor [flags] inspect key=value... | '<json>' | @file | -\n       refactor [flags] check [run_tests=true] [packages=./...]\n       refactor [flags] undo\n\n@file reads the JSON from a file, - from stdin. content_file (new_file, ...) gives a text argument from a file, as key=value or in the JSON; content_file=- reads it from stdin (one per call), so a heredoc can give it.\n\nflags:\n")
+		fmt.Fprintf(fs.Output(), "usage: refactor [flags] list [tool...]   (descriptions and arguments)\n       refactor [flags] <refactoring> key=value... | '<json>' | @file | -\n       refactor [flags] batch '<json>' | @file | -\n       refactor [flags] inspect key=value... | '<json>' | @file | -\n       refactor [flags] check [run_tests=true] [packages=./...]\n       refactor [flags] undo\n\n@file reads the JSON from a file, - from stdin. content_file (new_file, ...) gives a text argument from a file, as key=value or in the JSON; content_file=- reads it from stdin (one per call), so a heredoc can give it; the heredoc's final newline is dropped, except from content.\n\nflags:\n")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(argv); err != nil {
@@ -473,6 +474,11 @@ func stdinArgs(argv []string, jsonFromStdin bool) (out []string, done func(), er
 		text, err := io.ReadAll(stdin)
 		if err != nil {
 			return "", err
+		}
+		// A heredoc ends the text with a newline that is not part of it, as
+		// $(...) drops; content's final newline is the file's own.
+		if k != "content_file" {
+			text = bytes.TrimSuffix(text, []byte("\n"))
 		}
 		f, err := os.CreateTemp("", "refactor-stdin-*")
 		if err != nil {

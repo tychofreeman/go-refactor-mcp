@@ -327,7 +327,8 @@ refactor undo                     # undo the last step or batch
 Long text needs no quoting: `content_file=path` (`new_file`, any `key_file`)
 gives a text argument from a file, and `content_file=-` from stdin, one per
 call, so a heredoc can carry it (a quoted delimiter keeps it as written, and
-must not appear in the text):
+must not appear in the text; the heredoc's final newline is dropped, except
+from `content`):
 
 ```sh
 refactor add_declaration file=bed.go after=Bed content_file=- <<'EOF'
