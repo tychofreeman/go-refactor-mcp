@@ -4521,3 +4521,10 @@ uses the new `r` came before the statement declaring it, and a step's
 scope is checked even under check "end"; reordered (declarations, then
 the statement, then its users). The visit callback's signature changed by
 replace_expression on its type and both literals. Nothing by hand.
+
+## 2026-11-06: inline_struct for TypeScript (roadmap 52.3)
+
+Through the CLI, test first. `tsapi.InlineClass` by create_file (new
+behavior), the tool and its route through `inline` by add_declaration,
+add_field, replace_expression and add_case (insert_statements refused on
+a case clause's line; add_case is the edit for a clause). Nothing by hand.
