@@ -25,7 +25,9 @@ func (f *fake) Step(tool string, args json.RawMessage) (string, bool, error) {
 	f.hist.Push(history.Change{Label: f.name + " " + tool, After: map[string][]byte{"x" + f.ext: nil}})
 	return f.name + " ran " + tool, false, nil
 }
-func (f *fake) Batch(json.RawMessage) (string, error)                  { return f.name + " batch", nil }
+func (f *fake) Batch(args json.RawMessage) (string, bool, error) {
+	return f.name + " batch", false, nil
+}
 func (f *fake) Inspect(json.RawMessage) (string, error)                { return f.name + " inspect", nil }
 func (f *fake) Check(context.Context, json.RawMessage) (string, error) { return f.name + " check", nil }
 func (f *fake) Undo(args json.RawMessage) (string, error)              { return f.name + " undo", nil }

@@ -65,14 +65,14 @@ func TestCheckpointRunsTheProjectsTests(t *testing.T) {
 	write("package.json", `{"scripts": {"test": "node -e \"process.exit(require('fs').existsSync('fail') ? 1 : 0)\""}}`)
 	l := New(dir, &history.Stack{})
 	batch := json.RawMessage(`{"steps": [{"tool": "check", "args": {"run_tests": true}}]}`)
-	if out, err := l.Batch(batch); err != nil || !strings.Contains(out, "tests pass") {
+	if out, _, err := l.Batch(batch); err != nil || !strings.Contains(out, "tests pass") {
 		t.Fatalf("passing tests: %v\n%s", err, out)
 	}
 	if out, err := l.Check(context.Background(), json.RawMessage(`{"run_tests": true}`)); err != nil || !strings.Contains(out, "TESTS PASSED") {
 		t.Fatalf("check, passing tests: %v\n%s", err, out)
 	}
 	write("fail", "")
-	if out, err := l.Batch(batch); err != nil || !strings.Contains(out, "tests of ./... failed") {
+	if out, _, err := l.Batch(batch); err != nil || !strings.Contains(out, "tests of ./... failed") {
 		t.Fatalf("failing tests: %v\n%s", err, out)
 	}
 	if out, err := l.Check(context.Background(), json.RawMessage(`{"run_tests": true}`)); err != nil || !strings.Contains(out, "TESTS FAILED") {
@@ -120,7 +120,7 @@ func TestOtherSolutions(t *testing.T) {
 		t.Errorf("inspect in a nested solution: %v\n%s", err, out)
 	}
 
-	out, err = l.Batch([]byte(`{"steps": [{"tool": "replace_text", "args": {"file": "src/a.ts", "old": "return 1", "new": "return 5"}}, {"tool": "replace_text", "args": {"file": "tools/t.ts", "old": "return 2", "new": "return 6"}}]}`))
+	out, _, err = l.Batch([]byte(`{"steps": [{"tool": "replace_text", "args": {"file": "src/a.ts", "old": "return 1", "new": "return 5"}}, {"tool": "replace_text", "args": {"file": "tools/t.ts", "old": "return 2", "new": "return 6"}}]}`))
 	if err != nil || !strings.Contains(out, "more than one solution") {
 		t.Errorf("batch across solutions: %v\n%s", err, out)
 	}

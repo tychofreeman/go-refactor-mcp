@@ -28,6 +28,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/lang"
 	"github.com/tychofreeman/go-refactor-mcp/internal/lang/golang"
 	"github.com/tychofreeman/go-refactor-mcp/internal/lang/typescript"
+	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 )
 
 // Version is what the build knows of its source, reported to MCP clients
@@ -124,6 +125,7 @@ type Server struct {
 	golang     *golang.Language     // nil when the root holds no Go
 	typescript *typescript.Language // nil when it holds no TypeScript
 	langs      *lang.Dispatcher     // chooses the language of each call
+	retry      refactor.Retry       // the last batch refused with nothing changed
 }
 
 // byName removes what offers lines by number from the texts that
@@ -300,8 +302,8 @@ func (s *Server) MCP() *mcp.Server {
 	srv.AddTool(&mcp.Tool{
 		Name: "batch",
 		Description: s.forLanguages(`Run several refactorings and edits in order, in one call, planned from one inspect. Each step is {tool, args}: a tool and the arguments it takes when called alone; each runs on the code the earlier steps left.
-Give line numbers and columns as in the code you inspected before the batch: the batch moves them past the earlier steps. A line an earlier step rewrote cannot be given by number. Address a declaration by name (file and name, no line), or give a reference in place of line, start_line or end_line: "$prev.start" or "$prev.end" (the first or last line the step before added or changed in that file), "$2.end" (step 2's), "$helper.end" (the step with "id": "helper"), with an offset such as "$prev.end+1". A step that changed several places, such as a rename, has no range.
-If a step is refused, nothing changes and the result says which step and why; one undo reverts the whole batch. A step {"tool": "check"} is a checkpoint: the code must type-check there (args run_tests and packages also run go test); if a later step is refused, the steps up to the last checkpoint that passed are kept, as one change. Independent steps can instead be separate calls in one turn.
+Give line numbers and columns as in the code you inspected before the batch: the batch moves them past the earlier steps. A line an earlier step rewrote cannot be given by number. Address a declaration by name (file and name, no line), or give a reference in place of line, start_line or end_line: "$prev.start" or "$prev.end" (the first or last line the step before added or changed in that file), "$2.end" (step 2's), "$helper.end" (the step with "id": "helper"), with an offset such as "$prev.end+1". A step that changed several places (a rename) has no range.
+If a step is refused, nothing changes and the result says which step and why; one undo reverts the whole batch. A step {"tool": "check"} is a checkpoint: the code must type-check there (run_tests runs the tests too); if a later step is refused, the steps up to the last checkpoint that passed are kept, as one change. Independent steps can be separate calls in one turn.
 check "end" type-checks only after the last step, so edits may pass through code that does not compile yet (a declaration, then its first use); refactorings still need code that type-checks, so just before one the stubs and imports earlier edits need are added. A batch whose edit does not type-check runs again with "end", and functions the steps call but nothing declares get stubs (create_from_usage).`),
 		InputSchema: json.RawMessage(`{
   "type": "object",
@@ -312,16 +314,16 @@ check "end" type-checks only after the last step, so edits may pass through code
       "items": {
         "type": "object",
         "properties": {
-          "id":   {"type": "string", "description": "Optional: later steps address its lines as $id.start, $id.end."},
+          "id":   {"type": "string", "description": "Later steps address its lines as $id.start, $id.end."},
           "tool": {"type": "string", "description": "A refactoring or edit."},
-          "args": {"type": "object", "description": "That tool's arguments (see its schema)."}
+          "args": {"type": "object", "description": "That tool's arguments (see its schema)."},
+          "step": {"type": "integer"}, "after": {"type": "integer"}
         },
-        "required": ["tool", "args"],
         "additionalProperties": false
       }
     },
     "report": {"type": "string", "enum": ["diff", "summary"], "description": "After the steps' summaries, the change (default) or nothing more."},
-    "check":  {"type": "string", "enum": ["each", "end"], "description": "Type-check after each step (default) or only after the last."}
+    "check":  {"type": "string", "enum": ["each", "end"], "description": "Type-check after each step (default) or only after the last."}, "retry": {"type": "boolean"}
   },
   "required": ["steps"],
   "additionalProperties": false
@@ -432,15 +434,19 @@ func (s *Server) undo(args json.RawMessage) *mcp.CallToolResult {
 
 // batch runs the steps of one batch call; see the tool's description.
 func (s *Server) batch(args json.RawMessage) *mcp.CallToolResult {
+	args, refused := s.retry.Args(args)
+	if refused != "" {
+		return textResult(refused)
+	}
 	l, refused := s.langs.For(args)
 	if refused != "" {
 		return textResult(refused)
 	}
-	text, err := l.Batch(args)
+	text, unchanged, err := l.Batch(args)
 	if err != nil {
 		return toolError(err)
 	}
-	return textResult(text)
+	return textResult(text + s.retry.Keep(args, unchanged))
 }
 
 func (s *Server) check(ctx context.Context, args json.RawMessage) *mcp.CallToolResult {

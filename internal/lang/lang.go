@@ -35,8 +35,9 @@ type Language interface {
 	// Step runs one refactoring or edit; refused reports whether text is
 	// a refusal.
 	Step(tool string, args json.RawMessage) (text string, refused bool, err error)
-	// Batch runs the steps of a batch call.
-	Batch(args json.RawMessage) (string, error)
+	// Batch runs the steps of a batch call; refused reports whether it
+	// was refused with nothing changed.
+	Batch(args json.RawMessage) (string, bool, error)
 	// Inspect reads code; a refusal is its text.
 	Inspect(args json.RawMessage) (string, error)
 	// Check reports whether the code compiles, and runs its tests if asked.
