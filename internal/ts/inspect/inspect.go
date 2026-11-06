@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -26,6 +27,7 @@ type Query struct {
 	Targets   []Query  `json:"targets,omitempty"`
 	Names     []string `json:"names,omitempty"` // "name", "Class.member", or "file:name"
 	Uses      []string `json:"uses,omitempty"`
+	Pattern   string   `json:"pattern,omitempty"` // lines matching a regular expression, in File or in every file
 }
 
 // Options are the server's settings for reading.
@@ -48,6 +50,12 @@ const MaxLines = 400
 
 // RunWith answers q.
 func RunWith(ws *workspace.Workspace, q Query, o Options) (string, error) {
+	if q.Pattern != "" {
+		if q.Function != "" || q.StartLine != 0 || q.EndLine != 0 || len(q.Targets) > 0 || len(q.Names) > 0 || len(q.Uses) > 0 {
+			return "", refactor.Refusef("pattern takes only file: send the other arguments in a call of their own")
+		}
+		return pattern(ws, q.File, q.Pattern)
+	}
 	switch {
 	case len(q.Uses) > 0:
 		if q.File != "" || q.Function != "" || q.StartLine != 0 || q.EndLine != 0 || len(q.Targets) > 0 || len(q.Names) > 0 {
@@ -91,6 +99,24 @@ func overview(ws *workspace.Workspace) string {
 		fmt.Fprintf(&sb, "  %s  %s%s\n", d, strings.Join(names, ", "), more)
 	}
 	return sb.String()
+}
+
+// pattern lists the lines of file, or of every file of the solution when
+// file is empty, that match the regular expression expr, grouped by file.
+func pattern(ws *workspace.Workspace, file, expr string) (string, error) {
+	re, err := regexp.Compile(expr)
+	if err != nil {
+		return "", refactor.Refusef("pattern is not a regular expression (Go's RE2 syntax): %v", err)
+	}
+	paths := ws.Files()
+	if file != "" {
+		p := ws.Abs(file)
+		if !ws.Has(p) {
+			return "", refactor.Refusef("file %s is in none of the solution's projects (call inspect without arguments to list files)", file)
+		}
+		paths = []string{p}
+	}
+	return textutil.Matches(paths, re, ws.Rel, expr)
 }
 
 // source returns the lines of the file at rel and its outline, or a

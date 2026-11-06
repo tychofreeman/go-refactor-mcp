@@ -55,9 +55,6 @@ type Query struct {
 	Pattern string `json:"pattern,omitempty"`
 }
 
-// MaxMatches is the largest number of lines a pattern lists.
-const MaxMatches = 100
-
 // Options set what a read may show.
 type Options struct {
 	// ByName shows source only for what a query names (function, names,
@@ -741,50 +738,5 @@ func pattern(ws *workspace.Workspace, file, expr string) (string, error) {
 		}
 		sort.Slice(paths, func(i, j int) bool { return ws.Rel(paths[i]) < ws.Rel(paths[j]) })
 	}
-	var sb strings.Builder
-	shown, total := 0, 0
-	for _, path := range paths {
-		src, err := os.ReadFile(path)
-		if err != nil {
-			return "", err
-		}
-		lines := strings.SplitAfter(string(src), "\n")
-		if lines[len(lines)-1] == "" {
-			lines = lines[:len(lines)-1]
-		}
-		var hits []int
-		for i, line := range lines {
-			if re.MatchString(strings.TrimRight(line, "\n")) {
-				hits = append(hits, i+1)
-			}
-		}
-		if len(hits) == 0 {
-			continue
-		}
-		total += len(hits)
-		if shown == MaxMatches {
-			continue
-		}
-		verb := "lines match"
-		if len(hits) == 1 {
-			verb = "line matches"
-		}
-		if sb.Len() > 0 {
-			sb.WriteByte('\n')
-		}
-		fmt.Fprintf(&sb, "%s  %d %s /%s/:\n", ws.Rel(path), len(hits), verb, expr)
-		hits = hits[:min(len(hits), MaxMatches-shown)]
-		shown += len(hits)
-		width := len(fmt.Sprint(hits[len(hits)-1]))
-		for _, l := range hits {
-			sb.WriteString(textutil.NumberedLine(width, l, lines[l-1]))
-		}
-	}
-	if total == 0 {
-		return fmt.Sprintf("No line matches /%s/.\n", expr), nil
-	}
-	if shown < total {
-		fmt.Fprintf(&sb, "\nShown %d of %d matching lines; narrow the pattern, or pass file.\n", shown, total)
-	}
-	return sb.String(), nil
+	return textutil.Matches(paths, re, ws.Rel, expr)
 }

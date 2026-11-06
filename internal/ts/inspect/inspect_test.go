@@ -100,6 +100,34 @@ func TestNames(t *testing.T) {
 	mustContain(t, out, "Shed.#lock(): void", "12      console.log(\"locked\");", "Shed.[key](): string")
 }
 
+// A pattern lists the lines that match it, numbered, in one file or, without
+// file, in every file of the solution.
+func TestPattern(t *testing.T) {
+	ws := garden(t)
+	out, err := RunWith(ws, Query{Pattern: `function prune`}, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustContain(t, out,
+		"src/garden.ts  1 line matches /function prune/:",
+		"32  export function prune(p: Plant, by: number): Plant {",
+		"src/shed.ts  1 line matches /function prune/:",
+		"1  export function prune(): void {}",
+	)
+	out, err = RunWith(ws, Query{File: "src/shed.ts", Pattern: `prune`}, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out, "garden.ts") {
+		t.Errorf("a file other than file is searched:\n%s", out)
+	}
+	for _, q := range []Query{{Pattern: `(`}, {Pattern: `prune`, Function: "prune"}, {File: "src/none.ts", Pattern: `prune`}} {
+		if _, err := RunWith(ws, q, Options{}); !refactor.IsRefusal(err) {
+			t.Errorf("%+v: want a refusal, got %v", q, err)
+		}
+	}
+}
+
 func TestOverviewTargetsAndUses(t *testing.T) {
 	ws := garden(t)
 	out, err := RunWith(ws, Query{}, Options{})

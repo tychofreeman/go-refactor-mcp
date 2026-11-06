@@ -135,9 +135,26 @@ var byName = strings.NewReplacer(
 	"inspect with function, or start_line/end_line, or several at once with targets", "inspect with function, or several at once with targets",
 )
 
-// reads returns text, which describes inspect, as this server's reads
+// typescriptText rewrites the texts that describe the tools for a server
+// of TypeScript alone: the solution in place of the module, its tests in
+// place of go test. Longer texts come first, since the first match wins.
+var typescriptText = strings.NewReplacer(
+	"Read Go code", "Read TypeScript code",
+	"every Go file of the module", "every file of the solution",
+	"a Go regular expression", "a regular expression",
+	"A Go regular expression", "A regular expression",
+	"the module's packages and files", "the solution's projects and files",
+	"relative to the module root", "relative to the root",
+	"run `go test` (on packages, default ./...)", "run the tests (package.json's test script, or node --test; packages names test files)",
+	"Package pattern for go test, relative to the module root (default ./...).", "Test files to run, relative to the root (default: all).",
+	"Also run go test.", "Also run the tests.",
+	"also run go test", "also run the tests",
+	"the module", "the solution",
+)
+
+// forLanguages returns text, which describes the tools, as this server's reads
 // allow and for the languages it serves.
-func (s *Server) reads(text string) string {
+func (s *Server) forLanguages(text string) string {
 	if s.ReadByName {
 		text = byName.Replace(text)
 	}
@@ -145,7 +162,7 @@ func (s *Server) reads(text string) string {
 	case s.typescript != nil && s.golang != nil:
 		text = strings.Replace(text, "Read Go code", "Read Go and TypeScript code", 1)
 	case s.typescript != nil:
-		text = strings.Replace(text, "Read Go code", "Read TypeScript code", 1)
+		text = typescriptText.Replace(text)
 	}
 	return text
 }
@@ -155,11 +172,11 @@ func (s *Server) reads(text string) string {
 func (s *Server) instructions() string {
 	switch {
 	case s.golang == nil:
-		return s.reads(TypeScriptInstructions)
+		return s.forLanguages(TypeScriptInstructions)
 	case s.typescript != nil:
-		return s.reads(strings.Replace(Instructions, "Refactoring and editing tools for the Go module in this project, and", "Refactoring and editing tools for the Go module in this project and for its TypeScript (the solution of the nearest tsconfig.json; each call goes to the language of the files it names), and", 1))
+		return s.forLanguages(strings.Replace(Instructions, "Refactoring and editing tools for the Go module in this project, and", "Refactoring and editing tools for the Go module in this project and for its TypeScript (the solution of the nearest tsconfig.json; each call goes to the language of the files it names), and", 1))
 	}
-	return s.reads(Instructions)
+	return s.forLanguages(Instructions)
 }
 
 // New returns a server for the code at dir: Go for the module containing
@@ -227,7 +244,7 @@ func (s *Server) MCP() *mcp.Server {
 
 	srv.AddTool(&mcp.Tool{
 		Name: "inspect",
-		Description: s.reads(`Read Go code with line numbers. Use it before every refactoring to get exact line numbers, and again after each change.
+		Description: s.forLanguages(`Read Go code with line numbers. Use it before every refactoring to get exact line numbers, and again after each change.
 - No arguments: overview of the module's packages and files.
 - file: the file with its functions without their bodies, a third to a half of reading it whole: declarations, doc comments and types in full, and in place of each body the lines it takes, with the function's length, cyclomatic complexity, nesting depth, and whether calling it has side effects (with the first reason).
 - file + function ("Name" or "Type.Method"): that function's source.
@@ -236,7 +253,7 @@ func (s *Server) MCP() *mcp.Server {
 - names: declarations by name, wherever in the module they are, without file: functions, methods, types, variables and constants, e.g. ["Water", "Bed.Plant", "Schedule"]. A name declared in several packages is refused with where each is: qualify it as "pkg.Name". One nothing declares is said to be free to declare, or why not (predeclared, an import's name): check new names so.
 - pattern: the lines that match a Go regular expression, with their numbers, in file or, without it, every Go file of the module, e.g. "Plant\\.Species" or "^func .*Bed": to find a line or a call where no name says what to look for. At most 100 lines.
 - uses: how each use treats something, before changing what it holds or means: every use of a field, function, method, variable or constant in the module, found by the type checker, under what is done with it (switch on it, compared, asserted, written, passed as an interface, called, read; for a type also type switch cases, conversions and literals), each with its line, e.g. ["Plant.Species"] lists "compared (2):  garden/bed.go:85  p.Species == \"cactus\"" and the switches with their cases.`),
-		InputSchema: json.RawMessage(s.reads(`{
+		InputSchema: json.RawMessage(s.forLanguages(`{
   "type": "object",
   "properties": {
     "file":       {"type": "string",  "description": "File path relative to the module root."},
@@ -262,8 +279,8 @@ func (s *Server) MCP() *mcp.Server {
 
 	srv.AddTool(&mcp.Tool{
 		Name:        "check",
-		Description: "Report whether the module type-checks. With run_tests, also run `go test` (on packages, default ./...) to confirm behavior is unchanged; use it after a series of refactorings.",
-		InputSchema: json.RawMessage(`{
+		Description: s.forLanguages("Report whether the module type-checks. With run_tests, also run `go test` (on packages, default ./...) to confirm behavior is unchanged; use it after a series of refactorings."),
+		InputSchema: json.RawMessage(s.forLanguages(`{
   "type": "object",
   "properties": {
     "run_tests": {"type": "boolean", "description": "Also run go test."},
@@ -271,15 +288,15 @@ func (s *Server) MCP() *mcp.Server {
     "packages":  {"type": "string",  "description": "Package pattern for go test, relative to the module root (default ./...)."}
   },
   "additionalProperties": false
-}`),
+}`)),
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, s.handler(s.check))
 	srv.AddTool(&mcp.Tool{
 		Name: "batch",
-		Description: `Run several refactorings and edits in order, in one call, planned from one inspect. Each step is {tool, args}: a tool and the arguments it takes when called alone; each runs on the code the earlier steps left.
+		Description: s.forLanguages(`Run several refactorings and edits in order, in one call, planned from one inspect. Each step is {tool, args}: a tool and the arguments it takes when called alone; each runs on the code the earlier steps left.
 Give line numbers and columns as in the code you inspected before the batch: the batch moves them past the earlier steps. A line an earlier step rewrote cannot be given by number. Address a declaration by name (file and name, no line), or give a reference in place of line, start_line or end_line: "$prev.start" or "$prev.end" (the first or last line the step before added or changed in that file), "$2.end" (step 2's), "$helper.end" (the step with "id": "helper"), with an offset such as "$prev.end+1". A step that changed several places, such as a rename, has no range.
 If a step is refused, nothing changes and the result says which step and why; one undo reverts the whole batch. A step {"tool": "check"} is a checkpoint: the code must type-check there (args run_tests and packages also run go test); if a later step is refused, the steps up to the last checkpoint that passed are kept, as one change. Independent steps can instead be separate calls in one turn.
-check "end" type-checks only after the last step, so edits may pass through code that does not compile yet (a declaration, then its first use); refactorings still need code that type-checks, so just before one the stubs and imports earlier edits need are added. A batch whose edit does not type-check runs again with "end", and functions the steps call but nothing declares get stubs (create_from_usage).`,
+check "end" type-checks only after the last step, so edits may pass through code that does not compile yet (a declaration, then its first use); refactorings still need code that type-checks, so just before one the stubs and imports earlier edits need are added. A batch whose edit does not type-check runs again with "end", and functions the steps call but nothing declares get stubs (create_from_usage).`),
 		InputSchema: json.RawMessage(`{
   "type": "object",
   "properties": {
