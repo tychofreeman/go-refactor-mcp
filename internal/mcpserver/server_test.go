@@ -285,11 +285,8 @@ func TestDescriptionsAreCurrent(t *testing.T) {
 		}
 	}
 	mustContain(t, "rename", tools["rename"], "returns what changed")
-	if strings.Contains(tools["move_statement_up"], "move_statement_down") || !strings.Contains(tools["move_statement_up"], "the one before it") {
-		t.Errorf("move_statement_up describes both directions: %s", tools["move_statement_up"])
-	}
-	if !strings.Contains(tools["move_statement_down"], "the one after it") {
-		t.Errorf("move_statement_down: %s", tools["move_statement_down"])
+	if !strings.Contains(tools["move_statement"], "the one before") || !strings.Contains(tools["move_statement"], "the one after") {
+		t.Errorf("move_statement does not describe both directions: %s", tools["move_statement"])
 	}
 	instr := cs.InitializeResult().Instructions
 	mustContain(t, "instructions", instr, "as they were when the batch began")
