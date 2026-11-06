@@ -108,7 +108,8 @@ working patterns, with their steps, are in `docs/patterns.md`.
   `refactor batch - <<'EOF'` with the JSON (quote the delimiter: an
   unquoted heredoc turns `\n` into newlines), and code itself as text with
   `content_file=- <<'GO'` (the user, 2026-11-05: no scratch files or
-  Python to build the JSON; the delimiter must not occur in the text),
+  Python to build the JSON; the delimiter must not occur in the text,
+  and its final newline is dropped except from `content`),
   `refactor inspect` to read, `refactor check run_tests=true`, `refactor
   undo` (its stack is kept per module in the cache directory). Read
   through inspect there too, so the

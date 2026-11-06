@@ -4357,3 +4357,12 @@ stdin with `-`. Go and TypeScript alike, since the CLI serves both.
   `new_file=-` that replaced text ending mid-line left a blank line in a
   bullet of the session notes. Fixed by a second replace_text; whether
   `-` should drop one final newline when `old` has none is open.
+
+## 2026-11-05: two of the CLI's gaps closed
+
+From the day's entries: a heredoc's final newline is dropped from a text
+argument read from stdin (except `content`), so `new_file=-` no longer
+splits a line; and a number or boolean given for a string argument is
+taken as its text in the engine (`toSchemaTypes`), so `expression=1500`
+works through key=value and from a model's JSON. Record:
+`docs/sessions/cli-stdin-fixes.md`. Nothing by hand.

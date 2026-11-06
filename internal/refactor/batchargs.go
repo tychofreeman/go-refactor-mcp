@@ -100,7 +100,7 @@ var nameAliases = map[string]string{"path": "file", "from": "file", "struct": "n
 // the one it can only mean: an argument schema has and args does not
 // give, whose name is a word of the given name (old_text: old), or else
 // one of contentAliases for content or of nameAliases (path: file). It also
-// converts what fromStrings converts. It returns args unchanged if there
+// converts what toSchemaTypes converts. It returns args unchanged if there
 // is nothing to do, and a note on the names it took.
 func aliasArgs(schema, args json.RawMessage) (json.RawMessage, string) {
 	var s struct {
@@ -142,7 +142,7 @@ func aliasArgs(schema, args json.RawMessage) (json.RawMessage, string) {
 		delete(given, k)
 		took = append(took, fmt.Sprintf("%q as %s", k, fits[0]))
 	}
-	converted := fromStrings(s.Properties, given)
+	converted := toSchemaTypes(s.Properties, given)
 	if len(took) == 0 && !converted {
 		return args, ""
 	}
@@ -156,14 +156,21 @@ func aliasArgs(schema, args json.RawMessage) (json.RawMessage, string) {
 	return out, "took " + orList(took, "and")
 }
 
-// fromStrings converts each argument of given sent as a string that props
-// declares an integer or a boolean ("12", "true") to that type, and
-// reports whether it converted any.
-func fromStrings(props, given map[string]json.RawMessage) bool {
+// toSchemaTypes converts each argument of given sent as a string that props
+// declares an integer or a boolean ("12", "true") to that type, and one
+// sent as a number or a boolean that props declares a string to its text,
+// and reports whether it converted any.
+func toSchemaTypes(props, given map[string]json.RawMessage) bool {
 	converted := false
 	for k, v := range given {
 		var p struct {
 			Type string `json:"type"`
+		}
+		var f float64
+		var b bool
+		if json.Unmarshal(props[k], &p) == nil && p.Type == "string" && (json.Unmarshal(v, &f) == nil || json.Unmarshal(v, &b) == nil) {
+			given[k], converted = json.RawMessage(strconv.Quote(strings.TrimSpace(string(v)))), true
+			continue
 		}
 		var s string
 		if json.Unmarshal(props[k], &p) != nil || json.Unmarshal(v, &s) != nil {

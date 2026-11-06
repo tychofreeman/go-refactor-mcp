@@ -196,6 +196,21 @@ func TestTextArgumentFromStdin(t *testing.T) {
 	}
 }
 
+// A heredoc ends its text with a newline, which a text argument from
+// stdin drops, so a replacement that ends mid-line does not split it;
+// content keeps its final newline.
+func TestStdinDropsTheHeredocsNewline(t *testing.T) {
+	defer func() { stdin = os.Stdin }()
+	dir := module(t, "package p\n\n// A is first.\nfunc f() {}\n")
+	stdin = strings.NewReader("B is second.\n")
+	if code := run([]string{"-C", dir, "replace_text", "file=p.go", "old=A is first.", "new_file=-"}); code != 0 {
+		t.Fatalf("exit status %d, want 0", code)
+	}
+	if got := read(t, dir); !strings.Contains(got, "// B is second.\nfunc f() {}") {
+		t.Errorf("the replacement split the line:\n%s", got)
+	}
+}
+
 // inspect reads code as the server's inspect does, and a refused read
 // exits with status 2.
 func TestRunInspect(t *testing.T) {
