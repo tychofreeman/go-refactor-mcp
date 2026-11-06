@@ -4484,3 +4484,13 @@ and a one-line replace_statements for its return). Then the goldens
 version resolved locals in the shared `locateFunc`, which would have
 handed them to the other signature refactorings that read `t.decl`;
 moved to add_parameter alone. Nothing by hand.
+
+## 2026-11-06: extract_function's pointer for a variable it only reads (roadmap 44)
+
+Through the CLI, goldens first: one that copies, one that keeps the
+pointer when the lines call the literal (its output made by the current
+CLI on a scratch copy of the input), and, after a second look at the
+rule, one where the lines run it through another literal, which the
+first version of `copyReads` missed (red, then fixed). The rule by
+replace_expression on the switch case and add_declaration, its
+refinement by replace_expression. Nothing by hand.

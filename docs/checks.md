@@ -290,6 +290,11 @@ fmt.Println(total)                     for _, x := range xs { total += x }
   A variable only a function literal of the statements changes is passed
   as a copy when nothing outside them can see it again: no literal
   outside them uses it, no code after them, and no loop around them.
+  A variable that only literals outside the statements change is passed
+  as a copy when the statements do not write it and none of those
+  literals can run while they do: each is held in a local variable
+  (`visit := func(...) {...}`) that is only called, outside the
+  statements and any other literal, and not by `go` or `defer`.
 - If the statements use the receiver of the method they are in, the new
   function is a method of the same type, called as `c.bump()`; generic
   receivers (`(s *Stack[T])`) keep their type parameters. A value receiver

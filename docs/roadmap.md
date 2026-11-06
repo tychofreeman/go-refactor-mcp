@@ -38,9 +38,8 @@ part left. What is open, the newest priority first:
 5. **49** whether the work goes through the tools: 49.2, 49.3, 49.8, 49.9,
    49.12 and 49.14 open; 49.11 for the CLI, TypeScript and an A/B arm;
    49.4 and 49.5 wait on a measurement.
-6. **Defects found on the way and not yet fixed:** extract_function by
-   pointer (44); values reaching reflection through interfaces (42c);
-   move_file
+6. **Defects found on the way and not yet fixed:** values reaching
+   reflection through interfaces (42c); move_file
    into another module (39g); move_declaration's `new_name` on an embedded
    type, if it still fails (38e).
 7. **Older items with parts left**, by number: 1, 4-9 and 11-16 (signature,
@@ -2470,6 +2469,9 @@ part left. What is open, the newest priority first:
     *Done* (2026-11-06): add_parameter changes a local function, a
     variable a `:=` binds to a literal (`findLocal`); the other signature
     refactorings still refuse it.
+    *Done* (2026-11-06): extract_function passes a copy of a variable
+    that literals outside the lines change, when the lines only read it
+    and none of those literals can run while they do (`copyReads`).
     Not the only way round: extracting the tail and passing what follows
     as a parameter (`docs/derivations.md` section 10), and making a
     closure a function that builds it (section 11), compose today; run
