@@ -174,8 +174,17 @@ func TestMove(t *testing.T) {
 	for _, tool := range l.Tools() {
 		tools[tool.Name] = true
 	}
-	if !tools["move"] || tools["move_declaration"] || tools["move_method"] || tools["move_file"] {
-		t.Errorf("published: move %v, move_declaration %v, move_method %v, move_file %v", tools["move"], tools["move_declaration"], tools["move_method"], tools["move_file"])
+	if !tools["move"] || tools["move_declaration"] || tools["move_method"] || tools["move_file"] || tools["delete_file"] {
+		t.Errorf("published: move %v, move_declaration %v, move_method %v, move_file %v, delete_file %v", tools["move"], tools["move_declaration"], tools["move_method"], tools["move_file"], tools["delete_file"])
+	}
+	if text, refused, err := l.Step("move", []byte(`{"file": "docs/notes.txt", "delete": true}`)); err != nil || refused {
+		t.Fatalf("move with delete: %v %v\n%s", err, refused, text)
+	}
+	if _, err := os.Stat(filepath.Join(root, "docs/notes.txt")); err == nil {
+		t.Error("docs/notes.txt was not deleted")
+	}
+	if text, refused, _ := l.Step("move", []byte(`{"file": "a.go", "delete": true, "to": "b.go"}`)); !refused {
+		t.Errorf("delete with a destination is not refused:\n%s", text)
 	}
 }
 

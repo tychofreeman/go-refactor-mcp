@@ -82,7 +82,7 @@ Which tool, by what you want to do:
 - Simplify control flow (refactorings): invert_if, remove_else, move_statement_up, move_statement_down, split, remove_dead_code.
 - Add code (edits): create_file for any new file, Go or not (fixtures, JSON, go.mod; several in one batch), add_declaration, add_field, add_case, add_element, insert_statements; create_from_usage declares the functions, methods, types and fields code uses before they exist, and the methods a type lacks to implement an interface it is used as.
 - Change code (edits): replace_statements, replace_expression, replace_declaration (a whole one, by name); change_type for what a type (an alias) is, with the fixes it lists in the same batch; replace_text for string literals, comments and files that are not Go.
-- Move or delete files and directories (fixtures, docs): move, delete_file.
+- Move or delete files and directories (fixtures, docs): move, with delete to delete.
 - Several steps in one call: batch; then check, and undo.
 
 How to work with them:

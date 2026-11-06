@@ -18,7 +18,7 @@ Which tool, by what you want to do:
 - Simplify control flow (refactorings): invert_if, remove_else, move_statement_up, move_statement_down, remove_dead_code.
 - Add code (edits): create_file for any new file, TypeScript or not (test fixtures, JSON; several at once in one batch), add_declaration, add_field, add_case, add_element, insert_statements; create_from_usage declares the functions, classes, methods and properties code uses before they exist.
 - Change code (edits): replace_statements, replace_expression, replace_declaration (a whole declaration, by name); change_type for what a type alias is, with the fixes it lists in the same batch; replace_text for string literals, comments and files that are not TypeScript.
-- Move or delete files and directories (fixtures, docs, data): move, delete_file.
+- Move or delete files and directories (fixtures, docs, data): move, with delete to delete.
 - Several steps in one call: batch. Then: check (with run_tests: the project's test script, or node --test), and undo to revert a step.
 
 How to work with them:

@@ -224,8 +224,14 @@ func TestMove(t *testing.T) {
 	for _, tool := range l.Tools() {
 		names = append(names, tool.Name)
 	}
-	if !slices.Contains(names, "move") || slices.Contains(names, "move_declaration") || slices.Contains(names, "move_method") || slices.Contains(names, "move_file") {
+	if !slices.Contains(names, "move") || slices.Contains(names, "move_declaration") || slices.Contains(names, "move_method") || slices.Contains(names, "move_file") || slices.Contains(names, "delete_file") {
 		t.Errorf("published: %v", names)
+	}
+	if text, refused, err := l.Step("move", []byte(`{"file": "docs/beds.txt", "delete": true}`)); err != nil || refused {
+		t.Fatalf("move with delete: %v %v\n%s", err, refused, text)
+	}
+	if _, err := os.Stat(filepath.Join(root, "docs/beds.txt")); err == nil {
+		t.Error("docs/beds.txt was not deleted")
 	}
 }
 
