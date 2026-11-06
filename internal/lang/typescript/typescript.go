@@ -47,6 +47,10 @@ type Language struct {
 	FullDiffs bool
 	// ReadByName makes inspect show source only for what a request names.
 	ReadByName bool
+	// SkeletonOnly makes create_file refuse TypeScript with function
+	// bodies: structure comes from declaration, test_for and
+	// add_declaration.
+	SkeletonOnly bool
 
 	dir     string
 	history *history.Stack
@@ -295,6 +299,9 @@ func (l *Language) Step(tool string, args json.RawMessage) (string, bool, error)
 		return fmt.Sprintf("REFUSED %s: it does not work on TypeScript files yet; for them there is %s.", tool, l.names()), true, nil
 	}
 	r = refactor.Routed(r, args, lookup)
+	if t, ok := r.(*createfile.CreateFile); ok && l.SkeletonOnly {
+		r = createfile.Skeleton{CreateFile: t}
+	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	ws, args, intro, refused, err := l.route(args)

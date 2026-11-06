@@ -54,3 +54,4 @@ Not measured: a cloud session with no session log; about twenty CLI calls.
 
 - Java's `inline` (with inline class, when built).
 - inline_struct on one-line struct declarations (roadmap defects).
+- hand: merging main, both sides had appended whole test functions to the two language test files; the conflicts were resolved with a short Python script over the lines (main's functions, then TestInline), since no tool edits a file with conflict markers in it.
