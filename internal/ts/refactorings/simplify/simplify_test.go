@@ -556,6 +556,7 @@ export function f(x: number, h: number): number {
   }
 }
 `, NewRemoveElse(), `{"line": 15}`, "", "h, declared at g.ts:18, would then be seen"},
+		{"wrap keeps blank lines and template literals", plants + "\nexport function label(p: Plant | undefined): string {\n  if (!p) {\n    return \"\";\n  }\n  const h = p.height;\n\n  return `${h}\nm`;\n}\n", NewRemoveElse(), `{"line": 15, "wrap": true}`, plants + "\nexport function label(p: Plant | undefined): string {\n  if (!p) {\n    return \"\";\n  } else {\n    const h = p.height;\n\n    return `${h}\nm`;\n  }\n}\n", ""},
 	})
 }
 
@@ -794,8 +795,9 @@ export function soak(p: Plant): number {
   switch (p.name) {
     case "moss":
       return 1;
+    default:
+      return 0;
   }
-  return 0;
 }
 `, NewExtractFunction(), `{"function": "soak", "case": "fern", "name": "f"}`, "", "soak has no case fern"},
 		{"generic", plants + `
@@ -1183,6 +1185,7 @@ export class Bed {
 
 export const d = new Bed().depth();
 `, NewInlineFunction(), `{"line": 20, "name": "depth"}`, "", "a subclass could override"},
+		{"early return keeps blank lines and template literals", plants + "\nfunction sign(n: number): string {\n  if (n < 0) {\n    water();\n    return \"neg\";\n  }\n  const t = `p\nos`;\n\n  return t;\n}\n\nexport function use(n: number): string {\n  const s = sign(n);\n  return s + \"!\";\n}\n", NewInlineFunction(), `{"line": 26, "name": "sign"}`, plants + "\nexport function use(n: number): string {\n  let s: string;\n  if (n < 0) {\n    water();\n    s = \"neg\";\n  } else {\n    const t = `p\nos`;\n\n    s = t;\n  }\n  return s + \"!\";\n}\n", ""},
 	})
 }
 
@@ -1328,6 +1331,60 @@ export function soak(p: Plant): number {
   return 0;
 }
 `, NewExtractFunction(), `{"function": "soak", "case": "fern", "name": "f"}`, "", "declares n; splitting it would copy the declaration"},
+	})
+}
+
+// For a value with no case, when the code after the switch is what runs
+// for it, extract_function by case adds a case that calls a copy of that
+// code, as Go's does.
+func TestExtractMissingCase(t *testing.T) {
+	depth := plants + `
+export function depth(p: Plant): number {
+  switch (p.name) {
+    case "fern":
+      return 2;
+  }
+  water();
+  return p.height;
+}
+`
+	check(t, []change{
+		{"a value with no case", depth, NewExtractFunction(), `{"function": "depth", "case": "moss", "name": "mossDepth"}`, plants + `
+export function depth(p: Plant): number {
+  switch (p.name) {
+    case "fern":
+      return 2;
+    case "moss":
+      return mossDepth(p);
+  }
+  water();
+  return p.height;
+}
+
+function mossDepth(p: Plant) {
+  water();
+  return p.height;
+}
+`, ""},
+		{"a default runs for it", plants + `
+export function depth(p: Plant): number {
+  switch (p.name) {
+    case "fern":
+      return 2;
+    default:
+      return 1;
+  }
+}
+`, NewExtractFunction(), `{"function": "depth", "case": "moss", "name": "mossDepth"}`, "", "has no case moss"},
+		{"a case falls through to the code after", plants + `
+export function depth(p: Plant): number {
+  switch (p.name) {
+    case "fern":
+      water();
+  }
+  return p.height;
+}
+`, NewExtractFunction(), `{"function": "depth", "case": "moss", "name": "mossDepth"}`, "", "has no case moss"},
 	})
 }
 

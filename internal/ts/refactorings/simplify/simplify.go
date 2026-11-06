@@ -258,7 +258,7 @@ func NewExtractFunction() *ExtractFunction {
 
 func (*ExtractFunction) Description() string {
 	return `Move a run of whole statements into a new function, declared after the one they are in, and call it in their place: in function report(beds: Bed[]), extracting let total = 0 and the loop that adds each b.depth to it, as sum, gives const total = sum(beds) there and function sum(beds: Bed[]) { let total = 0; for ...; return total; }. Locals the statements use become parameters; those they declare or assign that are used elsewhere come back as the result (an object of them when several). Statements that use this become a private method of the class; with await, the function is async and the call awaited.
-Identify the statements by file, start_line and end_line: whole statements of one block, as inspect numbers them; or a case's body by function and case ("fern" in function water, or default; a last break stays), which stays valid after earlier steps; a case sharing its body with others gets a case of its own unless split is false. doc becomes the new function's doc comment.
+Identify the statements by file, start_line and end_line: whole statements of one block, as inspect numbers them; or a case's body by function and case ("fern" in function water, or default; a last break stays), which stays valid after earlier steps; a case sharing its body with others gets a case of its own unless split is false; for a value with no case, when the code after the switch is what runs for it, a new case calls a copy of that code. doc becomes the new function's doc comment.
 Returns: when the lines end the function's body, their returns stay and the call becomes return sum(...).
 Lines that return before the function's end return a value the call returns unless it is undefined, or whether they returned. Refuses, saying why: an early return of what may be undefined, a break or continue out of the lines, yield, arguments, this outside a class's method, a type parameter or a type declared in the function, a variable declared in a block of the lines and used after them, declaring some results and assigning others.`
 }
@@ -287,10 +287,16 @@ func (*ExtractFunction) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 		return nil, refactor.Refusef("give either function and case or start_line and end_line, not both")
 	}
 	var split []tsapi.Edit
+	var missing *tsapi.MissingCase
 	if a.Case != "" {
 		path, p, why := ws.Project(a.File)
 		if why == "" {
 			a.StartLine, a.EndLine, split, why = p.CaseBody(path, a.Function, a.Case, a.Split == nil || *a.Split)
+			if why != "" {
+				if missing, why = p.MissingCase(path, a.Function, a.Case, why); missing != nil {
+					a.StartLine, a.EndLine = missing.First, missing.Last
+				}
+			}
 		}
 		if why != "" {
 			return nil, refactor.Refusef("%s", why)
@@ -299,13 +305,17 @@ func (*ExtractFunction) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 	if a.StartLine == 0 || a.EndLine == 0 {
 		return nil, refactor.Refusef("give start_line and end_line")
 	}
-	return plan(ws, a.File, fmt.Sprintf("extracted lines %d-%d as %s", a.StartLine, a.EndLine, a.Name), func(p *tsapi.Project, path string) ([]tsapi.Edit, string) {
+	pl, err := plan(ws, a.File, fmt.Sprintf("extracted lines %d-%d as %s", a.StartLine, a.EndLine, a.Name), func(p *tsapi.Project, path string) ([]tsapi.Edit, string) {
 		es, why := p.ExtractFunction(bg, path, a.StartLine, a.EndLine, a.Name, a.Doc)
 		if why != "" {
 			return nil, why
 		}
-		return append(es, split...), ""
+		return append(missing.Place(es), split...), ""
 	})
+	if err == nil && missing != nil {
+		pl.Notes = append(pl.Notes, fmt.Sprintf("no case %s: the code after the switch runs for it, so the new case calls %s, a copy of that code, which stays", a.Case, a.Name))
+	}
+	return pl, err
 }
 
 // InlineFunction replaces calls with the function's body.
