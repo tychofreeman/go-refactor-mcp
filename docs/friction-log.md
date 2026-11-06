@@ -4550,3 +4550,14 @@ one-line replace_statements in the same batch), `withoutOwn` by
 add_declaration. That change was made while the new test was red, out
 of TDD's order. Then `delete` by add_field, insert_statements and
 replace_expression. Nothing by hand.
+
+## 2026-11-06: preserve_exceptions for Go (roadmap 54.4)
+
+Through the CLI. Goldens first (move_statement noted and refused), set
+aside while two refactorings ran green: Check's body extracted into
+`check` (extract_function made it a method and kept its returns), then a
+`strict` field and `strictly` threaded through by replace_expression.
+Back to red, then the behavior in one batch of nine structured steps.
+fold's goldens the same way; one expectation was wrong (fold leaves an
+occurrence rather than refusing), corrected in the golden's files with
+a short script (testdata). Nothing by hand in Go.

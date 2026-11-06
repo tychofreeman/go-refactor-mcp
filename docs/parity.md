@@ -102,7 +102,8 @@ Server-level gaps:
 - Java: `inspect` with no arguments lists the project (Java #111); the
   session log has no token counts (Java #18).
 - TS: `-no-code-by-text` is Go-only (49.11); Java has no such switch.
-- Go and TS: no `preserve_exceptions`. The user chose (2026-11-05) to
+- Go: `preserve_exceptions` *done* (2026-11-06; `docs/checks.md`); TS next.
+  The user chose (2026-11-05) to
   bring it to both: one flag on every refactoring that makes it refuse a
   change to exceptional behavior (Go: a panic, including the nil
   dereference that may now move past calls that return, per the session

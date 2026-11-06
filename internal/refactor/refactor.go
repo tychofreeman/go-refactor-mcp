@@ -67,6 +67,36 @@ type ImportKeeper interface {
 	KeepUnusedImports(keep bool)
 }
 
+// An ExceptionKeeper is a workspace whose refactorings can refuse to move
+// code that may panic or throw past other code (preserve_exceptions), and
+// that reports such moves they made instead.
+type ExceptionKeeper interface {
+	PreserveExceptions(on bool)
+	ExceptionChanges() []string
+}
+
+// PreserveExceptionsArg is the argument every refactoring takes to refuse
+// moving code that may panic or throw past other code.
+const PreserveExceptionsArg = "preserve_exceptions"
+
+// takePreserve returns args without preserve_exceptions, and its value.
+func takePreserve(args json.RawMessage) (json.RawMessage, bool) {
+	m := map[string]json.RawMessage{}
+	if json.Unmarshal(args, &m) != nil {
+		return args, false
+	}
+	v, ok := m[PreserveExceptionsArg]
+	if !ok {
+		return args, false
+	}
+	delete(m, PreserveExceptionsArg)
+	out, err := json.Marshal(m)
+	if err != nil {
+		return args, false
+	}
+	return out, string(v) == "true"
+}
+
 // addedRefusal says why a step that left the errors after, from before,
 // is refused in a workspace that tolerates errors, or "" if it is not.
 func addedRefusal(before, after []string) string {
@@ -291,6 +321,13 @@ func Run[W Workspace](ws W, r RefactoringOf[W], args json.RawMessage, opts Optio
 		k.KeepUnusedImports(true)
 		defer k.KeepUnusedImports(false)
 	}
+	args, preserve := takePreserve(args)
+	keeper, keeps := any(ws).(ExceptionKeeper)
+	if keeps && !isEdit {
+		keeper.PreserveExceptions(preserve)
+		defer keeper.PreserveExceptions(false)
+		keeper.ExceptionChanges() // what earlier calls left
+	}
 	args, took := aliasArgs(r.InputSchema(), args)
 	args, err := readFileArgs(ws.Dir(), r.InputSchema(), args)
 	if err != nil {
@@ -322,6 +359,11 @@ func Run[W Workspace](ws W, r RefactoringOf[W], args json.RawMessage, opts Optio
 		return nil, err
 	}
 	res.Summary, res.Notes = plan.Summary, plan.Notes
+	if keeps && !isEdit {
+		for _, c := range keeper.ExceptionChanges() {
+			res.Notes = append(res.Notes, "code that may panic moved: "+c+"; a nil dereference panics either way, but what runs before it changes (preserve_exceptions refuses this instead)")
+		}
+	}
 	res.supplied, res.locations, res.edits = plan.Supplied, plan.Locations, plan.Edits
 	res.Choices = plan.Choices
 	if took != "" {

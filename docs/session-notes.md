@@ -288,7 +288,9 @@ working patterns, with their steps, are in `docs/patterns.md`.
   declarations, members and files (the user: easier for the model to reach
   for), one `inline` for functions, variables and a held struct, and
   `rename` of a file path renames the file; `preserve_exceptions`
-  comes to Go and TypeScript. The tool budget waits for the user's review
+  comes to Go and TypeScript, per call on every refactoring, with a note
+  for each such move made without it (the user, 2026-11-06, over a server
+  flag; `docs/checks.md`). The tool budget waits for the user's review
   of the list in parity.md (they expect to raise it).
 - **Constructive transformations** (2026-11-05, roadmap 55, as
   java-refactor-mcp's #212-#215): `create_file` with `declaration`, then

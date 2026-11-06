@@ -99,3 +99,35 @@ func typeOf(t reflect.Type) string {
 	}
 	panic("refactor.Schema: no schema type for " + t.String())
 }
+
+// WithPreserveExceptions returns schema, an object schema as Schema writes
+// them, with the preserve_exceptions argument every refactoring takes.
+func WithPreserveExceptions(schema json.RawMessage) json.RawMessage {
+	const prop = `"preserve_exceptions": {"type": "boolean", "description": "Optional: refuse, rather than move code that may panic (a nil dereference) past other code and note it."}`
+	s := string(schema)
+	start := strings.Index(s, `"properties": {`)
+	if start < 0 || strings.Contains(s, `"preserve_exceptions"`) {
+		return schema
+	}
+	depth, inString := 0, false
+	for i := start + len(`"properties": `); i < len(s); i++ {
+		switch c := s[i]; {
+		case inString && c == '\\':
+			i++
+		case c == '"':
+			inString = !inString
+		case inString:
+		case c == '{':
+			depth++
+		case c == '}':
+			if depth--; depth == 0 {
+				sep := ", "
+				if s[i-1] == '{' {
+					sep = ""
+				}
+				return json.RawMessage(s[:i] + sep + prop + s[i:])
+			}
+		}
+	}
+	return schema
+}

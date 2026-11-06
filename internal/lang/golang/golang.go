@@ -61,9 +61,18 @@ func (*Language) Owns(path string) bool { return strings.HasSuffix(path, ".go") 
 func (*Language) Tools() []lang.Tool {
 	var out []lang.Tool
 	for _, r := range refactor.Published(refactorings.All()) {
-		out = append(out, lang.Tool{Name: r.Name(), Description: r.Description() + symbolNote(r), Schema: r.InputSchema()})
+		out = append(out, lang.Tool{Name: r.Name(), Description: r.Description() + symbolNote(r), Schema: schemaOf(r)})
 	}
 	return out
+}
+
+// schemaOf is r's published schema: with preserve_exceptions for a
+// refactoring, which refactor.Run takes off before r sees it.
+func schemaOf(r refactor.Refactoring) json.RawMessage {
+	if _, edit := r.(refactor.Edit); edit {
+		return r.InputSchema()
+	}
+	return refactor.WithPreserveExceptions(r.InputSchema())
 }
 
 // Loaded reports whether the workspace has been loaded.

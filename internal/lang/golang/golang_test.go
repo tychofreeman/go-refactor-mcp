@@ -220,6 +220,24 @@ func TestMoveStatement(t *testing.T) {
 	}
 }
 
+// Every published refactoring takes preserve_exceptions; edits do not.
+func TestPreserveExceptionsPublished(t *testing.T) {
+	tools := map[string]string{}
+	for _, tool := range (&Language{}).Tools() {
+		tools[tool.Name] = string(tool.Schema)
+	}
+	for _, name := range []string{"rename", "extract_function", "inline", "invert_if"} {
+		if !strings.Contains(tools[name], `"preserve_exceptions"`) {
+			t.Errorf("%s does not take preserve_exceptions: %s", name, tools[name])
+		}
+	}
+	for _, name := range []string{"replace_statements", "add_declaration"} {
+		if strings.Contains(tools[name], `"preserve_exceptions"`) {
+			t.Errorf("the edit %s takes preserve_exceptions", name)
+		}
+	}
+}
+
 // With SkeletonOnly, create_file refuses Go content with function bodies,
 // and takes types, fields, constants and variables, and declaration.
 func TestSkeletonOnly(t *testing.T) {
