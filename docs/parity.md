@@ -33,32 +33,44 @@ Cheap, and each one costs a fresh model a refusal or a wrong result today.
 ## 2. One contract: names and server-level behavior
 
 The same operation has different names in Java, so recipes and
-`examples/CLAUDE.md` do not transfer. Each server should accept the
-others' names as aliases (`refactor.ToolName` here, `Tools` there), and
-`docs/tool-contract.md` should record one name per operation.
+`examples/CLAUDE.md` do not transfer. The user's rule (2026-11-05): **the
+more generic name wins**, and the other names stay as aliases
+(`refactor.ToolName` here, `Tools` there), so old recipes and the A/B
+baselines keep working. `docs/tool-contract.md` records the result.
 
-| Go and TS | Java |
-|---|---|
-| extract_function | extract_method |
-| move_declaration | move_type |
-| move_method | move_member |
-| move_statement_up / _down | move_statement |
-| extract_interface | extract_supertype (interface) |
-| convert_params_to_object | extract_struct |
-| introduce_parameter | extract_variable `as=parameter` |
-| method_to_function | move_member `to` its own class |
-| function_to_method | function_to_method |
-| remove_dead_code | replace_declaration with empty content (safe delete) |
-| delete_file | move_file (delete) |
-| change_field_type, change_parameter_type | change_type |
+| Operation | Go and TS today | Java today | Shared name |
+|---|---|---|---|
+| extract a function | extract_function | extract_method | **extract_function** (a method is a function) |
+| move a declaration | move_declaration | move_type | **move_declaration** |
+| move a method | move_method | move_member | **move_member** |
+| move a statement | move_statement_up, _down | move_statement | **move_statement**, with a direction |
+| extract an interface or base | extract_interface | extract_supertype | **extract_supertype** |
+| a parameter object, extract class | convert_params_to_object, (Go) extract_struct | extract_struct (`fields` for a class) | **extract_struct**; TS's `extract_struct` alias for extract_interface moves to extract_supertype |
+| an expression made a parameter | introduce_parameter | extract_variable `as=parameter` | **extract_variable** `as` |
+| change a type | change_type, change_field_type, change_parameter_type | change_type | **change_type** |
+| move, copy, delete a file | move_file, delete_file | move_file | **move_file** |
+| a type switch to methods | type_switch_to_method (TS: union_switch_to_method) | none yet | **type_switch_to_method** |
+| a method to a function and back | method_to_function, function_to_method | move_member to its own class, function_to_method | keep the pair: function_to_method is in all three, and Go's method_to_function is not a move; Java adds method_to_function as an alias |
+
+Merging under one name also frees budget in Go and TypeScript: six
+published tools become options of others (move_statement_down,
+convert_params_to_object, introduce_parameter, change_field_type,
+change_parameter_type, delete_file), taking Go from 49 to 43. Each merged
+schema must stay under `TestLoadedToolsStaySmall`'s 1,700 characters, and
+a merge changes what the baselines saw, so it waits for an A/B check of
+the merged descriptions (ask before running it).
 
 Server-level gaps:
 - Java: `inspect` with no arguments lists the project (Java #111); the
   session log has no token counts (Java #18).
 - TS: `-no-code-by-text` is Go-only (49.11); Java has no such switch.
-- Go and TS: no `preserve_exceptions` (Java's policy on exceptional
-  behavior). Go's counterpart is panics, which this repo already rules on
-  (session notes); TS's is throws. A decision, not a bug.
+- Go and TS: no `preserve_exceptions`. The user chose (2026-11-05) to
+  bring it to both: one flag on every refactoring that makes it refuse a
+  change to exceptional behavior (Go: a panic, including the nil
+  dereference that may now move past calls that return, per the session
+  notes; TS: a throw) instead of making the change and naming it. The
+  changes become a separate part of the result, as Java's `Exceptional`
+  does.
 
 ## 3. Tools one language lacks
 
@@ -128,6 +140,20 @@ embedding struct (43.10); Java's convert_to_record needs
    budget allows, after the user rules on it.
 6. Option gaps in section 4, as the friction logs raise them.
 
-Decisions for the user: whether Java's names or Go's are the contract;
-raising the tool budget for steps 3 to 5; whether Go and TS get
-`preserve_exceptions`.
+Decided (2026-11-05, the user): the more generic name wins (section 2);
+`preserve_exceptions` comes to Go and TypeScript. The tool budget: the
+user will review the list below first, and expects to raise it.
+
+## 6. Every tool, for the budget review
+
+Go publishes 49 tools (TypeScript 46, Java 37); the budget is 50 in both
+repos. After the merges in section 2, Go publishes 43.
+
+| Kind | Go | TS | Java |
+|---|---|---|---|
+| Server | inspect, check, batch, undo | the same | inspect, batch, undo |
+| Edits | add_case, add_declaration, add_element, add_field, create_file, create_from_usage, insert_statements, replace_declaration, replace_expression, replace_statements, replace_text | the same | the same but add_field and create_from_usage |
+| Signature | add_parameter, remove_parameter, move_parameter, introduce_parameter, add_result, change_type, change_field_type, change_parameter_type, convert_params_to_object | the same | add_parameter, remove_parameter, move_parameter, change_type, extract_struct |
+| Extract, inline | extract_function, extract_variable, inline_function, inline_variable, split, fold, parameterize, merge_duplicate_function | the same but split | extract_method, extract_variable, inline_function, inline_variable, fold |
+| Conditionals | invert_if, remove_else, prepare_switch_for_types, type_switch_to_method | the same, union_switch_to_method | invert_if, remove_else |
+| Types and moves | rename, move_declaration, move_method, method_to_function, function_to_method, extract_interface, extract_struct, inline_struct, remove_dead_code, move_statement_up, move_statement_down, move_file, delete_file | the same but extract_struct and inline_struct | rename, move_type, move_member, function_to_method, extract_supertype, add_supertype, pull_up, push_down, encapsulate_field, convert_lambda, convert_to_record, move_statement, move_file |

@@ -272,6 +272,12 @@ working patterns, with their steps, are in `docs/patterns.md`.
   (51.4): the user found the example copies too much code and drives
   toward no design. An expander that folds must export the struct's fields
   when any call is in another package, external tests included.
+- **Parity of Go, TypeScript and Java** (2026-11-05, roadmap 54,
+  `docs/parity.md`): one name per operation across the servers, the more
+  generic one (extract_function, move_member, move_statement, change_type,
+  extract_supertype), the others kept as aliases; `preserve_exceptions`
+  comes to Go and TypeScript. The tool budget waits for the user's review
+  of the list in parity.md (they expect to raise it).
 - **Fowler's catalog and IntelliJ** (2026-11-04): `docs/catalog.md`.
   Run a composition before calling an entry missing: Encapsulate Variable
   and Record and Replace Function with Command first looked missing and
