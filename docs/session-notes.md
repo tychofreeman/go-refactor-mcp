@@ -274,8 +274,10 @@ working patterns, with their steps, are in `docs/patterns.md`.
   when any call is in another package, external tests included.
 - **Parity of Go, TypeScript and Java** (2026-11-05, roadmap 54,
   `docs/parity.md`): one name per operation across the servers, the more
-  generic one (extract_function, move_member, move_statement, change_type,
-  extract_supertype), the others kept as aliases; `preserve_exceptions`
+  generic one (extract_function, move_statement, change_type,
+  extract_supertype), the others kept as aliases; one `move` for
+  declarations, members and files (the user: easier for the model to reach
+  for), and `rename` of a file path renames the file; `preserve_exceptions`
   comes to Go and TypeScript. The tool budget waits for the user's review
   of the list in parity.md (they expect to raise it).
 - **Fowler's catalog and IntelliJ** (2026-11-04): `docs/catalog.md`.
