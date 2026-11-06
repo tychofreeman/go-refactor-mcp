@@ -1150,6 +1150,34 @@ The struct's value is named after the type (`usage` for `Usage`), or
 the first phase a function too, extract_function its statements with
 the struct's declaration: they return the struct.
 
+### TypeScript (variable and loop)
+
+TypeScript's `split` takes the same arguments (`tsapi.SplitVariable`,
+`tsapi.SplitLoop`); kind phase is not built for it yet and says to
+extract_function the second phase, then convert_params_to_object.
+
+- **variable:** `name = e` as a statement of the block that declares
+  `name` with `let` or `var`, where `e` does not read `name`, becomes
+  `const new_name = e`, or `let` when `new_name` is assigned later
+  (`=`, a compound assignment, `++`, `--`), keeping a type annotation
+  the declaration has; the uses after it read `new_name` (`{ name }`
+  becomes `{ name: new_name }`). Refused: an assignment in a block
+  inside the declaring one; a reference to `name` from a function inside
+  the declaring one (a closure may run before or after the assignment);
+  `new_name` already a name there (`taken`).
+- **loop:** a `for`, `for...of` or `for...in` whose body is a block.
+  The two parts may not use what the other declares (function
+  declarations aside) and their effects may not conflict (`conflict`,
+  as for reordering: both changing state, one writing what the other
+  reads, both assigning a local). The header runs again: a `for`'s
+  initializer must declare its variables (not assign outer ones), and
+  the header, leaving out its own variables, may not change state, nor
+  conflict with what either part does (`beds.push` in the body of a loop
+  over `beds`); a part may not assign the header's variables; a
+  `for...of` is refused over what the checker does not know to be an
+  array, since an iterator runs once. A part that leaves the loop
+  (`break`, `continue`, `return` at its level) is refused.
+
 ## Type switch to method: what it checks
 
 `type_switch_to_method` turns `switch k := v.(type)` into a method of
