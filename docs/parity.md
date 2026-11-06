@@ -25,8 +25,8 @@ Cheap, and each one costs a fresh model a refusal or a wrong result today.
 | Go | inspect `names` refuses a type as declared twice when a test file declares a function of the same name | 49.9 |
 | Go | merge_duplicate_function does not see `Exists` and `lang.Exists` as one | 50.6 |
 | Go | reflection through interface variables not followed, so rename can miss a JSON field | 42c |
+| Go | move_declaration `new_name` on an embedded type | *Done* (`embeddedField`) |
 | Go | move_file into another module | *Done* (`to` routed as a path) |
-| Go | move_declaration `new_name` on an embedded type | 38e |
 | Go | inline_struct breaks one-line struct declarations (`type Bed struct{ Soil }`) | *Done* (#573) |
 | Java | replace_text matches `old` inside a line's indentation and writes at the wrong indent, silently | Java friction log 2026-11-05, no row |
 | Java | replace_text refuses an `old` that differs only in indentation, without naming the nearest lines (Go does) | Java #106 |

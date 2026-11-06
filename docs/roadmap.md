@@ -39,8 +39,7 @@ part left. What is open, the newest priority first:
    49.12 and 49.14 open; 49.11 for the CLI, TypeScript and an A/B arm;
    49.4 and 49.5 wait on a measurement.
 6. **Defects found on the way and not yet fixed:** values reaching
-   reflection through interfaces (42c); move_declaration's `new_name` on an embedded
-   type, if it still fails (38e).
+   reflection through interfaces (42c).
 7. **Older items with parts left**, by number: 1, 4-9 and 11-16 (signature,
    inline, statements, rename, packaging, test time, intent tools, recipes,
    smaller results, generators, large modules, teaching, third-party A/B),
@@ -1874,7 +1873,9 @@ part left. What is open, the newest priority first:
     - **A bug:** `move_declaration` with `new_name` on an embedded type
       leaves the field name in keyed literals (`inliner{site: site{...}}`)
       and rolls back as a bug in its checks (Oct 26; noted in item 37,
-      now done).
+      now done). *Done* (2026-11-06): an embedded field is named after
+      its type, so its keys and selectors take the new name
+      (`embeddedField`).
     - **Refusals still too strict.** Each was worked around and none is
       on the roadmap: `extract_function` refuses a variable that a
       literal which can run later uses, though nothing assigns it again
