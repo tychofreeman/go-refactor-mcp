@@ -4408,6 +4408,14 @@ real one replaced the stub.
   JSON for replacements that end mid-line.
 - I ran a pointless `sed -n` on a Go file (its output discarded) before
   reading the lines through inspect.
+## 2026-11-05: two of the CLI's gaps closed
+
+From the day's entries: a heredoc's final newline is dropped from a text
+argument read from stdin (except `content`), so `new_file=-` no longer
+splits a line; and a number or boolean given for a string argument is
+taken as its text in the engine (`toSchemaTypes`), so `expression=1500`
+works through key=value and from a model's JSON. Record:
+`docs/sessions/cli-stdin-fixes.md`. Nothing by hand.
 ## 2026-11-06: one inline (roadmap 54.2)
 
 Through the CLI; nothing by hand. Found on the way: inline_struct writes
