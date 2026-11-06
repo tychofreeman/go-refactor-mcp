@@ -67,7 +67,7 @@ func all() []refactor.RefactoringOf[*workspace.Workspace] {
 	return []refactor.RefactoringOf[*workspace.Workspace]{rename.New(), createfile.New(), adddecl.New(), replacetext.New(), replacestmts.New(), insertstmts.New(), replaceexpr.New(), addfield.New(), createfromusage.New(), changesig.NewAdd(), changesig.NewRemove(), changesig.NewMove(), changesig.NewIntroduce(), changesig.NewParamsToObject(), changesig.NewAddResult(), changesig.NewChangeFieldType(), changesig.NewChangeParameterType(), changetype.New(), changesig.NewFunctionToMethod(), changesig.NewMethodToFunction(), changesig.NewMoveMethod(),
 		simplify.NewExtractVariable(), simplify.NewInlineVariable(), simplify.NewMoveUp(), simplify.NewMoveDown(), simplify.NewInvertIf(), simplify.NewRemoveElse(), simplify.NewExtractFunction(), simplify.NewInlineFunction(),
 		move.NewMoveDeclaration(), move.NewMoveFile(), move.NewDeleteFile(),
-		shapes.NewFold(), shapes.NewParameterize(), shapes.NewMergeDuplicate(), shapes.NewRemoveDeadCode(), shapes.NewExtractInterface(), shapes.NewUnionSwitchToMethod(), shapes.NewPrepareSwitchForTypes(), addcase.New(), addelement.New(), replacedecl.New(), simplify.NewSplit()}
+		shapes.NewFold(), shapes.NewParameterize(), shapes.NewMergeDuplicate(), shapes.NewRemoveDeadCode(), shapes.NewExtractInterface(), shapes.NewUnionSwitchToMethod(), shapes.NewPrepareSwitchForTypes(), addcase.New(), addelement.New(), replacedecl.New(), simplify.NewSplit(), newMove()}
 }
 
 // goNames are Go tools' names for the TypeScript tool that does their
@@ -105,7 +105,7 @@ func (*Language) Owns(path string) bool {
 // Tools are TypeScript's refactorings and edits.
 func (*Language) Tools() []lang.Tool {
 	var out []lang.Tool
-	for _, r := range all() {
+	for _, r := range refactor.Published(all()) {
 		out = append(out, lang.Tool{Name: r.Name(), Description: r.Description(), Schema: r.InputSchema()})
 	}
 	return out
@@ -282,7 +282,7 @@ func (l *Language) Preload() <-chan struct{} {
 
 func (l *Language) names() string {
 	var names []string
-	for _, r := range all() {
+	for _, r := range refactor.Published(all()) {
 		names = append(names, r.Name())
 	}
 	return strings.Join(names, ", ")
@@ -294,6 +294,7 @@ func (l *Language) Step(tool string, args json.RawMessage) (string, bool, error)
 	if !ok {
 		return fmt.Sprintf("REFUSED %s: it does not work on TypeScript files yet; for them there is %s.", tool, l.names()), true, nil
 	}
+	r = refactor.Routed(r, args, lookup)
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	ws, args, intro, refused, err := l.route(args)

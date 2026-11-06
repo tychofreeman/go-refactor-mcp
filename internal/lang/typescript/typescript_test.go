@@ -182,3 +182,49 @@ func TestWorktreeCalls(t *testing.T) {
 		t.Errorf("the worktree's src/a.ts:\n%s", b)
 	}
 }
+
+// move is published in place of move_declaration, move_method and
+// move_file, and runs the one its arguments ask for.
+func TestMove(t *testing.T) {
+	root := t.TempDir()
+	for name, text := range map[string]string{
+		"tsconfig.json":  `{"compilerOptions": {"strict": true, "noEmit": true, "types": []}, "include": ["src"]}`,
+		"src/garden.ts":  "export class Soil {\n  ph = 7;\n  acid(): boolean {\n    return this.ph < 6;\n  }\n}\n\nexport class Bed extends Soil {}\n\nexport const maxBeds = 4;\n\nexport function sour(b: Bed): boolean {\n  return b.acid();\n}\n",
+		"src/count.ts":   "import { maxBeds } from \"./garden\";\n\nexport const beds = maxBeds;\n",
+		"notes/beds.txt": "beds\n",
+	} {
+		p := filepath.Join(root, name)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	l := New(root, &history.Stack{})
+	for _, args := range []string{
+		`{"file": "src/garden.ts", "name": "maxBeds", "to_file": "src/limits.ts"}`,
+		`{"file": "src/garden.ts", "name": "Soil.acid", "to": "Bed"}`,
+		`{"file": "notes/beds.txt", "to": "docs/beds.txt"}`,
+	} {
+		if text, refused, err := l.Step("move", []byte(args)); err != nil || refused {
+			t.Fatalf("move %s: %v %v\n%s", args, err, refused, text)
+		}
+	}
+	if b, _ := os.ReadFile(filepath.Join(root, "src/count.ts")); !strings.Contains(string(b), "./limits") {
+		t.Errorf("count.ts does not import from limits:\n%s", b)
+	}
+	if _, err := os.Stat(filepath.Join(root, "docs/beds.txt")); err != nil {
+		t.Errorf("beds.txt was not moved: %v", err)
+	}
+	if text, refused, _ := l.Step("move", []byte(`{"file": "src/garden.ts", "name": "sour"}`)); !refused {
+		t.Errorf("move without a destination is not refused:\n%s", text)
+	}
+	var names []string
+	for _, tool := range l.Tools() {
+		names = append(names, tool.Name)
+	}
+	if !slices.Contains(names, "move") || slices.Contains(names, "move_declaration") || slices.Contains(names, "move_method") || slices.Contains(names, "move_file") {
+		t.Errorf("published: %v", names)
+	}
+}

@@ -57,7 +57,7 @@ func ParseBatch[W Workspace](args json.RawMessage, lookup func(string) (Refactor
 		if !ok {
 			return BatchOf[W]{}, fmt.Sprintf("REFUSED batch: step %d: %q is not a refactoring or edit; a batch runs tools such as rename, add_parameter or replace_statements, and check as a checkpoint, not inspect, undo or batch. Nothing changed.", i+1, st.Tool)
 		}
-		b.Steps[i] = StepOf[W]{ID: st.ID, Refactoring: r, Args: st.Args}
+		b.Steps[i] = StepOf[W]{ID: st.ID, Refactoring: Routed(r, st.Args, lookup), Args: st.Args}
 	}
 	return b, ""
 }
