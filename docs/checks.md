@@ -21,6 +21,13 @@ that occurrence is left as it is. `refactor.Run` takes the argument off
 before a tool sees it, and the workspace (`PreserveExceptions`,
 `ExceptionChanges`) carries it for the call.
 
+TypeScript takes it too: its one allowance is a read through what may be
+null or undefined moved past code that writes, or past another such read
+(`tsapi.conflict`, judged strictly and as before in the same way). The
+setting is package state in tsapi (`PreserveExceptions`,
+`TakeExceptionChanges`), since that analysis is made afresh at each use
+and the server runs one call at a time.
+
 ## Calls known to have no side effects
 
 A call can do anything, so most checks treat one as a side effect. A

@@ -110,9 +110,18 @@ func (*Language) Owns(path string) bool {
 func (*Language) Tools() []lang.Tool {
 	var out []lang.Tool
 	for _, r := range refactor.Published(all()) {
-		out = append(out, lang.Tool{Name: r.Name(), Description: r.Description(), Schema: r.InputSchema()})
+		out = append(out, lang.Tool{Name: r.Name(), Description: r.Description(), Schema: schemaOf(r)})
 	}
 	return out
+}
+
+// schemaOf is r's published schema: with preserve_exceptions for a
+// refactoring, which refactor.Run takes off before r sees it.
+func schemaOf(r refactor.RefactoringOf[*workspace.Workspace]) json.RawMessage {
+	if _, edit := r.(refactor.Edit); edit {
+		return r.InputSchema()
+	}
+	return refactor.WithPreserveExceptions(r.InputSchema())
 }
 
 // Loaded reports whether the workspace has been loaded.

@@ -361,7 +361,7 @@ func Run[W Workspace](ws W, r RefactoringOf[W], args json.RawMessage, opts Optio
 	res.Summary, res.Notes = plan.Summary, plan.Notes
 	if keeps && !isEdit {
 		for _, c := range keeper.ExceptionChanges() {
-			res.Notes = append(res.Notes, "code that may panic moved: "+c+"; a nil dereference panics either way, but what runs before it changes (preserve_exceptions refuses this instead)")
+			res.Notes = append(res.Notes, "code that may fail moved: "+c+"; reading through nil, null or undefined fails either way, but what runs before it changes (preserve_exceptions refuses this instead)")
 		}
 	}
 	res.supplied, res.locations, res.edits = plan.Supplied, plan.Locations, plan.Edits
