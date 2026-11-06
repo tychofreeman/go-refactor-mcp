@@ -133,14 +133,14 @@ func (x *inlining) find() error {
 	}
 	gen, ispec := typeSpec(x.File, inner.Obj().Name())
 	if ispec == nil {
-		return refactor.Refusef("%s is not declared in %s; move_declaration it there first", inner.Obj().Name(), x.a.File)
+		return refactor.Refusef("%s is not declared in %s; move it there first", inner.Obj().Name(), x.a.File)
 	}
 	ist, ok := ispec.Type.(*ast.StructType)
 	if !ok {
 		return refactor.Refusef("%s is not a struct type", inner.Obj().Name())
 	}
 	if len(gen.Specs) > 1 {
-		return refactor.Refusef("%s is declared in a group of types; move_declaration it out of the group first", inner.Obj().Name())
+		return refactor.Refusef("%s is declared in a group of types; move it out of the group first", inner.Obj().Name())
 	}
 	x.inner, x.innerAST, x.innerDecl = inner, ist, gen
 	x.innerUses[ispec.Name.Pos()] = true
@@ -196,7 +196,7 @@ func (x *inlining) findMethods() error {
 	for i := range x.inner.NumMethods() {
 		m := x.inner.Method(i)
 		if x.WS.Fset.Position(m.Pos()).Filename != file {
-			return refactor.Refusef("%s's method %s is in another file; move_declaration it into %s first", x.inner.Obj().Name(), m.Name(), x.a.File)
+			return refactor.Refusef("%s's method %s is in another file; move it into %s first", x.inner.Obj().Name(), m.Name(), x.a.File)
 		}
 		if x.outerMethods[m.Name()] != nil {
 			x.clash[m.Name()] = true
@@ -205,7 +205,7 @@ func (x *inlining) findMethods() error {
 	for i := range x.outer.NumMethods() {
 		m := x.outer.Method(i)
 		if x.WS.Fset.Position(m.Pos()).Filename != file && x.clash[m.Name()] {
-			return refactor.Refusef("%s's method %s is in another file; move_declaration it into %s first", x.a.Name, m.Name(), x.a.File)
+			return refactor.Refusef("%s's method %s is in another file; move it into %s first", x.a.Name, m.Name(), x.a.File)
 		}
 	}
 	for m := range x.clash {

@@ -56,7 +56,7 @@ func (p *Project) FunctionToMethod(ctx context.Context, path, name, method strin
 	}
 	cname := class.Name().Text()
 	if ast.GetSourceFileOfNode(class) != l.f {
-		return nil, fmt.Sprintf("%s is declared in another file; move %s next to it first (move_declaration)", cname, name)
+		return nil, fmt.Sprintf("%s is declared in another file; move %s next to it first (move, with to_file)", cname, name)
 	}
 	if why := p.memberTaken(c, class, method); why != "" {
 		return nil, why

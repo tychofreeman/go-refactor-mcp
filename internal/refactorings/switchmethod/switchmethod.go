@@ -809,7 +809,7 @@ func (s *switcher) plan() (*refactor.Plan, error) {
 		Summary: fmt.Sprintf("turned the type switch of %s into method %s of %s and of interface %s", locate.FuncName(s.fd), s.method, strings.Join(typeNames, ", "), s.iface.Obj().Name()),
 		Edits:   edit.Merge(fes),
 		Notes:   notes,
-		Choices: []string{fmt.Sprintf("the methods go after %s; move_declaration moves them", locate.FuncName(s.fd))},
+		Choices: []string{fmt.Sprintf("the methods go after %s; move moves them", locate.FuncName(s.fd))},
 	}
 	if analysis.PublicAPI(s.iface.Obj(), s.WS.Pkgs) {
 		plan.Notes = append(plan.Notes, refactor.APINote(s.iface.Obj().Name(), "adding a method to it"))

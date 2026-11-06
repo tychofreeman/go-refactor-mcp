@@ -458,6 +458,7 @@ var refactoringTools = map[string]bool{
 	"method_to_function": true, "remove_dead_code": true, "invert_if": true, "remove_else": true,
 	"fold": true, "parameterize": true, "move_method": true, "type_switch_to_method": true,
 	"prepare_switch_for_types": true,
+	"move":                     true,
 }
 
 // textEditTools are the edits that write Go as text, where a structured

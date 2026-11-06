@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings"
 )
 
@@ -182,7 +183,7 @@ func TestToolsAndInstructions(t *testing.T) {
 	for _, tool := range res.Tools {
 		names[tool.Name] = tool
 	}
-	for _, want := range []string{"rename", "extract_variable", "inline_variable", "move_declaration", "create_file", "inspect", "undo", "check"} {
+	for _, want := range []string{"rename", "extract_variable", "inline_variable", "move", "create_file", "inspect", "undo", "check"} {
 		if names[want] == nil {
 			t.Errorf("tool %q not listed", want)
 		}
@@ -223,7 +224,7 @@ func TestInstructionsExampleRuns(t *testing.T) {
 // symbolTools target a declaration, so they accept name alone, as a
 // package-level symbol, in place of file + line + name.
 var symbolTools = []string{
-	"rename", "remove_dead_code", "merge_duplicate_function", "move_declaration",
+	"rename", "remove_dead_code", "merge_duplicate_function", "move",
 	"extract_struct", "add_parameter", "remove_parameter", "move_parameter",
 	"function_to_method", "method_to_function", "add_field",
 }
@@ -1014,7 +1015,7 @@ func TestInstructionsNameEveryTool(t *testing.T) {
 	}
 	groups, _, _ = strings.Cut(groups, "\n\n")
 	names := []string{"inspect", "batch", "check", "undo"}
-	for _, r := range refactorings.All() {
+	for _, r := range refactor.Published(refactorings.All()) {
 		names = append(names, r.Name())
 	}
 	for _, n := range names {

@@ -319,7 +319,7 @@ refactor -n remove_else file=main.go line=20
 refactor -n add_parameter file=main.go line=9 name=copyTree parameter=skip type=string value=cfg.OutDir
 refactor -n remove_parameter file=main.go line=9 name=copyTree parameter=skip
 refactor -n move_parameter file=main.go line=9 name=copyTree parameter=dst before=src
-refactor -n move_declaration file=main.go line=40 name=copyTree to_file=copy.go
+refactor -n move file=main.go line=40 name=copyTree to_file=copy.go
 refactor batch @steps.json        # several steps as one change, from a JSON file
 refactor undo                     # undo the last step or batch
 ```
