@@ -38,10 +38,9 @@ part left. What is open, the newest priority first:
 5. **49** whether the work goes through the tools: 49.2, 49.3, 49.8, 49.9,
    49.12 and 49.14 open; 49.11 for the CLI, TypeScript and an A/B arm;
    49.4 and 49.5 wait on a measurement.
-6. **Defects found on the way and not yet fixed:** introduce_parameter on
-   `(*found)[0]`, extract_function by pointer (44); remove_else's `wrap` in unformatted files (43);
-   values reaching reflection through interfaces (42c); TypeScript's copy
-   of the code after a switch with no case for the value (41.8); move_file
+6. **Defects found on the way and not yet fixed:** extract_function by
+   pointer (44); values reaching reflection through interfaces (42c);
+   move_file
    into another module (39g); move_declaration's `new_name` on an embedded
    type, if it still fails (38e).
 7. **Older items with parts left**, by number: 1, 4-9 and 11-16 (signature,
@@ -2246,7 +2245,10 @@ part left. What is open, the newest priority first:
        keep their returns wherever they are (the call becomes
        `return f(...)`), as a case's body that returns needs; before,
        only lines that ended the function's body did. Go's copy of the
-       code after the switch for a value with no case is not done.
+       code after the switch for a value with no case: *Done*
+       (2026-11-06, `tsapi.MissingCase`), under Go's conditions (one
+       switch, no default, every case ends in a jump, the code after
+       it ends in a return or throw).
     9. The plan's smaller leftovers: all_calls across files, declaring a
        generic function in extract_function, a moved declaration the
        destination imports under an alias, deleting an old file left
@@ -2436,7 +2438,10 @@ part left. What is open, the newest priority first:
     extract_interface (41.5), async functions are not inlined (41.7).
     Also found: remove_else's `wrap` does not re-indent the moved
     statements in a file that is not formatted (both languages' output
-    was right on formatted files).
+    was right on formatted files). *Done* (2026-11-06): Go indents them by
+    the file's own step; TypeScript, which did, no longer indents blank
+    lines or the lines of a template literal, in wrap and in
+    inline_function's early returns.
 44. **Extracting code that returns a refusal** (2026-10-29, found by
     running the compositions item 43.10's rewrites skipped): Go's
     extract_function refuses lines that return on some paths unless the
@@ -2457,6 +2462,11 @@ part left. What is open, the newest priority first:
     passed `found` by pointer because a closure in the caller uses it,
     though the new function only reads it; add_parameter does not reach a
     function literal bound to a local (`try := func(...)`).
+    *Done* (2026-11-06): introduce_parameter writes `xs[0]`, not
+    `(*(&xs))[0]`, where the body dereferences a parameter the call
+    passes as `&xs` (`derefOf`); its first-occurrence half now refuses
+    rightly, since the occurrence after the if is not evaluated on every
+    call.
     *Done* (2026-11-06): add_parameter changes a local function, a
     variable a `:=` binds to a literal (`findLocal`); the other signature
     refactorings still refuse it.

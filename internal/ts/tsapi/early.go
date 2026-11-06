@@ -53,11 +53,12 @@ func (e *early) fresh(base string) string {
 	return name
 }
 
-// indentLines indents each line of the body from the one at off to the
-// one ending at end by one step.
+// indentLines indents the lines of the body from the one at off to the
+// one ending at end by one step, but for blank lines and lines inside a
+// template literal.
 func (e *early) indentLines(off, end int) {
 	fl := e.in.fl
-	for n := fl.line(off); n <= fl.line(end); n++ {
+	for _, n := range fl.indentable(fl.line(off), fl.line(end)) {
 		e.insert(fl.start(n), e.unit)
 	}
 }

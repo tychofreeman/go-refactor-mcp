@@ -2,6 +2,7 @@ package tsapi
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -87,6 +88,28 @@ func (l *lined) unit() string {
 		least = 2
 	}
 	return strings.Repeat(" ", least)
+}
+
+// indentable returns the lines from first to last that a change of
+// indentation may touch: not blank, and not starting inside a template
+// literal, whose text the change would alter.
+func (l *lined) indentable(first, last int) []int {
+	var spans [][2]int
+	inspect(l.f.AsNode(), func(n *ast.Node) bool {
+		if n.Kind == ast.KindNoSubstitutionTemplateLiteral || n.Kind == ast.KindTemplateExpression {
+			spans = append(spans, [2]int{l.pos(n), n.End()})
+		}
+		return true
+	})
+	var lines []int
+	for n := first; n <= last; n++ {
+		s := l.start(n)
+		inside := slices.ContainsFunc(spans, func(sp [2]int) bool { return sp[0] < s && s < sp[1] })
+		if !inside && strings.TrimSpace(l.text[s:l.end(n)]) != "" {
+			lines = append(lines, n)
+		}
+	}
+	return lines
 }
 
 // quiet reports whether text holds only whitespace and comments.
