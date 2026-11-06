@@ -155,3 +155,19 @@ func TestMove(t *testing.T) {
 		t.Errorf("published: move %v, move_declaration %v, move_method %v, move_file %v", tools["move"], tools["move_declaration"], tools["move_method"], tools["move_file"])
 	}
 }
+
+// rename with a file and no name renames the file in its directory.
+func TestRenameFile(t *testing.T) {
+	root := t.TempDir()
+	write(t, root, map[string]string{"go.mod": "module example.com/home\n\ngo 1.22\n", "a.go": "package home\n", "testdata/old.txt": "beds\n"})
+	l := New(root, []string{"./..."}, &history.Stack{})
+	if text, refused, err := l.Step("rename", []byte(`{"file": "testdata/old.txt", "new_name": "new.txt"}`)); err != nil || refused {
+		t.Fatalf("rename of a file: %v %v\n%s", err, refused, text)
+	}
+	if _, err := os.Stat(filepath.Join(root, "testdata/new.txt")); err != nil {
+		t.Errorf("testdata/new.txt: %v", err)
+	}
+	if text, refused, _ := l.Step("rename", []byte(`{"file": "a.go", "new_name": "other/b.go"}`)); !refused || !strings.Contains(text, "move") {
+		t.Errorf("a path as new_name is not refused, naming move:\n%s", text)
+	}
+}

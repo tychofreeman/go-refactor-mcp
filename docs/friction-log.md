@@ -4357,3 +4357,9 @@ stdin with `-`. Go and TypeScript alike, since the CLI serves both.
   `new_file=-` that replaced text ending mid-line left a blank line in a
   bullet of the session notes. Fixed by a second replace_text; whether
   `-` should drop one final newline when `old` has none is open.
+
+## 2026-11-06: rename of a file path (roadmap 54.1)
+
+Through the CLI; nothing by hand. rename with file and new_name alone
+renames the file through move_file, in Go and TypeScript. Record:
+`docs/sessions/rename-file.md`.

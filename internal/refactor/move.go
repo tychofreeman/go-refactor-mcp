@@ -1,6 +1,10 @@
 package refactor
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"path"
+	"strings"
+)
 
 // MoveOf is the "move" tool of a workspace W.
 type MoveOf[W Workspace] struct {
@@ -113,4 +117,14 @@ func (m *MoveOf[W]) Plan(_ W, args json.RawMessage) (*Plan, error) {
 		return nil, err
 	}
 	return nil, Refusef("move would run %s, which this language does not have", name)
+}
+
+// FileRename returns move_file's arguments for renaming file to newName
+// in its directory: what rename does with a file and no name. newName is
+// a name, not a path; a path is refused, naming move.
+func FileRename(file, newName string) (json.RawMessage, error) {
+	if newName == "" || strings.ContainsAny(newName, `/\`) {
+		return nil, Refusef("to rename the file %s, give new_name as a file name in its directory (%s); to put it elsewhere, use move with to", file, path.Base(file))
+	}
+	return json.Marshal(map[string]string{"file": file, "to": path.Join(path.Dir(file), newName)})
 }

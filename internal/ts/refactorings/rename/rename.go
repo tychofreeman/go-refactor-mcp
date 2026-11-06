@@ -14,6 +14,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
+	"github.com/tychofreeman/go-refactor-mcp/internal/ts/refactorings/move"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/workspace"
 )
 
@@ -25,6 +26,7 @@ func New() *Rename { return &Rename{Named: refactor.Called[args]("rename")} }
 
 func (*Rename) Description() string {
 	return `Rename a function, class, interface, type, variable, parameter, property or method, and every reference to it in every project of the solution, tests included: renaming water in src/plant.ts to irrigate changes its declaration, each import { water } and each call. Identify it by file, line and its current name (column if the name is on the line twice); without line, name is a top-level declaration of file or a member (Bed.plant), and with function a local of that function ("Bed.plant", name "rows").
+With file and new_name alone, the file itself is renamed in its directory, and the imports of it and its own follow (src/plant.ts to water.ts), as move does.
 Refuses, saying why: a new name that is not an identifier or is reserved, or that a file the rename changes already uses; a member of a type whose values reach code that finds properties by name (JSON.stringify, Object.keys, for...in, "name" in x; what console prints is listed in a note); what the language service cannot rename (a library's declaration, a keyword).`
 }
 
@@ -32,7 +34,7 @@ type args struct {
 	File     string `json:"file" desc:"Path of a file with the symbol, relative to the root."`
 	Line     int    `json:"line,omitempty" desc:"1-based line of an occurrence. Omit it to find name as a top-level declaration of file, or Class.member."`
 	Function string `json:"function,omitempty" desc:"Instead of line, for a local: the function (name or Class.method) of file that declares it (a parameter, variable or constant)."`
-	Name     string `json:"name" desc:"The current name."`
+	Name     string `json:"name,omitempty" desc:"The current name. Omit it, and line, to rename file itself to new_name, updating its imports."`
 	Column   int    `json:"column,omitempty" desc:"Optional 1-based column, only needed when the name is on the line twice."`
 	NewName  string `json:"new_name" desc:"The new name."`
 }
@@ -47,6 +49,13 @@ func (*Rename) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Pla
 	var a args
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
+	}
+	if a.Name == "" && a.Line == 0 && a.Function == "" {
+		moveArgs, err := refactor.FileRename(a.File, a.NewName)
+		if err != nil {
+			return nil, err
+		}
+		return move.NewMoveFile().Plan(ws, moveArgs)
 	}
 	switch {
 	case !identifier.MatchString(a.NewName):
