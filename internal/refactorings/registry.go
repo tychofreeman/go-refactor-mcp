@@ -91,6 +91,7 @@ func All() []refactor.Refactoring {
 		extractiface.New(),
 		inlinestruct.New(),
 		changesig.NewParamsToObject(),
+		newMove(),
 	}
 }
 

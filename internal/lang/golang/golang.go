@@ -56,7 +56,7 @@ func (*Language) Owns(path string) bool { return strings.HasSuffix(path, ".go") 
 // whose line is optional finds a declaration by name.
 func (*Language) Tools() []lang.Tool {
 	var out []lang.Tool
-	for _, r := range refactorings.All() {
+	for _, r := range refactor.Published(refactorings.All()) {
 		out = append(out, lang.Tool{Name: r.Name(), Description: r.Description() + symbolNote(r), Schema: r.InputSchema()})
 	}
 	return out
@@ -220,6 +220,7 @@ func (l *Language) Step(tool string, args json.RawMessage) (string, bool, error)
 	if !ok {
 		return "", false, fmt.Errorf("unknown tool %q", tool)
 	}
+	r = refactor.Routed(r, args, refactorings.Lookup)
 	r = l.strict(r)
 	l.mu.Lock()
 	defer l.mu.Unlock()

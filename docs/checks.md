@@ -1257,6 +1257,21 @@ exported method's change says so. And code in other modules, which could
 declare its own interfaces, is never seen. Methods of generic types are
 refused whenever an interface has a method of that name.
 
+## Move: which move it runs
+
+`move` (roadmap 54.1) is published in place of move_declaration,
+move_method and move_file, in Go and TypeScript, and runs the one its
+arguments ask for (`refactor.MoveOf.Route`), so each keeps its own checks
+below and its own result; the three still run by their names.
+
+- `name` and `to_file`: move_declaration.
+- `name` and `to`: move_method (`to` is the type).
+- `to` without `name`: move_file (`to` is the path); it takes only `copy`
+  besides, and refuses `line`, `column`, `also`, `new_name` and
+  `with_dependencies`.
+- Both `to_file` and `to`, `to_file` without `name`, or neither: refused,
+  saying which to give. Unknown arguments are refused as for any tool.
+
 ## Move declaration: what it checks
 
 `move_declaration` moves a top-level declaration (a function, method, type,

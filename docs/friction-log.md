@@ -4300,3 +4300,17 @@ refusals answered by resending: add_element addressed by the line of an
 element, not the literal's first line; replace_statements cutting a loop
 (the range the refusal named); and a placeholder line in a new file
 removed with replace_text.
+
+## 2026-11-05: one move (roadmap 54.1)
+
+Nothing by hand: the CLI throughout (a cloud clone), record
+`docs/sessions/one-move-tool.md`.
+
+- A generic function's stub is not declared: a test that calls
+  `NewMove[*workspace.Workspace]("")` was refused with "no stub was
+  declared for NewMove, which is not called", since an instantiation
+  before the call is not seen as one. The stubs went in a create_file of
+  their own in the same batch.
+- insert_statements `after` wants the line where a statement ends; an
+  `if` block's closing brace counts, the blank line after it does not
+  (one refusal, then the right line).

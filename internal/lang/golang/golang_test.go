@@ -111,3 +111,47 @@ func TestWorktreeCalls(t *testing.T) {
 		t.Errorf("the worktree's a.go:\n%s", b)
 	}
 }
+
+// move is published in place of move_declaration, move_method and
+// move_file, and runs the one its arguments ask for; the three still run
+// by name.
+func TestMove(t *testing.T) {
+	root := t.TempDir()
+	write(t, root, map[string]string{
+		"go.mod":    "module example.com/home\n\ngo 1.22\n",
+		"a.go":      "package home\n\ntype Soil struct{ depth int }\n\nfunc (s Soil) Deep() bool { return s.depth > 2 }\n\ntype Bed struct{ Soil }\n\nconst MaxBeds = 4\n\nfunc Count() int { return MaxBeds }\n",
+		"notes.txt": "beds\n",
+	})
+	l := New(root, []string{"./..."}, &history.Stack{})
+	for _, args := range []string{
+		`{"file": "a.go", "name": "MaxBeds", "to_file": "limits.go"}`,
+		`{"file": "a.go", "name": "Soil.Deep", "to": "Bed"}`,
+		`{"file": "notes.txt", "to": "docs/notes.txt"}`,
+	} {
+		if text, refused, err := l.Step("move", []byte(args)); err != nil || refused {
+			t.Fatalf("move %s: %v %v\n%s", args, err, refused, text)
+		}
+	}
+	if b, _ := os.ReadFile(filepath.Join(root, "limits.go")); !strings.Contains(string(b), "const MaxBeds = 4") {
+		t.Errorf("limits.go:\n%s", b)
+	}
+	if b, _ := os.ReadFile(filepath.Join(root, "a.go")); !strings.Contains(string(b), "func (b Bed) Deep() bool") && !strings.Contains(string(b), "Bed) Deep()") {
+		t.Errorf("Deep is not Bed's:\n%s", b)
+	}
+	if _, err := os.Stat(filepath.Join(root, "docs/notes.txt")); err != nil {
+		t.Errorf("notes.txt was not moved: %v", err)
+	}
+	if text, refused, _ := l.Step("move", []byte(`{"file": "a.go", "name": "Count"}`)); !refused {
+		t.Errorf("move without a destination is not refused:\n%s", text)
+	}
+	if text, refused, err := l.Step("move_declaration", []byte(`{"file": "a.go", "name": "Count", "to_file": "count.go"}`)); err != nil || refused {
+		t.Errorf("move_declaration by its own name: %v %v\n%s", err, refused, text)
+	}
+	tools := map[string]bool{}
+	for _, tool := range l.Tools() {
+		tools[tool.Name] = true
+	}
+	if !tools["move"] || tools["move_declaration"] || tools["move_method"] || tools["move_file"] {
+		t.Errorf("published: move %v, move_declaration %v, move_method %v, move_file %v", tools["move"], tools["move_declaration"], tools["move_method"], tools["move_file"])
+	}
+}

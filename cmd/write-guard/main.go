@@ -110,7 +110,7 @@ func writesGo(words []string, at func(string) string) string {
 // adviceFor says how to change Go instead, naming the CLI when cli says it
 // is installed.
 func adviceFor(cli bool) string {
-	a := `Change Go through gorefactor: a refactoring, or an edit (add_declaration, replace_declaration, replace_statements, insert_statements, replace_expression, add_case, add_field, add_element; create_file for a new file, move_file and delete_file for files), several as one batch. Where no tool or sequence of tools makes the change, say so in docs/friction-log.md and ask the user.`
+	a := `Change Go through gorefactor: a refactoring, or an edit (add_declaration, replace_declaration, replace_statements, insert_statements, replace_expression, add_case, add_field, add_element; create_file for a new file, move and delete_file for files), several as one batch. Where no tool or sequence of tools makes the change, say so in docs/friction-log.md and ask the user.`
 	if cli {
 		a += ` From the CLI: refactor batch @steps.json.`
 	}

@@ -3052,6 +3052,9 @@ candidates and the evidence for each, gathered from the friction log.
        file path (2026-11-05, the user): Go and TypeScript first, the old
        names as aliases, an A/B check of the description before it
        replaces them; then Java's move_type and move_member (its row 109).
+       *Go and TypeScript built* (`refactor.MoveOf`, a `Router`; record
+       `docs/sessions/one-move-tool.md`); left: the A/B check, `rename`
+       of a file path, Java.
     2. One `inline` for functions, variables and a held struct or class
        (2026-11-05, the user), in the same way, after `move`.
 

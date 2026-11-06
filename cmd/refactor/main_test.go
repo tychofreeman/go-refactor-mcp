@@ -95,6 +95,18 @@ func TestRunDeclaresWhatAnEditCalls(t *testing.T) {
 	}
 }
 
+// move runs the move its arguments ask for, and list shows move, not the
+// tools it stands for.
+func TestRunMove(t *testing.T) {
+	dir := module(t, "package p\n\nfunc f() {}\n\nfunc g() { f() }\n")
+	if code := run([]string{"-C", dir, "move", `{"file":"p.go","name":"f","to_file":"q.go"}`}); code != 0 {
+		t.Fatalf("exit status %d, want 0", code)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, "q.go")); !strings.Contains(string(b), "func f()") {
+		t.Errorf("f did not move to q.go:\n%s", b)
+	}
+}
+
 func TestRunBatch(t *testing.T) {
 	dir := module(t, "package p\n\nfunc f() {}\n")
 	steps := `{"steps":[

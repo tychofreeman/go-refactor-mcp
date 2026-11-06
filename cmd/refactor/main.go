@@ -70,7 +70,7 @@ func run(argv []string) int {
 	name := fs.Arg(0)
 	if name == "list" {
 		want := fs.Args()[1:]
-		for _, r := range refactorings.All() {
+		for _, r := range refactor.Published(refactorings.All()) {
 			if len(want) > 0 && !slices.Contains(want, r.Name()) {
 				continue
 			}
@@ -140,6 +140,7 @@ func run(argv []string) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
+	r = refactor.Routed(r, args, refactorings.Lookup)
 
 	ws, err := workspace.Load(*dir, *pattern)
 	if err != nil {
