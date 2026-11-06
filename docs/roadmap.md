@@ -39,8 +39,7 @@ part left. What is open, the newest priority first:
    49.12 and 49.14 open; 49.11 for the CLI, TypeScript and an A/B arm;
    49.4 and 49.5 wait on a measurement.
 6. **Defects found on the way and not yet fixed:** introduce_parameter on
-   `(*found)[0]`, extract_function by pointer, add_parameter on a local
-   function literal (44); remove_else's `wrap` in unformatted files (43);
+   `(*found)[0]`, add_parameter on a local function literal (44); remove_else's `wrap` in unformatted files (43);
    values reaching reflection through interfaces (42c); TypeScript's copy
    of the code after a switch with no case for the value (41.8); move_file
    into another module (39g); move_declaration's `new_name` on an embedded
@@ -2458,6 +2457,9 @@ part left. What is open, the newest priority first:
     passed `found` by pointer because a closure in the caller uses it,
     though the new function only reads it; add_parameter does not reach a
     function literal bound to a local (`try := func(...)`).
+    *Done* (2026-11-06): extract_function passes a copy of a variable
+    that literals outside the lines change, when the lines only read it
+    and none of those literals can run while they do (`copyReads`).
     Not the only way round: extracting the tail and passing what follows
     as a parameter (`docs/derivations.md` section 10), and making a
     closure a function that builds it (section 11), compose today; run

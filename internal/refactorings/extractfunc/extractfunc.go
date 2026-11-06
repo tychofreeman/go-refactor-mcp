@@ -747,7 +747,7 @@ func (x *extraction) analyzeDataFlow() error {
 	for _, v := range order {
 		switch {
 		case x.fa.Addressed[v], x.declaredOutsideLit(v) && len(x.fa.Modified[v]) > 0,
-			x.fa.CapturedAsync[v] && len(x.fa.Modified[v]) > 0 && x.sharedWithCaller(v),
+			x.fa.CapturedAsync[v] && len(x.fa.Modified[v]) > 0 && x.sharedWithCaller(v) && !x.copyReads(v),
 			x.fa.CapturedAsync[v] && x.sharedLoopVar(v):
 			// Other code can reach v while the statements run: pass a
 			// pointer, so that both work on the same variable. (A variable
@@ -1462,6 +1462,51 @@ func (x *extraction) sharedWithCaller(v *types.Var) bool {
 		}
 	}
 	return x.usedOutside(v) || x.loopAround(v)
+}
+
+// copyReads reports whether a copy of v serves the selection as well as v,
+// though function literals that can run later change it: the selection
+// does not write v, and no literal that uses v can run while it does,
+// since each is held in a local variable that is only called, outside the
+// selection and any function literal, and not by a go or defer statement.
+func (x *extraction) copyReads(v *types.Var) bool {
+	if x.writtenIn(v) {
+		return false
+	}
+	for _, lit := range x.fa.AsyncLits[v] {
+		path, _ := astutil.PathEnclosingInterval(x.File, lit.Pos(), lit.End())
+		var held types.Object
+		if as, ok := path[1].(*ast.AssignStmt); ok && as.Tok == token.DEFINE && len(as.Lhs) == 1 && len(as.Rhs) == 1 && as.Rhs[0] == lit {
+			if id, ok := as.Lhs[0].(*ast.Ident); ok {
+				held = x.Info.Defs[id]
+			}
+		}
+		if held == nil {
+			return false
+		}
+		onlyCalled := true
+		ast.Inspect(x.File, func(n ast.Node) bool {
+			id, ok := n.(*ast.Ident)
+			if !ok || x.Info.Uses[id] != held {
+				return onlyCalled
+			}
+			p, _ := astutil.PathEnclosingInterval(x.File, id.Pos(), id.End())
+			call, ok := p[1].(*ast.CallExpr)
+			if !ok || call.Fun != id || x.inSelection(call) || slices.ContainsFunc(p, func(n ast.Node) bool { _, lit := n.(*ast.FuncLit); return lit }) {
+				onlyCalled = false
+			} else {
+				switch p[2].(type) {
+				case *ast.GoStmt, *ast.DeferStmt:
+					onlyCalled = false
+				}
+			}
+			return onlyCalled
+		})
+		if !onlyCalled {
+			return false
+		}
+	}
+	return true
 }
 
 // sharedLoopVar reports whether v is the variable of a for or range loop

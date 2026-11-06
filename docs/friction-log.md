@@ -4440,3 +4440,13 @@ inline_struct replaced the holder's whole line with the inner struct's
 fields, breaking the file. It now replaces only the field when the field
 shares its line with the braces (`type Bed struct{ depth int }`); golden
 `one_line`. Through the CLI; nothing by hand.
+
+## 2026-11-06: extract_function's pointer for a variable it only reads (roadmap 44)
+
+Through the CLI, goldens first: one that copies, one that keeps the
+pointer when the lines call the literal (its output made by the current
+CLI on a scratch copy of the input), and, after a second look at the
+rule, one where the lines run it through another literal, which the
+first version of `copyReads` missed (red, then fixed). The rule by
+replace_expression on the switch case and add_declaration, its
+refinement by replace_expression. Nothing by hand.
