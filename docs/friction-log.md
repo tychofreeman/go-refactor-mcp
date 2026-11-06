@@ -4451,3 +4451,13 @@ literal's continuation included, which changed the string. Both edits
 by replace_statements of the loop or the plan's tail, and
 `lined.indentable` by add_declaration. The golden's files are testdata,
 written with the shell. Nothing by hand.
+
+## 2026-11-06: TypeScript's extract_function for a value with no case (roadmap 41.8)
+
+Through the CLI, test first (TestExtractMissingCase: one applied, two
+refused). `tsapi.MissingCase` and its `Place` by add_declaration, the
+Plan's case lookup and its note by replace_statements, the description
+by replace_text on its literal. An older case that expected "has no
+case" for a switch the new rule now extends was given a default, by
+replace_text on its TypeScript text, so it still pins the refusal.
+Nothing by hand.

@@ -795,8 +795,9 @@ export function soak(p: Plant): number {
   switch (p.name) {
     case "moss":
       return 1;
+    default:
+      return 0;
   }
-  return 0;
 }
 `, NewExtractFunction(), `{"function": "soak", "case": "fern", "name": "f"}`, "", "soak has no case fern"},
 		{"generic", plants + `
@@ -1330,6 +1331,60 @@ export function soak(p: Plant): number {
   return 0;
 }
 `, NewExtractFunction(), `{"function": "soak", "case": "fern", "name": "f"}`, "", "declares n; splitting it would copy the declaration"},
+	})
+}
+
+// For a value with no case, when the code after the switch is what runs
+// for it, extract_function by case adds a case that calls a copy of that
+// code, as Go's does.
+func TestExtractMissingCase(t *testing.T) {
+	depth := plants + `
+export function depth(p: Plant): number {
+  switch (p.name) {
+    case "fern":
+      return 2;
+  }
+  water();
+  return p.height;
+}
+`
+	check(t, []change{
+		{"a value with no case", depth, NewExtractFunction(), `{"function": "depth", "case": "moss", "name": "mossDepth"}`, plants + `
+export function depth(p: Plant): number {
+  switch (p.name) {
+    case "fern":
+      return 2;
+    case "moss":
+      return mossDepth(p);
+  }
+  water();
+  return p.height;
+}
+
+function mossDepth(p: Plant) {
+  water();
+  return p.height;
+}
+`, ""},
+		{"a default runs for it", plants + `
+export function depth(p: Plant): number {
+  switch (p.name) {
+    case "fern":
+      return 2;
+    default:
+      return 1;
+  }
+}
+`, NewExtractFunction(), `{"function": "depth", "case": "moss", "name": "mossDepth"}`, "", "has no case moss"},
+		{"a case falls through to the code after", plants + `
+export function depth(p: Plant): number {
+  switch (p.name) {
+    case "fern":
+      water();
+  }
+  return p.height;
+}
+`, NewExtractFunction(), `{"function": "depth", "case": "moss", "name": "mossDepth"}`, "", "has no case moss"},
 	})
 }
 

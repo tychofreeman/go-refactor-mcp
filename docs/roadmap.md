@@ -41,8 +41,7 @@ part left. What is open, the newest priority first:
 6. **Defects found on the way and not yet fixed:** introduce_parameter on
    `(*found)[0]`, extract_function by pointer, add_parameter on a local
    function literal (44);
-   values reaching reflection through interfaces (42c); TypeScript's copy
-   of the code after a switch with no case for the value (41.8); move_file
+   values reaching reflection through interfaces (42c); move_file
    into another module (39g); move_declaration's `new_name` on an embedded
    type, if it still fails (38e).
 7. **Older items with parts left**, by number: 1, 4-9 and 11-16 (signature,
@@ -2247,7 +2246,10 @@ part left. What is open, the newest priority first:
        keep their returns wherever they are (the call becomes
        `return f(...)`), as a case's body that returns needs; before,
        only lines that ended the function's body did. Go's copy of the
-       code after the switch for a value with no case is not done.
+       code after the switch for a value with no case: *Done*
+       (2026-11-06, `tsapi.MissingCase`), under Go's conditions (one
+       switch, no default, every case ends in a jump, the code after
+       it ends in a return or throw).
     9. The plan's smaller leftovers: all_calls across files, declaring a
        generic function in extract_function, a moved declaration the
        destination imports under an alias, deleting an old file left
