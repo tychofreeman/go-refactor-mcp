@@ -4569,3 +4569,13 @@ repeated the lines that word a conflict), then those lines extracted into
 `described` (extract_function; its parameters reordered by
 move_parameter) and used twice. The disk filled once (`go clean -cache`).
 Nothing by hand.
+
+## 2026-11-06: TypeScript's split by phase (roadmap 52.2)
+
+Through the CLI, tests first. convert_params_to_object first gained
+`parameters` (only those bundled, in the first's place): `only` added to
+both ParamsToObject functions by add_parameter, then the body's three
+places by insert_statements, replace_expression and replace_statements.
+Then `tsapi.PhaseAt` and Split's `Expand` by add_declaration (refused
+once: two packages named changesig; resent with imports). Nothing by
+hand.

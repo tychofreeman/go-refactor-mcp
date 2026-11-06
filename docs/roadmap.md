@@ -3045,8 +3045,10 @@ candidates and the evidence for each, gathered from the friction log.
        change, an expander of add_declaration, fold, inline_function and
        rename.
     2. **split for TypeScript** (variable, loop, phase). *Variable and
-       loop done* (2026-11-05, `docs/sessions/ts-split.md`); phase next,
-       as Go's came in its own PR.
+       loop done* (2026-11-05, `docs/sessions/ts-split.md`); *phase done*
+       (2026-11-06, `docs/sessions/ts-split-phase.md`): an expander of
+       extract_function and convert_params_to_object, which gained
+       `parameters` to bundle some of a function's parameters.
     3. **inline_struct's counterpart for TypeScript:** a class held in a
        property inlined into the class that holds it.
     The budget (item 25): Go publishes 49 of 50 tools with this, and the
