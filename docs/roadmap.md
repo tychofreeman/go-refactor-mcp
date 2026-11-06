@@ -3088,10 +3088,15 @@ candidates and the evidence for each, gathered from the friction log.
        from a local; Java's is left (with its inline class, when built).
     3. The other merges of `docs/parity.md` section 2, one PR each
        (2026-11-06, the user: "do items 1-3"): `move_statement` with a
-       `direction` for move_statement_up and _down; `change_type` for
-       change_field_type and change_parameter_type; delete_file into
-       `move` (*done*: `delete`; `refactor.Routed` now drops a router's
-       own arguments that the tool it routes to lacks).
+       `direction` for move_statement_up and _down (*done*,
+       `refactor.MoveStatementOf`, a Covering tool that passes on only
+       the arguments the chosen one takes); `change_type` for
+       change_field_type and change_parameter_type (*done*: change_type
+       is a Router, `refactor.ChangeTypeRoute`: parameter, values or a
+       name Type.Field route to the others, and it keeps its own case,
+       so each keeps its markers); delete_file into `move` (*done*:
+       `delete`; `refactor.Routed` now drops a router's own arguments
+       that the tool it routes to lacks).
 
 55. **Constructive transformations, as java-refactor-mcp's #212-#215**
     (2026-11-05, the user: "I'd like go/ts to work the same way"): create

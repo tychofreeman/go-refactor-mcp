@@ -123,6 +123,29 @@ func Published[W Workspace](rs []RefactoringOf[W]) []RefactoringOf[W] {
 	return out
 }
 
+// ChangeTypeRoute names the tool change_type's arguments ask for:
+// change_parameter_type for parameter, change_field_type for values or a
+// name Type.Field, and change_type itself otherwise.
+func ChangeTypeRoute(args json.RawMessage) (string, error) {
+	var a struct {
+		Name, Parameter string
+		Values          map[string]string
+	}
+	if err := json.Unmarshal(args, &a); err != nil {
+		return "", Refusef("invalid arguments: %v", err)
+	}
+	switch {
+	case a.Parameter != "":
+		return "change_parameter_type", nil
+	case len(a.Values) > 0 || strings.Contains(a.Name, "."):
+		return "change_field_type", nil
+	}
+	return "change_type", nil
+}
+
+// ChangeTypeCovers names the tools change_type stands for.
+var ChangeTypeCovers = []string{"change_field_type", "change_parameter_type"}
+
 // Description is move's, for the language it moves.
 func (m *MoveOf[W]) Description() string { return m.text }
 

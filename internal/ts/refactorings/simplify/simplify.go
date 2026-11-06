@@ -137,6 +137,14 @@ func NewMoveUp() *MoveStatement { return &MoveStatement{} }
 // NewMoveDown returns move_statement_down.
 func NewMoveDown() *MoveStatement { return &MoveStatement{down: true} }
 
+// NewMoveStatement returns move_statement, published in place of
+// move_statement_up and move_statement_down.
+func NewMoveStatement() refactor.RefactoringOf[*workspace.Workspace] {
+	return refactor.NewMoveStatement[*workspace.Workspace](NewMoveUp(), NewMoveDown(), `Swap a statement with its neighbor in the same block, each with the comments directly above it: direction up swaps it with the one before, down with the one after. With log("start") then const n = beds.length, moving const n = beds.length up puts it first. Use it to bring statements that belong together next to each other, e.g. before extract_function.
+Identify the statement by file and the line it starts on (the outermost statement there, so a whole if or loop moves as one).
+Behavior does not change, so it refuses, saying why, when the order matters: one uses what the other declares (a function declaration aside), or assigns; both may change state, throw or return; one changes state the other reads; a line with more than the statement on it.`)
+}
+
 func (m *MoveStatement) Name() string {
 	if m.down {
 		return "move_statement_down"

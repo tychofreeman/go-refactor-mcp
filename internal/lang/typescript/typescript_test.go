@@ -235,6 +235,38 @@ func TestMove(t *testing.T) {
 	}
 }
 
+// move_statement is published in place of move_statement_up and
+// move_statement_down, and runs the one its direction names.
+func TestMoveStatement(t *testing.T) {
+	root := t.TempDir()
+	for name, text := range map[string]string{
+		"tsconfig.json": `{"compilerOptions": {"strict": true, "noEmit": true, "types": []}, "include": ["src"]}`,
+		"src/a.ts":      "export function f(): number {\n  const a = 1;\n  const b = 2;\n  return a + b;\n}\n",
+	} {
+		p := filepath.Join(root, name)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	l := New(root, &history.Stack{})
+	if text, refused, err := l.Step("move_statement", []byte(`{"file": "src/a.ts", "line": 2, "direction": "down"}`)); err != nil || refused {
+		t.Fatalf("move_statement: %v %v\n%s", err, refused, text)
+	}
+	if b, _ := os.ReadFile(filepath.Join(root, "src/a.ts")); !strings.Contains(string(b), "const b = 2;\n  const a = 1;") {
+		t.Errorf("not moved down:\n%s", b)
+	}
+	var names []string
+	for _, tool := range l.Tools() {
+		names = append(names, tool.Name)
+	}
+	if !slices.Contains(names, "move_statement") || slices.Contains(names, "move_statement_up") || slices.Contains(names, "move_statement_down") {
+		t.Errorf("published: %v", names)
+	}
+}
+
 // create_file with declaration writes a class from its header, with a
 // member for each that its interfaces and abstract base require, and the
 // imports they need.
@@ -397,5 +429,42 @@ func TestRenameFile(t *testing.T) {
 	}
 	if b, _ := os.ReadFile(filepath.Join(root, "src/bed.ts")); !strings.Contains(string(b), "./water") {
 		t.Errorf("bed.ts does not import from ./water:\n%s", b)
+	}
+}
+
+// change_type is published in place of change_field_type and
+// change_parameter_type, and runs the one its arguments ask for.
+func TestChangeTypeCovers(t *testing.T) {
+	root := t.TempDir()
+	for name, text := range map[string]string{
+		"tsconfig.json": `{"compilerOptions": {"strict": true, "noEmit": true, "types": []}, "include": ["src"]}`,
+		"src/a.ts":      "export type Height = number;\n\nexport interface Plant {\n  height: number;\n}\n\nexport function grow(n: number): number {\n  return n + 1;\n}\n",
+	} {
+		p := filepath.Join(root, name)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	l := New(root, &history.Stack{})
+	for _, args := range []string{
+		`{"file": "src/a.ts", "name": "Plant.height", "type": "Height"}`,
+		`{"file": "src/a.ts", "name": "grow", "parameter": "n", "type": "Height"}`,
+	} {
+		if text, refused, err := l.Step("change_type", []byte(args)); err != nil || refused {
+			t.Fatalf("change_type %s: %v %v\n%s", args, err, refused, text)
+		}
+	}
+	if b, _ := os.ReadFile(filepath.Join(root, "src/a.ts")); !strings.Contains(string(b), "height: Height") || !strings.Contains(string(b), "n: Height") {
+		t.Errorf("a.ts:\n%s", b)
+	}
+	var names []string
+	for _, tool := range l.Tools() {
+		names = append(names, tool.Name)
+	}
+	if !slices.Contains(names, "change_type") || slices.Contains(names, "change_field_type") || slices.Contains(names, "change_parameter_type") {
+		t.Errorf("published: %v", names)
 	}
 }
