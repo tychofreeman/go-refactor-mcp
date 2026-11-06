@@ -35,8 +35,7 @@ func (*Split) Description() string {
 kind variable: a variable given a new value that does not depend on its old one becomes a new variable from there: in n := len(plants); fmt.Println(n); n = 3 * len(plants); fmt.Println(n), new_name waterings at the assignment gives waterings := 3 * len(plants), and the uses after it waterings.
 kind loop: a loop doing two independent things becomes two: for _, b := range beds { water += b.Water; plants += len(b.Plants) } at the second statement becomes for _, b := range beds { water += b.Water } then for _, b := range beds { plants += len(b.Plants) }.
 kind phase: what the statements before line compute for the rest goes into a new struct type, and the rest becomes the function new_name of it: litres := b.Rows * 2; total := litres * days; return total * rate at the second line, with type Usage and new_name price, gives usage := Usage{litres: litres}; return price(usage, days, rate).
-Identify a variable by file, line (the assignment) and name; a loop by file, line (the for) and at (the second loop's first statement); a phase by file and line (its first statement).
-Refuses, saying why: an assignment that reads the old value or is in a block inside the variable's; a variable whose address is taken or that a closure may use later; a name that would hide another; goto; loop parts that leave the loop, depend on each other or both have side effects; a loop over a map, channel or function, or whose header the body changes; a second phase that changes what the first computes (split it first).`
+Identify a variable by file, line (the assignment) and name; a loop by file, line (the for) and at (the second loop's first statement); a phase by file and line (its first statement).`
 }
 
 type args struct {

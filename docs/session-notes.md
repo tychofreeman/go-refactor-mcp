@@ -215,10 +215,13 @@ working patterns, with their steps, are in `docs/patterns.md`.
   (2026-10-21): cutting `fold`'s worked example of near-duplicates lost
   its use there (4/4 runs to 0/4); a fresh model decides whether a tool
   fits from its before/after examples. Write: what it does with a
-  before/after, the addressing hints the schema lacks, and one line of
-  what it refuses. When a PR adds or removes a refusal, change that line
-  (an audit, 2026-10-29, found 11 that had drifted); a definition stays
-  under `TestLoadedToolsStaySmall`'s 1,700 characters.
+  before/after and the addressing hints the schema lacks; not what it
+  refuses, nor what every tool shares (the user, 2026-11-06, as java's
+  #256: "refusals should explain themselves"; this replaced "one line of
+  what it refuses"). Each refusal says why and what to do instead;
+  `docs/checks.md` keeps the lists, and the instructions say once that
+  edits import what they name. A definition stays under
+  `TestLoadedToolsStaySmall`'s 1,700 characters.
 - **Examples come from no eval task** (2026-10-22): they use one garden
   domain (`Plant`, `Bed`, `Sprinkler`), and `TestExamplesAvoidEvalTasks`
   fails on a name or string of a seeded eval module in published text.

@@ -93,8 +93,7 @@ func NewParameterize() *Parameterize {
 
 func (*Parameterize) Description() string {
 	return `Make functions that are the same but for literals into calls of one new function that takes those literals as parameters: mist(bed: string) { log("mist on " + bed); } and drip(row: string) { log("drip on " + row); } become calls on(bed, "mist on ") and on(row, "drip on ") of function on(bed: string, what: string) { log(what + bed); }. Each keeps its signature and callers; inline_function with all_calls retires them.
-Give file, functions (two or more of one file with the same signature; methods of one class), name for the new function, and parameters: a name for each literal that differs, in the order they appear.
-Refuses, saying why: functions that differ in more than literals, or not at all (merge_duplicate_function is for that), a name already taken.`
+Give file, functions (two or more of one file with the same signature; methods of one class), name for the new function, and parameters: a name for each literal that differs, in the order they appear.`
 }
 
 // parameterizeArgs are the arguments of parameterize.
@@ -128,9 +127,8 @@ func NewMergeDuplicate() *MergeDuplicate {
 }
 
 func (*MergeDuplicate) Description() string {
-	return `Replace every use of a function with an identical one, and delete it: with function trim(s: string) { return s.trim(); } and function clean(t: string) { return t.trim(); }, merging trim into clean turns trim(x) into clean(x) everywhere, imports included, and deletes trim. Identical means the same signature and bodies that match node for node; parameters and locals may be named differently, every other name must mean the same. The refusal shows the first difference.
-Identify the function to delete by file and name, or by line at its declaration or any use, and the one to keep by keep_file and keep_name.
-Refuses, saying why: methods, generic functions or overloads, a function to keep that a file using the other cannot see (export it first), a re-export of the one to delete.`
+	return `Replace every use of a function with an identical one, and delete it: with function trim(s: string) { return s.trim(); } and function clean(t: string) { return t.trim(); }, merging trim into clean turns trim(x) into clean(x) everywhere, imports included, and deletes trim. Identical means the same signature and bodies that match node for node; parameters and locals may be named differently, every other name must mean the same.
+Identify the function to delete by file and name, or by line at its declaration or any use, and the one to keep by keep_file and keep_name.`
 }
 
 // mergeDuplicateArgs are the arguments of merge_duplicate_function.
@@ -166,8 +164,7 @@ func NewRemoveDeadCode() *RemoveDeadCode {
 
 func (*RemoveDeadCode) Description() string {
 	return `Delete a top-level declaration or a member of a class or interface that nothing uses, with the comments above it and the imports only it used: once the last call of oldLabel went, removing oldLabel deletes the function and its import of format; removing Plant.colour deletes the property once nothing reads or writes it. Exported code goes too, with a note that the module's API changed.
-Identify it by file and name (name, Class.member or Interface.member), or by line at its declaration; also names more declarations of the file to remove with it, such as functions that only call each other.
-Refuses, saying why: something still used (its own body aside, imports included); a member that implements or overrides one of a base class or interface; a value whose evaluation does something; a statement declaring several variables; a constructor.`
+Identify it by file and name (name, Class.member or Interface.member), or by line at its declaration; also names more declarations of the file to remove with it, such as functions that only call each other.`
 }
 
 // removeDeadCodeArgs are the arguments of remove_dead_code.
@@ -211,8 +208,7 @@ func NewExtractInterface() *ExtractInterface {
 
 func (*ExtractInterface) Description() string {
 	return `Name some members of a type as a new interface, so that code can depend on just those. From an interface, the members move into the new one, which the old one extends, so every use keeps working: moving depth and width of interface Bed { depth: number; width: number; name: string } into Size declares interface Size { depth: number; width: number } and makes interface Bed extends Size { name: string }. From a type alias of an object type, the same with type Bed = Size & { name: string }. From a class, the new interface has the members' signatures (a method's parameters and result, an accessor as a property) and the class implements it: class Sprinkler implements Watering.
-Identify the type by file and name, or by line at its declaration or a use; fields are the members, new_type the new interface's name, declared just before the type (exported with it).
-Refuses, saying why: a generic type, a private, protected or static member of a class, a member sharing its line with another, a name already taken.`
+Identify the type by file and name, or by line at its declaration or a use; fields are the members, new_type the new interface's name, declared just before the type (exported with it).`
 }
 
 // extractInterfaceArgs are the arguments of extract_interface.
@@ -253,8 +249,7 @@ func (*UnionSwitchToMethod) Description() string {
 becomes
   function water(p: Plant, days: number): number { return p.water(days); }
 with water(days: number): number { return days * this.mist; } in Fern and water(days: number): number { return 1; } in Cactus. An instanceof chain (if (p instanceof Fern) ... else if (p instanceof Cactus) ...) works the same way. The locals a case uses become parameters. Every case must return, or none.
-Identify the switch by file and line, or by function when it is that function's only one; method is the new method's name.
-Refuses, saying why: a class of the union without a case, a default or a final else, a case that falls through, assigns a local it uses, or uses this; a subject whose evaluation does something; a method name a class already has.`
+Identify the switch by file and line, or by function when it is that function's only one; method is the new method's name.`
 }
 
 // unionSwitchToMethodArgs are the arguments of union_switch_to_method.
@@ -293,8 +288,7 @@ becomes
   interface Species { water(days: number): number; }
   function water(p: Plant, days: number): number { if (typeof p.species === "object" && p.species !== null && "water" in p.species) { return (p.species as Species).water(days); } switch (p.species) { ... } return 0; }
 The subject must be able to hold an object: widen it first (change_field_type to unknown). The interface is declared before the function, or gets the method when the file has it. The locals the cases use become the method's parameters. Every case must return, or none (then the switch goes in the else). Cases that share a body (case "moss": case "cactus":) are split, each with a copy, so that each moves alone.
-Identify the switch by file and line, or by function when it is that function's only switch.
-Refuses, saying why: a subject that holds no object or would be evaluated again with another value, an interface that already has the method, a case that uses this, leaves other than by return or assigns a local it uses, a shared body that declares something.`
+Identify the switch by file and line, or by function when it is that function's only switch.`
 }
 
 // prepareSwitchForTypesArgs are the arguments of prepare_switch_for_types.

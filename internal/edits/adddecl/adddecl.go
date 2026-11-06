@@ -24,7 +24,7 @@ type AddDeclaration struct{ refactor.Named[args] }
 func New() *AddDeclaration { return &AddDeclaration{Named: refactor.Called[args]("add_declaration")} }
 
 func (*AddDeclaration) Description() string {
-	return `Add top-level declarations (functions, methods, types, variables, constants) to an existing file: an edit; for a new file, use create_file. content is Go source with doc comments, without package clause or imports; packages it names are imported (imports picks one when a name is ambiguous). They go at the end of the file, or just after or before the declaration named in after or before: after "Cart.Total" puts a new method right after Total.
+	return `Add top-level declarations (functions, methods, types, variables, constants) to an existing file; for a new file, use create_file. content is Go source with doc comments, without package clause or imports. They go at the end of the file, or just after or before the declaration named in after or before: after "Cart.Total" puts a new method right after Total.
 A function or method named like a stub (a body of only panic("not implemented"), as create_from_usage writes) replaces the stub, wherever it is in the package. test_for "Bed.Plant" adds a red TestBedPlant instead.`
 }
 

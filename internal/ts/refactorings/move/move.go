@@ -27,8 +27,7 @@ func NewMoveDeclaration() *MoveDeclaration {
 
 func (*MoveDeclaration) Description() string {
 	return `Move a top-level declaration (function with its overloads, class, interface, type, enum, or a variable statement, with the comments above it) to another file, creating the file if needed: moving water from src/plant.ts to src/water.ts declares it there, exported if anything outside it uses it, and changes import { water } from "./plant" to import from "./water" in every file. Imports follow the code: what it uses of its old file's imports is imported at its new place, and an import only it used goes.
-Identify the declaration by file and name, or by line at it or any use; to_file is the destination, relative to the root. also names more top-level declarations of the same file to move with it, such as the helpers it uses; with_dependencies moves every declaration of the file it uses, and what those use.
-Refuses, saying why: code that uses a declaration that stays and is not exported (move it too, or export it first); a name the destination declares already; a default export or a namespace; a statement declaring several variables; a file that imports the old one as a namespace and uses what moves, or re-exports all of it; import() or require() of the old file.`
+Identify the declaration by file and name, or by line at it or any use; to_file is the destination, relative to the root. also names more top-level declarations of the same file to move with it, such as the helpers it uses; with_dependencies moves every declaration of the file it uses, and what those use.`
 }
 
 // moveDeclarationArgs are the arguments of move_declaration.

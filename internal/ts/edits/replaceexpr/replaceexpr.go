@@ -28,7 +28,7 @@ func New() *ReplaceExpression {
 func (*ReplaceExpression) ChangesBehavior() {}
 
 func (*ReplaceExpression) Description() string {
-	return `Replace an expression with a new one: an edit, to change part of a statement without restating it. Replacing p.height with p.height * 2 on its line changes that read alone. With all_occurrences, every expression in the file that means the same is replaced: the same tokens, each name referring to the same thing, so this.plants in another method of Bed matches and a parameter p of another function does not.
+	return `Replace an expression with a new one, to change part of a statement without restating it. Replacing p.height with p.height * 2 on its line changes that read alone. With all_occurrences, every expression in the file that means the same is replaced: the same tokens, each name referring to the same thing, so this.plants in another method of Bed matches and a parameter p of another function does not.
 Identify the expression by file, the line it starts on and its source text (whitespace may differ; column if the text starts on the line twice). new is parenthesized where its place needs it (by becomes (by + 1) in h - by).`
 }
 

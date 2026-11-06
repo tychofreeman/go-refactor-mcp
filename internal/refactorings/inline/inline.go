@@ -25,8 +25,7 @@ func (*Inline) Description() string {
 	return `Inline what name names into where it is used, and remove it when nothing else uses it; what it is says which:
 - a function or method, at a call (line): with func full(u User) string { return u.First + " " + u.Last }, name := full(u) becomes name := u.First + " " + u.Last. all_calls inlines every call and deletes the function (line optional; keep_function keeps it).
 - a local variable or constant, at its declaration or a use (line), or by function and name: name := u.First; return greet(name) becomes return greet(u.First).
-- with field, a struct the struct name holds: with type Bed struct { Soil; name string } and type Soil struct { depth int }, name Bed and field Soil give type Bed struct { depth int; name string }, and b.Soil.depth becomes b.depth. elsewhere and prefer settle a struct used outside the holder and methods both have.
-Refuses, saying why: what each of those refuses (a generic or variadic function, a variable assigned after its declaration, a value evaluated another number of times or in another order).`
+- with field, a struct the struct name holds: with type Bed struct { Soil; name string } and type Soil struct { depth int }, name Bed and field Soil give type Bed struct { depth int; name string }, and b.Soil.depth becomes b.depth. elsewhere and prefer settle a struct used outside the holder and methods both have.`
 }
 
 // args are inline's: those of the tools it stands for.
