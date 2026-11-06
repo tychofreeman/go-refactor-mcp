@@ -1,0 +1,1 @@
+{"file": "cart_test.go", "test_for": "Cart.Total", "content": "func TestX(t *testing.T) {}"}

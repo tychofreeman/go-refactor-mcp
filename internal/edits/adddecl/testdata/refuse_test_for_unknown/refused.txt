@@ -1,0 +1,1 @@
+Cart has no method Pay

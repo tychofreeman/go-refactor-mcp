@@ -1,8 +1,12 @@
 package workspace
 
 import (
+	"context"
+	"encoding/json"
 	"os"
+	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/tsapi"
 )
@@ -46,4 +50,40 @@ func (w *Workspace) ClassMembers(implements []string, base string) ([]string, st
 	}
 	names := append(slices.Clone(implements), base)
 	return nil, "no project of the solution declares all of " + joinComma(slices.DeleteFunc(names, func(s string) bool { return s == "" })) + " as a top-level interface or class"
+}
+
+// TestFor returns tsapi's TestFor from the first project that declares
+// target, and the module to import test from: vitest or @jest/globals when
+// the root's package.json names one, "" for jest's globals, else node:test.
+func (w *Workspace) TestFor(target string) (test, module, refusal string) {
+	for _, p := range w.projects {
+		if test, found, why := p.TestFor(context.Background(), target); found {
+			return test, w.testModule(), why
+		}
+	}
+	return "", "", "no project of the solution has a top-level function or class " + strings.SplitN(target, ".", 2)[0] + "; test_for names a function or Class.method"
+}
+
+// testModule is the module the solution's tests import test from.
+func (w *Workspace) testModule() string {
+	var pkg struct {
+		Dependencies, DevDependencies map[string]string
+	}
+	if b, err := os.ReadFile(filepath.Join(w.Root, "package.json")); err == nil {
+		json.Unmarshal(b, &pkg)
+	}
+	has := func(name string) bool {
+		_, dep := pkg.Dependencies[name]
+		_, dev := pkg.DevDependencies[name]
+		return dep || dev
+	}
+	switch {
+	case has("vitest"):
+		return "vitest"
+	case has("@jest/globals"):
+		return "@jest/globals"
+	case has("jest"):
+		return ""
+	}
+	return "node:test"
 }
