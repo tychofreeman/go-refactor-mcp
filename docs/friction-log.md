@@ -4501,3 +4501,14 @@ Through the CLI, probe then golden first (`pkg_embedded_renamed`,
 testdata with the shell): it still rolled back. One batch:
 insert_statements in updateReferences' loop and `embeddedField` by
 add_declaration. Nothing by hand.
+
+## 2026-11-06: move_file's to in another module (roadmap 39g)
+
+Through the CLI, test first (TestMoveFileInOtherModule). Its first
+version used a sibling module and passed by coincidence (`../other/c.go`
+resolves the same from either root); a nested module showed the file
+moving to `tools/tools/u.go`. Two replace_expression steps in
+`lang.NamedFiles` and `MapFiles`, comments by replace_text. Nothing by
+hand. The CLI does not route to other modules (only the server's
+Language does), so probing there refused the file as outside the
+workspace.
