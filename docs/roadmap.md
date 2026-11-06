@@ -21,28 +21,31 @@ comparison it asked for is `cmd/refactor-ab`). Waiting on the user: 29
 (whether a loop of our own is worth a second step). Every other item has a
 part left. What is open, the newest priority first:
 
-1. **52** Go and TypeScript at parity: `split` kind phase for TypeScript
+1. **54** Go, TypeScript and Java at parity: `docs/parity.md` lists the
+   bugs, the shared names, the missing tools and options, and an order;
+   the bugs first (TypeScript's inspect `pattern` refused).
+2. **52** Go and TypeScript at parity: `split` kind phase for TypeScript
    (52.2; variable and loop are done), then
    inline_struct's counterpart (52.3, also 51.3's other half). Before the
    next Go tool the user raises the budget of 50 or two tools merge (25).
-2. **51** the rest of Fowler's and IntelliJ's catalog: Use Interface Where
+3. **51** the rest of Fowler's and IntelliJ's catalog: Use Interface Where
    Possible (51.2), fold of compound assignments, a local made a field and
    Consolidate Conditional Expression (51.5). Separate Query from Modifier
    is shelved (51.4).
-3. **50** worktrees: extract returns that also set a variable used after
+4. **50** worktrees: extract returns that also set a variable used after
    (50.5), merge_duplicate_function across `lang.` (50.6), `check` with
    several patterns (50.7), the branch from `cwd` in session-log (50.4).
-4. **49** whether the work goes through the tools: 49.2, 49.3, 49.8, 49.9,
+5. **49** whether the work goes through the tools: 49.2, 49.3, 49.8, 49.9,
    49.12 and 49.14 open; 49.11 for the CLI, TypeScript and an A/B arm;
    49.4 and 49.5 wait on a measurement.
-5. **Defects found on the way and not yet fixed:** introduce_parameter on
+6. **Defects found on the way and not yet fixed:** introduce_parameter on
    `(*found)[0]`, extract_function by pointer, add_parameter on a local
    function literal (44); remove_else's `wrap` in unformatted files (43);
    values reaching reflection through interfaces (42c); TypeScript's copy
    of the code after a switch with no case for the value (41.8); move_file
    into another module (39g); move_declaration's `new_name` on an embedded
    type, if it still fails (38e).
-6. **Older items with parts left**, by number: 1, 4-9 and 11-16 (signature,
+7. **Older items with parts left**, by number: 1, 4-9 and 11-16 (signature,
    inline, statements, rename, packaging, test time, intent tools, recipes,
    smaller results, generators, large modules, teaching, third-party A/B),
    18-21 (type reasoning, algebra, loops and containers, experience for a
@@ -3041,6 +3044,10 @@ candidates and the evidence for each, gathered from the friction log.
        guard alone (a few dollars; ask first).
     4. The Java repo gets the same two guards (its roadmap #15 and a row
        for the write guard).
+
+54. **Go, TypeScript and Java at parity** (2026-11-05, the user): the
+    survey and plan are `docs/parity.md`. Each fix or tool is its own PR
+    in its repo; mark its row there when done.
 
 Parked: the Ollama loop (`refactor-agent`). It works and stays, but Claude
 through MCP is the priority.
