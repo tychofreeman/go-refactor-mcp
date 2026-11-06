@@ -4494,3 +4494,10 @@ rule, one where the lines run it through another literal, which the
 first version of `copyReads` missed (red, then fixed). The rule by
 replace_expression on the switch case and add_declaration, its
 refinement by replace_expression. Nothing by hand.
+
+## 2026-11-06: move_declaration's new_name on an embedded type (roadmap 38e)
+
+Through the CLI, probe then golden first (`pkg_embedded_renamed`,
+testdata with the shell): it still rolled back. One batch:
+insert_statements in updateReferences' loop and `embeddedField` by
+add_declaration. Nothing by hand.
