@@ -4370,3 +4370,25 @@ tests), goldens written as testdata.
 - `TestExamplesAvoidEvalTasks` refused the first Go example (`Price`
   is a name of an eval task); the description now uses `io.Writer` on a
   `Sprinkler`.
+
+## 2026-11-05: test_for (roadmap 55.2)
+
+Through the CLI with heredocs; three slips of mine and two gaps:
+
+- I found a line of a test file with `grep -n` again (this session still
+  has no read guard), where `inspect` with `pattern` was the tool.
+- A bare `refactor undo`, meant for a scratch solution, ran in the repo
+  and reverted the last batch there (five steps of the TypeScript
+  wiring). The batch was sent again. The undo stack is per module, so an
+  undo without `-C` acts on the directory the shell is in.
+- An argument tagged `json:"content"` without omitempty is required in
+  the schema, so a batch step with `test_for` alone was refused as
+  "missing content", and the retry that adds imports failed silently:
+  the single step reported only its type error. Content is now optional
+  where test_for or declaration can replace it.
+- The CLI's key=value turns `expression=1500` into a number, which a
+  string argument refuses; the JSON form worked. key=value could keep a
+  value as text when the schema says string.
+- add_declaration's definition budget (1,500 characters, the tool models
+  load most) left no room for test_for; it is 1,700 now, as
+  replace_statements', with test_for explained in its field.

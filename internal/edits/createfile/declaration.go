@@ -15,6 +15,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/tychofreeman/go-refactor-mcp/internal/edits/testfor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
@@ -191,4 +192,25 @@ func receiverName(typeName string) string {
 		return string(unicode.ToLower(r))
 	}
 	return "x"
+}
+
+// testFile returns the _test.go file at path with a red test of target, a
+// function or Type.Method of the package in its directory, or, for a type
+// alone, the package clause.
+func testFile(ws *workspace.Workspace, path, target string) (string, error) {
+	if !strings.HasSuffix(path, "_test.go") {
+		return "", refactor.Refusef("test_for writes a test, so file is a _test.go file")
+	}
+	own := dirTypes(ws, filepath.Dir(path))
+	if own == nil {
+		return "", refactor.Refusef("test_for needs the package it tests in the file's directory; there is none")
+	}
+	if _, ok := own.Scope().Lookup(target).(*types.TypeName); ok {
+		return fmt.Sprintf("package %s\n", own.Name()), nil
+	}
+	test, err := testfor.Source(own, target)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("package %s\n\nimport \"testing\"\n\n%s\n", own.Name(), test), nil
 }

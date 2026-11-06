@@ -3071,7 +3071,9 @@ candidates and the evidence for each, gathered from the friction log.
        its target. Go ends it with `t.Fatalf("write the assertion: M
        returned %v", got)` (the user's choice over discarding the result);
        TypeScript's framework from package.json, vitest or jest, else
-       node:test (the user's choice over node:test always).
+       node:test (the user's choice over node:test always). *Done*
+       (`internal/edits/testfor`, `tsapi.TestFor`); add_declaration's
+       definition budget went from 1,500 to 1,700 characters for it.
     3. Skeleton-only creation behind a flag: Go refuses functions and
        methods with bodies in `create_file`; types, struct fields, consts
        and vars pass (the user's choice over refusing fields too).

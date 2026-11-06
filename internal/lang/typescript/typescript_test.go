@@ -265,3 +265,44 @@ func TestCreateFromDeclaration(t *testing.T) {
 		}
 	}
 }
+
+// test_for writes a red test of a method or function, importing test from
+// the framework package.json names (vitest here), once per file.
+func TestTestFor(t *testing.T) {
+	root := t.TempDir()
+	for name, text := range map[string]string{
+		"tsconfig.json":                    `{"compilerOptions": {"strict": true, "noEmit": true, "module": "ESNext", "moduleResolution": "Bundler", "types": []}, "include": ["src"]}`,
+		"package.json":                     `{"devDependencies": {"vitest": "^3.0.0"}}`,
+		"node_modules/vitest/package.json": `{"name": "vitest", "types": "index.d.ts"}`,
+		"node_modules/vitest/index.d.ts":   "export declare function test(name: string, fn: () => void | Promise<void>): void;\n",
+		"src/garden.ts":                    "export class Bed {\n  constructor(public soil: string, public depth: number) {}\n  plant(name: string, count: number): number {\n    return count;\n  }\n}\n\nexport async function water(liters: number): Promise<string> {\n  return `${liters} L`;\n}\n",
+	} {
+		p := filepath.Join(root, name)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	l := New(root, &history.Stack{})
+	if text, refused, err := l.Step("create_file", []byte(`{"file": "src/garden.test.ts", "test_for": "Bed.plant"}`)); err != nil || refused {
+		t.Fatalf("create_file: %v %v\n%s", err, refused, text)
+	}
+	if text, refused, err := l.Step("add_declaration", []byte(`{"file": "src/garden.test.ts", "test_for": "water"}`)); err != nil || refused {
+		t.Fatalf("add_declaration: %v %v\n%s", err, refused, text)
+	}
+	b, _ := os.ReadFile(filepath.Join(root, "src/garden.test.ts"))
+	got := string(b)
+	for _, want := range []string{"from \"vitest\"", "test(\"Bed.plant\", () => {", "const bed = new Bed(\"\", 0);", "const plant = bed.plant(\"\", 0);", "write the assertion: plant returned", "test(\"water\", async () => {", "const result = await water(0);"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("garden.test.ts lacks %q:\n%s", want, got)
+		}
+	}
+	if strings.Count(got, "from \"vitest\"") != 1 {
+		t.Errorf("vitest is not imported once:\n%s", got)
+	}
+	if text, refused, _ := l.Step("add_declaration", []byte(`{"file": "src/garden.test.ts", "test_for": "Bed.dig"}`)); !refused {
+		t.Errorf("a missing method is not refused:\n%s", text)
+	}
+}
