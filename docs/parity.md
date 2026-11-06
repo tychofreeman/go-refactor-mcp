@@ -27,11 +27,11 @@ Cheap, and each one costs a fresh model a refusal or a wrong result today.
 | Go | reflection through interface variables not followed, so rename can miss a JSON field | 42c |
 | Go | move_file into another module; move_declaration `new_name` on an embedded type | 39g, 38e |
 | Go | inline_struct breaks one-line struct declarations (`type Bed struct{ Soil }`) | *Done* (#573) |
-| Java | replace_text matches `old` inside a line's indentation and writes at the wrong indent, silently | Java friction log 2026-11-05, no row |
-| Java | replace_text refuses an `old` that differs only in indentation, without naming the nearest lines (Go does) | Java #106 |
+| Java | replace_text matches `old` inside a line's indentation and writes at the wrong indent, silently | Java #119 |
+| Java | replace_text refuses an `old` that differs only in indentation, without naming the nearest lines (Go does) | *Done* (Java #106, #221: a uniform indentation shift, `new` shifted with it; the nearest lines named on a miss) |
 | Java | a stub is not replaced by a declaration with the same erasure | Java #107 |
 | Java | a batch checked at the end imports a library class for a name a later step declares | Java #108 |
-| Java | friction-log follow-ups still call #105 open | Java friction log |
+| Java | friction-log follow-ups still call #105 open | *Done* (Java #222) |
 
 ## 2. One contract: names and server-level behavior
 
@@ -165,6 +165,9 @@ embedding struct (43.10); Java's convert_to_record needs
 `value_semantics=true`.
 
 ## 5. Proposed order
+
+Java's rows for these items are #119-#130 in its `docs/design.md`, ordered there under
+"Next, in order" (2026-11-06) with its own open items.
 
 1. The bugs in section 1, one PR each per repo (TS inspect `pattern` and
    the TS descriptions first; Java's silent indent match first there).
