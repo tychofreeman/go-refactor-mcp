@@ -4494,3 +4494,12 @@ rule, one where the lines run it through another literal, which the
 first version of `copyReads` missed (red, then fixed). The rule by
 replace_expression on the switch case and add_declaration, its
 refinement by replace_expression. Nothing by hand.
+
+## 2026-11-06: values reaching reflection through interfaces (roadmap 42c)
+
+Through the CLI, goldens first (three rename refusals: through a
+variable, a return, a literal). One batch, refused once: the loop that
+uses the new `r` came before the statement declaring it, and a step's
+scope is checked even under check "end"; reordered (declarations, then
+the statement, then its users). The visit callback's signature changed by
+replace_expression on its type and both literals. Nothing by hand.

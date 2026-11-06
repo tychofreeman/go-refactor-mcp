@@ -31,7 +31,7 @@ var swapsOnly = map[string]bool{
 // looked at.
 func PassedAsInterface(info *types.Info, files []*ast.File, match func(types.Type) bool) ast.Expr {
 	var found ast.Expr
-	passedAsInterface(info, files, match, func(_ *ast.CallExpr, _ int, arg ast.Expr) bool {
+	passedAsInterface(info, files, match, func(_ *ast.CallExpr, _ int, arg ast.Expr, _ types.Type) bool {
 		found = arg
 		return false
 	})
@@ -88,8 +88,8 @@ func ReflectedArgs(info *types.Info, files []*ast.File, match func(types.Type) b
 // pass arguments on to a printer (wrappersIn).
 func reflectedArgs(info *types.Info, files []*ast.File, match func(types.Type) bool, wrappers map[string]printer) []Reflected {
 	var refs []Reflected
-	passedAsInterface(info, files, match, func(call *ast.CallExpr, i int, arg ast.Expr) bool {
-		refs = append(refs, Reflected{Arg: arg, Type: info.TypeOf(arg), Callee: types.ExprString(call.Fun), Conv: info.Types[call.Fun].IsType(), Sight: sight(info, call, i, wrappers)})
+	passedAsInterface(info, files, match, func(call *ast.CallExpr, i int, arg ast.Expr, t types.Type) bool {
+		refs = append(refs, Reflected{Arg: arg, Type: t, Callee: types.ExprString(call.Fun), Conv: info.Types[call.Fun].IsType(), Sight: sight(info, call, i, wrappers)})
 		return true
 	})
 	return refs
@@ -120,7 +120,8 @@ func ReflectedIn(pkgs []*packages.Package, fset *token.FileSet, match func(types
 
 // passedAsInterface calls visit with each argument PassedAsInterface
 // looks for, its call and its index, until visit returns false.
-func passedAsInterface(info *types.Info, files []*ast.File, match func(types.Type) bool, visit func(call *ast.CallExpr, i int, arg ast.Expr) bool) {
+func passedAsInterface(info *types.Info, files []*ast.File, match func(types.Type) bool, visit func(call *ast.CallExpr, i int, arg ast.Expr, t types.Type) bool) {
+	r := newReaches(info, files, match)
 	stopped := false
 	for _, f := range files {
 		ast.Inspect(f, func(n ast.Node) bool {
@@ -159,11 +160,12 @@ func passedAsInterface(info *types.Info, files []*ast.File, match func(types.Typ
 				}
 			}
 			for i, arg := range call.Args {
-				if pt := param(i); pt != nil && types.IsInterface(pt) && Holds(info.TypeOf(arg), match) {
-					if !visit(call, i, arg) {
-						stopped = true
-						return false
-					}
+				if pt := param(i); pt == nil || !types.IsInterface(pt) {
+					continue
+				}
+				if t := r.holder(arg, map[any]bool{}); t != nil && !visit(call, i, arg, t) {
+					stopped = true
+					return false
 				}
 			}
 			return true
@@ -172,6 +174,108 @@ func passedAsInterface(info *types.Info, files []*ast.File, match func(types.Typ
 			return
 		}
 	}
+}
+
+// reaches finds what values reach an argument passed as an interface: its
+// own, or, when it is itself an interface, the values assigned to a
+// variable it names, returned by a function of these files it calls,
+// converted by a conversion, or held by a composite literal.
+type reaches struct {
+	info    *types.Info
+	match   func(types.Type) bool
+	assigns map[*types.Var][]ast.Expr
+	funcs   map[*types.Func]*ast.FuncDecl
+}
+
+func newReaches(info *types.Info, files []*ast.File, match func(types.Type) bool) *reaches {
+	r := &reaches{info: info, match: match, assigns: map[*types.Var][]ast.Expr{}, funcs: map[*types.Func]*ast.FuncDecl{}}
+	assign := func(id ast.Expr, value ast.Expr) {
+		if id, ok := id.(*ast.Ident); ok {
+			if v, ok := info.ObjectOf(id).(*types.Var); ok && types.IsInterface(v.Type()) {
+				r.assigns[v] = append(r.assigns[v], value)
+			}
+		}
+	}
+	for _, f := range files {
+		ast.Inspect(f, func(n ast.Node) bool {
+			switch n := n.(type) {
+			case *ast.FuncDecl:
+				if fn, ok := info.Defs[n.Name].(*types.Func); ok {
+					r.funcs[fn] = n
+				}
+			case *ast.AssignStmt:
+				if len(n.Lhs) == len(n.Rhs) {
+					for i := range n.Lhs {
+						assign(n.Lhs[i], n.Rhs[i])
+					}
+				}
+			case *ast.ValueSpec:
+				if len(n.Names) == len(n.Values) {
+					for i := range n.Names {
+						assign(n.Names[i], n.Values[i])
+					}
+				}
+			}
+			return true
+		})
+	}
+	return r
+}
+
+// holder returns the type of a value reaching e that holds a type r.match
+// accepts, or nil. seen holds the variables and functions already
+// followed.
+func (r *reaches) holder(e ast.Expr, seen map[any]bool) types.Type {
+	if t := r.info.TypeOf(e); t != nil && Holds(t, r.match) {
+		return t
+	}
+	switch e := ast.Unparen(e).(type) {
+	case *ast.CompositeLit:
+		for _, el := range e.Elts {
+			if kv, ok := el.(*ast.KeyValueExpr); ok {
+				el = kv.Value
+			}
+			if t := r.holder(el, seen); t != nil {
+				return t
+			}
+		}
+	case *ast.Ident:
+		v, ok := r.info.Uses[e].(*types.Var)
+		if !ok || seen[v] {
+			return nil
+		}
+		seen[v] = true
+		for _, value := range r.assigns[v] {
+			if t := r.holder(value, seen); t != nil {
+				return t
+			}
+		}
+	case *ast.CallExpr:
+		if r.info.Types[e.Fun].IsType() && len(e.Args) == 1 {
+			return r.holder(e.Args[0], seen)
+		}
+		fd := r.funcs[staticCallee(r.info, e)]
+		if fd == nil || fd.Body == nil || seen[fd] {
+			return nil
+		}
+		seen[fd] = true
+		var found types.Type
+		ast.Inspect(fd.Body, func(n ast.Node) bool {
+			switch n := n.(type) {
+			case *ast.FuncLit:
+				return false // its returns are its own
+			case *ast.ReturnStmt:
+				for _, res := range n.Results {
+					if found == nil {
+						found = r.holder(res, seen)
+					}
+				}
+			}
+			return found == nil
+		})
+		return found
+	}
+	return nil
 }
 
 // printer describes a function that only prints its arguments from index

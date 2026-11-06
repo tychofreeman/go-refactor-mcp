@@ -104,7 +104,11 @@ Refused (with an explanation):
   interface, on its own or inside a slice, map, pointer or other struct
   (`json.Marshal(r)`, `fmt.Printf("%+v", items)`): reflection finds fields
   by name, so `Name` to `name` drops the JSON key, and `{{.Name}}` in a
-  template stops working
+  template stops working. The value is followed into an interface: a
+  variable of interface type it was assigned to (`var x any = r;
+  json.Marshal(x)`), a function of the package that returns it as one,
+  a conversion, and a composite literal's elements (`map[string]any{"r":
+  r}`)
 - symbols declared outside the workspace (stdlib, dependencies)
 
 An embedded field is renamed into a named one: renaming `Member.Address`
