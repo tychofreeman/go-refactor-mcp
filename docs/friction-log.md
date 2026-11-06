@@ -4440,3 +4440,12 @@ inline_struct replaced the holder's whole line with the inner struct's
 fields, breaking the file. It now replaces only the field when the field
 shares its line with the braces (`type Bed struct{ depth int }`); golden
 `one_line`. Through the CLI; nothing by hand.
+
+## 2026-11-06: introduce_parameter of a dereferenced parameter (roadmap 44)
+
+Through the CLI, golden first (`deref_of_address`, testdata written with
+the shell). One replace_statements in `substitute` and `derefOf` by
+add_declaration, in one batch (it re-ran with check "end", since the
+first step uses what the second declares). Nothing by hand. Probing the
+three item-44 defects in a scratch module first showed the
+first-occurrence half of this one already refuses, rightly.

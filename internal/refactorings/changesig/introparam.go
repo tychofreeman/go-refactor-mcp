@@ -482,6 +482,17 @@ func (t *target) substitute(info *types.Info, src []byte, expr ast.Expr, c call,
 		} else {
 			arg = c.expr.Args[i]
 		}
+		if u, ok := ast.Unparen(arg).(*ast.UnaryExpr); ok && u.Op == token.AND && i >= 0 {
+			if d := derefOf(expr, id); d != nil {
+				// *(&x) is x: the address's operand takes the dereference's place.
+				text := string(csrc[t.Off(u.X.Pos()):t.Off(u.X.End())])
+				if !simpleOperand(u.X) {
+					text = "(" + text + ")"
+				}
+				rs = append(rs, repl{t.Off(d.Pos()), t.Off(d.End()), text})
+				continue
+			}
+		}
 		text := string(csrc[t.Off(arg.Pos()):t.Off(arg.End())])
 		if !simpleOperand(arg) {
 			text = "(" + text + ")"
@@ -517,6 +528,34 @@ func selected(expr ast.Expr, id *ast.Ident) bool {
 			found = true
 		}
 		return !found
+	})
+	return found
+}
+
+// derefOf returns the dereference of id in expr (*id), with the
+// parentheses around it, or nil.
+func derefOf(expr ast.Expr, id *ast.Ident) ast.Expr {
+	var found ast.Expr
+	var outer ast.Expr // the outermost of a run of parentheses
+	ast.Inspect(expr, func(n ast.Node) bool {
+		switch n := n.(type) {
+		case *ast.ParenExpr:
+			if outer == nil {
+				outer = n
+			}
+			return found == nil
+		case *ast.StarExpr:
+			if ast.Unparen(n.X) == id {
+				found = n
+				if outer != nil {
+					found = outer
+				}
+			}
+		}
+		if n != nil && found == nil {
+			outer = nil
+		}
+		return found == nil
 	})
 	return found
 }
