@@ -990,7 +990,7 @@ func (p *Project) WrapElse(ctx context.Context, path string, line, column int) (
 	f := l.f.FileName()
 	edits := []Edit{{File: f, Start: is.ThenStatement.End(), End: is.ThenStatement.End(), NewText: " else {"}}
 	end := rest[len(rest)-1].End()
-	for n := l.line(l.pos(rest[0])); n <= l.line(end); n++ {
+	for _, n := range l.indentable(l.line(l.pos(rest[0])), l.line(end)) {
 		edits = append(edits, Edit{File: f, Start: l.start(n), End: l.start(n), NewText: l.unit()})
 	}
 	edits = append(edits, Edit{File: f, Start: end, End: end, NewText: "\n" + l.indent(l.line(l.pos(ifs))) + "}"})
