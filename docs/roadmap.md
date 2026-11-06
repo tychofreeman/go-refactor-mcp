@@ -3130,6 +3130,12 @@ candidates and the evidence for each, gathered from the friction log.
        refusals explain themselves; *done*
        (`docs/sessions/descriptions-without-refusals.md`); an A/B check
        waits for the user.
+    7. replace_text after a loose match moves new's lines to the file's
+       indentation (java's #254: an `old` copied with spaces from
+       inspect, a file with tabs); *done* (`textutil.Shifted`, Go and
+       TypeScript); in Go source gofmt did it already, so it shows in
+       other files. Left: add_result on a function with named results,
+       refused today, which this change had to write around.
 
 55. **Constructive transformations, as java-refactor-mcp's #212-#215**
     (2026-11-05, the user: "I'd like go/ts to work the same way"): create

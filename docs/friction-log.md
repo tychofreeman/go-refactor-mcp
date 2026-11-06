@@ -4619,3 +4619,14 @@ too), and on a test's literal. Nothing by hand.
 As java's #256-#258 (`docs/sessions/descriptions-without-refusals.md`):
 81 replace_text steps on description literals in Go and TypeScript,
 through the CLI. Nothing by hand.
+
+## 2026-11-06: replace_text re-indents new after a loose match
+
+As java's #254. `textutil.Shifted` (test first) and `Indent`, the second
+declared by create_from_usage as a stub when Shifted's body used it.
+By hand: `fileEdit` rewritten whole with replace_declaration (50 lines,
+most of them the old body) to add a result, since add_result refuses a
+function with named results ("not supported yet"); a gap, on the
+roadmap. The golden came after the code (written as Go first, where
+gofmt hides the change; redone as a YAML file); checked red on the old
+code.

@@ -219,3 +219,33 @@ func LineEnd(src []byte, at int) int {
 	}
 	return at
 }
+
+// Shifted returns new with its lines after the first moved by the
+// difference between matched's indentation and old's, on the first line
+// after a break that has text, their relative indentation kept; how says
+// how they moved, or is empty when they did not.
+func Shifted(old, matched, new string) (shifted, how string) {
+	olds, files := strings.Split(old, "\n"), strings.Split(matched, "\n")
+	from, to := "", ""
+	for i := 1; i < len(olds) && i < len(files); i++ {
+		if strings.TrimSpace(olds[i]) != "" {
+			from, to = Indent(olds[i]), Indent(files[i])
+			break
+		}
+	}
+	if from == to {
+		return new, ""
+	}
+	lines := strings.Split(new, "\n")
+	for i := 1; i < len(lines); i++ {
+		if rest, ok := strings.CutPrefix(lines[i], from); ok {
+			lines[i] = to + rest
+		}
+	}
+	return strings.Join(lines, "\n"), fmt.Sprintf("new's lines moved from %q to the file's %q", from, to)
+}
+
+// Indent returns the spaces and tabs line starts with.
+func Indent(line string) string {
+	return line[:len(line)-len(strings.TrimLeft(line, " \t"))]
+}
