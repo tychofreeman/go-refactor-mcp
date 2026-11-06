@@ -3058,5 +3058,23 @@ candidates and the evidence for each, gathered from the friction log.
     2. One `inline` for functions, variables and a held struct or class
        (2026-11-05, the user), in the same way, after `move`.
 
+55. **Constructive transformations, as java-refactor-mcp's #212-#215**
+    (2026-11-05, the user: "I'd like go/ts to work the same way"): create
+    by structure, type only expressions and statements. One PR each:
+    1. `create_file` with `declaration`: a type from its header. Go takes
+       `implements` (the user's choice over an empty type only): an
+       assertion `var _ I = (*T)(nil)` and a pointer-receiver stub per
+       method; TypeScript reads `implements` and `extends` from the header,
+       a throwing method per required method and a `name!: T` per required
+       property, imported by fix_imports. *Done.*
+    2. `test_for` on `create_file` and `add_declaration`: a red test from
+       its target. Go ends it with `t.Fatalf("write the assertion: M
+       returned %v", got)` (the user's choice over discarding the result);
+       TypeScript's framework from package.json, vitest or jest, else
+       node:test (the user's choice over node:test always).
+    3. Skeleton-only creation behind a flag: Go refuses functions and
+       methods with bodies in `create_file`; types, struct fields, consts
+       and vars pass (the user's choice over refusing fields too).
+
 Parked: the Ollama loop (`refactor-agent`). It works and stays, but Claude
 through MCP is the priority.

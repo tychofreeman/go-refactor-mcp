@@ -228,3 +228,40 @@ func TestMove(t *testing.T) {
 		t.Errorf("published: %v", names)
 	}
 }
+
+// create_file with declaration writes a class from its header, with a
+// member for each that its interfaces and abstract base require, and the
+// imports they need.
+func TestCreateFromDeclaration(t *testing.T) {
+	root := t.TempDir()
+	for name, text := range map[string]string{
+		"tsconfig.json": `{"compilerOptions": {"strict": true, "noEmit": true, "types": []}, "include": ["src"]}`,
+		"src/garden.ts": "export interface Plant {\n  name: string;\n}\n\nexport interface Planter {\n  plant(p: Plant): void;\n  readonly size: number;\n  label?: string;\n}\n\nexport abstract class Soil {\n  depth = 1;\n  abstract ph(): number;\n}\n",
+	} {
+		p := filepath.Join(root, name)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	l := New(root, &history.Stack{})
+	if text, refused, err := l.Step("create_file", []byte(`{"file": "src/bed.ts", "declaration": "export class Bed extends Soil implements Planter"}`)); err != nil || refused {
+		t.Fatalf("create_file: %v %v\n%s", err, refused, text)
+	}
+	b, _ := os.ReadFile(filepath.Join(root, "src/bed.ts"))
+	for _, want := range []string{"\"./garden\"", "export class Bed extends Soil implements Planter {", "ph(): number {", "plant(p: Plant): void {", "throw new Error(\"not implemented\");", "readonly size!: number;"} {
+		if !strings.Contains(string(b), want) {
+			t.Errorf("bed.ts lacks %q:\n%s", want, b)
+		}
+	}
+	if strings.Contains(string(b), "label") || strings.Contains(string(b), "depth") {
+		t.Errorf("bed.ts has an optional or concrete member:\n%s", b)
+	}
+	for _, args := range []string{`{"file": "src/pot.ts", "declaration": "export class Pot implements Missing"}`, `{"file": "src/pot.ts", "declaration": "export class Pot {}"}`, `{"file": "src/pot.ts", "declaration": "export class Pot", "content": "x"}`} {
+		if text, refused, _ := l.Step("create_file", []byte(args)); !refused {
+			t.Errorf("%s: want a refusal, got\n%s", args, text)
+		}
+	}
+}

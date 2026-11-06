@@ -289,6 +289,10 @@ working patterns, with their steps, are in `docs/patterns.md`.
   `rename` of a file path renames the file; `preserve_exceptions`
   comes to Go and TypeScript. The tool budget waits for the user's review
   of the list in parity.md (they expect to raise it).
+- **Constructive transformations** (2026-11-05, roadmap 55, as
+  java-refactor-mcp's #212-#215): `create_file` with `declaration`, then
+  `test_for`, then a skeleton-only flag, each in its own PR; the user's
+  choices for Go and TypeScript are in the roadmap item.
 - **Fowler's catalog and IntelliJ** (2026-11-04): `docs/catalog.md`.
   Run a composition before calling an entry missing: Encapsulate Variable
   and Record and Replace Function with Command first looked missing and

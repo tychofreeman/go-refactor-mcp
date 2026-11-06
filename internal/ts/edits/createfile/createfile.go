@@ -23,14 +23,16 @@ func (*CreateFile) ChangesBehavior() {}
 
 func (*CreateFile) Description() string {
 	return `Create a new file, TypeScript or not (a fixture, JSON), with any missing directories: an edit. A source file a project's include takes joins that project; what it adds must type-check, so a test written first goes with what it calls, in one batch with check "end".
+With declaration in place of content, a class, interface or enum from its header: "export class Bed extends Soil implements Planter" writes the class with, for each method its interfaces and abstract base require, the method throwing new Error("not implemented"), and each required property with a definite-assignment mark (readonly size!: number), importing what they name.
 The file must not exist, unless overwrite is set to replace all of it; undo removes or restores it.`
 }
 
 // createFileArgs are the arguments of create_file.
 type createFileArgs struct {
-	File      string `json:"file" desc:"Path of the new file, relative to the root."`
-	Content   string `json:"content" desc:"The file's complete contents."`
-	Overwrite bool   `json:"overwrite,omitempty" desc:"Replace the file if it exists."`
+	File        string `json:"file" desc:"Path of the new file, relative to the root."`
+	Content     string `json:"content,omitempty" desc:"The file's complete contents."`
+	Declaration string `json:"declaration,omitempty" desc:"Instead of content: a class's, interface's or enum's header (export class Bed implements Planter); the file gets it with a body, a class's holding the members its interfaces and abstract base require."`
+	Overwrite   bool   `json:"overwrite,omitempty" desc:"Replace the file if it exists."`
 }
 
 func (*CreateFile) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
@@ -46,6 +48,16 @@ func (*CreateFile) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor
 	exists := err == nil
 	if exists && !a.Overwrite {
 		return nil, refactor.Refusef("%s already exists; change it with the other tools, or set overwrite to replace it", a.File)
+	}
+	switch {
+	case a.Declaration != "" && a.Content != "":
+		return nil, refactor.Refusef("give content or declaration, not both: declaration writes the file from a class's header")
+	case a.Declaration != "":
+		content, err := fromDeclaration(ws, a.Declaration)
+		if err != nil {
+			return nil, err
+		}
+		a.Content = content
 	}
 	did := "created"
 	if exists {

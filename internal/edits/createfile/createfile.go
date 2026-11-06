@@ -25,15 +25,18 @@ func New() *CreateFile { return &CreateFile{Named: refactor.Called[createArgs]("
 
 func (*CreateFile) Description() string {
 	return `Create a new file, Go or not (go.mod, JSON, a test fixture), with any missing directories: an edit. A Go file must parse and match its directory's package (a test may use the _test package), and is gofmt-ed. What it calls that nothing declares gets a stub, so a test written first compiles and fails: cart_test.go with if got := (&Cart{}).Total(); got != 0 { ... } also declares func (c *Cart) Total() int.
+With declaration in place of content, a type from its header: declaration "type Sprinkler struct" with implements ["io.Writer"] writes the package clause, type Sprinkler struct{}, var _ io.Writer = (*Sprinkler)(nil), and a stub for each method of io.Writer (func (s *Sprinkler) Write(p []byte) (n int, err error) { panic("not implemented") }); a header without a body gets an empty one.
 For several files, such as a fixture directory, send the create_file steps together in one batch. The file must not exist, unless overwrite is set to replace all of it; undo removes or restores it.`
 }
 
 func (*CreateFile) ChangesBehavior() {}
 
 type createArgs struct {
-	File      string `json:"file" desc:"Path of the new file, relative to the workspace root."`
-	Content   string `json:"content" desc:"The file's complete contents."`
-	Overwrite bool   `json:"overwrite,omitempty" desc:"Replace the file if it exists."`
+	File        string   `json:"file" desc:"Path of the new file, relative to the workspace root."`
+	Content     string   `json:"content,omitempty" desc:"The file's complete contents."`
+	Declaration string   `json:"declaration,omitempty" desc:"Instead of content, for a Go file: a type's header (type Cart struct); the file gets the package clause and the type."`
+	Implements  []string `json:"implements,omitempty" desc:"With declaration: interfaces the type implements (Priced, io.Writer); each gets an assertion and a stub per method."`
+	Overwrite   bool     `json:"overwrite,omitempty" desc:"Replace the file if it exists."`
 }
 
 // Plan checks preconditions and computes the edits.
@@ -66,6 +69,20 @@ func (*CreateFile) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor
 			return nil, refactor.Refusef("%s is a file, not a directory", ws.Rel(dir))
 		}
 		break
+	}
+	switch {
+	case a.Declaration != "" && a.Content != "":
+		return nil, refactor.Refusef("give content or declaration, not both: declaration writes the file from a type's header")
+	case a.Declaration != "" && !strings.HasSuffix(path, ".go"):
+		return nil, refactor.Refusef("declaration writes a Go file; %s is not one, so give content", rel)
+	case a.Declaration != "":
+		content, err := fromDeclaration(ws, path, a.Declaration, a.Implements)
+		if err != nil {
+			return nil, err
+		}
+		a.Content = content
+	case len(a.Implements) > 0:
+		return nil, refactor.Refusef("implements goes with declaration, the header of the type that implements them")
 	}
 	if strings.HasSuffix(path, ".go") {
 		if err := checkGo(ws, path, a.Content); err != nil {

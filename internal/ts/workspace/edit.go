@@ -2,6 +2,7 @@ package workspace
 
 import (
 	"os"
+	"slices"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/tsapi"
 )
@@ -33,4 +34,16 @@ func (w *Workspace) Project(file string) (path string, p *tsapi.Project, refusal
 		return path, nil, w.none(path)
 	}
 	return path, p, ""
+}
+
+// ClassMembers returns tsapi's ClassMembers from the first project of the
+// solution that declares every name, or why none does.
+func (w *Workspace) ClassMembers(implements []string, base string) ([]string, string) {
+	for _, p := range w.projects {
+		if members, found, why := p.ClassMembers(implements, base); found {
+			return members, why
+		}
+	}
+	names := append(slices.Clone(implements), base)
+	return nil, "no project of the solution declares all of " + joinComma(slices.DeleteFunc(names, func(s string) bool { return s == "" })) + " as a top-level interface or class"
 }
