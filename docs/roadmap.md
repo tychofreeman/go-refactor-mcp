@@ -40,7 +40,7 @@ part left. What is open, the newest priority first:
    49.4 and 49.5 wait on a measurement.
 6. **Defects found on the way and not yet fixed:** introduce_parameter on
    `(*found)[0]`, extract_function by pointer, add_parameter on a local
-   function literal (44); remove_else's `wrap` in unformatted files (43);
+   function literal (44);
    values reaching reflection through interfaces (42c); move_file
    into another module (39g); move_declaration's `new_name` on an embedded
    type, if it still fails (38e).
@@ -2439,7 +2439,10 @@ part left. What is open, the newest priority first:
     extract_interface (41.5), async functions are not inlined (41.7).
     Also found: remove_else's `wrap` does not re-indent the moved
     statements in a file that is not formatted (both languages' output
-    was right on formatted files).
+    was right on formatted files). *Done* (2026-11-06): Go indents them by
+    the file's own step; TypeScript, which did, no longer indents blank
+    lines or the lines of a template literal, in wrap and in
+    inline_function's early returns.
 44. **Extracting code that returns a refusal** (2026-10-29, found by
     running the compositions item 43.10's rewrites skipped): Go's
     extract_function refuses lines that return on some paths unless the
