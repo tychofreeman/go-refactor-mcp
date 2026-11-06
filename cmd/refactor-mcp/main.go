@@ -30,6 +30,8 @@ var readByName = flag.Bool("read-by-name", false, "inspect shows source only for
 
 var noCodeByText = flag.Bool("no-code-by-text", false, "replace_text changes a Go file only inside string literals and comments; code is changed by the structured edits")
 
+var skeletonOnly = flag.Bool("skeleton-only", false, "an experiment: create_file refuses code with function bodies; types come from declaration, tests from test_for, functions from add_declaration")
+
 func main() {
 	dir := flag.String("C", "", "module directory (default: $CLAUDE_PROJECT_DIR, else the current directory)")
 	pattern := flag.String("p", "./...", "package pattern to load, relative to the module root")
@@ -58,6 +60,7 @@ func main() {
 	s.FullDiffs = *fullDiffs
 	s.ReadByName = *readByName
 	s.NoCodeByText = *noCodeByText
+	s.SkeletonOnly = *skeletonOnly
 	s.Preload()
 	srv := s.MCP()
 	err := srv.Run(ctx, &mcp.StdioTransport{})

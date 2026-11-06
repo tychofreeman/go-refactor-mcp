@@ -307,7 +307,7 @@ func TestLoadedToolsStaySmall(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	budget := map[string]int{"batch": 2500, "replace_statements": 1700, "add_declaration": 1500}
+	budget := map[string]int{"batch": 2500, "replace_statements": 1700, "add_declaration": 1700}
 	for _, tool := range res.Tools {
 		max, ok := budget[tool.Name]
 		if !ok {

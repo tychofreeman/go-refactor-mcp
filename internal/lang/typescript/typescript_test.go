@@ -229,6 +229,112 @@ func TestMove(t *testing.T) {
 	}
 }
 
+// create_file with declaration writes a class from its header, with a
+// member for each that its interfaces and abstract base require, and the
+// imports they need.
+func TestCreateFromDeclaration(t *testing.T) {
+	root := t.TempDir()
+	for name, text := range map[string]string{
+		"tsconfig.json": `{"compilerOptions": {"strict": true, "noEmit": true, "types": []}, "include": ["src"]}`,
+		"src/garden.ts": "export interface Plant {\n  name: string;\n}\n\nexport interface Planter {\n  plant(p: Plant): void;\n  readonly size: number;\n  label?: string;\n}\n\nexport abstract class Soil {\n  depth = 1;\n  abstract ph(): number;\n}\n",
+	} {
+		p := filepath.Join(root, name)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	l := New(root, &history.Stack{})
+	if text, refused, err := l.Step("create_file", []byte(`{"file": "src/bed.ts", "declaration": "export class Bed extends Soil implements Planter"}`)); err != nil || refused {
+		t.Fatalf("create_file: %v %v\n%s", err, refused, text)
+	}
+	b, _ := os.ReadFile(filepath.Join(root, "src/bed.ts"))
+	for _, want := range []string{"\"./garden\"", "export class Bed extends Soil implements Planter {", "ph(): number {", "plant(p: Plant): void {", "throw new Error(\"not implemented\");", "readonly size!: number;"} {
+		if !strings.Contains(string(b), want) {
+			t.Errorf("bed.ts lacks %q:\n%s", want, b)
+		}
+	}
+	if strings.Contains(string(b), "label") || strings.Contains(string(b), "depth") {
+		t.Errorf("bed.ts has an optional or concrete member:\n%s", b)
+	}
+	for _, args := range []string{`{"file": "src/pot.ts", "declaration": "export class Pot implements Missing"}`, `{"file": "src/pot.ts", "declaration": "export class Pot {}"}`, `{"file": "src/pot.ts", "declaration": "export class Pot", "content": "x"}`} {
+		if text, refused, _ := l.Step("create_file", []byte(args)); !refused {
+			t.Errorf("%s: want a refusal, got\n%s", args, text)
+		}
+	}
+}
+
+// test_for writes a red test of a method or function, importing test from
+// the framework package.json names (vitest here), once per file.
+func TestTestFor(t *testing.T) {
+	root := t.TempDir()
+	for name, text := range map[string]string{
+		"tsconfig.json":                    `{"compilerOptions": {"strict": true, "noEmit": true, "module": "ESNext", "moduleResolution": "Bundler", "types": []}, "include": ["src"]}`,
+		"package.json":                     `{"devDependencies": {"vitest": "^3.0.0"}}`,
+		"node_modules/vitest/package.json": `{"name": "vitest", "types": "index.d.ts"}`,
+		"node_modules/vitest/index.d.ts":   "export declare function test(name: string, fn: () => void | Promise<void>): void;\n",
+		"src/garden.ts":                    "export class Bed {\n  constructor(public soil: string, public depth: number) {}\n  plant(name: string, count: number): number {\n    return count;\n  }\n}\n\nexport async function water(liters: number): Promise<string> {\n  return `${liters} L`;\n}\n",
+	} {
+		p := filepath.Join(root, name)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	l := New(root, &history.Stack{})
+	if text, refused, err := l.Step("create_file", []byte(`{"file": "src/garden.test.ts", "test_for": "Bed.plant"}`)); err != nil || refused {
+		t.Fatalf("create_file: %v %v\n%s", err, refused, text)
+	}
+	if text, refused, err := l.Step("add_declaration", []byte(`{"file": "src/garden.test.ts", "test_for": "water"}`)); err != nil || refused {
+		t.Fatalf("add_declaration: %v %v\n%s", err, refused, text)
+	}
+	b, _ := os.ReadFile(filepath.Join(root, "src/garden.test.ts"))
+	got := string(b)
+	for _, want := range []string{"from \"vitest\"", "test(\"Bed.plant\", () => {", "const bed = new Bed(\"\", 0);", "const plant = bed.plant(\"\", 0);", "write the assertion: plant returned", "test(\"water\", async () => {", "const result = await water(0);"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("garden.test.ts lacks %q:\n%s", want, got)
+		}
+	}
+	if strings.Count(got, "from \"vitest\"") != 1 {
+		t.Errorf("vitest is not imported once:\n%s", got)
+	}
+	if text, refused, _ := l.Step("add_declaration", []byte(`{"file": "src/garden.test.ts", "test_for": "Bed.dig"}`)); !refused {
+		t.Errorf("a missing method is not refused:\n%s", text)
+	}
+}
+
+// With SkeletonOnly, create_file refuses TypeScript with function bodies,
+// and takes classes with fields, interfaces and types, and declaration.
+func TestSkeletonOnly(t *testing.T) {
+	root := t.TempDir()
+	for name, text := range map[string]string{
+		"tsconfig.json": `{"compilerOptions": {"strict": true, "noEmit": true, "types": []}, "include": ["src"]}`,
+		"src/a.ts":      "export const a = 1;\n",
+	} {
+		p := filepath.Join(root, name)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	l := New(root, &history.Stack{})
+	l.SkeletonOnly = true
+	if text, refused, _ := l.Step("create_file", []byte(`{"file": "src/bed.ts", "content": "export class Bed {\n  depth = 1;\n  dig(): void {}\n}\n"}`)); !refused || !strings.Contains(text, "declaration") {
+		t.Errorf("a method body is not refused, naming declaration:\n%s", text)
+	}
+	for _, args := range []string{`{"file": "src/bed.ts", "content": "export class Bed {\n  depth = 1;\n}\n\nexport interface Pot {\n  size: number;\n}\n"}`, `{"file": "src/pot.ts", "declaration": "export class Planter"}`} {
+		if text, refused, err := l.Step("create_file", []byte(args)); err != nil || refused {
+			t.Errorf("%s: %v %v\n%s", args, err, refused, text)
+		}
+	}
+}
+
 // rename with a file and no name renames the file, updating its imports.
 func TestRenameFile(t *testing.T) {
 	root := t.TempDir()
