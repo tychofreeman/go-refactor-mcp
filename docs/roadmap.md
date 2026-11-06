@@ -3091,8 +3091,10 @@ candidates and the evidence for each, gathered from the friction log.
        `direction` for move_statement_up and _down (*done*,
        `refactor.MoveStatementOf`, a Covering tool that passes on only
        the arguments the chosen one takes); `change_type` for
-       change_field_type and change_parameter_type; delete_file into
-       `move`.
+       change_field_type and change_parameter_type (*done*: change_type
+       is a Router, `refactor.ChangeTypeRoute`: parameter, values or a
+       name Type.Field route to the others, and it keeps its own case,
+       so each keeps its markers); delete_file into `move`.
 
 55. **Constructive transformations, as java-refactor-mcp's #212-#215**
     (2026-11-05, the user: "I'd like go/ts to work the same way"): create

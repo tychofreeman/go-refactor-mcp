@@ -425,3 +425,40 @@ func TestRenameFile(t *testing.T) {
 		t.Errorf("bed.ts does not import from ./water:\n%s", b)
 	}
 }
+
+// change_type is published in place of change_field_type and
+// change_parameter_type, and runs the one its arguments ask for.
+func TestChangeTypeCovers(t *testing.T) {
+	root := t.TempDir()
+	for name, text := range map[string]string{
+		"tsconfig.json": `{"compilerOptions": {"strict": true, "noEmit": true, "types": []}, "include": ["src"]}`,
+		"src/a.ts":      "export type Height = number;\n\nexport interface Plant {\n  height: number;\n}\n\nexport function grow(n: number): number {\n  return n + 1;\n}\n",
+	} {
+		p := filepath.Join(root, name)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	l := New(root, &history.Stack{})
+	for _, args := range []string{
+		`{"file": "src/a.ts", "name": "Plant.height", "type": "Height"}`,
+		`{"file": "src/a.ts", "name": "grow", "parameter": "n", "type": "Height"}`,
+	} {
+		if text, refused, err := l.Step("change_type", []byte(args)); err != nil || refused {
+			t.Fatalf("change_type %s: %v %v\n%s", args, err, refused, text)
+		}
+	}
+	if b, _ := os.ReadFile(filepath.Join(root, "src/a.ts")); !strings.Contains(string(b), "height: Height") || !strings.Contains(string(b), "n: Height") {
+		t.Errorf("a.ts:\n%s", b)
+	}
+	var names []string
+	for _, tool := range l.Tools() {
+		names = append(names, tool.Name)
+	}
+	if !slices.Contains(names, "change_type") || slices.Contains(names, "change_field_type") || slices.Contains(names, "change_parameter_type") {
+		t.Errorf("published: %v", names)
+	}
+}

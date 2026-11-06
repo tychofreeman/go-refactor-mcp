@@ -4531,3 +4531,11 @@ names a key, and slice elements have none; added at the end instead),
 the instructions by replace_text on their literals. Found on the way:
 `inline`, published since #571, was missing from refactor-tokens'
 refactoring tools; added with `move_statement`. Nothing by hand.
+
+## 2026-11-06: change_type for field and parameter types (roadmap 54.3)
+
+Through the CLI, tests first in both languages. `refactor.ChangeTypeRoute`
+by add_declaration, Route and Covers on each change_type by
+add_declaration, the new arguments by add_field (one call per struct,
+both fields in it), the descriptions and instructions by replace_text on
+their literals. Nothing by hand.
