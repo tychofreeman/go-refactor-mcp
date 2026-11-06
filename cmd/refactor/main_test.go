@@ -83,6 +83,15 @@ func TestTypeScript(t *testing.T) {
 	if code := run([]string{"-C", dir, "undo"}); code != 2 {
 		t.Errorf("a second undo: exit status %d, want 2 (nothing left)\n%s", code, out.String())
 	}
+	// A text argument from stdin reaches TypeScript's tools too.
+	stdin = strings.NewReader("export const pots = 3;\n")
+	defer func() { stdin = os.Stdin }()
+	if code := run([]string{"-C", dir, "add_declaration", "file=src/a.ts", "content_file=-"}); code != 0 {
+		t.Fatalf("add_declaration from stdin: exit status %d\n%s", code, out.String())
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, "src/a.ts")); !strings.Contains(string(b), "export const pots = 3;") {
+		t.Errorf("a.ts:\n%s", b)
+	}
 }
 
 func TestRunDeclaresWhatAnEditCalls(t *testing.T) {
@@ -157,6 +166,33 @@ func TestRunFromStdin(t *testing.T) {
 	}
 	if got := read(t, dir); !strings.Contains(got, "func g() {}") {
 		t.Errorf("step from stdin not applied:\n%s", got)
+	}
+}
+
+// A text argument given as key_file=- reads its text from stdin, as key=value
+// or in the JSON, Go or TypeScript; a second - is refused, and so is one in
+// JSON that itself came from stdin.
+func TestTextArgumentFromStdin(t *testing.T) {
+	defer func() { stdin = os.Stdin }()
+	dir := module(t, "package p\n\nfunc f() {}\n")
+	stdin = strings.NewReader("func g() int {\n\treturn 1\n}\n")
+	if code := run([]string{"-C", dir, "add_declaration", "file=p.go", "content_file=-"}); code != 0 {
+		t.Fatalf("key=value: exit status %d, want 0", code)
+	}
+	stdin = strings.NewReader("func h() int {\n\treturn 2\n}\n")
+	if code := run([]string{"-C", dir, "batch", `{"steps":[{"tool":"add_declaration","args":{"file":"p.go","content_file":"-"}}]}`}); code != 0 {
+		t.Fatalf("in a batch step: exit status %d, want 0", code)
+	}
+	if got := read(t, dir); !strings.Contains(got, "return 1") || !strings.Contains(got, "return 2") {
+		t.Errorf("the text from stdin was not added:\n%s", got)
+	}
+	stdin = strings.NewReader("x")
+	if code := run([]string{"-C", dir, "replace_text", "file=p.go", "old_file=-", "new_file=-"}); code != 1 {
+		t.Errorf("two arguments from stdin: exit status %d, want 1", code)
+	}
+	stdin = strings.NewReader(`{"file":"p.go","content_file":"-"}`)
+	if code := run([]string{"-C", dir, "add_declaration", "-"}); code != 1 {
+		t.Errorf("- in JSON read from stdin: exit status %d, want 1", code)
 	}
 }
 

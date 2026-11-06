@@ -52,7 +52,7 @@ func run(argv []string) int {
 	asJSON := fs.Bool("json", false, "print the result as JSON (without declaring what an edit calls)")
 	version := fs.Bool("version", false, "print the version and exit")
 	fs.Usage = func() {
-		fmt.Fprintf(fs.Output(), "usage: refactor [flags] list [tool...]   (descriptions and arguments)\n       refactor [flags] <refactoring> key=value... | '<json>' | @file | -\n       refactor [flags] batch '<json>' | @file | -\n       refactor [flags] inspect key=value... | '<json>' | @file | -\n       refactor [flags] check [run_tests=true] [packages=./...]\n       refactor [flags] undo\n\n@file reads the JSON from a file, - from stdin. In the JSON, content_file (new_file, ...) gives a text argument from a file.\n\nflags:\n")
+		fmt.Fprintf(fs.Output(), "usage: refactor [flags] list [tool...]   (descriptions and arguments)\n       refactor [flags] <refactoring> key=value... | '<json>' | @file | -\n       refactor [flags] batch '<json>' | @file | -\n       refactor [flags] inspect key=value... | '<json>' | @file | -\n       refactor [flags] check [run_tests=true] [packages=./...]\n       refactor [flags] undo\n\n@file reads the JSON from a file, - from stdin. content_file (new_file, ...) gives a text argument from a file, as key=value or in the JSON; content_file=- reads it from stdin (one per call), so a heredoc can give it.\n\nflags:\n")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(argv); err != nil {
@@ -79,6 +79,13 @@ func run(argv []string) int {
 		return 0
 	}
 	rest, err := jsonFrom(fs.Args()[1:])
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	fromStdin := len(fs.Args()) == 2 && fs.Arg(1) == "-"
+	rest, done, err := stdinArgs(rest, fromStdin)
+	defer done()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
@@ -446,4 +453,88 @@ func jsonFrom(argv []string) ([]string, error) {
 		return nil, err
 	}
 	return []string{string(data)}, nil
+}
+
+// stdinArgs replaces the one argument key_file=- of argv, as key=value or
+// in its JSON at any depth (a batch's steps too), with the path of a file
+// that holds stdin's text, which the tool then reads as key; done removes
+// the file. A second - is refused, and so is one when the JSON itself came
+// from stdin. to_file names a destination, not a text, so it is left alone.
+func stdinArgs(argv []string, jsonFromStdin bool) (out []string, done func(), err error) {
+	done = func() {}
+	var path string
+	take := func(k string) (string, error) {
+		if path != "" {
+			return "", fmt.Errorf("only one argument can come from stdin: give %s from a file (%s=path) or in the JSON", k, k)
+		}
+		if jsonFromStdin {
+			return "", fmt.Errorf("the JSON came from stdin, so %s cannot: give it from a file (%s=path)", k, k)
+		}
+		text, err := io.ReadAll(stdin)
+		if err != nil {
+			return "", err
+		}
+		f, err := os.CreateTemp("", "refactor-stdin-*")
+		if err != nil {
+			return "", err
+		}
+		defer f.Close()
+		path = f.Name()
+		done = func() { os.Remove(path) }
+		_, err = f.Write(text)
+		return path, err
+	}
+	fromStdin := func(k string, v any) bool {
+		return strings.HasSuffix(k, "_file") && k != "to_file" && v == "-"
+	}
+	if len(argv) == 1 && strings.HasPrefix(strings.TrimSpace(argv[0]), "{") {
+		dec := json.NewDecoder(strings.NewReader(argv[0]))
+		dec.UseNumber()
+		var v any
+		if dec.Decode(&v) != nil {
+			return argv, done, nil // parseArgs says what is wrong with it
+		}
+		var walk func(v any) error
+		walk = func(v any) error {
+			switch x := v.(type) {
+			case map[string]any:
+				for k, e := range x {
+					if fromStdin(k, e) {
+						p, err := take(k)
+						if err != nil {
+							return err
+						}
+						x[k] = p
+						continue
+					}
+					if err := walk(e); err != nil {
+						return err
+					}
+				}
+			case []any:
+				for _, e := range x {
+					if err := walk(e); err != nil {
+						return err
+					}
+				}
+			}
+			return nil
+		}
+		if err := walk(v); err != nil || path == "" {
+			return argv, done, err
+		}
+		b, err := json.Marshal(v)
+		return []string{string(b)}, done, err
+	}
+	out = slices.Clone(argv)
+	for i, s := range out {
+		if k, v, ok := strings.Cut(s, "="); ok && fromStdin(k, v) {
+			p, err := take(k)
+			if err != nil {
+				return argv, done, err
+			}
+			out[i] = k + "=" + p
+		}
+	}
+	return out, done, nil
 }

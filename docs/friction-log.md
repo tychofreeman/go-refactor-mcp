@@ -4337,3 +4337,23 @@ Nothing by hand: the CLI throughout (a cloud clone), record
 - insert_statements `after` wants the line where a statement ends; an
   `if` block's closing brace counts, the blank line after it does not
   (one refusal, then the right line).
+
+## 2026-11-05: the CLI reads a text argument from stdin
+
+The user saw this session write Go into JSON with Python and scratch
+files to send it through the CLI. `content_file=-` (any `key_file`) now
+reads that text from stdin, as java-refactor-mcp's #210 does, so a
+heredoc carries code as written; the JSON of a batch already came from
+stdin with `-`. Go and TypeScript alike, since the CLI serves both.
+
+- By hand: none. The implementation's own JSON was built with Python one
+  last time, since the CLI could not yet take its text from stdin; the
+  TypeScript test case and these docs went through `content_file=-` and
+  `new_file=-`.
+- insert_statements placed the TypeScript case before the test's last
+  undo check, which then found one more change to undo; undo, then the
+  line after it.
+- A heredoc's text ends with a newline, and replace_text keeps it: a
+  `new_file=-` that replaced text ending mid-line left a blank line in a
+  bullet of the session notes. Fixed by a second replace_text; whether
+  `-` should drop one final newline when `old` has none is open.

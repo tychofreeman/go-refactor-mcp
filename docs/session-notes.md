@@ -105,10 +105,13 @@ working patterns, with their steps, are in `docs/patterns.md`.
 
 - **Cloud clones have no MCP** (the user's server runs on their checkout):
   build `cmd/refactor` from the branch and send every step through it,
-  `refactor batch @file.json` (write the JSON to a scratch file: an
-  unquoted heredoc turns `\n` into newlines), `refactor inspect` to read,
-  `refactor check run_tests=true`, `refactor undo` (its stack is kept per
-  module in the cache directory). Read through inspect there too, so the
+  `refactor batch - <<'EOF'` with the JSON (quote the delimiter: an
+  unquoted heredoc turns `\n` into newlines), and code itself as text with
+  `content_file=- <<'GO'` (the user, 2026-11-05: no scratch files or
+  Python to build the JSON; the delimiter must not occur in the text),
+  `refactor inspect` to read, `refactor check run_tests=true`, `refactor
+  undo` (its stack is kept per module in the cache directory). Read
+  through inspect there too, so the
   session reads as the tools intend.
 - **A session started outside the checkout has no guards** (2026-11-05):
   hooks load from where the session starts, so a cloud session that clones

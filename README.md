@@ -324,7 +324,22 @@ refactor batch @steps.json        # several steps as one change, from a JSON fil
 refactor undo                     # undo the last step or batch
 ```
 
+Long text needs no quoting: `content_file=path` (`new_file`, any `key_file`)
+gives a text argument from a file, and `content_file=-` from stdin, one per
+call, so a heredoc can carry it (a quoted delimiter keeps it as written, and
+must not appear in the text):
+
+```sh
+refactor add_declaration file=bed.go after=Bed content_file=- <<'EOF'
+func (b *Bed) Size() int { return len(b.plants) }
+EOF
+refactor batch - <<'EOF'
+{"steps": [{"tool": "rename", "args": {"file": "bed.go", "name": "Bed.Size", "new_name": "Count"}}]}
+EOF
+```
+
 Exit status: `0` applied/previewed, `2` refused, `1` error.
+
 
 `-C` can be any directory inside a module: the tool always loads the whole
 enclosing module (nearest `go.mod`), so references in every package are
