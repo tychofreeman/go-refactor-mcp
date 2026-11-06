@@ -38,9 +38,8 @@ part left. What is open, the newest priority first:
 5. **49** whether the work goes through the tools: 49.2, 49.3, 49.8, 49.9,
    49.12 and 49.14 open; 49.11 for the CLI, TypeScript and an A/B arm;
    49.4 and 49.5 wait on a measurement.
-6. **Defects found on the way and not yet fixed:** move_file into another
-   module (39g); move_declaration's `new_name` on an embedded type, if it
-   still fails (38e).
+6. **Defects found on the way:** none open; the last (42c, 39g, 38e) were
+   fixed on 2026-11-06.
 7. **Older items with parts left**, by number: 1, 4-9 and 11-16 (signature,
    inline, statements, rename, packaging, test time, intent tools, recipes,
    smaller results, generators, large modules, teaching, third-party A/B),
@@ -1874,7 +1873,9 @@ part left. What is open, the newest priority first:
     - **A bug:** `move_declaration` with `new_name` on an embedded type
       leaves the field name in keyed literals (`inliner{site: site{...}}`)
       and rolls back as a bug in its checks (Oct 26; noted in item 37,
-      now done).
+      now done). *Done* (2026-11-06): an embedded field is named after
+      its type, so its keys and selectors take the new name
+      (`embeddedField`).
     - **Refusals still too strict.** Each was worked around and none is
       on the roadmap: `extract_function` refuses a variable that a
       literal which can run later uses, though nothing assigns it again
@@ -2013,7 +2014,11 @@ part left. What is open, the newest priority first:
       relative to its root, and undo reverts it there. A call or batch
       naming files of two modules is refused. Left: TypeScript (a
       program per tsconfig.json), and a `to` of move_file in another
-      module, which stays relative to that module's root.
+      module, which stays relative to that module's root. *Done*
+      (2026-11-06): `to` beside no `name` is a path to the routing
+      (`lang.NamedFiles`, `MapFiles`), so it is taken in the module the
+      call works in, and a `to` in another module than `file`'s is
+      refused as two modules are; worktree-paths makes it absolute too.
     - **Versions:** `refactor` has no `-version`, and both binaries report
       only the constant; reporting the module version or commit from the
       build information (`debug.ReadBuildInfo`) would tell which build is
