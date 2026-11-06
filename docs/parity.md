@@ -65,6 +65,18 @@ from what it is given, with no `kind` argument:
 - a path with no name: the file or directory, to `to` (move_file;
   `copy` and delete as options, for delete_file).
 
+**One `inline`** (2026-11-05, the user, the same reasoning). The three
+inverses of extract are one tool, `inline`, which works out the case from
+what the name resolves to: a function or `Type.Method` inlines its calls
+(the one at `line`, or every call with `all_calls`; Go's and TypeScript's
+inline_function, Java's); a local variable or constant inlines its uses
+(inline_variable); `Holder.field` whose field holds a struct or class
+inlines that type into the holder (Go's inline_struct, TypeScript's 52.3,
+Java's inline class). Unlike `extract`, nothing is ambiguous: an
+extracted expression could become a variable or a function, so extract
+stays several tools (or takes `as`) until a run says otherwise. Go goes
+from 41 to 39 published tools.
+
 `rename` given a file path and a new name renames the file in place,
 the same as `move` within its directory. Not part of `move`: move_statement
 (order within a block) and move_parameter (order of a signature), which
@@ -169,7 +181,7 @@ user will review the list below first, and expects to raise it.
 ## 6. Every tool, for the budget review
 
 Go publishes 49 tools (TypeScript 46, Java 37); the budget is 50 in both
-repos. After the merges in section 2, Go publishes 41.
+repos. After the merges in section 2, Go publishes 39.
 
 | Kind | Go | TS | Java |
 |---|---|---|---|
