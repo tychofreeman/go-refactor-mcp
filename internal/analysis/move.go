@@ -39,6 +39,7 @@ type Move struct {
 	// evaluations Times counts, not code Expr moves past: Expr may read
 	// what other code can change, as long as Past does not change it.
 	Between bool
+	strict  bool // a nil dereference counts as any other panic (preserve_exceptions)
 }
 
 // Obstacle is why a Move would change behavior: Kind, what the
@@ -70,6 +71,40 @@ const (
 // as before and nothing it moves past could change its value, be changed
 // by it, or panic or stop before it where it would have before.
 func (m Move) Check() *Obstacle {
+	if m.strict || m.Effects == nil {
+		return m.check()
+	}
+	strict := m
+	strict.strict = true
+	o := strict.check()
+	if m.Effects.Preserve || o == nil {
+		return o
+	}
+	lax := m.check()
+	if lax == nil {
+		m.Effects.NoteChange(o.Why)
+	}
+	return lax
+}
+
+// TakeChanges returns, and forgets, the moves made since it was last
+// called that let a nil dereference panic on the other side of other code:
+// what Preserve would have refused.
+func (e *Effects) TakeChanges() []string {
+	c := e.changes
+	e.changes = nil
+	return c
+}
+
+// NoteChange records a move that let code that may panic run on the other
+// side of other code, for TakeChanges, once.
+func (e *Effects) NoteChange(why string) {
+	if !slices.Contains(e.changes, why) {
+		e.changes = append(e.changes, why)
+	}
+}
+
+func (m Move) check() *Obstacle {
 	var s Summary
 	if x, ok := m.Expr.(ast.Expr); ok {
 		s = m.Effects.Of(m.Func, x)
@@ -77,9 +112,9 @@ func (m Move) Check() *Obstacle {
 		s = m.Effects.OfNodes(m.Func, []ast.Node{m.Expr})
 	}
 	panics, panicAt := s.Panics, s.At.Panic
-	if m.Dereferenced && panics == NilPanic {
+	if m.Dereferenced && panics == NilPanic && !m.strict {
 		panics, panicAt = NoPanic, nil // the use panics the same way
-	} else if m.Dereferenced {
+	} else if m.Dereferenced && !m.strict {
 		panicAt = s.At.OtherPanic
 	}
 	q := nodeText(m.Expr)
@@ -87,7 +122,7 @@ func (m Move) Check() *Obstacle {
 	panicking := Obstacle{Kind: Panics, In: panicAt, Does: "could panic: it " + s.Unsafe}
 	reads := Obstacle{Kind: Reads, In: s.At.Reads, Does: s.Reads}
 	leaves := Obstacle{Kind: Acts, In: transfers([]ast.Node{m.Expr}), Does: "leaves the code around it"}
-	e := facts(s, panics, []ast.Node{m.Expr})
+	e := m.strictly(facts(s, panics, []ast.Node{m.Expr}))
 	then := ", which would then happen another number of times"
 	if m.Times == Maybe {
 		then = ", which would then not always happen"
@@ -143,7 +178,7 @@ func (m Move) Check() *Obstacle {
 		}
 		return p.At.Panic, "could panic (it " + p.Unsafe + ")"
 	}
-	ek, pk := reorder.Conflict(e, facts(p, p.Panics, m.Past))
+	ek, pk := reorder.Conflict(e, m.strictly(facts(p, p.Panics, m.Past)))
 	if ek == reorder.Writing {
 		at, does := pastDoes(pk)
 		return before(acts, at, does)
@@ -160,6 +195,15 @@ func (m Move) Check() *Obstacle {
 		return before(map[reorder.Kind]Obstacle{reorder.Reading: reads, reorder.Throwing: panicking, reorder.Leaving: leaves}[ek], at, does)
 	}
 	return nil
+}
+
+// strictly returns f, with a throw through nil counted as any other when
+// the move is strict.
+func (m Move) strictly(f reorder.Facts) reorder.Facts {
+	if m.strict && f.Throws == reorder.OnNull {
+		f.Throws = reorder.OtherThrow
+	}
+	return f
 }
 
 // facts are what the code nodes, summarized as s, may do, as moves

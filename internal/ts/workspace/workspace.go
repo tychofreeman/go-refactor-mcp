@@ -297,3 +297,12 @@ func fileExists(p string) bool {
 // Owns reports whether file, relative to the root or absolute, is a
 // TypeScript source file by its name.
 func (w *Workspace) Owns(file string) bool { return isSource(w.Abs(file)) }
+
+// PreserveExceptions sets whether refactorings refuse to move a read
+// through what may be null or undefined past other code, rather than move
+// it and say so.
+func (w *Workspace) PreserveExceptions(on bool) { tsapi.PreserveExceptions(on) }
+
+// ExceptionChanges returns, and forgets, the moves of such reads that
+// refactorings made since it was last called.
+func (w *Workspace) ExceptionChanges() []string { return tsapi.TakeExceptionChanges() }
