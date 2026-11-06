@@ -1207,6 +1207,37 @@ func TestInlineAllCallsAcrossFiles(t *testing.T) {
 	}
 }
 
+// inline with field: a class held in a property goes into the class that
+// holds it, as Go's inline_struct does for a struct.
+func TestInlineClass(t *testing.T) {
+	const garden = "class Soil {\n  depth = 3;\n  loam = false;\n\n  till(): void {\n    this.loam = true;\n  }\n}\n\nexport class Bed {\n  soil = new Soil();\n  name = \"\";\n\n  ready(): boolean {\n    this.soil.till();\n    return this.soil.depth > 2 && this.soil.loam;\n  }\n}\n"
+	ws, dir := load(t, map[string]string{"src/g.ts": garden})
+	res := run(t, ws, NewInline(), `{"file": "src/g.ts", "name": "Bed", "field": "soil"}`)
+	if !res.Applied {
+		t.Fatalf("%s", res)
+	}
+	got := string(tstest.Read(t, dir, "src/g.ts"))
+	for _, want := range []string{"  depth = 3;\n  loam = false;", "  till(): void {\n    this.loam = true;\n  }", "this.till();", "return this.depth > 2 && this.loam;"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("no %q in:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "class Soil") || strings.Contains(got, "soil") {
+		t.Errorf("Soil or the property is left:\n%s", got)
+	}
+	for _, c := range []struct{ src, refused string }{
+		{strings.Replace(garden, "    this.soil.till();", "    const s = this.soil;\n    s.till();", 1), "used whole"},
+		{strings.Replace(garden, "  name = \"\";", "  depth = 1;", 1), "both have depth"},
+		{strings.Replace(garden, "new Soil()", "new Soil(2)", 1), "new Soil()"},
+		{strings.Replace(garden, "export class Bed {", "export const extra = new Soil();\n\nexport class Bed {", 1), "used outside"},
+	} {
+		ws, _ := load(t, map[string]string{"src/g.ts": c.src})
+		if res := run(t, ws, NewInline(), `{"file": "src/g.ts", "name": "Bed", "field": "soil"}`); res.Applied || !strings.Contains(res.Refused, c.refused) {
+			t.Errorf("want a refusal with %q, got %s", c.refused, res)
+		}
+	}
+}
+
 // A file in another style: no semicolons, and a doc comment whose lines
 // start with one space.
 func TestFileStyle(t *testing.T) {

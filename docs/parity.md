@@ -117,8 +117,9 @@ Before any new Go or TS tool, `TestToolBudget` (50) has to be raised or
 two tools merged (25); Java's limit is also 50. The session notes' order
 applies: a composition, then an option of an existing tool, then a tool.
 
-**TypeScript lacks** (Go has): the counterpart of `inline_struct`
-(52.3); `split` kind phase is *done* (52.2).
+**TypeScript lacks** (Go has): nothing now; `split` kind phase (52.2) and
+the counterpart of `inline_struct` (52.3, without Go's `elsewhere` and
+`prefer`) are *done*.
 
 **Java lacks** (Go and TS have):
 - `add_result`, `parameterize`, `merge_duplicate_function`,

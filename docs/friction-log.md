@@ -4579,3 +4579,10 @@ places by insert_statements, replace_expression and replace_statements.
 Then `tsapi.PhaseAt` and Split's `Expand` by add_declaration (refused
 once: two packages named changesig; resent with imports). Nothing by
 hand.
+
+## 2026-11-06: inline_struct for TypeScript (roadmap 52.3)
+
+Through the CLI, test first. `tsapi.InlineClass` by create_file (new
+behavior), the tool and its route through `inline` by add_declaration,
+add_field, replace_expression and add_case (insert_statements refused on
+a case clause's line; add_case is the edit for a clause). Nothing by hand.

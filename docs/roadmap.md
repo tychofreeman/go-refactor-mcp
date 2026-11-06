@@ -3050,7 +3050,13 @@ candidates and the evidence for each, gathered from the friction log.
        extract_function and convert_params_to_object, which gained
        `parameters` to bundle some of a function's parameters.
     3. **inline_struct's counterpart for TypeScript:** a class held in a
-       property inlined into the class that holds it.
+       property inlined into the class that holds it. *Done*
+       (2026-11-06, `tsapi.InlineClass`, through `inline` with field):
+       a first, conservative version: the property initialized with
+       `new S()` with no arguments, S a class of the same file with no
+       constructor, static members or heritage, used nowhere else, and
+       the property used only as `x.field.m`; Go's `elsewhere` and
+       `prefer` are not offered.
     The budget (item 25): Go publishes 49 of 50 tools with this, and the
     instructions are at their 6,000 characters; each tool listed there
     has needed a cut. The next Go tool needs the user to raise one or
