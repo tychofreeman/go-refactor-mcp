@@ -179,6 +179,35 @@ func TestMove(t *testing.T) {
 	}
 }
 
+// change_type is published in place of change_field_type and
+// change_parameter_type, and runs the one its arguments ask for.
+func TestChangeTypeCovers(t *testing.T) {
+	root := t.TempDir()
+	write(t, root, map[string]string{
+		"go.mod": "module example.com/home\n\ngo 1.22\n",
+		"a.go":   "package home\n\ntype Plant struct{ Height int }\n\nfunc grow(n int) int { return n + 1 }\n\nfunc Use(p Plant) int { return grow(p.Height) }\n",
+	})
+	l := New(root, []string{"./..."}, &history.Stack{})
+	for _, args := range []string{
+		`{"file": "a.go", "name": "Plant.Height", "type": "int64"}`,
+		`{"file": "a.go", "name": "grow", "parameter": "n", "type": "int64"}`,
+	} {
+		if text, refused, err := l.Step("change_type", []byte(args)); err != nil || refused {
+			t.Fatalf("change_type %s: %v %v\n%s", args, err, refused, text)
+		}
+	}
+	if b, _ := os.ReadFile(filepath.Join(root, "a.go")); !strings.Contains(string(b), "Height int64") || !strings.Contains(string(b), "func grow(n int64)") {
+		t.Errorf("a.go:\n%s", b)
+	}
+	tools := map[string]bool{}
+	for _, tool := range l.Tools() {
+		tools[tool.Name] = true
+	}
+	if !tools["change_type"] || tools["change_field_type"] || tools["change_parameter_type"] {
+		t.Errorf("published: %v", tools)
+	}
+}
+
 // With SkeletonOnly, create_file refuses Go content with function bodies,
 // and takes types, fields, constants and variables, and declaration.
 func TestSkeletonOnly(t *testing.T) {

@@ -4521,3 +4521,11 @@ uses the new `r` came before the statement declaring it, and a step's
 scope is checked even under check "end"; reordered (declarations, then
 the statement, then its users). The visit callback's signature changed by
 replace_expression on its type and both literals. Nothing by hand.
+
+## 2026-11-06: change_type for field and parameter types (roadmap 54.3)
+
+Through the CLI, tests first in both languages. `refactor.ChangeTypeRoute`
+by add_declaration, Route and Covers on each change_type by
+add_declaration, the new arguments by add_field (one call per struct,
+both fields in it), the descriptions and instructions by replace_text on
+their literals. Nothing by hand.
