@@ -3086,6 +3086,11 @@ candidates and the evidence for each, gathered from the friction log.
        in Go, `tsapi.Callable` in TypeScript), a `refactor.Covering` tool
        rather than a `Router`, since arguments alone cannot tell a call
        from a local; Java's is left (with its inline class, when built).
+    4. `preserve_exceptions` (2026-11-06, the user: per call on every
+       refactoring, and a note for each change made without it). *Go
+       done* (`analysis.Move` judges strictly and as before;
+       `refactor.ExceptionKeeper`; fold's `movedAddress`); TypeScript
+       next.
 
 55. **Constructive transformations, as java-refactor-mcp's #212-#215**
     (2026-11-05, the user: "I'd like go/ts to work the same way"): create

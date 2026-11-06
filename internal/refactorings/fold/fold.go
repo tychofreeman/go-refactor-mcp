@@ -1247,6 +1247,14 @@ func (f *folder) movedAddress(info *types.Info, seq []ast.Stmt, b map[pattern.Ho
 				if why := f.mayStop(info, s, u.X.Pos()); why != "" {
 					return fmt.Sprintf("%s could panic on a nil %s, and would be evaluated before the statement at %s, which %s", types.ExprString(u), types.ExprString(p), f.ws.Position(s.Pos()), why)
 				}
+				if s.End() > u.Pos() {
+					continue // the statement that holds x
+				}
+				moved := fmt.Sprintf("%s could panic on a nil %s, and would be evaluated before the statement at %s", types.ExprString(u), types.ExprString(p), f.ws.Position(s.Pos()))
+				if f.ws.Effects().Preserve {
+					return moved + "; preserve_exceptions keeps a panic where it was"
+				}
+				f.ws.Effects().NoteChange(moved)
 			}
 		}
 	}

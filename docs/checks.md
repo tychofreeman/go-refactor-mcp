@@ -5,6 +5,22 @@ it applies, and what the edits do. The tool descriptions and refusals are
 what a model sees; this is the reasoning behind them, and may lag the code:
 the golden tests under each tool's `testdata/` are the reference.
 
+## preserve_exceptions: what it changes
+
+Every published Go refactoring takes `preserve_exceptions` (not the
+edits). The one change to panics the tools allow is a nil dereference
+moved to the other side of code that returns (the user's choice of
+2026-10-21): it panics either way, and only what that code did first
+differs. `analysis.Move` judges every move twice, strictly (a nil
+dereference counted as any other panic) and as before; when only the
+strict judgment objects, the move goes ahead with a note, "code that may
+panic moved: ...", and with `preserve_exceptions` it is refused with the
+strict judgment's reason. fold's own rule for an address taken ahead of
+the code before it (`movedAddress`) does the same: noted, or with the flag
+that occurrence is left as it is. `refactor.Run` takes the argument off
+before a tool sees it, and the workspace (`PreserveExceptions`,
+`ExceptionChanges`) carries it for the call.
+
 ## Calls known to have no side effects
 
 A call can do anything, so most checks treat one as a side effect. A

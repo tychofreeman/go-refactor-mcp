@@ -53,6 +53,7 @@ type Workspace struct {
 	stamps      map[string]stamp  // size and mtime of each relevant file at the last update
 	effects     *analysis.Effects // made on first use after each update
 	keepImports bool              // edits leave imports they make unused, for the end of a batch to remove
+	preserve    bool              // refactorings may not move a nil dereference past other code
 }
 
 // Refresh brings the workspace up to date with the files on disk, if any
@@ -311,6 +312,7 @@ func (w *Workspace) Effects() *analysis.Effects {
 			w.effects.AddPackage(p.Syntax, p.TypesInfo)
 		}
 	}
+	w.effects.Preserve = w.preserve
 	return w.effects
 }
 
@@ -520,6 +522,24 @@ func (w *Workspace) LoadUndo(path string) error {
 // KeepUnusedImports sets whether edits leave the imports they make
 // unused, for the end of a batch checked at its end to remove.
 func (w *Workspace) KeepUnusedImports(keep bool) { w.keepImports = keep }
+
+// PreserveExceptions sets whether refactorings refuse to move code that may
+// panic past other code, rather than move it and say so.
+func (w *Workspace) PreserveExceptions(on bool) {
+	w.preserve = on
+	if w.effects != nil {
+		w.effects.Preserve = on
+	}
+}
+
+// ExceptionChanges returns, and forgets, the moves of code that may panic
+// that refactorings made since it was last called.
+func (w *Workspace) ExceptionChanges() []string {
+	if w.effects == nil {
+		return nil
+	}
+	return w.effects.TakeChanges()
+}
 
 // KeepsUnusedImports reports whether edits leave the imports they make
 // unused.
