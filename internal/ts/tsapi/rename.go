@@ -62,6 +62,39 @@ func (p *Project) Identifiers(path string) []Ident {
 	return out
 }
 
+// Callable reports whether the identifier name on line of the file at path
+// (at column, when not 0) is a function or a method, and whether there is
+// such an identifier.
+func (p *Project) Callable(ctx context.Context, path string, line int, name string, column int) (callable, found bool) {
+	f := p.sourceFile(path)
+	if f == nil {
+		return false, false
+	}
+	c, done := p.prog.GetProgram().GetTypeChecker(ctx)
+	defer done()
+	text := f.Text()
+	var visit func(n *ast.Node) bool
+	visit = func(n *ast.Node) bool {
+		if found {
+			return true
+		}
+		if ast.IsIdentifier(n) && n.Text() == name {
+			off := scanner.GetTokenPosOfNode(n, f, false)
+			col := off - (strings.LastIndex(text[:off], "\n") + 1) + 1
+			if strings.Count(text[:off], "\n")+1 == line && (column == 0 || column == col) {
+				found = true
+				if s := symbolOf(c, n); s != nil {
+					callable = s.Flags&(ast.SymbolFlagsFunction|ast.SymbolFlagsMethod) != 0
+				}
+				return true
+			}
+		}
+		return n.ForEachChild(visit)
+	}
+	f.AsNode().ForEachChild(visit)
+	return callable, found
+}
+
 // TopLevel returns the offset of the name of the file's top-level
 // declaration called name: a function, class, interface, type alias,
 // enum or variable; or of a member, "Class.member", of a class,

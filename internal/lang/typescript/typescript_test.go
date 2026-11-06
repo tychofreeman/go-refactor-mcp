@@ -228,3 +228,37 @@ func TestMove(t *testing.T) {
 		t.Errorf("published: %v", names)
 	}
 }
+
+// inline is published in place of inline_function and inline_variable,
+// and runs the one that what it names asks for.
+func TestInline(t *testing.T) {
+	root := t.TempDir()
+	for name, text := range map[string]string{
+		"tsconfig.json": `{"compilerOptions": {"strict": true, "noEmit": true, "types": []}, "include": ["src"]}`,
+		"src/a.ts":      "function double(n: number): number {\n  return n * 2;\n}\n\nexport function use(): number {\n  const x = 3;\n  return double(x);\n}\n",
+	} {
+		p := filepath.Join(root, name)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	l := New(root, &history.Stack{})
+	for _, args := range []string{`{"file": "src/a.ts", "line": 6, "name": "x"}`, `{"file": "src/a.ts", "line": 6, "name": "double"}`} {
+		if text, refused, err := l.Step("inline", []byte(args)); err != nil || refused {
+			t.Fatalf("inline %s: %v %v\n%s", args, err, refused, text)
+		}
+	}
+	if b, _ := os.ReadFile(filepath.Join(root, "src/a.ts")); strings.Contains(string(b), "double") || strings.Contains(string(b), "const x") {
+		t.Errorf("not both inlined:\n%s", b)
+	}
+	var names []string
+	for _, tool := range l.Tools() {
+		names = append(names, tool.Name)
+	}
+	if !slices.Contains(names, "inline") || slices.Contains(names, "inline_function") || slices.Contains(names, "inline_variable") {
+		t.Errorf("published: %v", names)
+	}
+}

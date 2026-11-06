@@ -155,3 +155,39 @@ func TestMove(t *testing.T) {
 		t.Errorf("published: move %v, move_declaration %v, move_method %v, move_file %v", tools["move"], tools["move_declaration"], tools["move_method"], tools["move_file"])
 	}
 }
+
+// inline is published in place of inline_function, inline_variable and
+// inline_struct, and runs the one that what it names asks for.
+func TestInline(t *testing.T) {
+	root := t.TempDir()
+	write(t, root, map[string]string{
+		"go.mod": "module example.com/home\n\ngo 1.22\n",
+		"a.go":   "package home\n\nfunc double(n int) int { return n * 2 }\n\nfunc Use() int {\n\tx := 3\n\treturn double(x)\n}\n\ntype Soil struct {\n\tdepth int\n}\n\ntype Bed struct {\n\tSoil\n}\n\nfunc (b Bed) Deep() bool { return b.depth > 2 }\n",
+	})
+	l := New(root, []string{"./..."}, &history.Stack{})
+	if text, refused, _ := l.Step("inline", []byte(`{"file": "a.go", "name": "double"}`)); !refused {
+		t.Errorf("inline without a line, all_calls or field is not refused:\n%s", text)
+	}
+	for _, args := range []string{
+		`{"file": "a.go", "line": 6, "name": "x"}`,
+		`{"file": "a.go", "line": 6, "name": "double"}`,
+		`{"file": "a.go", "name": "Bed", "field": "Soil"}`,
+	} {
+		if text, refused, err := l.Step("inline", []byte(args)); err != nil || refused {
+			t.Fatalf("inline %s: %v %v\n%s", args, err, refused, text)
+		}
+	}
+	b, _ := os.ReadFile(filepath.Join(root, "a.go"))
+	for _, want := range []string{"n := 3\n\treturn n * 2", "type Bed struct {\n\tdepth int\n}"} {
+		if !strings.Contains(string(b), want) {
+			t.Errorf("a.go lacks %q:\n%s", want, b)
+		}
+	}
+	tools := map[string]bool{}
+	for _, tool := range l.Tools() {
+		tools[tool.Name] = true
+	}
+	if !tools["inline"] || tools["inline_function"] || tools["inline_variable"] || tools["inline_struct"] {
+		t.Errorf("published: inline %v, inline_function %v, inline_variable %v, inline_struct %v", tools["inline"], tools["inline_function"], tools["inline_variable"], tools["inline_struct"])
+	}
+}
