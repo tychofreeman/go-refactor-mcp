@@ -4301,6 +4301,29 @@ element, not the literal's first line; replace_statements cutting a loop
 (the range the refusal named); and a placeholder line in a new file
 removed with replace_text.
 
+## 2026-11-05: TypeScript inspect's pattern, and descriptions that said Go (roadmap 54)
+
+Nothing by hand. Through the CLI (a cloud clone): Go's listing of matching
+lines moved to `textutil.Matches` with insert_statements (`rel := ws.Rel`),
+replace_expression, extract_function, move_declaration with `also`, then
+inline_variable of `rel`; TypeScript's `pattern` is add_field, the test,
+add_declaration and insert_statements. The descriptions went through
+`forLanguages` by rename and three replace_expression steps.
+
+- replace_expression echoes the whole old and new expression in its
+  summary: wrapping three long string literals in `s.forLanguages(...)`
+  printed each twice (about 6 KB). A summary that names the line and the
+  first words would do (as `report: summary` intends).
+- A test that names a field nothing declares is refused with "Pattern was
+  not declared for you": stubs cover functions, not struct fields, so the
+  field went first with add_field.
+- Reading around the tools: this session (started outside the checkout,
+  so without the read guard) found Go lines with `grep -n` on files and
+  printed one with `sed -n`, five times, where `inspect` with `pattern`
+  answers the same. The user caught it. The guard only reaches sessions
+  started in the checkout; a cloud session that clones the repo later has
+  none.
+
 ## 2026-11-05: one move (roadmap 54.1)
 
 Nothing by hand: the CLI throughout (a cloud clone), record

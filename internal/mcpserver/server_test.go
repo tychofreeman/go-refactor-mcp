@@ -1086,6 +1086,15 @@ func TestTypeScriptOnly(t *testing.T) {
 	if d := tools["inspect"]; !strings.HasPrefix(d, "Read TypeScript code") {
 		t.Errorf("inspect's description does not name TypeScript: %.60s", d)
 	}
+	for _, name := range []string{"inspect", "check", "batch"} {
+		for _, goOnly := range []string{"go test", "Go file", "Go regular", "the module"} {
+			if strings.Contains(tools[name], goOnly) {
+				t.Errorf("%s's description says %q in a TypeScript-only repo:\n%s", name, goOnly, tools[name])
+			}
+		}
+	}
+	out, _ = call(t, cs, "inspect", map[string]any{"pattern": "water\\("})
+	mustContain(t, "inspect with pattern", out, "src/bed.ts", "3  export const morning = water(2);")
 	if src, _ := os.ReadFile(filepath.Join(dir, "src/plant.test.ts")); !strings.Contains(string(src), "water(3)") {
 		t.Errorf("undo did not restore the test file:\n%s", src)
 	}
