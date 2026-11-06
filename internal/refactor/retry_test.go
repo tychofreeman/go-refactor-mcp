@@ -25,7 +25,7 @@ func TestRetry(t *testing.T) {
 	for _, c := range []struct{ args, refusal string }{
 		{`{"retry": true, "steps": [{"args": {}}]}`, "one of step and after"},
 		{`{"retry": true, "steps": [{"step": 1, "after": 1}]}`, "one of step and after"},
-		{`{"retry": true, "steps": [{"step": 3, "args": {}}]}`, "from 1 to 2"},
+		{`{"retry": true, "steps": [{"step": 4, "args": {}}]}`, "from 1 to 2"},
 		{`{"retry": true, "steps": [{"after": 3, "tool": "x"}]}`, "from 0 to 2"},
 	} {
 		if _, refused := r.Args(json.RawMessage(c.args)); !strings.Contains(refused, c.refusal) {
@@ -38,5 +38,22 @@ func TestRetry(t *testing.T) {
 	r.Keep(batch, false)
 	if r.Kept != nil {
 		t.Error("a batch that applied did not forget the kept one")
+	}
+}
+
+// A step one past the refused batch's last is added last, as java's
+// #251: a model numbered a new step so.
+func TestRetryAppends(t *testing.T) {
+	var r Retry
+	r.Keep(json.RawMessage(`{"steps": [{"tool": "a", "args": {}}]}`), true)
+	got, refused := r.Args(json.RawMessage(`{"retry": true, "steps": [{"step": 2, "tool": "b", "args": {}}]}`))
+	if want := `{"steps":[{"args":{},"tool":"a"},{"args":{},"tool":"b"}]}`; refused != "" || string(got) != want {
+		t.Errorf("retry: %q\n got %s\nwant %s", refused, got, want)
+	}
+	if _, refused := r.Args(json.RawMessage(`{"retry": true, "steps": [{"step": 2, "args": {}}]}`)); !strings.Contains(refused, "needs its tool") {
+		t.Errorf("a new last step without a tool: %q", refused)
+	}
+	if _, refused := r.Args(json.RawMessage(`{"retry": true, "steps": [{"step": 3, "tool": "b"}]}`)); !strings.Contains(refused, "or 2 to add a last step") {
+		t.Errorf("a step past the end: %q", refused)
 	}
 }
