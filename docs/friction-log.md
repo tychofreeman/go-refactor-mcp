@@ -4461,3 +4461,12 @@ by replace_text on its literal. An older case that expected "has no
 case" for a switch the new rule now extends was given a default, by
 replace_text on its TypeScript text, so it still pins the refusal.
 Nothing by hand.
+
+## 2026-11-06: introduce_parameter of a dereferenced parameter (roadmap 44)
+
+Through the CLI, golden first (`deref_of_address`, testdata written with
+the shell). One replace_statements in `substitute` and `derefOf` by
+add_declaration, in one batch (it re-ran with check "end", since the
+first step uses what the second declares). Nothing by hand. Probing the
+three item-44 defects in a scratch module first showed the
+first-occurrence half of this one already refuses, rightly.
