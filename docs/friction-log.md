@@ -4586,3 +4586,11 @@ Through the CLI, test first. `tsapi.InlineClass` by create_file (new
 behavior), the tool and its route through `inline` by add_declaration,
 add_field, replace_expression and add_case (insert_statements refused on
 a case clause's line; add_case is the edit for a clause). Nothing by hand.
+
+## 2026-11-06: add_result before a final error
+
+Found adding a bool to `Language.Batch` (string, error): add_result put
+it after the error, and no tool reorders results; fixed add_result in its
+own PR, through the CLI (`docs/sessions/add-result-before-error.md`). Two
+refusals each resent the whole batch of seven steps. The old golden that
+pinned the order was changed by sed (testdata). Nothing by hand in Go.
