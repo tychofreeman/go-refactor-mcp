@@ -279,6 +279,33 @@ func Functions(content string, members bool) []string {
 	return out
 }
 
+// Bodied returns the first function, method, constructor or accessor
+// that content gives a body, at any depth, by name ("constructor" for a
+// constructor, "a function" for one without a name), or "".
+func Bodied(content string) string {
+	found := ""
+	var visit func(n *ast.Node) bool
+	visit = func(n *ast.Node) bool {
+		if found != "" {
+			return true
+		}
+		if ast.IsFunctionLike(n) && n.Body() != nil {
+			switch {
+			case ast.IsConstructorDeclaration(n):
+				found = "constructor"
+			case n.Name() != nil:
+				found = n.Name().Text()
+			default:
+				found = "a function"
+			}
+			return true
+		}
+		return n.ForEachChild(visit)
+	}
+	parseText(content).AsNode().ForEachChild(visit)
+	return found
+}
+
 // parameters writes the parameters of a stub from a call's arguments:
 // each named after the argument when it is a name, or else its type,
 // typed by the argument's type, widened from a literal.

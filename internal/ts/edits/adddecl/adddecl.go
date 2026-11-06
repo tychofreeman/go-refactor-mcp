@@ -29,14 +29,15 @@ func New() *AddDeclaration {
 func (*AddDeclaration) ChangesBehavior() {}
 
 func (*AddDeclaration) Description() string {
-	return `Add declarations (functions, classes, interfaces, types, variables, or members of a class) to an existing file: an edit; for a new file, use create_file. They go at the end of the file, or just after or before the declaration named in after or before: after "Bed.plant" puts a new method right after plant, inside Bed, so content is written as a member there. A function or method named like a stub (a body of only throw new Error("not implemented"), as create_from_usage writes) in the file, or in that class, replaces the stub.
+	return `Add declarations (functions, classes, interfaces, types, variables, or members of a class) to an existing file: an edit; for a new file, use create_file. They go at the end of the file, or just after or before the declaration named in after or before: after "Bed.plant" puts a new method right after plant, inside Bed, so content is written as a member there. A function or method named like a stub (a body of only throw new Error("not implemented"), as create_from_usage writes) in the file, or in that class, replaces the stub. With test_for in place of content, a red test at the end of the file: test_for "Bed.plant" adds test("Bed.plant", ...), which makes a Bed, calls plant with placeholder arguments and throws, showing the result, until the assertion is written; test comes from vitest or jest when package.json names one, else node:test.
 Refuses, saying why: a name after or before does not find; content that does not type-check where it goes.`
 }
 
 // addDeclarationArgs are the arguments of add_declaration.
 type addDeclarationArgs struct {
 	File    string `json:"file" desc:"Relative to the root."`
-	Content string `json:"content" desc:"TypeScript declarations, with their doc comments."`
+	Content string `json:"content,omitempty" desc:"TypeScript declarations, with their doc comments."`
+	TestFor string `json:"test_for,omitempty" desc:"Instead of content: the function or Class.method to write a red test for, at the end of file, with test imported from the solution's framework."`
 	After   string `json:"after,omitempty" desc:"Optional: put them just after this declaration of file (name, or Class.member)."`
 	Before  string `json:"before,omitempty" desc:"Optional: put them just before this declaration of file."`
 }
@@ -56,6 +57,20 @@ func (*AddDeclaration) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refa
 	}
 	if !ws.Has(path) {
 		return nil, refactor.Refusef("%s is in none of the solution's projects", a.File)
+	}
+	var frameworkImport string
+	if a.TestFor != "" {
+		if a.Content != "" {
+			return nil, refactor.Refusef("give content or test_for, not both: test_for writes the test")
+		}
+		test, module, why := ws.TestFor(a.TestFor)
+		if why != "" {
+			return nil, refactor.Refusef("%s", why)
+		}
+		a.Content = test
+		if module != "" && !strings.Contains(string(src), `from "`+module+`"`) {
+			frameworkImport = `import { test } from "` + module + `";` + "\n"
+		}
 	}
 	content := strings.TrimRight(a.Content, "\n")
 	text := string(src)
@@ -99,6 +114,9 @@ func (*AddDeclaration) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refa
 		edits = []edit.TextEdit{{Start: at, End: at, NewText: insert}}
 	} else {
 		summary += ", replacing the stub of " + strings.Join(replaced, " and ")
+	}
+	if frameworkImport != "" {
+		edits = append([]edit.TextEdit{{Start: 0, End: 0, NewText: frameworkImport}}, edits...)
 	}
 	return &refactor.Plan{
 		Summary:  summary,

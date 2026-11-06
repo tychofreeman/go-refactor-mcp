@@ -4358,6 +4358,57 @@ stdin with `-`. Go and TypeScript alike, since the CLI serves both.
   bullet of the session notes. Fixed by a second replace_text; whether
   `-` should drop one final newline when `old` has none is open.
 
+## 2026-11-05: create_file with declaration (roadmap 55.1)
+
+Nothing by hand: the CLI with `content_file=-` heredocs for the new code
+(the declaration helpers in both languages, `tsapi.ClassMembers`, the
+tests), goldens written as testdata.
+
+- A heredoc's final newline again made a blank line inside a
+  description string through `new_file=-`; the JSON form of replace_text
+  fixed it.
+- `TestExamplesAvoidEvalTasks` refused the first Go example (`Price`
+  is a name of an eval task); the description now uses `io.Writer` on a
+  `Sprinkler`.
+
+## 2026-11-05: test_for (roadmap 55.2)
+
+Through the CLI with heredocs; three slips of mine and two gaps:
+
+- I found a line of a test file with `grep -n` again (this session still
+  has no read guard), where `inspect` with `pattern` was the tool.
+- A bare `refactor undo`, meant for a scratch solution, ran in the repo
+  and reverted the last batch there (five steps of the TypeScript
+  wiring). The batch was sent again. The undo stack is per module, so an
+  undo without `-C` acts on the directory the shell is in.
+- An argument tagged `json:"content"` without omitempty is required in
+  the schema, so a batch step with `test_for` alone was refused as
+  "missing content", and the retry that adds imports failed silently:
+  the single step reported only its type error. Content is now optional
+  where test_for or declaration can replace it.
+- The CLI's key=value turns `expression=1500` into a number, which a
+  string argument refuses; the JSON form worked. key=value could keep a
+  value as text when the schema says string.
+- add_declaration's definition budget (1,500 characters, the tool models
+  load most) left no room for test_for; it is 1,700 now, as
+  replace_statements', with test_for explained in its field.
+
+## 2026-11-05: skeleton-only creation (roadmap 55.3)
+
+Through the CLI. The tests declared `Language.SkeletonOnly` on both
+languages as stubs, placed after the private fields; the fields were then
+deleted and added again with add_field in the exported group, with their
+doc comments, in one batch. A method the new code called and nothing
+declared (`Workspace.Owns`) was stubbed too, and add_declaration of the
+real one replaced the stub.
+
+- The heredoc's final newline detached a doc comment from its function
+  through `new_file=-` (the third time today). The CLI could drop one
+  final newline from `-` text when `old` does not end in one; until then,
+  JSON for replacements that end mid-line.
+- I ran a pointless `sed -n` on a Go file (its output discarded) before
+  reading the lines through inspect.
+
 ## 2026-11-06: inline_struct on one-line structs
 
 Found while building `inline` (#571): with `type Bed struct{ Soil }`,

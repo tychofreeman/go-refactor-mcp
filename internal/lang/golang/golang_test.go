@@ -155,3 +155,20 @@ func TestMove(t *testing.T) {
 		t.Errorf("published: move %v, move_declaration %v, move_method %v, move_file %v", tools["move"], tools["move_declaration"], tools["move_method"], tools["move_file"])
 	}
 }
+
+// With SkeletonOnly, create_file refuses Go content with function bodies,
+// and takes types, fields, constants and variables, and declaration.
+func TestSkeletonOnly(t *testing.T) {
+	root := t.TempDir()
+	write(t, root, map[string]string{"go.mod": "module example.com/home\n\ngo 1.22\n", "a.go": "package home\n"})
+	l := New(root, []string{"./..."}, &history.Stack{})
+	l.SkeletonOnly = true
+	if text, refused, _ := l.Step("create_file", []byte(`{"file": "bed.go", "content": "package home\n\ntype Bed struct{ depth int }\n\nfunc (b *Bed) Dig() {}\n"}`)); !refused || !strings.Contains(text, "declaration") {
+		t.Errorf("a function body is not refused, naming declaration:\n%s", text)
+	}
+	for _, args := range []string{`{"file": "bed.go", "content": "package home\n\ntype Bed struct{ depth int }\n\nconst rows = 3\n"}`, `{"file": "pot.go", "declaration": "type Pot struct", "implements": ["fmt.Stringer"]}`} {
+		if text, refused, err := l.Step("create_file", []byte(args)); err != nil || refused {
+			t.Errorf("%s: %v %v\n%s", args, err, refused, text)
+		}
+	}
+}
