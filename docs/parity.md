@@ -24,7 +24,7 @@ Cheap, and each one costs a fresh model a refusal or a wrong result today.
 | Go | add_parameter misses a local function literal | *Done* (`findLocal`; the other signature tools still refuse one) |
 | Go | inspect `names` refuses a type as declared twice when a test file declares a function of the same name | 49.9 |
 | Go | merge_duplicate_function does not see `Exists` and `lang.Exists` as one | 50.6 |
-| Go | reflection through interface variables not followed, so rename can miss a JSON field | 42c |
+| Go | reflection through interface variables not followed, so rename can miss a JSON field | *Done* (`analysis.reaches`) |
 | Go | move_declaration `new_name` on an embedded type | *Done* (`embeddedField`) |
 | Go | move_file into another module | *Done* (`to` routed as a path) |
 | Go | inline_struct breaks one-line struct declarations (`type Bed struct{ Soil }`) | *Done* (#573) |

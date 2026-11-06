@@ -38,8 +38,8 @@ part left. What is open, the newest priority first:
 5. **49** whether the work goes through the tools: 49.2, 49.3, 49.8, 49.9,
    49.12 and 49.14 open; 49.11 for the CLI, TypeScript and an A/B arm;
    49.4 and 49.5 wait on a measurement.
-6. **Defects found on the way and not yet fixed:** values reaching
-   reflection through interfaces (42c).
+6. **Defects found on the way:** none open; the last (42c, 39g, 38e) were
+   fixed on 2026-11-06.
 7. **Older items with parts left**, by number: 1, 4-9 and 11-16 (signature,
    inline, statements, rename, packaging, test time, intent tools, recipes,
    smaller results, generators, large modules, teaching, third-party A/B),
@@ -2314,6 +2314,12 @@ part left. What is open, the newest priority first:
       over a workspace's packages, once per argument.
     - **Values not followed:** assignments to interface variables and
       returns are not looked at (`var x any = v; json.Marshal(x)`).
+      *Done* (2026-11-06): an argument of interface type is followed to
+      what reaches it: values assigned to a variable it names, returns of
+      a function of the same files it calls, conversions, composite
+      literals' elements (`analysis.reaches`). Interface parameters of a
+      module function are left to the callee rule (not known: may find
+      fields by name), and other packages' functions are not followed.
 
 43. **TypeScript against Go, what still differs** (2026-10-29, the user
     asked where TypeScript does not match Go; read from the code and

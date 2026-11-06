@@ -4512,3 +4512,12 @@ moving to `tools/tools/u.go`. Two replace_expression steps in
 hand. The CLI does not route to other modules (only the server's
 Language does), so probing there refused the file as outside the
 workspace.
+
+## 2026-11-06: values reaching reflection through interfaces (roadmap 42c)
+
+Through the CLI, goldens first (three rename refusals: through a
+variable, a return, a literal). One batch, refused once: the loop that
+uses the new `r` came before the statement declaring it, and a step's
+scope is checked even under check "end"; reordered (declarations, then
+the statement, then its users). The visit callback's signature changed by
+replace_expression on its type and both literals. Nothing by hand.
