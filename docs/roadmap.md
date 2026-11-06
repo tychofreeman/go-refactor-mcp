@@ -3086,6 +3086,13 @@ candidates and the evidence for each, gathered from the friction log.
        in Go, `tsapi.Callable` in TypeScript), a `refactor.Covering` tool
        rather than a `Router`, since arguments alone cannot tell a call
        from a local; Java's is left (with its inline class, when built).
+    3. The other merges of `docs/parity.md` section 2, one PR each
+       (2026-11-06, the user: "do items 1-3"): `move_statement` with a
+       `direction` for move_statement_up and _down (*done*,
+       `refactor.MoveStatementOf`, a Covering tool that passes on only
+       the arguments the chosen one takes); `change_type` for
+       change_field_type and change_parameter_type; delete_file into
+       `move`.
 
 55. **Constructive transformations, as java-refactor-mcp's #212-#215**
     (2026-11-05, the user: "I'd like go/ts to work the same way"): create

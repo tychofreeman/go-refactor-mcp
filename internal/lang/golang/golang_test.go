@@ -179,6 +179,38 @@ func TestMove(t *testing.T) {
 	}
 }
 
+// move_statement is published in place of move_statement_up and
+// move_statement_down, and runs the one its direction names.
+func TestMoveStatement(t *testing.T) {
+	root := t.TempDir()
+	write(t, root, map[string]string{
+		"go.mod": "module example.com/home\n\ngo 1.22\n",
+		"a.go":   "package home\n\nfunc F() int {\n\ta := 1\n\tb := 2\n\treturn a + b\n}\n",
+	})
+	l := New(root, []string{"./..."}, &history.Stack{})
+	for _, s := range []struct{ args, want string }{
+		{`{"file": "a.go", "line": 4, "direction": "down"}`, "b := 2\n\ta := 1"},
+		{`{"file": "a.go", "line": 5, "direction": "up"}`, "a := 1\n\tb := 2"},
+	} {
+		if text, refused, err := l.Step("move_statement", []byte(s.args)); err != nil || refused {
+			t.Fatalf("move_statement %s: %v %v\n%s", s.args, err, refused, text)
+		}
+		if b, _ := os.ReadFile(filepath.Join(root, "a.go")); !strings.Contains(string(b), s.want) {
+			t.Errorf("after %s:\n%s", s.args, b)
+		}
+	}
+	if text, refused, _ := l.Step("move_statement", []byte(`{"file": "a.go", "line": 4, "direction": "left"}`)); !refused || !strings.Contains(text, "up or down") {
+		t.Errorf("a direction that is neither up nor down is not refused:\n%s", text)
+	}
+	tools := map[string]bool{}
+	for _, tool := range l.Tools() {
+		tools[tool.Name] = true
+	}
+	if !tools["move_statement"] || tools["move_statement_up"] || tools["move_statement_down"] {
+		t.Errorf("published: %v", tools)
+	}
+}
+
 // With SkeletonOnly, create_file refuses Go content with function bodies,
 // and takes types, fields, constants and variables, and declaration.
 func TestSkeletonOnly(t *testing.T) {
