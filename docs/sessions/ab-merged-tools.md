@@ -30,8 +30,34 @@ a cause.
 
 ## Notes
 
+- plan: the six sets first ran at once and four were killed (the
+  machine ran out of memory compiling the TypeScript checker six times);
+  rerun one at a time with both servers built once.
+
 ## Measured
+
+No session log (a cloud session started outside the checkout). No Go
+was changed: the CLI's calls were replace_text and create_file on docs.
+The runs, means per run (`docs/cost-history.md`, section 24):
+
+| task | before: cost | turns | after: cost | turns |
+|---|---|---|---|---|
+| move-to-package, multi-move-rename | $0.113 | 8.0 | $0.098 | 6.0 |
+| notify-userid | $0.236 | 14.5 | $0.169 | 14.0 |
+| warehouse-inline | $0.148 | 11.0 | $0.157 | 13.5 |
+
+16/16 passed; $2.26 in all.
 
 ## Assessment
 
+The merged list holds: every run reached the operation through its
+merged name (`change_type` for a field, where the baseline called
+`change_field_type`), none called an old name, and nothing was refused.
+Cost moved within the noise of 2 runs. The tasks did not exercise
+`move` with `delete`, `inline` with `field`, `move_statement` or
+`preserve_exceptions`; no task in the sets needs them.
+
 ## Follow-ups
+
+- A task that needs `move` with `delete` or `inline` with `field`, if a
+  later change to those descriptions needs measuring.
