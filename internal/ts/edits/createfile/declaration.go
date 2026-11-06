@@ -1,10 +1,12 @@
 package createfile
 
 import (
+	"encoding/json"
 	"regexp"
 	"strings"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/ts/tsapi"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/workspace"
 )
 
@@ -43,4 +45,24 @@ func fromDeclaration(ws *workspace.Workspace, declaration string) (string, error
 		return header + " {}\n", nil
 	}
 	return header + " {\n  " + strings.Join(members, "\n\n  ") + "\n}\n", nil
+}
+
+// Skeleton is create_file for a server that creates structure by command:
+// TypeScript content with a function or method body is refused, while
+// classes with fields, interfaces, types and what declaration and
+// test_for write pass.
+type Skeleton struct{ *CreateFile }
+
+// Plan refuses content with a body, else plans as create_file does.
+func (s Skeleton) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
+	var a createFileArgs
+	if err := refactor.DecodeArgs(raw, &a); err != nil {
+		return nil, err
+	}
+	if ws.Owns(a.File) && a.Content != "" {
+		if name := tsapi.Bodied(a.Content); name != "" {
+			return nil, refactor.Refusef("this server creates code by structure: content may hold classes with fields, interfaces and types, not %s's body. Make the class with declaration (implements and extends give its stubs), a test with test_for, and each function or method with add_declaration", name)
+		}
+	}
+	return s.CreateFile.Plan(ws, raw)
 }

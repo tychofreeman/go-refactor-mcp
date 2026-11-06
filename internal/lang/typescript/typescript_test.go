@@ -306,3 +306,31 @@ func TestTestFor(t *testing.T) {
 		t.Errorf("a missing method is not refused:\n%s", text)
 	}
 }
+
+// With SkeletonOnly, create_file refuses TypeScript with function bodies,
+// and takes classes with fields, interfaces and types, and declaration.
+func TestSkeletonOnly(t *testing.T) {
+	root := t.TempDir()
+	for name, text := range map[string]string{
+		"tsconfig.json": `{"compilerOptions": {"strict": true, "noEmit": true, "types": []}, "include": ["src"]}`,
+		"src/a.ts":      "export const a = 1;\n",
+	} {
+		p := filepath.Join(root, name)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	l := New(root, &history.Stack{})
+	l.SkeletonOnly = true
+	if text, refused, _ := l.Step("create_file", []byte(`{"file": "src/bed.ts", "content": "export class Bed {\n  depth = 1;\n  dig(): void {}\n}\n"}`)); !refused || !strings.Contains(text, "declaration") {
+		t.Errorf("a method body is not refused, naming declaration:\n%s", text)
+	}
+	for _, args := range []string{`{"file": "src/bed.ts", "content": "export class Bed {\n  depth = 1;\n}\n\nexport interface Pot {\n  size: number;\n}\n"}`, `{"file": "src/pot.ts", "declaration": "export class Planter"}`} {
+		if text, refused, err := l.Step("create_file", []byte(args)); err != nil || refused {
+			t.Errorf("%s: %v %v\n%s", args, err, refused, text)
+		}
+	}
+}

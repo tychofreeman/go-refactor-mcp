@@ -3073,10 +3073,16 @@ candidates and the evidence for each, gathered from the friction log.
        TypeScript's framework from package.json, vitest or jest, else
        node:test (the user's choice over node:test always). *Done*
        (`internal/edits/testfor`, `tsapi.TestFor`); add_declaration's
-       definition budget went from 1,500 to 1,700 characters for it.
+       definition budget went from 1,500 to 1,700 characters for it, and
+       the user kept test_for there (2026-11-05): later tests of a file
+       start from it too. Drop it first if an A/B run shows it unused.
     3. Skeleton-only creation behind a flag: Go refuses functions and
        methods with bodies in `create_file`; types, struct fields, consts
-       and vars pass (the user's choice over refusing fields too).
+       and vars pass (the user's choice over refusing fields too). *Done*:
+       the server flag `-skeleton-only` (off by default) wraps
+       create_file in `createfile.Skeleton` for Go and TypeScript, on in
+       this repo's `.mcp.json` (the user, 2026-11-05); an A/B arm with it
+       on waits for the user's yes.
 
 Parked: the Ollama loop (`refactor-agent`). It works and stays, but Claude
 through MCP is the priority.

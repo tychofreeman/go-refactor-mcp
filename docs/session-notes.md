@@ -292,7 +292,10 @@ working patterns, with their steps, are in `docs/patterns.md`.
 - **Constructive transformations** (2026-11-05, roadmap 55, as
   java-refactor-mcp's #212-#215): `create_file` with `declaration`, then
   `test_for`, then a skeleton-only flag, each in its own PR; the user's
-  choices for Go and TypeScript are in the roadmap item.
+  choices for Go and TypeScript are in the roadmap item. `-skeleton-only`
+  is a server flag like `-no-code-by-text`, on in this repo's
+  `.mcp.json` (the user, 2026-11-05): new Go and TypeScript files come
+  from declaration and test_for, and functions from add_declaration.
 - **Fowler's catalog and IntelliJ** (2026-11-04): `docs/catalog.md`.
   Run a composition before calling an entry missing: Encapsulate Variable
   and Record and Replace Function with Command first looked missing and
