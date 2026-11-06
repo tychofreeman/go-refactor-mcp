@@ -115,6 +115,10 @@ type Server struct {
 	// string literals and comments: code is changed by the structured
 	// edits. Published text is the same.
 	NoCodeByText bool
+	// SkeletonOnly makes create_file refuse code with function bodies, an
+	// experiment: types come from declaration, tests from test_for and
+	// functions from add_declaration. Published text is the same.
+	SkeletonOnly bool
 
 	home       string               // the git working tree of the server's directory, or ""
 	golang     *golang.Language     // nil when the root holds no Go
@@ -223,9 +227,11 @@ func (s *Server) MCP() *mcp.Server {
 	if s.golang != nil {
 		s.golang.FullDiffs, s.golang.ReadByName = s.FullDiffs, s.ReadByName
 		s.golang.NoCodeByText = s.NoCodeByText
+		s.golang.SkeletonOnly = s.SkeletonOnly
 	}
 	if s.typescript != nil {
 		s.typescript.FullDiffs, s.typescript.ReadByName = s.FullDiffs, s.ReadByName
+		s.typescript.SkeletonOnly = s.SkeletonOnly
 	}
 	srv := mcp.NewServer(&mcp.Implementation{Name: "gorefactor", Version: Version()}, &mcp.ServerOptions{
 		Instructions: s.instructions(),
