@@ -37,9 +37,9 @@ func (w *Workspace) IntroduceParameter(path, name, expr, param string) ([]edit.F
 // ParamsToObject returns the edits that bundle the parameters of the
 // function called name into one object, at its declaration and every
 // call.
-func (w *Workspace) ParamsToObject(path, name, typeName string) ([]edit.FileEdit, string) {
+func (w *Workspace) ParamsToObject(path, name, typeName string, only []string) ([]edit.FileEdit, string) {
 	return w.merged(path, func(p *tsapi.Project) ([]tsapi.Edit, string) {
-		return p.ParamsToObject(context.Background(), path, name, typeName)
+		return p.ParamsToObject(context.Background(), path, name, typeName, only)
 	})
 }
 

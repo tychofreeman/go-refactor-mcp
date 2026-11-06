@@ -227,3 +227,63 @@ func (p *Project) SplitLoop(ctx context.Context, path string, line, at int) ([]E
 	text := indent + "}\n" + indent + l.text[l.pos(loop):l.pos(body)] + "{\n"
 	return []Edit{{File: l.f.FileName(), Start: start, End: start, NewText: text}}, ""
 }
+
+// PhaseAt finds the second phase of a function that starts with the
+// statement on line of the file at path: the last line of the function's
+// body, and the names the statements before it declare that the ones from
+// it on use; or why there is none: not a statement of a function's body,
+// its first, a second phase that uses nothing the first computes or
+// assigns some of it, or typeName taken.
+func (p *Project) PhaseAt(ctx context.Context, path string, line int, typeName string) (last int, names []string, refusal string) {
+	l, why := p.lined(path)
+	if why != "" {
+		return 0, nil, why
+	}
+	var stmt *ast.Node
+	var list []*ast.Node
+	l.lists(func(_ *ast.Node, ls []*ast.Node) {
+		for _, s := range ls {
+			if stmt == nil && l.line(l.pos(s)) == line {
+				stmt, list = s, ls
+			}
+		}
+	})
+	if stmt == nil {
+		return 0, nil, fmt.Sprintf("no statement starts on line %d", line)
+	}
+	body := stmt.Parent
+	if !ast.IsBlock(body) || body.Parent == nil || !ast.IsFunctionLike(body.Parent) || body.Parent.Body() != body {
+		return 0, nil, fmt.Sprintf("line %d is not a statement of the function's body; the second phase starts at one", line)
+	}
+	i := slices.Index(list, stmt)
+	if i == 0 {
+		return 0, nil, fmt.Sprintf("line %d is the function's first statement, so there would be no first phase", line)
+	}
+	c, done := p.prog.GetProgram().GetTypeCheckerForFile(ctx, l.f)
+	defer done()
+	if taken(c, l, typeName, stmt) != "" {
+		return 0, nil, fmt.Sprintf("%s is already declared; choose another type name", typeName)
+	}
+	for _, s := range list[:i] {
+		for _, d := range declared(s) {
+			sym := c.GetSymbolAtLocation(d)
+			if sym == nil {
+				continue
+			}
+			used := false
+			for _, later := range list[i:] {
+				if where := l.assigns(later, sym, c); where != "" {
+					return 0, nil, fmt.Sprintf("%s assigns %s, which the first phase computes; split it first, with kind variable", where, d.Text())
+				}
+				used = used || uses(c, later, []*ast.Symbol{sym}) != nil
+			}
+			if used {
+				names = append(names, d.Text())
+			}
+		}
+	}
+	if len(names) == 0 {
+		return 0, nil, fmt.Sprintf("the statements from line %d on use nothing the ones before compute, so there is nothing to pass between phases", line)
+	}
+	return l.line(list[len(list)-1].End() - 1), names, ""
+}

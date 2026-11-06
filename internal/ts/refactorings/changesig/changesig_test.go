@@ -614,6 +614,20 @@ func TestParamsToObject(t *testing.T) {
 	}
 }
 
+// With parameters, only those go into the object, in the place of the
+// first; the others stay.
+func TestParamsToObjectSome(t *testing.T) {
+	ws, dir := load(t, map[string]string{"src/sow.ts": "export function sow(bed: string, rows: number, depth: number): number {\n  return rows * depth;\n}\n\nexport const sown = sow(\"roses\", 3, 2);\n"})
+	if res := tstest.Run(t, ws, NewParamsToObject(), `{"file": "src/sow.ts", "name": "sow", "parameters": ["rows", "depth"], "type_name": "Rows"}`); !res.Applied {
+		t.Fatalf("%s", res)
+	}
+	mustContain(t, dir, "src/sow.ts", "export interface Rows {\n  rows: number;\n  depth: number;\n}", "export function sow(bed: string, { rows, depth }: Rows): number {", `sow("roses", { rows: 3, depth: 2 })`)
+	res := tstest.Run(t, ws, NewParamsToObject(), `{"file": "src/sow.ts", "name": "sow", "parameters": ["width"]}`)
+	if want := "sow has no parameter width"; res.Applied || !strings.Contains(res.Refused, want) {
+		t.Errorf("want a refusal with %q, got %s", want, res)
+	}
+}
+
 func TestAddResult(t *testing.T) {
 	ws, dir := load(t, map[string]string{
 		"src/load.ts": `export function load(id: string): string {

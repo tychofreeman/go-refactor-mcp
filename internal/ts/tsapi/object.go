@@ -3,6 +3,7 @@ package tsapi
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/buke/typescript-go-internal/v7/pkg/ast"
@@ -17,7 +18,7 @@ import (
 // liters: 3 }). With typeName, the object's type is an interface declared
 // before the function. The object defaults to {} when every field is
 // optional.
-func (p *Project) ParamsToObject(ctx context.Context, path, name, typeName string) ([]Edit, string) {
+func (p *Project) ParamsToObject(ctx context.Context, path, name, typeName string, only []string) ([]Edit, string) {
 	t, done, why := p.target(ctx, path, name)
 	if why != "" {
 		return nil, why
@@ -27,6 +28,31 @@ func (p *Project) ParamsToObject(ctx context.Context, path, name, typeName strin
 	params := t.params[t.off:]
 	if len(params) == 0 {
 		return nil, fmt.Sprintf("%s has no parameters to bundle", name)
+	}
+	keep, first, chosen := params, 0, map[int]bool{} // the parameters bundled, the first's index
+	for i := range params {
+		chosen[i] = len(only) == 0
+	}
+	if len(only) > 0 {
+		if len(t.family) > 0 || len(t.overloads) > 0 {
+			return nil, fmt.Sprintf("%s changes with other methods or has overloads; leave out parameters, to bundle them all", name)
+		}
+		for _, o := range only {
+			i := slices.IndexFunc(params, func(prm *ast.Node) bool {
+				return prm.Name() != nil && ast.IsIdentifier(prm.Name()) && prm.Name().Text() == o
+			})
+			if i < 0 {
+				return nil, fmt.Sprintf("%s has no parameter %s", name, o)
+			}
+			chosen[i] = true
+		}
+		keep = nil
+		for i, prm := range params {
+			if chosen[i] {
+				keep = append(keep, prm)
+			}
+		}
+		first = slices.Index(params, keep[0])
 	}
 	if typeName != "" && len(t.overloads) > 0 {
 		return nil, fmt.Sprintf("%s has overloads, whose objects would have different types; leave out type_name", name)
@@ -39,7 +65,7 @@ func (p *Project) ParamsToObject(ctx context.Context, path, name, typeName strin
 	}
 	var binds, fields []string
 	allOptional := true
-	for _, prm := range params {
+	for _, prm := range keep {
 		d := prm.AsParameterDeclaration()
 		nm := prm.Name()
 		switch {
@@ -81,7 +107,16 @@ func (p *Project) ParamsToObject(ctx context.Context, path, name, typeName strin
 	if allOptional {
 		param += " = {}"
 	}
-	edits := []Edit{{File: l.f.FileName(), Start: l.pos(params[0]), End: params[len(params)-1].End(), NewText: param}}
+	var list []string // the parameters, the bundled ones as one
+	for i, prm := range params {
+		switch {
+		case i == first:
+			list = append(list, param)
+		case !chosen[i]:
+			list = append(list, l.source(prm))
+		}
+	}
+	edits := []Edit{{File: l.f.FileName(), Start: l.pos(params[0]), End: params[len(params)-1].End(), NewText: strings.Join(list, ", ")}}
 	// Each method of the family takes the same object, keyed by these
 	// names, binding its own.
 	for _, m := range t.family {
@@ -184,10 +219,19 @@ func (p *Project) ParamsToObject(ctx context.Context, path, name, typeName strin
 			}
 			continue
 		}
-		var props []string
+		var props, out []string
+		objAt := -1
 		for i, a := range args {
 			if i >= len(params) {
 				return nil, fmt.Sprintf("the call at %s passes more arguments than %s has parameters", cl.where(call), name)
+			}
+			if !chosen[i] {
+				out = append(out, cl.source(a))
+				continue
+			}
+			if i == first {
+				objAt = len(out)
+				out = append(out, "")
 			}
 			key := params[i].Name().Text()
 			if ast.IsIdentifier(a) && a.Text() == key {
@@ -196,7 +240,10 @@ func (p *Project) ParamsToObject(ctx context.Context, path, name, typeName strin
 				props = append(props, key+": "+cl.source(a))
 			}
 		}
-		edits = append(edits, Edit{File: cl.f.FileName(), Start: cl.pos(args[0]), End: args[len(args)-1].End(), NewText: "{ " + strings.Join(props, ", ") + " }"})
+		if objAt >= 0 {
+			out[objAt] = "{ " + strings.Join(props, ", ") + " }"
+		}
+		edits = append(edits, Edit{File: cl.f.FileName(), Start: cl.pos(args[0]), End: args[len(args)-1].End(), NewText: strings.Join(out, ", ")})
 	}
 	return edits, ""
 }

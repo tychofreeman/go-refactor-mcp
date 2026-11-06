@@ -4521,3 +4521,13 @@ uses the new `r` came before the statement declaring it, and a step's
 scope is checked even under check "end"; reordered (declarations, then
 the statement, then its users). The visit callback's signature changed by
 replace_expression on its type and both literals. Nothing by hand.
+
+## 2026-11-06: TypeScript's split by phase (roadmap 52.2)
+
+Through the CLI, tests first. convert_params_to_object first gained
+`parameters` (only those bundled, in the first's place): `only` added to
+both ParamsToObject functions by add_parameter, then the body's three
+places by insert_statements, replace_expression and replace_statements.
+Then `tsapi.PhaseAt` and Split's `Expand` by add_declaration (refused
+once: two packages named changesig; resent with imports). Nothing by
+hand.
