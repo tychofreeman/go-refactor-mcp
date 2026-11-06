@@ -2,6 +2,7 @@ package createfile
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"go/ast"
 	"go/format"
@@ -213,4 +214,28 @@ func testFile(ws *workspace.Workspace, path, target string) (string, error) {
 		return "", err
 	}
 	return fmt.Sprintf("package %s\n\nimport \"testing\"\n\n%s\n", own.Name(), test), nil
+}
+
+// Skeleton is create_file for a server that creates structure by command:
+// Go content with a function or method body is refused, while types,
+// fields, constants, variables and what declaration and test_for write
+// pass.
+type Skeleton struct{ *CreateFile }
+
+// Plan refuses content with a body, else plans as create_file does.
+func (s Skeleton) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
+	var a createArgs
+	if err := refactor.DecodeArgs(raw, &a); err != nil {
+		return nil, err
+	}
+	if strings.HasSuffix(a.File, ".go") && a.Content != "" {
+		if f, err := parser.ParseFile(token.NewFileSet(), a.File, a.Content, parser.SkipObjectResolution); err == nil {
+			for _, d := range f.Decls {
+				if fd, ok := d.(*ast.FuncDecl); ok && fd.Body != nil {
+					return nil, refactor.Refusef("this server creates code by structure: content may hold types, fields, constants and variables, not %s's body. Make the type with declaration (and implements for its stubs), a test with test_for, and each function with add_declaration", fd.Name.Name)
+				}
+			}
+		}
+	}
+	return s.CreateFile.Plan(ws, raw)
 }

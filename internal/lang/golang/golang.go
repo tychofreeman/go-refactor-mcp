@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/tychofreeman/go-refactor-mcp/internal/edits/createfile"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/replacetext"
 	"github.com/tychofreeman/go-refactor-mcp/internal/history"
 	"github.com/tychofreeman/go-refactor-mcp/internal/inspect"
@@ -30,6 +31,9 @@ type Language struct {
 	// NoCodeByText makes replace_text change a Go file only inside string
 	// literals and comments.
 	NoCodeByText bool
+	// SkeletonOnly makes create_file refuse Go with function bodies:
+	// structure comes from declaration, test_for and add_declaration.
+	SkeletonOnly bool
 
 	dir      string
 	patterns []string
@@ -233,10 +237,14 @@ func (l *Language) Step(tool string, args json.RawMessage) (string, bool, error)
 }
 
 // strict returns r, or for replace_text with NoCodeByText, the
-// replace_text that changes Go only inside string literals and comments.
+// replace_text that changes Go only inside string literals and comments,
+// or for create_file with SkeletonOnly, the one that refuses bodies.
 func (l *Language) strict(r refactor.Refactoring) refactor.Refactoring {
 	if t, ok := r.(*replacetext.ReplaceText); ok && l.NoCodeByText {
 		return &replacetext.ReplaceText{Named: t.Named, TextOnly: true}
+	}
+	if t, ok := r.(*createfile.CreateFile); ok && l.SkeletonOnly {
+		return createfile.Skeleton{CreateFile: t}
 	}
 	return r
 }

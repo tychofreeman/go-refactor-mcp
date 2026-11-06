@@ -4392,3 +4392,19 @@ Through the CLI with heredocs; three slips of mine and two gaps:
 - add_declaration's definition budget (1,500 characters, the tool models
   load most) left no room for test_for; it is 1,700 now, as
   replace_statements', with test_for explained in its field.
+
+## 2026-11-05: skeleton-only creation (roadmap 55.3)
+
+Through the CLI. The tests declared `Language.SkeletonOnly` on both
+languages as stubs, placed after the private fields; the fields were then
+deleted and added again with add_field in the exported group, with their
+doc comments, in one batch. A method the new code called and nothing
+declared (`Workspace.Owns`) was stubbed too, and add_declaration of the
+real one replaced the stub.
+
+- The heredoc's final newline detached a doc comment from its function
+  through `new_file=-` (the third time today). The CLI could drop one
+  final newline from `-` text when `old` does not end in one; until then,
+  JSON for replacements that end mid-line.
+- I ran a pointless `sed -n` on a Go file (its output discarded) before
+  reading the lines through inspect.

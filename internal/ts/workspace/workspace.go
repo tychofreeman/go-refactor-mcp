@@ -293,3 +293,7 @@ func fileExists(p string) bool {
 	fi, err := os.Stat(p)
 	return err == nil && !fi.IsDir()
 }
+
+// Owns reports whether file, relative to the root or absolute, is a
+// TypeScript source file by its name.
+func (w *Workspace) Owns(file string) bool { return isSource(w.Abs(file)) }
