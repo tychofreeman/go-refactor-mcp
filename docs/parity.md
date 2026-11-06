@@ -164,8 +164,11 @@ inline_function keeping only the branch a constant condition takes.
 
 **Go and TS behind Java (2026-11-06, java #243-#250):** `move` takes
 `imports` (java #244, after its A/B found a refusal asking for `imports`
-that `move` then refused): check that Go's and TypeScript's merged
-`move` passes `imports` on every route that writes Go or TypeScript.
+that `move` then refused). Checked 2026-11-06, nothing to fix: Go's
+and TypeScript's `move` import what moved code uses from its type
+information (`imports.Adder` by package path in `movedecl`), not by
+name, so no refusal of theirs asks for `imports`; only edits resolve
+names (`gocode`), and they take it.
 TypeScript's `type_switch_to_method` refuses a `default` or a final
 `else`; Java's makes it the supertype's own method (java #249), which
 TypeScript could do when the union's classes share a base class. It
@@ -213,7 +216,7 @@ Java's rows for these items are #119-#130 in its `docs/design.md`, ordered there
    budget allows, after the user rules on it.
 6. Option gaps in section 4, as the friction logs raise them.
 7. From Java's #243-#250 (the user, 2026-11-06): `batch` `retry` for Go
-   and TypeScript, and `move` with `imports`, each its own PR.
+   and TypeScript (`move` with `imports` was checked and needs nothing).
 
 Decided (2026-11-05, the user): the more generic name wins (section 2);
 `preserve_exceptions` comes to Go and TypeScript. The tool budget: the
