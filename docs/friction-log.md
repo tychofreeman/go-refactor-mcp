@@ -4416,3 +4416,13 @@ splits a line; and a number or boolean given for a string argument is
 taken as its text in the engine (`toSchemaTypes`), so `expression=1500`
 works through key=value and from a model's JSON. Record:
 `docs/sessions/cli-stdin-fixes.md`. Nothing by hand.
+## 2026-11-06: one inline (roadmap 54.2)
+
+Through the CLI; nothing by hand. Found on the way: inline_struct writes
+broken code for one-line struct declarations (on the roadmap's defects).
+`only`, the argument filter, moved to `refactor.OnlyArgs` with `move`
+(its first use in this repo's own work) when TypeScript needed it too.
+The TypeScript side was written before its test (TDD's order broken):
+the test came after and passed at once. A `key_file=-` with no heredoc
+waits on the terminal for its text: a slip of mine hung a command until
+it was stopped.

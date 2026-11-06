@@ -38,7 +38,10 @@ part left. What is open, the newest priority first:
 5. **49** whether the work goes through the tools: 49.2, 49.3, 49.8, 49.9,
    49.12 and 49.14 open; 49.11 for the CLI, TypeScript and an A/B arm;
    49.4 and 49.5 wait on a measurement.
-6. **Defects found on the way and not yet fixed:** introduce_parameter on
+6. **Defects found on the way and not yet fixed:** inline_struct writes broken code
+   when the holder and the held struct are declared on one line each
+   (`type Bed struct{ Soil }`: it replaces the declarations with the
+   field, 2026-11-06); introduce_parameter on
    `(*found)[0]`, extract_function by pointer, add_parameter on a local
    function literal (44); remove_else's `wrap` in unformatted files (43);
    values reaching reflection through interfaces (42c); TypeScript's copy
@@ -3056,7 +3059,11 @@ candidates and the evidence for each, gathered from the friction log.
        `docs/sessions/one-move-tool.md`); left: the A/B check, `rename`
        of a file path, Java.
     2. One `inline` for functions, variables and a held struct or class
-       (2026-11-05, the user), in the same way, after `move`.
+       (2026-11-05, the user), in the same way, after `move`. *Go and
+       TypeScript built*: `inline` decides by what name is (`locate.Ident`
+       in Go, `tsapi.Callable` in TypeScript), a `refactor.Covering` tool
+       rather than a `Router`, since arguments alone cannot tell a call
+       from a local; Java's is left (with its inline class, when built).
 
 55. **Constructive transformations, as java-refactor-mcp's #212-#215**
     (2026-11-05, the user: "I'd like go/ts to work the same way"): create

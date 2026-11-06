@@ -183,7 +183,7 @@ func TestToolsAndInstructions(t *testing.T) {
 	for _, tool := range res.Tools {
 		names[tool.Name] = tool
 	}
-	for _, want := range []string{"rename", "extract_variable", "inline_variable", "move", "create_file", "inspect", "undo", "check"} {
+	for _, want := range []string{"rename", "extract_variable", "inline", "move", "create_file", "inspect", "undo", "check"} {
 		if names[want] == nil {
 			t.Errorf("tool %q not listed", want)
 		}
@@ -275,10 +275,10 @@ func TestDescriptionsAreCurrent(t *testing.T) {
 	for _, name := range symbolTools {
 		mustContain(t, name, tools[name], "Without line, name alone identifies")
 	}
-	if strings.Contains(tools["inline_variable"], "Without line") {
-		t.Error("inline_variable finds only locals, but its description says it finds package-level symbols")
+	if strings.Contains(tools["inline"], "Without line") {
+		t.Error("inline finds no declaration by name alone, but its description says it does")
 	}
-	mustContain(t, "inline_variable", tools["inline_variable"], "function (\"Name\" or \"Type.Method\") and name")
+	mustContain(t, "inline", tools["inline"], "by function and name")
 	for name, desc := range tools {
 		if strings.Contains(desc, "returns a diff") {
 			t.Errorf("%s still says it returns a diff", name)
