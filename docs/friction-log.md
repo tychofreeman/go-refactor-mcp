@@ -4441,6 +4441,36 @@ fields, breaking the file. It now replaces only the field when the field
 shares its line with the braces (`type Bed struct{ depth int }`); golden
 `one_line`. Through the CLI; nothing by hand.
 
+## 2026-11-06: remove_else's wrap in unformatted files (roadmap 43)
+
+Through the CLI, tests first: a space-indented Go golden, and two
+TypeScript cases (wrap, and inline_function's early return) with a blank
+line and a template literal in the moved code. Go's wrap left indenting to
+gofmt; TypeScript's indented every line, blank lines and a template
+literal's continuation included, which changed the string. Both edits
+by replace_statements of the loop or the plan's tail, and
+`lined.indentable` by add_declaration. The golden's files are testdata,
+written with the shell. Nothing by hand.
+
+## 2026-11-06: TypeScript's extract_function for a value with no case (roadmap 41.8)
+
+Through the CLI, test first (TestExtractMissingCase: one applied, two
+refused). `tsapi.MissingCase` and its `Place` by add_declaration, the
+Plan's case lookup and its note by replace_statements, the description
+by replace_text on its literal. An older case that expected "has no
+case" for a switch the new rule now extends was given a default, by
+replace_text on its TypeScript text, so it still pins the refusal.
+Nothing by hand.
+
+## 2026-11-06: introduce_parameter of a dereferenced parameter (roadmap 44)
+
+Through the CLI, golden first (`deref_of_address`, testdata written with
+the shell). One replace_statements in `substitute` and `derefOf` by
+add_declaration, in one batch (it re-ran with check "end", since the
+first step uses what the second declares). Nothing by hand. Probing the
+three item-44 defects in a scratch module first showed the
+first-occurrence half of this one already refuses, rightly.
+
 ## 2026-11-06: extract_function's pointer for a variable it only reads (roadmap 44)
 
 Through the CLI, goldens first: one that copies, one that keeps the
