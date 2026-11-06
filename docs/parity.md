@@ -17,7 +17,7 @@ Cheap, and each one costs a fresh model a refusal or a wrong result today.
 |---|---|---|
 | TS | `inspect` with `pattern` is advertised (since #560) but refused as invalid arguments: `internal/ts/inspect` has no `Pattern` | *Done* (`textutil.Matches`, shared with Go) |
 | TS | In a TypeScript-only project `check` and `batch` publish Go's text (`go test`, ./...) though TS runs node tests | *Done* (`typescriptText`, also inspect's "Go file of the module") |
-| TS | extract_function by `case`: no copy of the code after the switch for a value with no case | 41.8 |
+| TS | extract_function by `case`: no copy of the code after the switch for a value with no case | *Done* (`tsapi.MissingCase`) |
 | Go, TS | remove_else `wrap` does not re-indent in an unformatted file | 43 |
 | Go | introduce_parameter on `(*found)[0]`; extract_function passes a read-only variable by pointer; add_parameter misses a local function literal | 44 |
 | Go | inspect `names` refuses a type as declared twice when a test file declares a function of the same name | 49.9 |
