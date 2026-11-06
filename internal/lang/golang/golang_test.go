@@ -68,6 +68,29 @@ func TestOtherModules(t *testing.T) {
 	}
 }
 
+// move_file's to, a path like file, is taken in the module the call works
+// in; to in another module than file's is refused, as two modules are.
+func TestMoveFileInOtherModule(t *testing.T) {
+	root := t.TempDir()
+	write(t, root, map[string]string{
+		"home/go.mod":       "module example.com/home\n\ngo 1.22\n",
+		"home/a.go":         "package home\n\nfunc A() int { return 1 }\n",
+		"home/tools/go.mod": "module example.com/tools\n\ngo 1.22\n",
+		"home/tools/t.go":   "package tools\n\nfunc T() int { return 2 }\n",
+	})
+	l := New(filepath.Join(root, "home"), []string{"./..."}, &history.Stack{})
+	text, refused, err := l.Step("move_file", []byte(`{"file": "tools/t.go", "to": "tools/u.go"}`))
+	if err != nil || refused {
+		t.Fatalf("move_file in a nested module: %v %v\n%s", err, refused, text)
+	}
+	if _, err := os.Stat(filepath.Join(root, "home/tools/u.go")); err != nil {
+		t.Errorf("home/tools/u.go: %v\n%s", err, text)
+	}
+	if text, refused, _ := l.Step("move_file", []byte(`{"file": "a.go", "to": "tools/a.go"}`)); !refused || !strings.Contains(text, "more than one module") {
+		t.Errorf("move_file into another module is not refused:\n%s", text)
+	}
+}
+
 // A call from a worktree that names no file (inspect's overview, check,
 // undo) carries the worktree, as cmd/worktree-paths adds it: inspect and
 // check work in its module, and undo refuses a change made elsewhere.

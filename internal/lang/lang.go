@@ -182,6 +182,7 @@ func (d *Dispatcher) owner(path string) Language {
 }
 
 // NamedFiles returns the paths v gives as "file", "to_file" or "files",
+// or as "to" beside no "name" (move_file's; with a name, to is a type),
 // at any depth, in the order they appear.
 func NamedFiles(v any) []string {
 	var out []string
@@ -195,7 +196,7 @@ func NamedFiles(v any) []string {
 		for _, k := range keys {
 			switch x := v[k].(type) {
 			case string:
-				if k == "file" || k == "to_file" {
+				if k == "file" || k == "to_file" || k == "to" && v["name"] == nil {
 					out = append(out, x)
 				}
 			case []any:
@@ -221,7 +222,7 @@ func NamedFiles(v any) []string {
 }
 
 // MapFiles returns v with each path it gives as "file", "to_file" or
-// "files", at any depth, replaced by f of it.
+// "files", or as "to" beside no "name", at any depth, replaced by f of it.
 func MapFiles(v any, f func(string) string) any {
 	switch v := v.(type) {
 	case map[string]any:
@@ -229,7 +230,7 @@ func MapFiles(v any, f func(string) string) any {
 		for k, x := range v {
 			switch x := x.(type) {
 			case string:
-				if k == "file" || k == "to_file" {
+				if k == "file" || k == "to_file" || k == "to" && v["name"] == nil {
 					out[k] = f(x)
 					continue
 				}
