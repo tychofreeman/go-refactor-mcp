@@ -4521,3 +4521,13 @@ uses the new `r` came before the statement declaring it, and a step's
 scope is checked even under check "end"; reordered (declarations, then
 the statement, then its users). The visit callback's signature changed by
 replace_expression on its type and both literals. Nothing by hand.
+
+## 2026-11-06: move_statement with a direction (roadmap 54.3)
+
+Through the CLI, tests first in both languages. create_file of
+`internal/refactor/movestatement.go` (new behavior), the constructors by
+add_declaration, the registrations by add_element (refused once: `after`
+names a key, and slice elements have none; added at the end instead),
+the instructions by replace_text on their literals. Found on the way:
+`inline`, published since #571, was missing from refactor-tokens'
+refactoring tools; added with `move_statement`. Nothing by hand.
