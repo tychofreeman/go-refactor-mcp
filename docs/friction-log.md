@@ -4292,3 +4292,11 @@ loop moved the wrong statements (each move renumbers them; done again
 one line at a time), and create_file of a test in a new package could
 not hold the stub it needs (a main.go first). The write guard's code is
 new behavior, written with replace_declaration over the stub.
+
+## 2026-11-05: split for TypeScript, variable and loop (roadmap 52.2)
+
+Nothing by hand. The record is `docs/sessions/ts-split.md`. Three
+refusals answered by resending: add_element addressed by the line of an
+element, not the literal's first line; replace_statements cutting a loop
+(the range the refusal named); and a placeholder line in a new file
+removed with replace_text.

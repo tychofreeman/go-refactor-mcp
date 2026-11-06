@@ -21,7 +21,8 @@ comparison it asked for is `cmd/refactor-ab`). Waiting on the user: 29
 (whether a loop of our own is worth a second step). Every other item has a
 part left. What is open, the newest priority first:
 
-1. **52** Go and TypeScript at parity: `split` for TypeScript (52.2), then
+1. **52** Go and TypeScript at parity: `split` kind phase for TypeScript
+   (52.2; variable and loop are done), then
    inline_struct's counterpart (52.3, also 51.3's other half). Before the
    next Go tool the user raises the budget of 50 or two tools merge (25).
 2. **51** the rest of Fowler's and IntelliJ's catalog: Use Interface Where
@@ -3016,7 +3017,9 @@ candidates and the evidence for each, gathered from the friction log.
        `docs/sessions/go-params-to-object.md`): derivations 5 as one
        change, an expander of add_declaration, fold, inline_function and
        rename.
-    2. **split for TypeScript** (variable, loop, phase).
+    2. **split for TypeScript** (variable, loop, phase). *Variable and
+       loop done* (2026-11-05, `docs/sessions/ts-split.md`); phase next,
+       as Go's came in its own PR.
     3. **inline_struct's counterpart for TypeScript:** a class held in a
        property inlined into the class that holds it.
     The budget (item 25): Go publishes 49 of 50 tools with this, and the

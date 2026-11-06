@@ -30,7 +30,7 @@ it; IntelliJ's and GoLand's lists are from JetBrains' help pages
 | Introduce Parameter Object | `convert_params_to_object` (derivations 5 as one change) |
 | Combine Functions into Class | `function_to_method` per function, `move_method` |
 | Combine Functions into Transform | missing |
-| Split Phase | missing; `split` (roadmap 51.1) |
+| Split Phase | `split` kind phase (Go; TypeScript: roadmap 52.2) |
 
 ### Encapsulation
 
@@ -56,7 +56,7 @@ it; IntelliJ's and GoLand's lists are from JetBrains' help pages
 | Move Statements to Callers | composition: `inline_function`, then `extract_function` of what stays shared |
 | Replace Inline Code with Function Call | `fold` |
 | Slide Statements | `move_statement_up`, `move_statement_down` |
-| Split Loop | missing; `split` (roadmap 51.1) |
+| Split Loop | `split` kind loop (Go and TypeScript) |
 | Replace Loop with Pipeline | missing (roadmap 20, loops) |
 | Remove Dead Code | `remove_dead_code` |
 
@@ -64,7 +64,7 @@ it; IntelliJ's and GoLand's lists are from JetBrains' help pages
 
 | Refactoring | gorefactor |
 |---|---|
-| Split Variable | missing; `split` (roadmap 51.1) |
+| Split Variable | `split` kind variable (Go and TypeScript) |
 | Rename Field | `rename` |
 | Replace Derived Variable with Query | not a refactoring: reads of the field equal the query only if every write, literal and decode keeps them equal, an invariant of the program, not an equality of code. An edit after an assertion the tests check (`insert_statements`, then `replace_expression`) |
 | Change Reference to Value | missing |

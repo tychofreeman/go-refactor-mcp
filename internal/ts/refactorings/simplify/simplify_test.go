@@ -1455,3 +1455,154 @@ export function taller(xs: number[]): number {
 `, ""},
 	})
 }
+
+func TestSplit(t *testing.T) {
+	const totals = `export function totals(beds: number[][]): number[] {
+  let water = 0;
+  let plants = 0;
+  for (const b of beds) {
+    water += b[0];
+    plants += b.length;
+  }
+  return [water, plants];
+}
+`
+	check(t, []change{
+		{"variable", `export function waterings(beds: number[]): number[] {
+  let n = beds.length;
+  const first = n * 2;
+  n = 3 * beds.length;
+  return [first, n + 1];
+}
+`, NewSplit(), `{"kind": "variable", "line": 4, "name": "n", "new_name": "total"}`, `export function waterings(beds: number[]): number[] {
+  let n = beds.length;
+  const first = n * 2;
+  const total = 3 * beds.length;
+  return [first, total + 1];
+}
+`, ""},
+		{"variable assigned again", `export function waterings(beds: number[]): number {
+  let n = beds.length;
+  const first = n * 2;
+  n = 3 * beds.length;
+  n += first;
+  return n;
+}
+`, NewSplit(), `{"kind": "variable", "line": 4, "name": "n", "new_name": "total"}`, `export function waterings(beds: number[]): number {
+  let n = beds.length;
+  const first = n * 2;
+  let total = 3 * beds.length;
+  total += first;
+  return total;
+}
+`, ""},
+		{"variable reads its old value", `export function waterings(beds: number[]): number {
+  let n = beds.length;
+  n = n * 2;
+  return n;
+}
+`, NewSplit(), `{"kind": "variable", "line": 3, "name": "n", "new_name": "total"}`, "", "reads n"},
+		{"variable in a nested block", `export function waterings(beds: number[]): number {
+  let n = beds.length;
+  if (n > 2) {
+    n = 3;
+  }
+  return n;
+}
+`, NewSplit(), `{"kind": "variable", "line": 4, "name": "n", "new_name": "total"}`, "", "block inside"},
+		{"variable a closure refers to", `export function waterings(beds: number[]): number {
+  let n = beds.length;
+  const f = () => n;
+  n = 3;
+  return n + f();
+}
+`, NewSplit(), `{"kind": "variable", "line": 4, "name": "n", "new_name": "total"}`, "", "closure"},
+		{"variable name taken", `export function waterings(beds: number[]): number {
+  let n = beds.length;
+  const first = n;
+  n = 3;
+  return n + first;
+}
+`, NewSplit(), `{"kind": "variable", "line": 4, "name": "n", "new_name": "first"}`, "", "already a name"},
+		{"loop for of", totals, NewSplit(), `{"kind": "loop", "line": 4, "at": 6}`, `export function totals(beds: number[][]): number[] {
+  let water = 0;
+  let plants = 0;
+  for (const b of beds) {
+    water += b[0];
+  }
+  for (const b of beds) {
+    plants += b.length;
+  }
+  return [water, plants];
+}
+`, ""},
+		{"loop for", `export function totals(beds: number[][]): number[] {
+  let water = 0;
+  let plants = 0;
+  for (let i = 0; i < beds.length; i++) {
+    water += beds[i][0];
+    plants += beds[i].length;
+  }
+  return [water, plants];
+}
+`, NewSplit(), `{"kind": "loop", "line": 4, "at": 6}`, `export function totals(beds: number[][]): number[] {
+  let water = 0;
+  let plants = 0;
+  for (let i = 0; i < beds.length; i++) {
+    water += beds[i][0];
+  }
+  for (let i = 0; i < beds.length; i++) {
+    plants += beds[i].length;
+  }
+  return [water, plants];
+}
+`, ""},
+		{"loop parts depend", `export function totals(beds: number[][]): number {
+  let plants = 0;
+  for (const b of beds) {
+    const w = b[0];
+    plants += w;
+  }
+  return plants;
+}
+`, NewSplit(), `{"kind": "loop", "line": 3, "at": 5}`, "", "uses w"},
+		{"loop part leaves", `export function totals(beds: number[][]): number[] {
+  let water = 0;
+  let plants = 0;
+  for (const b of beds) {
+    water += b[0];
+    if (b.length === 0) continue;
+    plants += b.length;
+  }
+  return [water, plants];
+}
+`, NewSplit(), `{"kind": "loop", "line": 4, "at": 6}`, "", "continue"},
+		{"loop over an iterable", `export function totals(beds: Iterable<number[]>): number[] {
+  let water = 0;
+  let plants = 0;
+  for (const b of beds) {
+    water += b[0];
+    plants += b.length;
+  }
+  return [water, plants];
+}
+`, NewSplit(), `{"kind": "loop", "line": 4, "at": 6}`, "", "array"},
+		{"loop body changes the header", `export function totals(beds: number[][]): number[] {
+  let water = 0;
+  for (const b of beds) {
+    water += b[0];
+    beds.push([]);
+  }
+  return [water];
+}
+`, NewSplit(), `{"kind": "loop", "line": 3, "at": 5}`, "", "beds"},
+		{"loop parts both have effects", plants + `
+export function tally(beds: number[][]): void {
+  for (const b of beds) {
+    water();
+    water();
+  }
+}
+`, NewSplit(), `{"kind": "loop", "line": 15, "at": 17}`, "", "water"},
+	})
+}
