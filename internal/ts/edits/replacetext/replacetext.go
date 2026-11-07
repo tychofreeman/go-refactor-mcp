@@ -25,7 +25,7 @@ func New() *ReplaceText { return &ReplaceText{Named: refactor.Called[replaceText
 func (*ReplaceText) ChangesBehavior() {}
 
 func (*ReplaceText) Description() string {
-	return `Replace exact text in a file: an edit, for what the other tools do not cover: string literals, comments, and files that are not source (package.json, fixtures, docs). old "version 1.2" and new "version 1.3" change that text in README.md.
+	return `Replace exact text in a file, for what the other tools do not cover: string literals, comments, and files that are not source (package.json, fixtures, docs). old "version 1.2" and new "version 1.3" change that text in README.md.
 old must be as in the file and occur once, or set all_occurrences; spacing within lines may differ where that still finds it. function limits the search to one function of a source file. append with no old adds new at the end of the file. files in place of file makes the same replacement in several files (old must be in each). It addresses text, not lines, so it stays valid after earlier steps of a batch.`
 }
 

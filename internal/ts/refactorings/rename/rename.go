@@ -26,8 +26,7 @@ func New() *Rename { return &Rename{Named: refactor.Called[args]("rename")} }
 
 func (*Rename) Description() string {
 	return `Rename a function, class, interface, type, variable, parameter, property or method, and every reference to it in every project of the solution, tests included: renaming water in src/plant.ts to irrigate changes its declaration, each import { water } and each call. Identify it by file, line and its current name (column if the name is on the line twice); without line, name is a top-level declaration of file or a member (Bed.plant), and with function a local of that function ("Bed.plant", name "rows").
-With file and new_name alone, the file itself is renamed in its directory, and the imports of it and its own follow (src/plant.ts to water.ts), as move does.
-Refuses, saying why: a new name that is not an identifier or is reserved, or that a file the rename changes already uses; a member of a type whose values reach code that finds properties by name (JSON.stringify, Object.keys, for...in, "name" in x; what console prints is listed in a note); what the language service cannot rename (a library's declaration, a keyword).`
+With file and new_name alone, the file itself is renamed in its directory, and the imports of it and its own follow (src/plant.ts to water.ts), as move does.`
 }
 
 type args struct {

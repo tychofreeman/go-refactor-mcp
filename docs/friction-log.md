@@ -4613,3 +4613,9 @@ last step. Through the CLI: insert_statements for the case, replace_text
 on the refusal's format string and its arguments (a literal and two
 arguments of one call; replace_expression of the whole Sprintf call fit
 too), and on a test's literal. Nothing by hand.
+
+## 2026-11-06: tool descriptions without refusal lists
+
+As java's #256-#258 (`docs/sessions/descriptions-without-refusals.md`):
+81 replace_text steps on description literals in Go and TypeScript,
+through the CLI. Nothing by hand.

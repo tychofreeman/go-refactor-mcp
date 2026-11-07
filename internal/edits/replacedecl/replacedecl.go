@@ -29,8 +29,8 @@ func New() *ReplaceDeclaration {
 }
 
 func (*ReplaceDeclaration) Description() string {
-	return `Replace a whole top-level declaration, found by name, with new source: an edit, for a signature and body that change together, or a declaration too long to restate as replace_text's old (a table, a type); for a body alone, use replace_statements with function. With name "Cart.Total" and content func (c *Cart) Total() (int, error) { ... }, Total's signature and body are replaced together.
-content is the new declaration, declaring the same name (to rename, use rename), then any declarations to add after it (a helper it now calls); in a parenthesized group, just its spec. The old doc comment stays unless content has its own. Packages content names are imported, and those only the old declaration used are removed. Empty content deletes the declaration and its doc comment. A struct field by Type.Field likewise: content Rows float64 replaces it, empty content deletes it (to move it, then add_field with after). Callers a new signature or a deletion breaks are refused, or fixed in the same batch with check "end".`
+	return `Replace a whole top-level declaration, found by name, with new source, for a signature and body that change together, or a declaration too long to restate as replace_text's old (a table, a type); for a body alone, use replace_statements with function. With name "Cart.Total" and content func (c *Cart) Total() (int, error) { ... }, Total's signature and body are replaced together.
+content is the new declaration, declaring the same name (to rename, use rename), then any declarations to add after it (a helper it now calls); in a parenthesized group, just its spec. The old doc comment stays unless content has its own. Empty content deletes the declaration and its doc comment. A struct field by Type.Field likewise: content Rows float64 replaces it, empty content deletes it (to move it, then add_field with after). Callers a new signature or a deletion breaks can be fixed in the same batch with check "end".`
 }
 
 // ChangesBehavior marks this as an edit.

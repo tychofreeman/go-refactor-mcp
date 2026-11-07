@@ -30,8 +30,7 @@ func NewParamsToObject() *ParamsToObject {
 func (*ParamsToObject) Description() string {
 	return `Bundle a function's parameters into one struct that every call builds: with func water(bed string, litres int) string, water("roses", 3) becomes water(waterArgs{bed: "roses", litres: 3}), and the body reads a.bed and a.litres (a variable of the same name where it assigns one). type_name names the struct, declared just before the function (by default named after the function, exported with it); its fields are the parameters, exported when a call is in another package.
 Identify the function by file and name (Type.Method for a method).
-It is four steps, one change: declare the struct and a function taking it, fold the calls into that, inline the old function there, and rename it back.
-Refuses, saying why: a function used as a value or that calls itself, a generic function, a variadic, unnamed or blank parameter, a call passing one call of several results, a type name already taken; and what those steps refuse.`
+It is four steps, one change: declare the struct and a function taking it, fold the calls into that, inline the old function there, and rename it back.`
 }
 
 // objectArgs are the arguments of convert_params_to_object.

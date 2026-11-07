@@ -3125,6 +3125,12 @@ candidates and the evidence for each, gathered from the friction log.
        stack; `Language.Batch` reports a refusal with nothing changed).
        Its rules are in the refusal, not the description, which was at
        its budget of 2,500 characters.
+    6. Descriptions without refusal lists, as java's #256-#258 (the
+       user, 2026-11-06, overturning the 2026-10-21 rule of one refusal
+       line): what every tool shares is in the instructions, the
+       refusals explain themselves; *done*
+       (`docs/sessions/descriptions-without-refusals.md`); an A/B check
+       waits for the user.
 
 55. **Constructive transformations, as java-refactor-mcp's #212-#215**
     (2026-11-05, the user: "I'd like go/ts to work the same way"): create
