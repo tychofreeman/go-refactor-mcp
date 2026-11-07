@@ -8,6 +8,11 @@
 //	refactor rename '{"file":"main.go","line":7,"name":"t","new_name":"total"}'
 //	refactor batch '{"steps":[{"tool":"rename","args":{...}}, ...]}'
 //	refactor batch @steps.json      (the JSON from a file; - reads stdin)
+//
+// JSON from a file or stdin may be followed by code sections: @@name alone
+// on a line, then the text, to the next section or the end. A string
+// "@name" in the JSON is that text, as written, so nothing is escaped.
+//
 //	refactor inspect '{"names":["Settle","Ledger.Post"]}'   (or file=a.go, ...)
 //	refactor check run_tests=true    (type-checks, then go test ./...)
 //	refactor undo                    (reverts the last step or batch applied)
@@ -53,7 +58,7 @@ func run(argv []string) int {
 	asJSON := fs.Bool("json", false, "print the result as JSON (without declaring what an edit calls)")
 	version := fs.Bool("version", false, "print the version and exit")
 	fs.Usage = func() {
-		fmt.Fprintf(fs.Output(), "usage: refactor [flags] list [tool...]   (descriptions and arguments)\n       refactor [flags] <refactoring> key=value... | '<json>' | @file | -\n       refactor [flags] batch '<json>' | @file | -\n       refactor [flags] inspect key=value... | '<json>' | @file | -\n       refactor [flags] check [run_tests=true] [packages=./...]\n       refactor [flags] undo\n\n@file reads the JSON from a file, - from stdin. content_file (new_file, ...) gives a text argument from a file, as key=value or in the JSON; content_file=- reads it from stdin (one per call), so a heredoc can give it; the heredoc's final newline is dropped, except from content.\n\nflags:\n")
+		fmt.Fprintf(fs.Output(), "usage: refactor [flags] list [tool...]   (descriptions and arguments)\n       refactor [flags] <refactoring> key=value... | '<json>' | @file | -\n       refactor [flags] batch '<json>' | @file | -\n       refactor [flags] inspect key=value... | '<json>' | @file | -\n       refactor [flags] check [run_tests=true] [packages=./...]\n       refactor [flags] undo\n\n@file reads the JSON from a file, - from stdin; code sections may follow it there (@@name alone on a line, then the text), and a string \"@name\" in the JSON is that text, as written. content_file (new_file, ...) gives a text argument from a file, as key=value or in the JSON; content_file=- reads it from stdin (one per call), so a heredoc can give it; the heredoc's final newline is dropped, except from content.\n\nflags:\n")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(argv); err != nil {
@@ -485,6 +490,9 @@ func jsonFrom(argv []string) ([]string, error) {
 		return argv, nil
 	}
 	if err != nil {
+		return nil, err
+	}
+	if data, err = withSections(data); err != nil {
 		return nil, err
 	}
 	return []string{string(data)}, nil

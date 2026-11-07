@@ -169,6 +169,52 @@ func TestRunFromStdin(t *testing.T) {
 	}
 }
 
+// JSON from stdin may be followed by code sections, @@name alone on a
+// line and the text after it; a string "@name" in the JSON is that text,
+// as written, so nothing in it is escaped. A section no string names is
+// an error.
+func TestRunWithSections(t *testing.T) {
+	dir := module(t, "package m\n\nfunc f() {}\n")
+	stdin = strings.NewReader(`{"steps": [
+  {"tool": "add_declaration", "args": {"file": "p.go", "content": "@g"}},
+  {"tool": "add_declaration", "args": {"file": "p.go", "content": "@h"}}
+]}
+@@g
+// g says "hi".
+func g() string { return "a\nb" }
+@@h
+func h() string { return ` + "`c\\d`" + ` }
+`)
+	defer func() { stdin = os.Stdin }()
+	if code := run([]string{"-C", dir, "batch", "-"}); code != 0 {
+		t.Fatalf("exit status %d, want 0", code)
+	}
+	got := read(t, dir)
+	for _, want := range []string{`// g says "hi".`, `return "a\nb"`, "return `c\\d`"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %s:\n%s", want, got)
+		}
+	}
+	stdin = strings.NewReader("{\"file\": \"p.go\", \"content\": \"@k\"}\n@@j\nfunc j() {}\n")
+	if code := run([]string{"-C", dir, "add_declaration", "-"}); code != 1 {
+		t.Errorf("an unused section: exit status %d, want 1", code)
+	}
+}
+
+// With sections given, a string "@name" that names none is an error, not
+// text: a heredoc that ended early drops the section it names.
+func TestRunWithSectionsMissing(t *testing.T) {
+	dir := module(t, "package m\n\nfunc f() {}\n")
+	stdin = strings.NewReader("{\"steps\": [{\"tool\": \"add_declaration\", \"args\": {\"file\": \"p.go\", \"content\": \"@g\"}}, {\"tool\": \"add_declaration\", \"args\": {\"file\": \"p.go\", \"content\": \"@h\"}}]}\n@@g\nfunc g() {}\n")
+	defer func() { stdin = os.Stdin }()
+	if code := run([]string{"-C", dir, "batch", "-"}); code != 1 {
+		t.Errorf("a string naming no section: exit status %d, want 1", code)
+	}
+	if got := read(t, dir); strings.Contains(got, "func g") {
+		t.Errorf("a step applied:\n%s", got)
+	}
+}
+
 // A text argument given as key_file=- reads its text from stdin, as key=value
 // or in the JSON, Go or TypeScript; a second - is refused, and so is one in
 // JSON that itself came from stdin.
