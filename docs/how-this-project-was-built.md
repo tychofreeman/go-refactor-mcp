@@ -493,6 +493,27 @@ gaps. Both finished within one PR's test run.
 *Worth repeating:* yes, for questions that would mean reading across
 many files. Verify before acting.
 
+### 21. The tool decides what does not change behavior
+
+On 2026-11-07 java-refactor-mcp's user set the rule that the model
+should not be concerned with layout (its #279): a rerun had shown a model
+asking for a constructor `before` the getters, and the honest answer to
+why that mattered was that it did not. Go took the same rule the same
+day: `add_declaration` places a method after its type's methods, a
+stub's replacement where the stub was, and the rest at the end, and
+`after` and `before` were retired (accepted and ignored, so a model that
+still sends them is not refused). In the A/B transcripts at hand, 8 of 26
+`add_declaration` calls had chosen a place. The rule is narrow on
+purpose: where a position changes what code does (a struct's field
+order, a slice's elements, a parameter's place, a statement's), the
+choice stays the model's.
+
+*Effect.* One fewer decision per new declaration, and one fewer name to
+get right; not yet measured.
+
+*Worth repeating:* yes, as a test for every option: if no answer changes
+behavior, the tool should pick it.
+
 ## What did not work as well
 
 - **Line numbers.** Several tool calls reused line numbers from before an

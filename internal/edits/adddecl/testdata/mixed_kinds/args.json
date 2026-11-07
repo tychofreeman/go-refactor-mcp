@@ -1,0 +1,1 @@
+{"file": "a.go", "content": "// size is a count of points.\ntype size int\n\n// Norm is x plus y.\nfunc (p point) Norm() int { return p.x + p.y }\n\nfunc (s size) twice() size { return 2 * s }"}

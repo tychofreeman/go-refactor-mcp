@@ -1,1 +1,0 @@
-{"file": "a.go", "content": "// segment joins two points.\ntype segment struct{ from, to point }", "after": "point"}

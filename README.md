@@ -331,7 +331,7 @@ must not appear in the text; the heredoc's final newline is dropped, except
 from `content`):
 
 ```sh
-refactor add_declaration file=bed.go after=Bed content_file=- <<'EOF'
+refactor add_declaration file=bed.go content_file=- <<'EOF'
 func (b *Bed) Size() int { return len(b.plants) }
 EOF
 refactor batch - <<'EOF'

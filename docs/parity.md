@@ -193,6 +193,18 @@ embedding struct (43.10); Java's convert_to_record needs
 `value_semantics=true`. replace_text's indentation: Java takes an `old`
 off by a uniform indentation and shifts `new` with it (java #106, #119,
 the user's choice over Go's rule, any run of spaces for any other).
+**Go and TS behind Java (2026-11-07, java #272-#279):** placement by
+kind (#279): Go's `add_declaration` done (`docs/sessions/place-by-kind.md`);
+TypeScript next, where a top-level `const`, `let` or class used at module
+load goes before its first such use (a temporal dead zone otherwise).
+The constructors written for the model (#272: an edit that leaves fields
+unset writes their constructor; #273: a constructor stub assigns the
+fields its arguments each fit; #275: an added constructor replaces such a
+one) fit TypeScript, where a field with no initializer is TS2564 under
+`strictPropertyInitialization`, and `new Pot(3)` stubs an empty
+constructor today; Go has no constructors or final fields, and a test
+builds a struct with a literal. Roadmap 54.9 and 54.10.
+
 Java-only, nothing to port: an ambiguous import decided by what the
 package's other files import (java #245), and `after` by an overload
 label (java #248); Go imports name packages. Checked, nothing to do:

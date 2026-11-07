@@ -24,8 +24,8 @@ type AddDeclaration struct{ refactor.Named[args] }
 func New() *AddDeclaration { return &AddDeclaration{Named: refactor.Called[args]("add_declaration")} }
 
 func (*AddDeclaration) Description() string {
-	return `Add top-level declarations (functions, methods, types, variables, constants) to an existing file; for a new file, use create_file. content is Go source with doc comments, without package clause or imports. They go at the end of the file, or just after or before the declaration named in after or before: after "Cart.Total" puts a new method right after Total.
-A function or method named like a stub (a body of only panic("not implemented"), as create_from_usage writes) replaces the stub, wherever it is in the package. test_for "Bed.Plant" adds a red TestBedPlant instead.`
+	return `Add top-level declarations (functions, methods, types, variables, constants) to an existing file; for a new file, use create_file. content is Go source with doc comments, without package clause or imports. Each is placed by kind: a method after its type's methods (a new Cart.Total after Cart's last method), the rest at the end.
+A function or method named like a stub (a body of only panic("not implemented"), as create_from_usage writes) replaces the stub, wherever it is in the package, in its place when it is in file. test_for "Bed.Plant" adds a red TestBedPlant instead.`
 }
 
 // ChangesBehavior marks this as an edit.
@@ -35,9 +35,12 @@ type args struct {
 	File    string   `json:"file" desc:"Path of the file, relative to the workspace root."`
 	Content string   `json:"content,omitempty" desc:"Go declarations, without package clause or imports."`
 	TestFor string   `json:"test_for,omitempty" desc:"Instead of content, in a _test.go file: a function or Type.Method; adds a test that calls it and fails, showing the result, until you write the assertion."`
-	After   string   `json:"after,omitempty" desc:"Optional: put them just after this declaration of file (Name, or Type.Method)."`
-	Before  string   `json:"before,omitempty" desc:"Optional: put them just before this declaration of file."`
+	After   string   `json:"after,omitempty" schema:"-"`  // retired: placement is by kind; accepted and ignored
+	Before  string   `json:"before,omitempty" schema:"-"` // retired, as After
 	Imports []string `json:"imports,omitempty" desc:"Optional: import paths for ambiguous package names."`
+	// PlaceBefore, unpublished, is for refactorings that compose
+	// add_declaration: the declaration to put content just before.
+	PlaceBefore string `json:"place_before,omitempty" schema:"-"`
 }
 
 // Plan checks preconditions and computes the edits.
@@ -69,7 +72,12 @@ func (*AddDeclaration) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refa
 	if err != nil {
 		return nil, err
 	}
-	at, pre, post, err := offset(opened.TF, file, src, a.File, a.After, a.Before)
+	var inserts []edit.TextEdit
+	if a.PlaceBefore != "" {
+		inserts, err = placeBefore(opened.TF, file, src, a.File, a.PlaceBefore, a.Content)
+	} else {
+		inserts, err = places(opened.TF, file, src, a.Content)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -78,10 +86,9 @@ func (*AddDeclaration) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refa
 	if err != nil {
 		return nil, err
 	}
-	text := pre + strings.Trim(a.Content, "\n") + "\n" + post
 	plan := &refactor.Plan{
 		Summary:  fmt.Sprintf("added %d declaration%s to %s", len(decls), textutil.Plural(len(decls)), a.File),
-		Edits:    []edit.FileEdit{{Path: path, Edits: append([]edit.TextEdit{{Start: at, End: at, NewText: text}}, adder.Edits()...)}},
+		Edits:    []edit.FileEdit{{Path: path, Edits: append(inserts, adder.Edits()...)}},
 		Supplied: a.Content,
 	}
 	if len(added) > 0 {

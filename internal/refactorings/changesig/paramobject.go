@@ -156,7 +156,7 @@ func (*ParamsToObject) Expand(ws *workspace.Workspace, raw json.RawMessage) ([]r
 		return refactor.Step{Refactoring: r, Args: j}
 	}
 	return []refactor.Step{
-		step(adddecl.New(), map[string]any{"file": a.File, "before": qualified, "content": content}),
+		step(adddecl.New(), map[string]any{"file": a.File, "place_before": qualified, "content": content}),
 		step(fold.New(), map[string]any{"file": a.File, "name": tmpName}),
 		step(inlinefunc.New(), map[string]any{"file": a.File, "name": qualified, "all_calls": true}),
 		step(rename.New(), map[string]any{"file": a.File, "function": tmpName, "name": tmp, "new_name": name}),
