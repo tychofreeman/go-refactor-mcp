@@ -1,4 +1,4 @@
-package extractiface
+package extractsupertype
 
 import (
 	"testing"
@@ -6,6 +6,6 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor/refactortest"
 )
 
-func TestExtractInterface(t *testing.T) {
+func TestExtractSupertype(t *testing.T) {
 	refactortest.Run(t, New(), "testdata")
 }

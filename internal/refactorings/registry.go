@@ -25,8 +25,8 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/changesig"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/deadcode"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/extractfunc"
-	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/extractiface"
-	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/extractstruct"
+	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/extractsupertype"
+	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/extracttype"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/extractvar"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/fold"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/inline"
@@ -64,7 +64,7 @@ func All() []refactor.Refactoring {
 		changesig.NewFunctionToMethod(),
 		changesig.NewMoveMethod(),
 		movedecl.New(),
-		extractstruct.New(),
+		extracttype.New(),
 		mergefunc.New(),
 		deadcode.New(),
 		slidestmt.NewUp(),
@@ -89,7 +89,7 @@ func All() []refactor.Refactoring {
 		files.NewDelete(),
 		replacedecl.New(),
 		split.New(),
-		extractiface.New(),
+		extractsupertype.New(),
 		inlinestruct.New(),
 		changesig.NewParamsToObject(),
 		newMove(),

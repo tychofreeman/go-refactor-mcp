@@ -350,14 +350,14 @@ export const x = n;
 	})
 }
 
-func TestExtractInterface(t *testing.T) {
+func TestExtractSupertype(t *testing.T) {
 	check(t, []change{
 		{"interface", map[string]string{"src/bed.ts": `export interface Bed {
   depth: number;
   width: number;
   name: string;
 }
-`}, NewExtractInterface(), `{"file": "src/bed.ts", "name": "Bed", "fields": ["depth", "width"], "new_type": "Size"}`, map[string]string{"src/bed.ts": `export interface Size {
+`}, NewExtractSupertype(), `{"file": "src/bed.ts", "name": "Bed", "fields": ["depth", "width"], "new_type": "Size"}`, map[string]string{"src/bed.ts": `export interface Size {
   depth: number;
   width: number;
 }
@@ -370,7 +370,7 @@ export interface Bed extends Size {
   depth: number;
   name: string;
 };
-`}, NewExtractInterface(), `{"file": "src/bed.ts", "name": "Bed", "fields": ["depth"], "new_type": "Size"}`, map[string]string{"src/bed.ts": `export interface Size {
+`}, NewExtractSupertype(), `{"file": "src/bed.ts", "name": "Bed", "fields": ["depth"], "new_type": "Size"}`, map[string]string{"src/bed.ts": `export interface Size {
   depth: number;
 }
 
@@ -388,7 +388,7 @@ export type Bed = Size & {
     return this.minutes > 0;
   }
 }
-`}, NewExtractInterface(), `{"file": "src/s.ts", "name": "Sprinkler", "fields": ["minutes", "spray", "on"], "new_type": "Watering"}`, map[string]string{"src/s.ts": `export interface Watering {
+`}, NewExtractSupertype(), `{"file": "src/s.ts", "name": "Sprinkler", "fields": ["minutes", "spray", "on"], "new_type": "Watering"}`, map[string]string{"src/s.ts": `export interface Watering {
   minutes: number;
   spray(bed: string, times?: number): string;
   readonly on: boolean;
@@ -408,7 +408,7 @@ export class Sprinkler implements Watering {
 		{"private", map[string]string{"src/s.ts": `export class Sprinkler {
   private log: string[] = [];
 }
-`}, NewExtractInterface(), `{"file": "src/s.ts", "name": "Sprinkler", "fields": ["log"], "new_type": "W"}`, nil, "private, protected or static"},
+`}, NewExtractSupertype(), `{"file": "src/s.ts", "name": "Sprinkler", "fields": ["log"], "new_type": "W"}`, nil, "private, protected or static"},
 	})
 }
 

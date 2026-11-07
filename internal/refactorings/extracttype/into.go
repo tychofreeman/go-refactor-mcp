@@ -1,4 +1,4 @@
-package extractstruct
+package extracttype
 
 import (
 	"fmt"

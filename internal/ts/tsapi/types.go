@@ -146,13 +146,13 @@ func (l *lined) memberSignature(c *checker.Checker, class, m *ast.Node) (string,
 	return "", fmt.Sprintf("%s is not a property, method or accessor", name)
 }
 
-// ExtractInterface returns the edits that name members of the class,
+// ExtractSupertype returns the edits that name members of the class,
 // interface or type alias name as a new interface newType. From a class,
 // the interface has the members' signatures and the class implements
 // it. From an interface, the members move into the new one, which the
 // old extends; from a type alias of an object type, into the new one,
 // which the alias joins (newType & { the rest }).
-func (p *Project) ExtractInterface(ctx context.Context, path string, line int, name string, column int, fields []string, newType string) ([]Edit, string) {
+func (p *Project) ExtractSupertype(ctx context.Context, path string, line int, name string, column int, fields []string, newType string) ([]Edit, string) {
 	l, why := p.lined(path)
 	if why != "" {
 		return nil, why

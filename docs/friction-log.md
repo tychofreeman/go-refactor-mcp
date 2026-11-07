@@ -4639,3 +4639,20 @@ stub's Plan, description and arguments by replace_declaration, the
 registration and three server tests (each pinned the absence) by
 replace_text. By hand: one sed on the test file to break an expectation
 and see the test fail, then put back, since every case passed at once.
+
+## 2026-11-06: internal names match the published ones
+
+`extractstruct` and `extractiface` became the packages `extracttype` and
+`extractsupertype`, and the types and functions behind extract_type and
+extract_supertype (Go and TypeScript) took the published names, by
+rename and move. No package rename exists, and two compositions were
+tried. `move` of every declaration with `also` worked for extractiface,
+but when a declaration moves first, `move` rewrites the test files left
+behind to import the new package, so moved back they import themselves;
+for extractstruct it also merged into.go into one file, since methods
+cannot move between files of a package. What worked: `move` of each
+file, byte for byte, to a `.txt` name in the new directory,
+`replace_text` of its package clause there (no import fixing for text),
+`move` back to `.go`, and `replace_text` of the importer's path and call,
+all in one batch. A package rename (move of a directory of Go code, its
+importers following) would have been one step. Nothing by hand.

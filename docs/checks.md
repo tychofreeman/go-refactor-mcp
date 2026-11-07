@@ -862,7 +862,7 @@ error, so:
   argument containing another call of the function (`f(f(x))`) is
   refused.
 
-## Extract struct: what it checks
+## Extract type: what it checks
 
 `extract_type` (`extract_struct` until 2026-11-06, still an alias) moves some fields of a struct type into a new struct
 type, declared just before it, and embeds the new type (by value) where
@@ -898,7 +898,7 @@ Not supported yet: a generic struct, an embedded field among those to
 move, part of a field group (`x, y int`), and a multi-line literal with
 comments between its elements (rewriting it would lose them).
 
-## Extract interface: what it checks
+## Extract supertype: what it checks
 
 `extract_supertype` (`extract_interface` until 2026-11-06, still an alias)
 names some methods of a type as a new interface,

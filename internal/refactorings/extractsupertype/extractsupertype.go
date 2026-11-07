@@ -1,6 +1,6 @@
-// Package extractiface implements extract_supertype for Go: some methods
-// of a type named as a new interface.
-package extractiface
+// Package extractsupertype implements extract_supertype for Go: some
+// methods of a type named as a new interface.
+package extractsupertype
 
 import (
 	"encoding/json"
@@ -20,15 +20,15 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
 
-// ExtractInterface is the "extract_supertype" refactoring for Go.
-type ExtractInterface struct{ refactor.Named[args] }
+// ExtractSupertype is the "extract_supertype" refactoring for Go.
+type ExtractSupertype struct{ refactor.Named[args] }
 
 // New returns the extract_supertype refactoring.
-func New() *ExtractInterface {
-	return &ExtractInterface{Named: refactor.Called[args]("extract_supertype")}
+func New() *ExtractSupertype {
+	return &ExtractSupertype{Named: refactor.Called[args]("extract_supertype")}
 }
 
-func (*ExtractInterface) Description() string {
+func (*ExtractSupertype) Description() string {
 	return `Name some methods of a type as a new interface, so that code can depend on just those. From a struct or another named type: with Water and Spray of Sprinkler, new_type Waterer declares type Waterer interface { Water(bed string, litres int) error; Spray() int } just before Sprinkler, and var _ Waterer = (*Sprinkler)(nil), which checks that Sprinkler implements it. From an interface, the methods move into the new one, which the old one embeds, so every use keeps working: Depth and Width of type Bed interface { Depth() int; Width() int; Name() string } into Size give type Bed interface { Size; Name() string }.
 Identify the type by file and name; fields are the methods, new_type the interface's name.`
 }
@@ -41,7 +41,7 @@ type args struct {
 }
 
 // Plan checks preconditions and computes the edits.
-func (*ExtractInterface) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
+func (*ExtractSupertype) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
 	var a args
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
