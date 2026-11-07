@@ -544,6 +544,24 @@ func TestBatch(t *testing.T) {
 	}
 }
 
+// A refused batch is kept: a retry sends only the steps that change.
+func TestBatchRetry(t *testing.T) {
+	cs, dir := setup(t)
+	rename := map[string]any{"tool": "rename", "args": map[string]any{"file": "calc/calc.go", "name": "Apply", "new_name": "Scale"}}
+	out, _ := call(t, cs, "batch", map[string]any{"steps": []any{rename,
+		map[string]any{"tool": "add_parameter", "args": map[string]any{"file": "calc/calc.go", "name": "Nope", "parameter": "k", "type": "int", "value": "0"}},
+	}})
+	mustContain(t, "refused batch", out, "REFUSED", `"retry": true`)
+	out, _ = call(t, cs, "batch", map[string]any{"retry": true, "steps": []any{
+		map[string]any{"step": 2, "args": map[string]any{"file": "calc/calc.go", "name": "Scale", "parameter": "k", "type": "int", "value": "0"}},
+	}})
+	mustContain(t, "retry", out, "APPLIED batch: 2 steps", "1. rename:", "2. add_parameter:")
+	app, _ := os.ReadFile(filepath.Join(dir, "app", "app.go"))
+	mustContain(t, "app.go", string(app), "calc.Scale(calc.Rate, 0)")
+	out, _ = call(t, cs, "batch", map[string]any{"retry": true, "steps": []any{map[string]any{"step": 1, "args": map[string]any{}}}})
+	mustContain(t, "retry after an applied batch", out, "no refused batch")
+}
+
 func TestBatchRefusals(t *testing.T) {
 	cs, dir := setup(t)
 	calc := filepath.Join(dir, "calc", "calc.go")

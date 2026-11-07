@@ -329,28 +329,28 @@ func notLoading(err error) string {
 }
 
 // Batch runs the steps of one batch call.
-func (l *Language) Batch(args json.RawMessage) (string, error) {
+func (l *Language) Batch(args json.RawMessage) (string, bool, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	ws, args, intro, refused, err := l.route(args)
 	if err != nil || refused != "" {
-		return refused, err
+		return refused, false, err
 	}
 	batch, refused := refactorings.ParseBatch(args)
 	if refused != "" {
-		return intro + refused, nil
+		return intro + refused, true, nil
 	}
 	for i := range batch.Steps {
 		batch.Steps[i].Refactoring = l.strict(batch.Steps[i].Refactoring)
 	}
 	b, err := refactor.RunBatch(ws, batch.Steps, refactor.Options{Compact: !l.FullDiffs, Unchecked: batch.Unchecked, Declare: refactorings.Declarer(), Imports: refactorings.Importer()})
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	if batch.Summary {
 		b.Diff = ""
 	}
-	return intro + b.String(), nil
+	return intro + b.String(), !b.Applied && b.Kept == 0, nil
 }
 
 // Check reports whether the module type-checks, and runs go test if

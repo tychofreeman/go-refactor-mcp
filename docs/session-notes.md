@@ -173,6 +173,10 @@ working patterns, with their steps, are in `docs/patterns.md`.
   broken code if it fixes some errors and adds none. A refactoring may
   too when every error is in a test file written against what it makes
   (2026-10-20), but not between red and green.
+- **A refused batch is kept for a retry** (2026-11-06, as java's #247):
+  `refactor.Retry`, in the server (above the languages: a retry may name
+  no file) and in the CLI (`<undo file>.retry`); a batch kept through a
+  checkpoint is not kept, since its first steps applied.
 - **Stubs are declared lazily, and batches get checkpoints** (2026-10-20):
   in a batch checked at its end, stubs for earlier edits are added just
   before a refactoring; a `check` step type-checks (and may run tests), and

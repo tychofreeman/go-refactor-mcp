@@ -4594,3 +4594,14 @@ it after the error, and no tool reorders results; fixed add_result in its
 own PR, through the CLI (`docs/sessions/add-result-before-error.md`). Two
 refusals each resent the whole batch of seven steps. The old golden that
 pinned the order was changed by sed (testdata). Nothing by hand in Go.
+
+## 2026-11-06: batch retry (roadmap 54.5)
+
+Through the CLI, test first (`docs/sessions/batch-retry.md`).
+`Language.Batch` gained its bool by add_result, after #592 fixed where
+add_result puts a result before an error. By hand: the CLI's runBatch
+body, written out with replace_statements (47 lines, most of them the
+old body): the workspace loads before the batch is parsed, and
+move_statement would refuse moving the load above the parse, since both
+print and return. Two refusals resent whole batches of seven and ten
+steps, which retry now saves.

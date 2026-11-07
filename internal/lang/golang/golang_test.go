@@ -55,7 +55,7 @@ func TestOtherModules(t *testing.T) {
 		t.Errorf("inspect in a nested module: %v\n%s", err, out)
 	}
 
-	out, err = l.Batch([]byte(`{"steps": [{"tool": "replace_text", "args": {"file": "a.go", "old": "return 1", "new": "return 5"}}, {"tool": "replace_text", "args": {"file": "tools/t.go", "old": "return 2", "new": "return 6"}}]}`))
+	out, _, err = l.Batch([]byte(`{"steps": [{"tool": "replace_text", "args": {"file": "a.go", "old": "return 1", "new": "return 5"}}, {"tool": "replace_text", "args": {"file": "tools/t.go", "old": "return 2", "new": "return 6"}}]}`))
 	if err != nil || !strings.Contains(out, "more than one module") {
 		t.Errorf("batch across modules: %v\n%s", err, out)
 	}

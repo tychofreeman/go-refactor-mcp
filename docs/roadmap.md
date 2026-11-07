@@ -3113,6 +3113,16 @@ candidates and the evidence for each, gathered from the friction log.
        done* (`analysis.Move` judges strictly and as before;
        `refactor.ExceptionKeeper`; fold's `movedAddress`); *TypeScript
        done* (`tsapi.conflict`, package state for the call).
+    5. `batch` `retry`, as java-refactor-mcp's #247 (2026-11-06, the
+       user): after a batch refused with nothing changed, `retry: true`
+       sends only the changes, `{"step": N, ...}` (its tool kept when
+       left out) and `{"after": N, ...}` (0 for first), numbered as in
+       the refused batch; the merged batch runs whole. *Done*
+       (`refactor.Retry`, kept by the server above the languages, since a
+       retry may name no file, and by the CLI in a file beside its undo
+       stack; `Language.Batch` reports a refusal with nothing changed).
+       Its rules are in the refusal, not the description, which was at
+       its budget of 2,500 characters.
 
 55. **Constructive transformations, as java-refactor-mcp's #212-#215**
     (2026-11-05, the user: "I'd like go/ts to work the same way"): create
