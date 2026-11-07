@@ -12,7 +12,7 @@ feature. The order below follows what that workflow needed in practice;
 `docs/friction-log.md` records each time a refactoring had to be done by
 hand or a tool got in the way.
 
-## Where it stands (2026-11-05)
+## Where it stands (2026-11-06)
 
 Items keep their numbers; each says in its own text which parts are done.
 Finished: 2, 10, 17, 22, 30, 31, 34, 35, 37, 40 (through 41 and 43), 41,
@@ -22,12 +22,13 @@ comparison it asked for is `cmd/refactor-ab`). Waiting on the user: 29
 part left. What is open, the newest priority first:
 
 1. **54** Go, TypeScript and Java at parity: `docs/parity.md` lists the
-   bugs, the shared names, the missing tools and options, and an order;
-   the bugs first (TypeScript's inspect `pattern` refused).
-2. **52** Go and TypeScript at parity: `split` kind phase for TypeScript
-   (52.2; variable and loop are done), then
-   inline_struct's counterpart (52.3, also 51.3's other half). Before the
-   next Go tool the user raises the budget of 50 or two tools merge (25).
+   steps in order. Done: the bugs, the shared names (one `move`,
+   `inline`, `move_statement` and `change_type`), `preserve_exceptions`
+   for Go and TypeScript, and TypeScript's last Go-only tools (52.2,
+   52.3). Next: tools from Java (pull_up and push_down for TypeScript),
+   after the user's review of the tool budget (parity.md section 6).
+2. **52** Go and TypeScript at parity: done but for inline_struct's
+   `elsewhere` and `prefer` in TypeScript, if a run asks for them.
 3. **51** the rest of Fowler's and IntelliJ's catalog: Use Interface Where
    Possible (51.2), fold of compound assignments, a local made a field and
    Consolidate Conditional Expression (51.5). Separate Query from Modifier

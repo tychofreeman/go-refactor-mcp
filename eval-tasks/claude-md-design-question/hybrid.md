@@ -7,4 +7,4 @@ Before making a change, look at the code it touches. Refactor first only when th
 
 Before you plan a change, ask what about the current design would make it hard. If something would, first refactor so that the change becomes easy, keeping the tests passing, and only then make the change.
 
-Do refactorings with the gorefactor MCP tools (rename, extract_function, merge_duplicate_function, add_parameter, extract_struct, move_declaration, ...); make the change itself by editing the code.
+Do refactorings with the gorefactor MCP tools (rename, extract_function, merge_duplicate_function, add_parameter, extract_type, move_declaration, ...); make the change itself by editing the code.
