@@ -1,4 +1,4 @@
-// Package extractiface implements extract_interface for Go: some methods
+// Package extractiface implements extract_supertype for Go: some methods
 // of a type named as a new interface.
 package extractiface
 
@@ -20,12 +20,12 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
 
-// ExtractInterface is the "extract_interface" refactoring for Go.
+// ExtractInterface is the "extract_supertype" refactoring for Go.
 type ExtractInterface struct{ refactor.Named[args] }
 
-// New returns the extract_interface refactoring.
+// New returns the extract_supertype refactoring.
 func New() *ExtractInterface {
-	return &ExtractInterface{Named: refactor.Called[args]("extract_interface")}
+	return &ExtractInterface{Named: refactor.Called[args]("extract_supertype")}
 }
 
 func (*ExtractInterface) Description() string {
@@ -69,7 +69,7 @@ func (*ExtractInterface) Plan(ws *workspace.Workspace, raw json.RawMessage) (*re
 	named, _ := tn.Type().(*types.Named)
 	switch {
 	case spec.TypeParams != nil:
-		return nil, refactor.Refusef("%s is generic, which extract_interface does not support yet", a.Name)
+		return nil, refactor.Refusef("%s is generic, which extract_supertype does not support yet", a.Name)
 	case named == nil || tn.IsAlias():
 		return nil, refactor.Refusef("%s is an alias; give the type it names", a.Name)
 	}
@@ -101,7 +101,7 @@ func (*ExtractInterface) Plan(ws *workspace.Workspace, raw json.RawMessage) (*re
 	}, nil
 }
 
-// fromInterface plans extract_interface of an interface: the methods it
+// fromInterface plans extract_supertype of an interface: the methods it
 // declares move into the new interface, which it embeds in place of the
 // first of them.
 func fromInterface(st *site.Site, path string, a args, iface *ast.InterfaceType, at int, doc string) (*refactor.Plan, error) {

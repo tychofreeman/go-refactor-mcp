@@ -296,10 +296,11 @@ working patterns, with their steps, are in `docs/patterns.md`.
   became extract_type in all three servers, since "struct" is Go's word and
   the new type in Java is a class or a record; extract_struct stays an alias
   (`toolAliases`); the A/B instruction files and reference batches use the
-  new name too. TypeScript's extract_interface makes a supertype (members
-  stay; the type extends or implements the new interface), so `goNames`
-  routes extract_supertype to it, not extract_type, which TypeScript refuses
-  for now.
+  new name too. extract_interface became extract_supertype in Go and
+  TypeScript the same day (the user), the name shared with Java: it makes a
+  supertype (members stay; the type embeds, extends or implements the new
+  interface), not a held type; extract_interface stays an alias. extract_type
+  on a TypeScript file is refused for now: TypeScript has no counterpart.
 - **Constructive transformations** (2026-11-05, roadmap 55, as
   java-refactor-mcp's #212-#215): `create_file` with `declaration`, then
   `test_for`, then a skeleton-only flag, each in its own PR; the user's
