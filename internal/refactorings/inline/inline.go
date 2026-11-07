@@ -30,7 +30,7 @@ func (*Inline) Description() string {
 
 // args are inline's: those of the tools it stands for.
 type args struct {
-	File         string `json:"file" desc:"Path of the file with the call, the variable, or the holder, relative to the module root."`
+	File         string `json:"file" desc:"Path of the file with the call, the variable, or the holder, relative to the workspace root."`
 	Line         int    `json:"line,omitempty" desc:"1-based line of the call, or of the variable's declaration or a use."`
 	Name         string `json:"name" desc:"The function or method called (for x.m(), m), the variable, or with field the holding struct."`
 	Column       int    `json:"column,omitempty" desc:"Optional 1-based column of name, only needed if it occurs on the line more than once."`

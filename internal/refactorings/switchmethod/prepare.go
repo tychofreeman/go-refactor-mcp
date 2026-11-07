@@ -32,7 +32,7 @@ func (*PrepareForTypes) Description() string {
 becomes
   type Species interface { Water() int }
   func Water(p Plant) int { if s, ok := p.Species.(Species); ok { return s.Water() }; switch p.Species { ... }; return 0 }
-The switch's tag must be an interface (change_field_type to any first). The interface is declared before the function, or gets the method when it exists; a method it already has is used if its signature is the one the cases need, or if fields the cases read can be its parameters (p.Height for height, declared before the switch). The variables the cases use become the method's parameters. Every case must return, or none (then the switch goes in the else). A case of several values (case "fern", "cactus":) is split into a case for each, with a copy of the body, so that each moves alone.
+The switch's tag must be an interface (change_type to any first). The interface is declared before the function, or gets the method when it exists; a method it already has is used if its signature is the one the cases need, or if fields the cases read can be its parameters (p.Height for height, declared before the switch). The variables the cases use become the method's parameters. Every case must return, or none (then the switch goes in the else). A case of several values (case "fern", "cactus":) is split into a case for each, with a copy of the body, so that each moves alone.
 Identify the switch by file and line, or by function when it is that function's only switch.`
 }
 
@@ -98,7 +98,7 @@ func (g *preparer) checkTag() error {
 	}
 	g.subject = sw.Tag
 	if t := g.Info.TypeOf(sw.Tag); !types.IsInterface(t) {
-		return refactor.Refusef("%s is a %s, not an interface, so no value of it can implement %s; widen it first (change_field_type to any)", g.Text(sw.Tag), g.typeName(t), g.name)
+		return refactor.Refusef("%s is a %s, not an interface, so no value of it can implement %s; widen it first (change_type to any)", g.Text(sw.Tag), g.typeName(t), g.name)
 	}
 	return g.checkStable()
 }

@@ -170,7 +170,7 @@ func (p *Project) ChangeType(path, name, typ string) ([]Edit, string) {
 			t := s.Type()
 			return []Edit{{File: l.f.FileName(), Start: l.pos(t), End: t.End(), NewText: typ}}, ""
 		case ast.IsInterfaceDeclaration(s), ast.IsClassDeclaration(s):
-			return nil, fmt.Sprintf("%s is an interface or a class, not a type alias; change its members with change_field_type", name)
+			return nil, fmt.Sprintf("%s is an interface or a class, not a type alias; change its members with change_type", name)
 		}
 	}
 	return nil, fmt.Sprintf("the file declares no type alias %s", name)

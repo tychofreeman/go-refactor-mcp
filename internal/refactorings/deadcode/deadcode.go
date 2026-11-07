@@ -35,7 +35,7 @@ type args struct {
 	File     string   `json:"file" desc:"Path of the file declaring it, relative to the workspace root."`
 	Line     int      `json:"line,omitempty" desc:"1-based line of its declaration. Omit it to find name as a symbol of the package of file."`
 	Name     string   `json:"name" desc:"The declared name: with line, just the method or field name; without line, the package-level name, Type.Method or Type.Field."`
-	Exported bool     `json:"exported,omitempty" desc:"No longer needed: exported code is removed, with a note that the module's API changed."`
+	Exported bool     `json:"exported,omitempty" schema:"-"` // accepted from older calls; exported code is removed anyway
 	Column   int      `json:"column,omitempty" desc:"Optional 1-based column, only needed to disambiguate."`
 	Also     []string `json:"also,omitempty" desc:"Optional: more names of the package to remove with it (Name or Type.Method); uses among them do not count."`
 	Value    string   `json:"value,omitempty" desc:"For a field still used: the path of the struct's other fields every literal sets it equal to (WS, or Site.WS); its reads become that."`

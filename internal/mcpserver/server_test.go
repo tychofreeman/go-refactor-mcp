@@ -272,9 +272,8 @@ func TestDescriptionsAreCurrent(t *testing.T) {
 	for _, tool := range res.Tools {
 		tools[tool.Name] = tool.Description
 	}
-	for _, name := range symbolTools {
-		mustContain(t, name, tools[name], "Without line, name alone identifies")
-	}
+	instr := cs.InitializeResult().Instructions
+	mustContain(t, "instructions", instr, "also accept file and name without line")
 	if strings.Contains(tools["inline"], "Without line") {
 		t.Error("inline finds no declaration by name alone, but its description says it does")
 	}
@@ -284,11 +283,10 @@ func TestDescriptionsAreCurrent(t *testing.T) {
 			t.Errorf("%s still says it returns a diff", name)
 		}
 	}
-	mustContain(t, "rename", tools["rename"], "returns what changed")
+	mustContain(t, "instructions", instr, "APPLIED with what changed")
 	if !strings.Contains(tools["move_statement"], "the one before") || !strings.Contains(tools["move_statement"], "the one after") {
 		t.Errorf("move_statement does not describe both directions: %s", tools["move_statement"])
 	}
-	instr := cs.InitializeResult().Instructions
 	mustContain(t, "instructions", instr, "as they were when the batch began")
 	if strings.Contains(instr, "never reuse old ones") {
 		t.Error("instructions still say never to reuse line numbers, which a batch now does")
@@ -1079,7 +1077,7 @@ func TestTypeScriptOnly(t *testing.T) {
 	if _, ok := tools["extract_type"]; !ok {
 		t.Error("a TypeScript-only repo is not offered extract_type")
 	}
-	for name, own := range map[string]string{"create_file": "TypeScript or not", "add_declaration": "inside Bed", "replace_text": "files that are not source", "replace_statements": "With function \"Bed.plant\"", "insert_statements": "constructor(soil: string) {}", "replace_expression": "p.height * 2", "add_field": "add_property is another name", "create_from_usage": "throw new Error(\"not implemented\")", "add_parameter": "water(\"roses\", 2, \"L\")", "remove_parameter": "prune(\"roses\")", "move_parameter": "prune(3, \"roses\")", "introduce_parameter": "label(rose, rose.height)", "convert_params_to_object": "water({ bed: \"roses\", liters: 3 })", "add_result": "load(\"a\").value"} {
+	for name, own := range map[string]string{"create_file": "TypeScript or not", "add_declaration": "inside Bed", "replace_text": "files that are not source", "replace_statements": "With function \"Bed.plant\"", "insert_statements": "constructor(soil: string) {}", "replace_expression": "p.height * 2", "add_field": "Add properties to an interface", "create_from_usage": "throw new Error(\"not implemented\")", "add_parameter": "water(\"roses\", 2, \"L\")", "remove_parameter": "prune(\"roses\")", "move_parameter": "prune(3, \"roses\")", "introduce_parameter": "label(rose, rose.height)", "convert_params_to_object": "water({ bed: \"roses\", liters: 3 })", "add_result": "load(\"a\").value"} {
 		if d := tools[name]; !strings.Contains(d, own) {
 			t.Errorf("%s is not offered with TypeScript's description: %q", name, d)
 		}

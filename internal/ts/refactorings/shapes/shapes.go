@@ -92,7 +92,7 @@ func NewParameterize() *Parameterize {
 }
 
 func (*Parameterize) Description() string {
-	return `Make functions that are the same but for literals into calls of one new function that takes those literals as parameters: mist(bed: string) { log("mist on " + bed); } and drip(row: string) { log("drip on " + row); } become calls on(bed, "mist on ") and on(row, "drip on ") of function on(bed: string, what: string) { log(what + bed); }. Each keeps its signature and callers; inline_function with all_calls retires them.
+	return `Make functions that are the same but for literals into calls of one new function that takes those literals as parameters: mist(bed: string) { log("mist on " + bed); } and drip(row: string) { log("drip on " + row); } become calls on(bed, "mist on ") and on(row, "drip on ") of function on(bed: string, what: string) { log(what + bed); }. Each keeps its signature and callers; inline with all_calls retires them.
 Give file, functions (two or more of one file with the same signature; methods of one class), name for the new function, and parameters: a name for each literal that differs, in the order they appear.`
 }
 
@@ -208,7 +208,7 @@ func NewExtractSupertype() *ExtractSupertype {
 
 func (*ExtractSupertype) Description() string {
 	return `Name some members of a type as a new interface, so that code can depend on just those. From an interface, the members move into the new one, which the old one extends, so every use keeps working: moving depth and width of interface Bed { depth: number; width: number; name: string } into Size declares interface Size { depth: number; width: number } and makes interface Bed extends Size { name: string }. From a type alias of an object type, the same with type Bed = Size & { name: string }. From a class, the new interface has the members' signatures (a method's parameters and result, an accessor as a property) and the class implements it: class Sprinkler implements Watering.
-Identify the type by file and name, or by line at its declaration or a use; fields are the members, new_type the new interface's name, declared just before the type (exported with it).`
+Identify the type by file and name, or by line at its declaration or a use; members are what to name, new_type the new interface's name, declared just before the type (exported with it).`
 }
 
 // extractSupertypeArgs are the arguments of extract_supertype.
@@ -217,7 +217,7 @@ type extractSupertypeArgs struct {
 	Line    int      `json:"line,omitempty" desc:"1-based line of its declaration or a use. Omit it to find name at the top level of file."`
 	Name    string   `json:"name" desc:"The class, interface or type alias."`
 	Column  int      `json:"column,omitempty" desc:"Optional 1-based column, only needed to disambiguate."`
-	Fields  []string `json:"fields" desc:"The members to name in the new interface."`
+	Fields  []string `json:"members" desc:"The members to name in the new interface."`
 	NewType string   `json:"new_type" desc:"Name of the new interface."`
 }
 
@@ -326,7 +326,7 @@ func (*PrepareSwitchForTypes) Description() string {
 becomes
   interface Species { water(days: number): number; }
   function water(p: Plant, days: number): number { if (typeof p.species === "object" && p.species !== null && "water" in p.species) { return (p.species as Species).water(days); } switch (p.species) { ... } return 0; }
-The subject must be able to hold an object: widen it first (change_field_type to unknown). The interface is declared before the function, or gets the method when the file has it. The locals the cases use become the method's parameters. Every case must return, or none (then the switch goes in the else). Cases that share a body (case "moss": case "cactus":) are split, each with a copy, so that each moves alone.
+The subject must be able to hold an object: widen it first (change_type to unknown). The interface is declared before the function, or gets the method when the file has it. The locals the cases use become the method's parameters. Every case must return, or none (then the switch goes in the else). Cases that share a body (case "moss": case "cactus":) are split, each with a copy, so that each moves alone.
 Identify the switch by file and line, or by function when it is that function's only switch.`
 }
 

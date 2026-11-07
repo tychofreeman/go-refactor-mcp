@@ -96,7 +96,7 @@ func NewRemove() *RemoveParameter {
 
 func (*RemoveParameter) Description() string {
 	return `Remove a parameter the body does not read, and its argument at every call in the solution: removing height, function prune(bed: string, height: number) becomes prune(bed: string), and prune("roses", 3) becomes prune("roses"). Use it last when taking a feature out: first change the body so it no longer reads the parameter.
-With value, a parameter the body reads goes too, when every call passes that expression of this or the other parameters, the inverse of introduce_parameter: value "this.depth" makes describe(p: Plant, depth: number) { return p.name + depth; } describe(p: Plant) { return p.name + this.depth; }, and bed.describe(rose, bed.depth) bed.describe(rose).
+With value, a parameter the body reads goes too, when every call passes that expression of this or the other parameters, the inverse of introduce_parameter: with value "this.depth", describe(p: Plant, depth: number) { return p.name + depth; } becomes describe(p: Plant) { return p.name + this.depth; }, and bed.describe(rose, bed.depth) becomes bed.describe(rose).
 Identify the function by file and name (Class.method for a method), and give the parameter. A method changes with its family: the interface method it implements (Iface.method names one), the class method it overrides, and every other implementation and override, with the calls through each. A dropped argument must plainly have no effects: a name, a literal, this, a property of one, or a function.`
 }
 
@@ -316,7 +316,7 @@ func NewAddResult() *AddResult {
 }
 
 func (*AddResult) Description() string {
-	return `Add a result to a function or method (change_return_type is another name for it in a batch): its result becomes an object holding the old result and the new one, every return gives value for the new one, and every call that uses the result reads the old one: with field error, type string | null and value null, function load(id: string): string becomes load(id: string): { value: string; error: string | null }, return x becomes return { value: x, error: null }, and const v = load("a") becomes const v = load("a").value; a call as a statement stays. Then make the body return real errors. kept names the old result (default value).
+	return `Add a result to a function or method: its result becomes an object holding the old result and the new one, every return gives value for the new one, and every call that uses the result reads the old one: with field error, type string | null and value null, function load(id: string): string becomes load(id: string): { value: string; error: string | null }, return x becomes return { value: x, error: null }, and const v = load("a") becomes const v = load("a").value; a call as a statement stays. Then make the body return real errors. kept names the old result (default value).
 Identify the function by file and name (Class.method for a method). value must plainly have no effects. A method changes with its family, as for add_parameter.`
 }
 
@@ -447,7 +447,7 @@ func NewFunctionToMethod() *FunctionToMethod {
 }
 
 func (*FunctionToMethod) Description() string {
-	return `Turn a function into a method of the class its first parameter is typed with, and change every call: function depth(b: Bed, extra: number): number becomes the method depth(extra: number): number at the end of Bed, with b as this, and depth(bed, 2) becomes bed.depth(2). The reverse of method_to_function. The class must be declared in the function's file: move_declaration the function there first.
+	return `Turn a function into a method of the class its first parameter is typed with, and change every call: function depth(b: Bed, extra: number): number becomes the method depth(extra: number): number at the end of Bed, with b as this, and depth(bed, 2) becomes bed.depth(2). The reverse of method_to_function. The class must be declared in the function's file: move the function there first.
 Identify the function by file and name; new_name gives the method another name.`
 }
 

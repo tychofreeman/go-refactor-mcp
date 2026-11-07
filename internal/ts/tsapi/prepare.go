@@ -63,7 +63,7 @@ func (p *Project) PrepareSwitchForTypes(ctx context.Context, path string, line i
 	}
 	subject := sw.AsSwitchStatement().Expression
 	if t := c.GetTypeAtLocation(subject); !mayHoldObject(t) {
-		return nil, fmt.Sprintf("the subject %s is of %s, which holds no object; widen it first (change_field_type or change_parameter_type to unknown)", l.source(subject), c.TypeToString(t))
+		return nil, fmt.Sprintf("the subject %s is of %s, which holds no object; widen it first (change_type to unknown)", l.source(subject), c.TypeToString(t))
 	}
 	if re := newEffects(c, l).Of(subject); !re.CanRepeat() {
 		return nil, fmt.Sprintf("the subject %s %s; name it first", l.source(subject), re.Why)

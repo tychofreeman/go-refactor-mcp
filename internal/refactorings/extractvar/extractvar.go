@@ -53,7 +53,7 @@ Identify the expression by file, the line it starts on and its source text (colu
 }
 
 type args struct {
-	File           string `json:"file" desc:"Path of the file, relative to the module root."`
+	File           string `json:"file" desc:"Path of the file, relative to the workspace root."`
 	Line           int    `json:"line" desc:"1-based line on which the expression starts."`
 	Expression     string `json:"expression" desc:"Source text of the expression, e.g. \"len(items) * unitPrice\"."`
 	Name           string `json:"name" desc:"Name for the new variable."`

@@ -54,7 +54,7 @@ Identify the variable by file, line and name at its declaration or any use, or b
 func (*InlineVariable) LocalsOnly() {}
 
 type args struct {
-	File     string `json:"file" desc:"Path of the file, relative to the module root."`
+	File     string `json:"file" desc:"Path of the file, relative to the workspace root."`
 	Line     int    `json:"line,omitempty" desc:"1-based line of the variable's declaration or of any use."`
 	Name     string `json:"name" desc:"The variable's name."`
 	Function string `json:"function,omitempty" desc:"Instead of line: the function (Name or Type.Method) of file that declares the variable."`

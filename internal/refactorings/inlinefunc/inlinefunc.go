@@ -44,7 +44,7 @@ A body that returns early is fine: each return assigns the results, the statemen
 }
 
 type args struct {
-	File         string `json:"file" desc:"Path of the file with the call, relative to the module root."`
+	File         string `json:"file" desc:"Path of the file with the call, relative to the workspace root."`
 	Line         int    `json:"line,omitempty" desc:"1-based line of the call. With all_calls, optional: the line of any call or of the declaration."`
 	Name         string `json:"name" desc:"Name of the called function or method (for a method call x.m(), m)."`
 	Column       int    `json:"column,omitempty" desc:"Optional 1-based column of the name, only needed if it appears more than once on the line."`

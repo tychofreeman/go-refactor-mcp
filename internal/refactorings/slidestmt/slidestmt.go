@@ -56,7 +56,7 @@ func (*MoveStatement) InputSchema() json.RawMessage {
 }
 
 type args struct {
-	File string `json:"file" desc:"Path of the file, relative to the module root."`
+	File string `json:"file" desc:"Path of the file, relative to the workspace root."`
 	Line int    `json:"line" desc:"1-based line on which the statement to move starts."`
 }
 

@@ -94,7 +94,7 @@ var contentAliases = []string{"new_text", "new_code", "new_content", "code", "bo
 
 // nameAliases are names a model gives an argument that share no word with
 // it: a path for the file, the struct whose field it means for the name.
-var nameAliases = map[string]string{"path": "file", "from": "file", "struct": "name"}
+var nameAliases = map[string]string{"path": "file", "from": "file", "struct": "name", "fields": "members"}
 
 // aliasArgs renames each argument of args that schema does not have to
 // the one it can only mean: an argument schema has and args does not

@@ -46,7 +46,7 @@ type addArgs struct {
 	Before    string  `json:"before,omitempty" desc:"Optional: an existing parameter; the new one goes just before it."`
 	// ReplaceVariable: the parameter takes the place of the package
 	// variable of the same name that the body reads.
-	ReplaceVariable bool `json:"replace_variable,omitempty" desc:"The parameter is named like a package variable the body reads, and takes its place: the body reads the parameter instead. Calls whose value is not that variable are edits, listed in a note."`
+	ReplaceVariable bool `json:"replace_variable,omitempty" desc:"true: the parameter takes the place of the package variable of its name that the body reads. Calls that pass another value are edits, listed in a note."`
 }
 
 // literal is Go source text, given as a JSON string or, for a number or

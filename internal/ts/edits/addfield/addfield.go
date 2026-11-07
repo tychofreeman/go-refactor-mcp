@@ -23,7 +23,7 @@ func New() *AddField { return &AddField{Named: refactor.Called[addFieldArgs]("ad
 func (*AddField) ChangesBehavior() {}
 
 func (*AddField) Description() string {
-	return `Add properties to an interface, a class or an object type (type Spot = { ... }), to give a type the state a feature needs (add_property is another name for it in a batch). field "colour: string;" with after "height" adds colour just after height in interface Plant. field is TypeScript, one or more members with their doc comments (in a class, with initializers or methods too); with type, field gives only names (field "colour", type "string"). Without after or before they go at the end. A type on one line is opened up into lines.
+	return `Add properties to an interface, a class or an object type (type Spot = { ... }), to give a type the state a feature needs. field "colour: string;" with after "height" adds colour just after height in interface Plant. field is TypeScript, one or more members with their doc comments (in a class, with initializers or methods too); with type, field gives only names (field "colour", type "string"). Without after or before they go at the end. A type on one line is opened up into lines.
 Identify the type by file and name. value gives one new property to each object literal of the type that lacks it: with field "colour: string;", value "'red'" adds colour: 'red' to each.`
 }
 
