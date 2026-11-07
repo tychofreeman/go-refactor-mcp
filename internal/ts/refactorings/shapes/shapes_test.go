@@ -412,6 +412,144 @@ export class Sprinkler implements Watering {
 	})
 }
 
+func TestExtractType(t *testing.T) {
+	order := `export interface Order {
+  id: number;
+  street: string;
+  city: string;
+}
+
+export function label(o: Order): string {
+  return o.id + " " + o.city;
+}
+`
+	refused := func(name, extra, args, why string) change {
+		return change{name, map[string]string{"src/order.ts": order + extra}, NewExtractType(), args, nil, why}
+	}
+	both := `{"file": "src/order.ts", "name": "Order", "fields": ["street", "city"], "new_type": "Address", "as": "home"}`
+	check(t, []change{
+		{"class", map[string]string{"src/person.ts": `export class Person {
+  name = "";
+  street = "";
+  city = "";
+  move(street: string, city: string): void {
+    this.street = street;
+    this.city = city;
+  }
+  label(): string {
+    return this.name + ", " + this.city;
+  }
+}
+`, "src/main.ts": `import { Person } from "./person";
+
+export function where(p: Person): string {
+  return p.street + " " + p?.city;
+}
+`}, NewExtractType(), `{"file": "src/person.ts", "name": "Person", "fields": ["street", "city", "move"], "new_type": "Address", "as": "home"}`, map[string]string{"src/person.ts": `export class Address {
+  street = "";
+  city = "";
+  move(street: string, city: string): void {
+    this.street = street;
+    this.city = city;
+  }
+}
+
+export class Person {
+  name = "";
+  home = new Address();
+  label(): string {
+    return this.name + ", " + this.home.city;
+  }
+}
+`, "src/main.ts": `import { Person } from "./person";
+
+export function where(p: Person): string {
+  return p.home.street + " " + p?.home.city;
+}
+`}, ""},
+		{"interface", map[string]string{"src/order.ts": order + `
+export function make(id: number, s: string): Order {
+  return { id, street: s, city: "Oslo" };
+}
+`}, NewExtractType(), both, map[string]string{"src/order.ts": `export interface Address {
+  street: string;
+  city: string;
+}
+
+export interface Order {
+  id: number;
+  home: Address;
+}
+
+export function label(o: Order): string {
+  return o.id + " " + o.home.city;
+}
+
+export function make(id: number, s: string): Order {
+  return { id, home: { street: s, city: "Oslo" } };
+}
+`}, ""},
+		{"type alias", map[string]string{"src/order.ts": `export type Order = {
+  id: number;
+  street: string;
+};
+
+export const first: Order = {
+  id: 1,
+  street: "Main",
+};
+`}, NewExtractType(), `{"file": "src/order.ts", "name": "Order", "fields": ["street"], "new_type": "Address", "as": "home"}`, map[string]string{"src/order.ts": `export interface Address {
+  street: string;
+}
+
+export type Order = {
+  id: number;
+  home: Address;
+};
+
+export const first: Order = {
+  id: 1,
+  home: { street: "Main" },
+};
+`}, ""},
+		{"a method using a member that stays", map[string]string{"src/p.ts": `export class P {
+  name = "";
+  label(): string {
+    return this.name;
+  }
+}
+`}, NewExtractType(), `{"file": "src/p.ts", "name": "P", "fields": ["label"], "new_type": "L", "as": "l"}`, nil, "uses name, which stays in P"},
+		{"no initializer", map[string]string{"src/p.ts": `export class P {
+  street: string;
+  constructor(s: string) {
+    this.street = s;
+  }
+}
+`}, NewExtractType(), `{"file": "src/p.ts", "name": "P", "fields": ["street"], "new_type": "A", "as": "home"}`, nil, "no initializer"},
+		{"optional", map[string]string{"src/o.ts": `export interface O {
+  street?: string;
+}
+`}, NewExtractType(), `{"file": "src/o.ts", "name": "O", "fields": ["street"], "new_type": "A", "as": "home"}`, nil, "optional"},
+		refused("found by name", `
+export function dump(o: Order): string {
+  return JSON.stringify(o);
+}
+`, both, "finds properties by name"),
+		refused("destructured", `
+export function town(o: Order): string {
+  const { city } = o;
+  return city;
+}
+`, both, "destructured"),
+		refused("spread", `
+export function copy(o: Order): Order {
+  return { ...o, id: 2 };
+}
+`, both, "spread"),
+		refused("as taken", "", `{"file": "src/order.ts", "name": "Order", "fields": ["street"], "new_type": "Address", "as": "id"}`, "Order already has a member id"),
+	})
+}
+
 const ferns = `export class Fern {
   readonly kind = "fern";
   mist = 2;

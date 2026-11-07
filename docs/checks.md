@@ -926,6 +926,32 @@ reflection or printing. Retyping the parameters that only call these
 methods to the interface (IntelliJ's Use Interface Where Possible) is
 not done yet.
 
+## TypeScript's extract_type: what it checks
+
+`extract_type` on a TypeScript file moves some members of a type into a
+new type, declared just before it (exported with it), held in the
+property `as`; every `x.f` of a moved member becomes `x.as.f` (`x?.f`
+becomes `x?.as.f`). From a class, the new type is a class, the property
+is `as = new T()`, and the moved members' own `this.f` move with them:
+the inverse of TypeScript's inline of a held class. From an interface or
+a type alias of an object type, the new type is an interface, the
+property `as: T`, and each object literal of the type, found by its
+contextual type, gets its moved properties in one literal held in `as`.
+
+Refused, saying why: a generic type; a member sharing its line with
+another; a name already taken, or `as` already a member; a type that
+another extends or implements; for a class, a member that is not a
+property or method, private, protected, static or abstract, a property
+with no initializer (a constructor sets it) or one that reads `this`, a
+method that uses `super`, `this` as a whole or a member that stays, and
+an object literal standing for one; for an interface, an optional
+member (a literal could leave it out), and a literal that spreads
+another value; a moved member read in a use other than `x.f`, or from
+another value inside a member that moves. Values of the type may not
+reach code that finds properties by name (`JSON.stringify`,
+`Object.keys` and the like, `for...in`, `in`), be printed by `console`,
+or be destructured: each sees the new shape.
+
 ## Inline struct: what it checks
 
 `inline_struct` moves the fields and methods of a struct S that a struct

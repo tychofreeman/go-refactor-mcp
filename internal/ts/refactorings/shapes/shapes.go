@@ -237,6 +237,45 @@ func (*ExtractInterface) Plan(ws *workspace.Workspace, raw json.RawMessage) (*re
 	})
 }
 
+// ExtractType moves members of a type into a new type held in their place.
+type ExtractType struct {
+	refactor.Named[extractTypeArgs]
+}
+
+// NewExtractType returns extract_type.
+func NewExtractType() *ExtractType {
+	return &ExtractType{Named: refactor.Called[extractTypeArgs]("extract_type")}
+}
+
+func (*ExtractType) Description() string {
+	return `Move some members of a type into a new type held in a property in their place, every use following.
+- A class's properties and methods: with fields street, city and move of class Person, new_type Address and as home, they move into class Address, Person gets home = new Address(), and p.street becomes p.home.street.
+- An interface's or object type's properties: with fields street and city of interface Order, new_type Address and as home, Order gets home: Address, o.city becomes o.home.city, and the literal { id, street: s, city: c } becomes { id, home: { street: s, city: c } }.`
+}
+
+// extractTypeArgs are the arguments of extract_type.
+type extractTypeArgs struct {
+	File    string   `json:"file" desc:"Path of the file declaring the type, relative to the root."`
+	Line    int      `json:"line,omitempty" desc:"1-based line of its declaration or a use. Omit it to find name at the top level of file."`
+	Name    string   `json:"name" desc:"The class, interface or type alias."`
+	Column  int      `json:"column,omitempty" desc:"Optional 1-based column, only needed to disambiguate."`
+	Fields  []string `json:"fields" desc:"The members to move."`
+	NewType string   `json:"new_type" desc:"Name of the new type, declared just before the old one (exported with it)."`
+	As      string   `json:"as" desc:"Name of the property that holds the new type."`
+}
+
+func (*ExtractType) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
+	var a extractTypeArgs
+	if err := refactor.DecodeArgs(raw, &a); err != nil {
+		return nil, err
+	}
+	return plan(ws, a.File, func() string {
+		return fmt.Sprintf("moved %s of %s into %s, held in %s", strings.Join(a.Fields, ", "), a.Name, a.NewType, a.As)
+	}, func(p *tsapi.Project, path string) ([]tsapi.Edit, string) {
+		return p.ExtractType(bg, path, a.Line, a.Name, a.Column, a.Fields, a.NewType, a.As)
+	})
+}
+
 // UnionSwitchToMethod turns a switch on a union of classes into methods.
 type UnionSwitchToMethod struct {
 	refactor.Named[unionSwitchToMethodArgs]

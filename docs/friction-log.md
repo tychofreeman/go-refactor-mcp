@@ -4586,3 +4586,12 @@ Through the CLI, test first. `tsapi.InlineClass` by create_file (new
 behavior), the tool and its route through `inline` by add_declaration,
 add_field, replace_expression and add_case (insert_statements refused on
 a case clause's line; add_case is the edit for a clause). Nothing by hand.
+
+## 2026-11-06: extract_type for TypeScript (roadmap 52.4)
+
+Through the CLI, tests first: the cases by add_declaration with a stub
+of the tool, `tsapi.ExtractType` by create_file (new behavior), the
+stub's Plan, description and arguments by replace_declaration, the
+registration and three server tests (each pinned the absence) by
+replace_text. By hand: one sed on the test file to break an expectation
+and see the test fail, then put back, since every case passed at once.
