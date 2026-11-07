@@ -4630,3 +4630,12 @@ function with named results ("not supported yet"); a gap, on the
 roadmap. The golden came after the code (written as Go first, where
 gofmt hides the change; redone as a YAML file); checked red on the old
 code.
+
+## 2026-11-06: extract_type for TypeScript (roadmap 52.4)
+
+Through the CLI, tests first: the cases by add_declaration with a stub
+of the tool, `tsapi.ExtractType` by create_file (new behavior), the
+stub's Plan, description and arguments by replace_declaration, the
+registration and three server tests (each pinned the absence) by
+replace_text. By hand: one sed on the test file to break an expectation
+and see the test fail, then put back, since every case passed at once.

@@ -3060,6 +3060,14 @@ candidates and the evidence for each, gathered from the friction log.
        constructor, static members or heritage, used nowhere else, and
        the property used only as `x.field.m`; Go's `elsewhere` and
        `prefer` are not offered.
+    4. **extract_type for TypeScript** (2026-11-06, the user, after the
+       rename from extract_struct). *Done* (`tsapi.ExtractType`): the
+       inverse of 3 for a class, and for an interface or an object type
+       alias its properties into a new interface held in a property, every
+       object literal of the type restructured. The user chose both kinds
+       over classes alone and over classes with parameters (Java's one
+       shape; TypeScript keeps convert_params_to_object), and `as` for the
+       holding property, Java's argument, over a default from new_type.
     The budget (item 25): Go publishes 49 of 50 tools with this, and the
     instructions are at their 6,000 characters; each tool listed there
     has needed a cut. The next Go tool needs the user to raise one or

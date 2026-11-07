@@ -71,7 +71,7 @@ func all() []refactor.RefactoringOf[*workspace.Workspace] {
 	return []refactor.RefactoringOf[*workspace.Workspace]{rename.New(), createfile.New(), adddecl.New(), replacetext.New(), replacestmts.New(), insertstmts.New(), replaceexpr.New(), addfield.New(), createfromusage.New(), changesig.NewAdd(), changesig.NewRemove(), changesig.NewMove(), changesig.NewIntroduce(), changesig.NewParamsToObject(), changesig.NewAddResult(), changesig.NewChangeFieldType(), changesig.NewChangeParameterType(), changetype.New(), changesig.NewFunctionToMethod(), changesig.NewMethodToFunction(), changesig.NewMoveMethod(),
 		simplify.NewExtractVariable(), simplify.NewInlineVariable(), simplify.NewMoveUp(), simplify.NewMoveDown(), simplify.NewInvertIf(), simplify.NewRemoveElse(), simplify.NewExtractFunction(), simplify.NewInlineFunction(),
 		move.NewMoveDeclaration(), move.NewMoveFile(), move.NewDeleteFile(),
-		shapes.NewFold(), shapes.NewParameterize(), shapes.NewMergeDuplicate(), shapes.NewRemoveDeadCode(), shapes.NewExtractInterface(), shapes.NewUnionSwitchToMethod(), shapes.NewPrepareSwitchForTypes(), addcase.New(), addelement.New(), replacedecl.New(), simplify.NewSplit(), newMove(), simplify.NewInline(), simplify.NewMoveStatement(), simplify.NewInlineStruct()}
+		shapes.NewFold(), shapes.NewParameterize(), shapes.NewMergeDuplicate(), shapes.NewRemoveDeadCode(), shapes.NewExtractInterface(), shapes.NewExtractType(), shapes.NewUnionSwitchToMethod(), shapes.NewPrepareSwitchForTypes(), addcase.New(), addelement.New(), replacedecl.New(), simplify.NewSplit(), newMove(), simplify.NewInline(), simplify.NewMoveStatement(), simplify.NewInlineStruct()}
 }
 
 // goNames are Go tools' names for the TypeScript tool that does their
