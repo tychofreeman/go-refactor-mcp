@@ -174,15 +174,15 @@ TypeScript's `type_switch_to_method` refuses a `default` or a final
 TypeScript could do when the union's classes share a base class. It
 already takes switch statements and `instanceof` chains. Go's keeps
 `default` in the nil branch by design: an interface has no method body.
-Java's `add_declaration` places members by kind (java #279, 2026-11-07,
-the user: layout is the tool's, not the model's): a field after the last
-field, a constructor after the last constructor or field, the rest at
-the end; `after` and `before` left its schema and are accepted and
-ignored. Go's and TypeScript's still publish `after` and `before`. The
-counterpart there would be a TS class member placed by kind, and a Go
-declaration placed by kind in the file (types, then their methods), with
-the two arguments retired the same way; their internal callers
-(`changesig/paramobject.go` passes `before`) would keep them, unpublished.
+`add_declaration` places by kind in all three (2026-11-07, the user:
+layout is the tool's, not the model's; java #279, here #607 and #608),
+with `after` and `before` out of the schema, accepted and ignored. Java
+and a TypeScript class (`type`): a field after the last field, a
+constructor after the last constructor or field, the rest at the end.
+Go: a method after its type's methods (or the type), the rest at the end.
+TypeScript's top level: the end, or before the first statement that
+names it. A replaced stub keeps its place in each; Go's
+convert_params_to_object places with the unpublished `place_before`.
 Java's edits also write the constructor of final fields a class leaves
 unset, and a constructor stub assigns the fields its arguments fit (java
 #272, #273); Go and TS have no counterpart yet (Go's structs need none).
