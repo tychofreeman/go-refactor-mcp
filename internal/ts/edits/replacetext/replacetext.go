@@ -26,7 +26,7 @@ func (*ReplaceText) ChangesBehavior() {}
 
 func (*ReplaceText) Description() string {
 	return `Replace exact text in a file, for what the other tools do not cover: string literals, comments, and files that are not source (package.json, fixtures, docs). old "version 1.2" and new "version 1.3" change that text in README.md.
-old must be as in the file and occur once, or set all_occurrences; spacing within lines may differ where that still finds it. function limits the search to one function of a source file. append with no old adds new at the end of the file. files in place of file makes the same replacement in several files (old must be in each). It addresses text, not lines, so it stays valid after earlier steps of a batch.`
+old must be as in the file and occur once, or set all_occurrences; spacing within lines may differ where that still finds it, and new's lines then move to the file's indentation. function limits the search to one function of a source file. append with no old adds new at the end of the file. files in place of file makes the same replacement in several files (old must be in each). It addresses text, not lines, so it stays valid after earlier steps of a batch.`
 }
 
 // replaceTextArgs are the arguments of replace_text.
@@ -65,6 +65,7 @@ func (*ReplaceText) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refacto
 	var fes []edit.FileEdit
 	n := 0
 	loose := false
+	moved := ""
 	for _, f := range files {
 		path := ws.Abs(f)
 		if !ws.Contains(path) {
@@ -101,7 +102,14 @@ func (*ReplaceText) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refacto
 		loose = loose || l
 		var tes []edit.TextEdit
 		for _, s := range spans {
-			tes = append(tes, edit.TextEdit{Start: s[0], End: s[1], NewText: a.New})
+			text := a.New
+			if l {
+				var how string
+				if text, how = textutil.Shifted(a.Old, string(src[s[0]:s[1]]), a.New); how != "" {
+					moved = how
+				}
+			}
+			tes = append(tes, edit.TextEdit{Start: s[0], End: s[1], NewText: text})
 		}
 		n += len(tes)
 		fes = append(fes, edit.FileEdit{Path: path, Edits: tes})
@@ -115,7 +123,7 @@ func (*ReplaceText) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refacto
 		plan.Summary = "appended the text to " + in
 	}
 	if loose {
-		plan.Notes = append(plan.Notes, "old matched with the spacing within lines ignored")
+		plan.Notes = append(plan.Notes, strings.TrimSuffix("old matched with the spacing within lines ignored; "+moved, "; "))
 	}
 	return plan, nil
 }
