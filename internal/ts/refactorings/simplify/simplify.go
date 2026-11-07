@@ -261,8 +261,7 @@ func NewExtractFunction() *ExtractFunction {
 func (*ExtractFunction) Description() string {
 	return `Move a run of whole statements into a new function, declared after the one they are in, and call it in their place: in function report(beds: Bed[]), extracting let total = 0 and the loop that adds each b.depth to it, as sum, gives const total = sum(beds) there and function sum(beds: Bed[]) { let total = 0; for ...; return total; }. Locals the statements use become parameters; those they declare or assign that are used elsewhere come back as the result (an object of them when several). Statements that use this become a private method of the class; with await, the function is async and the call awaited.
 Identify the statements by file, start_line and end_line: whole statements of one block, as inspect numbers them; or a case's body by function and case ("fern" in function water, or default; a last break stays), which stays valid after earlier steps; a case sharing its body with others gets a case of its own unless split is false; for a value with no case, when the code after the switch is what runs for it, a new case calls a copy of that code. doc becomes the new function's doc comment.
-Returns: when the lines end the function's body, their returns stay and the call becomes return sum(...).
-Lines that return before the function's end return a value the call returns unless it is undefined, or whether they returned.`
+Returns: when the lines end the function's body, their returns stay and the call becomes return sum(...). When some of the lines return earlier, the new function returns their value and the call returns it unless it is undefined; when they return nothing, it returns whether they returned, and the call returns if so.`
 }
 
 // extractFunctionArgs are the arguments of extract_function.

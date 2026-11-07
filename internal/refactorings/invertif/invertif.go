@@ -44,7 +44,7 @@ Identify the if by file and the line of its if keyword (column if the line has t
 }
 
 type args struct {
-	File     string `json:"file" desc:"Path of the file, relative to the module root."`
+	File     string `json:"file" desc:"Path of the file, relative to the workspace root."`
 	Line     int    `json:"line" desc:"1-based line of the if keyword."`
 	Column   int    `json:"column,omitempty" desc:"Optional 1-based column of the if keyword, only needed if the line has more than one if."`
 	KeepElse bool   `json:"keep_else,omitempty" desc:"Only swap the branches of an if/else; do not remove the else even if the new first branch exits."`

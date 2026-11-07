@@ -30,13 +30,13 @@ func New() *ExtractSupertype {
 
 func (*ExtractSupertype) Description() string {
 	return `Name some methods of a type as a new interface, so that code can depend on just those. From a struct or another named type: with Water and Spray of Sprinkler, new_type Waterer declares type Waterer interface { Water(bed string, litres int) error; Spray() int } just before Sprinkler, and var _ Waterer = (*Sprinkler)(nil), which checks that Sprinkler implements it. From an interface, the methods move into the new one, which the old one embeds, so every use keeps working: Depth and Width of type Bed interface { Depth() int; Width() int; Name() string } into Size give type Bed interface { Size; Name() string }.
-Identify the type by file and name; fields are the methods, new_type the interface's name.`
+Identify the type by file and name; members are the methods, new_type the interface's name.`
 }
 
 type args struct {
-	File    string   `json:"file" desc:"Path of the file declaring the type, relative to the module root."`
+	File    string   `json:"file" desc:"Path of the file declaring the type, relative to the workspace root."`
 	Name    string   `json:"name" desc:"The type."`
-	Fields  []string `json:"fields" desc:"The methods to name in the new interface."`
+	Fields  []string `json:"members" desc:"The methods to name in the new interface."`
 	NewType string   `json:"new_type" desc:"Name of the new interface."`
 }
 

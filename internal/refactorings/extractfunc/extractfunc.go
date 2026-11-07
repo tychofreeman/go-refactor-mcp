@@ -60,11 +60,11 @@ func New() *ExtractFunction {
 func (*ExtractFunction) Description() string {
 	return `Move a run of whole statements into a new function, declared after the one they are in, and call it in their place: in func report(plants []Plant) string, extracting total := 0 and the loop that adds each p.Height to it, as sum, gives total := sum(plants) there and func sum(plants []Plant) int { total := 0; for ...; return total }. Locals the statements use become parameters, and those they set that are used afterwards become results; the result lists both. Statements that use the receiver become a method of its type.
 Identify the statements by file, start_line and end_line: whole statements of one block, as inspect numbers them; or a case's body by function and case ("fern" in function Water, or default), which stays valid after earlier steps; for a value with no case, when the code after the switch is what runs for it, a new case calls a copy of that code. doc becomes the new function's doc comment.
-Returns: when every path returns, the call becomes return sum(...); early error returns (if err != nil { return err }) make the new function return an error, which the call checks; so do early returns of a string last (a refusal: return nil, "no name") known not to be empty. Other early returns make it also return whether they ran: if done, v, err := f(...); done { return v, err }.`
+Returns: when every path returns, the call becomes return sum(...); early error returns (if err != nil { return err }) make the new function return an error, which the call checks; so do early returns of a non-empty string last (return nil, "no name"), as an error. Other early returns make it also return whether they ran: if done, v, err := f(...); done { return v, err }.`
 }
 
 type args struct {
-	File      string `json:"file" desc:"Path of the file, relative to the module root."`
+	File      string `json:"file" desc:"Path of the file, relative to the workspace root."`
 	StartLine int    `json:"start_line,omitempty" desc:"1-based first line of the statements to extract."`
 	EndLine   int    `json:"end_line,omitempty" desc:"1-based last line of the statements to extract (inclusive)."`
 	Function  string `json:"function,omitempty" desc:"Instead of the lines, with case: the function (Name or Type.Method) with the switch."`

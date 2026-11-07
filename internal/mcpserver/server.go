@@ -77,17 +77,16 @@ Some tools choose for you (create_from_usage chooses a stub's signature and file
 
 Which tool, by what you want to do:
 - Read the code: inspect.
-- Rename or move: rename; move (a declaration, a method, or a file).
+- Rename or move: rename; move (a declaration, a method, or a file or directory; with delete, delete it).
 - Split or join code (refactorings): extract_function, extract_variable, extract_type, extract_supertype, inline (a call, a local or a held struct), merge_duplicate_function, function_to_method, method_to_function; fold replaces code that does what a function does with calls to it; parameterize makes functions that differ only in constants calls of one that takes them; type_switch_to_method makes each case of a type switch a method of its type; prepare_switch_for_types prepares a switch on a value for its cases to move into types one at a time.
 - Change a signature and every call (refactorings): add_parameter, remove_parameter, move_parameter, introduce_parameter, add_result, convert_params_to_object, change_type (a parameter's or a field's type); an interface method changes with its implementations.
 - Simplify control flow (refactorings): invert_if, remove_else, move_statement, split, remove_dead_code.
 - Add code (edits): create_file for any new file, Go or not (fixtures, JSON, go.mod; several in one batch), add_declaration, add_field, add_case, add_element, insert_statements; create_from_usage declares the functions, methods, types and fields code uses before they exist, and the methods a type lacks to implement an interface it is used as.
 - Change code (edits): replace_statements, replace_expression, replace_declaration (a whole one, by name); change_type for what a type (an alias) is, with the fixes it lists in the same batch; replace_text for string literals, comments and files that are not Go.
-- Move or delete files and directories (fixtures, docs): move, with delete to delete.
 - Several steps in one call: batch; then check, and undo.
 
 How to work with them:
-1. Call inspect (no arguments) for an overview. Inspect a file to see its declarations without their bodies, with line numbers: a third to a half of reading the whole file. Then read what you will change: inspect with function, or start_line/end_line, or several at once with targets; or several declarations by name alone with names; how each use treats a field or function, with uses. Each function shows its complexity, nesting, and whether calling it has side effects (calls of a function without them are easier to move or reorder).
+1. Call inspect (no arguments) for an overview. Inspect a file to see its declarations without their bodies, with line numbers. Then read what you will change: inspect with function, or start_line/end_line, or several at once with targets; or several declarations by name alone with names; how each use treats a field or function, with uses.
 2. Refactor only while tests pass: first to make the change easy, after it to remove duplication. A failing test needs passing code first.
 3. Apply ONE tool per call, or, when you can plan several steps from what you have read, send them together with batch: one call, rolled back as a whole if any step is refused. A step's args are that tool's own arguments, so if your client loads tool schemas on demand, first load the schema of every tool its steps use, all in one request, rather than guessing their names. Load schemas in the same response as another call, never in a turn of their own: when you read the code you will change, load the tools you will change it with in that response. Each call returns APPLIED with what changed, or REFUSED with why and what to do instead (descriptions do not list refusals); a refusal changes nothing.
 4. Line numbers change after edits. Before a single step that needs them, re-inspect the code an earlier step changed. In a batch, give line numbers as they were when the batch began (from the inspect you planned it with): the batch moves them past the earlier steps. To address what an earlier step of the batch made, give a reference instead of a number: "$prev.end", "$2.start", "$helper.end+1" (see batch). Tools that target a declaration (rename, add_parameter, move, ...) also accept file and name without line: name is then a package-level symbol of file's package (Name, Type.Method or Type.Field), which stays valid after edits.
@@ -151,6 +150,15 @@ var typescriptText = strings.NewReplacer(
 	"A Go regular expression", "A regular expression",
 	"the module's packages and files", "the solution's projects and files",
 	"relative to the module root", "relative to the root",
+	"relative to the workspace root", "relative to the root",
+	`"a.go"`, `"a.ts"`,
+	`"b.go"`, `"b.ts"`,
+	`garden/bed.go:85`, `src/bed.ts:85`,
+	` or "^func .*Bed"`, ` or "^export function"`,
+	"; for a type also type switch cases, conversions and literals", "",
+	", Type.Method, or pkg.Name.", ", or Type.Method.",
+	", Type.Field, Type.Method, or pkg.Name.", ", Type.Field or Type.Method.",
+	"packages names test files", "packages lists test files",
 	"run `go test` (on packages, default ./...)", "run the tests (package.json's test script, or node --test; packages names test files)",
 	"Package pattern for go test, relative to the module root (default ./...).", "Test files to run, relative to the root (default: all).",
 	"Also run go test.", "Also run the tests.",
@@ -244,7 +252,7 @@ func (s *Server) MCP() *mcp.Server {
 		name := t.Name
 		srv.AddTool(&mcp.Tool{
 			Name:        name,
-			Description: t.Description + "\nApplies the change and returns what changed; undo reverts it.",
+			Description: t.Description,
 			InputSchema: t.Schema,
 			Annotations: &mcp.ToolAnnotations{DestructiveHint: &notDestructive},
 		}, s.handler(func(_ context.Context, args json.RawMessage) *mcp.CallToolResult { return s.refactor(name, args) }))
@@ -252,19 +260,19 @@ func (s *Server) MCP() *mcp.Server {
 
 	srv.AddTool(&mcp.Tool{
 		Name: "inspect",
-		Description: s.forLanguages(`Read Go code with line numbers. Use it before every refactoring to get exact line numbers, and again after each change.
+		Description: s.forLanguages(`Read Go code with line numbers: before a step that takes lines, and again after a change moved them (a step that names a declaration needs none).
 - No arguments: overview of the module's packages and files.
 - file: the file with its functions without their bodies, a third to a half of reading it whole: declarations, doc comments and types in full, and in place of each body the lines it takes, with the function's length, cyclomatic complexity, nesting depth, and whether calling it has side effects (with the first reason).
 - file + function ("Name" or "Type.Method"): that function's source.
 - file + start_line/end_line: those lines.
 - targets: several of these in one call, e.g. [{"file": "a.go", "function": "F"}, {"file": "b.go", "start_line": 10, "end_line": 30}].
-- names: declarations by name, wherever in the module they are, without file: functions, methods, types, variables and constants, e.g. ["Water", "Bed.Plant", "Schedule"]. A name declared in several packages is refused with where each is: qualify it as "pkg.Name". One nothing declares is said to be free to declare, or why not (predeclared, an import's name): check new names so.
+- names: declarations by name, wherever in the module they are, without file: functions, methods, types, variables and constants, e.g. ["Water", "Bed.Plant", "Schedule"]. One nothing declares is said to be free to declare, or why not (predeclared, an import's name): check new names so.
 - pattern: the lines that match a Go regular expression, with their numbers, in file or, without it, every Go file of the module, e.g. "Plant\\.Species" or "^func .*Bed": to find a line or a call where no name says what to look for. At most 100 lines.
 - uses: how each use treats something, before changing what it holds or means: every use of a field, function, method, variable or constant in the module, found by the type checker, under what is done with it (switch on it, compared, asserted, written, passed as an interface, called, read; for a type also type switch cases, conversions and literals), each with its line, e.g. ["Plant.Species"] lists "compared (2):  garden/bed.go:85  p.Species == \"cactus\"" and the switches with their cases.`),
 		InputSchema: json.RawMessage(s.forLanguages(`{
   "type": "object",
   "properties": {
-    "file":       {"type": "string",  "description": "File path relative to the module root."},
+    "file":       {"type": "string",  "description": "File path relative to the workspace root."},
     "function":   {"type": "string",  "description": "Function name, or Type.Method for a method."},
     "start_line": {"type": "integer", "description": "First line to show (1-based)."},
     "end_line":   {"type": "integer", "description": "Last line to show (inclusive)."},
@@ -280,7 +288,7 @@ func (s *Server) MCP() *mcp.Server {
 
 	srv.AddTool(&mcp.Tool{
 		Name:        "undo",
-		Description: "Revert the most recent refactoring or edit applied in this session and return the reverting diff. Can be called repeatedly to step further back. Refuses if a changed file was edited since. Works while the module does not load.",
+		Description: s.forLanguages("Revert the most recent refactoring or edit applied in this session and return the reverting diff. Call it again to step further back. Works while the module does not load."),
 		InputSchema: json.RawMessage(`{"type": "object", "properties": {}, "additionalProperties": false}`),
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: &notDestructive},
 	}, s.handler(func(_ context.Context, args json.RawMessage) *mcp.CallToolResult { return s.undo(args) }))
@@ -301,9 +309,9 @@ func (s *Server) MCP() *mcp.Server {
 	}, s.handler(s.check))
 	srv.AddTool(&mcp.Tool{
 		Name: "batch",
-		Description: s.forLanguages(`Run several refactorings and edits in order, in one call, planned from one inspect. Each step is {tool, args}: a tool and the arguments it takes when called alone; each runs on the code the earlier steps left.
+		Description: s.forLanguages(`Run several refactorings and edits in order, in one call. Each step is {tool, args}: a tool and the arguments it takes when called alone; each runs on the code the earlier steps left.
 Give line numbers and columns as in the code you inspected before the batch: the batch moves them past the earlier steps. A line an earlier step rewrote cannot be given by number. Address a declaration by name (file and name, no line), or give a reference in place of line, start_line or end_line: "$prev.start" or "$prev.end" (the first or last line the step before added or changed in that file), "$2.end" (step 2's), "$helper.end" (the step with "id": "helper"), with an offset such as "$prev.end+1". A step that changed several places (a rename) has no range.
-If a step is refused, nothing changes and the result says which step and why; one undo reverts the whole batch. A step {"tool": "check"} is a checkpoint: the code must type-check there (run_tests runs the tests too); if a later step is refused, the steps up to the last checkpoint that passed are kept, as one change. Independent steps can be separate calls in one turn.
+If a step is refused, nothing changes and the result says which step and why; one undo reverts the whole batch. A step {"tool": "check"} is a checkpoint: the code must type-check there (run_tests runs the tests too); if a later step is refused, the steps up to the last checkpoint that passed are kept, as one change.
 check "end" type-checks only after the last step, so edits may pass through code that does not compile yet (a declaration, then its first use); refactorings still need code that type-checks, so just before one the stubs and imports earlier edits need are added. A batch whose edit does not type-check runs again with "end", and functions the steps call but nothing declares get stubs (create_from_usage).`),
 		InputSchema: json.RawMessage(`{
   "type": "object",
@@ -322,8 +330,8 @@ check "end" type-checks only after the last step, so edits may pass through code
         "additionalProperties": false
       }
     },
-    "report": {"type": "string", "enum": ["diff", "summary"], "description": "After the steps' summaries, the change (default) or nothing more."},
-    "check":  {"type": "string", "enum": ["each", "end"], "description": "Type-check after each step (default) or only after the last."}, "retry": {"type": "boolean"}
+    "report": {"type": "string", "enum": ["diff", "summary"], "description": "diff (default): summaries and the change; summary: summaries only."},
+    "check":  {"type": "string", "enum": ["each", "end"], "description": "Type-check after each step (default) or only after the last."}, "retry": {"type": "boolean", "description": "Rerun the last refused batch with these changes."}
   },
   "required": ["steps"],
   "additionalProperties": false

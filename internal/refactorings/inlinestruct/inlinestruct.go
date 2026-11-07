@@ -34,7 +34,7 @@ elsewhere: keep inlines a copy when the struct is used outside the holder and ke
 }
 
 type args struct {
-	File      string `json:"file" desc:"Path of the file declaring the holder, relative to the module root."`
+	File      string `json:"file" desc:"Path of the file declaring the holder, relative to the workspace root."`
 	Name      string `json:"name" desc:"The struct holding the one to inline."`
 	Field     string `json:"field" desc:"The field holding it: the embedded type's name, or the field's name."`
 	Elsewhere string `json:"elsewhere,omitempty" desc:"When the inlined struct is used outside the holder: refuse (the default), or keep, which keeps it for those uses and inlines a copy."`

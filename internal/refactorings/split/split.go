@@ -40,7 +40,7 @@ Identify a variable by file, line (the assignment) and name; a loop by file, lin
 
 type args struct {
 	Kind    string `json:"kind" desc:"variable, loop or phase."`
-	File    string `json:"file" desc:"Path of the file, relative to the module root."`
+	File    string `json:"file" desc:"Path of the file, relative to the workspace root."`
 	Line    int    `json:"line" desc:"variable: the line of the assignment from which the variable is a new one; loop: the line of the for statement; phase: the line of the second phase's first statement."`
 	Name    string `json:"name,omitempty" desc:"variable: the variable's name."`
 	NewName string `json:"new_name,omitempty" desc:"variable: the new variable's name; phase: the second phase's new function."`
@@ -117,7 +117,7 @@ var dataStep = refactor.Inner{Tool: "split", Schema: refactor.Schema[dataArgs]()
 // dataArgs are dataStep's arguments.
 type dataArgs struct {
 	Kind    string `json:"kind" desc:"phase."`
-	File    string `json:"file" desc:"Path of the file, relative to the module root."`
+	File    string `json:"file" desc:"Path of the file, relative to the workspace root."`
 	NewName string `json:"new_name" desc:"The second phase's function."`
 	Type    string `json:"type" desc:"The new struct type of what the first phase computes."`
 }

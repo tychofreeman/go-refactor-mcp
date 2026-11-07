@@ -126,7 +126,7 @@ func TestChangeTypes(t *testing.T) {
 		{NewChangeFieldType(), `{"name": "Bed.soil", "type": "string"}`, "Bed has no property soil"},
 		{NewChangeFieldType(), `{"name": "Size.small", "type": "string"}`, "change it with change_type"},
 		{NewChangeParameterType(), `{"name": "grow", "parameter": "q", "type": "Plant"}`, "grow has no parameter named q"},
-		{changetype.New(), `{"name": "Plant", "type": "string"}`, "change its members with change_field_type"},
+		{changetype.New(), `{"name": "Plant", "type": "string"}`, "change its members with change_type"},
 	} {
 		if res := in(tc.r, tc.args); res.Applied || !strings.Contains(res.Refused, tc.want) {
 			t.Errorf("%s %s: want a refusal with %q, got %s", tc.r.Name(), tc.args, tc.want, res)

@@ -35,22 +35,21 @@ func New() *ReplaceStatements {
 func (*ReplaceStatements) Description() string {
 	return `Replace whole statements of one block with new Go statements, to write a body or change what statements do. With function "Cart.Total" and content return len(c.Items), Total's whole body becomes that statement.
 Give start_line and end_line (inclusive, as inspect shows) covering whole statements of one block, comments and blank lines included; or function for the whole body, which stays valid after earlier steps. content is re-indented to the block. Empty content over whole case clauses deletes them (not one the value may still reach, or one fallen into).
-wrap in place of content keeps the statements, at the line $body of the code it gives: "once(func() {\n$body\n})".
-Imports are added and removed as content needs.`
+wrap in place of content keeps the statements, at the line $body of the code it gives: "once(func() {\n$body\n})".`
 }
 
 // ChangesBehavior marks this as an edit.
 func (*ReplaceStatements) ChangesBehavior() {}
 
 type args struct {
-	File      string   `json:"file" desc:"Relative to the root."`
+	File      string   `json:"file" desc:"Path of the file, relative to the workspace root."`
 	Function  string   `json:"function,omitempty" desc:"Instead of the lines: the function (Name or Type.Method)."`
 	Case      string   `json:"case,omitempty" desc:"With function: that case's body, by value (\"\\\"fern\\\"\") or default."`
-	StartLine int      `json:"start_line,omitempty" desc:"First line."`
-	EndLine   int      `json:"end_line,omitempty" desc:"Last line."`
+	StartLine int      `json:"start_line,omitempty" desc:"1-based first line of the statements."`
+	EndLine   int      `json:"end_line,omitempty" desc:"1-based last line of the statements (inclusive)."`
 	Content   string   `json:"content,omitempty" desc:"The new statements."`
 	Wrap      string   `json:"wrap,omitempty" desc:"Instead of content: code with a line $body."`
-	Imports   []string `json:"imports,omitempty" desc:"Paths to import for ambiguous names (math/rand)."`
+	Imports   []string `json:"imports,omitempty" desc:"Optional: import paths for ambiguous package names."`
 }
 
 // Plan checks preconditions and computes the edits.

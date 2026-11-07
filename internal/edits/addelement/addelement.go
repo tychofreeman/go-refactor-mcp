@@ -26,7 +26,7 @@ type AddElement struct{ refactor.Named[addElementArgs] }
 func New() *AddElement { return &AddElement{Named: refactor.Called[addElementArgs]("add_element")} }
 
 func (*AddElement) Description() string {
-	return `Add an element to a composite literal: a field to a struct literal, an entry to a map literal, a value to a slice or array literal; an edit. At the line of var codes = map[string]int{, element "sms": 3 adds that entry at the end; after or before puts it next to the element with that key (a field name, or a map key as written).
+	return `Add an element to a composite literal: a field to a struct literal, an entry to a map literal, a value to a slice or array literal. At the line of var codes = map[string]int{, element "sms": 3 adds that entry at the end; after or before puts it next to the element with that key (a field name, or a map key as written).
 Identify the literal by file and the line it starts on (its type, or { for an elided type; when more than one starts there, give type as written: "[]pair"; &Plan is written "Plan"), or by file and name, the package-level variable it initializes. element is "Key: value" or a value. A key the literal has already is merged when both values are keyed literals: {Sun: 6} and {Soil: "loam"} give {Sun: 6, Soil: "loam"}.
 from adds every element of another variable's literal, written by element as a template ($key, $value; copied without one): name "beds", from "soils", element "$key: {Soil: $value}". from the literal itself rewrites each element.`
 }

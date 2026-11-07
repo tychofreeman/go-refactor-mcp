@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
-	"slices"
 	"strings"
 	"sync"
 
@@ -61,7 +60,7 @@ func (*Language) Owns(path string) bool { return strings.HasSuffix(path, ".go") 
 func (*Language) Tools() []lang.Tool {
 	var out []lang.Tool
 	for _, r := range refactor.Published(refactorings.All()) {
-		out = append(out, lang.Tool{Name: r.Name(), Description: r.Description() + symbolNote(r), Schema: schemaOf(r)})
+		out = append(out, lang.Tool{Name: r.Name(), Description: r.Description(), Schema: schemaOf(r)})
 	}
 	return out
 }
@@ -372,27 +371,4 @@ func (l *Language) Check(ctx context.Context, args json.RawMessage) (string, err
 		return intro + err.Error(), nil
 	}
 	return intro + report, nil
-}
-
-// symbolNote tells, for a tool whose line is optional, how it finds a
-// declaration by name alone; the tools' own descriptions were written for
-// file, line and name. A tool for locals only has none.
-func symbolNote(r refactor.Refactoring) string {
-	if _, ok := r.(interface{ LocalsOnly() }); ok {
-		return ""
-	}
-	schema := r.InputSchema()
-	var s struct {
-		Properties map[string]json.RawMessage `json:"properties"`
-		Required   []string                   `json:"required"`
-	}
-	if json.Unmarshal(schema, &s) != nil {
-		return ""
-	}
-	_, line := s.Properties["line"]
-	_, name := s.Properties["name"]
-	if !line || !name || slices.Contains(s.Required, "line") {
-		return ""
-	}
-	return "\nWithout line, name alone identifies it as a package-level symbol of file's package (Name, or Type.Method or Type.Field); unlike a line number, a name stays valid after edits."
 }

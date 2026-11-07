@@ -35,7 +35,7 @@ It is four steps, one change: declare the struct and a function taking it, fold 
 
 // objectArgs are the arguments of convert_params_to_object.
 type objectArgs struct {
-	File     string `json:"file" desc:"Path of the file declaring the function, relative to the module root."`
+	File     string `json:"file" desc:"Path of the file declaring the function, relative to the workspace root."`
 	Name     string `json:"name" desc:"The function: Name, or Type.Method for a method."`
 	TypeName string `json:"type_name,omitempty" desc:"Optional: the struct's name."`
 }

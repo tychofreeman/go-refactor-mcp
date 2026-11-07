@@ -222,7 +222,11 @@ working patterns, with their steps, are in `docs/patterns.md`.
   `docs/checks.md` keeps the lists, and the instructions say once that
   edits import what they name. A definition stays under
   `TestLoadedToolsStaySmall`'s 1,700 characters. Checked by A/B the same
-  day (cost-history 25): no more refusals, cost within the noise.
+  day (cost-history 25): no more refusals, cost within the noise. What
+  every tool shares is said once in the instructions, not appended to
+  each ("applies the change", addressing by name; 2026-11-07 review,
+  `docs/sessions/descriptions-review.md`); Go's tools say paths are
+  relative to the workspace root.
 - **Examples come from no eval task** (2026-10-22): they use one garden
   domain (`Plant`, `Bed`, `Sprinkler`), and `TestExamplesAvoidEvalTasks`
   fails on a name or string of a seeded eval module in published text.

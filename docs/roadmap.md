@@ -3145,6 +3145,10 @@ candidates and the evidence for each, gathered from the friction log.
        TypeScript); in Go source gofmt did it already, so it shows in
        other files. Left: add_result on a function with named results,
        refused today, which this change had to write around.
+    8. rename of a struct field whose json tag names it explicitly still
+       refuses for encoding/json (found renaming extract_supertype's
+       args.Fields, 2026-11-07); the tag decides the JSON name, so only
+       an untagged field is at risk.
 
 55. **Constructive transformations, as java-refactor-mcp's #212-#215**
     (2026-11-05, the user: "I'd like go/ts to work the same way"): create

@@ -4656,3 +4656,11 @@ file, byte for byte, to a `.txt` name in the new directory,
 `move` back to `.go`, and `replace_text` of the importer's path and call,
 all in one batch. A package rename (move of a directory of Go code, its
 importers following) would have been one step. Nothing by hand.
+
+## 2026-11-07: a review of the tool descriptions
+
+`docs/sessions/descriptions-review.md`. All through the CLI on literals
+and tags. rename refused `Fields` to `Members` on extract_supertype's
+args, whose json tag names the field explicitly (a false refusal,
+roadmap 54.8); the tag changed and the Go name stayed. One file list for
+replace_text's `files` was built with Python.

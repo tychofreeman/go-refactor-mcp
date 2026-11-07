@@ -32,7 +32,7 @@ A function or method named like a stub (a body of only panic("not implemented"),
 func (*AddDeclaration) ChangesBehavior() {}
 
 type args struct {
-	File    string   `json:"file" desc:"Relative to the workspace root."`
+	File    string   `json:"file" desc:"Path of the file, relative to the workspace root."`
 	Content string   `json:"content,omitempty" desc:"Go declarations, without package clause or imports."`
 	TestFor string   `json:"test_for,omitempty" desc:"Instead of content, in a _test.go file: a function or Type.Method; adds a test that calls it and fails, showing the result, until you write the assertion."`
 	After   string   `json:"after,omitempty" desc:"Optional: put them just after this declaration of file (Name, or Type.Method)."`
