@@ -1539,6 +1539,21 @@ their order. `after` and `before` are retired: accepted and ignored
 composes add_declaration (convert_params_to_object) passes the
 unpublished `place_before`, to keep what it makes next to what it came
 from.
+
+TypeScript's `add_declaration` places by kind the same way
+(`tsapi.PlaceDeclarations`): at the end of the file, except that a
+`const`, `let`, `var`, class or enum an existing top-level statement
+names goes just before the first such statement (it would be used before
+it is declared; functions, interfaces and type aliases are skipped, as
+they run later or are types). With `type` naming a class, `content` is
+its members: a field (or static block) after the last field, a
+constructor after the last constructor or field, either before the first
+member when there are none of those, anything else after the last member;
+re-indented to the class's members, with a blank line between them when
+the class has one. `after` and `before` are ignored, except that a
+`Class.` prefix still names `type` for a call written the old way. A
+`type` that names no class of the file, and content that is not members,
+are refused.
 The `content` has no package clause and no imports: packages it names are
 imported as for `replace_statements`, and an `import` in it is refused. A
 name the package already declares is refused by the type check, whose

@@ -174,7 +174,9 @@ working patterns, with their steps, are in `docs/patterns.md`.
   sits does not change what Go does, so no option offers the model that
   choice; a new one would go against this. Where position is meaning
   (`add_field`, `add_element`, a parameter's place, `insert_statements`),
-  the model still chooses. Refactorings that compose add_declaration
+  the model still chooses. TypeScript's add_declaration does the same
+  (`tsapi.PlaceDeclarations`), with `type` naming the class for members.
+  Refactorings that compose add_declaration
   place what they make with the unpublished `place_before`; before
   retiring an argument, look for it in composites' `Expand`.
 - **Claude via MCP is the product** (2026-10-17), not the Ollama loop or
