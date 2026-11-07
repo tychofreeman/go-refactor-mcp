@@ -565,7 +565,9 @@ part left. What is open, the newest priority first:
         member. Interfaces outside the module are still checked.
       - **Results:** a tool to change a function's results, with every
         call. *Done: add_result adds one, last, with the value every
-        return gives it (callers `v, _ := f()`), for families too.
+        return gives it (callers `v, _ := f()`), for families too; before
+        a final error, which Go keeps last (2026-11-06: `(int, error)`
+        becomes `(int, bool, error)`, callers `n, _, err := f()`).
         Removing or retyping a result is still to do.*
       - **Edits that change a signature by text** are refused with the
         tool to use. *Done: such an edit still applies if everything
