@@ -1677,6 +1677,33 @@ Every run passed (16/16). Each called the merged name the task needed
 and `inline`, already merged before), and none an old name or alias.
 The differences are within the noise of 2 runs. Record:
 `docs/sessions/ab-merged-tools.md`.
+## 25. Descriptions without refusal lists (Nov 6)
+
+The server of #592-#596 (descriptions without refusal lists or shared
+boilerplate, the shared rules in the instructions; batch retry;
+replace_text's re-indent) against main. Sonnet, arm mcp, CLAUDE.md
+`claude-md-refactor-first-bash`, 2 runs per task and server; the four
+tasks of section 24 compared with that section's runs of main. Means
+per run:
+
+| task | main: pass | cost | turns | new: pass | cost | turns |
+|---|---|---|---|---|---|---|
+| feat-symbol-addressing | 1/2 | $0.319 | 26.0 | 2/2 | $0.385 | 23.0 |
+| feat-case-clause | 2/2 | $0.285 | 31.0 | 2/2 | $0.259 | 29.5 |
+| feat-no-echo | 2/2 | $0.356 | 23.5 | 2/2 | $0.417 | 27.5 |
+| feat-compact-diffs | 2/2 | $0.359 | 31.0 | 2/2 | $0.348 | 31.0 |
+| move-to-package | 2/2 | $0.096 | 6.0 | 2/2 | $0.093 | 5.5 |
+| multi-move-rename | 2/2 | $0.100 | 6.0 | 2/2 | $0.112 | 7.0 |
+| notify-userid | 2/2 | $0.169 | 14.0 | 2/2 | $0.179 | 14.5 |
+| warehouse-inline | 2/2 | $0.156 | 13.5 | 2/2 | $0.151 | 12.5 |
+
+Refused results: 17 of 184 gorefactor calls with the new descriptions,
+19 of 209 on main. Passes 16/16 against 15/16 (main's failure is the
+known symbol-addressing run on an interface method). Cost $3.89 against
+$3.68 in all (+6%), within the noise of 2 runs. Removing the refusal
+lists cost nothing measurable: models did not refuse more for not
+being told in advance. About $4.20 spent. Record:
+`docs/sessions/ab-descriptions.md`.
 
 ## What made the difference
 

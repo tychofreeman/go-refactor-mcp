@@ -221,7 +221,8 @@ working patterns, with their steps, are in `docs/patterns.md`.
   what it refuses"). Each refusal says why and what to do instead;
   `docs/checks.md` keeps the lists, and the instructions say once that
   edits import what they name. A definition stays under
-  `TestLoadedToolsStaySmall`'s 1,700 characters.
+  `TestLoadedToolsStaySmall`'s 1,700 characters. Checked by A/B the same
+  day (cost-history 25): no more refusals, cost within the noise.
 - **Examples come from no eval task** (2026-10-22): they use one garden
   domain (`Plant`, `Bed`, `Sprinkler`), and `TestExamplesAvoidEvalTasks`
   fails on a name or string of a seeded eval module in published text.
