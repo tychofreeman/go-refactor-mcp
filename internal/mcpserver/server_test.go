@@ -1077,7 +1077,7 @@ func TestTypeScriptOnly(t *testing.T) {
 	if _, ok := tools["extract_type"]; !ok {
 		t.Error("a TypeScript-only repo is not offered extract_type")
 	}
-	for name, own := range map[string]string{"create_file": "TypeScript or not", "add_declaration": "inside Bed", "replace_text": "files that are not source", "replace_statements": "With function \"Bed.plant\"", "insert_statements": "constructor(soil: string) {}", "replace_expression": "p.height * 2", "add_field": "Add properties to an interface", "create_from_usage": "throw new Error(\"not implemented\")", "add_parameter": "water(\"roses\", 2, \"L\")", "remove_parameter": "prune(\"roses\")", "move_parameter": "prune(3, \"roses\")", "introduce_parameter": "label(rose, rose.height)", "convert_params_to_object": "water({ bed: \"roses\", liters: 3 })", "add_result": "load(\"a\").value"} {
+	for name, own := range map[string]string{"create_file": "TypeScript or not", "add_declaration": "content is members of Bed", "replace_text": "files that are not source", "replace_statements": "With function \"Bed.plant\"", "insert_statements": "constructor(soil: string) {}", "replace_expression": "p.height * 2", "add_field": "Add properties to an interface", "create_from_usage": "throw new Error(\"not implemented\")", "add_parameter": "water(\"roses\", 2, \"L\")", "remove_parameter": "prune(\"roses\")", "move_parameter": "prune(3, \"roses\")", "introduce_parameter": "label(rose, rose.height)", "convert_params_to_object": "water({ bed: \"roses\", liters: 3 })", "add_result": "load(\"a\").value"} {
 		if d := tools[name]; !strings.Contains(d, own) {
 			t.Errorf("%s is not offered with TypeScript's description: %q", name, d)
 		}

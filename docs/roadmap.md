@@ -3151,17 +3151,20 @@ candidates and the evidence for each, gathered from the friction log.
        an untagged field is at risk.
     9. Placement by kind, as java's #279 (2026-11-07, the user): Go
        *done* (`adddecl.places`, `docs/sessions/place-by-kind.md`);
-       TypeScript next: class members by kind as Java's, and a top-level
-       `const`, `let` or class before the first statement that uses it
-       at module load, else at the end; `after`/`before` retired there
-       too (`refactor.unlistedArgs` already accepts them).
+       TypeScript *done* (`tsapi.PlaceDeclarations`, `type` names the
+       class members go in, `docs/sessions/ts-place-by-kind.md`): class
+       members by kind as Java's, and a top-level `const`, `let` or class
+       before the first statement that uses it, else at the end.
     10. Constructors written for the model, as java's #272, #273 and
        #275 (2026-11-07): TypeScript only (`docs/parity.md`, section 4).
        A field without an initializer in a class without a constructor
        gets one taking such fields; a stub from `new Pot(3)` assigns
        arguments that each fit one field; an added constructor replaces
        such a one of the same parameter types.
-55. **Constructive transformations, as java-refactor-mcp's #212-#215**
+    11. `batch` `retry` cannot drop a step of the kept batch, only
+       replace one (2026-11-07, `docs/sessions/ts-place-by-kind.md`: a
+       rename added in a retry, refused, had to be replaced by a `check`
+       step); `{"step": N, "drop": true}` would say it.55. **Constructive transformations, as java-refactor-mcp's #212-#215**
     (2026-11-05, the user: "I'd like go/ts to work the same way"): create
     by structure, type only expressions and statements. One PR each:
     1. `create_file` with `declaration`: a type from its header. Go takes

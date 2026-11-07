@@ -46,17 +46,17 @@ func TestAddDeclaration(t *testing.T) {
 		t.Fatalf("plant.ts:\n%s\nwant:\n%s", got, want)
 	}
 	res = run(t, ws, `{"file": "src/plant.ts", "content": "export const unit = \"L\";", "before": "water"}`)
-	if !res.Applied || !strings.HasPrefix(read(t, dir, "src/plant.ts"), "export const unit = \"L\";\n\nexport function water") {
-		t.Fatalf("not added before water: %s\n%s", res, read(t, dir, "src/plant.ts"))
+	if !res.Applied || !strings.HasSuffix(read(t, dir, "src/plant.ts"), "}\n\nexport const unit = \"L\";\n") {
+		t.Fatalf("a retired before was not ignored: %s\n%s", res, read(t, dir, "src/plant.ts"))
 	}
 	res = run(t, ws, `{"file": "src/bed.ts", "content": "export const evening = water(4);"}`)
 	if !res.Applied || !strings.HasSuffix(read(t, dir, "src/bed.ts"), "export const morning = water(2);\n\nexport const evening = water(4);\n") {
 		t.Fatalf("not added at the end: %s\n%s", res, read(t, dir, "src/bed.ts"))
 	}
 	for _, tc := range []struct{ args, want string }{
-		{`{"file": "src/bed.ts", "content": "export const x = 1;", "after": "dusk"}`, `declares no "dusk"`},
 		{`{"file": "src/bed.ts", "content": "export const y: string = water;"}`, "is not assignable to type 'string'"},
 		{`{"file": "src/none.ts", "content": "export const z = 1;"}`, "use create_file"},
+		{`{"file": "src/bed.ts", "type": "Dusk", "content": "x = 1;"}`, "declares no class Dusk"},
 	} {
 		if res := run(t, ws, tc.args); res.Applied || !strings.Contains(res.Refused, tc.want) {
 			t.Errorf("%s: want a refusal with %q, got %s", tc.args, tc.want, res)
@@ -73,7 +73,7 @@ func TestReplacesAStub(t *testing.T) {
 	if !res.Applied {
 		t.Fatalf("the stubs were not added: %s", res)
 	}
-	res = run(t, ws, `{"file": "src/bed.ts", "content": "  fill(n: number): number {\n    return n * this.depth();\n  }", "after": "Tray.depth"}`)
+	res = run(t, ws, `{"file": "src/bed.ts", "content": "  fill(n: number): number {\n    return n * this.depth();\n  }", "type": "Tray"}`)
 	if !res.Applied || !strings.Contains(res.String(), "replacing the stub of Tray.fill") {
 		t.Fatalf("the method did not replace its stub: %s", res)
 	}
@@ -110,5 +110,35 @@ func TestTestFirstInABatch(t *testing.T) {
 	}
 	if !b.Applied || !strings.Contains(read(t, dir, "src/plant.test.ts"), "return sun / 2;") {
 		t.Fatalf("the test with its function was not applied: %s", b)
+	}
+}
+
+// add_declaration places what it adds by kind: members of type in the
+// class by their kind, and a top-level const a statement uses before that
+// statement.
+func TestPlacesByKind(t *testing.T) {
+	ws, dir := solution(t)
+	res := run(t, ws, `{"file": "src/bed.ts", "content": "export class Pot {\n  size = 1;\n\n  grow(): void {}\n}"}`)
+	if !res.Applied {
+		t.Fatalf("the class was not added: %s", res)
+	}
+	res = run(t, ws, `{"file": "src/bed.ts", "type": "Pot", "content": "shrink(): void {}\n\nconstructor(readonly name: string) {}\n\ndepth = 2;"}`)
+	if !res.Applied {
+		t.Fatalf("the members were not added: %s", res)
+	}
+	want := "export class Pot {\n  size = 1;\n\n  depth = 2;\n\n  constructor(readonly name: string) {}\n\n  grow(): void {}\n\n  shrink(): void {}\n}\n"
+	if got := read(t, dir, "src/bed.ts"); !strings.HasSuffix(got, want) {
+		t.Fatalf("bed.ts:\n%s\nwant it to end:\n%s", got, want)
+	}
+	step := func(content string) refactor.StepOf[*workspace.Workspace] {
+		args, _ := json.Marshal(map[string]string{"file": "src/bed.ts", "content": content})
+		return refactor.StepOf[*workspace.Workspace]{Refactoring: New(), Args: args}
+	}
+	b, err := refactor.RunBatch(ws, []refactor.StepOf[*workspace.Workspace]{step("export const evening = water(dusk);"), step("export const dusk = 4;")}, refactor.OptionsOf[*workspace.Workspace]{Unchecked: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := read(t, dir, "src/bed.ts"); !b.Applied || !strings.Contains(got, "export const dusk = 4;\n\nexport const evening = water(dusk);") {
+		t.Fatalf("dusk is not before its use: %s\n%s", b, got)
 	}
 }

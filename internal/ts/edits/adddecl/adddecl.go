@@ -29,7 +29,7 @@ func New() *AddDeclaration {
 func (*AddDeclaration) ChangesBehavior() {}
 
 func (*AddDeclaration) Description() string {
-	return `Add declarations (functions, classes, interfaces, types, variables, or members of a class) to an existing file; for a new file, use create_file. They go at the end of the file, or just after or before the declaration named in after or before: after "Bed.plant" puts a new method right after plant, inside Bed, so content is written as a member there. A function or method named like a stub (a body of only throw new Error("not implemented"), as create_from_usage writes) in the file, or in that class, replaces the stub. With test_for in place of content, a red test at the end of the file: test_for "Bed.plant" adds test("Bed.plant", ...), which makes a Bed, calls plant with placeholder arguments and throws, showing the result, until the assertion is written; test comes from vitest or jest when package.json names one, else node:test.`
+	return `Add declarations (functions, classes, interfaces, types, variables, or members of a class) to an existing file; for a new file, use create_file. They are placed by kind: at the end of the file, or, for a const, let, class or enum a top-level statement already uses, just before it; with type "Bed", content is members of Bed: a field after its fields, a constructor after its constructors or fields, a method at its end. A function or method named like a stub (a body of only throw new Error("not implemented"), as create_from_usage writes) in the file, or in that class, replaces the stub. With test_for in place of content, a red test at the end of the file: test_for "Bed.plant" adds test("Bed.plant", ...), which makes a Bed, calls plant with placeholder arguments and throws, showing the result, until the assertion is written; test comes from vitest or jest when package.json names one, else node:test.`
 }
 
 // addDeclarationArgs are the arguments of add_declaration.
@@ -37,17 +37,15 @@ type addDeclarationArgs struct {
 	File    string `json:"file" desc:"Relative to the root."`
 	Content string `json:"content,omitempty" desc:"TypeScript declarations, with their doc comments."`
 	TestFor string `json:"test_for,omitempty" desc:"Instead of content: the function or Class.method to write a red test for, at the end of file, with test imported from the solution's framework."`
-	After   string `json:"after,omitempty" desc:"Optional: put them just after this declaration of file (name, or Class.member)."`
-	Before  string `json:"before,omitempty" desc:"Optional: put them just before this declaration of file."`
+	Type    string `json:"type,omitempty" desc:"Optional: the class content is members of; they go in it by kind."`
+	After   string `json:"after,omitempty" schema:"-"`  // retired: placement is by kind; a Class. prefix still names type
+	Before  string `json:"before,omitempty" schema:"-"` // retired, as After
 }
 
 func (*AddDeclaration) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
 	var a addDeclarationArgs
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
-	}
-	if a.After != "" && a.Before != "" {
-		return nil, refactor.Refusef("give after or before, not both")
 	}
 	path := ws.Abs(a.File)
 	src, err := os.ReadFile(path)
@@ -73,44 +71,21 @@ func (*AddDeclaration) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refa
 	}
 	content := strings.TrimRight(a.Content, "\n")
 	text := string(src)
-	var at int
-	var insert string
-	switch name := a.After + a.Before; {
-	case name == "":
-		at = len(text)
-		insert = "\n" + content + "\n"
-		if !strings.HasSuffix(text, "\n") && text != "" {
-			insert = "\n" + insert
-		}
-	default:
-		var found bool
-		var start, end int
-		for _, d := range ws.Outline(path) {
-			if d.Name == name {
-				found, start, end = true, d.Start, d.End
-				break
-			}
-		}
-		if !found {
-			return nil, refactor.Refusef("%s declares no %q; inspect the file to see what is there", a.File, name)
-		}
-		if a.After != "" {
-			at = lineEnd(text, end)
-			insert = "\n\n" + content
-		} else {
-			at = lineStart(text, start)
-			insert = content + "\n\n"
-		}
-	}
-	owner := ""
-	if anchor := a.After + a.Before; strings.Contains(anchor, ".") {
+	owner := a.Type
+	if anchor := a.After + a.Before; owner == "" && strings.Contains(anchor, ".") {
 		owner = anchor[:strings.Index(anchor, ".")]
 	}
 	edits, replaced := replaceStubs(ws.Outline(path), text, content, owner)
 	n := strings.Count(content, "\n") + 1
 	summary := fmt.Sprintf("added %d line%s to %s", n, plural(n), ws.Rel(path))
 	if len(edits) == 0 {
-		edits = []edit.TextEdit{{Start: at, End: at, NewText: insert}}
+		placed, why := tsapi.PlaceDeclarations(text, content, owner)
+		if why != "" {
+			return nil, refactor.Refusef("%s", why)
+		}
+		for _, p := range placed {
+			edits = append(edits, edit.TextEdit{Start: p.Offset, End: p.Offset, NewText: p.Text})
+		}
 	} else {
 		summary += ", replacing the stub of " + strings.Join(replaced, " and ")
 	}
