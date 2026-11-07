@@ -1125,8 +1125,10 @@ func TestGoAndTypeScript(t *testing.T) {
 	mustContain(t, "rename in TypeScript", out, `renamed "morning" to "dawn"`)
 	out, _ = call(t, cs, "rename", map[string]any{"file": "calc/calc.go", "name": "Apply", "new_name": "Scale"})
 	mustContain(t, "rename in Go", out, `"Apply" to "Scale"`)
+	out, _ = call(t, cs, "batch", map[string]any{"steps": []any{map[string]any{"tool": "extract_supertype", "args": map[string]any{"file": "src/bed.ts", "name": "Bed", "fields": []any{"soil"}, "new_type": "Soil"}}}})
+	mustContain(t, "the shared name for TypeScript's extract_interface", out, "extract_interface")
 	out, _ = call(t, cs, "extract_type", map[string]any{"file": "src/bed.ts", "name": "Bed", "fields": []any{"soil"}, "new_type": "Soil"})
-	mustContain(t, "a Go tool's name for a TypeScript one", out, "REFUSED extract_interface:")
+	mustContain(t, "extract_type has no TypeScript counterpart", out, "REFUSED extract_type: it does not work on TypeScript files yet")
 	out, _ = call(t, cs, "add_element", map[string]any{"file": "src/bed.ts", "line": 1, "element": "1"})
 	mustContain(t, "TypeScript's add_element", out, "REFUSED add_element: no object or array literal starts on line 1")
 	out, _ = call(t, cs, "batch", map[string]any{"steps": []any{

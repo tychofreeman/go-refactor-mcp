@@ -48,8 +48,8 @@ baselines keep working. `docs/tool-contract.md` records the result.
 | move a declaration | move_declaration | move_type | **move** |
 | move a method or field | move_method | move_member | **move** |
 | move a statement | move_statement_up, _down | move_statement | **move_statement**, with a direction |
-| extract an interface or base | extract_interface | extract_supertype | **extract_supertype** |
-| a parameter object, extract class | convert_params_to_object, (Go) extract_type | extract_type (`members` of a method, class or record) | **extract_type** (renamed from extract_struct on 2026-11-06, the user: "struct" is Go's word; extract_struct stays an alias); TS's `extract_type` alias for extract_interface moves to extract_supertype |
+| extract an interface or base | extract_interface (TS: extract_supertype runs it, 2026-11-06; Go: not yet) | extract_supertype | **extract_supertype** |
+| a parameter object, extract class | convert_params_to_object, (Go) extract_type | extract_type (`members` of a method, class or record) | **extract_type** (renamed from extract_struct on 2026-11-06, the user: "struct" is Go's word; extract_struct stays an alias); TypeScript has no counterpart yet, and its extract_interface is reached by extract_supertype (2026-11-06) |
 | an expression made a parameter | introduce_parameter | extract_variable `as=parameter` | **extract_variable** `as` |
 | change a type | change_type, change_field_type, change_parameter_type | change_type | **change_type** |
 | move, copy, delete a file | move_file, delete_file | move_file | **move** (a path); a file renamed in place is also **rename** |
