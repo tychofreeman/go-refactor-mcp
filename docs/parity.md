@@ -174,6 +174,18 @@ TypeScript's `type_switch_to_method` refuses a `default` or a final
 TypeScript could do when the union's classes share a base class. It
 already takes switch statements and `instanceof` chains. Go's keeps
 `default` in the nil branch by design: an interface has no method body.
+Java's `add_declaration` places members by kind (java #279, 2026-11-07,
+the user: layout is the tool's, not the model's): a field after the last
+field, a constructor after the last constructor or field, the rest at
+the end; `after` and `before` left its schema and are accepted and
+ignored. Go's and TypeScript's still publish `after` and `before`. The
+counterpart there would be a TS class member placed by kind, and a Go
+declaration placed by kind in the file (types, then their methods), with
+the two arguments retired the same way; their internal callers
+(`changesig/paramobject.go` passes `before`) would keep them, unpublished.
+Java's edits also write the constructor of final fields a class leaves
+unset, and a constructor stub assigns the fields its arguments fit (java
+#272, #273); Go and TS have no counterpart yet (Go's structs need none).
 
 **Go behind TS:** inline_function of generic, variadic and other-package
 callees (4); rename of interface methods, embedded types, imports and
@@ -208,8 +220,7 @@ constructor today; Go has no constructors or final fields, and a test
 builds a struct with a literal. Roadmap 54.9 and 54.10.
 
 Java-only, nothing to port: an ambiguous import decided by what the
-package's other files import (java #245), and `after` by an overload
-label (java #248); Go imports name packages. Checked, nothing to do:
+package's other files import (java #245); Go imports name packages. Checked, nothing to do:
 inline leaves an argument without parentheses where the parameter
 stands alone (java #248) in Go and TypeScript too (`g(n + 1)`, `v := n +
 1`; `(n + 1)` only inside an operator).
