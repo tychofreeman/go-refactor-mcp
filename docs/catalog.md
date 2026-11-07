@@ -128,7 +128,7 @@ Delete; IntelliJ adds, for Java, the entries below Safe Delete.
 | Extract Method / Function | `extract_function` |
 | Extract Variable | `extract_variable` |
 | Extract Constant | local `const` only, through `extract_variable`; not to package level |
-| Extract Interface | `extract_interface`, in both languages |
+| Extract Interface | `extract_supertype`, in both languages |
 | Inline | `inline_variable`, `inline_function`; no inline of a constant or type |
 | Move | `move_declaration`, `move_method`, `move_file` |
 | Copy | `move_file` with `copy`; not a declaration |

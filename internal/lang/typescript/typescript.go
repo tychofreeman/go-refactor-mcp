@@ -74,11 +74,10 @@ func all() []refactor.RefactoringOf[*workspace.Workspace] {
 		shapes.NewFold(), shapes.NewParameterize(), shapes.NewMergeDuplicate(), shapes.NewRemoveDeadCode(), shapes.NewExtractInterface(), shapes.NewUnionSwitchToMethod(), shapes.NewPrepareSwitchForTypes(), addcase.New(), addelement.New(), replacedecl.New(), simplify.NewSplit(), newMove(), simplify.NewInline(), simplify.NewMoveStatement(), simplify.NewInlineStruct()}
 }
 
-// goNames are other names, a Go tool's or the name shared with
-// java-refactor-mcp, for the TypeScript tool that does their operation,
-// with the same arguments: a step of that name on a TypeScript file runs
-// it. extract_supertype is the shared name of extract_interface.
-var goNames = map[string]string{"extract_supertype": "extract_interface", "type_switch_to_method": "union_switch_to_method"}
+// goNames are Go tools' names for the TypeScript tool that does their
+// operation, with the same arguments: a step of that name on a
+// TypeScript file runs it.
+var goNames = map[string]string{"type_switch_to_method": "union_switch_to_method"}
 
 func lookup(name string) (refactor.RefactoringOf[*workspace.Workspace], bool) {
 	name = refactor.ToolName(name)

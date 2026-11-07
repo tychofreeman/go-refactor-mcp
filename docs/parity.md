@@ -48,8 +48,8 @@ baselines keep working. `docs/tool-contract.md` records the result.
 | move a declaration | move_declaration | move_type | **move** |
 | move a method or field | move_method | move_member | **move** |
 | move a statement | move_statement_up, _down | move_statement | **move_statement**, with a direction |
-| extract an interface or base | extract_interface (TS: extract_supertype runs it, 2026-11-06; Go: not yet) | extract_supertype | **extract_supertype** |
-| a parameter object, extract class | convert_params_to_object, (Go) extract_type | extract_type (`members` of a method, class or record) | **extract_type** (renamed from extract_struct on 2026-11-06, the user: "struct" is Go's word; extract_struct stays an alias); TypeScript has no counterpart yet, and its extract_interface is reached by extract_supertype (2026-11-06) |
+| extract an interface or base | extract_supertype (extract_interface until 2026-11-06, still an alias) | extract_supertype | **extract_supertype** |
+| a parameter object, extract class | convert_params_to_object, (Go) extract_type | extract_type (`members` of a method, class or record) | **extract_type** (renamed from extract_struct on 2026-11-06, the user: "struct" is Go's word; extract_struct stays an alias); TypeScript has no counterpart yet |
 | an expression made a parameter | introduce_parameter | extract_variable `as=parameter` | **extract_variable** `as` |
 | change a type | change_type, change_field_type, change_parameter_type | change_type | **change_type** |
 | move, copy, delete a file | move_file, delete_file | move_file | **move** (a path); a file renamed in place is also **rename** |
@@ -136,7 +136,7 @@ the counterpart of `inline_struct` (52.3, without Go's `elsewhere` and
   #25 says worth a look).
 - `extract_supertype` as a superclass: TS only (Go has none).
 - `add_supertype`: TS `implements` / `extends`; Go the `var _ I = (*T)(nil)`
-  assertion extract_interface already writes.
+  assertion extract_supertype already writes.
 - `encapsulate_field`: a fold in Go and TS (derivations 14-16); a
   composite tool only if runs show the composition is missed.
 - `convert_lambda`: TS arrow, function expression and method reference;
@@ -213,4 +213,4 @@ repos. After the merges in section 2, Go publishes 39.
 | Signature | add_parameter, remove_parameter, move_parameter, introduce_parameter, add_result, change_type, change_field_type, change_parameter_type, convert_params_to_object | the same | add_parameter, remove_parameter, move_parameter, change_type, extract_type |
 | Extract, inline | extract_function, extract_variable, inline_function, inline_variable, split, fold, parameterize, merge_duplicate_function | the same but split | extract_method, extract_variable, inline_function, inline_variable, fold |
 | Conditionals | invert_if, remove_else, prepare_switch_for_types, type_switch_to_method | the same, union_switch_to_method | invert_if, remove_else |
-| Types and moves | rename, move_declaration, move_method, method_to_function, function_to_method, extract_interface, extract_type, inline_struct, remove_dead_code, move_statement_up, move_statement_down, move_file, delete_file | the same but extract_type and inline_struct | rename, move_type, move_member, function_to_method, extract_supertype, add_supertype, pull_up, push_down, encapsulate_field, convert_lambda, convert_to_record, move_statement, move_file |
+| Types and moves | rename, move_declaration, move_method, method_to_function, function_to_method, extract_supertype, extract_type, inline_struct, remove_dead_code, move_statement_up, move_statement_down, move_file, delete_file | the same but extract_type and inline_struct | rename, move_type, move_member, function_to_method, extract_supertype, add_supertype, pull_up, push_down, encapsulate_field, convert_lambda, convert_to_record, move_statement, move_file |

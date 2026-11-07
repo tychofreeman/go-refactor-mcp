@@ -900,7 +900,8 @@ comments between its elements (rewriting it would lose them).
 
 ## Extract interface: what it checks
 
-`extract_interface` names some methods of a type as a new interface,
+`extract_supertype` (`extract_interface` until 2026-11-06, still an alias)
+names some methods of a type as a new interface,
 declared just before the type (TypeScript's tool of the same name, with
 the same arguments: `file`, `name`, `fields`, `new_type`).
 
