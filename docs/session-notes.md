@@ -295,7 +295,8 @@ working patterns, with their steps, are in `docs/patterns.md`.
   makes sense, not for its own sake (the user, 2026-11-06): extract_struct
   became extract_type in all three servers, since "struct" is Go's word and
   the new type in Java is a class or a record; extract_struct stays an alias
-  (`toolAliases`), and the TypeScript route (`goNames`) follows the new name.
+  (`toolAliases`), and the TypeScript route (`goNames`) follows the new name;
+  the A/B instruction files and reference batches use the new name too.
 - **Constructive transformations** (2026-11-05, roadmap 55, as
   java-refactor-mcp's #212-#215): `create_file` with `declaration`, then
   `test_for`, then a skeleton-only flag, each in its own PR; the user's
