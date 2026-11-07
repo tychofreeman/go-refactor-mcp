@@ -3117,7 +3117,9 @@ candidates and the evidence for each, gathered from the friction log.
        user): after a batch refused with nothing changed, `retry: true`
        sends only the changes, `{"step": N, ...}` (its tool kept when
        left out) and `{"after": N, ...}` (0 for first), numbered as in
-       the refused batch; the merged batch runs whole. *Done*
+       the refused batch, a step one past the last adding a last step
+       (java's #251, after a model numbered one so); the merged batch
+       runs whole. *Done*
        (`refactor.Retry`, kept by the server above the languages, since a
        retry may name no file, and by the CLI in a file beside its undo
        stack; `Language.Batch` reports a refusal with nothing changed).

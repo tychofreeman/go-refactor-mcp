@@ -4605,3 +4605,11 @@ old body): the workspace loads before the batch is parsed, and
 move_statement would refuse moving the load above the parse, since both
 print and return. Two refusals resent whole batches of seven and ten
 steps, which retry now saves.
+
+## 2026-11-06: batch retry, a step one past the end
+
+As java's #251: `{"step": N}` one past the refused batch's last adds a
+last step. Through the CLI: insert_statements for the case, replace_text
+on the refusal's format string and its arguments (a literal and two
+arguments of one call; replace_expression of the whole Sprintf call fit
+too), and on a test's literal. Nothing by hand.

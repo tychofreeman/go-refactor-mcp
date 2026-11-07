@@ -46,8 +46,15 @@ func (r *Retry) Args(args json.RawMessage) (json.RawMessage, string) {
 		case (step == nil) == (after == nil):
 			return nil, fmt.Sprintf(`REFUSED batch: retry change %d needs one of step and after: {"step": N, ...} replaces step N, {"after": N, ...} adds a step after it`, i+1)
 		case step != nil:
+			if json.Unmarshal(step, &n) == nil && n == len(steps)+1 {
+				if c["tool"] == nil {
+					return nil, fmt.Sprintf("REFUSED batch: retry change %d: step %d, one past the last, adds a step and needs its tool", i+1, n)
+				}
+				added[len(steps)] = append(added[len(steps)], c)
+				break
+			}
 			if json.Unmarshal(step, &n) != nil || n < 1 || n > len(steps) {
-				return nil, fmt.Sprintf("REFUSED batch: retry change %d: step must be from 1 to %d, the refused batch's steps", i+1, len(steps))
+				return nil, fmt.Sprintf("REFUSED batch: retry change %d: step must be from 1 to %d, the refused batch's steps, or %d to add a last step", i+1, len(steps), len(steps)+1)
 			}
 			for k, v := range c {
 				steps[n-1][k] = v
@@ -86,5 +93,5 @@ func (r *Retry) Keep(args json.RawMessage, refused bool) string {
 		return ""
 	}
 	r.Kept = args
-	return "\n" + `To retry, send batch with "retry": true and only the steps that change: {"step": N, ...} replaces step N (its tool kept when left out), {"after": N, ...} adds a step after step N (0 for first); numbers are this batch's.` + "\n"
+	return "\n" + `To retry, send batch with "retry": true and only the steps that change: {"step": N, ...} replaces step N (its tool kept when left out), {"after": N, ...} adds a step after step N (0 for first, or step one past the last); numbers are this batch's.` + "\n"
 }
