@@ -4587,6 +4587,50 @@ behavior), the tool and its route through `inline` by add_declaration,
 add_field, replace_expression and add_case (insert_statements refused on
 a case clause's line; add_case is the edit for a clause). Nothing by hand.
 
+## 2026-11-06: add_result before a final error
+
+Found adding a bool to `Language.Batch` (string, error): add_result put
+it after the error, and no tool reorders results; fixed add_result in its
+own PR, through the CLI (`docs/sessions/add-result-before-error.md`). Two
+refusals each resent the whole batch of seven steps. The old golden that
+pinned the order was changed by sed (testdata). Nothing by hand in Go.
+
+## 2026-11-06: batch retry (roadmap 54.5)
+
+Through the CLI, test first (`docs/sessions/batch-retry.md`).
+`Language.Batch` gained its bool by add_result, after #592 fixed where
+add_result puts a result before an error. By hand: the CLI's runBatch
+body, written out with replace_statements (47 lines, most of them the
+old body): the workspace loads before the batch is parsed, and
+move_statement would refuse moving the load above the parse, since both
+print and return. Two refusals resent whole batches of seven and ten
+steps, which retry now saves.
+
+## 2026-11-06: batch retry, a step one past the end
+
+As java's #251: `{"step": N}` one past the refused batch's last adds a
+last step. Through the CLI: insert_statements for the case, replace_text
+on the refusal's format string and its arguments (a literal and two
+arguments of one call; replace_expression of the whole Sprintf call fit
+too), and on a test's literal. Nothing by hand.
+
+## 2026-11-06: tool descriptions without refusal lists
+
+As java's #256-#258 (`docs/sessions/descriptions-without-refusals.md`):
+81 replace_text steps on description literals in Go and TypeScript,
+through the CLI. Nothing by hand.
+
+## 2026-11-06: replace_text re-indents new after a loose match
+
+As java's #254. `textutil.Shifted` (test first) and `Indent`, the second
+declared by create_from_usage as a stub when Shifted's body used it.
+By hand: `fileEdit` rewritten whole with replace_declaration (50 lines,
+most of them the old body) to add a result, since add_result refuses a
+function with named results ("not supported yet"); a gap, on the
+roadmap. The golden came after the code (written as Go first, where
+gofmt hides the change; redone as a YAML file); checked red on the old
+code.
+
 ## 2026-11-06: extract_type for TypeScript (roadmap 52.4)
 
 Through the CLI, tests first: the cases by add_declaration with a stub

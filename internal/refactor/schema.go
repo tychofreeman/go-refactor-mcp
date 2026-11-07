@@ -103,7 +103,7 @@ func typeOf(t reflect.Type) string {
 // WithPreserveExceptions returns schema, an object schema as Schema writes
 // them, with the preserve_exceptions argument every refactoring takes.
 func WithPreserveExceptions(schema json.RawMessage) json.RawMessage {
-	const prop = `"preserve_exceptions": {"type": "boolean", "description": "Optional: refuse, rather than move a read through nil, null or undefined, which may fail, past other code and note it."}`
+	const prop = `"preserve_exceptions": {"type": "boolean", "description": "Optional: true to refuse a change to where or whether code may panic or throw."}`
 	s := string(schema)
 	start := strings.Index(s, `"properties": {`)
 	if start < 0 || strings.Contains(s, `"preserve_exceptions"`) {

@@ -12,7 +12,7 @@ feature. The order below follows what that workflow needed in practice;
 `docs/friction-log.md` records each time a refactoring had to be done by
 hand or a tool got in the way.
 
-## Where it stands (2026-11-05)
+## Where it stands (2026-11-06)
 
 Items keep their numbers; each says in its own text which parts are done.
 Finished: 2, 10, 17, 22, 30, 31, 34, 35, 37, 40 (through 41 and 43), 41,
@@ -22,12 +22,13 @@ comparison it asked for is `cmd/refactor-ab`). Waiting on the user: 29
 part left. What is open, the newest priority first:
 
 1. **54** Go, TypeScript and Java at parity: `docs/parity.md` lists the
-   bugs, the shared names, the missing tools and options, and an order;
-   the bugs first (TypeScript's inspect `pattern` refused).
-2. **52** Go and TypeScript at parity: `split` kind phase for TypeScript
-   (52.2; variable and loop are done), then
-   inline_struct's counterpart (52.3, also 51.3's other half). Before the
-   next Go tool the user raises the budget of 50 or two tools merge (25).
+   steps in order. Done: the bugs, the shared names (one `move`,
+   `inline`, `move_statement` and `change_type`), `preserve_exceptions`
+   for Go and TypeScript, and TypeScript's last Go-only tools (52.2,
+   52.3). Next: tools from Java (pull_up and push_down for TypeScript),
+   after the user's review of the tool budget (parity.md section 6).
+2. **52** Go and TypeScript at parity: done but for inline_struct's
+   `elsewhere` and `prefer` in TypeScript, if a run asks for them.
 3. **51** the rest of Fowler's and IntelliJ's catalog: Use Interface Where
    Possible (51.2), fold of compound assignments, a local made a field and
    Consolidate Conditional Expression (51.5). Separate Query from Modifier
@@ -564,7 +565,9 @@ part left. What is open, the newest priority first:
         member. Interfaces outside the module are still checked.
       - **Results:** a tool to change a function's results, with every
         call. *Done: add_result adds one, last, with the value every
-        return gives it (callers `v, _ := f()`), for families too.
+        return gives it (callers `v, _ := f()`), for families too; before
+        a final error, which Go keeps last (2026-11-06: `(int, error)`
+        becomes `(int, bool, error)`, callers `n, _, err := f()`).
         Removing or retyping a result is still to do.*
       - **Edits that change a signature by text** are refused with the
         tool to use. *Done: such an edit still applies if everything
@@ -3118,6 +3121,30 @@ candidates and the evidence for each, gathered from the friction log.
        done* (`analysis.Move` judges strictly and as before;
        `refactor.ExceptionKeeper`; fold's `movedAddress`); *TypeScript
        done* (`tsapi.conflict`, package state for the call).
+    5. `batch` `retry`, as java-refactor-mcp's #247 (2026-11-06, the
+       user): after a batch refused with nothing changed, `retry: true`
+       sends only the changes, `{"step": N, ...}` (its tool kept when
+       left out) and `{"after": N, ...}` (0 for first), numbered as in
+       the refused batch, a step one past the last adding a last step
+       (java's #251, after a model numbered one so); the merged batch
+       runs whole. *Done*
+       (`refactor.Retry`, kept by the server above the languages, since a
+       retry may name no file, and by the CLI in a file beside its undo
+       stack; `Language.Batch` reports a refusal with nothing changed).
+       Its rules are in the refusal, not the description, which was at
+       its budget of 2,500 characters.
+    6. Descriptions without refusal lists, as java's #256-#258 (the
+       user, 2026-11-06, overturning the 2026-10-21 rule of one refusal
+       line): what every tool shares is in the instructions, the
+       refusals explain themselves; *done*
+       (`docs/sessions/descriptions-without-refusals.md`); the A/B check
+       found no more refusals and cost within the noise (cost-history 25).
+    7. replace_text after a loose match moves new's lines to the file's
+       indentation (java's #254: an `old` copied with spaces from
+       inspect, a file with tabs); *done* (`textutil.Shifted`, Go and
+       TypeScript); in Go source gofmt did it already, so it shows in
+       other files. Left: add_result on a function with named results,
+       refused today, which this change had to write around.
 
 55. **Constructive transformations, as java-refactor-mcp's #212-#215**
     (2026-11-05, the user: "I'd like go/ts to work the same way"): create

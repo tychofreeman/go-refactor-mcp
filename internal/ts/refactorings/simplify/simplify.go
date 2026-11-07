@@ -42,8 +42,7 @@ func NewExtractVariable() *ExtractVariable {
 
 func (*ExtractVariable) Description() string {
 	return `Name an expression: const name = expression; is inserted just before its statement and the name used in its place. Extracting p.height * 2 as tall, return p.height * 2 + margin becomes const tall = p.height * 2; return tall + margin;
-Identify the expression by file, the line it starts on and its source text (column if the text is on the line twice). all_occurrences also replaces the same expression later in the block, where nothing in between could change it.
-Refuses, saying why: an expression evaluated only sometimes or more than once whose evaluation could then differ (after && or ?., in a loop's condition), one that would then run before something in its statement it must follow, one assigned to, a method called through it (its this), one in no block (an arrow's expression body), a name it uses that its statement declares.`
+Identify the expression by file, the line it starts on and its source text (column if the text is on the line twice). all_occurrences also replaces the same expression later in the block, where nothing in between could change it.`
 }
 
 // extractVariableArgs are the arguments of extract_variable.
@@ -97,8 +96,7 @@ func NewInlineVariable() *InlineVariable {
 
 func (*InlineVariable) Description() string {
 	return `Replace every use of a local variable or constant with its value, and delete the declaration: the inverse of extract_variable. const tall = p.height * 2; return tall + margin; becomes return p.height * 2 + margin; A declaration of several variables keeps the others.
-Identify the variable by file, line and name at its declaration or any use, or by file, function ("name" or "Class.method") and name, which stays valid later in a batch.
-Refuses, saying why: a variable assigned after its declaration, exported, or declared by a pattern; a value that would be evaluated a different number of times or in another order with what lies between (one with calls needs a single use, with nothing in between it must not pass); a use inside a function, unless the value is constant; a name in the value that means something else at a use.`
+Identify the variable by file, line and name at its declaration or any use, or by file, function ("name" or "Class.method") and name, which stays valid later in a batch.`
 }
 
 // inlineVariableArgs are the arguments of inline_variable.
@@ -141,8 +139,7 @@ func NewMoveDown() *MoveStatement { return &MoveStatement{down: true} }
 // move_statement_up and move_statement_down.
 func NewMoveStatement() refactor.RefactoringOf[*workspace.Workspace] {
 	return refactor.NewMoveStatement[*workspace.Workspace](NewMoveUp(), NewMoveDown(), `Swap a statement with its neighbor in the same block, each with the comments directly above it: direction up swaps it with the one before, down with the one after. With log("start") then const n = beds.length, moving const n = beds.length up puts it first. Use it to bring statements that belong together next to each other, e.g. before extract_function.
-Identify the statement by file and the line it starts on (the outermost statement there, so a whole if or loop moves as one).
-Behavior does not change, so it refuses, saying why, when the order matters: one uses what the other declares (a function declaration aside), or assigns; both may change state, throw or return; one changes state the other reads; a line with more than the statement on it.`)
+Identify the statement by file and the line it starts on (the outermost statement there, so a whole if or loop moves as one).`)
 }
 
 func (m *MoveStatement) Name() string {
@@ -158,8 +155,7 @@ func (m *MoveStatement) Description() string {
 		which, example = "after", `with log("start") then const n = beds.length, moving log("start") down puts it second`
 	}
 	return "Swap a statement with the one " + which + " it in the same block, each with the comments directly above it: " + example + `. Use it to bring statements that belong together next to each other, e.g. before extract_function.
-Identify the statement by file and the line it starts on (the outermost statement there, so a whole if or loop moves as one).
-Behavior does not change, so it refuses, saying why, when the order matters: one uses what the other declares (a function declaration aside), or assigns; both may change state, throw or return; one changes state the other reads; a line with more than the statement on it.`
+Identify the statement by file and the line it starts on (the outermost statement there, so a whole if or loop moves as one).`
 }
 
 func (*MoveStatement) InputSchema() json.RawMessage {
@@ -195,8 +191,7 @@ func NewInvertIf() *InvertIf { return &InvertIf{Named: refactor.Called[invertIfA
 func (*InvertIf) Description() string {
 	return `Negate an if's condition and swap its branches, turning nesting into guard clauses: if (bed.wet) { plant(p) } else { return } becomes if (!bed.wet) { return } followed by plant(p); a last if (x > 0) { total += x } in a loop body becomes if (!(x > 0)) { continue } followed by total += x. keep_else only swaps the branches.
 An if without else is un-nested this way when it ends a function's body (return) or a loop's (continue). The negation is simplified where that is exact (=== and !== swap, ! drops, < and >= swap for strings, De Morgan for && and ||; a number may be NaN, so x > 0 becomes !(x > 0)).
-Identify the if by file and the line of its if keyword (column if the line has two).
-Refuses, saying why: an else-if in the else branch, an if without else anywhere else, a name un-nesting would make clash.`
+Identify the if by file and the line of its if keyword (column if the line has two).`
 }
 
 // invertIfArgs are the arguments of invert_if.
@@ -227,8 +222,7 @@ func NewRemoveElse() *RemoveElse {
 
 func (*RemoveElse) Description() string {
 	return `Remove an else after an if branch that cannot fall through, un-nesting it: if (!bed) { return 0 } else { return bed.depth * 2 } becomes if (!bed) { return 0 } followed by return bed.depth * 2. An else-if becomes a separate if. When it is the else branch that exits, use invert_if instead. With wrap, the inverse: the statements after an if whose branch cannot fall through become its else, each outcome in a branch of its own.
-Identify the if by file and the line of its if keyword (column if the line has two).
-Refuses, saying why: an if branch that can fall through, un-nested names that would clash.`
+Identify the if by file and the line of its if keyword (column if the line has two).`
 }
 
 // removeElseArgs are the arguments of remove_else.
@@ -268,7 +262,7 @@ func (*ExtractFunction) Description() string {
 	return `Move a run of whole statements into a new function, declared after the one they are in, and call it in their place: in function report(beds: Bed[]), extracting let total = 0 and the loop that adds each b.depth to it, as sum, gives const total = sum(beds) there and function sum(beds: Bed[]) { let total = 0; for ...; return total; }. Locals the statements use become parameters; those they declare or assign that are used elsewhere come back as the result (an object of them when several). Statements that use this become a private method of the class; with await, the function is async and the call awaited.
 Identify the statements by file, start_line and end_line: whole statements of one block, as inspect numbers them; or a case's body by function and case ("fern" in function water, or default; a last break stays), which stays valid after earlier steps; a case sharing its body with others gets a case of its own unless split is false; for a value with no case, when the code after the switch is what runs for it, a new case calls a copy of that code. doc becomes the new function's doc comment.
 Returns: when the lines end the function's body, their returns stay and the call becomes return sum(...).
-Lines that return before the function's end return a value the call returns unless it is undefined, or whether they returned. Refuses, saying why: an early return of what may be undefined, a break or continue out of the lines, yield, arguments, this outside a class's method, a type parameter or a type declared in the function, a variable declared in a block of the lines and used after them, declaring some results and assigning others.`
+Lines that return before the function's end return a value the call returns unless it is undefined, or whether they returned.`
 }
 
 // extractFunctionArgs are the arguments of extract_function.
@@ -338,8 +332,7 @@ func NewInlineFunction() *InlineFunction {
 
 func (*InlineFunction) Description() string {
 	return `Replace a call with the function's body, and delete the function when nothing else uses it: the inverse of extract_function. With function area(b: Bed) { return b.width * b.depth; }, const a = area(bed) becomes const a = bed.width * bed.depth. A body that is one expression or one return may be inlined anywhere, and so may guards and a last return (if (s.length <= n) return s; return s.slice(0, n); becomes s.length <= n ? s : s.slice(0, n)); a body of statements where the call is a statement, a declaration's or assignment's value, or a return. A body that returns early elsewhere than as a return's whole value has each return assign the call's variable: the statements after an if that returns become its else, and a return in a loop or switch sets a flag that guards the rest. Parameters are replaced by the arguments where that is safe, and otherwise declared first (const b = arg;; a rest parameter as the array of the rest, a destructured one as its pattern). Of overloads, the implementation is inlined.
-Identify the call by file, line and the function's name (column if the name is on the line twice). With all_calls, every call in the solution is inlined, other files' imports of it go, and the function is deleted (give file and name); if one call cannot be, none is. keep_function keeps the function; an exported one is always kept.
-Refuses, saying why: methods a subclass could override (only static and private ones are inlined), async functions and generators, a body that names a type parameter, a destructured rest parameter, an early return in a call at a module's top level or inside try, super, recursion, a name the body uses that means something else at the call.`
+Identify the call by file, line and the function's name (column if the name is on the line twice). With all_calls, every call in the solution is inlined, other files' imports of it go, and the function is deleted (give file and name); if one call cannot be, none is. keep_function keeps the function; an exported one is always kept.`
 }
 
 // inlineFunctionArgs are the arguments of inline_function.

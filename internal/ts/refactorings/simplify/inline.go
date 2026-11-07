@@ -20,8 +20,7 @@ func (*Inline) Description() string {
 	return `Inline what name names into where it is used, and remove it when nothing else uses it; what it is says which:
 - a function or method, at a call (line): with function area(b: Bed) { return b.width * b.depth; }, const a = area(bed) becomes const a = bed.width * bed.depth. all_calls inlines every call in every file and deletes the function (line optional; keep_function keeps it; an exported one is kept).
 - a local variable or constant, at its declaration or a use (line), or by function and name: const tall = p.height * 2; return tall + margin; becomes return p.height * 2 + margin;
-- with field, a class the class name holds: with class Soil { depth = 3 } and class Bed { soil = new Soil() }, name Bed and field soil move depth into Bed, b.soil.depth becomes b.depth, and Soil goes.
-Refuses, saying why: what each of those refuses (a held class with a constructor or used elsewhere, methods a subclass could override, async functions and generators, a variable assigned after its declaration, a value evaluated another number of times or in another order).`
+- with field, a class the class name holds: with class Soil { depth = 3 } and class Bed { soil = new Soil() }, name Bed and field soil move depth into Bed, b.soil.depth becomes b.depth, and Soil goes.`
 }
 
 // inlineArgs are inline's: those of the tools it stands for.

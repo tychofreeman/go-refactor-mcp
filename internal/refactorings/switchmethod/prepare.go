@@ -33,8 +33,7 @@ becomes
   type Species interface { Water() int }
   func Water(p Plant) int { if s, ok := p.Species.(Species); ok { return s.Water() }; switch p.Species { ... }; return 0 }
 The switch's tag must be an interface (change_field_type to any first). The interface is declared before the function, or gets the method when it exists; a method it already has is used if its signature is the one the cases need, or if fields the cases read can be its parameters (p.Height for height, declared before the switch). The variables the cases use become the method's parameters. Every case must return, or none (then the switch goes in the else). A case of several values (case "fern", "cactus":) is split into a case for each, with a copy of the body, so that each moves alone.
-Identify the switch by file and line, or by function when it is that function's only switch.
-Refuses, saying why: a type that already implements the interface with the method, a case that leaves other than by return or assigns a variable it uses (it could not become a method), a case of several values that declares a label or a type (its body is copied), a tag that would be evaluated again with another value.`
+Identify the switch by file and line, or by function when it is that function's only switch.`
 }
 
 type prepareArgs struct {

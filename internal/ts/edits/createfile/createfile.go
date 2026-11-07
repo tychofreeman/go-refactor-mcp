@@ -22,7 +22,7 @@ func New() *CreateFile { return &CreateFile{Named: refactor.Called[createFileArg
 func (*CreateFile) ChangesBehavior() {}
 
 func (*CreateFile) Description() string {
-	return `Create a new file, TypeScript or not (a fixture, JSON), with any missing directories: an edit. A source file a project's include takes joins that project; what it adds must type-check, so a test written first goes with what it calls, in one batch with check "end".
+	return `Create a new file, TypeScript or not (a fixture, JSON), with any missing directories. A source file a project's include takes joins that project; what it adds must type-check, so a test written first goes with what it calls, in one batch with check "end".
 With declaration in place of content, a class, interface or enum from its header: "export class Bed extends Soil implements Planter" writes the class with, for each method its interfaces and abstract base require, the method throwing new Error("not implemented"), and each required property with a definite-assignment mark (readonly size!: number), importing what they name. With test_for, a test file with a red test of a function or Class.method, as add_declaration's test_for writes it.
 The file must not exist, unless overwrite is set to replace all of it; undo removes or restores it.`
 }

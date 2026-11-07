@@ -28,6 +28,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/lang"
 	"github.com/tychofreeman/go-refactor-mcp/internal/lang/golang"
 	"github.com/tychofreeman/go-refactor-mcp/internal/lang/typescript"
+	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 )
 
 // Version is what the build knows of its source, reported to MCP clients
@@ -70,7 +71,7 @@ const Instructions = `Refactoring and editing tools for the Go module in this pr
 
 Two kinds of tool, by what they guarantee:
 - Refactorings preserve behavior. They find every reference with the type checker (every use and call, and a doc comment that starts with the name), so there is no need to search for them first; they refuse changes that would alter behavior.
-- Edits change behavior on purpose: the step that adds or changes a feature.
+- Edits change behavior on purpose: the step that adds or changes a feature. Edits import the packages their code names.
 Every step, refactoring or edit, starts from code that type-checks and must leave code that type-checks; a step that would not is refused with the errors, and nothing changes. An edit may also start from code that does not type-check if it fixes some of the errors and adds none (add_field for a field a test written first uses). And an edit that calls functions or methods nothing declares yet gets stubs for them (create_from_usage), so to write a failing test first, just write the test.
 Some tools choose for you (create_from_usage chooses a stub's signature and file); their result lists each choice on a "chose:" line. Check them: give the choice explicitly, or undo, to change it.
 
@@ -88,7 +89,7 @@ Which tool, by what you want to do:
 How to work with them:
 1. Call inspect (no arguments) for an overview. Inspect a file to see its declarations without their bodies, with line numbers: a third to a half of reading the whole file. Then read what you will change: inspect with function, or start_line/end_line, or several at once with targets; or several declarations by name alone with names; how each use treats a field or function, with uses. Each function shows its complexity, nesting, and whether calling it has side effects (calls of a function without them are easier to move or reorder).
 2. Refactor only while tests pass: first to make the change easy, after it to remove duplication. A failing test needs passing code first.
-3. Apply ONE tool per call, or, when you can plan several steps from what you have read, send them together with batch: one call, rolled back as a whole if any step is refused. A step's args are that tool's own arguments, so if your client loads tool schemas on demand, first load the schema of every tool its steps use, all in one request, rather than guessing their names. Load schemas in the same response as another call, never in a turn of their own: when you read the code you will change, load the tools you will change it with in that response. Each call returns APPLIED with what changed, or REFUSED with the reason; a refusal changes nothing, so read it and choose differently.
+3. Apply ONE tool per call, or, when you can plan several steps from what you have read, send them together with batch: one call, rolled back as a whole if any step is refused. A step's args are that tool's own arguments, so if your client loads tool schemas on demand, first load the schema of every tool its steps use, all in one request, rather than guessing their names. Load schemas in the same response as another call, never in a turn of their own: when you read the code you will change, load the tools you will change it with in that response. Each call returns APPLIED with what changed, or REFUSED with why and what to do instead (descriptions do not list refusals); a refusal changes nothing.
 4. Line numbers change after edits. Before a single step that needs them, re-inspect the code an earlier step changed. In a batch, give line numbers as they were when the batch began (from the inspect you planned it with): the batch moves them past the earlier steps. To address what an earlier step of the batch made, give a reference instead of a number: "$prev.end", "$2.start", "$helper.end+1" (see batch). Tools that target a declaration (rename, add_parameter, move, ...) also accept file and name without line: name is then a package-level symbol of file's package (Name, Type.Method or Type.Field), which stays valid after edits.
 5. Use check (with run_tests) at the end, and undo if a step made the code worse. Every step can be undone.
 
@@ -124,6 +125,7 @@ type Server struct {
 	golang     *golang.Language     // nil when the root holds no Go
 	typescript *typescript.Language // nil when it holds no TypeScript
 	langs      *lang.Dispatcher     // chooses the language of each call
+	retry      refactor.Retry       // the last batch refused with nothing changed
 }
 
 // byName removes what offers lines by number from the texts that
@@ -300,8 +302,8 @@ func (s *Server) MCP() *mcp.Server {
 	srv.AddTool(&mcp.Tool{
 		Name: "batch",
 		Description: s.forLanguages(`Run several refactorings and edits in order, in one call, planned from one inspect. Each step is {tool, args}: a tool and the arguments it takes when called alone; each runs on the code the earlier steps left.
-Give line numbers and columns as in the code you inspected before the batch: the batch moves them past the earlier steps. A line an earlier step rewrote cannot be given by number. Address a declaration by name (file and name, no line), or give a reference in place of line, start_line or end_line: "$prev.start" or "$prev.end" (the first or last line the step before added or changed in that file), "$2.end" (step 2's), "$helper.end" (the step with "id": "helper"), with an offset such as "$prev.end+1". A step that changed several places, such as a rename, has no range.
-If a step is refused, nothing changes and the result says which step and why; one undo reverts the whole batch. A step {"tool": "check"} is a checkpoint: the code must type-check there (args run_tests and packages also run go test); if a later step is refused, the steps up to the last checkpoint that passed are kept, as one change. Independent steps can instead be separate calls in one turn.
+Give line numbers and columns as in the code you inspected before the batch: the batch moves them past the earlier steps. A line an earlier step rewrote cannot be given by number. Address a declaration by name (file and name, no line), or give a reference in place of line, start_line or end_line: "$prev.start" or "$prev.end" (the first or last line the step before added or changed in that file), "$2.end" (step 2's), "$helper.end" (the step with "id": "helper"), with an offset such as "$prev.end+1". A step that changed several places (a rename) has no range.
+If a step is refused, nothing changes and the result says which step and why; one undo reverts the whole batch. A step {"tool": "check"} is a checkpoint: the code must type-check there (run_tests runs the tests too); if a later step is refused, the steps up to the last checkpoint that passed are kept, as one change. Independent steps can be separate calls in one turn.
 check "end" type-checks only after the last step, so edits may pass through code that does not compile yet (a declaration, then its first use); refactorings still need code that type-checks, so just before one the stubs and imports earlier edits need are added. A batch whose edit does not type-check runs again with "end", and functions the steps call but nothing declares get stubs (create_from_usage).`),
 		InputSchema: json.RawMessage(`{
   "type": "object",
@@ -312,16 +314,16 @@ check "end" type-checks only after the last step, so edits may pass through code
       "items": {
         "type": "object",
         "properties": {
-          "id":   {"type": "string", "description": "Optional: later steps address its lines as $id.start, $id.end."},
+          "id":   {"type": "string", "description": "Later steps address its lines as $id.start, $id.end."},
           "tool": {"type": "string", "description": "A refactoring or edit."},
-          "args": {"type": "object", "description": "That tool's arguments (see its schema)."}
+          "args": {"type": "object", "description": "That tool's arguments (see its schema)."},
+          "step": {"type": "integer"}, "after": {"type": "integer"}
         },
-        "required": ["tool", "args"],
         "additionalProperties": false
       }
     },
     "report": {"type": "string", "enum": ["diff", "summary"], "description": "After the steps' summaries, the change (default) or nothing more."},
-    "check":  {"type": "string", "enum": ["each", "end"], "description": "Type-check after each step (default) or only after the last."}
+    "check":  {"type": "string", "enum": ["each", "end"], "description": "Type-check after each step (default) or only after the last."}, "retry": {"type": "boolean"}
   },
   "required": ["steps"],
   "additionalProperties": false
@@ -432,15 +434,19 @@ func (s *Server) undo(args json.RawMessage) *mcp.CallToolResult {
 
 // batch runs the steps of one batch call; see the tool's description.
 func (s *Server) batch(args json.RawMessage) *mcp.CallToolResult {
+	args, refused := s.retry.Args(args)
+	if refused != "" {
+		return textResult(refused)
+	}
 	l, refused := s.langs.For(args)
 	if refused != "" {
 		return textResult(refused)
 	}
-	text, err := l.Batch(args)
+	text, unchanged, err := l.Batch(args)
 	if err != nil {
 		return toolError(err)
 	}
-	return textResult(text)
+	return textResult(text + s.retry.Keep(args, unchanged))
 }
 
 func (s *Server) check(ctx context.Context, args json.RawMessage) *mcp.CallToolResult {

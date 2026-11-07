@@ -23,8 +23,7 @@ func (*Split) Description() string {
 kind variable: a variable given a new value that does not depend on its old one becomes a new variable from there: in let n = beds.length; log(n); n = 3 * beds.length; log(n), new_name waterings at the assignment gives const waterings = 3 * beds.length and the uses after it waterings.
 kind loop: a loop doing two independent things becomes two: for (const b of beds) { water += b.water; plants += b.plants.length } at the second statement becomes for (const b of beds) { water += b.water } then for (const b of beds) { plants += b.plants.length }.
 kind phase: what the statements before line compute for the rest goes into an object of a new type, and the rest becomes the function new_name of it: const litres = b.rows * 2; const total = litres * days; return total * rate at the second line, with type Usage and new_name price, gives return price({ litres }, days, rate) and function price({ litres }: Usage, days: number, rate: number).
-Identify a variable by file, line (the assignment) and name; a loop by file, line (the for) and at (the second loop's first statement); a phase by file and line (its first statement).
-Refuses, saying why: an assignment that reads the old value or is in a block inside the variable's; a variable a closure refers to; a name already taken; loop parts that leave the loop, depend on each other or both have effects; a header the body changes or with effects, or a for...of over what is not known to be an array.`
+Identify a variable by file, line (the assignment) and name; a loop by file, line (the for) and at (the second loop's first statement); a phase by file and line (its first statement).`
 }
 
 // splitArgs are the arguments of split.

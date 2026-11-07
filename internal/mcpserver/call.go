@@ -39,7 +39,7 @@ func (s *Server) Call(tool string, args json.RawMessage) (string, bool, error) {
 		text, err := l.Inspect(args)
 		return text, false, err
 	case "batch":
-		text, err := l.Batch(args)
+		text, _, err := l.Batch(args)
 		return text, strings.HasPrefix(text, "REFUSED"), err
 	}
 	return l.Step(tool, args)

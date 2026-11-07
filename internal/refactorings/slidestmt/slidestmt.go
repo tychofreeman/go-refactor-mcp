@@ -32,8 +32,7 @@ func NewDown() *MoveStatement { return &MoveStatement{down: true} }
 // move_statement_down.
 func New() refactor.Refactoring {
 	return refactor.NewMoveStatement[*workspace.Workspace](NewUp(), NewDown(), `Swap a statement with its neighbor in the same block, each with the comments directly above it: direction up swaps it with the one before, down with the one after. With log.Print("start") then n := len(xs), moving n := len(xs) up puts it first. Use it to bring statements that belong together next to each other, e.g. before extract_function.
-Identify the statement by file and the line it starts on (the outermost statement there, so a whole if or loop moves as one).
-Behavior does not change, so it refuses, saying why, when the order matters: one uses what the other declares or assigns; one has side effects the other could see, or that would then happen or not when the other panics or does not finish; both could panic; a statement that returns or jumps out; a line with more than the statement on it.`)
+Identify the statement by file and the line it starts on (the outermost statement there, so a whole if or loop moves as one).`)
 }
 
 func (m *MoveStatement) Name() string {
@@ -49,8 +48,7 @@ func (m *MoveStatement) Description() string {
 		which, example = "after", `with log.Print("start") then n := len(xs), moving log.Print("start") down puts it second`
 	}
 	return "Swap a statement with the one " + which + " it in the same block, each with the comments directly above it: " + example + `. Use it to bring statements that belong together next to each other, e.g. before extract_function.
-Identify the statement by file and the line it starts on (the outermost statement there, so a whole if or loop moves as one).
-Behavior does not change, so it refuses, saying why, when the order matters: one uses what the other declares or assigns; one has side effects the other could see, or that would then happen or not when the other panics or does not finish; both could panic; a statement that returns or jumps out; a line with more than the statement on it.`
+Identify the statement by file and the line it starts on (the outermost statement there, so a whole if or loop moves as one).`
 }
 
 func (*MoveStatement) InputSchema() json.RawMessage {

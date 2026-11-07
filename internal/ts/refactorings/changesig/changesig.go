@@ -53,8 +53,7 @@ func NewAdd() *AddParameter {
 
 func (*AddParameter) Description() string {
 	return `Add a parameter to a function or method, and pass the same value for it at every call in the solution: with parameter unit, type string and value "L", function water(bed: string, liters: number) becomes water(bed: string, liters: number, unit: string), and water("roses", 2) becomes water("roses", 2, "L"). The body does not use it yet, so behavior is unchanged; add it, then change the body.
-Identify the function by file and name (Class.method for a method; Class.constructor, whose calls are the news of the class and the super calls of classes extending it). A method changes with its family: the interface method it implements (Iface.method names one), the class method it overrides, and every other implementation and override, with the calls through each. value must mean the same at every call (a name every call sees alike); before puts the parameter ahead of that one (default: last, before a rest parameter). A call passing fewer arguments gets undefined for those it skips. replace_variable makes a variable at a module's top level the body reads a parameter: parameter rate, value rate turns function cost(n: number) { return n * rate; } into cost(n: number, rate: number), and each call passes rate.
-Refuses, saying why: a function used as a value (xs.map(f) passes an index), a call that spreads its arguments, an overload with too few parameters to take it where it goes (overloads change with the implementation), a class extending one without a constructor of its own, a name the body already reads, a value a call cannot see.`
+Identify the function by file and name (Class.method for a method; Class.constructor, whose calls are the news of the class and the super calls of classes extending it). A method changes with its family: the interface method it implements (Iface.method names one), the class method it overrides, and every other implementation and override, with the calls through each. value must mean the same at every call (a name every call sees alike); before puts the parameter ahead of that one (default: last, before a rest parameter). A call passing fewer arguments gets undefined for those it skips. replace_variable makes a variable at a module's top level the body reads a parameter: parameter rate, value rate turns function cost(n: number) { return n * rate; } into cost(n: number, rate: number), and each call passes rate.`
 }
 
 // addParameterArgs are the arguments of add_parameter.
@@ -98,8 +97,7 @@ func NewRemove() *RemoveParameter {
 func (*RemoveParameter) Description() string {
 	return `Remove a parameter the body does not read, and its argument at every call in the solution: removing height, function prune(bed: string, height: number) becomes prune(bed: string), and prune("roses", 3) becomes prune("roses"). Use it last when taking a feature out: first change the body so it no longer reads the parameter.
 With value, a parameter the body reads goes too, when every call passes that expression of this or the other parameters, the inverse of introduce_parameter: value "this.depth" makes describe(p: Plant, depth: number) { return p.name + depth; } describe(p: Plant) { return p.name + this.depth; }, and bed.describe(rose, bed.depth) bed.describe(rose).
-Identify the function by file and name (Class.method for a method), and give the parameter. A method changes with its family: the interface method it implements (Iface.method names one), the class method it overrides, and every other implementation and override, with the calls through each. A dropped argument must plainly have no effects: a name, a literal, this, a property of one, or a function.
-Refuses, saying why: a body that reads the parameter or arguments, a parameter property (constructor(public soil: string)), a function used as a value, a call that spreads its arguments, an argument that could have effects.`
+Identify the function by file and name (Class.method for a method), and give the parameter. A method changes with its family: the interface method it implements (Iface.method names one), the class method it overrides, and every other implementation and override, with the calls through each. A dropped argument must plainly have no effects: a name, a literal, this, a property of one, or a function.`
 }
 
 func (*RemoveParameter) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
@@ -199,8 +197,7 @@ func NewMove() *MoveParameter {
 
 func (*MoveParameter) Description() string {
 	return `Move a parameter to another position, and its argument at every call in the solution: with parameter height and before bed, function prune(bed: string, height: number) becomes prune(height: number, bed: string), and prune("roses", 3) becomes prune(3, "roses").
-Identify the function by file and name (Class.method for a method); before is the parameter it goes ahead of (default: last, before a rest parameter). A method changes with its family: the interface method it implements (Iface.method names one), the class method it overrides, and every other implementation and override, with the calls through each.
-Refuses, saying why: a call where the new order of evaluation could matter (an argument that could have effects), a call that passes only some of the arguments it reorders, a rest parameter, a function used as a value.`
+Identify the function by file and name (Class.method for a method); before is the parameter it goes ahead of (default: last, before a rest parameter). A method changes with its family: the interface method it implements (Iface.method names one), the class method it overrides, and every other implementation and override, with the calls through each.`
 }
 
 // moveParameterArgs are the arguments of move_parameter.
@@ -236,7 +233,7 @@ func NewIntroduce() *IntroduceParameter {
 func (*IntroduceParameter) Description() string {
 	return `Replace an expression in a function's body with a new parameter, and pass the expression at every call, written in the call's own terms: introducing p.height as height, function label(p: Plant): string { return p.name + p.height; } becomes label(p: Plant, height: number) with the body p.name + height, and label(rose) becomes label(rose, rose.height). Then remove_parameter p once the body no longer reads it. this works too in a method: this.depth in Bed.describe becomes bed.depth at bed.describe(rose).
 Identify the expression by file, function (name, Class.method or Class.constructor) and its source text; every occurrence in the body that means the same is replaced. The parameter goes last, before a rest parameter; its type is the expression's.
-The expression is then evaluated once, at the call, so it must have no effects and read nothing the body changes before it reads it. Refuses, saying why: a local of the function, a name a call sees otherwise, an argument that could have effects (it is evaluated twice), an expression in a loop or closure that reads changing state, a function used as a value.`
+The expression is then evaluated once, at the call, so it must have no effects and read nothing the body changes before it reads it.`
 }
 
 // introduceParameterArgs are the arguments of introduce_parameter.
@@ -279,8 +276,7 @@ func NewParamsToObject() *ParamsToObject {
 
 func (*ParamsToObject) Description() string {
 	return `Bundle a function's parameters into one object, destructured so that the body keeps its names, and pass an object literal at every call in the solution: function water(bed: string, liters = 2) becomes water({ bed, liters = 2 }: { bed: string; liters?: number }), and water("roses", 3) becomes water({ bed: "roses", liters: 3 }). With type_name, the object's type is an interface declared just before the function (WaterOptions). When every field is optional, the object defaults to {}. With parameters, only those go into it, in the place of the first: sow(bed: string, rows: number, depth: number) with ["rows", "depth"] becomes sow(bed: string, { rows, depth }: ...).
-Identify the function by file and name (Class.method for a method, Class.constructor). A method changes with its family, as for add_parameter.
-Refuses, saying why: a body that reads arguments, a rest parameter, a parameter that is already destructured or is a parameter property, a function used as a value, a call that spreads its arguments.`
+Identify the function by file and name (Class.method for a method, Class.constructor). A method changes with its family, as for add_parameter.`
 }
 
 // paramsToObjectArgs are the arguments of convert_params_to_object.
@@ -321,8 +317,7 @@ func NewAddResult() *AddResult {
 
 func (*AddResult) Description() string {
 	return `Add a result to a function or method (change_return_type is another name for it in a batch): its result becomes an object holding the old result and the new one, every return gives value for the new one, and every call that uses the result reads the old one: with field error, type string | null and value null, function load(id: string): string becomes load(id: string): { value: string; error: string | null }, return x becomes return { value: x, error: null }, and const v = load("a") becomes const v = load("a").value; a call as a statement stays. Then make the body return real errors. kept names the old result (default value).
-Identify the function by file and name (Class.method for a method). value must plainly have no effects. A method changes with its family, as for add_parameter.
-Refuses, saying why: a function that returns nothing (void), an async function or generator, a function used as a value, a call that spreads its arguments.`
+Identify the function by file and name (Class.method for a method). value must plainly have no effects. A method changes with its family, as for add_parameter.`
 }
 
 // addResultArgs are the arguments of add_result.
@@ -384,8 +379,7 @@ func (*ChangeFieldType) ChangesBehavior() {}
 
 func (*ChangeFieldType) Description() string {
 	return `Change the declared type of a property of a class, an interface or an object type: with name Plant.height and type Centimeters, height: number becomes height: Centimeters (a property without a type gets one). Types are erased, so no value changes, but the uses stay as they are: an edit, so that a batch with check "end" can change those that no longer type-check after it (an assertion such as p.height as number, or another annotation); alone, it is refused, listing them.
-Identify the property by file and name as Type.property. values, narrowing, maps each old constant to a value of the new type: {"fern": "FERN"} turns species: "fern" and p.species === "fern" into species: FERN and p.species === FERN.
-Refuses, saying why: a method or accessor, a type alias that is not an object type (change it with change_type).`
+Identify the property by file and name as Type.property. values, narrowing, maps each old constant to a value of the new type: {"fern": "FERN"} turns species: "fern" and p.species === "fern" into species: FERN and p.species === FERN.`
 }
 
 // changeFieldTypeArgs are the arguments of change_field_type.
@@ -421,8 +415,7 @@ func (*ChangeParameterType) ChangesBehavior() {}
 
 func (*ChangeParameterType) Description() string {
 	return `Change the declared type of a function's or method's parameter: with name water, parameter liters and type Liters, function water(bed: string, liters: number) becomes water(bed: string, liters: Liters). Types are erased, so no value changes, but the body and the calls stay as they are: an edit, so that a batch with check "end" can change those that no longer type-check after it; alone, it is refused, listing them.
-Identify the function by file and name (Class.method for a method). A method changes with its family, as for add_parameter.
-Refuses, saying why: a function with overload signatures, a destructured parameter.`
+Identify the function by file and name (Class.method for a method). A method changes with its family, as for add_parameter.`
 }
 
 // changeParameterTypeArgs are the arguments of change_parameter_type.
@@ -455,8 +448,7 @@ func NewFunctionToMethod() *FunctionToMethod {
 
 func (*FunctionToMethod) Description() string {
 	return `Turn a function into a method of the class its first parameter is typed with, and change every call: function depth(b: Bed, extra: number): number becomes the method depth(extra: number): number at the end of Bed, with b as this, and depth(bed, 2) becomes bed.depth(2). The reverse of method_to_function. The class must be declared in the function's file: move_declaration the function there first.
-Identify the function by file and name; new_name gives the method another name.
-Refuses, saying why: a name the class, a class it extends or one extending it already has; a body that uses this, assigns the parameter or uses it in a nested function; a function used as a value, generic, overloaded or recursive.`
+Identify the function by file and name; new_name gives the method another name.`
 }
 
 // functionToMethodArgs are the arguments of function_to_method.
@@ -488,8 +480,7 @@ func NewMethodToFunction() *MethodToFunction {
 
 func (*MethodToFunction) Description() string {
 	return `Turn a method into a function whose first parameter is the instance, and change every call: Bed's depth(extra: number): number becomes function depth(bed: Bed, extra: number): number after the class, with this as bed, and bed.depth(2) becomes depth(bed, 2); a file that calls it imports it. The reverse of function_to_method. Use it before moving a method elsewhere, or when it uses little of its class.
-Identify the method by file and name (Class.method); new_name gives the function another name.
-Refuses, saying why: a method that overrides or implements a member, or that a subclass overrides; a static method, a private name (#), a body using super; a method used as a value, called with ?. or calling itself; a name already taken.`
+Identify the method by file and name (Class.method); new_name gives the function another name.`
 }
 
 // methodToFunctionArgs are the arguments of method_to_function.
@@ -519,8 +510,7 @@ func NewMoveMethod() *MoveMethod {
 
 func (*MoveMethod) Description() string {
 	return `Move a method down to a class that extends its class, when every use reaches it through that class: with class Bed extends Soil, moving Soil.acid to Bed takes acid() { return this.ph < 6; } out of Soil and puts it at the end of Bed, and b.acid() on a Bed stays. also names more methods of the class to move with it, such as those that call it on this.
-To move a method to a parameter's type instead, use method_to_function, then function_to_method.
-Refuses, saying why: a use through a value of another class (a Pot extends Soil too), a call on this in a method that does not move, a class to that does not extend the method's, a name to already has, a method that implements an interface's or overrides or is overridden, a static method.`
+To move a method to a parameter's type instead, use method_to_function, then function_to_method.`
 }
 
 // moveMethodArgs are the arguments of move_method.
