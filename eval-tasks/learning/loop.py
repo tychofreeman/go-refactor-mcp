@@ -65,7 +65,7 @@ The change:
 Answer with one JSON object and nothing else:
 {{"batch": {{"steps": [the whole change as gorefactor steps, in order]}}}}{read}
 Prefer refactorings that derive the change
-(fold, inline_function, rename, extract_struct, ...) to edits that rewrite
+(fold, inline_function, rename, extract_type, ...) to edits that rewrite
 code. Code you cannot see here need not be written: steps that address
 it by name carry it with them (extract_function of a case by function
 and case, function_to_method, move_declaration, inline_function), so
