@@ -56,6 +56,10 @@ reasons: `name` for the new thing in the extract tools (a `new_name`
 alias would touch five tools and the A/B reference batches), and the
 schema's repeated `column` text.
 
+A/B, the same eight tasks against cost-history 25's runs: 16/16 passed
+both times, cost -8%, refusals 14 of 140 calls against 17 of 184
+(cost-history 26).
+
 ## Follow-ups
 
 - rename of a struct field with an explicit json tag should not refuse

@@ -1705,6 +1705,31 @@ lists cost nothing measurable: models did not refuse more for not
 being told in advance. About $4.20 spent. Record:
 `docs/sessions/ab-descriptions.md`.
 
+## 26. The reviewed descriptions (Nov 7)
+
+The server of #604 (a technical writer's review: stale names, Go text in
+TypeScript's, the two sentences repeated on every tool said once in the
+instructions, one path anchor, examples that dropped their verb) against
+section 25's runs of the server before it, on the same eight tasks.
+Sonnet, arm mcp, 2 runs per task. Means per run:
+
+| task | before: pass | cost | turns | after: pass | cost | turns |
+|---|---|---|---|---|---|---|
+| feat-symbol-addressing | 2/2 | $0.385 | 23.0 | 2/2 | $0.390 | 22.0 |
+| feat-case-clause | 2/2 | $0.259 | 29.5 | 2/2 | $0.215 | 20.5 |
+| feat-no-echo | 2/2 | $0.417 | 27.5 | 2/2 | $0.322 | 23.5 |
+| feat-compact-diffs | 2/2 | $0.348 | 31.0 | 2/2 | $0.342 | 30.5 |
+| move-to-package | 2/2 | $0.093 | 5.5 | 2/2 | $0.088 | 5.5 |
+| multi-move-rename | 2/2 | $0.112 | 7.0 | 2/2 | $0.111 | 7.5 |
+| notify-userid | 2/2 | $0.179 | 14.5 | 2/2 | $0.180 | 12.5 |
+| warehouse-inline | 2/2 | $0.151 | 12.5 | 2/2 | $0.147 | 13.0 |
+
+16/16 passed both times. Cost $3.59 against $3.89 (-8%), refused results
+14 of 140 gorefactor calls against 17 of 184. Within the noise of 2 runs
+except feat-case-clause (9 turns fewer a run), so the review costs
+nothing and may save a little; about $3.60 spent. Record:
+`docs/sessions/descriptions-review.md`.
+
 ## What made the difference
 
 - **Smaller results** (#75, rename locations): the largest single win when
