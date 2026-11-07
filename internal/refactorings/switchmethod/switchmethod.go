@@ -38,8 +38,7 @@ becomes
   func (Fern) care(p Plant) string { return p.Name }
   func (k Cactus) care(p Plant) string { return k.Note(p.Name) }
 and Species gets care(p Plant) string. The variables a case uses become parameters, the switch's variable (k) the receiver; case nil (or default) stays behind the nil check. Every case must return, or none.
-Identify the switch by file and line, or by function when it is that function's only type switch; method is the new method's name.
-Refuses, saying why: a switch with an init statement or a label, or in a function literal; a type of the module that implements the interface without a case, a case of several types, of a pointer type or of a type of another package, a case that assigns a variable it uses or leaves the case (break, continue, goto, defer), a method name a type or the interface already has.`
+Identify the switch by file and line, or by function when it is that function's only type switch; method is the new method's name.`
 }
 
 type args struct {

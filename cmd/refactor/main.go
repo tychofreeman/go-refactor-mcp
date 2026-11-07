@@ -199,15 +199,25 @@ func runBatch(argv []string, dir, pattern string, dryRun bool) int {
 		fmt.Fprintln(os.Stderr, `batch takes one JSON object: '{"steps":[{"tool":...,"args":{...}}, ...]}'`)
 		return 1
 	}
-	batch, refused := refactorings.ParseBatch(json.RawMessage(argv[0]))
-	if refused != "" {
-		fmt.Println(refused)
-		return 2
-	}
 	ws, err := workspace.Load(dir, pattern)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
+	}
+	retry, keep, err := keptBatch(ws)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	args, refused := retry.Args(json.RawMessage(argv[0]))
+	if refused != "" {
+		fmt.Println(refused)
+		return 2
+	}
+	batch, refused := refactorings.ParseBatch(args)
+	if refused != "" {
+		fmt.Println(refused + keep(args, true))
+		return 2
 	}
 	save, err := keepUndo(ws)
 	if err != nil {
@@ -223,7 +233,7 @@ func runBatch(argv []string, dir, pattern string, dryRun bool) int {
 	if batch.Summary {
 		b.Diff = ""
 	}
-	fmt.Print(b.String())
+	fmt.Print(b.String() + keep(args, !b.Applied && b.Kept == 0))
 	if !b.Applied {
 		return 2
 	}
@@ -335,6 +345,30 @@ func keepUndo(ws *workspace.Workspace) (func(), error) {
 		if err := ws.SaveUndo(path); err != nil {
 			fmt.Fprintln(os.Stderr, "the undo stack was not saved:", err)
 		}
+	}, nil
+}
+
+// keptBatch loads the batch an earlier invocation kept for a retry, from
+// a file beside the undo stack's, and returns it with the function that
+// records how this invocation's batch ended.
+func keptBatch(ws *workspace.Workspace) (*refactor.Retry, func(args json.RawMessage, refused bool) string, error) {
+	path, err := undoFile(ws.Root)
+	if err != nil {
+		return nil, nil, err
+	}
+	path += ".retry"
+	r := &refactor.Retry{}
+	if b, err := os.ReadFile(path); err == nil {
+		r.Kept = b
+	}
+	return r, func(args json.RawMessage, refused bool) string {
+		hint := r.Keep(args, refused)
+		if r.Kept == nil {
+			os.Remove(path)
+		} else if err := os.WriteFile(path, r.Kept, 0o644); err != nil {
+			fmt.Fprintln(os.Stderr, "the refused batch was not kept:", err)
+		}
+		return hint
 	}, nil
 }
 

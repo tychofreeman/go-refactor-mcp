@@ -47,6 +47,18 @@ func TestLocate(t *testing.T) {
 	}
 }
 
+// A loose match moves new's lines to the file's indentation: old read
+// with spaces matched tabs.
+func TestShifted(t *testing.T) {
+	got, how := Shifted("if a {\n    b()\n}", "if a {\n\t\tb()\n\t}", "if a {\n    b()\n        c()\n}")
+	if want := "if a {\n\t\tb()\n\t\t    c()\n}"; got != want || how == "" {
+		t.Errorf("got %q (%s), want %q", got, how, want)
+	}
+	if got, how := Shifted("a  b", "a b", "x\n  y"); got != "x\n  y" || how != "" {
+		t.Errorf("one line, no indentation to go by: %q (%s)", got, how)
+	}
+}
+
 func TestScanAutoSemicolon(t *testing.T) {
 	toks := Scan([]byte("a\nb"))
 	if len(toks) != 4 || toks[1].Off != toks[1].End {

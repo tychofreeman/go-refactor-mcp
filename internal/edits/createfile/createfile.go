@@ -24,7 +24,7 @@ type CreateFile struct{ refactor.Named[createArgs] }
 func New() *CreateFile { return &CreateFile{Named: refactor.Called[createArgs]("create_file")} }
 
 func (*CreateFile) Description() string {
-	return `Create a new file, Go or not (go.mod, JSON, a test fixture), with any missing directories: an edit. A Go file must parse and match its directory's package (a test may use the _test package), and is gofmt-ed. What it calls that nothing declares gets a stub, so a test written first compiles and fails: cart_test.go with if got := (&Cart{}).Total(); got != 0 { ... } also declares func (c *Cart) Total() int.
+	return `Create a new file, Go or not (go.mod, JSON, a test fixture), with any missing directories. A Go file must parse and match its directory's package (a test may use the _test package), and is gofmt-ed. What it calls that nothing declares gets a stub, so a test written first compiles and fails: cart_test.go with if got := (&Cart{}).Total(); got != 0 { ... } also declares func (c *Cart) Total() int.
 With declaration in place of content, a type from its header: declaration "type Sprinkler struct" with implements ["io.Writer"] writes the package clause, type Sprinkler struct{}, var _ io.Writer = (*Sprinkler)(nil), and a stub for each method of io.Writer (func (s *Sprinkler) Write(p []byte) (n int, err error) { panic("not implemented") }); a header without a body gets an empty one. With test_for, a _test.go file with a red test of a function or Type.Method, as add_declaration's test_for writes it.
 For several files, such as a fixture directory, send the create_file steps together in one batch. The file must not exist, unless overwrite is set to replace all of it; undo removes or restores it.`
 }

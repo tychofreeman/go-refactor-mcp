@@ -173,6 +173,10 @@ working patterns, with their steps, are in `docs/patterns.md`.
   broken code if it fixes some errors and adds none. A refactoring may
   too when every error is in a test file written against what it makes
   (2026-10-20), but not between red and green.
+- **A refused batch is kept for a retry** (2026-11-06, as java's #247):
+  `refactor.Retry`, in the server (above the languages: a retry may name
+  no file) and in the CLI (`<undo file>.retry`); a batch kept through a
+  checkpoint is not kept, since its first steps applied.
 - **Stubs are declared lazily, and batches get checkpoints** (2026-10-20):
   in a batch checked at its end, stubs for earlier edits are added just
   before a refactoring; a `check` step type-checks (and may run tests), and
@@ -211,10 +215,14 @@ working patterns, with their steps, are in `docs/patterns.md`.
   (2026-10-21): cutting `fold`'s worked example of near-duplicates lost
   its use there (4/4 runs to 0/4); a fresh model decides whether a tool
   fits from its before/after examples. Write: what it does with a
-  before/after, the addressing hints the schema lacks, and one line of
-  what it refuses. When a PR adds or removes a refusal, change that line
-  (an audit, 2026-10-29, found 11 that had drifted); a definition stays
-  under `TestLoadedToolsStaySmall`'s 1,700 characters.
+  before/after and the addressing hints the schema lacks; not what it
+  refuses, nor what every tool shares (the user, 2026-11-06, as java's
+  #256: "refusals should explain themselves"; this replaced "one line of
+  what it refuses"). Each refusal says why and what to do instead;
+  `docs/checks.md` keeps the lists, and the instructions say once that
+  edits import what they name. A definition stays under
+  `TestLoadedToolsStaySmall`'s 1,700 characters. Checked by A/B the same
+  day (cost-history 25): no more refusals, cost within the noise.
 - **Examples come from no eval task** (2026-10-22): they use one garden
   domain (`Plant`, `Bed`, `Sprinkler`), and `TestExamplesAvoidEvalTasks`
   fails on a name or string of a seeded eval module in published text.

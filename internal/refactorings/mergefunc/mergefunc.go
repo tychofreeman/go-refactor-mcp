@@ -38,9 +38,8 @@ func New() *MergeDuplicate {
 }
 
 func (*MergeDuplicate) Description() string {
-	return `Replace every use of a function with an identical one, and delete it: with func trim(s string) string { return strings.TrimSpace(s) } and func clean(t string) string { return strings.TrimSpace(t) }, merging trim into clean turns trim(x) into clean(x) everywhere and deletes trim. Identical means the same signature and bodies that match node for node; parameters and locals may be named differently, every other name must mean the same. The refusal shows the first difference.
-Identify the function to delete by file and name, or by line at its declaration or any use, and the one to keep by keep_file (any file of its package) and keep_name.
-Refuses, saying why: methods, generic functions, a function to keep that a use cannot reach or could import only through an import cycle.`
+	return `Replace every use of a function with an identical one, and delete it: with func trim(s string) string { return strings.TrimSpace(s) } and func clean(t string) string { return strings.TrimSpace(t) }, merging trim into clean turns trim(x) into clean(x) everywhere and deletes trim. Identical means the same signature and bodies that match node for node; parameters and locals may be named differently, every other name must mean the same.
+Identify the function to delete by file and name, or by line at its declaration or any use, and the one to keep by keep_file (any file of its package) and keep_name.`
 }
 
 type args struct {

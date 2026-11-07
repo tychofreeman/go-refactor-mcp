@@ -36,8 +36,7 @@ func (*ChangeType) Description() string {
 	return `Change a type; what you give says which:
 - name Type.Field: the field's type, every value keeping its meaning: converted where it is written and, where its type matters, read. ID string to ID PlantID turns Plant{ID: s} into Plant{ID: PlantID(s)} and strings.ToUpper(p.ID) into strings.ToUpper(string(p.ID)). values, narrowing to an interface, maps old constants to new values.
 - name (a function, or Type.Method) and parameter: the parameter's type, with the body and every call: to an interface the old type implements (func save(b *bytes.Buffer) to b io.Writer, calls unchanged), to a type with the same underlying type (find(name string) to name UserID: calls convert, find(UserID(n))), or to an alias of the old type.
-- name, a type of the module: what it is, an alias's target (type renderArg = string to any) or a defined type's underlying type. An edit: every use takes the new type. After a parameter is changed to an alias, change the alias here, in a batch with check "end" with the fixes its result lists.
-Refuses, saying why: a use that cannot follow (an address taken), an embedded field, generic types, a parameter the body compares with nil, assigns or takes the address of.`
+- name, a type of the module: what it is, an alias's target (type renderArg = string to any) or a defined type's underlying type. An edit: every use takes the new type. After a parameter is changed to an alias, change the alias here, in a batch with check "end" with the fixes its result lists.`
 }
 
 // ChangesBehavior marks this as an edit.

@@ -30,8 +30,7 @@ func (*ChangeType) Description() string {
 	return `Change a declared type; what you give says which. Types are erased, so no value changes, but the uses stay as they are: each is an edit, so run it in a batch with check "end" together with the changes the uses then need.
 - name Type.property: a property's type, of a class, an interface or an object type: with type Centimeters, height: number becomes height: Centimeters. values, narrowing, maps each old constant to the new type's value: {"fern": "FERN"} turns species: "fern" into species: FERN.
 - name (a function, or Class.method) and parameter: the parameter's type: water(bed: string, liters: number) becomes water(bed: string, liters: Liters); a method changes with its family.
-- name, an alias: what it stands for: type Liters = number to type Liters = number | string.
-Refuses, saying why: a method or accessor as a property, overload signatures, a destructured parameter, an interface or class named alone.`
+- name, an alias: what it stands for: type Liters = number to type Liters = number | string.`
 }
 
 // changeTypeArgs are the arguments of change_type.

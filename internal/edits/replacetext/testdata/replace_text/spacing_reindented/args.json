@@ -1,0 +1,1 @@
+{"file": "beds.yaml", "old": "fern:\n        water: 1", "new": "fern:\n        water: 2\n        sun: full"}

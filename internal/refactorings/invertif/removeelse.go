@@ -26,8 +26,7 @@ func NewRemoveElse() *RemoveElse {
 
 func (*RemoveElse) Description() string {
 	return `Remove an else after an if branch that cannot fall through, un-nesting it: if err != nil { return 0, err } else { return use(v), nil } becomes if err != nil { return 0, err } followed by return use(v), nil. An else-if becomes a separate if. When it is the else branch that exits, use invert_if instead. With wrap, the inverse: the statements after an if whose branch cannot fall through become its else, each outcome in a branch of its own.
-Identify the if by file and the line of its if keyword (column if the line has two).
-Refuses, saying why: an if branch that can fall through, un-nested names that would clash.`
+Identify the if by file and the line of its if keyword (column if the line has two).`
 }
 
 // Plan checks preconditions and computes the edits.

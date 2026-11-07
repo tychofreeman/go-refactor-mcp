@@ -25,9 +25,8 @@ type AddResult struct{ refactor.Named[resultArgs] }
 func NewAddResult() *AddResult { return &AddResult{Named: refactor.Called[resultArgs]("add_result")} }
 
 func (*AddResult) Description() string {
-	return `Add a result to a function or method, last, with the same value at every return, and update every call: with type error and value nil, func load() string becomes func load() (string, error), each return x becomes return x, nil, and v := load() becomes v, _ := load(); a call as a statement stays. Then make the body return real errors.
-Identify the function by file and name, or by line at its declaration or any call. value must have no side effects and not be able to panic.
-Refuses, saying why: named results, a call whose result is used inside an expression or returned by the caller (assign it to a variable first), a declaration of the call's results that states their type, a function used as a value.`
+	return `Add a result to a function or method, last (before a final error), with the same value at every return, and update every call: with type error and value nil, func load() string becomes func load() (string, error), each return x becomes return x, nil, and v := load() becomes v, _ := load(); a call as a statement stays. Then make the body return real errors.
+Identify the function by file and name, or by line at its declaration or any call. value must have no side effects and not be able to panic.`
 }
 
 type resultArgs struct {
@@ -109,10 +108,23 @@ func (t *target) resultEdits(typ string) []edit.TextEdit {
 	case r == nil || len(r.List) == 0:
 		return []edit.TextEdit{insert(t.ftype.Params.Closing+1, " "+typ)}
 	case r.Opening.IsValid():
+		if t.errorLast() {
+			return []edit.TextEdit{insert(r.List[len(r.List)-1].Pos(), typ+", ")}
+		}
 		return []edit.TextEdit{insert(r.Closing, ", "+typ)}
 	default:
+		if t.errorLast() {
+			return []edit.TextEdit{insert(r.Pos(), "("+typ+", "), insert(r.End(), ")")}
+		}
 		return []edit.TextEdit{insert(r.Pos(), "("), insert(r.End(), ", "+typ+")")}
 	}
+}
+
+// errorLast reports whether t's last result is an error, which a new
+// result goes before: Go's results keep an error last.
+func (t *target) errorLast() bool {
+	rs := t.obj.Signature().Results()
+	return rs.Len() > 0 && types.Identical(rs.At(rs.Len()-1).Type(), types.Universe.Lookup("error").Type())
 }
 
 // checkResultValue checks that value type-checks at the top of t's body,
@@ -168,8 +180,17 @@ func (t *target) returnEdits(value string) ([]edit.TextEdit, error) {
 				}
 				indent := strings.Repeat("\t", t.WS.Fset.Position(n.Pos()).Column-1)
 				list := strings.Join(names, ", ")
-				es = append(es, edit.TextEdit{Start: t.Off(n.Pos()), End: t.Off(n.End()), NewText: list + " := " + string(t.Src[t.Off(n.Results[0].Pos()):t.Off(n.Results[0].End())]) + "\n" + indent + "return " + list + ", " + value})
+				ret := list + ", " + value
+				if t.errorLast() {
+					ret = strings.Join(names[:before-1], ", ") + ", " + value + ", " + names[before-1]
+				}
+				es = append(es, edit.TextEdit{Start: t.Off(n.Pos()), End: t.Off(n.End()), NewText: list + " := " + string(t.Src[t.Off(n.Results[0].Pos()):t.Off(n.Results[0].End())]) + "\n" + indent + "return " + ret})
 			default:
+				if t.errorLast() {
+					at := t.Off(n.Results[len(n.Results)-1].Pos())
+					es = append(es, edit.TextEdit{Start: at, End: at, NewText: value + ", "})
+					break
+				}
 				at := t.Off(n.Results[len(n.Results)-1].End())
 				es = append(es, edit.TextEdit{Start: at, End: at, NewText: ", " + value})
 			}
@@ -235,6 +256,10 @@ func (t *target) callResultEdit(c call) (*edit.TextEdit, error) {
 	}
 	where := t.WS.Position(c.expr.Pos())
 	blank := func(after ast.Node) (*edit.TextEdit, error) {
+		if t.errorLast() {
+			at := t.Off(after.Pos())
+			return &edit.TextEdit{Start: at, End: at, NewText: "_, "}, nil
+		}
 		at := t.Off(after.End())
 		return &edit.TextEdit{Start: at, End: at, NewText: ", _"}, nil
 	}

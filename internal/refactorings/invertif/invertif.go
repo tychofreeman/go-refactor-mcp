@@ -40,8 +40,7 @@ func New() *InvertIf { return &InvertIf{Named: refactor.Called[args]("invert_if"
 func (*InvertIf) Description() string {
 	return `Negate an if's condition and swap its branches, turning nesting into guard clauses: if c { A } else { return } becomes if !c { return } followed by A; in a loop body, a last if x > 0 { n += x } becomes if x <= 0 { continue } followed by n += x. keep_else only swaps the branches.
 An if without else is un-nested this way when it ends a function without results (return), a loop body (continue) or a case (break), or when only the function's final return follows it. The negation is simplified where that is exact (== and != swap, < and >= swap for integers and strings, De Morgan for && and ||).
-Identify the if by file and the line of its if keyword (column if the line has two).
-Refuses, saying why: an else-if chain in the else branch, an if without else anywhere else, an if that already exits (a guard clause) or has an empty body, un-nesting that would make names clash.`
+Identify the if by file and the line of its if keyword (column if the line has two).`
 }
 
 type args struct {

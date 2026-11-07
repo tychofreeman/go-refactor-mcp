@@ -34,8 +34,7 @@ func (*ChangeParameterType) Description() string {
 - To an interface the old type implements: func save(b *bytes.Buffer) becomes func save(b io.Writer); calls are unchanged.
 - To a type with the same underlying type, or a number type that holds every old value: func find(name string) becomes func find(name UserID); typed arguments are converted at calls (find(UserID(n))) and the body converts back (string(name)) where the type matters.
 - To an alias of the old type (type renderArg = string): only the declaration changes; change_type then changes the alias.
-Identify the function by file and name, or by line at its declaration or any call; give the parameter and its new type as Go source.
-Refuses, saying why: a body that compares a parameter of a non-interface type with nil, assigns it or takes its address; generic types; a call that passes another call's results.`
+Identify the function by file and name, or by line at its declaration or any call; give the parameter and its new type as Go source.`
 }
 
 // ChecksByCompiling: that the body compiles with the new type is checked
