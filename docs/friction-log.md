@@ -4672,3 +4672,11 @@ refusal (an undefined name in a new file) cost a resend of all 79 lines.
 The first batch sent with sections ended its heredoc early on a line of
 the text equal to the delimiter: the missing section's "@name" went in as
 text, now refused. Nothing by hand.
+
+## place-by-kind (2026-11-07)
+
+By hand: the goldens of the retired `after` and `before` were renamed and
+deleted with `git mv` and `git rm`, and one `out/` directory made with
+`mkdir` and `cp` of its go.mod: no tool moves or deletes a testdata
+directory (`move` of a file path moves one file, and the guard exempts
+testdata). Everything else went through the CLI's batches.

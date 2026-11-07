@@ -167,6 +167,16 @@ working patterns, with their steps, are in `docs/patterns.md`.
 
 ## Decisions and their reasons
 
+- **Layout is the tool's, not the model's** (2026-11-07, the user, as
+  java's #279): `add_declaration` places declarations by kind
+  (`adddecl.places`); `after` and `before` are retired, accepted and
+  ignored (`schema:"-"`, `refactor.unlistedArgs`). Where a declaration
+  sits does not change what Go does, so no option offers the model that
+  choice; a new one would go against this. Where position is meaning
+  (`add_field`, `add_element`, a parameter's place, `insert_statements`),
+  the model still chooses. Refactorings that compose add_declaration
+  place what they make with the unpublished `place_before`; before
+  retiring an argument, look for it in composites' `Expand`.
 - **Claude via MCP is the product** (2026-10-17), not the Ollama loop or
   standalone evaluation. A plan-and-execute loop of our own was tried as an
   experiment (`docs/plan-and-execute.md`, roadmap 29); the user decides on

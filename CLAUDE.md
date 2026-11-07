@@ -94,7 +94,7 @@ with no MCP, build `cmd/refactor` and send the same steps through it
    that does not compile yet (a test before the code it tests).
 5. **Address by name, not line,** where a tool allows it: `file` + `name`
    (`Type.Method`, `Type.Field`), `replace_statements` with `function`,
-   `add_declaration` with `after`/`before`, `replace_declaration` with
+   `replace_declaration` with
    empty `content` to delete. `$prev.end` addresses what an earlier step
    of the batch made.
 6. **Test first through the tools.** Add the test with `add_declaration`

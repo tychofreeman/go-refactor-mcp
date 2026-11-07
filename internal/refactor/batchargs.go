@@ -69,7 +69,7 @@ func argsProblem(schema, args json.RawMessage) string {
 	}
 	var unknown, missing []string
 	for k := range given {
-		if _, ok := s.Properties[k]; !ok {
+		if _, ok := s.Properties[k]; !ok && !slices.Contains(unlistedArgs, k) {
 			unknown = append(unknown, strconv.Quote(k))
 		}
 	}
@@ -250,3 +250,9 @@ func orList(items []string, conj string) string {
 	}
 	return strings.Join(items[:len(items)-1], ", ") + " " + conj + " " + items[len(items)-1]
 }
+
+// unlistedArgs are arguments accepted where a tool's schema does not list
+// them: add_declaration's retired after and before, which it ignores since
+// it places declarations by kind, and place_before, which refactorings that
+// compose add_declaration pass and a model is not offered.
+var unlistedArgs = []string{"after", "before", "place_before"}

@@ -1529,10 +1529,16 @@ before or after the statement, a non-empty block written on one line (use
 ### add_declaration
 
 `add_declaration` adds top-level declarations (functions, methods, types,
-variables, constants, with their doc comments) to an existing file: at its
-end, or just `after` or `before` the top-level declaration of that name
-(`Type.Method` for a method, which `after` alone cannot name when the
-method shares a type's name).
+variables, constants, with their doc comments) to an existing file, each
+placed by kind (2026-11-07, as java's #279): a function or method that
+replaces a stub of the file where the stub was, a method after the last
+method of its type in the file or else after the type, anything else at
+the end; declarations of `content` that go to one place stay together, in
+their order. `after` and `before` are retired: accepted and ignored
+(`refactor.unlistedArgs`), and out of the schema. A refactoring that
+composes add_declaration (convert_params_to_object) passes the
+unpublished `place_before`, to keep what it makes next to what it came
+from.
 The `content` has no package clause and no imports: packages it names are
 imported as for `replace_statements`, and an `import` in it is refused. A
 name the package already declares is refused by the type check, whose

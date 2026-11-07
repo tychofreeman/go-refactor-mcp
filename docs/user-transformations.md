@@ -24,7 +24,7 @@ them in and calls `RunBatch` as it is.
   use what a step chose (the parameters `extract_function` picked, the
   file `create_from_usage` chose).
 - **Against:** portable only for steps addressed by name (`rename`,
-  `inline_variable` with `function`, `add_declaration` with `after`,
+  `inline_variable` with `function`, `add_declaration`,
   `move_declaration`, `replace_text`). A line in a recipe means nothing
   in another file; references such as `$prev.end` (roadmap item 10)
   address the lines the recipe's own steps made.
