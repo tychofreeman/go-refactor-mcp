@@ -3128,8 +3128,8 @@ candidates and the evidence for each, gathered from the friction log.
        user, 2026-11-06, overturning the 2026-10-21 rule of one refusal
        line): what every tool shares is in the instructions, the
        refusals explain themselves; *done*
-       (`docs/sessions/descriptions-without-refusals.md`); an A/B check
-       waits for the user.
+       (`docs/sessions/descriptions-without-refusals.md`); the A/B check
+       found no more refusals and cost within the noise (cost-history 25).
     7. replace_text after a loose match moves new's lines to the file's
        indentation (java's #254: an `old` copied with spaces from
        inspect, a file with tabs); *done* (`textutil.Shifted`, Go and
