@@ -1,4 +1,4 @@
-// Package extractstruct implements extract_struct: move some fields of a
+// Package extractstruct implements extract_type: move some fields of a
 // struct type into a new struct type, embedded in their place.
 //
 // Embedding keeps every use compiling with the same meaning: x.f now
@@ -31,11 +31,11 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
 
-// ExtractStruct is the "extract_struct" refactoring.
+// ExtractStruct is the "extract_type" refactoring.
 type ExtractStruct struct{ refactor.Named[args] }
 
-// New returns the extract_struct refactoring.
-func New() *ExtractStruct { return &ExtractStruct{Named: refactor.Called[args]("extract_struct")} }
+// New returns the extract_type refactoring.
+func New() *ExtractStruct { return &ExtractStruct{Named: refactor.Called[args]("extract_type")} }
 
 func (*ExtractStruct) Description() string {
 	return `Move some fields of a struct into a new struct type, embedded in their place, so that every use (m.path) keeps working: moving path and mode of type mover struct { path string; mode int; n int } into source declares type source struct { path string; mode int } and makes mover struct { source; n int }, and mover{path: p} becomes mover{source: source{path: p}}. To hold it as a named field instead, then rename mover.source (to src: m.path becomes m.src.path). Use it to split a struct that holds two things, or to group fields that belong together, before giving the new type methods or a file of its own.

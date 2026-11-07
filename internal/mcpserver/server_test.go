@@ -225,7 +225,7 @@ func TestInstructionsExampleRuns(t *testing.T) {
 // package-level symbol, in place of file + line + name.
 var symbolTools = []string{
 	"rename", "remove_dead_code", "merge_duplicate_function", "move",
-	"extract_struct", "add_parameter", "remove_parameter", "move_parameter",
+	"extract_type", "add_parameter", "remove_parameter", "move_parameter",
 	"function_to_method", "method_to_function", "add_field",
 }
 
@@ -1076,8 +1076,8 @@ func TestTypeScriptOnly(t *testing.T) {
 	dir := tsSetup(t, nil)
 	cs := connect(t, New(dir))
 	tools := toolDescriptions(t, cs)
-	if _, ok := tools["extract_struct"]; ok {
-		t.Error("a TypeScript-only repo is offered Go's extract_struct")
+	if _, ok := tools["extract_type"]; ok {
+		t.Error("a TypeScript-only repo is offered Go's extract_type")
 	}
 	for name, own := range map[string]string{"create_file": "TypeScript or not", "add_declaration": "inside Bed", "replace_text": "files that are not source", "replace_statements": "With function \"Bed.plant\"", "insert_statements": "constructor(soil: string) {}", "replace_expression": "p.height * 2", "add_field": "add_property is another name", "create_from_usage": "throw new Error(\"not implemented\")", "add_parameter": "water(\"roses\", 2, \"L\")", "remove_parameter": "prune(\"roses\")", "move_parameter": "prune(3, \"roses\")", "introduce_parameter": "label(rose, rose.height)", "convert_params_to_object": "water({ bed: \"roses\", liters: 3 })", "add_result": "load(\"a\").value"} {
 		if d := tools[name]; !strings.Contains(d, own) {
@@ -1143,8 +1143,12 @@ func TestGoAndTypeScript(t *testing.T) {
 	mustContain(t, "rename in TypeScript", out, `renamed "morning" to "dawn"`)
 	out, _ = call(t, cs, "rename", map[string]any{"file": "calc/calc.go", "name": "Apply", "new_name": "Scale"})
 	mustContain(t, "rename in Go", out, `"Apply" to "Scale"`)
-	out, _ = call(t, cs, "extract_struct", map[string]any{"file": "src/bed.ts", "name": "Bed", "fields": []any{"soil"}, "new_type": "Soil"})
-	mustContain(t, "a Go tool's name for a TypeScript one", out, "REFUSED extract_interface:")
+	out, _ = call(t, cs, "extract_supertype", map[string]any{"file": "src/bed.ts", "name": "Bed", "fields": []any{"soil"}, "new_type": "Soil"})
+	mustContain(t, "TypeScript's extract_supertype", out, "REFUSED extract_supertype:")
+	out, _ = call(t, cs, "batch", map[string]any{"steps": []any{map[string]any{"tool": "extract_interface", "args": map[string]any{"file": "src/bed.ts", "name": "Bed", "fields": []any{"soil"}, "new_type": "Soil"}}}})
+	mustContain(t, "extract_interface, the old name, in a batch", out, "extract_supertype")
+	out, _ = call(t, cs, "extract_type", map[string]any{"file": "src/bed.ts", "name": "Bed", "fields": []any{"soil"}, "new_type": "Soil"})
+	mustContain(t, "extract_type has no TypeScript counterpart", out, "REFUSED extract_type: it does not work on TypeScript files yet")
 	out, _ = call(t, cs, "add_element", map[string]any{"file": "src/bed.ts", "line": 1, "element": "1"})
 	mustContain(t, "TypeScript's add_element", out, "REFUSED add_element: no object or array literal starts on line 1")
 	out, _ = call(t, cs, "batch", map[string]any{"steps": []any{

@@ -1,6 +1,6 @@
 // Package shapes has the TypeScript refactorings that change the shape
 // of code across a file or the solution: fold, parameterize,
-// merge_duplicate_function, remove_dead_code, extract_interface and
+// merge_duplicate_function, remove_dead_code, extract_supertype and
 // union_switch_to_method.
 package shapes
 
@@ -201,9 +201,9 @@ type ExtractInterface struct {
 	refactor.Named[extractInterfaceArgs]
 }
 
-// NewExtractInterface returns extract_interface.
+// NewExtractInterface returns extract_supertype.
 func NewExtractInterface() *ExtractInterface {
-	return &ExtractInterface{Named: refactor.Called[extractInterfaceArgs]("extract_interface")}
+	return &ExtractInterface{Named: refactor.Called[extractInterfaceArgs]("extract_supertype")}
 }
 
 func (*ExtractInterface) Description() string {
@@ -211,7 +211,7 @@ func (*ExtractInterface) Description() string {
 Identify the type by file and name, or by line at its declaration or a use; fields are the members, new_type the new interface's name, declared just before the type (exported with it).`
 }
 
-// extractInterfaceArgs are the arguments of extract_interface.
+// extractInterfaceArgs are the arguments of extract_supertype.
 type extractInterfaceArgs struct {
 	File    string   `json:"file" desc:"Path of the file declaring the type, relative to the root."`
 	Line    int      `json:"line,omitempty" desc:"1-based line of its declaration or a use. Omit it to find name at the top level of file."`

@@ -450,7 +450,7 @@ type algebraCall struct {
 // refactoringTools are the operations that restructure code, as opposed
 // to the edits through which the model writes it.
 var refactoringTools = map[string]bool{
-	"rename": true, "extract_function": true, "extract_variable": true, "extract_struct": true,
+	"rename": true, "extract_function": true, "extract_variable": true, "extract_type": true, "extract_struct": true,
 	"inline_function": true, "inline_variable": true, "move_declaration": true, "move_parameter": true,
 	"move_statement_up": true, "move_statement_down": true, "add_parameter": true, "remove_parameter": true,
 	"introduce_parameter": true, "change_parameter_type": true, "add_result": true, "change_field_type": true,

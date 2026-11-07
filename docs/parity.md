@@ -48,8 +48,8 @@ baselines keep working. `docs/tool-contract.md` records the result.
 | move a declaration | move_declaration | move_type | **move** |
 | move a method or field | move_method | move_member | **move** |
 | move a statement | move_statement_up, _down | move_statement | **move_statement**, with a direction |
-| extract an interface or base | extract_interface | extract_supertype | **extract_supertype** |
-| a parameter object, extract class | convert_params_to_object, (Go) extract_struct | extract_struct (`fields` for a class) | **extract_struct**; TS's `extract_struct` alias for extract_interface moves to extract_supertype |
+| extract an interface or base | extract_supertype (extract_interface until 2026-11-06, still an alias) | extract_supertype | **extract_supertype** |
+| a parameter object, extract class | convert_params_to_object, (Go) extract_type | extract_type (`members` of a method, class or record) | **extract_type** (renamed from extract_struct on 2026-11-06, the user: "struct" is Go's word; extract_struct stays an alias); TypeScript has no counterpart yet |
 | an expression made a parameter | introduce_parameter | extract_variable `as=parameter` | **extract_variable** `as` |
 | change a type | change_type, change_field_type, change_parameter_type | change_type | **change_type** |
 | move, copy, delete a file | move_file, delete_file | move_file | **move** (a path); a file renamed in place is also **rename** |
@@ -136,12 +136,23 @@ the counterpart of `inline_struct` (52.3, without Go's `elsewhere` and
   #25 says worth a look).
 - `extract_supertype` as a superclass: TS only (Go has none).
 - `add_supertype`: TS `implements` / `extends`; Go the `var _ I = (*T)(nil)`
-  assertion extract_interface already writes.
+  assertion extract_supertype already writes.
 - `encapsulate_field`: a fold in Go and TS (derivations 14-16); a
   composite tool only if runs show the composition is missed.
 - `convert_lambda`: TS arrow, function expression and method reference;
   Go has no counterpart worth a tool.
 - `convert_to_record`: Java-only.
+- `batch` `retry` (java #247): after a refused batch, send only the
+  changed steps (`{"step": N, ...}` replaces one, `{"after": N, ...}`
+  adds one), numbered as in the refused batch; the batch still runs
+  whole. Go and TypeScript have checkpoints (a `check` step) and the
+  automatic rerun with check "end", not this.
+- The constructive options (java #123): `add_declaration` with
+  `implement` (`*` stubs every abstract method left, a name adds one stub
+  or a `super` override) and `constructor` (fields in, a constructor that
+  assigns each); `replace_statements` with `surround` (`try`, `if`,
+  `for`, `while`). Java's skeleton A/B (#250) found all three unused on
+  its shop tasks, so these wait for evidence.
 
 ## 4. Options and behavior on shared tools
 
@@ -151,11 +162,25 @@ the signature tools, change_type and move_method; function_to_method's
 invert_if un-nesting at the end of a case or before the final return;
 inline_function keeping only the branch a constant condition takes.
 
+**Go and TS behind Java (2026-11-06, java #243-#250):** `move` takes
+`imports` (java #244, after its A/B found a refusal asking for `imports`
+that `move` then refused). Checked 2026-11-06, nothing to fix: Go's
+and TypeScript's `move` import what moved code uses from its type
+information (`imports.Adder` by package path in `movedecl`), not by
+name, so no refusal of theirs asks for `imports`; only edits resolve
+names (`gocode`), and they take it.
+TypeScript's `type_switch_to_method` refuses a `default` or a final
+`else`; Java's makes it the supertype's own method (java #249), which
+TypeScript could do when the union's classes share a base class. It
+already takes switch statements and `instanceof` chains. Go's keeps
+`default` in the nil branch by design: an interface has no method body.
+
 **Go behind TS:** inline_function of generic, variadic and other-package
 callees (4); rename of interface methods, embedded types, imports and
 labels (6); introduce_parameter of every occurrence at once (1).
 
-**Java behind Go and TS:** move_member into another file's class (#109);
+**Java behind Go and TS:** replace_text's `files` and `function`;
+replace_declaration's `line`/`column` and `imports`; move_member into another file's class (#109);
 fold of instance methods (#103); encapsulate_field's compound writes and
 `++`; stubs for a static field read (#107); refusals that name the line
 (#110); the remaining `inspect` and argument options the schemas list
@@ -165,7 +190,15 @@ fold of instance methods (#103); encapsulate_field's compound writes and
 Go's convert at the uses (41.2); add_result returns a tuple in Go and an
 object in TS (43); TS's move_method moves down to a subclass, Go's to an
 embedding struct (43.10); Java's convert_to_record needs
-`value_semantics=true`.
+`value_semantics=true`. replace_text's indentation: Java takes an `old`
+off by a uniform indentation and shifts `new` with it (java #106, #119,
+the user's choice over Go's rule, any run of spaces for any other).
+Java-only, nothing to port: an ambiguous import decided by what the
+package's other files import (java #245), and `after` by an overload
+label (java #248); Go imports name packages. Checked, nothing to do:
+inline leaves an argument without parentheses where the parameter
+stands alone (java #248) in Go and TypeScript too (`g(n + 1)`, `v := n +
+1`; `(n + 1)` only inside an operator).
 
 ## 5. Proposed order
 
@@ -182,6 +215,8 @@ Java's rows for these items are #119-#130 in its `docs/design.md`, ordered there
 5. Go and TS from Java: pull_up / push_down for TS, then whatever the
    budget allows, after the user rules on it.
 6. Option gaps in section 4, as the friction logs raise them.
+7. From Java's #243-#250 (the user, 2026-11-06): `batch` `retry` for Go
+   and TypeScript (`move` with `imports` was checked and needs nothing).
 
 Decided (2026-11-05, the user): the more generic name wins (section 2);
 `preserve_exceptions` comes to Go and TypeScript. The tool budget: the
@@ -199,7 +234,9 @@ the type switch pair is one tool, `type_switch_to_method` (a switch expression o
 first); `add_field` is `add_parameter` on a record; `split` is deferred (no friction entry, and
 `extract_function` of a tail splits a method). Of section 4: `move_member` into another file's
 class and of static fields (#109), and refusals that say where (#110), are done; the rest wait
-for friction entries. The A/B check of Java's merged list (`move`, `inline`) waits for the user.
+for friction entries. The A/B check of Java's merged list (`move`, `inline`) passed (#243); since then #244-#250
+added `imports` on `move`, the import rules, `batch` `retry`, `implement`, `constructor`,
+`surround` and more shapes for `type_switch_to_method` (sections 3 and 4).
 
 ## 6. Every tool, for the budget review
 
@@ -210,7 +247,7 @@ repos. After the merges in section 2, Go publishes 39.
 |---|---|---|---|
 | Server | inspect, check, batch, undo | the same | inspect, batch, undo |
 | Edits | add_case, add_declaration, add_element, add_field, create_file, create_from_usage, insert_statements, replace_declaration, replace_expression, replace_statements, replace_text | the same | the same but add_field and create_from_usage |
-| Signature | add_parameter, remove_parameter, move_parameter, introduce_parameter, add_result, change_type, change_field_type, change_parameter_type, convert_params_to_object | the same | add_parameter, remove_parameter, move_parameter, change_type, extract_struct |
+| Signature | add_parameter, remove_parameter, move_parameter, introduce_parameter, add_result, change_type, change_field_type, change_parameter_type, convert_params_to_object | the same | add_parameter, remove_parameter, move_parameter, change_type, extract_type |
 | Extract, inline | extract_function, extract_variable, inline_function, inline_variable, split, fold, parameterize, merge_duplicate_function | the same but split | extract_method, extract_variable, inline_function, inline_variable, fold |
 | Conditionals | invert_if, remove_else, prepare_switch_for_types, type_switch_to_method | the same, union_switch_to_method | invert_if, remove_else |
-| Types and moves | rename, move_declaration, move_method, method_to_function, function_to_method, extract_interface, extract_struct, inline_struct, remove_dead_code, move_statement_up, move_statement_down, move_file, delete_file | the same but extract_struct and inline_struct | rename, move_type, move_member, function_to_method, extract_supertype, add_supertype, pull_up, push_down, encapsulate_field, convert_lambda, convert_to_record, move_statement, move_file |
+| Types and moves | rename, move_declaration, move_method, method_to_function, function_to_method, extract_supertype, extract_type, inline_struct, remove_dead_code, move_statement_up, move_statement_down, move_file, delete_file | the same but extract_type and inline_struct | rename, move_type, move_member, function_to_method, extract_supertype, add_supertype, pull_up, push_down, encapsulate_field, convert_lambda, convert_to_record, move_statement, move_file |
