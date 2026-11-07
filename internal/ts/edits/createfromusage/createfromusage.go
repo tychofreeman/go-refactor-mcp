@@ -30,7 +30,7 @@ func New() *CreateFromUsage {
 }
 
 func (*CreateFromUsage) Description() string {
-	return `Declare stubs for what a file uses that nothing declares, typed from the uses, so that a test can be written first. With a test calling shade(10) where const shaded: number = shade(10), it declares function shade(n: number): number { throw new Error("not implemented"); }; in the module the file imports shade from, exported, if it does. new Pot(3) declares class Pot { constructor(n: number) {} }; a method called on a class (or interface) goes in it, and a property read or written there becomes size!: number. results gives types the uses do not tell; to_file puts the file's own stubs in another file. A batch checked at its end declares them for you.`
+	return `Declare stubs for what a file uses that nothing declares, typed from the uses, so that a test can be written first. With a test calling shade(10) where const shaded: number = shade(10), it declares function shade(n: number): number { throw new Error("not implemented"); }; in the module the file imports shade from, exported, if it does. new Pot(3) declares class Pot { constructor(n: number) {} }, whose body sets the fields added later that n fits by type; a method called on a class (or interface) goes in it, and a property read or written there becomes size!: number. results gives types the uses do not tell; to_file puts the file's own stubs in another file. A batch checked at its end declares them for you.`
 }
 
 // createFromUsageArgs are the arguments of create_from_usage.

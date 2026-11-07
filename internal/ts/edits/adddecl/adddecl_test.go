@@ -161,3 +161,20 @@ func TestWritesTheConstructorOfUnsetFields(t *testing.T) {
 		t.Fatalf("the written constructor was not replaced: %s\n%s", res, got)
 	}
 }
+
+// A constructor with an empty body, as create_from_usage declares from
+// new Tray(3), sets the fields added later that its parameters fit.
+func TestAStubConstructorSetsTheFieldsItFits(t *testing.T) {
+	ws, dir := solution(t)
+	if res := run(t, ws, `{"file": "src/bed.ts", "content": "export class Tray {\n  constructor(n: number) {}\n}"}`); !res.Applied {
+		t.Fatalf("the class was not added: %s", res)
+	}
+	res := run(t, ws, `{"file": "src/bed.ts", "type": "Tray", "content": "rows: number;"}`)
+	want := "export class Tray {\n  rows: number;\n  constructor(n: number) {\n    this.rows = n;\n  }\n}\n"
+	if got := read(t, dir, "src/bed.ts"); !res.Applied || !strings.HasSuffix(got, want) {
+		t.Fatalf("%s\nbed.ts:\n%s\nwant it to end:\n%s", res, got, want)
+	}
+	if res := run(t, ws, `{"file": "src/bed.ts", "type": "Tray", "content": "a: string;\nb: string;"}`); res.Applied {
+		t.Fatalf("fields no parameter fits were set: %s\n%s", res, read(t, dir, "src/bed.ts"))
+	}
+}

@@ -3162,8 +3162,10 @@ candidates and the evidence for each, gathered from the friction log.
        `tsapi.WriteConstructors`, `docs/sessions/ts-written-constructors.md`);
        an added constructor replaces such a one (#275, *done*: it counts as
        a stub); a stub from `new Pot(3)` assigns arguments that each fit
-       one field (#273, next). A class with a stub constructor gets none
-       written yet: #273's stub, assigning the fields, makes that case.
+              one field (#273, *done*, `docs/sessions/ts-assigning-stub.md`: in
+       TypeScript the stub comes first, from `create_from_usage`, and the
+       fields after, so an empty or stub constructor whose parameters fit
+       the new fields by type takes their assignments). *Done.*
     11. `batch` `retry` cannot drop a step of the kept batch, only
        replace one (2026-11-07, `docs/sessions/ts-place-by-kind.md`: a
        rename added in a retry, refused, had to be replaced by a `check`

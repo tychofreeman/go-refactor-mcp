@@ -2,10 +2,12 @@ package tsapi
 
 import (
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 
 	"github.com/buke/typescript-go-internal/v7/pkg/ast"
+	"github.com/buke/typescript-go-internal/v7/pkg/scanner"
 )
 
 // StrictPropertyInitialization reports whether the project needs a
@@ -21,12 +23,15 @@ func (p *Project) StrictPropertyInitialization() bool {
 type unsetField struct{ name, typ string }
 
 // WriteConstructors returns after, the text of a file an edit changed
-// from before, with a constructor written in each class that has fields
+// from before, with the constructor set up in each class that has fields
 // with no value (no initializer, ? or !, not static, abstract or
-// declared), one of them new since before, and no constructor: a
-// parameter per field, in order, of the field's type as written,
-// assigning each, placed after the fields. The notes name each class and
-// its fields; none, and after as it is, when no class is so.
+// declared), one of them new since before. With no constructor, it writes
+// one: a parameter per field, in order, of the field's type as written,
+// assigning each, placed after the fields. With one whose body is empty
+// or a stub's, as create_from_usage declares from new Pot(3), and whose
+// parameters each fit by type exactly one of the fields, all of them
+// covered, it gives that body the assignments. The notes name each class
+// and its fields; none, and after as it is, when no class is so.
 func WriteConstructors(before, after string) (string, []string) {
 	old := map[string][]string{}
 	bf := parseText(before)
@@ -37,11 +42,15 @@ func WriteConstructors(before, after string) (string, []string) {
 			}
 		}
 	}
+	type change struct {
+		start, end int
+		text       string
+	}
 	f := parseText(after)
-	var placed []Placed
+	var changes []change
 	var notes []string
 	for _, s := range f.Statements.Nodes {
-		if !ast.IsClassDeclaration(s) || s.Name() == nil || slices.ContainsFunc(s.Members(), ast.IsConstructorDeclaration) {
+		if !ast.IsClassDeclaration(s) || s.Name() == nil {
 			continue
 		}
 		class := s.Name().Text()
@@ -49,22 +58,46 @@ func WriteConstructors(before, after string) (string, []string) {
 		if !slices.ContainsFunc(fields, func(fl unsetField) bool { return !slices.Contains(old[class], fl.name) }) {
 			continue
 		}
-		parts, why := placeMembers(f, after, constructorOf(fields, semiOf(s, after)), class)
-		if why != "" {
-			continue
-		}
 		var names []string
 		for _, fl := range fields {
 			names = append(names, fl.name)
 		}
-		for _, p := range parts {
-			placed = append(placed, Placed{Offset: p.at, Text: p.prefix + p.text + p.suffix})
+		var ctors []*ast.Node
+		for _, m := range s.Members() {
+			if ast.IsConstructorDeclaration(m) {
+				ctors = append(ctors, m)
+			}
 		}
-		notes = append(notes, fmt.Sprintf("wrote %s's constructor, setting %s: with strictPropertyInitialization a field with no value needs one; add_declaration of a constructor replaces it", class, strings.Join(names, ", ")))
+		semi := semiOf(s, after)
+		switch {
+		case len(ctors) == 0:
+			parts, why := placeMembers(f, after, constructorOf(fields, semi), class)
+			if why != "" {
+				continue
+			}
+			for _, p := range parts {
+				changes = append(changes, change{p.at, p.at, p.prefix + p.text + p.suffix})
+			}
+			notes = append(notes, fmt.Sprintf("wrote %s's constructor, setting %s: with strictPropertyInitialization a field with no value needs one; add_declaration of a constructor replaces it", class, strings.Join(names, ", ")))
+		case len(ctors) == 1 && ctors[0].Body() != nil:
+			body := ctors[0].Body()
+			from := scanner.GetTokenPosOfNode(body, f, false)
+			params, ok := fitting(ctors[0], fields, after)
+			if !emptyBody.MatchString(after[from:body.End()]) || !ok {
+				continue
+			}
+			indent := leadingSpace(after[lineStartIn(after, scanner.GetTokenPosOfNode(ctors[0], f, false)):])
+			var lines []string
+			for i, fl := range fields {
+				lines = append(lines, indent+"  this."+fl.name+" = "+params[i]+semi)
+			}
+			changes = append(changes, change{from, body.End(), "{\n" + strings.Join(lines, "\n") + "\n" + indent + "}"})
+			notes = append(notes, fmt.Sprintf("%s's constructor now sets %s from its parameters (%s), which fit them by type: with strictPropertyInitialization a field with no value needs one", class, strings.Join(names, ", "), strings.Join(params, ", ")))
+		}
 	}
-	slices.SortFunc(placed, func(a, b Placed) int { return b.Offset - a.Offset })
-	for _, p := range placed {
-		after = after[:p.Offset] + p.Text + after[p.Offset:]
+	slices.SortFunc(changes, func(a, b change) int { return b.start - a.start })
+	for _, c := range changes {
+		after = after[:c.start] + c.text + after[c.end:]
 	}
 	return after, notes
 }
@@ -105,4 +138,39 @@ func semiOf(class *ast.Node, text string) string {
 		}
 	}
 	return ";"
+}
+
+// emptyBody is a constructor body that does nothing yet: empty, as
+// create_from_usage declares one, or a stub's.
+var emptyBody = regexp.MustCompile(`^\{\s*(throw new Error\("not implemented"\);?\s*)?\}$`)
+
+// fitting returns, for each of fields, the parameter of ctor whose type as
+// written is that field's: false unless each field has one, no two fields
+// or parameters share a type, and each parameter is a plain one.
+func fitting(ctor *ast.Node, fields []unsetField, text string) ([]string, bool) {
+	params := ctor.Parameters()
+	if len(params) != len(fields) {
+		return nil, false
+	}
+	byType := map[string][]string{}
+	for _, p := range params {
+		if p.Type() == nil || p.Name() == nil || !ast.IsIdentifier(p.Name()) || p.Initializer() != nil || p.ModifierFlags() != 0 {
+			return nil, false
+		}
+		t := strings.TrimSpace(text[p.Type().Pos():p.Type().End()])
+		byType[t] = append(byType[t], p.Name().Text())
+	}
+	typed := map[string]int{}
+	for _, fl := range fields {
+		typed[fl.typ]++
+	}
+	var out []string
+	for _, fl := range fields {
+		ps := byType[fl.typ]
+		if len(ps) != 1 || typed[fl.typ] != 1 {
+			return nil, false
+		}
+		out = append(out, ps[0])
+	}
+	return out, true
 }
