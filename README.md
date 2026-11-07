@@ -339,6 +339,29 @@ refactor batch - <<'EOF'
 EOF
 ```
 
+For code in several steps of one batch, JSON from stdin or a file may be
+followed by sections, `@@name` alone on a line and the text after it, to
+the next section or the end; a string `"@name"` in the JSON is that text,
+as written, so nothing in it is escaped. A section no string names, or a
+string naming no section, is an error:
+
+```sh
+refactor batch - <<'EOF'
+{"steps": [
+  {"tool": "add_declaration", "args": {"file": "bed.go", "content": "@size"}},
+  {"tool": "add_declaration", "args": {"file": "bed_test.go", "content": "@test"}}
+]}
+@@size
+func (b *Bed) Size() int { return len(b.plants) }
+@@test
+func TestSize(t *testing.T) {
+	if n := (&Bed{}).Size(); n != 0 {
+		t.Errorf("Size() = %d, want 0", n)
+	}
+}
+EOF
+```
+
 Exit status: `0` applied/previewed, `2` refused, `1` error.
 
 

@@ -4664,3 +4664,11 @@ and tags. rename refused `Fields` to `Members` on extract_supertype's
 args, whose json tag names the field explicitly (a false refusal,
 roadmap 54.8); the tag changed and the Go name stayed. One file list for
 replace_text's `files` was built with Python.
+
+## 2026-11-07: code sections after a CLI call's JSON
+
+`docs/sessions/batch-sections.md`. Through the CLI, test first. One
+refusal (an undefined name in a new file) cost a resend of all 79 lines.
+The first batch sent with sections ended its heredoc early on a line of
+the text equal to the delimiter: the missing section's "@name" went in as
+text, now refused. Nothing by hand.
