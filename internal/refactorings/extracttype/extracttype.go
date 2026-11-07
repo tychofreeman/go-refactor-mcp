@@ -1,4 +1,4 @@
-// Package extractstruct implements extract_type: move some fields of a
+// Package extracttype implements extract_type: move some fields of a
 // struct type into a new struct type, embedded in their place.
 //
 // Embedding keeps every use compiling with the same meaning: x.f now
@@ -6,7 +6,7 @@
 // struct's own shape, which composite literals spell out (they are
 // rewritten), and which reflection sees (fmt's %+v, encoding/json), so
 // values of the type must not reach an interface.
-package extractstruct
+package extracttype
 
 import (
 	"encoding/json"
@@ -31,13 +31,13 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
 
-// ExtractStruct is the "extract_type" refactoring.
-type ExtractStruct struct{ refactor.Named[args] }
+// ExtractType is the "extract_type" refactoring.
+type ExtractType struct{ refactor.Named[args] }
 
 // New returns the extract_type refactoring.
-func New() *ExtractStruct { return &ExtractStruct{Named: refactor.Called[args]("extract_type")} }
+func New() *ExtractType { return &ExtractType{Named: refactor.Called[args]("extract_type")} }
 
-func (*ExtractStruct) Description() string {
+func (*ExtractType) Description() string {
 	return `Move some fields of a struct into a new struct type, embedded in their place, so that every use (m.path) keeps working: moving path and mode of type mover struct { path string; mode int; n int } into source declares type source struct { path string; mode int } and makes mover struct { source; n int }, and mover{path: p} becomes mover{source: source{path: p}}. To hold it as a named field instead, then rename mover.source (to src: m.path becomes m.src.path). Use it to split a struct that holds two things, or to group fields that belong together, before giving the new type methods or a file of its own.
 With into in place of new_type, the fields go to the end of a struct that already exists, one the struct embeds or holds in a field by value: moving depth of Bed into Soil, held as soil, makes b.depth b.soil.depth and Bed{depth: 3} Bed{soil: Soil{depth: 3}}.
 Identify the struct by file and name, or by line at its declaration or a use; fields are the names to move, new_type the new type's name.
@@ -77,7 +77,7 @@ type extraction struct {
 }
 
 // Plan checks preconditions and computes the edits.
-func (*ExtractStruct) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
+func (*ExtractType) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
 	var a args
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err

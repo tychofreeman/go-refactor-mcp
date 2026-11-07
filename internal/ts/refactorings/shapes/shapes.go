@@ -199,24 +199,24 @@ func (*RemoveDeadCode) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refa
 	})
 }
 
-// ExtractInterface names members of a type as a new interface.
-type ExtractInterface struct {
-	refactor.Named[extractInterfaceArgs]
+// ExtractSupertype names members of a type as a new interface.
+type ExtractSupertype struct {
+	refactor.Named[extractSupertypeArgs]
 }
 
-// NewExtractInterface returns extract_supertype.
-func NewExtractInterface() *ExtractInterface {
-	return &ExtractInterface{Named: refactor.Called[extractInterfaceArgs]("extract_supertype")}
+// NewExtractSupertype returns extract_supertype.
+func NewExtractSupertype() *ExtractSupertype {
+	return &ExtractSupertype{Named: refactor.Called[extractSupertypeArgs]("extract_supertype")}
 }
 
-func (*ExtractInterface) Description() string {
+func (*ExtractSupertype) Description() string {
 	return `Name some members of a type as a new interface, so that code can depend on just those. From an interface, the members move into the new one, which the old one extends, so every use keeps working: moving depth and width of interface Bed { depth: number; width: number; name: string } into Size declares interface Size { depth: number; width: number } and makes interface Bed extends Size { name: string }. From a type alias of an object type, the same with type Bed = Size & { name: string }. From a class, the new interface has the members' signatures (a method's parameters and result, an accessor as a property) and the class implements it: class Sprinkler implements Watering.
 Identify the type by file and name, or by line at its declaration or a use; fields are the members, new_type the new interface's name, declared just before the type (exported with it).
 Refuses, saying why: a generic type, a private, protected or static member of a class, a member sharing its line with another, a name already taken.`
 }
 
-// extractInterfaceArgs are the arguments of extract_supertype.
-type extractInterfaceArgs struct {
+// extractSupertypeArgs are the arguments of extract_supertype.
+type extractSupertypeArgs struct {
 	File    string   `json:"file" desc:"Path of the file declaring the type, relative to the root."`
 	Line    int      `json:"line,omitempty" desc:"1-based line of its declaration or a use. Omit it to find name at the top level of file."`
 	Name    string   `json:"name" desc:"The class, interface or type alias."`
@@ -225,15 +225,15 @@ type extractInterfaceArgs struct {
 	NewType string   `json:"new_type" desc:"Name of the new interface."`
 }
 
-func (*ExtractInterface) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
-	var a extractInterfaceArgs
+func (*ExtractSupertype) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
+	var a extractSupertypeArgs
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
 	return plan(ws, a.File, func() string {
 		return fmt.Sprintf("named %s of %s as interface %s", strings.Join(a.Fields, ", "), a.Name, a.NewType)
 	}, func(p *tsapi.Project, path string) ([]tsapi.Edit, string) {
-		return p.ExtractInterface(bg, path, a.Line, a.Name, a.Column, a.Fields, a.NewType)
+		return p.ExtractSupertype(bg, path, a.Line, a.Name, a.Column, a.Fields, a.NewType)
 	})
 }
 

@@ -1,4 +1,4 @@
-package extractiface
+package extractsupertype
 
 // Opt-in stress test: applies extract_supertype to every named type of a
 // real module that has methods, with its first two methods, and reports
