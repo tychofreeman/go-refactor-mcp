@@ -40,7 +40,7 @@ it; IntelliJ's and GoLand's lists are from JetBrains' help pages
 | Encapsulate Collection | missing (a getter that returns a copy changes what callers see) |
 | Replace Primitive with Object | `change_field_type`, `change_parameter_type`, `change_type` |
 | Replace Temp with Query | composition: `extract_function` of the temp's computation, `inline_variable` |
-| Extract Class | `extract_struct` |
+| Extract Class | `extract_type` |
 | Inline Class | `inline_struct` |
 | Hide Delegate | composition by fold's one-return shape: a method `func (a A) c() C { return a.b.c }`, folded |
 | Remove Middle Man | `inline_function` of each delegating method |
@@ -51,7 +51,7 @@ it; IntelliJ's and GoLand's lists are from JetBrains' help pages
 | Refactoring | gorefactor |
 |---|---|
 | Move Function | `move_declaration`, `move_method`, `method_to_function`, `function_to_method` |
-| Move Field | `extract_struct` with `into`; within a struct, derivations 13 |
+| Move Field | `extract_type` with `into`; within a struct, derivations 13 |
 | Move Statements into Function | composition: `extract_function` of the call and the statements at one caller, `fold` the others, `inline_function` the old function |
 | Move Statements to Callers | composition: `inline_function`, then `extract_function` of what stays shared |
 | Replace Inline Code with Function Call | `fold` |
@@ -104,13 +104,13 @@ allows.
 | Refactoring | gorefactor |
 |---|---|
 | Pull Up Method | missing (`move_method` moves down only) |
-| Pull Up Field | `extract_struct` with `into` an embedded struct |
+| Pull Up Field | `extract_type` with `into` an embedded struct |
 | Pull Up Constructor Body | not applicable |
 | Push Down Method | `move_method` to a struct that embeds the receiver |
 | Push Down Field | missing |
 | Replace Type Code with Subclasses | `change_field_type` to `any`, `prepare_switch_for_types`, `type_switch_to_method` (derivations 6) |
 | Remove Subclass | missing |
-| Extract Superclass | `extract_struct` (its new type is embedded) |
+| Extract Superclass | `extract_type` (its new type is embedded) |
 | Collapse Hierarchy | `inline_struct` of an embedded struct |
 | Replace Subclass with Delegate | `rename` of an embedded field to a named one |
 | Replace Superclass with Delegate | the same |
@@ -138,7 +138,7 @@ Delete; IntelliJ adds, for Java, the entries below Safe Delete.
 | Find and Replace Code Duplicates | `fold`, `merge_duplicate_function` |
 | Extract Parameter | `introduce_parameter` |
 | Extract Parameter Object | `convert_params_to_object` |
-| Extract Delegate, Extract Superclass | `extract_struct` |
+| Extract Delegate, Extract Superclass | `extract_type` |
 | Replace Temp with Query | composition (Fowler's, above) |
 | Remove Middleman | `inline_function` |
 | Use Interface Where Possible | missing; close to roadmap 9's narrowing a parameter |
