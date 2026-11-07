@@ -272,8 +272,12 @@ func Functions(content string, members bool) []string {
 	}
 	var out []string
 	for _, n := range nodes {
-		if (ast.IsFunctionDeclaration(n) || ast.IsMethodDeclaration(n)) && n.Name() != nil && n.Body() != nil {
-			out = append(out, n.Name().Text())
+		if (ast.IsFunctionDeclaration(n) || ast.IsMethodDeclaration(n) || ast.IsConstructorDeclaration(n)) && n.Body() != nil && (n.Name() != nil || ast.IsConstructorDeclaration(n)) {
+			name := "constructor"
+			if n.Name() != nil {
+				name = n.Name().Text()
+			}
+			out = append(out, name)
 		}
 	}
 	return out

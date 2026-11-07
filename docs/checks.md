@@ -1554,6 +1554,17 @@ the class has one. `after` and `before` are ignored, except that a
 `Class.` prefix still names `type` for a call written the old way. A
 `type` that names no class of the file, and content that is not members,
 are refused.
+
+Under `strictPropertyInitialization` (on with `strict`, TypeScript 7's
+default), `add_declaration` and `add_field` write a constructor for a class
+they leave with fields that have no value (no initializer, `?` or `!`; not
+static, abstract or `declare`), one of them new in the edit, and no
+constructor (`tsapi.WriteConstructors`, java's #272): a parameter per such
+field, of its type as written, assigning each, placed after the fields; the
+result notes it. A class with any constructor, a stub included, gets none.
+A constructor `add_declaration` adds replaces one whose body only assigns
+fields from parameters (`this.size = size;`), as it replaces a stub
+(java's #275), re-indented to its place.
 The `content` has no package clause and no imports: packages it names are
 imported as for `replace_statements`, and an `import` in it is refused. A
 name the package already declares is refused by the type check, whose

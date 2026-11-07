@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/tsapi"
 )
 
@@ -86,4 +87,25 @@ func (w *Workspace) testModule() string {
 		return ""
 	}
 	return "node:test"
+}
+
+// Construct returns edits of the file at path, whose text is before, with
+// the constructors tsapi.WriteConstructors writes for the classes they
+// leave with fields to set, as one edit of the whole file, and its notes;
+// edits as they are when the file's project does not need fields set or
+// no class does.
+func (w *Workspace) Construct(path, before string, edits []edit.TextEdit) ([]edit.TextEdit, []string) {
+	p := w.project(path)
+	if p == nil || !p.StrictPropertyInitialization() {
+		return edits, nil
+	}
+	after, err := edit.Apply([]byte(before), edits)
+	if err != nil {
+		return edits, nil
+	}
+	written, notes := tsapi.WriteConstructors(before, string(after))
+	if len(notes) == 0 {
+		return edits, nil
+	}
+	return []edit.TextEdit{{Start: 0, End: len(before), NewText: written}}, notes
 }

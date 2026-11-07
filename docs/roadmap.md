@@ -3158,9 +3158,12 @@ candidates and the evidence for each, gathered from the friction log.
     10. Constructors written for the model, as java's #272, #273 and
        #275 (2026-11-07): TypeScript only (`docs/parity.md`, section 4).
        A field without an initializer in a class without a constructor
-       gets one taking such fields; a stub from `new Pot(3)` assigns
-       arguments that each fit one field; an added constructor replaces
-       such a one of the same parameter types.
+       gets one taking such fields (#272, *done*:
+       `tsapi.WriteConstructors`, `docs/sessions/ts-written-constructors.md`);
+       an added constructor replaces such a one (#275, *done*: it counts as
+       a stub); a stub from `new Pot(3)` assigns arguments that each fit
+       one field (#273, next). A class with a stub constructor gets none
+       written yet: #273's stub, assigning the fields, makes that case.
     11. `batch` `retry` cannot drop a step of the kept batch, only
        replace one (2026-11-07, `docs/sessions/ts-place-by-kind.md`: a
        rename added in a retry, refused, had to be replaced by a `check`
