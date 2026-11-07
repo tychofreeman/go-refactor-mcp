@@ -1,6 +1,6 @@
 // Package inlinestruct implements inline_struct: the fields and methods
 // of a struct that another holds move into the holder, the inverse of
-// extract_struct.
+// extract_type.
 package inlinestruct
 
 import (
@@ -28,7 +28,7 @@ type InlineStruct struct{ refactor.Named[args] }
 func New() *InlineStruct { return &InlineStruct{Named: refactor.Called[args]("inline_struct")} }
 
 func (*InlineStruct) Description() string {
-	return `Move the fields and methods of a struct that another holds into the holder, and delete it: the inverse of extract_struct. With type Bed struct { Soil; name string } and type Soil struct { depth int; loam bool }, inlining Soil into Bed gives type Bed struct { depth int; loam bool; name string }; b.Soil.depth becomes b.depth, Bed{Soil: Soil{depth: 3}} becomes Bed{depth: 3}, and Soil's methods become Bed's (b.Soil.till() becomes b.till()). A named field (soil Soil) works the same way.
+	return `Move the fields and methods of a struct that another holds into the holder, and delete it: the inverse of extract_type. With type Bed struct { Soil; name string } and type Soil struct { depth int; loam bool }, inlining Soil into Bed gives type Bed struct { depth int; loam bool; name string }; b.Soil.depth becomes b.depth, Bed{Soil: Soil{depth: 3}} becomes Bed{depth: 3}, and Soil's methods become Bed's (b.Soil.till() becomes b.till()). A named field (soil Soil) works the same way.
 Identify the holder by file and name, and field: the embedded type's name or the field's name.
 elsewhere: keep inlines a copy when the struct is used outside the holder and keeps it for those uses; otherwise that is refused. prefer: outer keeps the holder's method where both have one, inner replaces it with the inlined struct's, which changes what its calls do; otherwise that is refused.`
 }

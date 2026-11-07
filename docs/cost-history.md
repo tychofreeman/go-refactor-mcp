@@ -1657,6 +1657,26 @@ tools from section 10): a fold's lines counted as changed, not derived.
 The rows stay as they were measured; to compare a new run with one of
 them, measure both again with the current `refactor-tokens`.
 
+## 24. The merged tool list (Nov 6)
+
+The server after #583-#589 (one `move` with `delete`, `inline` with
+`field`, `move_statement`, `change_type` covering the field and
+parameter tools, `preserve_exceptions` on every refactoring) against
+the one before them (`c7bf1579`). Sonnet, arm mcp, CLAUDE.md
+`claude-md-refactor-first-bash`, 2 runs per task and server, $2.26 in
+all. Means per run:
+
+| task | before: cost | turns | after: cost | turns |
+|---|---|---|---|---|
+| move-to-package, multi-move-rename | $0.113 | 8.0 | $0.098 | 6.0 |
+| notify-userid | $0.236 | 14.5 | $0.169 | 14.0 |
+| warehouse-inline | $0.148 | 11.0 | $0.157 | 13.5 |
+
+Every run passed (16/16). Each called the merged name the task needed
+(`change_type` where the baseline called `change_field_type`; `move`
+and `inline`, already merged before), and none an old name or alias.
+The differences are within the noise of 2 runs. Record:
+`docs/sessions/ab-merged-tools.md`.
 ## 25. Descriptions without refusal lists (Nov 6)
 
 The server of #592-#596 (descriptions without refusal lists or shared

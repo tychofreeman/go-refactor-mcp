@@ -1,6 +1,6 @@
 package extractiface
 
-// Opt-in stress test: applies extract_interface to every named type of a
+// Opt-in stress test: applies extract_supertype to every named type of a
 // real module that has methods, with its first two methods, and reports
 // every change that broke the build (a rollback means a precondition is
 // missing). It modifies STRESS_DIR, so point it at a copy:

@@ -864,7 +864,7 @@ error, so:
 
 ## Extract struct: what it checks
 
-`extract_struct` moves some fields of a struct type into a new struct
+`extract_type` (`extract_struct` until 2026-11-06, still an alias) moves some fields of a struct type into a new struct
 type, declared just before it, and embeds the new type (by value) where
 the first of them was. Every use keeps compiling with the same meaning:
 `m.path` now selects the field through the embedded struct. Fields move
@@ -900,7 +900,8 @@ comments between its elements (rewriting it would lose them).
 
 ## Extract interface: what it checks
 
-`extract_interface` names some methods of a type as a new interface,
+`extract_supertype` (`extract_interface` until 2026-11-06, still an alias)
+names some methods of a type as a new interface,
 declared just before the type (TypeScript's tool of the same name, with
 the same arguments: `file`, `name`, `fields`, `new_type`).
 
@@ -929,7 +930,7 @@ not done yet.
 
 `inline_struct` moves the fields and methods of a struct S that a struct
 T holds, embedded (`Soil`) or in a named field (`soil Soil`), into T,
-and deletes S: the inverse of `extract_struct`. The user's decisions
+and deletes S: the inverse of `extract_type`. The user's decisions
 (2026-11-04) set its arguments:
 
 - `elsewhere`: S used outside T (a parameter, another struct) is refused,
@@ -952,7 +953,7 @@ T's method set is the same; for a named field it grows, so a method
 named as one the standard library looks for (`String`, `Error`,
 `MarshalJSON`, ...) or as a method of an interface of the module is
 refused. fmt prints the fields one level up (a note lists the calls);
-other reflection is refused, as `extract_struct` does.
+other reflection is refused, as `extract_type` does.
 
 Also refused: S used as a whole (`b.Soil`, `&b.Soil`); S held by
 pointer, whose nil would become zero fields; a literal of T or S without
