@@ -517,6 +517,12 @@ get right; not yet measured.
 *Worth repeating:* yes, as a test for every option: if no answer changes
 behavior, the tool should pick it.
 
+The same day the rule's other half came over from Java (its #272 and
+#275): code the language makes the model write, the tool writes. A
+TypeScript class whose fields have no value needs a constructor that sets
+them (TS2564), so `add_declaration` and `add_field` write it, and a
+constructor the model adds later replaces it.
+
 ## What did not work as well
 
 - **Line numbers.** Several tool calls reused line numbers from before an

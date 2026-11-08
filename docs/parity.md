@@ -221,7 +221,8 @@ fields its arguments each fit; #275: an added constructor replaces such a
 one) fit TypeScript, where a field with no initializer is TS2564 under
 `strictPropertyInitialization`, and `new Pot(3)` stubs an empty
 constructor today; Go has no constructors or final fields, and a test
-builds a struct with a literal. Roadmap 54.9 and 54.10.
+builds a struct with a literal. Roadmap 54.9 and 54.10. #272 and #275 done
+in TypeScript (`docs/sessions/ts-written-constructors.md`); #273 next.
 
 Java-only, nothing to port: an ambiguous import decided by what the
 package's other files import (java #245); Go imports name packages. Checked, nothing to do:

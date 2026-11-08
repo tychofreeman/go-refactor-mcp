@@ -5,6 +5,7 @@ package addfield
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
@@ -23,7 +24,7 @@ func New() *AddField { return &AddField{Named: refactor.Called[addFieldArgs]("ad
 func (*AddField) ChangesBehavior() {}
 
 func (*AddField) Description() string {
-	return `Add properties to an interface, a class or an object type (type Spot = { ... }), to give a type the state a feature needs. field "colour: string;" with after "height" adds colour just after height in interface Plant. field is TypeScript, one or more members with their doc comments (in a class, with initializers or methods too); with type, field gives only names (field "colour", type "string"). Without after or before they go at the end. A type on one line is opened up into lines.
+	return `Add properties to an interface, a class or an object type (type Spot = { ... }), to give a type the state a feature needs. field "colour: string;" with after "height" adds colour just after height in interface Plant. field is TypeScript, one or more members with their doc comments (in a class, with initializers or methods too); with type, field gives only names (field "colour", type "string"). Without after or before they go at the end. A type on one line is opened up into lines. A class with no constructor gets one setting its fields that have no value.
 Identify the type by file and name. value gives one new property to each object literal of the type that lacks it: with field "colour: string;", value "'red'" adds colour: 'red' to each.`
 }
 
@@ -87,6 +88,15 @@ func (*AddField) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.P
 		plan.Edits = edit.Merge(append(plan.Edits, fills...))
 		if n > 0 {
 			plan.Notes = append(plan.Notes, fmt.Sprintf("gave %s %s in %d object literal%s", names[0], strings.TrimSpace(a.Value), n, map[bool]string{true: "", false: "s"}[n == 1]))
+		}
+	}
+	if src, err := os.ReadFile(path); err == nil {
+		for i, fe := range plan.Edits {
+			if fe.Path == path {
+				var notes []string
+				plan.Edits[i].Edits, notes = ws.Construct(path, string(src), fe.Edits)
+				plan.Notes = append(plan.Notes, notes...)
+			}
 		}
 	}
 	return plan, nil

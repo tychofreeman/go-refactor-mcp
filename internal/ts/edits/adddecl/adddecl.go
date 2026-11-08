@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
+	"github.com/tychofreeman/go-refactor-mcp/internal/edits/gocode"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/tsapi"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/workspace"
@@ -29,7 +30,7 @@ func New() *AddDeclaration {
 func (*AddDeclaration) ChangesBehavior() {}
 
 func (*AddDeclaration) Description() string {
-	return `Add declarations (functions, classes, interfaces, types, variables, or members of a class) to an existing file; for a new file, use create_file. They are placed by kind: at the end of the file, or, for a const, let, class or enum a top-level statement already uses, just before it; with type "Bed", content is members of Bed: a field after its fields, a constructor after its constructors or fields, a method at its end. A function or method named like a stub (a body of only throw new Error("not implemented"), as create_from_usage writes) in the file, or in that class, replaces the stub. With test_for in place of content, a red test at the end of the file: test_for "Bed.plant" adds test("Bed.plant", ...), which makes a Bed, calls plant with placeholder arguments and throws, showing the result, until the assertion is written; test comes from vitest or jest when package.json names one, else node:test.`
+	return `Add declarations (functions, classes, interfaces, types, variables, or members of a class) to an existing file; for a new file, use create_file. They are placed by kind: at the end of the file, or, for a const, let, class or enum a top-level statement already uses, just before it; with type "Bed", content is members of Bed: a field after its fields, a constructor after its constructors or fields, a method at its end. A function or method named like a stub (a body of only throw new Error("not implemented"), as create_from_usage writes) in the file, or in that class, replaces the stub. Fields with no value (size: number;) in a class with no constructor get one, constructor(size: number) { this.size = size; }, which a constructor added later replaces. With test_for in place of content, a red test at the end of the file: test_for "Bed.plant" adds test("Bed.plant", ...), which makes a Bed, calls plant with placeholder arguments and throws, showing the result, until the assertion is written; test comes from vitest or jest when package.json names one, else node:test.`
 }
 
 // addDeclarationArgs are the arguments of add_declaration.
@@ -92,9 +93,11 @@ func (*AddDeclaration) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refa
 	if frameworkImport != "" {
 		edits = append([]edit.TextEdit{{Start: 0, End: 0, NewText: frameworkImport}}, edits...)
 	}
+	edits, notes := ws.Construct(path, text, edits)
 	return &refactor.Plan{
 		Summary:  summary,
 		Edits:    []edit.FileEdit{{Path: path, Edits: edits}},
+		Notes:    notes,
 		Supplied: content,
 	}, nil
 }
@@ -115,14 +118,14 @@ func replaceStubs(outline []tsapi.Decl, text, content, owner string) ([]edit.Tex
 			key = owner + "." + fn
 		}
 		for _, d := range outline {
-			if d.Name != key || (d.Kind != "function" && d.Kind != "method") || d.BlockEnd <= d.BlockStart || !stubBody.MatchString(text[d.BlockStart:d.BlockEnd]) {
+			if d.Name != key || (d.Kind != "function" && d.Kind != "method") || d.BlockEnd <= d.BlockStart || !replaceable(fn, text[d.BlockStart:d.BlockEnd]) {
 				continue
 			}
 			from, to := lineStart(text, d.Start), lineStart(text, d.End+1)
 			if len(edits) == 0 {
 				from += len(text[from:]) - len(strings.TrimLeft(text[from:], " \t"))
 				to = lineEnd(text, d.End)
-				edits = append(edits, edit.TextEdit{Start: from, End: to, NewText: strings.TrimLeft(content, " \t")})
+				edits = append(edits, edit.TextEdit{Start: from, End: to, NewText: strings.TrimLeft(gocode.Reindent(content, text[lineStart(text, d.Start):from], false), " \t")})
 			} else {
 				edits = append(edits, edit.TextEdit{Start: from, End: to})
 			}
@@ -160,4 +163,15 @@ func plural(n int) string {
 		return ""
 	}
 	return "s"
+}
+
+// assigningBody is the body of a constructor that only sets fields from
+// its parameters, as add_declaration and add_field write one.
+var assigningBody = regexp.MustCompile(`^\{\s*(this\.#?[\w$]+\s*=\s*[\w$]+;?\s*)*\}$`)
+
+// replaceable reports whether a declaration of fn with body is one an
+// added declaration of the same name replaces: a stub, or a constructor
+// that only sets fields.
+func replaceable(fn, body string) bool {
+	return stubBody.MatchString(body) || fn == "constructor" && assigningBody.MatchString(body)
 }

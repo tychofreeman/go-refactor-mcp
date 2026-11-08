@@ -48,6 +48,8 @@ func TestAddField(t *testing.T) {
 			"export type Spot = {\n  x: number;\n  z: number;\n  y: number;\n};"},
 		{"a class", `{"name": "Bed", "field": "rows = 2;"}`,
 			"export class Bed {\n  plants: Plant[] = [];\n  rows = 2;\n}"},
+		{"a class field with no value", `{"name": "Bed", "field": "rows: number;"}`,
+			"export class Bed {\n  plants: Plant[] = [];\n  rows: number;\n  constructor(rows: number) {\n    this.rows = rows;\n  }\n}"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ws, dir := load(t)
@@ -128,5 +130,23 @@ func TestRefusals(t *testing.T) {
 		if res.Applied || !strings.Contains(res.Refused, tc.want) {
 			t.Errorf("%s: want a refusal with %q, got %s", tc.args, tc.want, res)
 		}
+	}
+}
+
+// Without strictPropertyInitialization a field may stay unset, so no
+// constructor is written for it.
+func TestNoConstructorWhenNotStrict(t *testing.T) {
+	dir := t.TempDir()
+	ws := tstest.Load(t, dir, map[string]string{
+		"tsconfig.json": `{"compilerOptions": {"strict": false, "module": "ESNext", "moduleResolution": "Bundler", "noEmit": true, "types": []}, "include": ["src"]}`,
+		"src/shapes.ts": shapes,
+	})
+	res, err := refactor.Run(ws, New(), json.RawMessage(`{"file": "src/shapes.ts", "name": "Bed", "field": "rows: number;"}`), refactor.OptionsOf[*workspace.Workspace]{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(filepath.Join(dir, "src/shapes.ts"))
+	if !res.Applied || strings.Contains(string(got), "constructor") {
+		t.Fatalf("%s\n%s\nwant rows added and no constructor", res, got)
 	}
 }

@@ -142,3 +142,22 @@ func TestPlacesByKind(t *testing.T) {
 		t.Fatalf("dusk is not before its use: %s\n%s", b, got)
 	}
 }
+
+// Fields with no value in a class with no constructor get one written for
+// them, and a constructor added later replaces it.
+func TestWritesTheConstructorOfUnsetFields(t *testing.T) {
+	ws, dir := solution(t)
+	if res := run(t, ws, `{"file": "src/bed.ts", "content": "export class Pot {\n  depth = 1;\n\n  grow(): void {}\n}"}`); !res.Applied {
+		t.Fatalf("the class was not added: %s", res)
+	}
+	res := run(t, ws, `{"file": "src/bed.ts", "type": "Pot", "content": "size: number;\n\nlabel: string;"}`)
+	want := "export class Pot {\n  depth = 1;\n\n  size: number;\n\n  label: string;\n\n  constructor(size: number, label: string) {\n    this.size = size;\n    this.label = label;\n  }\n\n  grow(): void {}\n}\n"
+	if got := read(t, dir, "src/bed.ts"); !res.Applied || !strings.HasSuffix(got, want) || !strings.Contains(res.String(), "constructor") {
+		t.Fatalf("%s\nbed.ts:\n%s\nwant it to end:\n%s", res, got, want)
+	}
+	res = run(t, ws, `{"file": "src/bed.ts", "type": "Pot", "content": "constructor(size: number, label: string) {\n  this.size = size;\n  this.label = label.trim();\n}"}`)
+	got := read(t, dir, "src/bed.ts")
+	if !res.Applied || strings.Count(got, "constructor(") != 1 || !strings.Contains(got, "  constructor(size: number, label: string) {\n    this.size = size;\n    this.label = label.trim();\n  }\n\n  grow") {
+		t.Fatalf("the written constructor was not replaced: %s\n%s", res, got)
+	}
+}
