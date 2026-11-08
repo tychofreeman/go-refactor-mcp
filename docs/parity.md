@@ -192,11 +192,15 @@ callees (4); rename of interface methods, embedded types, imports and
 labels (6); introduce_parameter of every occurrence at once (1).
 
 **Java behind Go and TS:** replace_text's `files` and `function`;
-replace_declaration's `line`/`column` and `imports`; move_member into another file's class (#109);
-fold of instance methods (#103); encapsulate_field's compound writes and
-`++`; stubs for a static field read (#107); refusals that name the line
-(#110); the remaining `inspect` and argument options the schemas list
-(Java has fewer addressing options on most tools).
+replace_declaration's `line`/`column` and `imports`; the remaining `inspect`
+and argument options the schemas list (Java has fewer addressing options on
+most tools). Done in Java: move_member into another file's class and stubs
+for a static field read (java #109, #107, 2026-11-06), refusals that name the
+line (#110); and java #130 (2026-11-07/08): encapsulate_field's compound
+writes and `++` as statements (#283), fold of instance methods, in the class
+and its subclasses, a method the project overrides refused (#284), and `line`
+(with `column`) in place of `name` on add_parameter, remove_parameter,
+move_parameter and change_type, a declaration or a call (#285).
 
 **Different by design, not to change:** TS's change_type family are edits,
 Go's convert at the uses (41.2); add_result returns a tuple in Go and an
