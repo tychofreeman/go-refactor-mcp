@@ -184,8 +184,9 @@ working patterns, with their steps, are in `docs/patterns.md`.
   write a constructor for fields with no value in a class with none, under
   `strictPropertyInitialization` only (TypeScript 7 turns `strict` on by
   default: a test of the other case needs `"strict": false`); a
-  constructor added later replaces one that only assigns fields. Go has no
-  constructors to write.
+  constructor added later replaces one that only assigns fields, and an
+  empty or stub constructor whose parameters fit the new fields by type
+  gets their assignments (java's #273). Go has no constructors to write.
 - **Claude via MCP is the product** (2026-10-17), not the Ollama loop or
   standalone evaluation. A plan-and-execute loop of our own was tried as an
   experiment (`docs/plan-and-execute.md`, roadmap 29); the user decides on

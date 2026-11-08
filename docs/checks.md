@@ -1561,7 +1561,11 @@ they leave with fields that have no value (no initializer, `?` or `!`; not
 static, abstract or `declare`), one of them new in the edit, and no
 constructor (`tsapi.WriteConstructors`, java's #272): a parameter per such
 field, of its type as written, assigning each, placed after the fields; the
-result notes it. A class with any constructor, a stub included, gets none.
+result notes it. A class with one constructor whose body is empty (as
+`create_from_usage` declares it from `new Pot(3)`) or a stub's, whose
+parameters each fit by type exactly one of those fields, all covered, gets
+that body set to assign them, its signature kept (java's #273); any other
+constructor is left to the type check.
 A constructor `add_declaration` adds replaces one whose body only assigns
 fields from parameters (`this.size = size;`), as it replaces a stub
 (java's #275), re-indented to its place.
