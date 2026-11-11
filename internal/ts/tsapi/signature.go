@@ -379,6 +379,10 @@ func (l *lined) function(name string) (fn *ast.Node, overloads []*ast.Node, name
 		}
 	}
 	if len(found) == 0 {
+		if !isMember && l.hasClass(name) {
+			// A class's name alone names its constructor.
+			return l.function(name + ".constructor")
+		}
 		return nil, nil, nil, fmt.Sprintf("the file declares no function or method %s (give name, or Class.method)", name)
 	}
 	for _, f := range found {
@@ -817,4 +821,14 @@ func (l *lined) source(n *ast.Node) string { return l.text[l.pos(n):n.End()] }
 func (l *lined) where(n *ast.Node) string {
 	name := l.f.FileName()
 	return fmt.Sprintf("%s:%d", name[strings.LastIndex(name, "/")+1:], l.line(l.pos(n)))
+}
+
+// hasClass reports whether the file declares a class called name.
+func (l *lined) hasClass(name string) bool {
+	for _, s := range l.f.Statements.Nodes {
+		if ast.IsClassDeclaration(s) && s.Name() != nil && s.Name().Text() == name {
+			return true
+		}
+	}
+	return false
 }
