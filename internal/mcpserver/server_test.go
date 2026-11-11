@@ -157,6 +157,11 @@ func mustContain(t *testing.T, label, got string, wants ...string) {
 
 func TestToolsAndInstructions(t *testing.T) {
 	cs, _ := setup(t)
+	// The version a model sees, at the head of the instructions: it is not
+	// shown serverInfo (java-refactor-mcp#346).
+	if got := cs.InitializeResult().Instructions; !strings.HasPrefix(got, "gorefactor "+Version()+". ") {
+		t.Errorf("instructions do not start with the version: %.60q", got)
+	}
 	if !strings.Contains(cs.InitializeResult().Instructions, "ONE tool per call") {
 		t.Error("server instructions not sent")
 	}
@@ -1165,7 +1170,7 @@ func TestTypeScriptInstructions(t *testing.T) {
 	})
 	cs := connect(t, New(dir))
 	got := cs.InitializeResult().Instructions
-	if !strings.HasPrefix(got, "Refactoring and editing tools for the TypeScript") || strings.Contains(got, "Go module") {
+	if !strings.HasPrefix(got, "gorefactor "+Version()+". Refactoring and editing tools for the TypeScript") || strings.Contains(got, "Go module") {
 		t.Errorf("the instructions are not TypeScript's: %.80s", got)
 	}
 	if n := len(got); n > 6000 {
@@ -1196,7 +1201,7 @@ func TestTypeScriptInstructions(t *testing.T) {
 func TestGoAndTypeScriptInstructions(t *testing.T) {
 	dir := tsSetup(t, map[string]string{"go.mod": "module example.com/m\n\ngo 1.22\n", "m.go": "package m\n"})
 	got := connect(t, New(dir)).InitializeResult().Instructions
-	if !strings.HasPrefix(got, "Refactoring and editing tools for the Go module in this project and for its TypeScript") {
+	if !strings.HasPrefix(got, "gorefactor "+Version()+". Refactoring and editing tools for the Go module in this project and for its TypeScript") {
 		t.Errorf("the instructions do not name both languages: %.120s", got)
 	}
 }

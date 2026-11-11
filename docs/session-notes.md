@@ -90,7 +90,9 @@ working patterns, with their steps, are in `docs/patterns.md`.
   `minor` bumps that part, anything else the patch; label a PR that adds
   a tool `minor`. There is no version constant to raise: the binary
   reports the tag it was installed at, or "devel" and a commit
-  (`mcpserver.Version()`). `docs/releases/` holds the notes of v0.3.0 to
+  (`mcpserver.Version()`), which also heads the instructions, `gorefactor
+  v0.9.1. ...`: a model is not shown serverInfo (java-refactor-mcp#346, the
+  user's choice of 2026-11-11 over a version tool). `docs/releases/` holds the notes of v0.3.0 to
   v0.5.0, written by hand. Sessions may not push tags or create releases
   (HTTP 403); the workflow's token can.
 - **CI minutes** (2026-10-27): 5,000 Actions minutes a month, so Test
