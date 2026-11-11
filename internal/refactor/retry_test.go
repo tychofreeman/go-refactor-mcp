@@ -23,8 +23,8 @@ func TestRetry(t *testing.T) {
 		t.Errorf("retry: %q\n got %s\nwant %s", refused, got, want)
 	}
 	for _, c := range []struct{ args, refusal string }{
-		{`{"retry": true, "steps": [{"args": {}}]}`, "one of step and after"},
-		{`{"retry": true, "steps": [{"step": 1, "after": 1}]}`, "one of step and after"},
+		{`{"retry": true, "steps": [{"args": {}}]}`, "one of step, after and remove"},
+		{`{"retry": true, "steps": [{"step": 1, "after": 1}]}`, "one of step, after and remove"},
 		{`{"retry": true, "steps": [{"step": 4, "args": {}}]}`, "from 1 to 2"},
 		{`{"retry": true, "steps": [{"after": 3, "tool": "x"}]}`, "from 0 to 2"},
 	} {
@@ -55,5 +55,24 @@ func TestRetryAppends(t *testing.T) {
 	}
 	if _, refused := r.Args(json.RawMessage(`{"retry": true, "steps": [{"step": 3, "tool": "b"}]}`)); !strings.Contains(refused, "or 2 to add a last step") {
 		t.Errorf("a step past the end: %q", refused)
+	}
+}
+
+// A retry can drop a step of the kept batch, as java's #318: a step in the
+// wrong place is dropped there and added again after another.
+func TestRetryRemoves(t *testing.T) {
+	var r Retry
+	r.Keep(json.RawMessage(`{"steps": [{"tool": "a", "args": {}}, {"tool": "b", "args": {}}, {"tool": "c", "args": {}}]}`), true)
+	got, refused := r.Args(json.RawMessage(`{"retry": true, "steps": [{"remove": 1}, {"after": 3, "tool": "a", "args": {}}]}`))
+	if want := `{"steps":[{"args":{},"tool":"b"},{"args":{},"tool":"c"},{"args":{},"tool":"a"}]}`; refused != "" || string(got) != want {
+		t.Errorf("retry: %q\n got %s\nwant %s", refused, got, want)
+	}
+	for _, c := range []struct{ args, refusal string }{
+		{`{"retry": true, "steps": [{"remove": 4}]}`, "remove must be from 1 to 3"},
+		{`{"retry": true, "steps": [{"remove": 1, "step": 1}]}`, "one of step, after and remove"},
+	} {
+		if _, refused := r.Args(json.RawMessage(c.args)); !strings.Contains(refused, c.refusal) {
+			t.Errorf("%s: %q, want %q", c.args, refused, c.refusal)
+		}
 	}
 }

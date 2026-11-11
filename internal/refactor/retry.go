@@ -37,14 +37,27 @@ func (r *Retry) Args(args json.RawMessage) (json.RawMessage, string) {
 		return nil, `REFUSED batch: a retry's steps are changes, each {"step": N, ...} or {"after": N, ...}`
 	}
 	added := map[int][]map[string]json.RawMessage{}
+	removed := map[int]bool{}
 	for i, c := range changes {
-		step, after := c["step"], c["after"]
+		step, after, remove := c["step"], c["after"], c["remove"]
 		delete(c, "step")
 		delete(c, "after")
+		delete(c, "remove")
 		var n int
+		given := 0
+		for _, k := range []json.RawMessage{step, after, remove} {
+			if k != nil {
+				given++
+			}
+		}
 		switch {
-		case (step == nil) == (after == nil):
-			return nil, fmt.Sprintf(`REFUSED batch: retry change %d needs one of step and after: {"step": N, ...} replaces step N, {"after": N, ...} adds a step after it`, i+1)
+		case given != 1:
+			return nil, fmt.Sprintf(`REFUSED batch: retry change %d needs one of step, after and remove: {"step": N, ...} replaces step N, {"after": N, ...} adds a step after it, {"remove": N} drops it`, i+1)
+		case remove != nil:
+			if json.Unmarshal(remove, &n) != nil || n < 1 || n > len(steps) {
+				return nil, fmt.Sprintf("REFUSED batch: retry change %d: remove must be from 1 to %d, the refused batch's steps", i+1, len(steps))
+			}
+			removed[n-1] = true
 		case step != nil:
 			if json.Unmarshal(step, &n) == nil && n == len(steps)+1 {
 				if c["tool"] == nil {
@@ -68,7 +81,9 @@ func (r *Retry) Args(args json.RawMessage) (json.RawMessage, string) {
 	}
 	merged := added[0]
 	for i, st := range steps {
-		merged = append(merged, st)
+		if !removed[i] {
+			merged = append(merged, st)
+		}
 		merged = append(merged, added[i+1]...)
 	}
 	for k, v := range a {
@@ -93,5 +108,5 @@ func (r *Retry) Keep(args json.RawMessage, refused bool) string {
 		return ""
 	}
 	r.Kept = args
-	return "\n" + `To retry, send batch with "retry": true and only the steps that change: {"step": N, ...} replaces step N (its tool kept when left out), {"after": N, ...} adds a step after step N (0 for first, or step one past the last); numbers are this batch's.` + "\n"
+	return "\n" + `To retry, send batch with "retry": true and only the steps that change: {"step": N, ...} replaces step N (its tool kept when left out), {"after": N, ...} adds a step after step N (0 for first, or step one past the last), {"remove": N} drops it; remove and after move a step; numbers are this batch's.` + "\n"
 }
