@@ -1126,6 +1126,14 @@ The two must be independent, which it checks conservatively:
 Defining a function literal runs nothing, so what its body does does not
 count, until something calls it.
 
+TypeScript's `past_try` (java's #343, 2026-11-11) swaps a statement with
+a `try` next to it whatever their side effects: the one move that changes
+behavior on purpose. Declarations are still checked, and a return,
+throw, break or continue does not move. The result says what changed:
+below the try, the statement runs after everything the try does and only
+when it completes normally (naming the first exit in it); above it,
+before, and also when it does not. Go has no `try`; it ignores the flag.
+
 ## Split: what it checks
 
 `split` takes a `kind`: `variable`, `loop` or `phase` (Fowler's Split

@@ -598,8 +598,9 @@ func (l *lined) dropDeclaration(d *ast.Node) Edit {
 
 // MoveStatement returns the edits that swap the statement starting on
 // line with the one after it (down) or before it, each with the comments
-// directly above it.
-func (p *Project) MoveStatement(ctx context.Context, path string, line int, down bool) ([]Edit, string) {
+// directly above it. With pastTry, one of the two must be a try, and they
+// swap whatever their side effects, and note is set to what that changes.
+func (p *Project) MoveStatement(ctx context.Context, path string, line int, down, pastTry bool, note *string) ([]Edit, string) {
 	l, why := p.lined(path)
 	if why != "" {
 		return nil, why
@@ -646,8 +647,25 @@ func (p *Project) MoveStatement(ctx context.Context, path string, line int, down
 			return nil, fmt.Sprintf("%s uses %s, which %s declares", l.part(first), u.Text(), l.part(second))
 		}
 	}
-	if why := newEffects(c, l).Check(Move{Expr: stmt, Past: []*ast.Node{other}}); why != "" {
-		return nil, why
+	var aTry *ast.Node
+	switch {
+	case ast.IsTryStatement(first) && !ast.IsTryStatement(second):
+		aTry = first
+	case ast.IsTryStatement(second) && !ast.IsTryStatement(first):
+		aTry = second
+	}
+	if pastTry && aTry == nil {
+		return nil, "past_try applies when one of the two statements is a try and the other is not; leave it out here"
+	}
+	if pastTry {
+		if first != aTry && isJump(first) || second != aTry && isJump(second) {
+			return nil, "a return, throw, break or continue leaves the block where it is; move the statements around it instead"
+		}
+	}
+	if !pastTry {
+		if why := newEffects(c, l).Check(Move{Expr: stmt, Past: []*ast.Node{other}}); why != "" {
+			return nil, why
+		}
 	}
 	a0, a1, ok1 := l.lineRange(first)
 	b0, b1, ok2 := l.lineRange(second)
@@ -655,6 +673,9 @@ func (p *Project) MoveStatement(ctx context.Context, path string, line int, down
 		return nil, fmt.Sprintf("%s or %s shares its lines with other code", l.part(first), l.part(second))
 	}
 	text := l.text[b0:b1] + l.text[a1:b0] + l.text[a0:a1]
+	if pastTry {
+		*note = l.pastTryNote(aTry, aTry == second)
+	}
 	return []Edit{{File: l.f.FileName(), Start: a0, End: b1, NewText: text}}, ""
 }
 
@@ -917,6 +938,37 @@ func (l *lined) invertBefore(c *checker.Checker, ifs *ast.Node, head, jump strin
 	return []Edit{{File: l.f.FileName(), Start: l.pos(ifs), End: l.end(endLine), NewText: text}}, ""
 }
 
+// pastTryNote says what moving a statement past aTry changes: below it
+// (below), it runs after everything the try does and only when the try
+// completes normally; above it, before and also when it does not.
+func (l *lined) pastTryNote(aTry *ast.Node, below bool) string {
+	exit := ""
+	inspect(aTry, func(n *ast.Node) bool {
+		if exit != "" || ast.IsFunctionLike(n) {
+			return false
+		}
+		kind := ""
+		switch {
+		case ast.IsReturnStatement(n):
+			kind = "returns"
+		case ast.IsThrowStatement(n):
+			kind = "throws"
+		case ast.IsBreakStatement(n):
+			kind = "breaks"
+		case ast.IsContinueStatement(n):
+			kind = "continues"
+		}
+		if kind != "" {
+			exit = " (" + l.where(n) + " " + kind + ")"
+		}
+		return exit == ""
+	})
+	if below {
+		return "it now runs after everything the try does, and only when the try completes normally: not when it returns, throws, breaks or continues" + exit
+	}
+	return "it now runs before everything the try does, and also when the try does not complete normally" + exit
+}
+
 // RemoveElse returns the edits that un-nest the else of the if on line,
 // whose first branch cannot fall through: its statements follow the if.
 func (p *Project) RemoveElse(ctx context.Context, path string, line, column int) ([]Edit, string) {
@@ -1041,4 +1093,10 @@ func typedFunction(c *checker.Checker, l *lined, e *ast.Node) string {
 		out = "(" + head + ")" + out[len(head):]
 	}
 	return out
+}
+
+// isJump reports whether s leaves its block: a return, throw, break or
+// continue.
+func isJump(s *ast.Node) bool {
+	return ast.IsReturnStatement(s) || ast.IsThrowStatement(s) || ast.IsBreakStatement(s) || ast.IsContinueStatement(s)
 }
