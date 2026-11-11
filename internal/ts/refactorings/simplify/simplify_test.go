@@ -1761,3 +1761,46 @@ func TestSplitPhase(t *testing.T) {
 		}
 	}
 }
+
+// past_try swaps a statement with a try next to it whatever their effects,
+// as java's #343: below the try it runs only when the try completes
+// normally, which the result says.
+func TestMoveStatementPastTry(t *testing.T) {
+	soak := plants + `
+export function soak(log: string[]): boolean {
+  log.push("soaking");
+  try {
+    water();
+  } catch (e) {
+    return false;
+  }
+  return true;
+}
+`
+	check(t, []change{
+		{"past a try", soak, NewMoveDown(), `{"line": 15, "past_try": true}`, plants + `
+export function soak(log: string[]): boolean {
+  try {
+    water();
+  } catch (e) {
+    return false;
+  }
+  log.push("soaking");
+  return true;
+}
+`, ""},
+		{"not without past_try", soak, NewMoveDown(), `{"line": 15}`, "", "may change state"},
+		{"not a return", soak, NewMoveDown(), `{"line": 16, "past_try": true}`, "", "leaves the block"},
+		{"neither is a try", plants + `
+export function twice(): void {
+  water();
+  water();
+}
+`, NewMoveDown(), `{"line": 15, "past_try": true}`, "", "past_try applies when one of the two statements is a try"},
+	})
+	ws, _ := load(t, map[string]string{"src/g.ts": soak})
+	res := run(t, ws, NewMoveDown(), `{"file": "src/g.ts", "line": 15, "past_try": true}`)
+	if !strings.Contains(res.String(), "only when the try completes normally: not when it returns, throws, breaks or continues (g.ts:19 returns)") {
+		t.Errorf("the result does not say what changed: %s", res)
+	}
+}
