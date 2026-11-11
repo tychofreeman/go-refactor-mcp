@@ -1476,6 +1476,19 @@ So writing a failing test first is one step: what the test calls that
 nothing declares gets a stub (`create_from_usage`), and the test compiles
 and fails.
 
+### replace_declaration: deleting a method that something else would answer
+
+Empty content deletes a declaration; a deletion its uses would not survive
+fails the type check. A method whose calls would still compile, running
+another method, is refused (java-refactor-mcp #322, ported 2026-11-11): in
+Go, a method that hides one promoted from an embedded field
+(`Bed.Name` over `Soil.Name`); in TypeScript, an override of a base class
+method that has a body. Either may go when its body only calls that other
+method with its parameters in order (`return b.Soil.Name(prefix)`,
+`return super.depth(extra);`): the refusal names that body. Java also takes
+an override whose body equals the inherited one; here that is the forwarding
+body first, then the deletion.
+
 ### create_file
 
 `create_file` creates a file with the given `content` at `file`, relative

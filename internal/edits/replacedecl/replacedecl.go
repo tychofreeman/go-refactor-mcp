@@ -8,6 +8,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"go/types"
 	"slices"
 	"strings"
 
@@ -76,6 +77,13 @@ func (*ReplaceDeclaration) Plan(ws *workspace.Workspace, raw json.RawMessage) (*
 		return nil, refactor.Refusef("%s is not a top-level declaration", a.Name)
 	}
 	if strings.TrimSpace(a.Content) == "" {
+		if f, ok := obj.(*types.Func); ok {
+			if fd, ok := decl.(*ast.FuncDecl); ok {
+				if err := shadowing(f, fd, dpkg.TypesInfo); err != nil {
+					return nil, err
+				}
+			}
+		}
 		return deletion(ws, declaring, path, a.Name, decl, spec)
 	}
 	code, decls, err := gocode.ParseDeclarations(a.Content)
@@ -350,4 +358,133 @@ func sameKind(old, new ast.Decl) error {
 func textOf(content string, n ast.Node) string {
 	off := func(p token.Pos) int { return int(p) - 1 - len(header) }
 	return content[off(n.Pos()):off(n.End())]
+}
+
+// shadowing refuses deleting the method m when a method of its name is
+// promoted from a field its type embeds: calls of m would then run that one,
+// which compiles but does something else. A body that only calls that method
+// through the field, with m's parameters in order, may go.
+func shadowing(m *types.Func, fd *ast.FuncDecl, info *types.Info) error {
+	recv := m.Signature().Recv()
+	if recv == nil {
+		return nil
+	}
+	t := recv.Type()
+	if p, ok := t.(*types.Pointer); ok {
+		t = p.Elem()
+	}
+	st, ok := t.Underlying().(*types.Struct)
+	if !ok {
+		return nil
+	}
+	for i := range st.NumFields() {
+		field := st.Field(i)
+		if !field.Embedded() {
+			continue
+		}
+		obj, _, _ := types.LookupFieldOrMethod(field.Type(), true, m.Pkg(), m.Name())
+		other, ok := obj.(*types.Func)
+		if !ok {
+			continue
+		}
+		if forwards(fd, field, other, info) {
+			return nil
+		}
+		owner := types.TypeString(t, types.RelativeTo(m.Pkg()))
+		from := methodOwner(other, m.Pkg())
+		return refactor.Refusef("%s.%s hides %s.%s, promoted from the embedded %s: deleted, calls of it would run %s.%s, which compiles but does something else. Keep it; or, if it should run that one, replace its body with %s and delete it again",
+			owner, m.Name(), from, m.Name(), field.Name(), from, m.Name(), forwardCall(fd, field, m))
+	}
+	return nil
+}
+
+// forwards reports whether fd's body is only a call of other through the
+// embedded field, passing fd's parameters in order: return r.Field.M(a, b)
+// or r.Field.M(a, b).
+func forwards(fd *ast.FuncDecl, field *types.Var, other *types.Func, info *types.Info) bool {
+	if fd.Body == nil || len(fd.Body.List) != 1 || fd.Recv == nil || len(fd.Recv.List) != 1 || len(fd.Recv.List[0].Names) != 1 {
+		return false
+	}
+	var call *ast.CallExpr
+	switch s := fd.Body.List[0].(type) {
+	case *ast.ReturnStmt:
+		if len(s.Results) == 1 {
+			call, _ = s.Results[0].(*ast.CallExpr)
+		}
+	case *ast.ExprStmt:
+		call, _ = s.X.(*ast.CallExpr)
+	}
+	if call == nil {
+		return false
+	}
+	sel, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok || info.Uses[sel.Sel] != other && info.Uses[sel.Sel] != types.Object(other.Origin()) {
+		return false
+	}
+	via, ok := sel.X.(*ast.SelectorExpr)
+	if !ok || via.Sel.Name != field.Name() {
+		return false
+	}
+	r, ok := via.X.(*ast.Ident)
+	if !ok || info.Uses[r] == nil || info.Uses[r] != info.Defs[fd.Recv.List[0].Names[0]] {
+		return false
+	}
+	var params []types.Object
+	for _, f := range fd.Type.Params.List {
+		for _, n := range f.Names {
+			params = append(params, info.Defs[n])
+		}
+	}
+	if len(call.Args) != len(params) || call.Ellipsis.IsValid() != isVariadic(fd) {
+		return false
+	}
+	for i, arg := range call.Args {
+		id, ok := arg.(*ast.Ident)
+		if !ok || info.Uses[id] == nil || info.Uses[id] != params[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// isVariadic reports whether fd's last parameter is ...T.
+func isVariadic(fd *ast.FuncDecl) bool {
+	ps := fd.Type.Params.List
+	if len(ps) == 0 {
+		return false
+	}
+	_, ok := ps[len(ps)-1].Type.(*ast.Ellipsis)
+	return ok
+}
+
+// methodOwner is the name of the type that declares the method f.
+func methodOwner(f *types.Func, from *types.Package) string {
+	t := f.Signature().Recv().Type()
+	if p, ok := t.(*types.Pointer); ok {
+		t = p.Elem()
+	}
+	return types.TypeString(t, types.RelativeTo(from))
+}
+
+// forwardCall is the body that makes m only call its promoted twin through
+// field: return r.Field.M(a, b), without return when m has no results.
+func forwardCall(fd *ast.FuncDecl, field *types.Var, m *types.Func) string {
+	recv := "r"
+	if fd.Recv != nil && len(fd.Recv.List) == 1 && len(fd.Recv.List[0].Names) == 1 && fd.Recv.List[0].Names[0].Name != "_" {
+		recv = fd.Recv.List[0].Names[0].Name
+	}
+	var args []string
+	for _, f := range fd.Type.Params.List {
+		for _, n := range f.Names {
+			args = append(args, n.Name)
+		}
+	}
+	if isVariadic(fd) && len(args) > 0 {
+		args[len(args)-1] += "..."
+	}
+	call := fmt.Sprintf("%s.%s.%s(%s)", recv, field.Name(), m.Name(), strings.Join(args, ", "))
+	if m.Signature().Results().Len() > 0 {
+		return "return " + call
+	}
+	return call
 }
