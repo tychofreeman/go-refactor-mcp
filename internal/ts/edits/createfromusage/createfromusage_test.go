@@ -205,3 +205,18 @@ func TestMissing(t *testing.T) {
 		t.Errorf("a misspelling: %q close to %q", name, close)
 	}
 }
+
+// A class a file only calls static members of gets a stub with them, as
+// java's #293: Pot.decode("x") names a class nothing declares.
+func TestStubAStaticReceiver(t *testing.T) {
+	ws, dir := load(t, copyOf(garden))
+	b := batch(t, ws,
+		mk(adddecl.New(), map[string]string{"file": "src/plant.ts", "content": "export const soil: string = Pot.decode(\"clay\");"}),
+	)
+	if !b.Applied {
+		t.Fatalf("not applied: %s", b)
+	}
+	if got, want := read(t, dir, "src/plant.ts"), "}\n\nclass Pot {\n  static decode(s: string): string {\n    throw new Error(\"not implemented\");\n  }\n}\n\nexport const soil: string = Pot.decode(\"clay\");\n"; !strings.HasSuffix(got, want) {
+		t.Errorf("plant.ts:\n%s\nwant it to end:\n%s", got, want)
+	}
+}

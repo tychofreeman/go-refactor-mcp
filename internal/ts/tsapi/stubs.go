@@ -30,7 +30,8 @@ type Stub struct {
 // Stubs returns a stub for each of names that the file at path uses and
 // nothing declares: a function it calls, of the file or an exported one of
 // the module the file imports it from; a class it makes with new, there
-// too; a method or property of the class (a signature or property of the
+// too, or one it only uses static members of (Pot.decode("x"), with
+// them); a method or property of the class (a signature or property of the
 // interface) it calls or reads on. results gives the result type of a
 // function or method, or the type of a property, by name, where its use
 // does not tell it. It refuses a name the file does not use so ("calls no
@@ -69,6 +70,7 @@ func (l *lined) stub(c *checker.Checker, name, result string) (Stub, string) {
 		s.File, exported = from, true
 	}
 	var call, made, prop *ast.Node
+	var statics []*ast.Node
 	method := false
 	inspect(l.f.AsNode(), func(n *ast.Node) bool {
 		switch {
@@ -84,6 +86,9 @@ func (l *lined) stub(c *checker.Checker, name, result string) (Stub, string) {
 			made = n
 		case prop == nil && ast.IsPropertyAccessExpression(n) && n.Name().Text() == name && !isCallee(n) && c.GetSymbolAtLocation(n.Name()) == nil:
 			prop = n
+		}
+		if ast.IsPropertyAccessExpression(n) && ast.IsIdentifier(n.Expression()) && n.Expression().Text() == name && c.GetSymbolAtLocation(n.Expression()) == nil {
+			statics = append(statics, n)
 		}
 		return true
 	})
@@ -122,6 +127,39 @@ func (l *lined) stub(c *checker.Checker, name, result string) (Stub, string) {
 		s.File, s.Owner, s.Text = file, owner, name+": "+typ+";"
 		if class {
 			s.Text = name + "!: " + typ + ";"
+		}
+		return s, ""
+	case call == nil && made == nil && prop == nil && len(statics) > 0:
+		// A class only its static members are used on: Pot.decode("x").
+		var members []string
+		seen := map[string]bool{}
+		for _, n := range statics {
+			m := n.Name().Text()
+			if seen[m] {
+				continue
+			}
+			seen[m] = true
+			if isCallee(n) {
+				r, ok := resultType(c, n.Parent)
+				if !ok {
+					return Stub{}, fmt.Sprintf("cannot tell the results of %s.%s from how %s uses it: give its call a type (const x: T = %s.%s(...)), or declare it", name, m, rel, name, m)
+				}
+				members = append(members, fmt.Sprintf("  static %s(%s): %s {\n    throw new Error(\"not implemented\");\n  }", m, parameters(c, n.Parent), r))
+				continue
+			}
+			t, ok := propertyType(c, n)
+			if !ok {
+				return Stub{}, fmt.Sprintf("cannot tell the type of %s.%s from how %s uses it: give it a place of a type (const x: T = %s.%s)", name, m, rel, name, m)
+			}
+			members = append(members, fmt.Sprintf("  static %s: %s;", m, t))
+		}
+		s.Text = export("class " + name + " {\n" + strings.Join(members, "\n\n") + "\n}")
+		if !exported {
+			top := statics[0]
+			for top.Parent != nil && !ast.IsSourceFile(top.Parent) {
+				top = top.Parent
+			}
+			s.Before = l.start(l.line(scanner.GetTokenPosOfNode(top, l.f, true)))
 		}
 		return s, ""
 	case call == nil:
