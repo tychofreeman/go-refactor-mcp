@@ -519,13 +519,50 @@ export const first: Order = {
   }
 }
 `}, NewExtractType(), `{"file": "src/p.ts", "name": "P", "fields": ["label"], "new_type": "L", "as": "l"}`, nil, "uses name, which stays in P"},
-		{"no initializer", map[string]string{"src/p.ts": `export class P {
-  street: string;
-  constructor(s: string) {
-    this.street = s;
+		{"set by the constructor, private", map[string]string{"src/renamer.ts": `export class Renamer {
+  private readonly out: string[];
+  private readonly err: string[];
+  readonly retries: number;
+  constructor(out: string[], err: string[], retries: number) {
+    this.out = out;
+    this.err = err;
+    this.retries = retries;
+  }
+  report(r: string): void {
+    this.out.push(r);
+    if (this.retries > 1) this.err.push(r);
   }
 }
-`}, NewExtractType(), `{"file": "src/p.ts", "name": "P", "fields": ["street"], "new_type": "A", "as": "home"}`, nil, "no initializer"},
+`}, NewExtractType(), `{"file": "src/renamer.ts", "name": "Renamer", "fields": ["out", "err"], "new_type": "TextReport", "as": "text"}`, map[string]string{"src/renamer.ts": `export class TextReport {
+  readonly out: string[];
+  readonly err: string[];
+
+  constructor(out: string[], err: string[]) {
+    this.out = out;
+    this.err = err;
+  }
+}
+
+export class Renamer {
+  private readonly text: TextReport;
+  readonly retries: number;
+  constructor(out: string[], err: string[], retries: number) {
+    this.text = new TextReport(out, err);
+    this.retries = retries;
+  }
+  report(r: string): void {
+    this.text.out.push(r);
+    if (this.retries > 1) this.text.err.push(r);
+  }
+}
+`}, ""},
+		{"set by the constructor from a call", map[string]string{"src/p.ts": `export class P {
+  street: string;
+  constructor(s: string) {
+    this.street = s.trim();
+  }
+}
+`}, NewExtractType(), `{"file": "src/p.ts", "name": "P", "fields": ["street"], "new_type": "A", "as": "home"}`, nil, "sets street to s.trim()"},
 		{"optional", map[string]string{"src/o.ts": `export interface O {
   street?: string;
 }

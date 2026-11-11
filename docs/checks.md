@@ -938,11 +938,22 @@ a type alias of an object type, the new type is an interface, the
 property `as: T`, and each object literal of the type, found by its
 contextual type, gets its moved properties in one literal held in `as`.
 
+A class's properties without an initializer (java's #345, 2026-11-11)
+are set by its constructor: the new class takes them in a constructor of
+its own, the holder is declared `as: T`, and the first of the
+constructor's `this.f = e;` becomes `this.as = new T(e1, e2);`, the others
+deleted. Each `e` may read only the constructor's parameters it never
+assigns and literals, and call or make nothing. A private member moves
+without `private`, and the holder is `private` instead (`private
+readonly` when every moved property is readonly).
+
 Refused, saying why: a generic type; a member sharing its line with
 another; a name already taken, or `as` already a member; a type that
 another extends or implements; for a class, a member that is not a
-property or method, private, protected, static or abstract, a property
-with no initializer (a constructor sets it) or one that reads `this`, a
+property or method, protected, static, abstract or `#private`, a
+property with no initializer that the constructor does not set in a
+statement of its own, sets twice or from more than its parameters, or
+reads between setting, one whose initializer reads `this`, a
 method that uses `super`, `this` as a whole or a member that stays, and
 an object literal standing for one; for an interface, an optional
 member (a literal could leave it out), and a literal that spreads

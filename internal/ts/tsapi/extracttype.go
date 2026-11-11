@@ -80,6 +80,24 @@ func (p *Project) ExtractType(ctx context.Context, path string, line int, name s
 			return nil, why
 		}
 	}
+	var ctorSet []*ast.Node
+	private := false
+	for _, m := range chosen {
+		if class && ast.IsPropertyDeclaration(m) && m.AsPropertyDeclaration().Initializer == nil {
+			ctorSet = append(ctorSet, m)
+		}
+		if m.ModifierFlags()&ast.ModifierFlagsPrivate != 0 {
+			private = true
+		}
+	}
+	var ctorEdits []Edit
+	var rewritten [][2]int
+	if len(ctorSet) > 0 {
+		ctorEdits, rewritten, why = l.buildInConstructor(c, decl, ctorSet, chosen, newType, as)
+		if why != "" {
+			return nil, why
+		}
+	}
 	declSym := c.GetSymbolAtLocation(decl.Name())
 	for _, id := range p.references(c, []*ast.Symbol{declSym}) {
 		if h := id.Parent; h != nil && ast.IsExpressionWithTypeArguments(h) && h.Parent != nil && ast.IsHeritageClause(h.Parent) {
@@ -105,6 +123,8 @@ func (p *Project) ExtractType(ctx context.Context, path string, line int, name s
 		pa := id.Parent
 		access := ast.IsPropertyAccessExpression(pa) && pa.Name() == id
 		switch {
+		case ast.GetSourceFileOfNode(id) == l.f && slices.ContainsFunc(rewritten, func(r [2]int) bool { return id.Pos() >= r[0] && id.End() <= r[1] }):
+			// In a statement of the constructor that buildInConstructor rewrites.
 		case inMoved(id) && access && pa.Expression().Kind == ast.KindThisKeyword:
 			// Moves with its member, where this is the new type.
 		case inMoved(id):
@@ -120,7 +140,8 @@ func (p *Project) ExtractType(ctx context.Context, path string, line int, name s
 		return nil, why
 	}
 	edits = append(edits, lits...)
-	edits = append(edits, l.moveMembers(decl, chosen, class, newType, as)...)
+	edits = append(edits, ctorEdits...)
+	edits = append(edits, l.moveMembers(c, decl, chosen, class, newType, as, ctorSet, private)...)
 	slices.SortFunc(edits, func(x, y Edit) int { return x.Start - y.Start })
 	return edits, ""
 }
@@ -143,13 +164,13 @@ func (l *lined) movable(m *ast.Node, class bool, name, newType string, moved map
 	if !ast.IsPropertyDeclaration(m) && !ast.IsMethodDeclaration(m) {
 		return fmt.Sprintf("%s is not a property or method", what)
 	}
-	if m.ModifierFlags()&(ast.ModifierFlagsPrivate|ast.ModifierFlagsProtected|ast.ModifierFlagsStatic|ast.ModifierFlagsAbstract) != 0 || ast.IsPrivateIdentifier(m.Name()) {
-		return fmt.Sprintf("%s is private, protected, static or abstract, which %s could not reach in %s", what, name, newType)
+	if m.ModifierFlags()&(ast.ModifierFlagsProtected|ast.ModifierFlagsStatic|ast.ModifierFlagsAbstract) != 0 || ast.IsPrivateIdentifier(m.Name()) {
+		return fmt.Sprintf("%s is protected, static, abstract or #private, which %s could not reach in %s", what, name, newType)
 	}
 	if ast.IsPropertyDeclaration(m) {
 		init := m.AsPropertyDeclaration().Initializer
 		if init == nil {
-			return fmt.Sprintf("%s has no initializer, so a constructor sets it; give it one where it is declared first", what)
+			return "" // the constructor sets it: buildInConstructor
 		}
 		var this *ast.Node
 		inspect(init, func(n *ast.Node) bool {
@@ -279,7 +300,7 @@ func (p *Project) literals(c *checker.Checker, sym *ast.Symbol, name string, cla
 
 // moveMembers returns the edits that declare newType, just before decl,
 // with the chosen members, and put the property as in their place.
-func (l *lined) moveMembers(decl *ast.Node, chosen []*ast.Node, class bool, newType, as string) []Edit {
+func (l *lined) moveMembers(c *checker.Checker, decl *ast.Node, chosen []*ast.Node, class bool, newType, as string, ctorSet []*ast.Node, private bool) []Edit {
 	ind := l.indent(l.line(l.pos(decl)))
 	in := ind + l.unit()
 	export := ""
@@ -294,11 +315,35 @@ func (l *lined) moveMembers(decl *ast.Node, chosen []*ast.Node, class bool, newT
 	var edits []Edit
 	for i, m := range chosen {
 		a, b, _ := l.lineRange(m)
-		text += l.reindent(a, b, l.indent(l.line(l.pos(m))), in)
+		var drop []repl
+		if mods := m.Modifiers(); private && mods != nil {
+			// Private to the holder now: the moved member is the new class's own.
+			for _, mod := range mods.Nodes {
+				if mod.Kind == ast.KindPrivateKeyword {
+					end := mod.End()
+					for end < len(l.text) && l.text[end] == ' ' {
+						end++
+					}
+					drop = append(drop, repl{start: l.pos(mod), end: end})
+				}
+			}
+		}
+		text += l.reindent(a, b, l.indent(l.line(l.pos(m))), in, drop...)
 		held := ""
 		if i == 0 {
 			if class {
-				held = in + as + " = new " + newType + "()" + l.semi() + "\n"
+				mods := ""
+				if private {
+					mods = "private "
+					if allReadonly(chosen) {
+						mods += "readonly "
+					}
+				}
+				if len(ctorSet) > 0 {
+					held = in + mods + as + ": " + newType + l.semi() + "\n"
+				} else {
+					held = in + mods + as + " = new " + newType + "()" + l.semi() + "\n"
+				}
 			} else {
 				end := ";"
 				if s := strings.TrimSpace(l.text[a:b]); !strings.HasSuffix(s, ";") && !strings.HasSuffix(s, ",") {
@@ -311,10 +356,163 @@ func (l *lined) moveMembers(decl *ast.Node, chosen []*ast.Node, class bool, newT
 		}
 		edits = append(edits, Edit{File: l.f.FileName(), Start: a, End: b, NewText: held})
 	}
+	if len(ctorSet) > 0 {
+		var params, sets []string
+		for _, m := range ctorSet {
+			f := l.source(m.Name())
+			t := ""
+			if m.Type() != nil {
+				t = l.source(m.Type())
+			} else {
+				t = c.TypeToString(c.GetTypeAtLocation(m.Name()))
+			}
+			params = append(params, f+": "+t)
+			sets = append(sets, in+l.unit()+"this."+f+" = "+f+l.semi()+"\n")
+		}
+		text += "\n" + in + "constructor(" + strings.Join(params, ", ") + ") {\n" + strings.Join(sets, "") + in + "}\n"
+	}
 	text += ind + "}\n\n"
 	a, _, ok := l.lineRange(decl)
 	if !ok {
 		a = l.start(l.line(l.pos(decl)))
 	}
 	return append(edits, Edit{File: l.f.FileName(), Start: a, End: a, NewText: text})
+}
+
+// allReadonly reports whether every property of members is readonly.
+func allReadonly(members []*ast.Node) bool {
+	for _, m := range members {
+		if ast.IsPropertyDeclaration(m) && m.ModifierFlags()&ast.ModifierFlagsReadonly == 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// buildInConstructor returns the edits that build the holder in decl's
+// constructor, for fields that have no initializer, from the statements
+// that set them (this.f = e;, each e reading only the constructor's
+// parameters and literals): the first becomes this.as = new
+// NewType(e1, ...), the others go. It also returns the ranges of those
+// statements, whose references are rewritten so. As java's #345.
+func (l *lined) buildInConstructor(c *checker.Checker, decl *ast.Node, fields, chosen []*ast.Node, newType, as string) ([]Edit, [][2]int, string) {
+	var ctor *ast.Node
+	for _, m := range decl.Members() {
+		if ast.IsConstructorDeclaration(m) && m.Body() != nil {
+			ctor = m
+		}
+	}
+	if ctor == nil {
+		return nil, nil, fmt.Sprintf("%s has no initializer and no constructor sets it; give it one where it is declared first", l.source(fields[0].Name()))
+	}
+	stmts := ctor.Body().Statements()
+	sets := map[string]int{}
+	for i, s := range stmts {
+		if !ast.IsExpressionStatement(s) {
+			continue
+		}
+		e := s.Expression()
+		if !ast.IsBinaryExpression(e) || e.AsBinaryExpression().OperatorToken.Kind != ast.KindEqualsToken {
+			continue
+		}
+		left := e.AsBinaryExpression().Left
+		if !ast.IsPropertyAccessExpression(left) || left.Expression().Kind != ast.KindThisKeyword {
+			continue
+		}
+		name := left.Name().Text()
+		for _, f := range fields {
+			if l.source(f.Name()) != name {
+				continue
+			}
+			if _, twice := sets[name]; twice {
+				return nil, nil, fmt.Sprintf("the constructor sets %s twice; leave it out of fields", name)
+			}
+			sets[name] = i
+		}
+	}
+	var args []string
+	lo, hi := len(stmts), -1
+	for _, f := range fields {
+		name := l.source(f.Name())
+		i, ok := sets[name]
+		if !ok {
+			return nil, nil, fmt.Sprintf("the constructor does not set %s in a statement of its own body (this.%s = ...;), so the holder cannot be built there; give it an initializer, or leave it out", name, name)
+		}
+		right := stmts[i].Expression().AsBinaryExpression().Right
+		if why := l.fromParameters(c, ctor, right); why != "" {
+			return nil, nil, fmt.Sprintf("the constructor sets %s to %s, which %s; built into the holder it would run at another point. Assign it to a local first, or leave %s out", name, l.source(right), why, name)
+		}
+		args = append(args, l.source(right))
+		lo, hi = min(lo, i), max(hi, i)
+	}
+	set := map[int]bool{}
+	for _, i := range sets {
+		set[i] = true
+	}
+	for i := lo + 1; i < hi; i++ {
+		if set[i] {
+			continue
+		}
+		why := ""
+		inspect(stmts[i], func(n *ast.Node) bool {
+			if why == "" && ast.IsPropertyAccessExpression(n) && n.Expression().Kind == ast.KindThisKeyword && slices.ContainsFunc(chosen, func(m *ast.Node) bool { return m.Name() != nil && l.source(m.Name()) == n.Name().Text() }) {
+				why = fmt.Sprintf("the constructor reads %s between setting the fields (%s), and the holder sets them all at once; move that statement first", l.source(n), l.where(n))
+			}
+			return why == ""
+		})
+		if why != "" {
+			return nil, nil, why
+		}
+	}
+	var edits []Edit
+	var ranges [][2]int
+	for i := range set {
+		s := stmts[i]
+		a, b, ok := l.lineRange(s)
+		if !ok {
+			a, b = l.pos(s), s.End()
+		}
+		ranges = append(ranges, [2]int{a, b})
+		if i == lo {
+			edits = append(edits, Edit{File: l.f.FileName(), Start: l.pos(s), End: s.End(), NewText: "this." + as + " = new " + newType + "(" + strings.Join(args, ", ") + ")" + l.semi()})
+		} else {
+			edits = append(edits, Edit{File: l.f.FileName(), Start: a, End: b})
+		}
+	}
+	return edits, ranges, ""
+}
+
+// fromParameters says why e reads more than the parameters of ctor that
+// it never assigns, and literals, or calls or makes something; or "".
+func (l *lined) fromParameters(c *checker.Checker, ctor, e *ast.Node) string {
+	why := ""
+	inspect(e, func(n *ast.Node) bool {
+		if why != "" {
+			return false
+		}
+		switch {
+		case ast.IsCallExpression(n), ast.IsNewExpression(n), ast.IsTaggedTemplateExpression(n), ast.IsAwaitExpression(n), ast.IsYieldExpression(n):
+			why = "calls or makes something"
+		case n.Kind == ast.KindThisKeyword:
+			why = "reads this"
+		case ast.IsBinaryExpression(n) && ast.IsAssignmentOperator(n.AsBinaryExpression().OperatorToken.Kind),
+			ast.IsPrefixUnaryExpression(n) && isUpdate(n.AsPrefixUnaryExpression().Operator), ast.IsPostfixUnaryExpression(n):
+			why = "assigns"
+		case ast.IsFunctionLike(n):
+			return false
+		case ast.IsIdentifier(n):
+			if p := n.Parent; p != nil && ast.IsPropertyAccessExpression(p) && p.Name() == n {
+				return true
+			}
+			s := c.GetSymbolAtLocation(n)
+			param := s != nil && s.ValueDeclaration != nil && ast.IsParameterDeclaration(s.ValueDeclaration) && s.ValueDeclaration.Parent == ctor
+			if !param && n.Text() != "undefined" {
+				why = "reads " + n.Text() + ", not a parameter"
+			} else if param && l.assigns(ctor.Body(), s, c) != "" {
+				why = "reads " + n.Text() + ", which the constructor assigns"
+			}
+		}
+		return why == ""
+	})
+	return why
 }
