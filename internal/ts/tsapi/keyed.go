@@ -108,9 +108,13 @@ func typeHolds(c *checker.Checker, t *checker.Type, owner *ast.Symbol, seen map[
 		}
 		return false
 	}
-	for _, a := range c.GetTypeArguments(t) {
-		if typeHolds(c, a, owner, seen) {
-			return true
+	// Only a type reference has type arguments; asked of another, the
+	// checker dereferences nil.
+	if t.ObjectFlags()&checker.ObjectFlagsReference != 0 {
+		for _, a := range c.GetTypeArguments(t) {
+			if typeHolds(c, a, owner, seen) {
+				return true
+			}
 		}
 	}
 	if s := t.Symbol(); s != nil && s.Flags&(ast.SymbolFlagsTypeLiteral|ast.SymbolFlagsObjectLiteral|ast.SymbolFlagsInterface|ast.SymbolFlagsClass) != 0 {
