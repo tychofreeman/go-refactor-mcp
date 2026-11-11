@@ -244,7 +244,7 @@ func (s *Server) MCP() *mcp.Server {
 		s.typescript.SkeletonOnly = s.SkeletonOnly
 	}
 	srv := mcp.NewServer(&mcp.Implementation{Name: "gorefactor", Version: Version()}, &mcp.ServerOptions{
-		Instructions: s.instructions(),
+		Instructions: "gorefactor " + Version() + ". " + s.instructions(),
 	})
 
 	notDestructive := false
