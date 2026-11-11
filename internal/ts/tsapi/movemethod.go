@@ -147,6 +147,9 @@ func (p *Project) MoveMethod(ctx context.Context, path, name, to string, also []
 	if why != "" {
 		return nil, why
 	}
+	// Each class's step: its members' indentation past its own.
+	fromStep := strings.TrimPrefix(l.indent(l.line(l.pos(moved[0]))), l.indent(l.line(l.pos(from))))
+	toStep := strings.TrimPrefix(pl.Indent, tl.indent(tl.line(tl.pos(target))))
 	var edits []Edit
 	var texts []string
 	for _, m := range moved {
@@ -154,7 +157,7 @@ func (p *Project) MoveMethod(ctx context.Context, path, name, to string, also []
 		if !ok {
 			return nil, fmt.Sprintf("%s shares a line with other code; put it on lines of its own first", memberName(m))
 		}
-		texts = append(texts, strings.TrimSuffix(textutil.Reindent(l.text[a:b], l.indent(l.line(l.pos(m))), pl.Indent), "\n"))
+		texts = append(texts, strings.TrimSuffix(textutil.ReindentSteps(l.text[a:b], l.indent(l.line(l.pos(m))), pl.Indent, fromStep, toStep), "\n"))
 		edits = append(edits, Edit{File: l.f.FileName(), Start: a, End: b})
 	}
 	text := strings.Join(texts, "\n\n")

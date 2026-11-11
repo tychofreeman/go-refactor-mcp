@@ -1120,3 +1120,18 @@ export function sour(b: Bed): boolean {
   }
 }`)
 }
+
+// A method moved into a class indented by another step takes that step
+// inside it too, as java's #316.
+func TestMoveMethodIndentStep(t *testing.T) {
+	src := "export class Soil {\n  ph = 7;\n  acid(): boolean {\n    if (this.ph < 6) {\n      return true;\n    }\n    return false;\n  }\n}\n\nexport class Bed extends Soil {\n    name = \"bed\";\n}\n\nexport function sour(b: Bed): boolean {\n    return b.acid();\n}\n"
+	ws, dir := load(t, map[string]string{"src/soil.ts": src})
+	res, err := refactor.Run(ws, NewMoveMethod(), json.RawMessage(`{"file": "src/soil.ts", "name": "Soil.acid", "to": "Bed"}`), refactor.OptionsOf[*workspace.Workspace]{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Applied {
+		t.Fatalf("%s", res)
+	}
+	mustContain(t, dir, "src/soil.ts", "    acid(): boolean {\n        if (this.ph < 6) {\n            return true;\n        }\n        return false;\n    }\n")
+}

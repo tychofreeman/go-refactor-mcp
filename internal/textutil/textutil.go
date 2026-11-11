@@ -249,3 +249,27 @@ func Shifted(old, matched, new string) (shifted, how string) {
 func Indent(line string) string {
 	return line[:len(line)-len(strings.TrimLeft(line, " \t"))]
 }
+
+// ReindentSteps is Reindent, also turning each step of fromStep in the
+// indentation after from into one of toStep, for text moved into a file
+// that indents by another step.
+func ReindentSteps(text, from, to, fromStep, toStep string) string {
+	out := Reindent(text, from, to)
+	if fromStep == toStep || fromStep == "" {
+		return out
+	}
+	lines := strings.Split(out, "\n")
+	for i, line := range lines {
+		if !strings.HasPrefix(line, to) {
+			continue
+		}
+		rest := line[len(to):]
+		n := 0
+		for strings.HasPrefix(rest, fromStep) {
+			rest = rest[len(fromStep):]
+			n++
+		}
+		lines[i] = to + strings.Repeat(toStep, n) + rest
+	}
+	return strings.Join(lines, "\n")
+}
