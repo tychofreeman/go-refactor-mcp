@@ -1819,6 +1819,7 @@ export function grow(p: Plant): number {
 }
 `, NewExtractFunction(), `{"start_line": 15, "end_line": 15, "name": "twice", "visibility": "public"}`, "", "visibility applies to a method"},
 	})
+}
 
 // past_try swaps a statement with a try next to it whatever their effects,
 // as java's #343: below the try it runs only when the try completes
