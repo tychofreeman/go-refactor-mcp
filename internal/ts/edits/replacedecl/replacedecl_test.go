@@ -93,3 +93,30 @@ func TestDeleteDeclaration(t *testing.T) {
 		t.Errorf("deleting a method water calls was not refused")
 	}
 }
+
+// Deleting an override would make its calls run the base class's method,
+// which compiles: refused, unless it only calls that one through super.
+func TestDeleteOverride(t *testing.T) {
+	const beds = `export class Bed {
+  depth(extra: number): number {
+    return extra;
+  }
+}
+
+export class RaisedBed extends Bed {
+  override depth(extra: number): number {
+    return BODY;
+  }
+}
+
+export function dig(b: RaisedBed): number {
+  return b.depth(2);
+}
+`
+	check(t, strings.Replace(beds, "BODY", "extra + 1", 1), []tcase{
+		{"an override that does more", `{"name": "RaisedBed.depth", "content": ""}`, "", "calls of it would run that one"},
+	})
+	check(t, strings.Replace(beds, "BODY", "super.depth(extra)", 1), []tcase{
+		{"an override that only calls super", `{"name": "RaisedBed.depth", "content": ""}`, "export class RaisedBed extends Bed {\n}", ""},
+	})
+}

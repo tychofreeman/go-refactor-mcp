@@ -32,6 +32,9 @@ func (p *Project) ReplaceDeclaration(path, name, content string) ([]Edit, string
 	}
 	d := found[0]
 	if strings.TrimSpace(content) == "" {
+		if why := p.deletesOverride(l, name); why != "" {
+			return nil, why
+		}
 		// Deleted, with its doc comment and the blank line after it, or
 		// before it when it is the last.
 		from, to := l.start(d.Start), min(l.end(d.End)+1, len(l.text))
@@ -361,6 +364,40 @@ func (p *Project) AddCase(path string, line int, where, content string) ([]Edit,
 	return nil, "content is case or default clauses, or else if or else branches"
 }
 
+// deletesOverride returns why the method name (Class.method) may not be
+// deleted: it overrides a method its base class has a body for, so calls of
+// it would run that one, which compiles but does something else. A method
+// whose body only calls that one through super, with its parameters in
+// order, may go.
+func (p *Project) deletesOverride(l *lined, name string) string {
+	cname, mname, ok := strings.Cut(name, ".")
+	if !ok {
+		return ""
+	}
+	class, ms, why := l.member(cname, mname)
+	if why != "" || !ast.IsClassDeclaration(class) || len(ms) != 1 || !ast.IsMethodDeclaration(ms[0]) || ms[0].Body() == nil {
+		return ""
+	}
+	c, done := p.prog.GetProgram().GetTypeChecker(context.Background())
+	defer done()
+	for _, e := range ast.GetExtendsHeritageClauseElements(class) {
+		typ := c.GetTypeAtLocation(e)
+		if typ == nil {
+			continue
+		}
+		prop := c.GetPropertyOfType(typ, mname)
+		if prop == nil || !hasBody(prop.Declarations) {
+			continue
+		}
+		if callsSuper(c, ms[0], mname) {
+			return ""
+		}
+		return fmt.Sprintf("%s overrides the %s of %s: deleted, calls of it would run that one, which compiles but does something else. Keep it; or, if it should run that one, replace its body with %s and delete it again",
+			name, mname, l.source(e), superCall(l, ms[0], mname))
+	}
+	return ""
+}
+
 // addClauses adds the clauses content to the switch sw: before or after
 // clause when it is given, else at its end.
 func (l *lined) addClauses(sw, clause *ast.Node, where, content string) ([]Edit, string) {
@@ -498,4 +535,77 @@ func indented(text, indent string) string {
 		}
 	}
 	return strings.Join(lines, "\n")
+}
+
+// hasBody reports whether one of decls is a method with a body.
+func hasBody(decls []*ast.Node) bool {
+	for _, d := range decls {
+		if ast.IsMethodDeclaration(d) && d.Body() != nil {
+			return true
+		}
+	}
+	return false
+}
+
+// callsSuper reports whether m's body is only super.name(...) with m's
+// parameters in order, returned or as a statement.
+func callsSuper(c *checker.Checker, m *ast.Node, name string) bool {
+	stmts := m.Body().AsBlock().Statements.Nodes
+	if len(stmts) != 1 {
+		return false
+	}
+	var e *ast.Node
+	switch s := stmts[0]; {
+	case ast.IsReturnStatement(s):
+		e = s.AsReturnStatement().Expression
+	case ast.IsExpressionStatement(s):
+		e = s.AsExpressionStatement().Expression
+	}
+	if e == nil || !ast.IsCallExpression(e) {
+		return false
+	}
+	call := e.AsCallExpression()
+	callee := call.Expression
+	if !ast.IsPropertyAccessExpression(callee) || callee.AsPropertyAccessExpression().Expression.Kind != ast.KindSuperKeyword || callee.Name().Text() != name {
+		return false
+	}
+	params := m.Parameters()
+	var args []*ast.Node
+	if call.Arguments != nil {
+		args = call.Arguments.Nodes
+	}
+	if len(args) != len(params) {
+		return false
+	}
+	for i, a := range args {
+		p := params[i]
+		if p.AsParameterDeclaration().DotDotDotToken != nil {
+			if !ast.IsSpreadElement(a) {
+				return false
+			}
+			a = a.AsSpreadElement().Expression
+		}
+		if !ast.IsIdentifier(a) || c.GetSymbolAtLocation(a) == nil || c.GetSymbolAtLocation(a) != c.GetSymbolAtLocation(p.Name()) {
+			return false
+		}
+	}
+	return true
+}
+
+// superCall is the body that makes m only call its base's name through
+// super: return super.name(a, b);, without return when m returns void.
+func superCall(l *lined, m *ast.Node, name string) string {
+	var args []string
+	for _, p := range m.Parameters() {
+		a := l.source(p.Name())
+		if p.AsParameterDeclaration().DotDotDotToken != nil {
+			a = "..." + a
+		}
+		args = append(args, a)
+	}
+	call := fmt.Sprintf("super.%s(%s);", name, strings.Join(args, ", "))
+	if t := m.Type(); t != nil && strings.TrimSpace(l.source(t)) == "void" {
+		return call
+	}
+	return "return " + call
 }
