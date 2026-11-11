@@ -85,6 +85,26 @@ export function water(): number {
 
 func TestExtractVariable(t *testing.T) {
 	check(t, []change{
+		{"an arrow takes its parameters' types", plants + `
+export function heights(ps: Plant[]): number[] {
+  return ps.map((p) => p.height);
+}
+`, NewExtractVariable(), `{"line": 15, "expression": "(p) => p.height", "name": "height"}`, plants + `
+export function heights(ps: Plant[]): number[] {
+  const height = (p: Plant) => p.height;
+  return ps.map(height);
+}
+`, ""},
+		{"an arrow without parentheses", plants + `
+export function heights(ps: Plant[]): number[] {
+  return ps.map(p => p.height);
+}
+`, NewExtractVariable(), `{"line": 15, "expression": "p => p.height", "name": "height"}`, plants + `
+export function heights(ps: Plant[]): number[] {
+  const height = (p: Plant) => p.height;
+  return ps.map(height);
+}
+`, ""},
 		{"plain", plants + `
 export function tall(p: Plant, margin: number): number {
   return p.height * 2 + margin;

@@ -397,7 +397,7 @@ func (p *Project) ExtractVariable(ctx context.Context, path string, line int, ex
 	}
 	var edits []Edit
 	indent := l.indent(l.line(l.pos(stmt)))
-	decl := "const " + name + " = " + l.source(e)
+	decl := "const " + name + " = " + typedFunction(c, l, e)
 	if at := l.start(l.line(l.pos(stmt))); strings.TrimSpace(l.text[at:l.pos(stmt)]) == "" {
 		edits = append(edits, Edit{File: l.f.FileName(), Start: at, End: at, NewText: indent + decl + l.semi() + "\n"})
 	} else {
@@ -995,4 +995,50 @@ func (p *Project) WrapElse(ctx context.Context, path string, line, column int) (
 	}
 	edits = append(edits, Edit{File: f, Start: end, End: end, NewText: "\n" + l.indent(l.line(l.pos(ifs))) + "}"})
 	return edits, ""
+}
+
+// typedFunction returns the source of e, with the types its context gave
+// an arrow function's or function expression's untyped parameters
+// written on them: away from that context, as a variable's value, they
+// would have none (java's #298).
+func typedFunction(c *checker.Checker, l *lined, e *ast.Node) string {
+	src := l.source(e)
+	if !ast.IsArrowFunction(e) && !ast.IsFunctionExpression(e) {
+		return src
+	}
+	params := e.Parameters()
+	if len(params) == 0 {
+		return src
+	}
+	start := l.pos(e)
+	var b strings.Builder
+	at := start
+	typed := false
+	for _, p := range params {
+		pd := p.AsParameterDeclaration()
+		if p.Type() != nil || p.Initializer() != nil || pd.QuestionToken != nil {
+			continue
+		}
+		t := c.GetTypeAtLocation(p.Name())
+		if t == nil {
+			continue
+		}
+		b.WriteString(l.text[at:p.Name().End()])
+		b.WriteString(": " + c.TypeToString(t))
+		at = p.Name().End()
+		typed = true
+	}
+	if !typed {
+		return src
+	}
+	b.WriteString(l.text[at:e.End()])
+	out := b.String()
+	first := l.pos(params[0])
+	if ast.IsArrowFunction(e) && strings.TrimSpace(l.text[start:first]) == "" {
+		// A lone parameter without parentheses gets them, to take a type.
+		last := params[len(params)-1].End()
+		head := out[:last-start+len(out)-(e.End()-start)]
+		out = "(" + head + ")" + out[len(head):]
+	}
+	return out
 }
