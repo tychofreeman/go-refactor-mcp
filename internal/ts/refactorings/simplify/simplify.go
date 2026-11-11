@@ -265,21 +265,22 @@ func NewExtractFunction() *ExtractFunction {
 }
 
 func (*ExtractFunction) Description() string {
-	return `Move a run of whole statements into a new function, declared after the one they are in, and call it in their place: in function report(beds: Bed[]), extracting let total = 0 and the loop that adds each b.depth to it, as sum, gives const total = sum(beds) there and function sum(beds: Bed[]) { let total = 0; for ...; return total; }. Locals the statements use become parameters; those they declare or assign that are used elsewhere come back as the result (an object of them when several). Statements that use this become a private method of the class; with await, the function is async and the call awaited.
+	return `Move a run of whole statements into a new function, declared after the one they are in, and call it in their place: in function report(beds: Bed[]), extracting let total = 0 and the loop that adds each b.depth to it, as sum, gives const total = sum(beds) there and function sum(beds: Bed[]) { let total = 0; for ...; return total; }. Locals the statements use become parameters; those they declare or assign that are used elsewhere come back as the result (an object of them when several). Statements that use this become a private method of the class (visibility protected or public makes it so, and then it may override a base class's method of its name, a template method's step, marked override); with await, the function is async and the call awaited.
 Identify the statements by file, start_line and end_line: whole statements of one block, as inspect numbers them; or a case's body by function and case ("fern" in function water, or default; a last break stays), which stays valid after earlier steps; a case sharing its body with others gets a case of its own unless split is false; for a value with no case, when the code after the switch is what runs for it, a new case calls a copy of that code. doc becomes the new function's doc comment.
 Returns: when the lines end the function's body, their returns stay and the call becomes return sum(...). When some of the lines return earlier, the new function returns their value and the call returns it unless it is undefined; when they return nothing, it returns whether they returned, and the call returns if so.`
 }
 
 // extractFunctionArgs are the arguments of extract_function.
 type extractFunctionArgs struct {
-	File      string `json:"file" desc:"Path of the file, relative to the root."`
-	StartLine int    `json:"start_line,omitempty" desc:"1-based first line of the statements to extract."`
-	EndLine   int    `json:"end_line,omitempty" desc:"1-based last line of the statements to extract (inclusive)."`
-	Function  string `json:"function,omitempty" desc:"Instead of the lines: the function (name or Class.method) with the switch whose case to extract."`
-	Case      string `json:"case,omitempty" desc:"With function: the case's value as written (\"fern\", Kind.Fern) or default."`
-	Split     *bool  `json:"split,omitempty" desc:"With case, sharing its body (case \"fern\": case \"moss\":): unless false, the value gets a case of its own, the others a copy of the body."`
-	Name      string `json:"name" desc:"Name for the new function."`
-	Doc       string `json:"doc,omitempty" desc:"Optional doc comment for the new function, its text without /** */."`
+	File       string `json:"file" desc:"Path of the file, relative to the root."`
+	StartLine  int    `json:"start_line,omitempty" desc:"1-based first line of the statements to extract."`
+	EndLine    int    `json:"end_line,omitempty" desc:"1-based last line of the statements to extract (inclusive)."`
+	Function   string `json:"function,omitempty" desc:"Instead of the lines: the function (name or Class.method) with the switch whose case to extract."`
+	Case       string `json:"case,omitempty" desc:"With function: the case's value as written (\"fern\", Kind.Fern) or default."`
+	Split      *bool  `json:"split,omitempty" desc:"With case, sharing its body (case \"fern\": case \"moss\":): unless false, the value gets a case of its own, the others a copy of the body."`
+	Name       string `json:"name" desc:"Name for the new function."`
+	Doc        string `json:"doc,omitempty" desc:"Optional doc comment for the new function, its text without /** */."`
+	Visibility string `json:"visibility,omitempty" desc:"For a method (lines that use this): private (the default), protected or public; not private, it may override a base class's method of its name, marked override."`
 }
 
 func (*ExtractFunction) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
@@ -313,7 +314,7 @@ func (*ExtractFunction) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 		return nil, refactor.Refusef("give start_line and end_line")
 	}
 	pl, err := plan(ws, a.File, fmt.Sprintf("extracted lines %d-%d as %s", a.StartLine, a.EndLine, a.Name), func(p *tsapi.Project, path string) ([]tsapi.Edit, string) {
-		es, why := p.ExtractFunction(bg, path, a.StartLine, a.EndLine, a.Name, a.Doc)
+		es, why := p.ExtractFunction(bg, path, a.StartLine, a.EndLine, a.Name, a.Doc, a.Visibility)
 		if why != "" {
 			return nil, why
 		}

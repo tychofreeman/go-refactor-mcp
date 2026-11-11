@@ -224,7 +224,7 @@ func containsWord(s, word string) bool {
 // function they are in (a method of its class when they use this), and
 // call it in their place. Locals they read become parameters; those they
 // declare or assign that are used elsewhere come back as its result.
-func (p *Project) ExtractFunction(ctx context.Context, path string, first, last int, name, doc string) ([]Edit, string) {
+func (p *Project) ExtractFunction(ctx context.Context, path string, first, last int, name, doc, visibility string) ([]Edit, string) {
 	l, why := p.lined(path)
 	if why != "" {
 		return nil, why
@@ -302,6 +302,24 @@ func (p *Project) ExtractFunction(ctx context.Context, path string, first, last 
 		}
 	} else if why := taken(c, l, name, top); why != "" {
 		return nil, why
+	}
+	switch visibility {
+	case "", "private", "protected", "public":
+	default:
+		return nil, fmt.Sprintf("visibility is private, protected or public, not %q", visibility)
+	}
+	if visibility != "" && member == nil {
+		return nil, "visibility applies to a method; the lines do not use this, so they become a function"
+	}
+	overrides := false
+	if visibility != "" && visibility != "private" {
+		if ast.IsStatic(member) {
+			return nil, "the lines are in a static member, whose new method is called on the class; leave visibility out"
+		}
+		var why string
+		if overrides, why = p.overrideOf(c, member.Parent, name); why != "" {
+			return nil, why
+		}
 	}
 
 	// The locals the lines use, in the order they first do.
@@ -494,9 +512,16 @@ func (p *Project) ExtractFunction(ctx context.Context, path string, first, last 
 		head += "<" + strings.Join(srcs, ", ") + ">"
 	}
 	if member != nil {
-		head = "private " + name
+		vis := "private"
+		if visibility != "" {
+			vis = visibility
+		}
+		head = vis + " " + name
 		if ast.IsStatic(member) {
-			head = "private static " + name
+			head = vis + " static " + name
+		}
+		if overrides {
+			head = vis + " override " + name
 		}
 	}
 	if b.async {
@@ -532,4 +557,86 @@ func (p *Project) ExtractFunction(ctx context.Context, path string, first, last 
 	edits = append(edits, Edit{File: l.f.FileName(), Start: at, End: at, NewText: prefix + decl})
 	slices.SortFunc(edits, func(a, b Edit) int { return a.Start - b.Start })
 	return edits, ""
+}
+
+// overrideOf says whether a method name of class, not private, would
+// override a method of a base class, and why it may not be declared: a
+// class extending class has a member of that name, which would override it
+// in turn; the base class's member of that name is not a method it could
+// override; or a call of that method could then run the new one, other
+// than this.name() in a method of a base class that class overrides
+// (where it runs only for other instances). As java's #321.
+func (p *Project) overrideOf(c *checker.Checker, class *ast.Node, name string) (bool, string) {
+	cname := class.Name().Text()
+	for _, f := range p.sources() {
+		why := ""
+		inspect(f.AsNode(), func(n *ast.Node) bool {
+			if why == "" && ast.IsClassDeclaration(n) && n != class && extends(c, n, class) {
+				for _, m := range n.Members() {
+					if m.Name() != nil && m.Name().Text() == name {
+						why = fmt.Sprintf("%s, which extends %s, already has a member %s, which would override the new method and change what calls of it run; choose another name", n.Name().Text(), cname, name)
+					}
+				}
+			}
+			return why == ""
+		})
+		if why != "" {
+			return false, why
+		}
+	}
+	var base *ast.Symbol
+	for _, e := range ast.GetExtendsHeritageClauseElements(class) {
+		if t := c.GetTypeAtLocation(e); t != nil {
+			if s := c.GetPropertyOfType(t, name); s != nil {
+				base = s
+			}
+		}
+	}
+	if base == nil {
+		return false, ""
+	}
+	d := base.ValueDeclaration
+	if d == nil || !ast.IsMethodDeclaration(d) || d.ModifierFlags()&(ast.ModifierFlagsPrivate|ast.ModifierFlagsStatic) != 0 {
+		return false, fmt.Sprintf("%s inherits a member %s that the new method would not override (a property, or private or static); choose another name", cname, name)
+	}
+	for _, id := range p.references(c, []*ast.Symbol{base}) {
+		if ast.IsDeclarationName(id) {
+			continue
+		}
+		fl := newLined(ast.GetSourceFileOfNode(id))
+		refuse := func(why string) (bool, string) {
+			return false, fmt.Sprintf("%s.%s would override %s, and the call at %s could then run the new one: %s; choose another name, or keep the method private", cname, name, memberName(d), fl.where(id), why)
+		}
+		acc := id.Parent
+		if !ast.IsPropertyAccessExpression(acc) || acc.Name() != id {
+			return refuse("it is not a plain call")
+		}
+		recv := ast.SkipParentheses(acc.Expression())
+		if recv.Kind == ast.KindSuperKeyword {
+			continue
+		}
+		if recv.Kind != ast.KindThisKeyword {
+			return refuse("its receiver may be a " + cname)
+		}
+		m := ast.GetContainingFunction(id)
+		for m != nil && ast.IsArrowFunction(m) {
+			m = ast.GetContainingFunction(m)
+		}
+		if m == nil || m.Parent == nil || !ast.IsClassDeclaration(m.Parent) || m.Name() == nil {
+			return refuse("it is not in a method of a class")
+		}
+		owner := m.Parent
+		if owner == class || extends(c, owner, class) {
+			return refuse("it is in " + owner.Name().Text() + " itself")
+		}
+		if !extends(c, class, owner) {
+			continue
+		}
+		// The most derived member of m's name, as class sees it.
+		mine := c.GetPropertyOfType(c.GetTypeAtLocation(class.Name()), m.Name().Text())
+		if mine == nil || mine.ValueDeclaration == nil || mine.ValueDeclaration.Parent == owner {
+			return refuse("it is in " + memberName(m) + ", which " + cname + " does not override")
+		}
+	}
+	return true, ""
 }

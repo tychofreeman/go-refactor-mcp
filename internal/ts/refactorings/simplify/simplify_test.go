@@ -1762,6 +1762,65 @@ func TestSplitPhase(t *testing.T) {
 	}
 }
 
+// visibility makes the new method other than private; then it may override
+// a base class's method, as java's #321: a template method's step.
+func TestExtractFunctionOverriding(t *testing.T) {
+	renamers := `export class Renamer {
+  carryOut(r: string): boolean {
+    this.print(r);
+    return this.move(r);
+  }
+  print(r: string): void {
+    console.log(r);
+  }
+  move(r: string): boolean {
+    return r.length > 0;
+  }
+}
+
+export class FileRenamer extends Renamer {
+  override carryOut(r: string): boolean {
+    this.print(r);
+    this.print("moving " + r);
+    return false;
+  }
+}
+`
+	check(t, []change{
+		{"overriding", renamers, NewExtractFunction(), `{"start_line": 17, "end_line": 18, "name": "move", "visibility": "public"}`, `export class Renamer {
+  carryOut(r: string): boolean {
+    this.print(r);
+    return this.move(r);
+  }
+  print(r: string): void {
+    console.log(r);
+  }
+  move(r: string): boolean {
+    return r.length > 0;
+  }
+}
+
+export class FileRenamer extends Renamer {
+  override carryOut(r: string): boolean {
+    this.print(r);
+    return this.move(r);
+  }
+
+  public override move(r: string) {
+    this.print("moving " + r);
+    return false;
+  }
+}
+`, ""},
+		{"a call it would take over", strings.Replace(renamers, "  print(r: string): void {", "  twice(r: string): boolean {\n    return this.move(r) && this.move(r);\n  }\n  print(r: string): void {", 1), NewExtractFunction(), `{"start_line": 20, "end_line": 21, "name": "move", "visibility": "public"}`, "", "Renamer.twice, which FileRenamer does not override"},
+		{"no visibility for a function", plants + `
+export function grow(p: Plant): number {
+  return p.height * 2;
+}
+`, NewExtractFunction(), `{"start_line": 15, "end_line": 15, "name": "twice", "visibility": "public"}`, "", "visibility applies to a method"},
+	})
+}
+
 // past_try swaps a statement with a try next to it whatever their effects,
 // as java's #343: below the try it runs only when the try completes
 // normally, which the result says.
