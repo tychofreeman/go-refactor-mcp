@@ -835,3 +835,14 @@ export const other = { name: "x", height: 2 };
 `}, ""},
 	})
 }
+
+// A function whose body is one expression statement matches an arrow's
+// expression body, as java's #344: files.forEach((f) => log(...)).
+func TestFoldArrowBody(t *testing.T) {
+	ws, dir := load(t, map[string]string{"src/s.ts": "const logged: string[] = [];\n\nfunction skipped(file: string): void {\n  logged.push(\"skipped \" + file);\n}\n\nexport function all(files: string[]): void {\n  files.forEach((f) => logged.push(\"skipped \" + f));\n}\n"})
+	res := run(t, ws, NewFold(), `{"file": "src/s.ts", "name": "skipped"}`)
+	if !res.Applied {
+		t.Fatalf("%s", res)
+	}
+	want(t, dir, "src/s.ts", "const logged: string[] = [];\n\nfunction skipped(file: string): void {\n  logged.push(\"skipped \" + file);\n}\n\nexport function all(files: string[]): void {\n  files.forEach((f) => skipped(f));\n}\n")
+}

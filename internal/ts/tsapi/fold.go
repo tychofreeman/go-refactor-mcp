@@ -251,6 +251,14 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 				}
 			}
 		})
+		// One expression statement also matches an arrow's expression body.
+		if len(stmts) == 1 && ast.IsExpressionStatement(stmts[0]) {
+			cl.expressions(func(n *ast.Node) {
+				if ast.IsArrowFunction(n) && !ast.IsBlock(n.Body()) && outside(n) && onLine(n.Body()) {
+					tryBoth(cl, []*ast.Node{n.Body()}, []*ast.Node{stmts[0].Expression()})
+				}
+			})
+		}
 	}
 	// Each match becomes a call, where that does the same.
 	imported := map[*ast.SourceFile]bool{}
@@ -397,7 +405,7 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 			args = append(args, s)
 		}
 		call := callee + "(" + strings.Join(args, ", ") + ")"
-		if expr != nil {
+		if expr != nil || isArrowBody(root) {
 			edits = append(edits, Edit{File: cl.f.FileName(), Start: cl.pos(root), End: root.End(), NewText: call})
 		} else {
 			last := m.root[len(m.root)-1]
@@ -531,4 +539,9 @@ func (p *Project) extended(c *checker.Checker, class *ast.Node) bool {
 		visit(f.AsNode())
 	}
 	return found
+}
+
+// isArrowBody reports whether n is an arrow function's expression body.
+func isArrowBody(n *ast.Node) bool {
+	return n.Parent != nil && ast.IsArrowFunction(n.Parent) && n.Parent.Body() == n
 }
