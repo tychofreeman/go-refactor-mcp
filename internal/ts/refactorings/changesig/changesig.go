@@ -21,7 +21,7 @@ import (
 // function is the arguments that name the function a tool changes.
 type function struct {
 	File string `json:"file" desc:"The file that declares the function, relative to the root."`
-	Name string `json:"name" desc:"The function's name, Class.method for a method, or Class.constructor."`
+	Name string `json:"name" desc:"The function's name, Class.method for a method, or Class.constructor (or the class's name alone)."`
 }
 
 // plan makes ch to the function a names, with the summary given.

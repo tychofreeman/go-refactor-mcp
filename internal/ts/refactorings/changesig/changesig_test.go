@@ -1048,3 +1048,17 @@ func TestMoveMethod(t *testing.T) {
 		}
 	}
 }
+
+// A class's name alone names its constructor, as java's #331: a model
+// wrote "Bed" for it.
+func TestConstructorByClassName(t *testing.T) {
+	ws, dir := load(t, beds)
+	res, err := refactor.Run(ws, NewAdd(), json.RawMessage(`{"file": "src/bed.ts", "name": "Bed", "parameter": "width", "type": "number", "value": "1"}`), refactor.OptionsOf[*workspace.Workspace]{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Applied {
+		t.Fatalf("%s", res)
+	}
+	mustContain(t, dir, "src/bed.ts", "constructor(public readonly soil: string, rows: number, width: number) {}", `new Bed("clay", 3, 1)`)
+}
