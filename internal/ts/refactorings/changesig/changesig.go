@@ -518,7 +518,7 @@ type moveMethodArgs struct {
 	File string   `json:"file" desc:"The file that declares the method, relative to the root."`
 	Name string   `json:"name" desc:"The method, as Class.method."`
 	To   string   `json:"to" desc:"The class to move it to: one that extends Class."`
-	Also []string `json:"also,omitempty" desc:"Other methods of the same class to move with it (method or Class.method)."`
+	Also []string `json:"also,omitempty" desc:"Other methods of the same class to move with it (method or Class.method); private ones only the moved methods call go along without being named."`
 }
 
 func (*MoveMethod) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
@@ -530,11 +530,17 @@ func (*MoveMethod) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor
 	if _, err := os.Stat(path); err != nil {
 		return nil, refactor.Refusef("%s: no such file", a.File)
 	}
+	var along []string
 	edits, why := ws.Edits(path, func(p *tsapi.Project) ([]tsapi.Edit, string) {
-		return p.MoveMethod(context.Background(), path, a.Name, a.To, a.Also)
+		along = nil
+		return p.MoveMethod(context.Background(), path, a.Name, a.To, a.Also, &along)
 	})
 	if why != "" {
 		return nil, refactor.Refusef("%s", why)
 	}
-	return &refactor.Plan{Summary: fmt.Sprintf("moved %s to %s", strings.Join(append([]string{a.Name}, a.Also...), ", "), a.To), Edits: edits}, nil
+	pl := &refactor.Plan{Summary: fmt.Sprintf("moved %s to %s", strings.Join(append([]string{a.Name}, a.Also...), ", "), a.To), Edits: edits}
+	if len(along) > 0 {
+		pl.Notes = append(pl.Notes, "with "+strings.Join(along, ", ")+", private and called only from it")
+	}
+	return pl, nil
 }

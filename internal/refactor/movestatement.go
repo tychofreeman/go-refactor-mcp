@@ -16,6 +16,7 @@ type moveStatementArgs struct {
 	File      string `json:"file" desc:"Path of the file, relative to the root."`
 	Line      int    `json:"line" desc:"1-based line on which the statement to move starts."`
 	Direction string `json:"direction" desc:"up, to swap it with the statement before it, or down, with the one after it."`
+	PastTry   bool   `json:"past_try,omitempty" desc:"TypeScript: swap a statement with a try next to it whatever their side effects; the result says what changes (below the try, it runs only when the try completes normally)."`
 }
 
 // NewMoveStatement returns move_statement, which runs up or down as its

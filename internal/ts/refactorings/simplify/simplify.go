@@ -164,8 +164,9 @@ func (*MoveStatement) InputSchema() json.RawMessage {
 
 // moveStatementArgs are the arguments of move_statement_up and _down.
 type moveStatementArgs struct {
-	File string `json:"file" desc:"Path of the file, relative to the root."`
-	Line int    `json:"line" desc:"1-based line on which the statement to move starts."`
+	File    string `json:"file" desc:"Path of the file, relative to the root."`
+	Line    int    `json:"line" desc:"1-based line on which the statement to move starts."`
+	PastTry bool   `json:"past_try,omitempty" desc:"Swap a statement with a try next to it whatever their side effects, and say what changes."`
 }
 
 func (m *MoveStatement) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
@@ -177,9 +178,14 @@ func (m *MoveStatement) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 	if m.down {
 		dir = "down"
 	}
-	return plan(ws, a.File, fmt.Sprintf("moved the statement on line %d %s", a.Line, dir), func(p *tsapi.Project, path string) ([]tsapi.Edit, string) {
-		return p.MoveStatement(bg, path, a.Line, m.down)
+	var note string
+	pl, err := plan(ws, a.File, fmt.Sprintf("moved the statement on line %d %s", a.Line, dir), func(p *tsapi.Project, path string) ([]tsapi.Edit, string) {
+		return p.MoveStatement(bg, path, a.Line, m.down, a.PastTry, &note)
 	})
+	if err == nil && note != "" {
+		pl.Notes = append(pl.Notes, note)
+	}
+	return pl, err
 }
 
 // InvertIf negates an if's condition and swaps its branches.
