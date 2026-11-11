@@ -1062,3 +1062,61 @@ func TestConstructorByClassName(t *testing.T) {
 	}
 	mustContain(t, dir, "src/bed.ts", "constructor(public readonly soil: string, rows: number, width: number) {}", `new Bed("clay", 3, 1)`)
 }
+
+// The private methods only the moved method calls go with it, as java's
+// #317: left behind, the subclass could not reach them.
+func TestMoveMethodTakesPrivateCallees(t *testing.T) {
+	src := `export class Soil {
+  ph = 7;
+  acid(): boolean {
+    return this.low(this.ph);
+  }
+  private low(n: number): boolean {
+    return n < this.limit();
+  }
+  private limit(): number {
+    return 6;
+  }
+  private shared(): number {
+    return 1;
+  }
+  label(): string {
+    return "soil" + this.shared();
+  }
+}
+
+export class Bed extends Soil {
+  name = "bed";
+}
+
+export function sour(b: Bed): boolean {
+  return b.acid();
+}
+`
+	ws, dir := load(t, map[string]string{"src/soil.ts": src})
+	res, err := refactor.Run(ws, NewMoveMethod(), json.RawMessage(`{"file": "src/soil.ts", "name": "Soil.acid", "to": "Bed"}`), refactor.OptionsOf[*workspace.Workspace]{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Applied {
+		t.Fatalf("%s", res)
+	}
+	if !strings.Contains(res.String(), "with Soil.low, Soil.limit, private and called only from it") {
+		t.Errorf("the result does not name the methods that went along: %s", res)
+	}
+	mustContain(t, dir, "src/soil.ts", "export class Soil {\n  ph = 7;\n  private shared(): number {", `export class Bed extends Soil {
+  name = "bed";
+
+  acid(): boolean {
+    return this.low(this.ph);
+  }
+
+  private low(n: number): boolean {
+    return n < this.limit();
+  }
+
+  private limit(): number {
+    return 6;
+  }
+}`)
+}
