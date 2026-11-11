@@ -17,7 +17,7 @@ import (
 // also, down to the class to, which extends it: their text goes to the end
 // of to's body. Every use must reach them through a to (or a class that
 // extends it), so that each still finds them there.
-func (p *Project) MoveMethod(ctx context.Context, path, name, to string, also []string) ([]Edit, string) {
+func (p *Project) MoveMethod(ctx context.Context, path, name, to string, also []string, along *[]string) ([]Edit, string) {
 	l, why := p.lined(path)
 	if why != "" {
 		return nil, why
@@ -47,6 +47,13 @@ func (p *Project) MoveMethod(ctx context.Context, path, name, to string, also []
 		}
 		moved = append(moved, fn)
 	}
+	// The private methods of owner that only the moved ones call go with
+	// them, as java's #317: left behind, the moved code could not reach them.
+	extra := privateCallees(l, moved)
+	for _, m := range extra {
+		*along = append(*along, owner+"."+m.Name().Text())
+	}
+	moved = append(moved, extra...)
 	from := moved[0].Parent
 	c, done := p.prog.GetProgram().GetTypeChecker(ctx)
 	defer done()
@@ -183,4 +190,49 @@ func extends(c *checker.Checker, cls, base *ast.Node) bool {
 		cls = next
 	}
 	return false
+}
+
+// privateCallees returns the private instance methods of the class of
+// moved that are called as this.m(...) from moved, directly or through
+// each other, and used nowhere else in the class; in the order found.
+func privateCallees(l *lined, moved []*ast.Node) []*ast.Node {
+	class := moved[0].Parent
+	byName := map[string]*ast.Node{}
+	for _, m := range class.Members() {
+		if ast.IsMethodDeclaration(m) && m.Body() != nil && m.Name() != nil && ast.IsIdentifier(m.Name()) &&
+			m.ModifierFlags()&ast.ModifierFlagsPrivate != 0 && !ast.IsStatic(m) && !slices.Contains(moved, m) {
+			byName[m.Name().Text()] = m
+		}
+	}
+	in := func(set []*ast.Node, n *ast.Node) bool {
+		return slices.ContainsFunc(set, func(m *ast.Node) bool { return n.Pos() >= m.Pos() && n.End() <= m.End() })
+	}
+	var found []*ast.Node
+	group := slices.Clone(moved)
+	for i := 0; i < len(group); i++ {
+		inspect(group[i], func(n *ast.Node) bool {
+			if ast.IsPropertyAccessExpression(n) && n.Expression().Kind == ast.KindThisKeyword {
+				if m := byName[n.Name().Text()]; m != nil && !slices.Contains(group, m) {
+					group = append(group, m)
+					found = append(found, m)
+				}
+			}
+			return true
+		})
+	}
+	// Each must be used only inside the group.
+	for _, m := range found {
+		name := m.Name().Text()
+		elsewhere := false
+		inspect(class, func(n *ast.Node) bool {
+			if !elsewhere && ast.IsIdentifier(n) && n.Text() == name && n != m.Name() && !in(group, n) {
+				elsewhere = true
+			}
+			return !elsewhere
+		})
+		if elsewhere {
+			return nil
+		}
+	}
+	return found
 }
