@@ -33,6 +33,17 @@ Cheap, and each one costs a fresh model a refusal or a wrong result today.
 | Java | a stub is not replaced by a declaration with the same erasure | *Done* (Java #107, #224; also a static field stub for `T.NAME`) |
 | Java | a batch checked at the end imports a library class for a name a later step declares | *Done* (Java #108, #225) |
 | Java | friction-log follow-ups still call #105 open | *Done* (Java #222) |
+| Go, TS | replace_declaration deletes a method another then answers for (Go: one hiding an embedded field's; TS: an override), silently changing behavior | *Done* (Java #322; #614) |
+| Go, TS | a batch retry cannot remove a step | *Done* (Java #318; #615) |
+| TS | a class's name alone does not name its constructor in the signature tools | *Done* (Java #331; #616) |
+| TS | extract_variable of an arrow loses its parameters' contextual types | *Done* (Java #298; #617) |
+| TS | no stub for a class only used through static members (`Pot.decode("x")`) | *Done* (Java #293; #618) |
+| TS | fold does not match an arrow's expression body | *Done* (Java #344; #619) |
+| TS | extract_type refuses private members and fields the constructor sets | *Done* (Java #345; #620) |
+| TS | move_statement has no `past_try` | *Done* (Java #343; #621) |
+| TS | move leaves behind the private methods only the moved method calls | *Done* (Java #317; #622) |
+| TS | extract_function has no `visibility` or override | *Done* (Java #321; #623) |
+| TS | a moved method keeps the source class's indent step inside it | *Done* (Java #316; #624) |
 
 ## 2. One contract: names and server-level behavior
 
