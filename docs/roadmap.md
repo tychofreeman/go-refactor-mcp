@@ -3175,7 +3175,9 @@ candidates and the evidence for each, gathered from the friction log.
        Go's index loop and `range` both ways (#627, *done*,
        `internal/refactorings/convertloop`); Go's three-clause and
        condition-only `for` both ways (#628, *done*); TypeScript's `for`,
-       `for...of`, `while` and `do...while` (#629).
+       `for...of`, `while` and `do...while` (#629, *done*,
+       `tsapi.ConvertLoop`). Each language's probes run the program
+       before and after (`go run`, and node with `--experimental-strip-types`).
 
 55. **Constructive transformations, as java-refactor-mcp's #212-#215**
     (2026-11-05, the user: "I'd like go/ts to work the same way"): create

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/tsapi"
@@ -372,5 +373,49 @@ func (*InlineFunction) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refa
 	if deleted {
 		p.Summary += " and deleted it"
 	}
+	return p, nil
+}
+
+// ConvertLoop rewrites a loop as another statement form.
+type ConvertLoop struct {
+	refactor.Named[convertLoopArgs]
+}
+
+// NewConvertLoop returns convert_loop.
+func NewConvertLoop() *ConvertLoop {
+	return &ConvertLoop{Named: refactor.Called[convertLoopArgs]("convert_loop")}
+}
+
+func (*ConvertLoop) Description() string {
+	return `Rewrite a loop as another statement form that runs the same code in the same order. to=for_each turns an index loop over an array, for (let i = 0; i < plants.length; i++) { water(plants[i]) }, into for (const plant of plants) { water(plant) }; to=for turns a for...of over an array back into an index loop, the element declared first in the body, and a while into a for, the let declared just before it and the body's last assignment moving into its header; to=while turns a for into its init followed by a while, the incrementor last in the body and before each continue, and do { ... } while (c) into while (true) { ... if (!c) break }; to=do_while turns while (c) into if (c) { do { ... } while (c) }.
+Identify the loop by file and the line of its keyword (column if the line has two).`
+}
+
+// convertLoopArgs are the arguments of convert_loop.
+type convertLoopArgs struct {
+	File   string `json:"file" desc:"Path of the file, relative to the root."`
+	Line   int    `json:"line" desc:"1-based line of the loop's for, while or do keyword."`
+	Column int    `json:"column,omitempty" desc:"Optional 1-based column of the keyword, only needed if the line has more than one loop."`
+	To     string `json:"to" desc:"The form to write: for_each (a for...of), for, while or do_while."`
+}
+
+func (*ConvertLoop) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
+	var a convertLoopArgs
+	if err := refactor.DecodeArgs(raw, &a); err != nil {
+		return nil, err
+	}
+	if !slices.Contains([]string{"for_each", "for", "while", "do_while"}, a.To) {
+		return nil, refactor.Refusef("to is for_each, for, while or do_while; to=%q is not a loop form", a.To)
+	}
+	said := ""
+	p, err := plan(ws, a.File, "", func(p *tsapi.Project, path string) ([]tsapi.Edit, string) {
+		es, s, why := p.ConvertLoop(bg, path, a.Line, a.Column, a.To)
+		said = s
+		return es, why
+	})
+	if err != nil {
+		return nil, err
+	}
+	p.Summary = fmt.Sprintf("rewrote the loop at line %d as %s", a.Line, said)
 	return p, nil
 }
