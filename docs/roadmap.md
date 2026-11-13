@@ -3174,7 +3174,7 @@ candidates and the evidence for each, gathered from the friction log.
        the user: "start on the gorefactor ports"), one PR per issue:
        Go's index loop and `range` both ways (#627, *done*,
        `internal/refactorings/convertloop`); Go's three-clause and
-       condition-only `for` both ways (#628); TypeScript's `for`,
+       condition-only `for` both ways (#628, *done*); TypeScript's `for`,
        `for...of`, `while` and `do...while` (#629).
 
 55. **Constructive transformations, as java-refactor-mcp's #212-#215**
