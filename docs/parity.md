@@ -153,6 +153,10 @@ the counterpart of `inline_struct` (52.3, without Go's `elsewhere` and
 - `convert_lambda`: TS arrow, function expression and method reference;
   Go has no counterpart worth a tool.
 - `convert_to_record`: Java-only.
+- `convert_loop` (java #353-#355, issues #627-#629): a loop to another
+  statement form. Go: an index loop and `range` both ways (#627, *done*),
+  a three-clause and a condition-only `for` (#628); TypeScript: every
+  pair Java has but the iterator loop (#629).
 - `batch` `retry` (java #247): after a refused batch, send only the
   changed steps (`{"step": N, ...}` replaces one, `{"after": N, ...}`
   adds one), numbered as in the refused batch; the batch still runs

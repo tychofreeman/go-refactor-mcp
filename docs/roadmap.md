@@ -3169,7 +3169,15 @@ candidates and the evidence for each, gathered from the friction log.
     11. `batch` `retry` cannot drop a step of the kept batch, only
        replace one (2026-11-07, `docs/sessions/ts-place-by-kind.md`: a
        rename added in a retry, refused, had to be replaced by a `check`
-       step); `{"step": N, "drop": true}` would say it.55. **Constructive transformations, as java-refactor-mcp's #212-#215**
+       step); `{"step": N, "drop": true}` would say it.
+    12. `convert_loop`, as java-refactor-mcp's #353-#355 (2026-11-12,
+       the user: "start on the gorefactor ports"), one PR per issue:
+       Go's index loop and `range` both ways (#627, *done*,
+       `internal/refactorings/convertloop`); Go's three-clause and
+       condition-only `for` both ways (#628); TypeScript's `for`,
+       `for...of`, `while` and `do...while` (#629).
+
+55. **Constructive transformations, as java-refactor-mcp's #212-#215**
     (2026-11-05, the user: "I'd like go/ts to work the same way"): create
     by structure, type only expressions and statements. One PR each:
     1. `create_file` with `declaration`: a type from its header. Go takes
