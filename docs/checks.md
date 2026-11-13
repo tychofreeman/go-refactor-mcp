@@ -1306,6 +1306,24 @@ a condition shares one; and a loop with only a condition that has nothing
 to move into a header. Cases named
 `probe_` run before and after (`TestProbes`) and must print the same.
 
+TypeScript (#629) has every pair Java has but the iterator loop:
+`to=for_each` from `for (let i = 0; i < xs.length; i++)` (`++i`, `i += 1`)
+over a local array or tuple to `for (const x of xs)`, a first `const x =
+xs[i]` (or a `let` the body does not assign) naming the element; `to=for`
+from a `for...of` over a local array back, `<the declaration> = xs[i]`
+first in the body, and from a `while`, as Go's; `to=while` from a `for`,
+as Go's, and from a `do...while`, `while (true) { ... if (!c) break }`
+with `c` negated as `invert_if` does; `to=do_while` from a `while`,
+`if (c) { do ... while (c) }`. Refused besides Go's cases: an index read
+other than as `xs[i]`; a body that writes an element of `xs` or calls a
+method that changes it (`push`, `splice`, `sort`, ...); a `for...of` over
+anything but an array or a tuple (a `Map`, a `Set`, a generator), or a
+`for await`; a function in the loop that captures a `let` moved between a
+`for`'s header and the statement before it (each pass of a `for` has its
+own copy); a `continue` in a `do...while` to `while`; a `while` to
+`do...while` whose condition does more than read locals (it is read
+twice on the first pass).
+
 ## Type switch to method: what it checks
 `type_switch_to_method` turns `switch k := v.(type)` into a method of
 each type it switches on: each case's body becomes that type's method,
