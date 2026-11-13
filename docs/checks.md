@@ -1263,8 +1263,34 @@ extract_function the second phase, then convert_params_to_object.
   array, since an iterator runs once. A part that leaves the loop
   (`break`, `continue`, `return` at its level) is refused.
 
-## Type switch to method: what it checks
+## Convert loop: what it checks
 
+`convert_loop` rewrites a loop as another statement form that runs the
+same code in the same order. Go has two pairs (#627):
+
+- `to=for_each`: an index loop, `for i := 0; i < len(xs); i++` (`i += 1`
+  too), over a local slice or array becomes a range. Each `xs[i]` becomes
+  the element; a first `x := xs[i]` the body does not assign names it and
+  is dropped, else the element is the singular of `xs` (`names` to
+  `name`) or `item`, numbered when taken. `i` stays as the key when the
+  body uses it otherwise; `for i := range xs` when it reads no element,
+  `for range xs` when neither.
+- `to=for`: a range over a slice or an array, with `:=`, becomes an
+  index loop, `x := xs[i]` first in the body.
+
+Refused: a bound other than `len(xs)` of a local slice or array (a range
+reads `xs` once, an index loop on each pass: "Put it in a local first");
+a body that assigns `xs` or `i` or takes their address; a body that
+writes an element of `xs` (an assignment, an increment, `&`, a method with
+a pointer receiver), since a range's element is a copy; a range over a
+map, a channel, a string (runes at byte offsets), an integer or a
+function iterator, or with `=`; a range over an array whose elements the
+body changes (a range reads a copy of the array); and, before Go 1.22, a
+function literal that captures the loop's variables, which every pass
+then shares and the two forms leave with different values. Cases named
+`probe_` run before and after (`TestProbes`) and must print the same.
+
+## Type switch to method: what it checks
 `type_switch_to_method` turns `switch k := v.(type)` into a method of
 each type it switches on: each case's body becomes that type's method,
 the interface (`v`'s type) gets the method, and the switch becomes

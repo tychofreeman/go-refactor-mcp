@@ -23,6 +23,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/replacetext"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/changesig"
+	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/convertloop"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/deadcode"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/extractfunc"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/extractsupertype"
@@ -95,6 +96,7 @@ func All() []refactor.Refactoring {
 		newMove(),
 		inline.New(),
 		slidestmt.New(),
+		convertloop.New(),
 	}
 }
 
