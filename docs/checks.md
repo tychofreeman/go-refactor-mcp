@@ -1266,7 +1266,7 @@ extract_function the second phase, then convert_params_to_object.
 ## Convert loop: what it checks
 
 `convert_loop` rewrites a loop as another statement form that runs the
-same code in the same order. Go has two pairs (#627):
+same code in the same order. Go has three pairs (#627, #628):
 
 - `to=for_each`: an index loop, `for i := 0; i < len(xs); i++` (`i += 1`
   too), over a local slice or array becomes a range. Each `xs[i]` becomes
@@ -1277,7 +1277,18 @@ same code in the same order. Go has two pairs (#627):
   `for range xs` when neither.
 - `to=for`: a range over a slice or an array, with `:=`, becomes an
   index loop, `x := xs[i]` first in the body.
-
+- `to=while`: `for init; cond; post` becomes `init` followed by `for
+  cond` (`for` alone when there is no condition), `post` last in the body
+  (not after a return, panic, break, continue or goto) and before each
+  `continue` of the loop: unlabeled ones in no inner loop, and those
+  naming its label; a `continue` in a `switch` counts. The init and the
+  loop go in a block when the block already declares one of the init's
+  names or a statement after the loop names one.
+- `to=for` from a loop with only a condition: the `v := ...` just before
+  it, which the condition reads and nothing after the loop does, becomes
+  the init, and the body's last assignment or increment the post
+  statement, unless a `continue` of the loop would skip it (a note says it
+  stays in the body).
 Refused: a bound other than `len(xs)` of a local slice or array (a range
 reads `xs` once, an index loop on each pass: "Put it in a local first");
 a body that assigns `xs` or `i` or takes their address; a body that
@@ -1287,7 +1298,12 @@ map, a channel, a string (runes at byte offsets), an integer or a
 function iterator, or with `=`; a range over an array whose elements the
 body changes (a range reads a copy of the array); and, before Go 1.22, a
 function literal that captures the loop's variables, which every pass
-then shares and the two forms leave with different values. Cases named
+then shares and the two forms leave with different values; from Go 1.22,
+moving a variable between a for's init and the statement before it when a
+function literal captures it or its address is taken, since each pass of
+a for with init and post statements has its own copy and a loop with only
+a condition shares one; and a loop with only a condition that has nothing
+to move into a header. Cases named
 `probe_` run before and after (`TestProbes`) and must print the same.
 
 ## Type switch to method: what it checks

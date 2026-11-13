@@ -6,7 +6,9 @@
 //	}                                        }
 //
 // The pairs are those java-refactor-mcp's convert_loop has where Go has
-// both forms: an index loop and a range loop (to=for_each and to=for).
+// both forms: an index loop and a range loop (to=for_each and to=for),
+// and a for with init and post statements and one with only a condition,
+// Go's while (to=while and to=for).
 package convertloop
 
 import (
@@ -16,6 +18,7 @@ import (
 	"go/token"
 	"go/types"
 	"go/version"
+	"sort"
 	"strings"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
@@ -32,7 +35,7 @@ type ConvertLoop struct{ refactor.Named[args] }
 func New() *ConvertLoop { return &ConvertLoop{Named: refactor.Called[args]("convert_loop")} }
 
 func (*ConvertLoop) Description() string {
-	return `Rewrite a loop as another statement form that runs the same code in the same order. to=for_each turns an index loop over a slice or an array, for i := 0; i < len(names); i++ { fmt.Println(names[i]) }, into for _, name := range names { fmt.Println(name) }, keeping i as the key when the body still uses it; to=for turns a range over a slice or an array back into an index loop, the element assigned first in the body.
+	return `Rewrite a loop as another statement form that runs the same code in the same order. to=for_each turns an index loop over a slice or an array, for i := 0; i < len(names); i++ { fmt.Println(names[i]) }, into for _, name := range names { fmt.Println(name) }, keeping i as the key when the body still uses it; to=for turns a range over a slice or an array back into an index loop, the element assigned first in the body. to=while turns for i := 0; i < n; i++ into i := 0 followed by for i < n, with i++ last in the body and before each continue; to=for turns such a loop back, the variable declared just before it and the body's last assignment moving into its header.
 Identify the loop by file and the line of its for keyword (column if the line has two).`
 }
 
@@ -40,13 +43,14 @@ type args struct {
 	File   string `json:"file" desc:"Path of the file, relative to the workspace root."`
 	Line   int    `json:"line" desc:"1-based line of the for keyword."`
 	Column int    `json:"column,omitempty" desc:"Optional 1-based column of the for keyword, only needed if the line has more than one loop."`
-	To     string `json:"to" desc:"The form to write: for_each (a range loop) or for (an index loop)."`
+	To     string `json:"to" desc:"The form to write: for_each (a range loop), for (an index loop, or a for with init and post statements) or while (a for with only a condition)."`
 }
 
 type conversion struct {
 	site.Site
-	path string
-	line int
+	path  string
+	line  int
+	notes []string
 }
 
 // Plan checks preconditions and computes the edits.
@@ -60,8 +64,8 @@ func (*ConvertLoop) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refacto
 		return nil, refactor.Refusef("file is required")
 	case a.Line < 1:
 		return nil, refactor.Refusef("line is required (1-based)")
-	case a.To != "for_each" && a.To != "for":
-		return nil, refactor.Refusef("to is for_each or for; to=%q is not built for Go", a.To)
+	case a.To != "for_each" && a.To != "for" && a.To != "while":
+		return nil, refactor.Refusef("to is for_each, for or while; to=%q is not built for Go", a.To)
 	}
 	path := ws.Abs(a.File)
 	at, err := site.At(ws, path)
@@ -77,13 +81,24 @@ func (*ConvertLoop) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refacto
 	var summary string
 	switch l := loop.(type) {
 	case *ast.ForStmt:
-		if a.To != "for_each" {
-			return nil, refactor.Refusef("the loop at line %d is already a for with an index; to=for_each turns it into a range", a.Line)
+		onlyCond := l.Init == nil && l.Post == nil
+		switch {
+		case onlyCond && a.To == "for":
+			summary, edits, err = x.whileToFor(l)
+		case onlyCond && a.To == "while":
+			return nil, refactor.Refusef("the loop at line %d already has only a condition", a.Line)
+		case onlyCond:
+			return nil, refactor.Refusef("the loop at line %d has only a condition; turn it into a for with init and post statements first (to=for), then into a range", a.Line)
+		case a.To == "for_each":
+			summary, edits, err = x.indexToRange(l)
+		case a.To == "while":
+			summary, edits, err = x.forToWhile(l)
+		default:
+			return nil, refactor.Refusef("the loop at line %d already has init and post statements; to=for_each turns it into a range, to=while into a loop with only a condition", a.Line)
 		}
-		summary, edits, err = x.indexToRange(l)
 	case *ast.RangeStmt:
 		if a.To != "for" {
-			return nil, refactor.Refusef("the loop at line %d is already a range loop; to=for turns it into an index loop", a.Line)
+			return nil, refactor.Refusef("the loop at line %d is a range loop; to=for turns it into an index loop, which to=while then takes", a.Line)
 		}
 		summary, edits, err = x.rangeToIndex(l)
 	}
@@ -93,6 +108,7 @@ func (*ConvertLoop) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refacto
 	return &refactor.Plan{
 		Summary: fmt.Sprintf("rewrote the loop at line %d as %s", a.Line, summary),
 		Edits:   []edit.FileEdit{{Path: x.path, Edits: edits}},
+		Notes:   x.notes,
 	}, nil
 }
 
@@ -607,6 +623,293 @@ func (x *conversion) lineEnd(p token.Pos) int {
 		off++
 	}
 	return off
+}
+
+// forToWhile turns for init; cond; post into init followed by a loop
+// with only cond: post goes last in the body and before each continue of
+// the loop. The two go in a block when the init's names would clash with
+// the block's or be read after the loop.
+func (x *conversion) forToWhile(l *ast.ForStmt) (string, []edit.TextEdit, error) {
+	whole, list := x.around(l)
+	var declared []*types.Var
+	if init, ok := l.Init.(*ast.AssignStmt); ok && init.Tok == token.DEFINE {
+		for _, e := range init.Lhs {
+			if id, ok := e.(*ast.Ident); ok {
+				if v, ok := x.Info.Defs[id].(*types.Var); ok {
+					declared = append(declared, v)
+				}
+			}
+		}
+	}
+	if x.perPass() {
+		for _, v := range declared {
+			if err := x.notCaptured(l, v, "each pass of a for with init and post statements has its own %s since Go 1.22, and a loop with only a condition shares one"); err != nil {
+				return "", nil, err
+			}
+		}
+	}
+	indent := x.indentOf(l.Pos())
+	start := x.lineStart(whole.Pos())
+	var inner []edit.TextEdit
+	if l.Post != nil {
+		post := x.Text(l.Post)
+		for _, c := range x.continues(l) {
+			inner = append(inner, edit.TextEdit{Start: x.Off(c.Pos()), End: x.Off(c.Pos()), NewText: post + "\n" + x.indentOf(c.Pos())})
+		}
+		if !analysis.EndsFlow(x.Info, l.Body.List) {
+			if x.TF.Line(l.Body.Lbrace) == x.TF.Line(l.Body.Rbrace) {
+				inner = append(inner, edit.TextEdit{Start: x.Off(l.Body.Lbrace), End: x.Off(l.Body.End()), NewText: "{\n" + indent + "\t" + post + "\n" + indent + "}"})
+			} else {
+				at := x.lineStart(l.Body.Rbrace)
+				inner = append(inner, edit.TextEdit{Start: at, End: at, NewText: indent + "\t" + post + "\n"})
+			}
+		}
+	}
+	head := "for "
+	if l.Cond != nil {
+		head += x.Text(l.Cond) + " "
+	}
+	inner = append(inner, edit.TextEdit{Start: x.Off(l.For), End: x.Off(l.Body.Lbrace), NewText: head})
+	text := x.applied(start, x.Off(whole.End()), inner)
+	if l.Init != nil {
+		text = indent + x.Text(l.Init) + "\n" + text
+	}
+	wrap := false
+	for _, v := range declared {
+		wrap = wrap || x.clashes(v.Name(), whole, list)
+	}
+	if wrap {
+		lines := strings.Split(text, "\n")
+		for k, s := range lines {
+			if strings.TrimSpace(s) != "" {
+				lines[k] = "\t" + s
+			}
+		}
+		text = indent + "{\n" + strings.Join(lines, "\n") + "\n" + indent + "}"
+	}
+	summary := strings.TrimSpace(head) + " {"
+	if wrap {
+		summary += ", in a block with its init"
+	}
+	return summary, []edit.TextEdit{{Start: start, End: x.Off(whole.End()), NewText: text}}, nil
+}
+
+// whileToFor turns a loop with only a condition into one with init and
+// post statements: the v := ... just before it, which the condition reads
+// and nothing after the loop does, becomes the init, and the body's last
+// assignment or increment the post statement, unless a continue of the
+// loop would skip it.
+func (x *conversion) whileToFor(l *ast.ForStmt) (string, []edit.TextEdit, error) {
+	whole, list := x.around(l)
+	var edits []edit.TextEdit
+	init := ""
+	at := -1
+	for k, s := range list {
+		if s == whole {
+			at = k
+		}
+	}
+	if at > 0 {
+		if a, ok := list[at-1].(*ast.AssignStmt); ok && a.Tok == token.DEFINE && len(a.Lhs) == 1 && len(a.Rhs) == 1 {
+			id, _ := a.Lhs[0].(*ast.Ident)
+			v, _ := x.Info.Defs[id].(*types.Var)
+			if v != nil && l.Cond != nil && x.reads(l.Cond, v) && !x.readsAny(list[at+1:], v) {
+				if x.perPass() {
+					if err := x.notCaptured(l, v, "a loop with only a condition shares one %s, and since Go 1.22 each pass of a for with init and post statements has its own"); err != nil {
+						return "", nil, err
+					}
+				}
+				init = x.Text(a)
+				edits = append(edits, edit.TextEdit{Start: x.lineStart(a.Pos()), End: x.lineEnd(a.End()), NewText: ""})
+			}
+		}
+	}
+	post := ""
+	if n := len(l.Body.List); n > 0 {
+		last := l.Body.List[n-1]
+		_, inc := last.(*ast.IncDecStmt)
+		a, assign := last.(*ast.AssignStmt)
+		if inc || (assign && a.Tok != token.DEFINE) {
+			if len(x.continues(l)) == 0 {
+				post = x.Text(last)
+				edits = append(edits, edit.TextEdit{Start: x.lineStart(last.Pos()), End: x.lineEnd(last.End()), NewText: ""})
+			} else {
+				x.notes = append(x.notes, fmt.Sprintf("%s stays last in the body: a continue of the loop skips it, and as the post statement it would run", x.Text(last)))
+			}
+		}
+	}
+	if init == "" && post == "" {
+		return "", nil, refactor.Refusef("the loop at line %d has nothing to move into its header: no variable declared just before it that its condition reads and nothing after it does, and no assignment or increment last in its body", x.line)
+	}
+	cond := ""
+	if l.Cond != nil {
+		cond = x.Text(l.Cond)
+	}
+	head := fmt.Sprintf("for %s; %s; %s", init, cond, post)
+	head = strings.TrimRight(head, " ")
+	edits = append(edits, edit.TextEdit{Start: x.Off(l.For), End: x.Off(l.Body.Lbrace), NewText: head + " "})
+	return head + " {", edits, nil
+}
+
+// around returns the loop with its label, if it has one, and the list of
+// statements that holds it.
+func (x *conversion) around(l ast.Stmt) (ast.Stmt, []ast.Stmt) {
+	path := analysis.PathTo(x.File, l)
+	var whole ast.Stmt = l
+	k := 1
+	if lab, ok := path[1].(*ast.LabeledStmt); ok {
+		whole = lab
+		k = 2
+	}
+	switch p := path[k].(type) {
+	case *ast.BlockStmt:
+		return whole, p.List
+	case *ast.CaseClause:
+		return whole, p.Body
+	case *ast.CommClause:
+		return whole, p.Body
+	}
+	return whole, nil
+}
+
+// continues returns the continue statements that go to the next pass of
+// l: unlabeled ones in no inner loop, and those naming its label.
+func (x *conversion) continues(l ast.Stmt) []*ast.BranchStmt {
+	label := ""
+	if path := analysis.PathTo(x.File, l); len(path) > 1 {
+		if lab, ok := path[1].(*ast.LabeledStmt); ok {
+			label = lab.Label.Name
+		}
+	}
+	var out []*ast.BranchStmt
+	var walk func(n ast.Node, inner bool)
+	walk = func(n ast.Node, inner bool) {
+		ast.Inspect(n, func(m ast.Node) bool {
+			switch m := m.(type) {
+			case *ast.FuncLit:
+				return false
+			case *ast.ForStmt:
+				if m != l {
+					walk(m.Body, true)
+					return false
+				}
+			case *ast.RangeStmt:
+				walk(m.Body, true)
+				return false
+			case *ast.BranchStmt:
+				if m.Tok == token.CONTINUE && ((m.Label == nil && !inner) || (m.Label != nil && m.Label.Name == label)) {
+					out = append(out, m)
+				}
+			}
+			return true
+		})
+	}
+	switch l := l.(type) {
+	case *ast.ForStmt:
+		walk(l.Body, false)
+	case *ast.RangeStmt:
+		walk(l.Body, false)
+	}
+	return out
+}
+
+// perPass reports whether the file's Go version gives each pass of a for
+// with init and post statements its own variables (Go 1.22 and later).
+func (x *conversion) perPass() bool {
+	fv := x.Info.FileVersions[x.File]
+	return fv == "" || version.Compare(fv, "go1.22") >= 0
+}
+
+// notCaptured refuses when a function literal in l captures v or l takes
+// v's address: the two forms then differ in how many vs there are. why
+// says how, with %s for v's name.
+func (x *conversion) notCaptured(l ast.Node, v *types.Var, why string) error {
+	var err error
+	ast.Inspect(l, func(n ast.Node) bool {
+		if err != nil {
+			return false
+		}
+		switch n := n.(type) {
+		case *ast.FuncLit:
+			if x.reads(n, v) {
+				err = refactor.Refusef("a function literal at line %d captures %s; "+why+". Copy it into a local in the body first", x.TF.Line(n.Pos()), v.Name(), v.Name())
+			}
+			return false
+		case *ast.UnaryExpr:
+			if n.Op == token.AND && x.is(n.X, v) {
+				err = refactor.Refusef("line %d takes the address of %s; "+why, x.TF.Line(n.Pos()), v.Name(), v.Name())
+			}
+		}
+		return true
+	})
+	return err
+}
+
+// reads reports whether n uses v.
+func (x *conversion) reads(n ast.Node, v types.Object) bool {
+	found := false
+	ast.Inspect(n, func(m ast.Node) bool {
+		if id, ok := m.(*ast.Ident); ok && x.Info.Uses[id] == v {
+			found = true
+		}
+		return !found
+	})
+	return found
+}
+
+// readsAny reports whether any of list uses v.
+func (x *conversion) readsAny(list []ast.Stmt, v types.Object) bool {
+	for _, s := range list {
+		if x.reads(s, v) {
+			return true
+		}
+	}
+	return false
+}
+
+// clashes reports whether declaring name just before whole, in list,
+// would redeclare a name of the block or reach a statement after it that
+// names it.
+func (x *conversion) clashes(name string, whole ast.Stmt, list []ast.Stmt) bool {
+	if list == nil {
+		return true
+	}
+	path := analysis.PathTo(x.File, whole)
+	if scope := x.Info.Scopes[path[1]]; scope != nil && scope.Lookup(name) != nil {
+		return true
+	}
+	after := false
+	for _, s := range list {
+		if s == whole {
+			after = true
+			continue
+		}
+		if !after {
+			continue
+		}
+		hit := false
+		ast.Inspect(s, func(n ast.Node) bool {
+			if id, ok := n.(*ast.Ident); ok && id.Name == name {
+				hit = true
+			}
+			return !hit
+		})
+		if hit {
+			return true
+		}
+	}
+	return false
+}
+
+// applied returns the source from start to end with edits, which all fall
+// inside it, applied.
+func (x *conversion) applied(start, end int, edits []edit.TextEdit) string {
+	sort.Slice(edits, func(i, j int) bool { return edits[i].Start > edits[j].Start })
+	b := []byte(string(x.Src[start:end]))
+	for _, e := range edits {
+		b = append(b[:e.Start-start], append([]byte(e.NewText), b[e.End-start:]...)...)
+	}
+	return string(b)
 }
 
 func contains(rs []*ast.IndexExpr, r *ast.IndexExpr) bool {
