@@ -9,6 +9,10 @@ both servers' `tools/list`, this repo's roadmap, `docs/checks.md`,
 and friction log. Roadmap item 54 tracks it; the Java repo's design.md
 points here.
 
+A review of both repos on 2026-11-13 is
+`docs/parity-review-2026-11-13.md`: what has changed since this survey
+(sections 3 and 6 here are behind it) and a suggested order.
+
 ## 1. Bugs to fix first
 
 Cheap, and each one costs a fresh model a refusal or a wrong result today.
