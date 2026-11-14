@@ -103,8 +103,8 @@ REFUSED inline_variable: "n" is assigned at bed.go:15:3; only variables that are
   implementations); method to function and back, move a method, extract a
   struct or an interface, inline a struct; `fold` (replace code that does what a function does with calls
   to it), `parameterize`, merge duplicate functions; a type switch into
-  methods; invert if, remove else, slide statements, split a variable, a
-  loop or a phase, remove dead code.
+  methods; invert if, remove else, slide statements, convert a loop to
+  another form, split a variable, a loop or a phase, remove dead code.
 - **Edits**, which change behavior on purpose and are still type-checked
   and undoable: create, move and delete files, add declarations, fields,
   cases and elements, replace statements, expressions, declarations and
@@ -173,6 +173,16 @@ path as the command. The server works on the Go module (the nearest
 projects it references) at or above `-C`, `$CLAUDE_PROJECT_DIR` (which
 Claude Code sets), or its working directory.
 
+**Server options**, after the command in `args` (`refactor-mcp -h` lists all):
+- `-no-code-by-text`: `replace_text` changes Go only inside string literals
+  and comments, and refuses other changes with the structured edit to use.
+  Sessions had used it to paste code where an edit fit.
+- `-skeleton-only` (an experiment): `create_file` refuses code with
+  function bodies; a type starts from `declaration`, a test from
+  `test_for`, and functions come from `add_declaration`.
+
+This repo runs with both.
+
 **2. Tell Claude to use it.** Without instructions that ask for them, a
 fresh model never calls the tools: it edits files as it always has. Copy
 `examples/CLAUDE.md` into your project's CLAUDE.md, or merge it into the one
@@ -229,9 +239,9 @@ small as it can be. Moves that have worked:
   then remove_dead_code the old field.
 - **Move behaviour or change a signature (expand, migrate, contract):**
   add_declaration the new function as a wrapper over the old one, `fold`
-  the callers onto it, inline_function the old one with `all_calls`, then
+  the callers onto it, `inline` the old one with `all_calls`, then
   rename. One parameter or result: add_parameter, remove_parameter,
-  change_parameter_type or add_result in one step.
+  change_type or add_result in one step.
 - **A test written first** gets stubs for what it calls and nothing
   declares, so the code still compiles.
 
@@ -311,9 +321,9 @@ refactor -C path/to/module -n rename file=main.go line=7 name=t new_name=total  
 refactor -C path/to/module    rename file=main.go line=7 name=t new_name=total   # apply
 refactor rename '{"file":"main.go","line":7,"name":"t","new_name":"total"}'      # JSON args, as a model sends them
 refactor -n extract_variable file=main.go line=12 expression='qty*unit' name=subtotal
-refactor -n inline_variable file=main.go line=12 name=subtotal
+refactor -n inline file=main.go line=12 name=subtotal
 refactor -n extract_function file=main.go start_line=20 end_line=31 name=printReport
-refactor -n inline_function file=main.go line=20 name=printReport
+refactor -n inline file=main.go line=20 name=printReport
 refactor -n invert_if file=main.go line=14
 refactor -n remove_else file=main.go line=20
 refactor -n add_parameter file=main.go line=9 name=copyTree parameter=skip type=string value=cfg.OutDir
