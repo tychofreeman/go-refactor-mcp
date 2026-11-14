@@ -28,10 +28,9 @@ Moves that work:
   it, then remove_dead_code the old field.
 - **Move behaviour or change a signature (expand, migrate, contract):**
   add_declaration the new function as a wrapper over the old one,
-  `fold` the callers onto it, inline_function the old one with
+  `fold` the callers onto it, `inline` the old one with
   all_calls, then rename. For one parameter or result, add_parameter,
-  remove_parameter, change_parameter_type or add_result do it in one
-  step.
+  remove_parameter, change_type or add_result do it in one step.
 - **A function, method or field a new test uses** is stubbed for you.
 
 ## Using the tools
@@ -43,3 +42,4 @@ Moves that work:
 - Address declarations by name, not line. Use `"check": "end"` when a
   test comes before the code it tests.
 - Read refusals: they say what to send instead.
+- Run the tests with `check` and `run_tests`; it also type-checks.
