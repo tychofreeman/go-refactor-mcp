@@ -335,3 +335,21 @@ func TestChangeTypeCovers(t *testing.T) {
 		t.Errorf("published: %v", tools)
 	}
 }
+
+// inline with all_calls and no line inlines every call of the function
+// name names and deletes it, as inline_function does.
+func TestInlineAllCalls(t *testing.T) {
+	root := t.TempDir()
+	write(t, root, map[string]string{
+		"go.mod": "module example.com/home\n\ngo 1.22\n",
+		"a.go":   "package home\n\nfunc double(n int) int { return n * 2 }\n\nfunc Use() int { return double(3) }\n\nfunc Twice() int { return double(4) }\n",
+	})
+	l := New(root, []string{"./..."}, &history.Stack{})
+	if text, refused, err := l.Step("inline", []byte(`{"file": "a.go", "name": "double", "all_calls": true}`)); err != nil || refused {
+		t.Fatalf("inline all_calls: %v %v\n%s", err, refused, text)
+	}
+	b, _ := os.ReadFile(filepath.Join(root, "a.go"))
+	if strings.Contains(string(b), "double") || !strings.Contains(string(b), "n := 4") {
+		t.Errorf("a.go keeps double, or lacks a call inlined:\n%s", b)
+	}
+}

@@ -304,7 +304,11 @@ func (x *inliner) plan() (*refactor.Plan, error) {
 func (x *inliner) findCall() error {
 	name := x.id.Name
 	if o, ok := x.Info.Defs[x.id].(*types.Func); ok {
-		return refactor.Refusef("%s is the declaration of %q; give the line of a call to it, or all_calls to inline every call", x.WS.Position(x.id.Pos()), o.Name())
+		sites := callSites(x.WS, o)
+		if sites == "" {
+			return refactor.Refusef("%s is the declaration of %q, which nothing calls, so there is no call to inline", x.WS.Position(x.id.Pos()), o.Name())
+		}
+		return refactor.Refusef("%s is the declaration of %q; give the line of a call to it (%s), or all_calls to inline every call", x.WS.Position(x.id.Pos()), o.Name(), sites)
 	}
 	fn, ok := x.Info.Uses[x.id].(*types.Func)
 	if !ok {
@@ -1543,4 +1547,48 @@ func quoteAll(ss []string) []string {
 		out[i] = fmt.Sprintf("%q", s)
 	}
 	return out
+}
+
+// callSites lists where fn is called, for a refusal that asks for the line
+// of a call: the first five in source order, each "file:line in Func",
+// then how many more; empty when nothing calls fn.
+func callSites(ws *workspace.Workspace, fn *types.Func) string {
+	calls, _ := callsOf(ws, fn)
+	sort.Slice(calls, func(i, j int) bool {
+		if calls[i].Filename != calls[j].Filename {
+			return calls[i].Filename < calls[j].Filename
+		}
+		return calls[i].Offset < calls[j].Offset
+	})
+	var sites []string
+	for _, c := range calls {
+		if len(sites) == 5 {
+			sites = append(sites, fmt.Sprintf("%d more", len(calls)-5))
+			break
+		}
+		s := fmt.Sprintf("%s:%d", ws.Rel(c.Filename), c.Line)
+		if in := enclosing(ws, c); in != "" {
+			s += " in " + in
+		}
+		sites = append(sites, s)
+	}
+	return strings.Join(sites, ", ")
+}
+
+// enclosing names the function declaration around at, as inspect's outline
+// does, or is empty when at is in none.
+func enclosing(ws *workspace.Workspace, at token.Position) string {
+	for _, p := range ws.Pkgs {
+		for _, f := range p.Syntax {
+			if ws.Fset.Position(f.Pos()).Filename != at.Filename {
+				continue
+			}
+			for _, d := range f.Decls {
+				if fd, ok := d.(*ast.FuncDecl); ok && ws.Fset.Position(fd.Pos()).Offset <= at.Offset && at.Offset < ws.Fset.Position(fd.End()).Offset {
+					return locate.FuncName(fd)
+				}
+			}
+		}
+	}
+	return ""
 }

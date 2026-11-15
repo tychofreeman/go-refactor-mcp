@@ -88,3 +88,17 @@ func (*Inline) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Pla
 	}
 	return to.Plan(ws, refactor.OnlyArgs(raw, to.InputSchema()))
 }
+
+// Expand hands all_calls of a function to inline_function, which runs it
+// as one step per call.
+func (*Inline) Expand(ws *workspace.Workspace, raw json.RawMessage) ([]refactor.Step, error) {
+	var a args
+	if err := refactor.DecodeArgs(raw, &a); err != nil {
+		return nil, err
+	}
+	if !a.AllCalls || a.Field != "" {
+		return nil, nil
+	}
+	to := inlinefunc.New()
+	return to.Expand(ws, refactor.OnlyArgs(raw, to.InputSchema()))
+}
