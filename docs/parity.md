@@ -137,10 +137,13 @@ the counterpart of `inline_struct` (52.3, without Go's `elsewhere` and
 `prefer`) are *done*.
 
 **Java lacks** (Go and TS have):
-- `add_result`, `parameterize`, `merge_duplicate_function`,
-  `prepare_switch_for_types`, `type_switch_to_method` (an `instanceof`
-  chain or a switch on a sealed type to a method), `split`, and
-  inline class (`inline_struct`).
+- `merge_duplicate_function` (a composition there: `fold`, then `inline`).
+  The rest are built: `add_result`, `type_switch_to_method` (one tool for
+  the pair), inline class (`inline` with `field`), `split` kind phase (java
+  #370, 2026-11-15: the carried locals in a new record) and `parameterize`
+  (java #372, 2026-11-15: a published tool with Go's arguments, `functions`,
+  `name` and `parameters`). `prepare_switch_for_types` is an unpublished
+  alias of `type_switch_to_method`, which moves every case at once.
 - `add_field` (Java's add_declaration declares a field but does not fill
   constructors or literals).
 - `create_from_usage` is not missing: Java declares stubs automatically,
@@ -210,10 +213,14 @@ unset, and a constructor stub assigns the fields its arguments fit (java
 callees (4); rename of interface methods, embedded types, imports and
 labels (6); introduce_parameter of every occurrence at once (1).
 
-**Java behind Go and TS:** replace_text's `files` and `function`;
-replace_declaration's `line`/`column` and `imports`; the remaining `inspect`
-and argument options the schemas list (Java has fewer addressing options on
-most tools). Done in Java: move_member into another file's class and stubs
+**Java behind Go and TS:** replace_declaration's `imports`, and argument
+options the schemas list (Java has fewer addressing options on most tools).
+Done in Java on 2026-11-15 (java #368, #369, #371): `inline` of one call by
+`line` (`all_calls`, `keep_function`); `inspect` `uses` (Go's roles mapped to
+Java), `function` and `targets`, and the outline's facts per body (lines,
+complexity, nesting, and side effects following calls into the project, as
+Go's, with a per-session cache of other files' summaries); replace_text's
+`files` and `function`; replace_declaration's `line`/`column`. Done in Java: move_member into another file's class and stubs
 for a static field read (java #109, #107, 2026-11-06), refusals that name the
 line (#110); and java #130 (2026-11-07/08): encapsulate_field's compound
 writes and `++` as statements (#283), fold of instance methods, in the class
@@ -288,6 +295,13 @@ class and of static fields (#109), and refusals that say where (#110), are done;
 for friction entries. The A/B check of Java's merged list (`move`, `inline`) passed (#243); since then #244-#250
 added `imports` on `move`, the import rules, `batch` `retry`, `implement`, `constructor`,
 `surround` and more shapes for `type_switch_to_method` (sections 3 and 4).
+
+**Java's status (2026-11-15, java-refactor-mcp #632-#641):** of section 3, `split` (kind phase)
+and `parameterize` are published tools; `parameterize` is no longer `extract_variable`
+`as=parameter`, which is what Go's `introduce_parameter` maps to. Go's `introduce_parameter`,
+`convert_params_to_object`, `remove_dead_code` and `prepare_switch_for_types` are unpublished
+aliases there, each taking Go's arguments. Of section 4, see "Java behind Go and TS". Java
+publishes 44 tools.
 
 ## 6. Every tool, for the budget review
 
