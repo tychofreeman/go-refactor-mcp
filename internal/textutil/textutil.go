@@ -49,28 +49,14 @@ func Scan(src []byte) []Token {
 // start inside a multi-line string literal or comment are left alone,
 // since changing them would change the string.
 func Reindent(text, from, to string) string {
-	var spans [][2]int // multi-line tokens
-	for _, t := range Scan([]byte(text)) {
-		if (t.Tok == token.STRING || t.Tok == token.COMMENT) && strings.Contains(text[t.Off:t.End], "\n") {
-			spans = append(spans, [2]int{t.Off, t.End})
-		}
-	}
-	inside := func(off int) bool {
-		for _, s := range spans {
-			if s[0] < off && off < s[1] {
-				return true
-			}
-		}
-		return false
-	}
+	inside := stringLines(text)
 	var sb strings.Builder
-	off := 0
 	for i, line := range strings.Split(text, "\n") {
 		if i > 0 {
 			sb.WriteByte('\n')
 		}
 		switch {
-		case inside(off):
+		case inside[i]:
 			sb.WriteString(line)
 		case strings.TrimSpace(line) == "":
 		case strings.HasPrefix(line, from):
@@ -78,7 +64,6 @@ func Reindent(text, from, to string) string {
 		default:
 			sb.WriteString(to + strings.TrimLeft(line, " \t"))
 		}
-		off += len(line) + 1
 	}
 	return sb.String()
 }
@@ -258,9 +243,10 @@ func ReindentSteps(text, from, to, fromStep, toStep string) string {
 	if fromStep == toStep || fromStep == "" {
 		return out
 	}
+	inside := stringLines(text)
 	lines := strings.Split(out, "\n")
 	for i, line := range lines {
-		if !strings.HasPrefix(line, to) {
+		if inside[i] || !strings.HasPrefix(line, to) {
 			continue
 		}
 		rest := line[len(to):]
@@ -272,4 +258,20 @@ func ReindentSteps(text, from, to, fromStep, toStep string) string {
 		lines[i] = to + strings.Repeat(toStep, n) + rest
 	}
 	return strings.Join(lines, "\n")
+}
+
+// stringLines is the indexes of text's lines that start inside a string
+// literal or comment spanning lines: changing their indentation would
+// change the string.
+func stringLines(text string) map[int]bool {
+	inside := map[int]bool{}
+	for _, t := range Scan([]byte(text)) {
+		if (t.Tok == token.STRING || t.Tok == token.COMMENT) && strings.Contains(text[t.Off:t.End], "\n") {
+			first := strings.Count(text[:t.Off], "\n")
+			for i := first + 1; i <= first+strings.Count(text[t.Off:t.End], "\n"); i++ {
+				inside[i] = true
+			}
+		}
+	}
+	return inside
 }

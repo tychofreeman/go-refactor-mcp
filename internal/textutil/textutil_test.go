@@ -78,3 +78,13 @@ func TestReindentSteps(t *testing.T) {
 		t.Errorf("the same step: %q", got)
 	}
 }
+
+// A line inside a multi-line string is part of its value: its steps are
+// not converted either.
+func TestReindentStepsKeepsStrings(t *testing.T) {
+	in := "    foo() {\n        return `a\n        b`;\n    }\n"
+	want := "  foo() {\n    return `a\n        b`;\n  }\n"
+	if got := ReindentSteps(in, "    ", "  ", "    ", "  "); got != want {
+		t.Errorf("got\n%q\nwant\n%q", got, want)
+	}
+}
