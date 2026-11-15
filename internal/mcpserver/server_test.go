@@ -1234,3 +1234,37 @@ func TestVersionOf(t *testing.T) {
 		}
 	}
 }
+
+// A tool that panics is reported as an error naming the tool and where it
+// panicked, and the server goes on serving: the SDK runs each call in its
+// own goroutine, so an unrecovered panic would end the process (#639).
+func TestPanicIsAToolError(t *testing.T) {
+	s := New(t.TempDir())
+	srv := s.MCP()
+	srv.AddTool(&mcp.Tool{Name: "boom", InputSchema: map[string]any{"type": "object"}}, s.handler(func(context.Context, json.RawMessage) *mcp.CallToolResult {
+		var m map[string]int
+		m["x"] = 1
+		return nil
+	}))
+	ctx := context.Background()
+	st, ct := mcp.NewInMemoryTransports()
+	if _, err := srv.Connect(ctx, st, nil); err != nil {
+		t.Fatal(err)
+	}
+	cs, err := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "1"}, nil).Connect(ctx, ct, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cs.Close()
+	res, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: "boom", Arguments: map[string]any{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := res.Content[0].(*mcp.TextContent).Text
+	if !res.IsError || !strings.Contains(text, "boom") || !strings.Contains(text, "server_test.go") {
+		t.Fatalf("the panic was reported as %v: %s", res.IsError, text)
+	}
+	if _, err := cs.ListTools(ctx, nil); err != nil {
+		t.Fatalf("the server stopped serving after the panic: %v", err)
+	}
+}

@@ -4680,3 +4680,10 @@ deleted with `git mv` and `git rm`, and one `out/` directory made with
 `mkdir` and `cp` of its go.mod: no tool moves or deletes a testdata
 directory (`move` of a file path moves one file, and the guard exempts
 testdata). Everything else went through the CLI's batches.
+
+## 2026-11-14, recover-panics (#639)
+
+- `refactor add_declaration imports=github.com/google/jsonschema-go/jsonschema` was refused,
+  "cannot unmarshal string into ... imports of type []string": the CLI's `key=value` form takes
+  no list. Sent the same step through `batch` with `"imports": [...]`. A list could be accepted
+  as one element, or as JSON after `=`.

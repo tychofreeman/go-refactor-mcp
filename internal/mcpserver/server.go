@@ -16,9 +16,11 @@ package mcpserver
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"runtime/debug"
 	"strings"
 
@@ -372,9 +374,17 @@ func (s *Server) arguments(req *mcp.CallToolRequest) (json.RawMessage, *mcp.Call
 }
 
 // handler is a tool's handler that runs run with the call's arguments,
-// once arguments has what it asks the client.
+// once arguments has what it asks the client. A panic is the tool's
+// error, not the server's end: the SDK runs each call in its own
+// goroutine, so one it does not recover ends the process and its undo
+// history (#639).
 func (s *Server) handler(run func(ctx context.Context, args json.RawMessage) *mcp.CallToolResult) mcp.ToolHandler {
-	return func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	return func(ctx context.Context, req *mcp.CallToolRequest) (res *mcp.CallToolResult, err error) {
+		defer func() {
+			if p := recover(); p != nil {
+				res, err = toolError(fmt.Errorf("%s panicked at %s: %v. This is a bug in gorefactor; check the changed files (git diff) before the next step, since a change may be partly written", req.Params.Name, panicSite(), p)), nil
+			}
+		}()
 		args, ask := s.arguments(req)
 		if ask != nil {
 			return ask, nil
@@ -478,4 +488,20 @@ func toolError(err error) *mcp.CallToolResult {
 	r := textResult("error: " + err.Error())
 	r.IsError = true
 	return r
+}
+
+// panicSite is file:line of the code that panicked, for a recover in a
+// deferred call: the first frame outside the runtime.
+func panicSite() string {
+	pcs := make([]uintptr, 32)
+	frames := runtime.CallersFrames(pcs[:runtime.Callers(3, pcs)])
+	for {
+		f, more := frames.Next()
+		if !strings.HasPrefix(f.Function, "runtime.") {
+			return fmt.Sprintf("%s:%d", filepath.Base(f.File), f.Line)
+		}
+		if !more {
+			return "an unknown place"
+		}
+	}
 }
