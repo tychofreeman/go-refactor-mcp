@@ -2,7 +2,8 @@
 the tools, how it runs a batch and the module's tests, how it shows the
 module to the plan, and how it finds a place a message names.
 
-Go is gorefactor, from this checkout. Java is java-refactor-mcp
+Go is gorefactor, from this checkout, and so is TypeScript: the same
+tools, which go by a file's extension. Java is java-refactor-mcp
 (tychofreeman/java-refactor-mcp), from a checkout given with -server: its
 bin/jrefactor runs a tool from a shell, with the arguments and batch form
 gorefactor's CLI takes.
@@ -25,6 +26,7 @@ class Lang:
     place = None  # a file:line a message names
     check = ""  # the module's own checks, a shell command run in it
     head = ""  # what introduces view's output in the plan; the loop's HEADS when empty
+    declaration = re.compile(r"(func|type|var|const) ")  # starts a top-level declaration
 
     def cli(self):
         """The command that runs one tool on a module: argv before -C."""
@@ -53,7 +55,7 @@ class Lang:
     def around(self, lines, line):
         """The first and last line of the declaration around line, 1-based."""
         start = line
-        while start > 1 and not re.match(r"(func|type|var|const) ", lines[start - 1]):
+        while start > 1 and not self.declaration.match(lines[start - 1]):
             start -= 1
         end = line
         while end < len(lines) and lines[end - 1] != "}" and not (end == start and lines[end - 1].endswith("}")):
@@ -81,6 +83,38 @@ class Go(Lang):
 
     def view(self, module):
         return probe.view("calltree", module)
+
+
+class TypeScript(Go):
+    name = "typescript"
+    module = "a TypeScript project"
+    names = "Where a tool takes file and name without line, name is a top-level symbol of file (name, Class.method or Class.field), and stays valid after earlier steps; a file is a path from the project's root (src/freight.ts)."
+    # path.ts:12, and tsc's path.ts(12,5).
+    place = re.compile(r"([\w./-]+\.tsx?)(?::|\()(\d+)")
+    check = "tsc -p . && node --test"
+    head = "The project: every file's path, then each source file but the tests without its function bodies (names, signatures, fields and doc comments), with line numbers:"
+    declaration = re.compile(r"(export|function|class|interface|type|const|let|enum|abstract|declare) ")
+
+    def tool_list(self):
+        # In a TypeScript project the server describes the tools for TypeScript.
+        return probe.tool_list(files=["tsconfig.json"])
+
+    def view(self, module):
+        files = sorted(os.path.relpath(os.path.join(d, f), module)
+                       for d, _, fs in os.walk(module) if "node_modules" not in d
+                       for f in fs if f.endswith((".ts", ".tsx")))
+        parts = ["Files: " + ", ".join(files)]
+        for f in files:
+            if not f.endswith((".test.ts", ".test.tsx")):
+                r = probe.sh(self.cli() + ["-C", module, "inspect", "file=" + f])
+                parts.append(r.stdout.strip())
+        return "\n\n".join(parts)
+
+    def places(self, module, text):
+        """The (file, line) pairs text names; node's stack traces name a
+        file by its URL, which is given from module on."""
+        text = text.replace("file://", "").replace(os.path.realpath(module) + os.sep, "").replace(module + os.sep, "")
+        return [(f, int(n)) for f, n in self.place.findall(text)]
 
 
 class Java(Lang):
@@ -157,4 +191,4 @@ def of(name, tmp, checkout):
         if not checkout:
             raise SystemExit("-lang java needs -server, the java-refactor-mcp checkout")
         return Java(checkout)
-    return Go(tmp)
+    return TypeScript(tmp) if name == "typescript" else Go(tmp)

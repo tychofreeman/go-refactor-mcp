@@ -1,0 +1,6 @@
+{"steps":[{"tool":"add_declaration","args":{"file":"src/notify.ts","content":"/** What broadcast sends, and to whom. */\nexport interface Batch {\n  users: User[];\n  message: Message;\n}\n\n/** Sends b's message to each of its users. */\nexport function broadcastBatch(c: Config, b: Batch): string[] {\n  return broadcast(c, b.users, b.message);\n}"}},
+{"tool":"fold","args":{"file":"src/notify.ts","name":"broadcastBatch"}},
+{"tool":"replace_text","args":{"file":"src/notify.test.ts","old":"import { broadcast, Email, SMS }","new":"import { Email, SMS }"}},
+{"tool":"inline","args":{"file":"src/notify.ts","name":"broadcast","all_calls":true}},
+{"tool":"remove_dead_code","args":{"file":"src/notify.ts","name":"broadcast"}},
+{"tool":"rename","args":{"file":"src/notify.ts","name":"broadcastBatch","new_name":"broadcast"}}]}

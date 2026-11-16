@@ -69,10 +69,14 @@ def schemas(tools=None):
     return "\n\n".join(f"{t['name']}: {t['description']}\ninput schema: {json.dumps(t['inputSchema'])}" for t in tools or tool_list())
 
 
-def tool_list(server=None):
+def tool_list(server=None, files=()):
     """The server's tools/list: name, description and input schema of each.
-    server is the command that starts it; gorefactor's, built here, without."""
+    server is the command that starts it; gorefactor's, built here, without.
+    It starts in an empty directory but for files, which are created empty
+    there: gorefactor describes its tools for the languages it finds."""
     d = tempfile.mkdtemp(prefix="probe-mcp-")
+    for f in files:
+        open(os.path.join(d, f), "w").close()
     if server is None:
         binary = os.path.join(d, "refactor-mcp")
         sh(["go", "build", "-o", binary, "./cmd/refactor-mcp"])
