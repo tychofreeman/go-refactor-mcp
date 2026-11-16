@@ -3226,7 +3226,8 @@ candidates and the evidence for each, gathered from the friction log.
     all_calls". *Go done*: the line of the declaration, or a name with
     no line, runs all_calls, and the result's `chose:` line says so.
     TypeScript's inline still refuses there; its counterpart is a PR
-    of its own.
+    of its own. *TypeScript done* (2026-11-16,
+    `docs/sessions/ts-inline-declaration.md`).
 
 57. **method_to_function drops the package of calls from other
     packages** (2026-11-16, found by a loop attempt, cost-history 28).

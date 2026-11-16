@@ -537,7 +537,10 @@ the line of any call. The function's declaration given where a call goes
 so, with the number of calls, and that a call's line inlines that call
 alone; a declaration nothing calls is refused. With `all_calls`, a
 `function` argument is ignored, as it was before (a plan sent both in
-2 of 8 attempts on 2026-11-16). If any call cannot be
+2 of 8 attempts on 2026-11-16). TypeScript's inline does the same
+(2026-11-16): the declaration's line, or a function's name with no line,
+inlines every call in every file, with the same `chose:` line (without
+the count). If any call cannot be
 inlined, none is, and the refusal names the call. The calls go from the end of each file back, so
 that a call nested in another's arguments goes first, and the batch
 follows each call's line and column through the steps before it. Refused

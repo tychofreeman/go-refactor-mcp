@@ -1863,3 +1863,43 @@ export function twice(): void {
 		t.Errorf("the result does not say what changed: %s", res)
 	}
 }
+
+// The declaration given where a call goes, by its line or with no line,
+// inlines every call, and the result says so, as Go's inline does.
+func TestInlineDeclaration(t *testing.T) {
+	src := plants + `
+function area(p: Plant): number {
+  return p.height * p.height;
+}
+
+export function both(a: Plant, b: Plant): number {
+  return area(a) + area(b);
+}
+`
+	out := plants + `
+export function both(a: Plant, b: Plant): number {
+  return a.height * a.height + b.height * b.height;
+}
+`
+	for _, c := range []struct {
+		name string
+		r    refactor.RefactoringOf[*workspace.Workspace]
+		args string
+	}{
+		{"declaration line", NewInlineFunction(), `{"file": "src/plant.ts", "line": 14, "name": "area"}`},
+		{"no line", NewInlineFunction(), `{"file": "src/plant.ts", "name": "area"}`},
+		{"inline, no line", NewInline(), `{"file": "src/plant.ts", "name": "area"}`},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			ws, dir := load(t, map[string]string{"src/plant.ts": src})
+			res := run(t, ws, c.r, c.args)
+			if res.Refused != "" {
+				t.Fatalf("refused: %s", res.Refused)
+			}
+			want(t, dir, "src/plant.ts", out)
+			if !strings.Contains(strings.Join(res.Choices, "\n"), "every call of area") {
+				t.Errorf("choices = %q, want every call of area", res.Choices)
+			}
+		})
+	}
+}
