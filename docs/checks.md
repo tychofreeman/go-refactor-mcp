@@ -521,8 +521,12 @@ it. `keep_function` keeps it anyway.
 `all_calls` inlines every call to the function in the module, one call
 after another as a batch, and then deletes the function as above; the
 function is given by `file` and `name` (`Name` or `Type.Method`), or by
-the line of any call. If any call cannot be inlined, none is, and the
-refusal names the call. The calls go from the end of each file back, so
+the line of any call. The function's declaration given where a call goes
+(the line of the declaration, or `file` and `name` with no line) means
+`all_calls` too (2026-11-15, the user): the result's `chose:` line says
+so, with the number of calls, and that a call's line inlines that call
+alone; a declaration nothing calls is refused. If any call cannot be
+inlined, none is, and the refusal names the call. The calls go from the end of each file back, so
 that a call nested in another's arguments goes first, and the batch
 follows each call's line and column through the steps before it. Refused
 up front: a function that calls itself. The engine runs such a step through `refactor.Expander`: a refactoring that

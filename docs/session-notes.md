@@ -304,6 +304,11 @@ working patterns, with their steps, are in `docs/patterns.md`.
   simpler form first when only `return E` follows. remove_else's `wrap`
   exposes the first step. A string last result counts as an error for an
   early exit (this repo's refusals return that way); numbers do not.
+- **inline at a declaration means every call** (2026-11-15, the user,
+  over keeping the refusal): the line of the declaration, or a name with
+  no line, is all_calls, reported on a `chose:` line. An expander's
+  choices reach the result through an unlisted `chose` argument of its
+  first step (`refactor.unlistedArgs`).
 - **TypeScript in this repo, from one server** (2026-10-27): one server
   whose tools route by file extension, so the language-neutral code
   (diffs, server, batch, A/B harness) lands once. Descriptions follow what
