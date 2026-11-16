@@ -63,18 +63,21 @@ explain the change to a colleague before touching the code],
  """
 
 
-def schemas():
+def schemas(tools=None):
     """The server's tools as it publishes them: each one's name,
-    description and input schema."""
-    return "\n\n".join(f"{t['name']}: {t['description']}\ninput schema: {json.dumps(t['inputSchema'])}" for t in tool_list())
+    description and input schema; gorefactor's, without tools."""
+    return "\n\n".join(f"{t['name']}: {t['description']}\ninput schema: {json.dumps(t['inputSchema'])}" for t in tools or tool_list())
 
 
-def tool_list():
-    """The server's tools/list: name, description and input schema of each."""
+def tool_list(server=None):
+    """The server's tools/list: name, description and input schema of each.
+    server is the command that starts it; gorefactor's, built here, without."""
     d = tempfile.mkdtemp(prefix="probe-mcp-")
-    binary = os.path.join(d, "refactor-mcp")
-    sh(["go", "build", "-o", binary, "./cmd/refactor-mcp"])
-    p = subprocess.Popen([binary], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, cwd=d)
+    if server is None:
+        binary = os.path.join(d, "refactor-mcp")
+        sh(["go", "build", "-o", binary, "./cmd/refactor-mcp"])
+        server = [binary]
+    p = subprocess.Popen(server, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, cwd=d)
 
     def rpc(i, method, params):
         p.stdin.write(json.dumps({"jsonrpc": "2.0", "id": i, "method": method, "params": params}) + "\n")
