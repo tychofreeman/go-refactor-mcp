@@ -3324,5 +3324,23 @@ candidates and the evidence for each, gathered from the friction log.
     keeps `throw new Error("no label")` after the new `return p.label();`,
     unreachable code the tool could remove.
 
+61. **Behavior probes for Go** (2026-11-16, a review of the tests the
+    user asked for): the goldens check that a result type-checks and
+    matches out/, which was recorded from the tool, so a recorded result
+    that prints something else passes; the stress runs that run real
+    tests are opt-in, and only convert_loop ran programs. *Done:* a golden
+    case named `probe_<...>` is also a probe: `refactortest.Run` runs its
+    in/ (a main package) before and after the refactoring, from copies,
+    and fails when the output differs (skipped with `-short`, run in CI).
+    convert_loop's own runner is gone; its four probes run through it.
+    Nine new probes, each applied with its output kept: inline (an
+    argument with an effect used twice, `&&` short-circuit, early
+    returns), invert_if (a float compared with NaN), extract_function (an
+    error exit), extract_variable (a call in its statement), fold
+    (near-duplicates), remove_parameter (value an expression), split (a
+    loop with two sums). Next: probes for move_statement, inline of a
+    variable, and the refusals that guard behavior (Java's ProbeTest has
+    101 of those, each naming its refusal).
+
 Parked: the Ollama loop (`refactor-agent`). It works and stays, but Claude
 through MCP is the priority.
