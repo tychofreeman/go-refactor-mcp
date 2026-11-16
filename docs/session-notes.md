@@ -304,6 +304,11 @@ working patterns, with their steps, are in `docs/patterns.md`.
   simpler form first when only `return E` follows. remove_else's `wrap`
   exposes the first step. A string last result counts as an error for an
   early exit (this repo's refusals return that way); numbers do not.
+- **inline at a declaration means every call** (2026-11-15, the user,
+  over keeping the refusal): the line of the declaration, or a name with
+  no line, is all_calls, reported on a `chose:` line. An expander's
+  choices reach the result through an unlisted `chose` argument of its
+  first step (`refactor.unlistedArgs`).
 - **TypeScript in this repo, from one server** (2026-10-27): one server
   whose tools route by file extension, so the language-neutral code
   (diffs, server, batch, A/B harness) lands once. Descriptions follow what
@@ -387,7 +392,18 @@ session plans by.
   changes.
 - Tasks every arm gets right do not show the tools' value: Haiku and
   Sonnet by hand passed every freight-xl and trap task. Evidence would
-  come from tasks a model gets wrong by hand.
+  come from tasks a model gets wrong by hand. On freight-xxl (five
+  times the places, 2026-11-15, cost-history 27-28) the loop passed
+  32/32 and by hand failed 3 of 8 on routes (505 uses). With the whole
+  call tree in view the loop's cost followed the module's size; with
+  `-view focused` (what the prompt names, use counts, an index) it is
+  $0.07-0.10 a task on both modules, 3.7x-11x less than by hand on
+  freight-xxl.
+- In the loop, a plan uses a tool well only from its full entry: with
+  inline as an index line, plans gave it the declaration's line (24
+  refusals, 2026-11-15). `claude -p` resumes an answer cut at the
+  output cap and reports only the clean resumption, so a runaway shows
+  only in `usage`; the loop caps output at 40K and counts runaways.
 - A plan chooses a derivation from the examples it sees, and reads make
   the model write code out instead of deriving: with bodies in view both
   Haiku and Sonnet wrote more by hand.

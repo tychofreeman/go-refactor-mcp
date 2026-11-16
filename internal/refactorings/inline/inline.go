@@ -23,7 +23,7 @@ func New() *Inline { return &Inline{Named: refactor.Called[args]("inline")} }
 
 func (*Inline) Description() string {
 	return `Inline what name names into where it is used, and remove it when nothing else uses it; what it is says which:
-- a function or method, at a call (line): with func full(u User) string { return u.First + " " + u.Last }, name := full(u) becomes name := u.First + " " + u.Last. all_calls inlines every call and deletes the function (line optional; keep_function keeps it).
+- a function or method, at a call (line): with func full(u User) string { return u.First + " " + u.Last }, name := full(u) becomes name := u.First + " " + u.Last. all_calls, or the function's declaration in place of a call (its line, or no line), inlines every call and deletes the function (keep_function keeps it).
 - a local variable or constant, at its declaration or a use (line), or by function and name: name := u.First; return greet(name) becomes return greet(u.First).
 - with field, a struct the struct name holds: with type Bed struct { Soil; name string } and type Soil struct { depth int }, name Bed and field Soil give type Bed struct { depth int; name string }, and b.Soil.depth becomes b.depth. elsewhere and prefer settle a struct used outside the holder and methods both have.`
 }
@@ -87,4 +87,18 @@ func (*Inline) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Pla
 		return nil, refactor.Refusef("give line (of a call or of a local's declaration or use), all_calls for every call of a function, function for a local by name, or field for the struct a struct holds")
 	}
 	return to.Plan(ws, refactor.OnlyArgs(raw, to.InputSchema()))
+}
+
+// Expand hands a function to inline_function, which runs all_calls, or the
+// function's declaration given in place of a call, as one step per call.
+func (*Inline) Expand(ws *workspace.Workspace, raw json.RawMessage) ([]refactor.Step, error) {
+	var a args
+	if err := refactor.DecodeArgs(raw, &a); err != nil {
+		return nil, err
+	}
+	if a.Field != "" || a.Function != "" {
+		return nil, nil
+	}
+	to := inlinefunc.New()
+	return to.Expand(ws, refactor.OnlyArgs(raw, to.InputSchema()))
 }

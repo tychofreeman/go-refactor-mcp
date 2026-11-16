@@ -1,0 +1,30 @@
+[
+  {
+    "name": "freight-xxl-dispatch",
+    "dir": "testdata/freight-xxl",
+    "tests": "testdata/freight-xxl-dispatch",
+    "check": "go vet ./... && go test ./...",
+    "prompt": "The Ship methods of the 50 carriers in package freight (Truck, Train, Plane, Vessel, Van, Freighter, Drone, Barge, Courier and Post, and their numbered copies Truck2 to Post5) do nearly the same thing. Make all 50 call one package-level function dispatch(shipped *[]string, mode, to, text string), which logs \"<mode> ship to <to>\" with the standard logger and appends \"<to>: <text>\" to *shipped. What they ship and log must not change."
+  },
+  {
+    "name": "freight-xxl-routes",
+    "dir": "testdata/freight-xxl",
+    "tests": "testdata/freight-xxl-routes",
+    "check": "go vet ./... && go test ./...",
+    "prompt": "Replace the fields Road and Rail of freight.Shipment with one field Routes map[string]string, keyed by route: \"road\" for the road depot code and \"rail\" for the rail yard code. Everything that used them, in every package, must work as before."
+  },
+  {
+    "name": "freight-xxl-tail",
+    "dir": "testdata/freight-xxl",
+    "tests": "testdata/freight-xxl-tail",
+    "check": "go vet ./... && go test ./...",
+    "prompt": "last is used only by Truck. Replace it with a method func (c *Truck) tail(code string) string that keeps the last 4 bytes of code, the part a driver sees, and remove last. What Truck's methods return and ship must not change."
+  },
+  {
+    "name": "freight-xxl-run",
+    "dir": "testdata/freight-xxl",
+    "tests": "testdata/freight-xxl-run",
+    "check": "go vet ./... && go test ./...",
+    "prompt": "Dispatch should take its shipments and order as one value. Add a type freight.Run struct { Shipments []Shipment; Order Order } and change Dispatch to func Dispatch(c Config, r Run) []string, updating every caller in every package. What it ships and returns must not change."
+  }
+]

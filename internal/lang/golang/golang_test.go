@@ -264,8 +264,10 @@ func TestInline(t *testing.T) {
 		"a.go":   "package home\n\nfunc double(n int) int { return n * 2 }\n\nfunc Use() int {\n\tx := 3\n\treturn double(x)\n}\n\ntype Soil struct {\n\tdepth int\n}\n\ntype Bed struct {\n\tSoil\n}\n\nfunc (b Bed) Deep() bool { return b.depth > 2 }\n",
 	})
 	l := New(root, []string{"./..."}, &history.Stack{})
-	if text, refused, _ := l.Step("inline", []byte(`{"file": "a.go", "name": "double"}`)); !refused {
-		t.Errorf("inline without a line, all_calls or field is not refused:\n%s", text)
+	// A function named without a line is every call (inline's goldens);
+	// anything else needs a line, function or field.
+	if text, refused, _ := l.Step("inline", []byte(`{"file": "a.go", "name": "Bed"}`)); !refused {
+		t.Errorf("inline of a type without a line or field is not refused:\n%s", text)
 	}
 	for _, args := range []string{
 		`{"file": "a.go", "line": 6, "name": "x"}`,
@@ -333,5 +335,23 @@ func TestChangeTypeCovers(t *testing.T) {
 	}
 	if !tools["change_type"] || tools["change_field_type"] || tools["change_parameter_type"] {
 		t.Errorf("published: %v", tools)
+	}
+}
+
+// inline with all_calls and no line inlines every call of the function
+// name names and deletes it, as inline_function does.
+func TestInlineAllCalls(t *testing.T) {
+	root := t.TempDir()
+	write(t, root, map[string]string{
+		"go.mod": "module example.com/home\n\ngo 1.22\n",
+		"a.go":   "package home\n\nfunc double(n int) int { return n * 2 }\n\nfunc Use() int { return double(3) }\n\nfunc Twice() int { return double(4) }\n",
+	})
+	l := New(root, []string{"./..."}, &history.Stack{})
+	if text, refused, err := l.Step("inline", []byte(`{"file": "a.go", "name": "double", "all_calls": true}`)); err != nil || refused {
+		t.Fatalf("inline all_calls: %v %v\n%s", err, refused, text)
+	}
+	b, _ := os.ReadFile(filepath.Join(root, "a.go"))
+	if strings.Contains(string(b), "double") || !strings.Contains(string(b), "n := 4") {
+		t.Errorf("a.go keeps double, or lacks a call inlined:\n%s", b)
 	}
 }

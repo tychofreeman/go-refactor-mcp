@@ -510,10 +510,13 @@ func convText(t, s string) string {
 	return t + "(" + strings.TrimSpace(s) + ")"
 }
 
-// reindentTail re-indents every line of text but the first.
+// reindentTail re-indents every line of text but the first. It
+// re-indents the whole text, so the multi-line strings that Reindent
+// leaves alone are found from where they start, and keeps the first line.
 func reindentTail(text, from, to string) string {
 	i := strings.IndexByte(text, '\n')
-	return text[:i+1] + textutil.Reindent(text[i+1:], from, to)
+	out := textutil.Reindent(text, from, to)
+	return text[:i] + out[strings.IndexByte(out, '\n'):]
 }
 
 func (x *inliner) parenText(e ast.Expr) string {

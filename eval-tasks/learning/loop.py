@@ -55,7 +55,7 @@ the arguments the tool takes):
 
 {tools}
 
-The module, as a call tree (names, signatures and doc comments; no bodies):
+{head}
 
 {view}
 
@@ -65,10 +65,10 @@ The change:
 Answer with one JSON object and nothing else:
 {{"batch": {{"steps": [the whole change as gorefactor steps, in order]}}}}{read}
 Prefer refactorings that derive the change
-(fold, inline_function, rename, extract_type, ...) to edits that rewrite
+(fold, inline, rename, extract_type, ...) to edits that rewrite
 code. Code you cannot see here need not be written: steps that address
 it by name carry it with them (extract_function of a case by function
-and case, function_to_method, move_declaration, inline_function), so
+and case, function_to_method, move, inline), so
 move code rather than ask for it or call back into what you move.
 Address declarations by name where a tool allows it; a batch with
 check "end" may pass through code that does not compile yet. After it
@@ -90,6 +90,15 @@ with the next batch, which runs on the module as this one left it:
 UNPARSED = """Your answer was not one JSON object with a "batch" key that parses.
 Answer with that JSON alone, nothing before or after it:
 {"batch": {"steps": [...]}}."""
+
+# HEADS introduces the plan's view of the module, by -view.
+HEADS = {
+    "calltree": "The module, as a call tree (names, signatures and doc comments; no bodies):",
+    "focused": """The module, as far as the change reaches: what it names, with signatures,
+doc comments and calls (no bodies), and the functions of their package
+that call them; how many places use each, from the type checker; and
+every package's names.""",
+}
 
 # MAY_READ, in PLAN, lets the first answer ask for source; without it
 # (-no-read), source comes only with a repair, for what failed.
@@ -238,7 +247,7 @@ every place it reaches:
 
 {entries}"""
 
-CARRIERS = "fold,extract_function,change_field_type,introduce_parameter,remove_dead_code,prepare_switch_for_types,function_to_method"
+CARRIERS = "fold,extract_function,change_type,introduce_parameter,remove_dead_code,inline,prepare_switch_for_types,function_to_method"
 
 # TOOLS_HINT ends the later prompts with -index.
 TOOLS_HINT = """
@@ -359,7 +368,7 @@ PLAN_MANUAL = """You are making a change to a Go module. You have no tools in th
 conversation: you answer with JSON, and a program applies it and tells
 you what happened.
 
-The module, as a call tree (names, signatures and doc comments; no bodies):
+{head}
 
 {view}
 
@@ -476,12 +485,22 @@ class Arm:
         return ans["batch"] if isinstance(ans.get("batch"), dict) else None
 
 
+# MAX_OUTPUT caps a request's output tokens. No answer in the loop's runs
+# to 2026-11-15 wrote more than 36.5K; two wrote fake tool calls until
+# the CLI's cap of 128K (about $1.90 each with Sonnet), and the CLI's
+# resume after the cap hid them from the transcript. The CLI resumes a
+# capped answer a few times, and usage counts them all, so a runaway
+# that never recovers costs about four times the cap.
+MAX_OUTPUT = 40000
+
+
 class Model:
     """One conversation with claude -p, continued with --resume."""
 
     def __init__(self, name, cwd):
         self.name, self.cwd, self.session, self.cost, self.requests = name, cwd, None, 0.0, 0
         self.usage = []  # per request: tokens written to the cache, read from it, and output
+        self.runaways = 0  # requests whose output reached MAX_OUTPUT
 
     def ask(self, text):
         # No tools and no MCP servers: the model answers with JSON, and
@@ -489,7 +508,7 @@ class Model:
         cmd = ["claude", "-p", "--model", self.name, "--output-format", "json", "--tools", "", "--strict-mcp-config"]
         if self.session:
             cmd += ["--resume", self.session]
-        r = probe.sh(cmd, cwd=self.cwd, stdin=text)
+        r = probe.sh(cmd, cwd=self.cwd, stdin=text, env=dict(os.environ, CLAUDE_CODE_MAX_OUTPUT_TOKENS=str(MAX_OUTPUT)))
         self.requests += 1
         try:
             res = json.loads(r.stdout)
@@ -500,6 +519,8 @@ class Model:
         self.cost = res.get("total_cost_usd", self.cost)
         u = res.get("usage") or {}
         self.usage.append([u.get("cache_creation_input_tokens", 0), u.get("cache_read_input_tokens", 0), u.get("output_tokens", 0)])
+        if u.get("output_tokens", 0) >= MAX_OUTPUT:
+            self.runaways += 1
         return res.get("result", ""), ""
 
 
@@ -507,7 +528,7 @@ class Ref:
     """Answers with the reference batch: checks the loop for free."""
 
     def __init__(self, ref):
-        self.ref, self.cost, self.requests, self.usage = ref, 0.0, 0, []
+        self.ref, self.cost, self.requests, self.usage, self.runaways = ref, 0.0, 0, [], 0
 
     def ask(self, text):
         self.requests += 1
@@ -522,7 +543,7 @@ ARMS = {
 }
 
 
-def attempt(task, model, tools, binary, repairs, log, may_read=True, stages=2, read_after=False, patch=False, arm=ARMS["refactor"], tool_entries=None):
+def attempt(task, model, tools, binary, repairs, log, may_read=True, stages=2, read_after=False, patch=False, arm=ARMS["refactor"], tool_entries=None, view="calltree"):
     """One attempt at task. A batch that applies and passes the module's
     tests is kept, and the model is asked whether the change is done; if
     not, its next batch runs on what the kept ones left, at most stages
@@ -532,9 +553,12 @@ def attempt(task, model, tools, binary, repairs, log, may_read=True, stages=2, r
     repair may answer with the failed batch's steps from one on. arm says
     what the model answers with: steps, or text edits (a batch's steps
     then being the edits). With tool_entries, tools is an index, and the
-    model asks for the entries of the tools it will use."""
+    model asks for the entries of the tools it will use. view is the
+    plan's view of the module: the whole call tree, or focused on what
+    the task's prompt names (probe.focused)."""
     module = os.path.join(ROOT, "eval-tasks", task["dir"])
-    text = arm.plan.format(tools=tools, view=probe.view("calltree", module), prompt=task["prompt"],
+    shown = probe.focused(binary, module, task["prompt"]) if view == "focused" else probe.view("calltree", module)
+    text = arm.plan.format(tools=tools, head=HEADS[view], view=shown, prompt=task["prompt"],
                            read=READ_AFTER if read_after else arm.may_read if may_read else "")
     may_read = may_read and not read_after
     row = {"reads": 0, "repairs": 0, "patches": 0, "tool_asks": 0, "tools_asked": 0, "stages": 0, "refusals": [], "error": ""}
@@ -644,6 +668,8 @@ def main():
                    help="what the model answers with: gorefactor steps, or text edits the loop applies")
     p.add_argument("-reference", default="compact", choices=["compact", "full"],
                    help="the tools as compact signatures and descriptions, or as the server publishes them")
+    p.add_argument("-view", default="calltree", choices=sorted(HEADS),
+                   help="the plan's view of the module: the whole call tree, or focused on what the prompt names, with use counts and an index of names")
     p.add_argument("-stages", type=int, default=2, help="batches after the first that the model may send when asked if it is done")
     a = p.parse_args()
     if a.arm == "manual" and (a.read_after or a.index or "ref" in a.models.split(",")):
@@ -657,7 +683,9 @@ def main():
     tool_entries = None
     if a.index:
         tool_entries = entries(listed)
-        full = [n for n in a.full_tools.split(",") if n in tool_entries]
+        full = [n for n in a.full_tools.split(",") if n]
+        if unknown := [n for n in full if n not in tool_entries]:
+            p.error("-full-tools names no tool: " + ", ".join(unknown) + "; the tools are " + ", ".join(sorted(tool_entries)))
         tools = INDEX.format(index=index(listed, full))
         if full:
             tools += FULL.format(entries="\n\n".join([NAMES] + [tool_entries[n] for n in full]))
@@ -671,8 +699,8 @@ def main():
                 model = Ref(ref) if m == "ref" else Model(m, empty)
                 log = []
                 row = {"task": t["name"], "model": m, "run": n, "arm": a.arm}
-                row.update(attempt(t, model, tools, binary, a.repairs, log, may_read=not a.no_read, stages=a.stages, read_after=a.read_after, patch=a.patch, arm=ARMS[a.arm], tool_entries=tool_entries))
-                row.update(cost=model.cost, requests=model.requests, usage=model.usage)
+                row.update(attempt(t, model, tools, binary, a.repairs, log, may_read=not a.no_read, stages=a.stages, read_after=a.read_after, patch=a.patch, arm=ARMS[a.arm], tool_entries=tool_entries, view=a.view))
+                row.update(cost=model.cost, requests=model.requests, usage=model.usage, runaways=model.runaways)
                 with open(os.path.join(a.out, f"{t['name']}-{m}-{n}.txt"), "w") as f:
                     f.write("\n\n==== next answer ====\n\n".join(log))
                 results.write(json.dumps(row) + "\n")

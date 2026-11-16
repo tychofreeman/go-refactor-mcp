@@ -437,6 +437,7 @@ func runExpanded[W Workspace](ws W, steps []StepOf[W], opts OptionsOf[W], res *R
 	seen := map[string]bool{}
 	for _, s := range b.Steps {
 		summaries = append(summaries, s.Summary)
+		res.Choices = append(res.Choices, s.Choices...)
 		for _, n := range s.Notes {
 			if !seen[n] {
 				seen[n] = true

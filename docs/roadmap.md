@@ -1431,6 +1431,19 @@ part left. What is open, the newest priority first:
     the API with its own context, only if step 1 pays. A research
     instrument: the decision that Claude through MCP is the product
     stands, and the user decides on the result.
+    *2026-11-15:* step 1 is done and measured (cost-history 16-19 and
+    27, `docs/plan-and-execute.md`). With the carrying tools in full
+    the loop costs less than editing by hand on freight-xl's changes
+    that reach many places (routes, run), and on freight-xxl, five times
+    the places, 1.7x-5.9x less on every task, while by hand failed 3 of
+    8 routes. Done along the way: current tool names and a checked
+    `-full-tools` (#651), an output cap (#652), inline at a declaration
+    means every call (#653), freight-xxl (#654). Step 2, a runner of
+    our own, and what the loop becomes, are still the user's decision.
+    *2026-11-16:* `-view focused` (#656, cost-history 28) takes the
+    module's size out of the loop's cost: $0.07-0.10 a task on
+    freight-xxl (from $0.16-0.19), 32/32. Untested: prompts that name
+    no code, and a way for the plan to ask for more of the module.
 
 30. **move_parameter counts a local as observable** (2026-10-25, the
     trap run, cost-history 15): with `from := p.Bin()` extracted,
@@ -3204,6 +3217,25 @@ candidates and the evidence for each, gathered from the friction log.
        create_file in `createfile.Skeleton` for Go and TypeScript, on in
        this repo's `.mcp.json` (the user, 2026-11-05); an A/B arm with it
        on waits for the user's yes.
+
+56. **inline at a declaration means every call** (2026-11-15, the user,
+    of four options: keep the refusal, this, a name alone only, an
+    example in the description). In the plan-and-execute loop's
+    2026-11-15 rerun, 24 of the refactor arm's 49 refusals were inline's
+    "is the declaration of ...; give the line of a call to it, or
+    all_calls". *Go done*: the line of the declaration, or a name with
+    no line, runs all_calls, and the result's `chose:` line says so.
+    TypeScript's inline still refuses there; its counterpart is a PR
+    of its own.
+
+57. **method_to_function drops the package of calls from other
+    packages** (2026-11-16, found by a loop attempt, cost-history 28).
+    On freight-xl, function_to_method of `Dispatch` and then
+    method_to_function of `Config.Dispatch` writes the calls in depots
+    and schedules as `Dispatch(c, ...)`, not `freight.Dispatch(c, ...)`;
+    the post-check refuses it as a bug in the precondition checks, so
+    nothing is written. Fix: qualify a call outside the method's package
+    (and import it), with a golden of a call from another package.
 
 Parked: the Ollama loop (`refactor-agent`). It works and stays, but Claude
 through MCP is the priority.

@@ -4687,3 +4687,29 @@ testdata). Everything else went through the CLI's batches.
   "cannot unmarshal string into ... imports of type []string": the CLI's `key=value` form takes
   no list. Sent the same step through `batch` with `"imports": [...]`. A list could be accepted
   as one element, or as JSON after `=`.
+
+## inline at a declaration means every call (2026-11-15)
+
+By hand: the bodies of three golden fixtures' `in/m.go` (8, 5 and 8
+lines) with `printf`, and copies of a case directory with `cp -r`.
+Tried first: create_file with content (refused under `-skeleton-only`:
+no function bodies), then replace_statements on the fixture's `run` and
+`f` (refused: a fixture under testdata/ is not one of the module's
+packages, so no edit reaches it). `move` with `copy` copied the old
+case and with `delete` removed its `refused.txt`. Everything else went
+through the tools, `inline_test.go` as create_file of the package clause
+and add_declaration.
+
+## The loop's 2026-11-15 record (#651-#654 and this)
+
+Docs through replace_text; loop.py, probe.py, the refs and
+gen_freight_scale.py through replace_text and create_file (#651, #652,
+#654). By hand: freight-xxl's manual results, whose last four attempts
+ran separately, were appended to one results.jsonl with a short script
+(gitignored run output, not the repo). #653's by-hand fixtures are in
+its own entry.
+
+## The focused view's record (2026-11-16)
+
+Docs through replace_text; #656's loop.py and probe.py through
+replace_text. Nothing by hand.

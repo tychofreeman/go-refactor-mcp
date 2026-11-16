@@ -230,6 +230,25 @@ func (l *lined) withBlank(a, b int) (int, int) {
 // indentation from replaced by to, but for lines inside a string or
 // template that spans lines.
 func (l *lined) reindent(start, end int, from, to string, rs ...repl) string {
+	inside := l.literalLines(start, end)
+	var b strings.Builder
+	for line := l.line(start); line <= l.count() && l.start(line) < end; line++ {
+		s := l.substitute(l.start(line), min(l.start(line+1), end), rs)
+		if !inside[line] {
+			if strings.HasPrefix(s, from) {
+				s = to + s[len(from):]
+			} else if strings.TrimSpace(s) == "" {
+				s = strings.TrimLeft(s, " \t")
+			}
+		}
+		b.WriteString(s)
+	}
+	return b.String()
+}
+
+// literalLines is the lines in [start, end) that start inside a string or
+// template spanning lines: changing their indentation changes the string.
+func (l *lined) literalLines(start int, end int) map[int]bool {
 	inside := map[int]bool{}
 	inspect(l.f.AsNode(), func(n *ast.Node) bool {
 		if n.End() <= start || n.Pos() >= end {
@@ -244,19 +263,7 @@ func (l *lined) reindent(start, end int, from, to string, rs ...repl) string {
 		}
 		return true
 	})
-	var b strings.Builder
-	for line := l.line(start); line <= l.count() && l.start(line) < end; line++ {
-		s := l.substitute(l.start(line), min(l.start(line+1), end), rs)
-		if !inside[line] {
-			if strings.HasPrefix(s, from) {
-				s = to + s[len(from):]
-			} else if strings.TrimSpace(s) == "" {
-				s = strings.TrimLeft(s, " \t")
-			}
-		}
-		b.WriteString(s)
-	}
-	return b.String()
+	return inside
 }
 
 // declared returns the names stmt declares in its block: variables,
