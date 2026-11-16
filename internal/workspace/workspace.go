@@ -336,6 +336,9 @@ func (w *Workspace) Preview(label string, fes []edit.FileEdit) (history.Change, 
 		if !w.Contains(fe.Path) {
 			return history.Change{}, fmt.Errorf("refusing to edit %s: outside workspace %s", fe.Path, w.Root)
 		}
+		if err := history.Outside(w.Root, fe.Path); err != nil {
+			return history.Change{}, fmt.Errorf("refusing to edit %s: %v; only files inside the workspace are edited", w.Rel(fe.Path), err)
+		}
 		d, err := c.Add(w.Rel(fe.Path), fe, goFormat)
 		if err != nil {
 			return history.Change{}, err

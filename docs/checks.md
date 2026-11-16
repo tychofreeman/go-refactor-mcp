@@ -28,6 +28,16 @@ setting is package state in tsapi (`PreserveExceptions`,
 `TakeExceptionChanges`), since that analysis is made afresh at each use
 and the server runs one call at a time.
 
+## Every change: where it may write
+
+A change writes only files inside the workspace root (`Contains`, on the
+path as written), and none it reaches through a link that leads out of
+the root (`history.Outside`, #640): the path and the root are resolved,
+for a new file the nearest existing directory above it, and a link that
+points to nothing is refused too. A link that stays inside the root is
+edited as the file it points at. Both languages check this in `Preview`,
+so every edit and refactoring goes through it, and undo writes only paths that passed it.
+
 ## Calls known to have no side effects
 
 A call can do anything, so most checks treat one as a side effect. A

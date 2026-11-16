@@ -214,3 +214,24 @@ func TestEngineToleratesErrorsAlreadyThere(t *testing.T) {
 		t.Fatalf("a batch that adds an error was applied: %s", b)
 	}
 }
+
+// An edit of a link to a file outside the root is refused, and the file
+// there is left as it was.
+func TestApplyRefusesALinkOutOfTheRoot(t *testing.T) {
+	ws, dir := solution(t)
+	outside := filepath.Join(t.TempDir(), "out.txt")
+	if err := os.WriteFile(outside, []byte("hi\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "link.txt")
+	if err := os.Symlink(outside, link); err != nil {
+		t.Skip("no symlinks:", err)
+	}
+	_, err := ws.Apply("edit through a link", []edit.FileEdit{{Path: link, Edits: []edit.TextEdit{{Start: 0, End: 2, NewText: "changed"}}}})
+	if err == nil || !strings.Contains(err.Error(), "outside") {
+		t.Errorf("Apply = %v, want a refusal", err)
+	}
+	if b, _ := os.ReadFile(outside); string(b) != "hi\n" {
+		t.Errorf("the file outside = %q, want it unchanged", b)
+	}
+}
