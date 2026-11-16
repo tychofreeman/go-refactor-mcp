@@ -167,6 +167,28 @@ def index(pkgs):
     return "".join(out)
 
 
+def view_of(module, names):
+    """The call tree's entries for names, as a plan asks for what the
+    focused view leaves out: a package (all of it), a type (with its
+    methods), a function, Type.Method or pkg.Name."""
+    want = set(names)
+    out, found = [], set()
+    for p, es in calltree_entries(module).items():
+        if p in want:
+            found.add(p)
+            hit = es
+        else:
+            keys = lambda e: {e["name"], e["recv"], f"{e['recv']}.{e['name']}", f"{p}.{e['name']}"}
+            hit = [e for e in es if keys(e) & want]
+            found |= {k for e in hit for k in keys(e) & want}
+        if hit:
+            out.append(f"package {p}\n" + "".join("\n".join(e["lines"]) + "\n" for e in hit))
+    text = "".join(out)
+    if missing := [n for n in names if n not in found]:
+        text += "\nThe module declares nothing named " + ", ".join(missing) + ".\n"
+    return text
+
+
 def focused(binary, module, prompt):
     """The plan's view of module sized to the change, not the module: the
     declarations prompt names (a function, a type with its methods, a

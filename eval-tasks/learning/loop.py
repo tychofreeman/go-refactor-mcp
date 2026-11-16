@@ -100,6 +100,18 @@ that call them; how many places use each, from the type checker; and
 every package's names.""",
 }
 
+# VIEW_ASK ends the focused view's head with -view-asks: the plan may ask
+# for what the view leaves out; VIEWED answers it.
+VIEW_ASK = """
+For what this leaves out, ask, at most {n} times, before or after any
+batch: {{"view": ["Name", "Type", "Type.Method", "package", ...]}}, for
+their signatures, doc comments and calls."""
+
+VIEWED = """From the module as it is now:
+
+{source}
+Answer with the batch: {{"batch": {{"steps": [...]}}}}, or ask for more."""
+
 # MAY_READ, in PLAN, lets the first answer ask for source; without it
 # (-no-read), source comes only with a repair, for what failed.
 MAY_READ = """
@@ -543,7 +555,7 @@ ARMS = {
 }
 
 
-def attempt(task, model, tools, binary, repairs, log, may_read=True, stages=2, read_after=False, patch=False, arm=ARMS["refactor"], tool_entries=None, view="calltree"):
+def attempt(task, model, tools, binary, repairs, log, may_read=True, stages=2, read_after=False, patch=False, arm=ARMS["refactor"], tool_entries=None, view="calltree", view_asks=0):
     """One attempt at task. A batch that applies and passes the module's
     tests is kept, and the model is asked whether the change is done; if
     not, its next batch runs on what the kept ones left, at most stages
@@ -555,13 +567,15 @@ def attempt(task, model, tools, binary, repairs, log, may_read=True, stages=2, r
     then being the edits). With tool_entries, tools is an index, and the
     model asks for the entries of the tools it will use. view is the
     plan's view of the module: the whole call tree, or focused on what
-    the task's prompt names (probe.focused)."""
+    the task's prompt names (probe.focused), of which the plan may ask
+    for more view_asks times."""
     module = os.path.join(ROOT, "eval-tasks", task["dir"])
     shown = probe.focused(binary, module, task["prompt"]) if view == "focused" else probe.view("calltree", module)
-    text = arm.plan.format(tools=tools, head=HEADS[view], view=shown, prompt=task["prompt"],
+    head = HEADS[view] + (VIEW_ASK.format(n=view_asks) if view_asks else "")
+    text = arm.plan.format(tools=tools, head=head, view=shown, prompt=task["prompt"],
                            read=READ_AFTER if read_after else arm.may_read if may_read else "")
     may_read = may_read and not read_after
-    row = {"reads": 0, "repairs": 0, "patches": 0, "tool_asks": 0, "tools_asked": 0, "stages": 0, "refusals": [], "error": ""}
+    row = {"reads": 0, "repairs": 0, "patches": 0, "tool_asks": 0, "tools_asked": 0, "view_asks": 0, "stages": 0, "refusals": [], "error": ""}
     asks = 4  # tool asks left, with an index
     more = TOOLS_HINT if tool_entries else ""
     base, batches, left, reads = module, [], repairs, 3  # base: where the next batch runs
@@ -599,6 +613,11 @@ def attempt(task, model, tools, binary, repairs, log, may_read=True, stages=2, r
             if unknown := [n for n in names if n not in tool_entries]:
                 text += "\n\nNo tool is named " + ", ".join(unknown) + "."
             ask(TOOLS.format(entries=text) + hint)
+            continue
+        if view_asks and batch is None and ans and isinstance(ans.get("view"), list) and not ans.get("patch"):
+            view_asks -= 1
+            row["view_asks"] += 1
+            ask(VIEWED.format(source=probe.view_of(base, [str(n) for n in ans["view"]])) + hint)
             continue
         if patch and last and ans and batch is None and (b := patched(last, ans.get("patch"))):
             batch = b
@@ -670,10 +689,13 @@ def main():
                    help="the tools as compact signatures and descriptions, or as the server publishes them")
     p.add_argument("-view", default="calltree", choices=sorted(HEADS),
                    help="the plan's view of the module: the whole call tree, or focused on what the prompt names, with use counts and an index of names")
+    p.add_argument("-view-asks", type=int, default=0, help="with -view focused, how many times the plan may ask for more of the module")
     p.add_argument("-stages", type=int, default=2, help="batches after the first that the model may send when asked if it is done")
     a = p.parse_args()
     if a.arm == "manual" and (a.read_after or a.index or "ref" in a.models.split(",")):
         p.error("the manual arm has no reference edits and no tools, and -read-after asks for a first batch that moves code by name")
+    if a.view_asks and a.view != "focused":
+        p.error("-view-asks asks for what the focused view leaves out; give -view focused")
     os.makedirs(a.out, exist_ok=True)
     tmp = tempfile.mkdtemp(prefix="loop-")
     binary = os.path.join(tmp, "refactor")
@@ -699,7 +721,7 @@ def main():
                 model = Ref(ref) if m == "ref" else Model(m, empty)
                 log = []
                 row = {"task": t["name"], "model": m, "run": n, "arm": a.arm}
-                row.update(attempt(t, model, tools, binary, a.repairs, log, may_read=not a.no_read, stages=a.stages, read_after=a.read_after, patch=a.patch, arm=ARMS[a.arm], tool_entries=tool_entries, view=a.view))
+                row.update(attempt(t, model, tools, binary, a.repairs, log, may_read=not a.no_read, stages=a.stages, read_after=a.read_after, patch=a.patch, arm=ARMS[a.arm], tool_entries=tool_entries, view=a.view, view_asks=a.view_asks))
                 row.update(cost=model.cost, requests=model.requests, usage=model.usage, runaways=model.runaways)
                 with open(os.path.join(a.out, f"{t['name']}-{m}-{n}.txt"), "w") as f:
                     f.write("\n\n==== next answer ====\n\n".join(log))

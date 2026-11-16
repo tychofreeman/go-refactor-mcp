@@ -1,0 +1,2 @@
+{"steps":[{"tool":"add_declaration","args":{"file":"freight/freight.go","after":"last","content":"// dispatch logs a shipment by mode to to and records text for it in *shipped.\nfunc dispatch(shipped *[]string, mode, to, text string) {\n\tlog.Printf(\"%s ship to %s\", mode, to)\n\t*shipped = append(*shipped, to+\": \"+text)\n}"}},
+{"tool":"fold","args":{"file":"freight/freight.go","name":"dispatch"}}]}
