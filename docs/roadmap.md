@@ -3205,5 +3205,15 @@ candidates and the evidence for each, gathered from the friction log.
        this repo's `.mcp.json` (the user, 2026-11-05); an A/B arm with it
        on waits for the user's yes.
 
+56. **inline at a declaration means every call** (2026-11-15, the user,
+    of four options: keep the refusal, this, a name alone only, an
+    example in the description). In the plan-and-execute loop's
+    2026-11-15 rerun, 24 of the refactor arm's 49 refusals were inline's
+    "is the declaration of ...; give the line of a call to it, or
+    all_calls". *Go done*: the line of the declaration, or a name with
+    no line, runs all_calls, and the result's `chose:` line says so.
+    TypeScript's inline still refuses there; its counterpart is a PR
+    of its own.
+
 Parked: the Ollama loop (`refactor-agent`). It works and stays, but Claude
 through MCP is the priority.

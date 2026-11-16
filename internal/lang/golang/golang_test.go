@@ -264,8 +264,10 @@ func TestInline(t *testing.T) {
 		"a.go":   "package home\n\nfunc double(n int) int { return n * 2 }\n\nfunc Use() int {\n\tx := 3\n\treturn double(x)\n}\n\ntype Soil struct {\n\tdepth int\n}\n\ntype Bed struct {\n\tSoil\n}\n\nfunc (b Bed) Deep() bool { return b.depth > 2 }\n",
 	})
 	l := New(root, []string{"./..."}, &history.Stack{})
-	if text, refused, _ := l.Step("inline", []byte(`{"file": "a.go", "name": "double"}`)); !refused {
-		t.Errorf("inline without a line, all_calls or field is not refused:\n%s", text)
+	// A function named without a line is every call (inline's goldens);
+	// anything else needs a line, function or field.
+	if text, refused, _ := l.Step("inline", []byte(`{"file": "a.go", "name": "Bed"}`)); !refused {
+		t.Errorf("inline of a type without a line or field is not refused:\n%s", text)
 	}
 	for _, args := range []string{
 		`{"file": "a.go", "line": 6, "name": "x"}`,

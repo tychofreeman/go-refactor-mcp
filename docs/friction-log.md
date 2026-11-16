@@ -4680,3 +4680,15 @@ deleted with `git mv` and `git rm`, and one `out/` directory made with
 `mkdir` and `cp` of its go.mod: no tool moves or deletes a testdata
 directory (`move` of a file path moves one file, and the guard exempts
 testdata). Everything else went through the CLI's batches.
+
+## inline at a declaration means every call (2026-11-15)
+
+By hand: the bodies of three golden fixtures' `in/m.go` (8, 5 and 8
+lines) with `printf`, and copies of a case directory with `cp -r`.
+Tried first: create_file with content (refused under `-skeleton-only`:
+no function bodies), then replace_statements on the fixture's `run` and
+`f` (refused: a fixture under testdata/ is not one of the module's
+packages, so no edit reaches it). `move` with `copy` copied the old
+case and with `delete` removed its `refused.txt`. Everything else went
+through the tools, `inline_test.go` as create_file of the package clause
+and add_declaration.

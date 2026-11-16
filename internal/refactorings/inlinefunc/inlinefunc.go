@@ -39,17 +39,18 @@ func New() *InlineFunction { return &InlineFunction{Named: refactor.Called[args]
 
 func (*InlineFunction) Description() string {
 	return `Replace a call with the function's body, and delete the function when nothing else uses it: the inverse of extract_function. With func full(u User) string { return u.First + " " + u.Last }, name := full(u) becomes name := u.First + " " + u.Last. The call may be a statement, the right side of an assignment, a return, or, for a body that is one return, part of an expression; parameters are replaced by the arguments where that is safe, and otherwise declared first (p := arg); an if whose condition becomes a constant keeps only the branch that runs.
-Identify the call by file, line and the function's name (column if the name is on the line twice). With all_calls, every call in the module is inlined and the function deleted (give file and name); if one call cannot be, none is. keep_function keeps the function.
+Identify the call by file, line and the function's name (column if the name is on the line twice). With all_calls, or the declaration in place of a call (its line, or none), every call in the module is inlined and the function deleted; if one call cannot be, none is. keep_function keeps the function.
 A body that returns early is fine: each return assigns the results, the statements after an if that returns become its else, and a return in a loop or switch assigns and breaks, the result starting at the value returned after the loop, or a flag guarding the statements after it.`
 }
 
 type args struct {
 	File         string `json:"file" desc:"Path of the file with the call, relative to the workspace root."`
-	Line         int    `json:"line,omitempty" desc:"1-based line of the call. With all_calls, optional: the line of any call or of the declaration."`
+	Line         int    `json:"line,omitempty" desc:"1-based line of the call. The declaration's line, or none, means every call (all_calls)."`
 	Name         string `json:"name" desc:"Name of the called function or method (for a method call x.m(), m)."`
 	Column       int    `json:"column,omitempty" desc:"Optional 1-based column of the name, only needed if it appears more than once on the line."`
 	KeepFunction bool   `json:"keep_function,omitempty" desc:"Keep the function even if no other call to it is left. Default false."`
 	AllCalls     bool   `json:"all_calls,omitempty" desc:"Inline every call to the function in the module, then delete it (unless keep_function). Without line, name is the function (Name or Type.Method) of file's package."`
+	Chose        string `json:"chose,omitempty" schema:"-"` // what Expand decided for the model, reported by the step that carries it
 }
 
 // shape is how the call is used, which decides what replaces it.
@@ -134,24 +135,32 @@ func (*InlineFunction) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refa
 		usedQ:   map[string]bool{},
 	}
 	x.imp = imports.New(ws, pkg, x.File, x.Src)
-	return x.plan()
+	plan, err := x.plan()
+	if err == nil && a.Chose != "" {
+		plan.Choices = append(plan.Choices, a.Chose)
+	}
+	return plan, err
 }
 
-// Expand returns, with all_calls, one step per call to the function: all
-// but the last keep it, so the last deletes it unless keep_function.
+// Expand returns, with all_calls or the function's declaration in place of
+// a call, one step per call to the function: all but the last keep it, so
+// the last deletes it unless keep_function.
 func (r *InlineFunction) Expand(ws *workspace.Workspace, raw json.RawMessage) ([]refactor.Step, error) {
 	var a args
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
-	if !a.AllCalls {
-		return nil, nil
-	}
 	pkg, id, err := locate.Ident(ws, locate.IdentQuery{File: a.File, Line: a.Line, Column: a.Column, Name: a.Name})
 	if err != nil {
+		if !a.AllCalls {
+			return nil, nil // Plan says what is wrong
+		}
 		return nil, err
 	}
 	fn, ok := pkg.TypesInfo.Defs[id].(*types.Func)
+	if !a.AllCalls && !ok {
+		return nil, nil // a call: Plan inlines it
+	}
 	if !ok {
 		fn, ok = pkg.TypesInfo.Uses[id].(*types.Func)
 	}
@@ -167,9 +176,22 @@ func (r *InlineFunction) Expand(ws *workspace.Workspace, raw json.RawMessage) ([
 			return nil, refactor.Refusef("%s calls itself (at %s:%d), so its calls cannot all be inlined; inline the calls outside it one at a time", fn.Name(), ws.Rel(c.Filename), c.Line)
 		}
 	}
+	// The declaration given in place of a call means every call.
+	chose := ""
+	if !a.AllCalls {
+		then := ", then deleted " + fn.Name()
+		if a.KeepFunction {
+			then = ", keeping " + fn.Name()
+		}
+		chose = fmt.Sprintf("every call of %s (%d)%s: %s is its declaration, not a call; give a call's line to inline that call alone", fn.Name(), len(calls), then, ws.Position(id.Pos()))
+	}
 	var steps []refactor.Step
 	for i, c := range calls {
-		b, err := json.Marshal(args{File: ws.Rel(c.Filename), Line: c.Line, Column: c.Column, Name: fn.Name(), KeepFunction: a.KeepFunction || i < len(calls)-1})
+		step := args{File: ws.Rel(c.Filename), Line: c.Line, Column: c.Column, Name: fn.Name(), KeepFunction: a.KeepFunction || i < len(calls)-1}
+		if i == 0 {
+			step.Chose = chose
+		}
+		b, err := json.Marshal(step)
 		if err != nil {
 			return nil, err
 		}

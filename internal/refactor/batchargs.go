@@ -254,5 +254,6 @@ func orList(items []string, conj string) string {
 // unlistedArgs are arguments accepted where a tool's schema does not list
 // them: add_declaration's retired after and before, which it ignores since
 // it places declarations by kind, and place_before, which refactorings that
-// compose add_declaration pass and a model is not offered.
-var unlistedArgs = []string{"after", "before", "place_before"}
+// compose add_declaration pass and a model is not offered; and chose,
+// what an expanding step decided, which its first step reports.
+var unlistedArgs = []string{"after", "before", "place_before", "chose"}
