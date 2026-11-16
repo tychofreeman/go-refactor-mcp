@@ -3284,6 +3284,11 @@ candidates and the evidence for each, gathered from the friction log.
     `refactortest.Run` fails a fragment under 15. No case's refusal
     changed. TypeScript's tests write their expected refusals inline;
     four are under 15 and are left to that suite's own review.
+    Found on the way: remove_parameter's "the body of g uses last (at
+    ...)" names a different use on different runs (a.go:4:15, 5:2 or
+    6:9 in `remove_parameter/refuse_read_first`), so that fragment leaves
+    the position out. A refusal should name the first use in source
+    order; not yet fixed.
 
 Parked: the Ollama loop (`refactor-agent`). It works and stays, but Claude
 through MCP is the priority.
