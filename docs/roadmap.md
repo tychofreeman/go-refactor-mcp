@@ -1447,7 +1447,7 @@ part left. What is open, the newest priority first:
     *2026-11-16, later:* both tested (#664, cost-history 29): on
     prompts that name no code, a plan that may ask (`-view-asks 3`)
     passed 32/32 at $0.06-0.15 a task; one that may not, 29/32.
-    *2026-11-16, sessions (cost-history 30):* Claude Code by hand on
+    *2026-11-16, sessions (cost-history 31):* Claude Code by hand on
     freight-xxl costs $0.09-0.12 a run (sed or perl over the files),
     not the loop's manual arm's $0.28-1.08; the focused loop is 20-40%
     cheaper than that. Sessions with the tools cost $0.14-0.38, and a
@@ -3250,6 +3250,30 @@ candidates and the evidence for each, gathered from the friction log.
     (and import it), with a golden of a call from another package.
     *Done* (2026-11-16, `docs/sessions/method-to-function-qualify.md`):
     an unexported new_name with such a call is refused.
+
+58. **TypeScript gaps the loop's reference batches found** (2026-11-16,
+    writing `eval-tasks/learning/refs/ts-notify-batch.json` for
+    `loop.py -lang typescript`; each reproduces with `cmd/refactor` on a
+    copy of `eval-tasks/testdata/ts-notify`):
+    - **add_declaration with `type` panics** (`tsapi.placeMembers`,
+      place.go:127, slice bounds out of range) when the class has a
+      member with a doc comment after another member: `type: "SMS"` or
+      `"Email"` with any method as content. A documented member's start
+      is taken from its JSDoc, which begins where the member before it
+      ends, so the text between the two is a negative range. Present
+      since placing by kind (#4f7e017); no golden has a documented
+      member. It blocks a reference for ts-notify-fit.
+    - **fold leaves the old import.** Folding `broadcastBatch` into a
+      call in another file adds `import { broadcastBatch }` on a line of
+      its own and leaves `broadcast` in the import it no longer uses;
+      that import then counts as a use: rename to `broadcast` is refused
+      ("already used in src/notify.test.ts:1").
+    - **inline with all_calls keeps an exported function** nothing calls
+      any more, where the description says it deletes it; Go's deletes.
+      The reference removes it with remove_dead_code.
+    The reference works around the last two with a replace_text of the
+    import and a remove_dead_code step; with them fixed it is Go's four
+    steps (wrapper, fold, inline, rename).
 
 Parked: the Ollama loop (`refactor-agent`). It works and stays, but Claude
 through MCP is the priority.

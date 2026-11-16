@@ -407,7 +407,7 @@ session plans by.
 - The loop's manual arm (text edits, repairs) is not how Claude Code
   edits by hand: a session makes a wide change with one `sed -i` or
   `perl -pi` over the files, and on freight-xxl cost $0.09-0.12 a run
-  (cost-history 30). Compare the loop with sessions, not with its
+  (cost-history 31). Compare the loop with sessions, not with its
   manual arm. Sessions with the tools cost more than by hand there
   ($0.14-0.38), and planning from the focused view in a session did
   not close the gap.

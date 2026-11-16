@@ -488,7 +488,27 @@ with `-view-asks 3` it asked once or twice, passed 32 of 32, and cost
 $0.06-0.15 a task, half the whole call tree. The view a plan needs is
 what the prompt names plus what it asks for, not the module.
 
-## Against real sessions (cost-history 30)
+## TypeScript (2026-11-16)
+
+`-lang typescript` (`langs.TypeScript`, on the language switch that
+brought Java): the same gorefactor binary, its tools listed from a
+TypeScript project so their descriptions are TypeScript's, the check
+`tsc -p . && node --test`, and as the plan's view each source file but
+the tests as inspect shows it without function bodies. Places are read
+from tsc's `file.ts(12,5)` and from node's stack traces. `-view focused`
+is Go's still: it reads `cmd/calltree`.
+
+Checked with the reference only (`-models ref`, ts-notify-batch passes
+its hidden tests through the loop); no model has run. Writing that
+reference found three gaps in TypeScript's tools (roadmap 58), one of
+them a panic that blocks a reference for ts-notify-fit.
+
+What a comparison with Go and Java needs next: the gaps fixed, a
+TypeScript freight fixture with the shapes of freight-xl's tail and
+routes (ts-notify is 116 lines; the saving showed at about 1,000), its
+references, and then both arms with a model.
+
+## Against real sessions (cost-history 31)
 
 2026-11-16. The loop's manual arm was a weak baseline: Claude Code by
 hand on freight-xxl makes a wide change with one `sed -i` or `perl -pi`

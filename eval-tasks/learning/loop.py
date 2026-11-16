@@ -29,8 +29,20 @@ Run from the repository root:
         -only freight-dispatch,freight-routes,freight-tail,freight-run \
         -models haiku -runs 4 -repairs 2 -out eval-runs/loop-freight
 
--models ref answers with the reference batch (eval-tasks/learning/refs),
-costs nothing, and checks the loop itself.
+-models ref answers with the reference batch (learning/refs beside the
+task file), costs nothing, and checks the loop itself.
+
+-lang java runs java-refactor-mcp's tools from a checkout of it given
+with -server, on its own task file (langs.py):
+
+    python3 eval-tasks/learning/loop.py -lang java -server ../java-refactor-mcp \
+        -tasks ../java-refactor-mcp/eval-tasks/derivations-freight.json -models ref -runs 1 -out eval-runs/loop-java
+
+-lang typescript runs gorefactor on a TypeScript project, whose tools
+are the same and go by a file's extension:
+
+    python3 eval-tasks/learning/loop.py -lang typescript \
+        -tasks eval-tasks/ts-derivations.json -models ref -runs 1 -out eval-runs/loop-ts
 """
 import argparse
 import json
@@ -42,11 +54,12 @@ import sys
 import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import langs  # noqa: E402
 import probe  # noqa: E402
 
 ROOT = os.getcwd()
 
-PLAN = """You are making a change to a Go module through gorefactor, a tool
+PLAN = """You are making a change to {module} through {server}, a tool
 that runs refactorings and edits. You have no tools in this conversation:
 you answer with JSON, and a program runs it and tells you what happened.
 
@@ -63,7 +76,7 @@ The change:
 {prompt}
 
 Answer with one JSON object and nothing else:
-{{"batch": {{"steps": [the whole change as gorefactor steps, in order]}}}}{read}
+{{"batch": {{"steps": [the whole change as {server} steps, in order]}}}}{read}
 Prefer refactorings that derive the change
 (fold, inline, rename, extract_type, ...) to edits that rewrite
 code. Code you cannot see here need not be written: steps that address
@@ -226,11 +239,12 @@ NOT_STEPS = ("batch", "inspect", "undo")
 NAMES = "Where a tool takes file and name without line, name is a package-level symbol of file's package (Name, Type.Method or Type.Field), and stays valid after earlier steps."
 
 
-def compact(tools):
+def compact(tools, names=NAMES):
     """The tools as a batch's steps need them: each step's description,
     without the sentences every tool repeats, and its arguments as a
-    signature (name: type, a ? for optional), without their descriptions."""
-    return "\n\n".join([NAMES] + list(entries(tools).values()))
+    signature (name: type, a ? for optional), without their descriptions.
+    names says how a tool's name argument names a declaration."""
+    return "\n\n".join([names] + list(entries(tools).values()))
 
 
 # INDEX, with -index, stands for the tools reference in the plan: a line
@@ -297,24 +311,20 @@ def entries(tools):
     return out
 
 
-def source(binary, module, names):
+def source(lang, module, names):
     """The named declarations of module as inspect shows them, each with
     its file and line numbers."""
-    r = subprocess.run([binary, "-C", module, "inspect", json.dumps({"names": [str(n) for n in names]})],
+    r = subprocess.run(lang.cli() + ["-C", module, "inspect", json.dumps({"names": [str(n) for n in names]})],
                        capture_output=True, text=True)
     return (r.stdout + r.stderr).strip()
 
 
-PLACE = re.compile(r"([\w./-]+\.go):(\d+)")
-
-
-def named_places(module, text, limit=8):
+def named_places(lang, module, text, limit=8):
     """The source around each file:line that text names, as the enclosing
     top-level declaration for code and five lines around it otherwise
     (a test's composite literal at package level), at most limit."""
     parts, seen = [], set()
-    for file, line in PLACE.findall(text):
-        line = int(line)
+    for file, line in lang.places(module, text):
         path = os.path.join(module, file)
         if not os.path.isfile(path) or (file, line) in seen:
             continue
@@ -322,12 +332,7 @@ def named_places(module, text, limit=8):
         lines = open(path).read().splitlines()
         if not 1 <= line <= len(lines):
             continue  # a line of the file as a step left it, past its end now
-        start = line
-        while start > 1 and not re.match(r"(func|type|var|const) ", lines[start - 1]):
-            start -= 1
-        end = line
-        while end < len(lines) and lines[end - 1] != "}" and not (end == start and lines[end - 1].endswith("}")):
-            end += 1
+        start, end = lang.around(lines, line)
         if end - start > 60:
             start, end = max(1, line - 5), min(len(lines), line + 5)
         numbered = (f"{i:4}  {text}" for i, text in enumerate(lines[start - 1:end], start))
@@ -337,26 +342,25 @@ def named_places(module, text, limit=8):
     return "".join(p + "\n\n" for p in parts)
 
 
-def run_batch(binary, module, batch):
-    """Runs batch on a fresh copy of module, then go vet and the module's
-    own tests. Returns (copy, ok, what failed); after a refusal, the copy
+def run_batch(lang, module, batch):
+    """Runs batch on a fresh copy of module, then the module's own checks
+    (go vet and its tests, for Go). Returns (copy, ok, what failed); after a refusal, the copy
     is as it was just before the refused step."""
     d = probe.copy_module(module)
     path = os.path.join(d, ".batch.json")
     json.dump(batch, open(path, "w"))
-    r = probe.sh([binary, "-C", d, "batch", "@" + path])
+    applied, out = lang.batch(d, path)
     os.remove(path)
-    out = (r.stdout + r.stderr).strip()
-    if not out.startswith("APPLIED"):
+    if not applied:
         shutil.rmtree(d)
-        return before_step(binary, module, batch, out), False, out[:3000] or "no output"
-    t = probe.sh(["sh", "-c", "go vet ./... && go test ./..."], cwd=d)
+        return before_step(lang, module, batch, out), False, out[:3000] or "no output"
+    t = probe.sh(["sh", "-c", lang.check], cwd=d)
     if t.returncode != 0:
         return d, False, "The batch applied, but the module's tests failed:\n" + (t.stdout + t.stderr)[:3000]
     return d, True, ""
 
 
-def before_step(binary, module, batch, refusal):
+def before_step(lang, module, batch, refusal):
     """A copy of module with the steps before the one refused applied, so
     that the places the refusal names are where it found them."""
     m = re.match(r"REFUSED batch at step (\d+) of", refusal)
@@ -364,19 +368,19 @@ def before_step(binary, module, batch, refusal):
     if m and int(m.group(1)) > 1:
         path = os.path.join(d, ".batch.json")
         json.dump(dict(batch, steps=batch["steps"][:int(m.group(1)) - 1]), open(path, "w"))
-        probe.sh([binary, "-C", d, "batch", "@" + path])
+        lang.batch(d, path)
         os.remove(path)
     return d
 
 
-def hidden(d, tests):
-    shutil.copytree(os.path.join(ROOT, "eval-tasks", tests), d, dirs_exist_ok=True)
-    return probe.sh(["sh", "-c", "go vet ./... && go test ./..."], cwd=d).returncode == 0
+def hidden(lang, d, tests):
+    shutil.copytree(tests, d, dirs_exist_ok=True)
+    return probe.sh(["sh", "-c", lang.check], cwd=d).returncode == 0
 
 
 # The manual arm (-arm manual): the same loop, but the model answers
 # with text edits, which the loop applies, in place of gorefactor steps.
-PLAN_MANUAL = """You are making a change to a Go module. You have no tools in this
+PLAN_MANUAL = """You are making a change to {module}. You have no tools in this
 conversation: you answer with JSON, and a program applies it and tells
 you what happened.
 
@@ -442,16 +446,16 @@ before kept as they were:
 or with all of them again: {{"edits": [...]}}."""
 
 
-def run_edits(binary, module, batch):
+def run_edits(lang, module, batch):
     """Applies the edits of batch["steps"], in order, to a fresh copy of
-    module, then runs go vet and the module's own tests, as run_batch
+    module, then runs the module's own checks, as run_batch
     does. After an edit that cannot apply, the copy has those before it."""
     d = probe.copy_module(module)
     edits = batch["steps"]
     for i, e in enumerate(edits, 1):
         if why := apply_edit(d, e):
             return d, False, f"REFUSED edits at edit {i} of {len(edits)}: {why}"
-    t = probe.sh(["sh", "-c", "go vet ./... && go test ./..."], cwd=d)
+    t = probe.sh(["sh", "-c", lang.check], cwd=d)
     if t.returncode != 0:
         return d, False, "The edits applied, but the module's tests failed:\n" + (t.stdout + t.stderr)[:3000]
     return d, True, ""
@@ -555,7 +559,7 @@ ARMS = {
 }
 
 
-def attempt(task, model, tools, binary, repairs, log, may_read=True, stages=2, read_after=False, patch=False, arm=ARMS["refactor"], tool_entries=None, view="calltree", view_asks=0):
+def attempt(task, model, tools, lang, repairs, log, may_read=True, stages=2, read_after=False, patch=False, arm=ARMS["refactor"], tool_entries=None, view="calltree", view_asks=0):
     """One attempt at task. A batch that applies and passes the module's
     tests is kept, and the model is asked whether the change is done; if
     not, its next batch runs on what the kept ones left, at most stages
@@ -569,10 +573,10 @@ def attempt(task, model, tools, binary, repairs, log, may_read=True, stages=2, r
     plan's view of the module: the whole call tree, or focused on what
     the task's prompt names (probe.focused), of which the plan may ask
     for more view_asks times."""
-    module = os.path.join(ROOT, "eval-tasks", task["dir"])
-    shown = probe.focused(binary, module, task["prompt"]) if view == "focused" else probe.view("calltree", module)
-    head = HEADS[view] + (VIEW_ASK.format(n=view_asks) if view_asks else "")
-    text = arm.plan.format(tools=tools, head=head, view=shown, prompt=task["prompt"],
+    module = task["dir"]
+    shown = probe.focused(lang.binary, module, task["prompt"]) if view == "focused" else lang.view(module)
+    head = (lang.head or HEADS[view]) + (VIEW_ASK.format(n=view_asks) if view_asks else "")
+    text = arm.plan.format(module=lang.module, server=lang.server, tools=tools, head=head, view=shown, prompt=task["prompt"],
                            read=READ_AFTER if read_after else arm.may_read if may_read else "")
     may_read = may_read and not read_after
     row = {"reads": 0, "repairs": 0, "patches": 0, "tool_asks": 0, "tools_asked": 0, "view_asks": 0, "stages": 0, "refusals": [], "error": ""}
@@ -596,7 +600,7 @@ def attempt(task, model, tools, binary, repairs, log, may_read=True, stages=2, r
         if may_read and reads and ans and isinstance(ans.get("read"), list) and not ans.get("batch"):
             reads -= 1
             row["reads"] += len(ans["read"])
-            ask(arm.read.format(source=source(binary, base, ans["read"])))
+            ask(arm.read.format(source=source(lang, base, ans["read"])))
             continue
         if read_after and reads and not batches and ans and isinstance(ans.get("read"), list) and not ans.get("batch"):
             reads -= 1
@@ -609,7 +613,7 @@ def attempt(task, model, tools, binary, repairs, log, may_read=True, stages=2, r
             names = [str(n) for n in ans["tools"]]
             row["tool_asks"] += 1
             row["tools_asked"] += len(names)
-            text = "\n\n".join([NAMES] + [tool_entries[n] for n in names if n in tool_entries])
+            text = "\n\n".join([lang.names] + [tool_entries[n] for n in names if n in tool_entries])
             if unknown := [n for n in names if n not in tool_entries]:
                 text += "\n\nNo tool is named " + ", ".join(unknown) + "."
             ask(TOOLS.format(entries=text) + hint)
@@ -632,7 +636,7 @@ def attempt(task, model, tools, binary, repairs, log, may_read=True, stages=2, r
             ask(arm.unparsed)
             continue
         last = batch
-        d, ok, what = arm.run(binary, base, last)
+        d, ok, what = arm.run(lang, base, last)
         if ok:
             last = None
             batches.append(batch)
@@ -652,14 +656,14 @@ def attempt(task, model, tools, binary, repairs, log, may_read=True, stages=2, r
             break
         left -= 1
         row["repairs"] += 1
-        places = named_places(d, what)
+        places = named_places(lang, d, what)
         shutil.rmtree(d)
         if patch and isinstance(last.get("steps"), list):
             ask(arm.patch.format(what=what, source=places, listing=listing(last["steps"]), suggest=suggestion(what, len(last["steps"]), arm.unit)) + hint)
         else:
             ask(arm.repair.format(what=what, source=places) + hint)
     row["applied"] = bool(batches)
-    row["passed"] = bool(batches) and hidden(base, task["tests"])
+    row["passed"] = bool(batches) and hidden(lang, base, task["tests"])
     if base != module:
         shutil.rmtree(base)
     every = {"steps": [s for b in batches for s in b.get("steps", [])]}
@@ -690,6 +694,9 @@ def main():
     p.add_argument("-view", default="calltree", choices=sorted(HEADS),
                    help="the plan's view of the module: the whole call tree, or focused on what the prompt names, with use counts and an index of names")
     p.add_argument("-view-asks", type=int, default=0, help="with -view focused, how many times the plan may ask for more of the module")
+    p.add_argument("-lang", default="go", choices=["go", "java", "typescript"],
+                   help="the language and its server: gorefactor from this checkout (go, typescript), or java-refactor-mcp from -server")
+    p.add_argument("-server", default="", help="with -lang java, the java-refactor-mcp checkout whose bin/jrefactor runs the tools")
     p.add_argument("-stages", type=int, default=2, help="batches after the first that the model may send when asked if it is done")
     a = p.parse_args()
     if a.arm == "manual" and (a.read_after or a.index or "ref" in a.models.split(",")):
@@ -697,11 +704,12 @@ def main():
     if a.view_asks and a.view != "focused":
         p.error("-view-asks asks for what the focused view leaves out; give -view focused")
     os.makedirs(a.out, exist_ok=True)
+    if a.view == "focused" and a.lang != "go":
+        p.error(f"-view focused reads Go's call tree; -lang {a.lang} has the outline view only")
     tmp = tempfile.mkdtemp(prefix="loop-")
-    binary = os.path.join(tmp, "refactor")
-    probe.sh(["go", "build", "-o", binary, "./cmd/refactor"])
-    listed = probe.tool_list()
-    tools = compact(listed) if a.reference == "compact" else probe.schemas()
+    lang = langs.of(a.lang, tmp, a.server)
+    listed = lang.tool_list()
+    tools = compact(listed, lang.names) if a.reference == "compact" else probe.schemas(listed)
     tool_entries = None
     if a.index:
         tool_entries = entries(listed)
@@ -710,18 +718,21 @@ def main():
             p.error("-full-tools names no tool: " + ", ".join(unknown) + "; the tools are " + ", ".join(sorted(tool_entries)))
         tools = INDEX.format(index=index(listed, full))
         if full:
-            tools += FULL.format(entries="\n\n".join([NAMES] + [tool_entries[n] for n in full]))
-    tasks = [t for t in json.load(open(a.tasks)) if not a.only or t["name"] in a.only.split(",")]
+            tools += FULL.format(entries="\n\n".join([lang.names] + [tool_entries[n] for n in full]))
+    # A task's dir and tests, and its reference, are found beside the task file.
+    here = os.path.dirname(os.path.abspath(a.tasks))
+    tasks = [dict(t, dir=os.path.join(here, t["dir"]), tests=os.path.join(here, t["tests"]))
+             for t in json.load(open(a.tasks)) if not a.only or t["name"] in a.only.split(",")]
     results = open(os.path.join(a.out, "results.jsonl"), "a")
     for t in tasks:
-        ref = json.load(open(os.path.join(ROOT, "eval-tasks/learning/refs", t["name"] + ".json")))
+        ref = json.load(open(os.path.join(here, "learning", "refs", t["name"] + ".json")))
         for m in a.models.split(","):
             for n in range(1, a.runs + 1):
                 empty = tempfile.mkdtemp(prefix="loop-empty-")
                 model = Ref(ref) if m == "ref" else Model(m, empty)
                 log = []
-                row = {"task": t["name"], "model": m, "run": n, "arm": a.arm}
-                row.update(attempt(t, model, tools, binary, a.repairs, log, may_read=not a.no_read, stages=a.stages, read_after=a.read_after, patch=a.patch, arm=ARMS[a.arm], tool_entries=tool_entries, view=a.view, view_asks=a.view_asks))
+                row = {"task": t["name"], "model": m, "run": n, "arm": a.arm, "lang": a.lang}
+                row.update(attempt(t, model, tools, lang, a.repairs, log, may_read=not a.no_read, stages=a.stages, read_after=a.read_after, patch=a.patch, arm=ARMS[a.arm], tool_entries=tool_entries, view=a.view, view_asks=a.view_asks))
                 row.update(cost=model.cost, requests=model.requests, usage=model.usage, runaways=model.runaways)
                 with open(os.path.join(a.out, f"{t['name']}-{m}-{n}.txt"), "w") as f:
                     f.write("\n\n==== next answer ====\n\n".join(log))
