@@ -1,1 +1,1 @@
-reads total
+the assignment on line 8 reads total, so the new value depends on the old one

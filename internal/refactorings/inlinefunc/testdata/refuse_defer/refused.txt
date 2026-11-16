@@ -1,1 +1,1 @@
-uses defer
+which runs when "work" returns; inlined, it would run when the caller returns

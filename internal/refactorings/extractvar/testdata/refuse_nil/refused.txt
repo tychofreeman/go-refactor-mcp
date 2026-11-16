@@ -1,1 +1,1 @@
-untyped nil
+the untyped nil, which cannot initialize a variable without a type

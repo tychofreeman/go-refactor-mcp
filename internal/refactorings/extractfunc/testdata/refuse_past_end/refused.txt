@@ -1,1 +1,1 @@
-past the end
+end_line 30 is past the end of m.go

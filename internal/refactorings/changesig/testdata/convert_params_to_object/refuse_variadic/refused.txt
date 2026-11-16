@@ -1,1 +1,1 @@
-variadic
+water is variadic; a struct field cannot take its arguments

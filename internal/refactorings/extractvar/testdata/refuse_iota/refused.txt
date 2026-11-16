@@ -1,1 +1,1 @@
-uses iota
+whose value depends on its position in the const declaration

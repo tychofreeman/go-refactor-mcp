@@ -1,1 +1,1 @@
-might block
+and line 6 receives from a channel, which might block

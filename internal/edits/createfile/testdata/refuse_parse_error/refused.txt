@@ -1,1 +1,1 @@
-does not parse
+b.go does not parse: b.go:3:9: expected ')'

@@ -1,1 +1,1 @@
-generic
+inlining generic functions is not supported yet

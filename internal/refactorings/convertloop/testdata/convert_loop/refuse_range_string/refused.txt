@@ -1,1 +1,1 @@
-string
+ranges over a string, which yields runes at byte offsets

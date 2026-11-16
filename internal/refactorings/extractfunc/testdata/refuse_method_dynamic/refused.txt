@@ -1,1 +1,1 @@
-fmt.Stringer
+could make counter implement fmt.Stringer, which code checks for at run time

@@ -1,1 +1,1 @@
-c.Bump()
+which assigns to c.count between its use

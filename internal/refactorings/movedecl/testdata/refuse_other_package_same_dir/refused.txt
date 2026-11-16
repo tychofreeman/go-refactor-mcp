@@ -1,1 +1,1 @@
-package m_test
+x_test.go is in package m_test, not m

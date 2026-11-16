@@ -1,1 +1,1 @@
-go:embed
+has a //go:embed directive; moving embedded variables is not supported yet

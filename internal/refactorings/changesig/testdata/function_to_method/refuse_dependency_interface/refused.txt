@@ -1,1 +1,1 @@
-io.Reader
+could make source implement io.Reader, which code checks for at run time

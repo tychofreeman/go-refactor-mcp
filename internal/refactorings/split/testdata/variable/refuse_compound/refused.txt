@@ -1,1 +1,1 @@
-n = 
+is not an assignment n = ...; split takes the assignment

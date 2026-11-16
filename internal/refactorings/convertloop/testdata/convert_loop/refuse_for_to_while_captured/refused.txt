@@ -1,1 +1,1 @@
-captures i
+each pass of a for with init and post statements has its own i since Go 1.22

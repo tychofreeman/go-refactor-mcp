@@ -1,1 +1,1 @@
-calls itself
+so its calls cannot all be inlined

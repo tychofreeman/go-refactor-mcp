@@ -1,1 +1,1 @@
-use rename
+within a package the name does not change; use rename
