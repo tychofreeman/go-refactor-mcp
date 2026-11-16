@@ -4719,3 +4719,9 @@ replace_text. Nothing by hand.
 The golden copied from another with `move` (copy, then delete of its
 `chose.txt`) and create_file of its args; the fix with
 replace_expression. Nothing by hand.
+
+## Golden fixtures under -skeleton-only (2026-11-16)
+
+`docs/sessions/fixtures-skeleton-only.md`. The gap of #653 and #661
+(fixtures written with printf) is closed: create_file takes a fixture
+under testdata/ whatever it holds. Nothing by hand.

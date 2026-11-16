@@ -389,6 +389,10 @@ func TestSkeletonOnly(t *testing.T) {
 			t.Errorf("%s: %v %v\n%s", args, err, refused, text)
 		}
 	}
+	// A fixture under testdata/ is data a test loads, not the project's code.
+	if text, refused, err := l.Step("create_file", []byte(`{"file": "src/testdata/case.ts", "content": "export function f(): number {\n  return 1;\n}\n"}`)); err != nil || refused {
+		t.Errorf("a fixture under testdata/ is refused: %v\n%s", err, text)
+	}
 }
 
 // inline is published in place of inline_function and inline_variable,

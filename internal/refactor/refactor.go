@@ -21,6 +21,7 @@ import (
 	"go/token"
 	"go/types"
 	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -1304,4 +1305,10 @@ func ArgsHelp(name string, schema json.RawMessage) string {
 		fmt.Fprintf(&sb, "\n  %s%s: %s", key, required, p.Description)
 	}
 	return sb.String()
+}
+
+// InTestdata reports whether path has a testdata element: a fixture a test
+// loads as code of its own, which the go tool never builds.
+func InTestdata(path string) bool {
+	return slices.Contains(strings.Split(filepath.ToSlash(path), "/"), "testdata")
 }
