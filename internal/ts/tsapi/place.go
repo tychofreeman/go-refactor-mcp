@@ -253,13 +253,17 @@ func leadingSpace(s string) string {
 	return s[:len(s)-len(strings.TrimLeft(s, " \t"))]
 }
 
-// reindent returns s with the indentation its lines share replaced by
-// indent on each line that is not blank.
+// reindent returns s, class members, with the indentation its lines share
+// replaced by indent on each line that is not blank, but for lines inside a
+// string or template that spans lines: those are part of its value.
 func reindent(s, indent string) string {
+	const wrap = "class __Placed {\n"
+	inside := newLined(parseText(wrap+s+"\n}\n")).literalLines(0, len(wrap)+len(s))
+	skip := func(i int, l string) bool { return strings.TrimSpace(l) == "" || inside[i+2] }
 	lines := strings.Split(s, "\n")
 	common, set := "", false
-	for _, l := range lines {
-		if strings.TrimSpace(l) == "" {
+	for i, l := range lines {
+		if skip(i, l) {
 			continue
 		}
 		if lead := leadingSpace(l); !set || len(lead) < len(common) {
@@ -267,7 +271,7 @@ func reindent(s, indent string) string {
 		}
 	}
 	for i, l := range lines {
-		if strings.TrimSpace(l) != "" {
+		if !skip(i, l) {
 			lines[i] = indent + strings.TrimPrefix(l, common)
 		}
 	}

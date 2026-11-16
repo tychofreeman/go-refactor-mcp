@@ -178,3 +178,21 @@ func TestAStubConstructorSetsTheFieldsItFits(t *testing.T) {
 		t.Fatalf("fields no parameter fits were set: %s\n%s", res, read(t, dir, "src/bed.ts"))
 	}
 }
+
+// The lines of a template literal that spans lines are part of its value:
+// placing a member moves its other lines, not those.
+func TestKeepsTemplateLiterals(t *testing.T) {
+	ws, dir := solution(t)
+	res := run(t, ws, `{"file": "src/bed.ts", "content": "export class Pot {\n  size = 1;\n}"}`)
+	if !res.Applied {
+		t.Fatalf("the class was not added: %s", res)
+	}
+	res = run(t, ws, `{"file": "src/bed.ts", "type": "Pot", "content": "    banner(): string {\n        return `+"`"+`top\n    middle`+"`"+`;\n    }"}`)
+	if !res.Applied {
+		t.Fatalf("the member was not added: %s", res)
+	}
+	want := "  banner(): string {\n      return `top\n    middle`;\n  }\n}\n"
+	if got := read(t, dir, "src/bed.ts"); !strings.HasSuffix(got, want) {
+		t.Fatalf("bed.ts:\n%s\nwant it to end:\n%s", got, want)
+	}
+}
