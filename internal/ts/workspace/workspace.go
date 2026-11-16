@@ -175,7 +175,7 @@ func (w *Workspace) Abs(path string) string {
 // in node_modules: only such files are edited.
 func (w *Workspace) Contains(path string) bool {
 	rel, err := filepath.Rel(w.Root, path)
-	return err == nil && rel != ".." && !strings.HasPrefix(rel, "../") && !strings.Contains(filepath.ToSlash(rel), "node_modules/")
+	return err == nil && history.Inside(w.Root, path) && !strings.Contains(filepath.ToSlash(rel), "node_modules/")
 }
 
 // Preview computes the change the edits would make without writing it.
@@ -210,7 +210,7 @@ func (w *Workspace) Apply(label string, fes []edit.FileEdit) (history.Change, er
 			return history.Change{}, err
 		}
 	}
-	if err := c.Write(); err != nil {
+	if err := c.Write(w.Root); err != nil {
 		_ = c.Restore()
 		return history.Change{}, err
 	}
