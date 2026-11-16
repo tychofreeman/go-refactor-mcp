@@ -1,1 +1,1 @@
-as a whole
+is used as a whole at m.go:29:34; inline_struct needs every use to go through

@@ -1,1 +1,1 @@
-go statement
+is in a go statement; inlining it would run the body in the calling goroutine

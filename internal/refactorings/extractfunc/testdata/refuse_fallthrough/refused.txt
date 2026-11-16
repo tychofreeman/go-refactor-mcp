@@ -1,1 +1,1 @@
-fallthrough
+which must stay the last statement of its case

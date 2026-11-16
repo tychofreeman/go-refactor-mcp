@@ -1,1 +1,1 @@
-dot import
+comes from a dot import; moving code that uses dot imports is not supported

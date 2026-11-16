@@ -1,1 +1,1 @@
-n
+the second loop would evaluate i < n again, after the first loop's body ran

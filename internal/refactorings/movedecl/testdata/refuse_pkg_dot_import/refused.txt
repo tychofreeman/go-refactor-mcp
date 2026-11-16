@@ -1,1 +1,1 @@
-dot import
+comes from a dot import of package p; moving it is not supported

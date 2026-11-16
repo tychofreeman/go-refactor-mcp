@@ -1,1 +1,1 @@
-give new_name
+is unexported and used outside package q, so it must become exported

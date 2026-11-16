@@ -6,7 +6,8 @@
 //	  args.json     arguments passed to the refactoring
 //	  in/           a complete Go module (with go.mod) before the change
 //	  out/          the expected module after the change, or
-//	  refused.txt   a substring expected in the refusal message
+//	  refused.txt   a substring expected in the refusal message, at least 15
+//	                characters so that it names the rule
 //	  notes.txt     optional, when applied: substrings expected in the
 //	                result's notes, one per line
 //	  chose.txt     optional, when applied: substrings expected in the
@@ -104,6 +105,9 @@ func runCase(t *testing.T, r refactor.Refactoring, caseDir string) {
 	wantRefusal, err := os.ReadFile(filepath.Join(caseDir, "refused.txt"))
 	if err == nil {
 		want := strings.TrimSpace(string(wantRefusal))
+		if len(want) < 15 {
+			t.Errorf("refused.txt is %q, too short to tell this refusal from another: give a phrase of it", want)
+		}
 		if res.Refused == "" {
 			t.Fatalf("expected refusal containing %q, but it was applied:\n%s", want, res.Diff)
 		}

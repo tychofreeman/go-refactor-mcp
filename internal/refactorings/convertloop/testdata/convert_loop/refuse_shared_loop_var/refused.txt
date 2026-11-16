@@ -1,1 +1,1 @@
-1.22
+which every pass shares before Go 1.22
