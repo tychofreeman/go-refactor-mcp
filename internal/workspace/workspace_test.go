@@ -546,3 +546,28 @@ func TestRenamingATestIsNotAnError(t *testing.T) {
 		t.Errorf("renaming a test gave errors: %v", errs)
 	}
 }
+
+// An edit of a link to a file outside the module is refused, and the file
+// there is left as it was.
+func TestApplyRefusesALinkOutOfTheModule(t *testing.T) {
+	dir := writeModule(t, map[string]string{"m.go": "package m\n"})
+	outside := filepath.Join(t.TempDir(), "out.txt")
+	if err := os.WriteFile(outside, []byte("hi\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "link.txt")
+	if err := os.Symlink(outside, link); err != nil {
+		t.Skip("no symlinks:", err)
+	}
+	w, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = w.Apply("edit through a link", []edit.FileEdit{{Path: link, Edits: []edit.TextEdit{{Start: 0, End: 2, NewText: "changed"}}}})
+	if err == nil || !strings.Contains(err.Error(), "outside") {
+		t.Errorf("Apply = %v, want a refusal", err)
+	}
+	if b, _ := os.ReadFile(outside); string(b) != "hi\n" {
+		t.Errorf("the file outside = %q, want it unchanged", b)
+	}
+}
