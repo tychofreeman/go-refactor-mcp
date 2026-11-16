@@ -391,7 +391,16 @@ session plans by.
   where one step carries a change to many uses and writing won on local
   changes.
 - Tasks every arm gets right do not show the tools' value: Haiku and
-  Sonnet by hand passed every freight-xl and trap task. Evidence would
+  Sonnet by hand passed every freight-xl and trap task. On freight-xxl
+  (five times the places, 2026-11-15, cost-history 27) the loop passed
+  32/32 at 1.7x-5.9x less than by hand, which failed 3 of 8 on routes
+  (505 uses); the loop's cost follows the module's size (its call-tree
+  view), the hand's the places a change reaches.
+- In the loop, a plan uses a tool well only from its full entry: with
+  inline as an index line, plans gave it the declaration's line (24
+  refusals, 2026-11-15). `claude -p` resumes an answer cut at the
+  output cap and reports only the clean resumption, so a runaway shows
+  only in `usage`; the loop caps output at 40K and counts runaways. Evidence would
   come from tasks a model gets wrong by hand.
 - A plan chooses a derivation from the examples it sees, and reads make
   the model write code out instead of deriving: with bodies in view both
