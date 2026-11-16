@@ -1821,6 +1821,51 @@ carries. The manual arm's rose with the places (on medians dispatch
 change reaches hundreds of places. About $24.50 spent in all (tail and
 run again, and freight-xxl). Record: `docs/plan-and-execute.md`.
 
+## 28. The loop with a view sized to the change (Nov 16)
+
+Section 27's refactor arm with `-view focused` (#656): the plan sees
+what the task's prompt names (functions, types with their methods, a
+struct by a field) with the functions of their package that call them,
+a count per package of callers elsewhere, how many places use each
+named function and field (from `inspect uses`), and a line of names for
+every package, in place of the whole call tree. 13-36% of the call
+tree's size on freight-xl, 10-27% on freight-xxl. Sonnet, 8 attempts a
+task, `-no-read -patch -repairs 4 -stages 3 -index -full-tools
+fold,extract_function,change_type,introduce_parameter,remove_dead_code,inline
+-view focused`; `eval-runs/loop-sonnet-freight-focused-8` and
+`eval-runs/loop-sonnet-freightxxl-focused-8`. Means a task (medians):
+
+| task | freight-xl, call tree | freight-xl, focused | freight-xxl, call tree | freight-xxl, focused | by hand, freight-xxl |
+|---|---|---|---|---|---|
+| dispatch | $0.065 | $0.053 ($0.053) | $0.161 | $0.077 ($0.076) | $0.285 |
+| routes | $0.110 | $0.086 ($0.076) | $0.185 | $0.096 ($0.089) | $1.083 (5/8) |
+| tail | $0.077 | $0.058 ($0.056) | $0.162 | $0.075 ($0.073) | $0.283 |
+| run | $0.073 | $0.062 ($0.053) | $0.163 | $0.073 ($0.065) | $0.552 |
+
+(freight-xl's call-tree column: dispatch and routes from section 27's
+first run, tail and run from its run with inline in full.)
+
+32/32 on each module, $2.07 and $2.57. The first request's cache write
+fell from 12.1K to 7.7K tokens on freight-xl and from 33.1K to 11.0K on
+freight-xxl, the cache reads of an attempt from 70K to 32K there;
+output stayed at 1.2K. From freight-xl to freight-xxl the loop's cost
+a task now rises $0.01-0.02, against $0.07-0.10 with the call tree. By
+hand costs 1.1x-3.9x the focused loop on freight-xl and 3.7x-11x on
+freight-xxl.
+
+Refusals: 10 on freight-xl, 7 on freight-xxl; as far as their text
+shows, none for something the view left out. Two (freight-xl run 1 and
+2) were a regression of #653: inline with all_calls and function ran
+every call before, and since #653 any function sent it down the local
+variable's path to the declaration refusal (fixed in its own PR after
+this record). One is an
+engine bug: run attempt 7 sent
+function_to_method, convert_params_to_object, method_to_function, and
+method_to_function wrote the calls from other packages without their
+qualifier (`Dispatch(c, ...)`; it reproduces with function_to_method
+and method_to_function alone), caught by the post-check and refused
+(roadmap 57). About $4.70 spent.
+
 ## What made the difference
 
 - **Smaller results** (#75, rename locations): the largest single win when

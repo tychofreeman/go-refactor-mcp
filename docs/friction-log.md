@@ -4702,6 +4702,11 @@ ran separately, were appended to one results.jsonl with a short script
 (gitignored run output, not the repo). #653's by-hand fixtures are in
 its own entry.
 
+## The focused view's record (2026-11-16)
+
+Docs through replace_text; #656's loop.py and probe.py through
+replace_text. Nothing by hand.
+
 ## inline: all_calls with function, again (2026-11-16)
 
 The golden copied from another with `move` (copy, then delete of its
