@@ -476,12 +476,22 @@ class Arm:
         return ans["batch"] if isinstance(ans.get("batch"), dict) else None
 
 
+# MAX_OUTPUT caps a request's output tokens. No answer in the loop's runs
+# to 2026-11-15 wrote more than 36.5K; two wrote fake tool calls until
+# the CLI's cap of 128K (about $1.90 each with Sonnet), and the CLI's
+# resume after the cap hid them from the transcript. The CLI resumes a
+# capped answer a few times, and usage counts them all, so a runaway
+# that never recovers costs about four times the cap.
+MAX_OUTPUT = 40000
+
+
 class Model:
     """One conversation with claude -p, continued with --resume."""
 
     def __init__(self, name, cwd):
         self.name, self.cwd, self.session, self.cost, self.requests = name, cwd, None, 0.0, 0
         self.usage = []  # per request: tokens written to the cache, read from it, and output
+        self.runaways = 0  # requests whose output reached MAX_OUTPUT
 
     def ask(self, text):
         # No tools and no MCP servers: the model answers with JSON, and
@@ -489,7 +499,7 @@ class Model:
         cmd = ["claude", "-p", "--model", self.name, "--output-format", "json", "--tools", "", "--strict-mcp-config"]
         if self.session:
             cmd += ["--resume", self.session]
-        r = probe.sh(cmd, cwd=self.cwd, stdin=text)
+        r = probe.sh(cmd, cwd=self.cwd, stdin=text, env=dict(os.environ, CLAUDE_CODE_MAX_OUTPUT_TOKENS=str(MAX_OUTPUT)))
         self.requests += 1
         try:
             res = json.loads(r.stdout)
@@ -500,6 +510,8 @@ class Model:
         self.cost = res.get("total_cost_usd", self.cost)
         u = res.get("usage") or {}
         self.usage.append([u.get("cache_creation_input_tokens", 0), u.get("cache_read_input_tokens", 0), u.get("output_tokens", 0)])
+        if u.get("output_tokens", 0) >= MAX_OUTPUT:
+            self.runaways += 1
         return res.get("result", ""), ""
 
 
@@ -507,7 +519,7 @@ class Ref:
     """Answers with the reference batch: checks the loop for free."""
 
     def __init__(self, ref):
-        self.ref, self.cost, self.requests, self.usage = ref, 0.0, 0, []
+        self.ref, self.cost, self.requests, self.usage, self.runaways = ref, 0.0, 0, [], 0
 
     def ask(self, text):
         self.requests += 1
@@ -674,7 +686,7 @@ def main():
                 log = []
                 row = {"task": t["name"], "model": m, "run": n, "arm": a.arm}
                 row.update(attempt(t, model, tools, binary, a.repairs, log, may_read=not a.no_read, stages=a.stages, read_after=a.read_after, patch=a.patch, arm=ARMS[a.arm], tool_entries=tool_entries))
-                row.update(cost=model.cost, requests=model.requests, usage=model.usage)
+                row.update(cost=model.cost, requests=model.requests, usage=model.usage, runaways=model.runaways)
                 with open(os.path.join(a.out, f"{t['name']}-{m}-{n}.txt"), "w") as f:
                     f.write("\n\n==== next answer ====\n\n".join(log))
                 results.write(json.dumps(row) + "\n")
