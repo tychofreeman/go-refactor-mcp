@@ -68,7 +68,7 @@ func (w *textWorkspace) Apply(label string, fes []edit.FileEdit) (history.Change
 	if err != nil {
 		return history.Change{}, err
 	}
-	if err := c.Write(); err != nil {
+	if err := c.Write(w.dir); err != nil {
 		return history.Change{}, err
 	}
 	w.hist.Push(c)

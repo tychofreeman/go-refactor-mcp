@@ -234,8 +234,7 @@ func (w *Workspace) Errors() []string {
 // Contains reports whether the absolute path is inside the workspace root.
 // Files outside it (standard library, module cache) are never edited.
 func (w *Workspace) Contains(path string) bool {
-	r, err := filepath.Rel(w.Root, path)
-	return err == nil && r != ".." && !strings.HasPrefix(r, ".."+string(filepath.Separator))
+	return history.Inside(w.Root, path)
 }
 
 // Abs resolves a path given relative to the module root, as the tools
@@ -367,7 +366,7 @@ func (w *Workspace) Apply(label string, fes []edit.FileEdit) (history.Change, er
 			return history.Change{}, err
 		}
 	}
-	if err := c.Write(); err != nil {
+	if err := c.Write(w.Root); err != nil {
 		// Best effort to restore what was already written.
 		_ = c.Restore()
 		return history.Change{}, err

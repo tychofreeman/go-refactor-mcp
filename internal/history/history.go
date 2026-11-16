@@ -60,20 +60,22 @@ func (c Change) DiffContext(root string, n int) string {
 
 // Restore puts back the files as they were before the change, removing
 // the ones it created, and the directories it created if they are empty.
+// A file it cannot write leaves every file as it was.
 func (c Change) Restore() error {
 	before := map[string][]byte{}
+	var created []string
 	for p, data := range c.Before {
-		if !c.Created[p] {
-			before[p] = data
-			// A deleted file's directory may have gone with it.
-			if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-				return err
-			}
-		} else if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
+		if c.Created[p] {
+			created = append(created, p)
+			continue
+		}
+		before[p] = data
+		// A deleted file's directory may have gone with it.
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 			return err
 		}
 	}
-	if err := writeAll(before); err != nil {
+	if err := commit(before, created); err != nil {
 		return err
 	}
 	// The directories it created go last, and only if empty: one that has
@@ -158,21 +160,23 @@ func (c *Change) Add(rel string, fe edit.FileEdit, f Format) (string, error) {
 }
 
 // Write writes the files the change leaves and deletes those it deletes,
-// with the directories that leaves empty.
-func (c Change) Write() error {
+// with the directories that leaves empty up to root. A file it cannot
+// write leaves every file as it was.
+func (c Change) Write(root string) error {
 	after := map[string][]byte{}
+	var deleted []string
 	for p, data := range c.After {
-		if !c.Deleted[p] {
+		if c.Deleted[p] {
+			deleted = append(deleted, p)
+		} else {
 			after[p] = data
-		} else if err := os.Remove(p); err != nil {
-			return err
 		}
 	}
-	if err := writeAll(after); err != nil {
+	if err := commit(after, deleted); err != nil {
 		return err
 	}
-	for p := range c.Deleted {
-		if err := removeEmpty(filepath.Dir(p)); err != nil {
+	for _, p := range deleted {
+		if err := removeEmpty(filepath.Dir(p), root); err != nil {
 			return err
 		}
 	}
@@ -180,9 +184,10 @@ func (c Change) Write() error {
 }
 
 // removeEmpty removes dir if it is empty, and then each directory above
-// it that this leaves empty.
-func removeEmpty(dir string) error {
-	for {
+// it that this leaves empty, up to root: root itself, and what is not
+// inside it, stay.
+func removeEmpty(dir string, root string) error {
+	for Inside(root, dir) && filepath.Clean(dir) != filepath.Clean(root) {
 		entries, err := os.ReadDir(dir)
 		if err != nil || len(entries) > 0 {
 			return nil // gone already, or still in use
@@ -191,18 +196,6 @@ func removeEmpty(dir string) error {
 			return err
 		}
 		dir = filepath.Dir(dir)
-	}
-}
-
-func writeAll(files map[string][]byte) error {
-	for p, data := range files {
-		mode := os.FileMode(0o644)
-		if fi, err := os.Stat(p); err == nil {
-			mode = fi.Mode().Perm()
-		}
-		if err := os.WriteFile(p, data, mode); err != nil {
-			return err
-		}
 	}
 	return nil
 }
@@ -222,4 +215,74 @@ func Paths(files map[string][]byte) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// Inside reports whether path is root or a path under it, comparing the
+// paths as written.
+func Inside(root, path string) bool {
+	r, err := filepath.Rel(root, path)
+	return err == nil && r != ".." && !strings.HasPrefix(r, ".."+string(filepath.Separator))
+}
+
+// commit writes files and then removes the paths in remove. Each file is
+// written in full beside its target first and then renamed over it, so a
+// file that cannot be written leaves every file as it was. A link is
+// written through, to the file it points at.
+func commit(files map[string][]byte, remove []string) error {
+	var staged [][2]string // the temporary file, then its target
+	discard := func() {
+		for _, s := range staged {
+			os.Remove(s[0])
+		}
+	}
+	for _, p := range Paths(files) {
+		target := p
+		if real, err := filepath.EvalSymlinks(p); err == nil {
+			target = real
+		}
+		mode := os.FileMode(0o644)
+		if fi, err := os.Stat(target); err == nil {
+			mode = fi.Mode().Perm()
+		}
+		tmp, err := writeTemp(target, files[p], mode)
+		if err != nil {
+			discard()
+			return err
+		}
+		staged = append(staged, [2]string{tmp, target})
+	}
+	for i, s := range staged {
+		if err := os.Rename(s[0], s[1]); err != nil {
+			staged = staged[i:]
+			discard()
+			return err
+		}
+	}
+	for _, p := range remove {
+		if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+	return nil
+}
+
+// writeTemp writes data with mode to a new file beside path, named after
+// it, and returns the new file's path.
+func writeTemp(path string, data []byte, mode os.FileMode) (string, error) {
+	f, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".tmp-*")
+	if err != nil {
+		return "", err
+	}
+	_, err = f.Write(data)
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		err = os.Chmod(f.Name(), mode)
+	}
+	if err != nil {
+		os.Remove(f.Name())
+		return "", err
+	}
+	return f.Name(), nil
 }
