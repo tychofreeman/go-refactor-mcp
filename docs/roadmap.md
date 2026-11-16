@@ -3263,6 +3263,20 @@ candidates and the evidence for each, gathered from the friction log.
       ends, so the text between the two is a negative range. Present
       since placing by kind (#4f7e017); no golden has a documented
       member. It blocks a reference for ts-notify-fit.
+      *Done* (2026-11-16): the parser's position with the doc comment
+      also takes in a trailing comment on the line before (`sent: ...;
+      // what was sent`), so the member seemed to start inside the one
+      before. `tsapi.docStart` finds the member's own `/**`, for the
+      class's members and for content's; the content side had placed a
+      field with a trailing comment after the methods, silently. Tests
+      `TestAddsToAClassWithDocumentedMembers`,
+      `TestSplitsDocumentedContent`; ts-notify-fit has its reference.
+    - **fold refuses a method that does not use `this`** ("nothing
+      stands for this, which the body does not use"): `SMS.fit`, whose
+      body is `return truncate(text, 20);`, does not fold into
+      `truncate(m.subject, 20)` inside `SMS.send`, where `this` is the
+      receiver at hand. The ts-notify-fit reference uses one
+      replace_expression there instead.
     - **fold leaves the old import.** Folding `broadcastBatch` into a
       call in another file adds `import { broadcastBatch }` on a line of
       its own and leaves `broadcast` in the import it no longer uses;

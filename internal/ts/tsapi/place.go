@@ -117,7 +117,7 @@ func placeMembers(f *ast.SourceFile, text, content, class string) ([]placedPart,
 		return nil, fmt.Sprintf("content is not members of a class; with type %s, give only the members, without the class around them", class)
 	}
 	members := cls.Members()
-	start := func(m *ast.Node) int { return lineStartIn(text, scanner.GetTokenPosOfNode(m, f, true)) }
+	start := func(m *ast.Node) int { return lineStartIn(text, docStart(f, text, 0, m)) }
 	classIndent := leadingSpace(text[lineStartIn(text, scanner.GetTokenPosOfNode(cls, f, false)):])
 	indent, sep := classIndent+"  ", "\n"
 	lastField, lastCtor := -1, -1
@@ -172,7 +172,7 @@ func segmentStart(cf *ast.SourceFile, content string, nodes []*ast.Node, i, skip
 	if i == 0 {
 		return 0
 	}
-	return lineStartIn(content, scanner.GetTokenPosOfNode(nodes[i], cf, true)-skip)
+	return lineStartIn(content, docStart(cf, content, skip, nodes[i]))
 }
 
 // segmentEnd is where the i'th node's text ends: where the next one's
@@ -276,4 +276,18 @@ func reindent(s, indent string) string {
 		}
 	}
 	return strings.Join(lines, "\n")
+}
+
+// docStart is the offset in text where n's own doc comment starts, or its
+// first token when it has none; text is what f was parsed from, less its
+// first skip bytes. The parser's position with the doc comment also takes
+// in the comments before it, such as a trailing comment on the line of
+// the member before, which would put n's start inside that member.
+func docStart(f *ast.SourceFile, text string, skip int, n *ast.Node) int {
+	withDoc := scanner.GetTokenPosOfNode(n, f, true) - skip
+	tok := scanner.GetTokenPosOfNode(n, f, false) - skip
+	if i := strings.Index(text[withDoc:tok], "/**"); i >= 0 {
+		return withDoc + i
+	}
+	return tok
 }
