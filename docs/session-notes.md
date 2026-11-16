@@ -401,7 +401,9 @@ session plans by.
   call tree in view the loop's cost followed the module's size; with
   `-view focused` (what the prompt names, use counts, an index) it is
   $0.07-0.10 a task on both modules, 3.7x-11x less than by hand on
-  freight-xxl.
+  freight-xxl. On prompts that name no code, the plan must be able to
+  ask for more (`-view-asks`): without it, it guesses names and fails
+  3 of 32; with it, 32/32 at about the same cost (cost-history 29).
 - In the loop, a plan uses a tool well only from its full entry: with
   inline as an index line, plans gave it the declaration's line (24
   refusals, 2026-11-15). `claude -p` resumes an answer cut at the

@@ -4741,3 +4741,8 @@ replace_statements.
 `docs/sessions/fixtures-skeleton-only.md`. The gap of #653 and #661
 (fixtures written with printf) is closed: create_file takes a fixture
 under testdata/ whatever it holds. Nothing by hand.
+
+## The loop's unnamed prompts, recorded (2026-11-16)
+
+`docs/sessions/loop-view-asks.md`. Docs through replace_text; nothing
+by hand.
