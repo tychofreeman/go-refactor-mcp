@@ -4720,6 +4720,14 @@ The golden copied from another with `move` (copy, then delete of its
 `chose.txt`) and create_file of its args; the fix with
 replace_expression. Nothing by hand.
 
+## TypeScript inline at a declaration (2026-11-16)
+
+`docs/sessions/ts-inline-declaration.md`. Nothing by hand: add_result
+carried the new result to the one caller, then add_case,
+replace_expression, insert_statements and replace_statements. One
+refusal: add_case at a line an earlier step of the batch had rewritten,
+retried with `$2.start`.
+
 ## method_to_function: calls from other packages (2026-11-16)
 
 `docs/sessions/method-to-function-qualify.md`. By hand: the goldens'
@@ -4727,3 +4735,14 @@ fixtures (a go.mod and three short Go files, copied for the refusal),
 with printf, since create_file refuses bodies under -skeleton-only and
 no edit reaches testdata/. The fix went through add_declaration and
 replace_statements.
+
+## Golden fixtures under -skeleton-only (2026-11-16)
+
+`docs/sessions/fixtures-skeleton-only.md`. The gap of #653 and #661
+(fixtures written with printf) is closed: create_file takes a fixture
+under testdata/ whatever it holds. Nothing by hand.
+
+## The loop's unnamed prompts, recorded (2026-11-16)
+
+`docs/sessions/loop-view-asks.md`. Docs through replace_text; nothing
+by hand.

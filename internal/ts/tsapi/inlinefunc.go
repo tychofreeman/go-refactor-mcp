@@ -57,11 +57,12 @@ type inliner struct {
 // (at column, when given) with the function's body, and delete the
 // function when nothing else uses it, unless keep; with all, every call in
 // the file, the function then named by name alone. deleted says whether
-// the function goes.
-func (p *Project) InlineFunction(ctx context.Context, path string, line int, name string, column int, keep, all bool) ([]Edit, bool, string) {
+// the function goes; every, whether every call ran because line held the
+// function's declaration, or no line was given, in place of a call.
+func (p *Project) InlineFunction(ctx context.Context, path string, line int, name string, column int, keep, all bool) ([]Edit, bool, string, bool) {
 	l, why := p.lined(path)
 	if why != "" {
-		return nil, false, why
+		return nil, false, why, false
 	}
 	c, done := p.prog.GetProgram().GetTypeChecker(ctx)
 	defer done()
@@ -78,9 +79,10 @@ func (p *Project) InlineFunction(ctx context.Context, path string, line int, nam
 		return nil
 	}
 	var sym *ast.Symbol
+	every := false // the declaration was given in place of a call: every call
 	if line > 0 {
 		if line > l.count() {
-			return nil, false, fmt.Sprintf("line %d out of range: the file has %d lines", line, l.count())
+			return nil, false, fmt.Sprintf("line %d out of range: the file has %d lines", line, l.count()), false
 		}
 		identifiers(l.f.AsNode(), func(id *ast.Node) {
 			start := l.pos(id)
@@ -94,31 +96,33 @@ func (p *Project) InlineFunction(ctx context.Context, path string, line int, nam
 		})
 		switch {
 		case len(calls) > 1:
-			return nil, false, fmt.Sprintf("%s is called %d times on line %d; give column", name, len(calls), line)
+			return nil, false, fmt.Sprintf("%s is called %d times on line %d; give column", name, len(calls), line), false
 		case len(calls) == 1:
 			sym = symbolOf(c, calls[0].Expression())
 			if ast.IsPropertyAccessExpression(calls[0].Expression()) {
 				sym = symbolOf(c, calls[0].Expression().Name())
 			}
-		case sym == nil || !all:
-			return nil, false, fmt.Sprintf("no call of %s on line %d: %s", name, line, strings.TrimSpace(l.text[l.start(line):l.end(line)]))
+		case sym == nil:
+			return nil, false, fmt.Sprintf("no call of %s on line %d: %s", name, line, strings.TrimSpace(l.text[l.start(line):l.end(line)])), false
+		case !all:
+			all, every = true, true
 		}
 	} else {
 		if !all {
-			return nil, false, "give the line of the call, or all_calls"
+			all, every = true, true
 		}
 		_, _, nameNode, why := l.function(name)
 		if why != "" {
-			return nil, false, why
+			return nil, false, why, false
 		}
 		sym = c.GetSymbolAtLocation(nameNode)
 	}
 	if sym == nil {
-		return nil, false, fmt.Sprintf("%s refers to nothing known", name)
+		return nil, false, fmt.Sprintf("%s refers to nothing known", name), false
 	}
 	in, why := p.newInliner(c, ef, sym, name)
 	if why != "" {
-		return nil, false, why
+		return nil, false, why, false
 	}
 	// Every reference, to know whether the function is left unused.
 	var refs []*ast.Node
@@ -140,22 +144,22 @@ func (p *Project) InlineFunction(ctx context.Context, path string, line int, nam
 			}
 		}
 		if len(calls) == 0 {
-			return nil, false, fmt.Sprintf("%s has no calls", name)
+			return nil, false, fmt.Sprintf("%s has no calls", name), false
 		}
 	}
 	var edits []Edit
 	for i, call := range calls {
 		for _, other := range calls[:i] {
 			if other.Pos() <= call.Pos() && call.End() <= other.End() || call.Pos() <= other.Pos() && other.End() <= call.End() {
-				return nil, false, fmt.Sprintf("the call at %s is inside another (%s); inline one at a time", l.where(call), l.where(other))
+				return nil, false, fmt.Sprintf("the call at %s is inside another (%s); inline one at a time", l.where(call), l.where(other)), false
 			}
 		}
 		if call.Pos() >= in.fn.Pos() && call.End() <= in.fn.End() && ast.GetSourceFileOfNode(call) == in.fl.f {
-			return nil, false, fmt.Sprintf("%s calls itself (%s)", name, l.where(call))
+			return nil, false, fmt.Sprintf("%s calls itself (%s)", name, l.where(call)), false
 		}
 		es, why := in.inline(newLined(ast.GetSourceFileOfNode(call)), call)
 		if why != "" {
-			return nil, false, why
+			return nil, false, why, false
 		}
 		edits = append(edits, es...)
 	}
@@ -197,7 +201,7 @@ func (p *Project) InlineFunction(ctx context.Context, path string, line int, nam
 			}
 		}
 	}
-	return edits, deleted, ""
+	return edits, deleted, "", every
 }
 
 // newInliner returns the inliner of the function sym names, or why its

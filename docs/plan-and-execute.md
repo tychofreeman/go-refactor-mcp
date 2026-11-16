@@ -479,6 +479,15 @@ gets only the index, and `-no-read` gives no way to ask for more:
 that is untested, and is the next thing the view needs if the loop is
 pursued.
 
+## Prompts that name no code (cost-history 29)
+
+2026-11-16. With prompts that describe the change and name none of the
+code it changes, the focused view holds only the index. Without a way
+to ask, the plan guessed names it could not see and failed 3 of 32;
+with `-view-asks 3` it asked once or twice, passed 32 of 32, and cost
+$0.06-0.15 a task, half the whole call tree. The view a plan needs is
+what the prompt names plus what it asks for, not the module.
+
 ## TypeScript (2026-11-16)
 
 `-lang typescript` (`langs.TypeScript`, on the language switch that

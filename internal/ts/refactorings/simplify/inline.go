@@ -18,7 +18,7 @@ func NewInline() *Inline { return &Inline{Named: refactor.Called[inlineArgs]("in
 
 func (*Inline) Description() string {
 	return `Inline what name names into where it is used, and remove it when nothing else uses it; what it is says which:
-- a function or method, at a call (line): with function area(b: Bed) { return b.width * b.depth; }, const a = area(bed) becomes const a = bed.width * bed.depth. all_calls inlines every call in every file and deletes the function (line optional; keep_function keeps it; an exported one is kept).
+- a function or method, at a call (line): with function area(b: Bed) { return b.width * b.depth; }, const a = area(bed) becomes const a = bed.width * bed.depth. all_calls, or the function's declaration in place of a call (its line, or no line), inlines every call in every file and deletes the function (keep_function keeps it; an exported one is kept).
 - a local variable or constant, at its declaration or a use (line), or by function and name: const tall = p.height * 2; return tall + margin; becomes return p.height * 2 + margin;
 - with field, a class the class name holds: with class Soil { depth = 3 } and class Bed { soil = new Soil() }, name Bed and field soil move depth into Bed, b.soil.depth becomes b.depth, and Soil goes.`
 }
@@ -68,7 +68,7 @@ func (*Inline) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Pla
 			to = NewInlineFunction()
 		}
 	default:
-		return nil, refactor.Refusef("give line (of a call or of a local's declaration or use), all_calls for every call of a function, or function for a local by name")
+		to = NewInlineFunction() // the declaration, by name: every call, or why not
 	}
 	return to.Plan(ws, refactor.OnlyArgs(raw, to.InputSchema()))
 }

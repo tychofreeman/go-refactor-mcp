@@ -355,6 +355,9 @@ working patterns, with their steps, are in `docs/patterns.md`.
   is a server flag like `-no-code-by-text`, on in this repo's
   `.mcp.json` (the user, 2026-11-05): new Go and TypeScript files come
   from declaration and test_for, and functions from add_declaration.
+  A file under `testdata/` is exempt (2026-11-16): a golden's fixture
+  is data, in no loaded package, so no edit reaches it; write it, and
+  change it, with create_file (`overwrite`).
 - **Fowler's catalog and IntelliJ** (2026-11-04): `docs/catalog.md`.
   Run a composition before calling an entry missing: Encapsulate Variable
   and Record and Replace Function with Command first looked missing and
@@ -398,7 +401,9 @@ session plans by.
   call tree in view the loop's cost followed the module's size; with
   `-view focused` (what the prompt names, use counts, an index) it is
   $0.07-0.10 a task on both modules, 3.7x-11x less than by hand on
-  freight-xxl.
+  freight-xxl. On prompts that name no code, the plan must be able to
+  ask for more (`-view-asks`): without it, it guesses names and fails
+  3 of 32; with it, 32/32 at about the same cost (cost-history 29).
 - In the loop, a plan uses a tool well only from its full entry: with
   inline as an index line, plans gave it the declaration's line (24
   refusals, 2026-11-15). `claude -p` resumes an answer cut at the

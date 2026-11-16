@@ -1866,7 +1866,46 @@ qualifier (`Dispatch(c, ...)`; it reproduces with function_to_method
 and method_to_function alone), caught by the post-check and refused
 (roadmap 57). About $4.70 spent.
 
-## 29. The loop on Java (Nov 16)
+## 29. Prompts that name no code, and a plan that may ask (Nov 16)
+
+Cost-history 28's focused view takes its names from the prompt. #664
+adds freight-xxl's four tasks with prompts that describe the change
+without naming the code it changes
+(`eval-tasks/derivations-freight-xxl-unnamed.json`: "the helper that
+keeps the final characters of a code", "the package-level function that
+ships an order ..."), so the focused view holds only the index for
+dispatch, routes and tail and three types for run; and `-view-asks N`,
+with which the plan may ask `{"view": [...]}` for more of the module.
+Refactor arm, Sonnet, 8 attempts a task, `-no-read -patch -repairs 4
+-stages 3 -index -full-tools
+fold,extract_function,change_type,introduce_parameter,remove_dead_code,inline`
+and the view below; `eval-runs/loop-sonnet-unnamed-{calltree,focused,asks}-8`.
+Means a task:
+
+| task | whole call tree | focused | focused, `-view-asks 3` | named prompts, focused (28) |
+|---|---|---|---|---|
+| dispatch | 8/8 $0.152 | 8/8 $0.052 | 8/8 $0.058 | 8/8 $0.077 |
+| routes | 8/8 $0.185 | 6/8 $0.132 | 8/8 $0.145 | 8/8 $0.096 |
+| tail | 8/8 $0.163 | 8/8 $0.089 | 8/8 $0.082 | 8/8 $0.075 |
+| run | 7/8 $0.162 | 7/8 $0.096 | 8/8 $0.067 | 8/8 $0.073 |
+| all | 31/32, $5.29 | 29/32, $2.95 | 32/32, $2.82 | 32/32, $2.57 |
+
+Without asks the plan guessed what it could not see: routes named a
+field the module lacks (`Depot`), then removed `Road` with 303 uses
+left (2 attempts out of repairs, 12 remove_dead_code refusals in all);
+run guessed Dispatch's parameter names for introduce_parameter. With
+asks every attempt asked: once on tail and run, once to three times on
+routes, up to twice on dispatch (where the index's `Truck(Ship Name
+...)` was often enough), and every attempt passed, the wide changes
+carried by fold (32 uses), inline (16) and remove_dead_code (8) as on
+the named prompts. The whole call tree's failure (run 8) applied and
+failed the hidden tests.
+
+So a plan that may ask costs about what the named prompts cost (routes
+$0.05 more, from its extra asks) and half the whole call tree, with no
+failures. $11.06 spent.
+
+## 30. The loop on Java (Nov 16)
 
 `loop.py -lang java` (langs.py) runs java-refactor-mcp's tools from its
 checkout, on its own fixture: `eval-tasks/testdata/freight` there, about
