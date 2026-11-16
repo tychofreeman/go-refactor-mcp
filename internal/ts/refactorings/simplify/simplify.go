@@ -339,13 +339,13 @@ func NewInlineFunction() *InlineFunction {
 
 func (*InlineFunction) Description() string {
 	return `Replace a call with the function's body, and delete the function when nothing else uses it: the inverse of extract_function. With function area(b: Bed) { return b.width * b.depth; }, const a = area(bed) becomes const a = bed.width * bed.depth. A body that is one expression or one return may be inlined anywhere, and so may guards and a last return (if (s.length <= n) return s; return s.slice(0, n); becomes s.length <= n ? s : s.slice(0, n)); a body of statements where the call is a statement, a declaration's or assignment's value, or a return. A body that returns early elsewhere than as a return's whole value has each return assign the call's variable: the statements after an if that returns become its else, and a return in a loop or switch sets a flag that guards the rest. Parameters are replaced by the arguments where that is safe, and otherwise declared first (const b = arg;; a rest parameter as the array of the rest, a destructured one as its pattern). Of overloads, the implementation is inlined.
-Identify the call by file, line and the function's name (column if the name is on the line twice). With all_calls, every call in the solution is inlined, other files' imports of it go, and the function is deleted (give file and name); if one call cannot be, none is. keep_function keeps the function; an exported one is always kept.`
+Identify the call by file, line and the function's name (column if the name is on the line twice). With all_calls, or the declaration in place of a call (its line, or none), every call in the solution is inlined, other files' imports of it go, and the function is deleted; if one call cannot be, none is. keep_function keeps the function; an exported one is always kept.`
 }
 
 // inlineFunctionArgs are the arguments of inline_function.
 type inlineFunctionArgs struct {
 	File   string `json:"file" desc:"Path of the file with the call, relative to the root."`
-	Line   int    `json:"line,omitempty" desc:"1-based line of the call. With all_calls, optional: the line of any call or of the declaration."`
+	Line   int    `json:"line,omitempty" desc:"1-based line of the call. The declaration's line, or none, means every call (all_calls)."`
 	Name   string `json:"name" desc:"Name of the called function or method (for a call x.m(), m)."`
 	Column int    `json:"column,omitempty" desc:"Optional 1-based column of the name, only needed if it appears more than once on the line."`
 	Keep   bool   `json:"keep_function,omitempty" desc:"Keep the function even if no other call to it is left. Default false."`
@@ -358,20 +358,28 @@ func (*InlineFunction) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refa
 		return nil, err
 	}
 	deleted := false
+	every := false
 	p, err := plan(ws, a.File, "", func(p *tsapi.Project, path string) ([]tsapi.Edit, string) {
-		es, del, why := p.InlineFunction(bg, path, a.Line, a.Name, a.Column, a.Keep, a.All)
-		deleted = del
+		es, del, why, ev := p.InlineFunction(bg, path, a.Line, a.Name, a.Column, a.Keep, a.All)
+		deleted, every = del, ev
 		return es, why
 	})
 	if err != nil {
 		return nil, err
 	}
 	p.Summary = "inlined " + a.Name
-	if a.All {
+	if a.All || every {
 		p.Summary = "inlined every call of " + a.Name
 	}
 	if deleted {
 		p.Summary += " and deleted it"
+	}
+	if every {
+		then := ", then deleted " + a.Name
+		if !deleted {
+			then = ", keeping " + a.Name
+		}
+		p.Choices = append(p.Choices, "every call of "+a.Name+then+": what was given is its declaration, not a call; give a call's line to inline that call alone")
 	}
 	return p, nil
 }
