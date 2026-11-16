@@ -14,6 +14,10 @@
 //	  no_notes.txt  optional, when applied: substrings the notes must not
 //	                contain, one per line
 //
+// A case whose directory is named probe_<...> is also a behavior probe: its
+// in/ is a main package, run before the refactoring and after it, and an
+// applied probe must print the same (skipped with -short).
+//
 // Run `go test ./... -update` to (re)write out/ directories from the
 // current behavior; review the diff before committing.
 package refactortest
@@ -148,6 +152,11 @@ func runCase(t *testing.T, r refactor.Refactoring, caseDir string) {
 		return
 	}
 	compareTrees(t, outDir, tmp)
+	if strings.HasPrefix(filepath.Base(caseDir), "probe_") && !testing.Short() {
+		if before, after := goRun(t, inDir), goRun(t, tmp); before != after {
+			t.Errorf("the program printed\n%s\nbefore, and\n%s\nafter", before, after)
+		}
+	}
 	matchesFreshLoad(t, ws, loads, "after applying")
 
 	// Every applied step must be undoable back to the exact input.
@@ -328,4 +337,22 @@ func copyTree(t *testing.T, src, dst string) {
 	if err != nil {
 		t.Fatal(err)
 	}
+}
+
+// goRun runs the main package of the module in dir, from a copy, and
+// returns what it printed. A probe_ case's program is run on its input and
+// on the result: a refactoring must keep what it prints, which the type
+// check and out/ alone do not show.
+func goRun(t *testing.T, dir string) string {
+	t.Helper()
+	work := t.TempDir()
+	copyTree(t, dir, work)
+	cmd := exec.Command("go", "run", ".")
+	cmd.Dir = work
+	cmd.Env = append(os.Environ(), "GOWORK=off", "GOFLAGS=-mod=mod")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("go run in a copy of %s: %v\n%s", dir, err, out)
+	}
+	return strings.TrimSpace(string(out))
 }

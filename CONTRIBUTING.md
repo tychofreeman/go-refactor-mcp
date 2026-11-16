@@ -89,6 +89,11 @@ parallel, and after each applied refactoring and each undo they compare the
 incrementally updated workspace with a fresh load (one that reuses the
 metadata of an earlier `go list` when the files' headers are unchanged;
 see roadmap item 8). `go test -short ./...` skips that comparison for a faster local loop; CI always runs it.
+A golden case named `probe_<...>` is also a behavior probe: its `in/` is a
+`main` package, which the harness runs before and after the refactoring; an
+applied probe must print the same (skipped with `-short`). Add one for a
+refactoring that moves or duplicates code, where a result can type-check
+and still behave differently.
 `TestGoldenRoundTrip` checks that `inline_variable` undoes `extract_variable`:
 for every applying `extract_variable` golden case, extracting and then
 inlining the new variable must give back the original code (after gofmt).
