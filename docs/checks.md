@@ -525,7 +525,9 @@ the line of any call. The function's declaration given where a call goes
 (the line of the declaration, or `file` and `name` with no line) means
 `all_calls` too (2026-11-15, the user): the result's `chose:` line says
 so, with the number of calls, and that a call's line inlines that call
-alone; a declaration nothing calls is refused. If any call cannot be
+alone; a declaration nothing calls is refused. With `all_calls`, a
+`function` argument is ignored, as it was before (a plan sent both in
+2 of 8 attempts on 2026-11-16). If any call cannot be
 inlined, none is, and the refusal names the call. The calls go from the end of each file back, so
 that a call nested in another's arguments goes first, and the batch
 follows each call's line and column through the steps before it. Refused
