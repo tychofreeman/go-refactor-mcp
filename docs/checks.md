@@ -537,7 +537,10 @@ the line of any call. The function's declaration given where a call goes
 so, with the number of calls, and that a call's line inlines that call
 alone; a declaration nothing calls is refused. With `all_calls`, a
 `function` argument is ignored, as it was before (a plan sent both in
-2 of 8 attempts on 2026-11-16). If any call cannot be
+2 of 8 attempts on 2026-11-16). TypeScript's inline does the same
+(2026-11-16): the declaration's line, or a function's name with no line,
+inlines every call in every file, with the same `chose:` line (without
+the count). If any call cannot be
 inlined, none is, and the refusal names the call. The calls go from the end of each file back, so
 that a call nested in another's arguments goes first, and the batch
 follows each call's line and column through the steps before it. Refused
@@ -846,7 +849,12 @@ for every call; what can change is which types have the method:
   one of its files, not predeclared, and not hidden by a local at any
   call;
 - a call whose receiver contains another call of the method
-  (`n.after().after()`) is refused; assign the inner one first.
+  (`n.after().after()`) is refused; assign the inner one first;
+- a call in another package names the function through that file's
+  name for the method's package (`freight.Dispatch(c, a)`), importing
+  it where the file holds the receiver without importing its package;
+  such a call is refused if a local hides the package's name there, or
+  if `new_name` is not exported (2026-11-16, roadmap 57).
 
 ## Function to method: what it checks
 
