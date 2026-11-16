@@ -1444,6 +1444,9 @@ part left. What is open, the newest priority first:
     module's size out of the loop's cost: $0.07-0.10 a task on
     freight-xxl (from $0.16-0.19), 32/32. Untested: prompts that name
     no code, and a way for the plan to ask for more of the module.
+    *2026-11-16, later:* both tested (#664, cost-history 29): on
+    prompts that name no code, a plan that may ask (`-view-asks 3`)
+    passed 32/32 at $0.06-0.15 a task; one that may not, 29/32.
 
 30. **move_parameter counts a local as observable** (2026-10-25, the
     trap run, cost-history 15): with `from := p.Bin()` extracted,

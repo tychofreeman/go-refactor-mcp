@@ -4735,3 +4735,8 @@ fixtures (a go.mod and three short Go files, copied for the refusal),
 with printf, since create_file refuses bodies under -skeleton-only and
 no edit reaches testdata/. The fix went through add_declaration and
 replace_statements.
+
+## The loop's unnamed prompts, recorded (2026-11-16)
+
+`docs/sessions/loop-view-asks.md`. Docs through replace_text; nothing
+by hand.
