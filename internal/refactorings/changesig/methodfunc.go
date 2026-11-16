@@ -11,6 +11,7 @@ import (
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
+	"github.com/tychofreeman/go-refactor-mcp/internal/imports"
 	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
@@ -79,12 +80,10 @@ func (*MethodToFunction) Plan(ws *workspace.Workspace, raw json.RawMessage) (*re
 	path := ws.Fset.Position(t.decl.Pos()).Filename
 	fes := []edit.FileEdit{{Path: path, Edits: t.funcDeclEdits(name, recvParam)}}
 	srcs := map[string][]byte{path: t.Src}
+	adders := map[string]*imports.Adder{}
 	for _, c := range t.calls {
 		where := ws.Position(c.expr.Pos())
 		if err := checkNoSpread(c, where); err != nil {
-			return nil, err
-		}
-		if err := t.checkNameAtCall(c, name); err != nil {
 			return nil, err
 		}
 		cpath := ws.Fset.Position(c.expr.Pos()).Filename
@@ -93,11 +92,22 @@ func (*MethodToFunction) Plan(ws *workspace.Workspace, raw json.RawMessage) (*re
 				return nil, err
 			}
 		}
-		es, err := t.funcCallEdits(c, name, srcs[cpath])
+		callName := name
+		if c.pkg.Types.Path() == t.obj.Pkg().Path() {
+			if err := t.checkNameAtCall(c, name); err != nil {
+				return nil, err
+			}
+		} else if callName, err = t.qualifiedName(c, cpath, srcs[cpath], adders, name); err != nil {
+			return nil, err
+		}
+		es, err := t.funcCallEdits(c, callName, srcs[cpath])
 		if err != nil {
 			return nil, err
 		}
 		fes = append(fes, edit.FileEdit{Path: cpath, Edits: es})
+	}
+	for cpath, imp := range adders {
+		fes = append(fes, edit.FileEdit{Path: cpath, Edits: imp.Edits()})
 	}
 	return t.newPlan(fmt.Sprintf("turned method %s into function %s", t.obj.Name(), name), fes), nil
 }
@@ -243,6 +253,37 @@ func (t *target) funcCallEdits(c call, name string, csrc []byte) ([]edit.TextEdi
 		{Start: t.Off(c.expr.Fun.Pos()), End: t.Off(c.expr.Fun.End()), NewText: name},
 		{Start: at, End: at, NewText: x},
 	}, nil
+}
+
+// qualifiedName is name as a call in another package than the method's
+// writes it: through that file's name for the method's package, which an
+// import adds (in adders, one per file) when the file has none.
+func (t *target) qualifiedName(c call, cpath string, src []byte, adders map[string]*imports.Adder, name string) (string, error) {
+	where := t.WS.Position(c.expr.Pos())
+	if !token.IsExported(name) {
+		return "", refactor.Refusef("the call at %s is in package %s, which cannot call %s once it is a function: it is not exported; give an exported new_name", where, c.pkg.Types.Name(), name)
+	}
+	imp := adders[cpath]
+	if imp == nil {
+		_, file := t.WS.FileSyntax(cpath)
+		imp = imports.New(t.WS, c.pkg, file, src)
+		adders[cpath] = imp
+	}
+	q, err := imp.Name(t.obj.Pkg())
+	if err != nil {
+		return "", refactor.Refusef("the call at %s cannot name package %s: %v", where, t.obj.Pkg().Name(), err)
+	}
+	if q == "" {
+		return name, nil
+	}
+	if scope := c.pkg.Types.Scope().Innermost(c.expr.Pos()); scope != nil {
+		if _, o := scope.LookupParent(q, c.expr.Pos()); o != nil {
+			if _, ok := o.(*types.PkgName); !ok {
+				return "", refactor.Refusef("at the call at %s, %s is the %s declared at %s, which hides package %s; rename it first", where, q, kind(o), t.WS.Position(o.Pos()), t.obj.Pkg().Name())
+			}
+		}
+	}
+	return q + "." + name, nil
 }
 
 func deref(t types.Type) types.Type {

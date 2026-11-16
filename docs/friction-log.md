@@ -4719,3 +4719,11 @@ replace_text. Nothing by hand.
 The golden copied from another with `move` (copy, then delete of its
 `chose.txt`) and create_file of its args; the fix with
 replace_expression. Nothing by hand.
+
+## method_to_function: calls from other packages (2026-11-16)
+
+`docs/sessions/method-to-function-qualify.md`. By hand: the goldens'
+fixtures (a go.mod and three short Go files, copied for the refusal),
+with printf, since create_file refuses bodies under -skeleton-only and
+no edit reaches testdata/. The fix went through add_declaration and
+replace_statements.
