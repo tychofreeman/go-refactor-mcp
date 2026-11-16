@@ -65,10 +65,10 @@ The change:
 Answer with one JSON object and nothing else:
 {{"batch": {{"steps": [the whole change as gorefactor steps, in order]}}}}{read}
 Prefer refactorings that derive the change
-(fold, inline_function, rename, extract_type, ...) to edits that rewrite
+(fold, inline, rename, extract_type, ...) to edits that rewrite
 code. Code you cannot see here need not be written: steps that address
 it by name carry it with them (extract_function of a case by function
-and case, function_to_method, move_declaration, inline_function), so
+and case, function_to_method, move, inline), so
 move code rather than ask for it or call back into what you move.
 Address declarations by name where a tool allows it; a batch with
 check "end" may pass through code that does not compile yet. After it
@@ -238,7 +238,7 @@ every place it reaches:
 
 {entries}"""
 
-CARRIERS = "fold,extract_function,change_field_type,introduce_parameter,remove_dead_code,prepare_switch_for_types,function_to_method"
+CARRIERS = "fold,extract_function,change_type,introduce_parameter,remove_dead_code,inline,prepare_switch_for_types,function_to_method"
 
 # TOOLS_HINT ends the later prompts with -index.
 TOOLS_HINT = """
@@ -657,7 +657,9 @@ def main():
     tool_entries = None
     if a.index:
         tool_entries = entries(listed)
-        full = [n for n in a.full_tools.split(",") if n in tool_entries]
+        full = [n for n in a.full_tools.split(",") if n]
+        if unknown := [n for n in full if n not in tool_entries]:
+            p.error("-full-tools names no tool: " + ", ".join(unknown) + "; the tools are " + ", ".join(sorted(tool_entries)))
         tools = INDEX.format(index=index(listed, full))
         if full:
             tools += FULL.format(entries="\n\n".join([NAMES] + [tool_entries[n] for n in full]))
