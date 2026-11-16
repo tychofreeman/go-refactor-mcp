@@ -1,1 +1,1 @@
-label loop
+and the calling function both use the label loop

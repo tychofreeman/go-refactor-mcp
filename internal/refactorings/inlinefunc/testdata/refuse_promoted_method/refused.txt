@@ -1,1 +1,1 @@
-promoted
+inlining promoted methods is not supported yet

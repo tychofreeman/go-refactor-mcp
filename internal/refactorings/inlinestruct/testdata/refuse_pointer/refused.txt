@@ -1,1 +1,1 @@
-pointer
+Bed holds Soil by pointer

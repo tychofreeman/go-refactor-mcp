@@ -1,1 +1,1 @@
-block inside
+is in a block inside the one that declares n

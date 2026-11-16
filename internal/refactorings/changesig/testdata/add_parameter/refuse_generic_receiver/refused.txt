@@ -1,1 +1,1 @@
-Box is generic
+changing methods of generic types that an interface could match is not supported yet

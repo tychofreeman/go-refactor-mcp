@@ -1,1 +1,1 @@
-fmt.Stringer
+may be how point implements fmt.Stringer, which code checks for at run time

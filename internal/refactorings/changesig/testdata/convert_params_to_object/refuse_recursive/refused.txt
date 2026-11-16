@@ -1,1 +1,1 @@
-itself
+count calls itself, and inlining it would not end

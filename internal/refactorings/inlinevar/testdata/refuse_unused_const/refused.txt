@@ -1,1 +1,1 @@
-is never used
+is never used; there is nothing to inline

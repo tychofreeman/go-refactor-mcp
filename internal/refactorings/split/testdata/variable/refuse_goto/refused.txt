@@ -1,1 +1,1 @@
-goto
+the function uses goto, which could run the code before line 9 again

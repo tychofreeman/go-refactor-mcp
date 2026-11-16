@@ -1,1 +1,1 @@
-might block
+could panic on a nil r, and would be evaluated before the statement

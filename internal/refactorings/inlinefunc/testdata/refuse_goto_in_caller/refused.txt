@@ -1,1 +1,1 @@
-uses goto
+a goto must not jump over declarations

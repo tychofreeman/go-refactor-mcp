@@ -3275,5 +3275,20 @@ candidates and the evidence for each, gathered from the friction log.
     import and a remove_dead_code step; with them fixed it is Go's four
     steps (wrapper, fold, inline, rename).
 
+59. **Golden refusal fragments name the rule** (2026-11-16, a review of
+    the tests the user asked for): 83 `refused.txt` files matched fewer
+    than 15 characters (`n`, `map`, `i++`, `generic`, `could panic`),
+    short enough that a refusal for another reason in the same tool still
+    passed. *Done:* each is a phrase of 25 characters or more from the
+    refusal the case gets, chosen to name the rule, and
+    `refactortest.Run` fails a fragment under 15. No case's refusal
+    changed. TypeScript's tests write their expected refusals inline;
+    four are under 15 and are left to that suite's own review.
+    Found on the way: remove_parameter's "the body of g uses last (at
+    ...)" names a different use on different runs (a.go:4:15, 5:2 or
+    6:9 in `remove_parameter/refuse_read_first`), so that fragment leaves
+    the position out. A refusal should name the first use in source
+    order; not yet fixed.
+
 Parked: the Ollama loop (`refactor-agent`). It works and stays, but Claude
 through MCP is the priority.

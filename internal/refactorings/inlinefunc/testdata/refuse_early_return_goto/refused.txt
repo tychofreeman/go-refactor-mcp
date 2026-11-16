@@ -1,1 +1,1 @@
-uses goto
+a function with goto can only be inlined where it is called as

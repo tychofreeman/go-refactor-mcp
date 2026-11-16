@@ -1,1 +1,1 @@
-test file
+only one of a.go and f_test.go is a test file
