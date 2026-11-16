@@ -54,8 +54,10 @@ var Arms = []string{"mcp", "manual"}
 // and Claude's own editing tools too; names is the mcp arm reading Go
 // code only by name (refactor-mcp -read-by-name, and no other reads);
 // guarded is the mcp arm with the read-guard hook, which refuses reading
-// Go other than through inspect (cmd/read-guard).
-var ExtraArms = []string{"hybrid", "names", "guarded"}
+// Go other than through inspect (cmd/read-guard); planned is the mcp arm
+// with its own CLAUDE.md, for tasks whose prompts begin with a view of
+// the module to plan from (eval-tasks/learning/planned_tasks.py).
+var ExtraArms = []string{"hybrid", "names", "guarded", "planned"}
 
 // checking is the Bash every arm that may not write may run to check
 // TypeScript and Java (java-refactor-mcp's tasks): the type check and the
@@ -91,6 +93,11 @@ type toolSet struct {
 // armTools are the tools of each arm.
 var armTools = map[string]toolSet{
 	"mcp": {
+		mcp:        true,
+		allowed:    append([]string{"mcp__gorefactor", "Read", "Grep", "Glob"}, lookingBash...),
+		disallowed: []string{"Edit", "Write", "MultiEdit", "NotebookEdit"},
+	},
+	"planned": {
 		mcp:        true,
 		allowed:    append([]string{"mcp__gorefactor", "Read", "Grep", "Glob"}, lookingBash...),
 		disallowed: []string{"Edit", "Write", "MultiEdit", "NotebookEdit"},
