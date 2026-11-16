@@ -55,6 +55,7 @@ func check(t *testing.T, cases []change) {
 				if res.Applied || !strings.Contains(res.Refused, tc.refused) {
 					t.Fatalf("want a refusal with %q, got %s", tc.refused, res)
 				}
+				tstest.Unchanged(t, dir, tc.files)
 				return
 			}
 			if !res.Applied {
@@ -63,6 +64,11 @@ func check(t *testing.T, cases []change) {
 			for f, text := range tc.out {
 				want(t, dir, f, text)
 			}
+			var named []string
+			for f := range tc.out {
+				named = append(named, f)
+			}
+			tstest.Unchanged(t, dir, tc.files, named...)
 		})
 	}
 }
@@ -781,6 +787,24 @@ export function label(p: Plant): string {
   return p.label();
   throw new Error("no label");
 }
+`, "src/plants.ts": `export class Fern {
+  readonly kind = "fern";
+  mist = 2;
+
+  label(): string {
+    return "fern " + this.mist;
+  }
+}
+
+export class Cactus {
+  readonly kind = "cactus";
+
+  label(): string {
+    return "cactus";
+  }
+}
+
+export type Plant = Fern | Cactus;
 `}, ""},
 		{"missing case", map[string]string{"src/plants.ts": ferns, "src/water.ts": `import { Plant } from "./plants";
 

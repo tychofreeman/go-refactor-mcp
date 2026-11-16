@@ -53,18 +53,21 @@ func check(t *testing.T, cases []change) {
 	t.Helper()
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			ws, dir := load(t, map[string]string{"src/g.ts": tc.src})
+			files := map[string]string{"src/g.ts": tc.src}
+			ws, dir := load(t, files)
 			res := run(t, ws, tc.r, `{"file": "src/g.ts", `+tc.args[1:])
 			if tc.out == "" {
 				if res.Applied || !strings.Contains(res.Refused, tc.refused) {
 					t.Fatalf("want a refusal with %q, got %s", tc.refused, res)
 				}
+				tstest.Unchanged(t, dir, files)
 				return
 			}
 			if !res.Applied {
 				t.Fatalf("%s", res)
 			}
 			want(t, dir, "src/g.ts", tc.out)
+			tstest.Unchanged(t, dir, files, "src/g.ts")
 		})
 	}
 }

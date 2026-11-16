@@ -3301,8 +3301,28 @@ candidates and the evidence for each, gathered from the friction log.
     Found on the way: remove_parameter's "the body of g uses last (at
     ...)" names a different use on different runs (a.go:4:15, 5:2 or
     6:9 in `remove_parameter/refuse_read_first`), so that fragment leaves
-    the position out. A refusal should name the first use in source
-    order; not yet fixed.
+    the position out. fold's refusal in `refuse_hole_twice_written_between`
+    names one of two obstacles by run (about one run in ten names
+    `c.Bump()` evaluated early, the others `c.Get()` evaluated once), so
+    its fragment is the part both share, `which assigns to c.count`; the
+    first fragment matched only the commoner one and failed `go test`
+    on #673's branch. A refusal should name the first use, or obstacle,
+    in source order; not yet fixed.
+
+60. **TypeScript tests check every file** (2026-11-16, a review of the
+    tests the user asked for): the table-driven TypeScript tests compared
+    only the files a case named, and a refusal was not checked to leave
+    the files as they were. *Done:* `tstest.Unchanged` fails a test when a
+    file it did not name changed, was added or was removed; the checks of
+    shapes and simplify, and the `edited` helpers of add_case, add_element
+    and replace_declaration, call it after a refusal and after an apply.
+    It found one gap: union_switch_to_method's "instanceof returning"
+    rewrote `src/plants.ts` (the classes gain `label()`), which the case
+    never checked; it does now. Left: the edit tools' tests accept a
+    result that only contains the expected text (`strings.Contains`), and
+    the tests outside these helpers call `want` per file. The same case
+    keeps `throw new Error("no label")` after the new `return p.label();`,
+    unreachable code the tool could remove.
 
 61. **Behavior probes for Go** (2026-11-16, a review of the tests the
     user asked for): the goldens check that a result type-checks and
