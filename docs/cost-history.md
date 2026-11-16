@@ -1866,6 +1866,37 @@ qualifier (`Dispatch(c, ...)`; it reproduces with function_to_method
 and method_to_function alone), caught by the post-check and refused
 (roadmap 57). About $4.70 spent.
 
+## 29. The loop on Java (Nov 16)
+
+`loop.py -lang java` (langs.py) runs java-refactor-mcp's tools from its
+checkout, on its own fixture: `eval-tasks/testdata/freight` there, about
+400 lines in four packages, hand-written with the shapes of freight-xl's
+tail and routes tasks (java-refactor-mcp roadmap 520). The plan sees
+each main file's outline without bodies in place of the call tree.
+Sonnet, 8 attempts a task, section 27's settings (`-no-read -patch
+-repairs 4 -stages 3 -index`), `-full-tools` the same tools by their
+Java names (`fold,extract_function,change_type,extract_variable,replace_declaration`);
+the by-hand arm with `-arm manual`. Means a task (medians), against
+section 27's freight-xl, its tail with inline fixed (#650):
+
+| task | Java, tools | Java, by hand | Go, tools | Go, by hand |
+|---|---|---|---|---|
+| tail | $0.075 ($0.075), 8/8 | $0.131 ($0.067), 8/8 | $0.075, 8/8 | $0.066, 8/8 |
+| routes | $0.093 ($0.097), 8/8 | $0.372 ($0.278), 7/8 | $0.110, 8/8 | $0.552, 8/8 |
+
+16/16 for $1.34 with the tools, 15/16 for $4.02 by hand; the by-hand
+tail's mean is one runaway answer ($0.57). The shape is Go's: a change
+to a declaration used across packages costs 3-4x by hand, one confined
+to a class about the same. Routes by hand read 35 declarations an
+attempt; the tools' plans read none.
+
+The Java plans took other routes than Go's: tail went through
+remove_parameter (value 4), rename and replace_text of the modifier in
+6 of 8 attempts, fold and inline in 2. Refusals: 3 on tail (two wrong
+argument names, one inline of a call that is not a whole return), 7 on
+routes (5 deleting a field its uses still named, before encapsulating
+it; one a step's wrong argument). About $5.40 spent.
+
 ## What made the difference
 
 - **Smaller results** (#75, rename locations): the largest single win when
