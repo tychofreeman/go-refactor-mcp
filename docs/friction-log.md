@@ -4746,3 +4746,11 @@ under testdata/ whatever it holds. Nothing by hand.
 
 `docs/sessions/loop-view-asks.md`. Docs through replace_text; nothing
 by hand.
+
+## Sessions on freight-xxl, recorded (2026-11-16)
+
+The planned arm (#668) through add_element and replace_expression on
+`internal/ab`, its instructions and task file through move (copy),
+replace_text and create_file. Nothing by hand. A check meant to be free
+(`refactor-ab -runs 0`) ran one session of each task ($1.24): `-runs 0`
+means the default of one.

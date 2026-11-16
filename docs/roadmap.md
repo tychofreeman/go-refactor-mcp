@@ -1447,6 +1447,14 @@ part left. What is open, the newest priority first:
     *2026-11-16, later:* both tested (#664, cost-history 29): on
     prompts that name no code, a plan that may ask (`-view-asks 3`)
     passed 32/32 at $0.06-0.15 a task; one that may not, 29/32.
+    *2026-11-16, sessions (cost-history 30):* Claude Code by hand on
+    freight-xxl costs $0.09-0.12 a run (sed or perl over the files),
+    not the loop's manual arm's $0.28-1.08; the focused loop is 20-40%
+    cheaper than that. Sessions with the tools cost $0.14-0.38, and a
+    session that plans from the focused view, as the loop does, about
+    the same. So the gain over by hand needs a loop of our own (no
+    session overhead), and it is 20-40% on this module, not 3-11x.
+    Whether to build one stays the user's decision.
 
 30. **move_parameter counts a local as observable** (2026-10-25, the
     trap run, cost-history 15): with `from := p.Bin()` extracted,

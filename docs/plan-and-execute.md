@@ -488,6 +488,19 @@ with `-view-asks 3` it asked once or twice, passed 32 of 32, and cost
 $0.06-0.15 a task, half the whole call tree. The view a plan needs is
 what the prompt names plus what it asks for, not the module.
 
+## Against real sessions (cost-history 30)
+
+2026-11-16. The loop's manual arm was a weak baseline: Claude Code by
+hand on freight-xxl makes a wide change with one `sed -i` or `perl -pi`
+over the files, and costs $0.09-0.12 a run (31/32), not $0.28-1.08. The
+loop with the focused view is 20-40% cheaper than that; Claude Code
+with the tools is dearer than by hand ($0.14-0.38), and a session told
+to plan from the focused view, as the loop does, cost about the same
+($0.14-0.27), with fewer per-use edits on routes. So what the loop
+saves is mostly the session's own overhead (instructions, tool
+definitions, several requests), not the derivation: a loop of our own
+is what carries the gain, if the gain is wanted.
+
 ## Recording
 
 Each step in its own PR: the results in `docs/cost-history.md`, the
