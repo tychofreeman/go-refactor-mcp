@@ -1730,6 +1730,97 @@ except feat-case-clause (9 turns fewer a run), so the review costs
 nothing and may save a little; about $3.60 spent. Record:
 `docs/sessions/descriptions-review.md`.
 
+## 27. The loop on freight-xl again, and on freight-xxl (Nov 15)
+
+The plan-and-execute loop (`eval-tasks/learning/loop.py`, section 17
+on), Sonnet, 8 attempts a task, `-patch -repairs 4 -stages 3`. The
+refactor arm adds `-no-read -index -full-tools ...`; the manual arm is
+`-arm manual` (reads allowed). Means a task unless marked.
+
+**Freight-xl, both arms** (`eval-runs/loop-sonnet-freight-indexfull-8`,
+`-full-tools fold,extract_function,change_type,introduce_parameter,remove_dead_code`;
+`eval-runs/loop-sonnet-freight-manual-8`): refactor 31/32 at $0.102,
+manual 32/32 at $0.160 without two outliers and $0.266 with them.
+
+| task | refactor | manual |
+|---|---|---|
+| dispatch | $0.065 | $0.070 |
+| routes | $0.110 | $0.335 |
+| tail | $0.109 | $0.066 |
+| run | $0.123 | $0.169 |
+
+38 of the refactor arm's 49 refusals were inline's, 24 of them "is the
+declaration of ...; give the line of a call to it, or all_calls": the
+plans gave inline the line of the `func`, from the index line alone.
+The two manual outliers (routes run 7, $2.08; run run 1, $1.84) wrote
+fake tool-call markup in their first request until the CLI's 128K
+output cap; the CLI then resumed and got a clean answer, so only
+`usage` showed it (#652 caps a request at 40K and counts runaways).
+
+**Tail and run with inline in full** (#651; `-full-tools` adding
+`inline`; `eval-runs/loop-sonnet-freight-inline-8`, $1.20):
+
+| task | passed | cost | requests | refusals | "declaration of" |
+|---|---|---|---|---|---|
+| tail | 8/8 | $0.077 (median $0.078) | 3.2 | 2 | 0 |
+| run | 8/8 | $0.073 (median $0.072) | 3.2 | 0 | 0 |
+
+Back at October's $0.07, from $0.109 and $0.123: with inline's entry
+in view the plans used all_calls. The declaration now means every call
+anyway (#653).
+
+**Freight-xxl** (#654: freight-xl's shapes five times over, 4,287
+lines in 21 packages; dispatch folds 50 Ship methods against 10,
+routes reaches 505 uses of Road and Rail against 105, tail 57 calls of
+`last` against 13, run 151 calls of Dispatch against 31; the plan's
+call-tree view is 63K characters against 13K). Both arms on main after
+#651-#654:
+
+    python3 eval-tasks/learning/loop.py -tasks eval-tasks/derivations-freight-xxl.json \
+      -models sonnet -runs 8 -no-read -patch -repairs 4 -stages 3 -index \
+      -full-tools fold,extract_function,change_type,introduce_parameter,remove_dead_code,inline \
+      -out eval-runs/loop-sonnet-freightxxl-refactor-8
+    python3 eval-tasks/learning/loop.py -tasks eval-tasks/derivations-freight-xxl.json \
+      -models sonnet -runs 8 -patch -repairs 4 -stages 3 -arm manual \
+      -out eval-runs/loop-sonnet-freightxxl-manual-8
+
+(The manual arm was stopped after 28 attempts; run's last four ran
+separately into `...-manual-8-rest` and were appended as runs 5-8.)
+
+| task | arm | passed | cost (median) | requests | lines written | tests failed after the first edits | refusals |
+|---|---|---|---|---|---|---|---|
+| dispatch | refactor | 8/8 | $0.161 ($0.155) | 3.2 | 5 | 1 | 1 test failure |
+| dispatch | manual | 8/8 | $0.285 ($0.285) | 3.9 | 55 | 0 | 1 unparsed |
+| routes | refactor | 8/8 | $0.185 ($0.184) | 3.0 | 22 | 0 | none |
+| routes | manual | 5/8 | $1.083 ($1.032) | 8.0 | 121 | 7 | 24 test failures, 6 unparsed, 2 edits |
+| tail | refactor | 8/8 | $0.162 ($0.162) | 3.2 | 4 | 0 | remove_dead_code 1, retry 1 |
+| tail | manual | 8/8 | $0.283 ($0.268) | 4.2 | 63 | 0 | 2 unparsed |
+| run | refactor | 8/8 | $0.163 ($0.164) | 3.6 | 8 | 0 | none |
+| run | manual | 8/8 | $0.552 ($0.566) | 5.2 | 43 | 7 | 7 test failures, 3 unparsed |
+
+Refactor 32/32 for $5.37; manual 29/32 for $17.62 (and one stopped
+attempt). The manual arm's three failures on routes ran out of repairs:
+each set of edits missed uses among the 505, and the next repair found
+more. One manual request ran away (routes run 2, about 80K output
+tokens through the CLI's resumes, $1.99).
+
+Manual over refactor, cost a task:
+
+| task | freight-xl | freight-xxl |
+|---|---|---|
+| dispatch | 1.1x | 1.8x |
+| routes | 3.0x | 5.9x |
+| tail | 0.9x (with Step 2's $0.077) | 1.7x |
+| run | 2.3x (with Step 2's $0.073) | 3.4x |
+
+The saving grows with the places a change reaches. The refactor arm's
+cost a task rose by $0.07-0.10 from freight-xl to freight-xxl
+whatever the number of places: the larger call-tree view every request
+carries. The manual arm's rose with the places (on medians dispatch
+4.1x, tail 4.2x, run 3.6x, routes 3.2x) and it began to fail where a
+change reaches hundreds of places. About $24.50 spent in all (tail and
+run again, and freight-xxl). Record: `docs/plan-and-execute.md`.
+
 ## What made the difference
 
 - **Smaller results** (#75, rename locations): the largest single win when

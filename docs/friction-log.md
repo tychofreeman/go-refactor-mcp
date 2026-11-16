@@ -4692,3 +4692,12 @@ packages, so no edit reaches it). `move` with `copy` copied the old
 case and with `delete` removed its `refused.txt`. Everything else went
 through the tools, `inline_test.go` as create_file of the package clause
 and add_declaration.
+
+## The loop's 2026-11-15 record (#651-#654 and this)
+
+Docs through replace_text; loop.py, probe.py, the refs and
+gen_freight_scale.py through replace_text and create_file (#651, #652,
+#654). By hand: freight-xxl's manual results, whose last four attempts
+ran separately, were appended to one results.jsonl with a short script
+(gitignored run output, not the repo). #653's by-hand fixtures are in
+its own entry.

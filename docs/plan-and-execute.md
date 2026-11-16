@@ -433,6 +433,33 @@ inline (eight), the plan's prompt and the reference batches use the
 current names, and `-full-tools` refuses a name that is not a tool;
 it used to drop it, so a run given an old name planned without it.
 
+## Freight-xl again, and a module five times its size (cost-history 27)
+
+2026-11-15. Rerun on freight-xl, both arms with Sonnet: the loop with
+the carrying tools in full cost $0.102 a task against $0.160 by hand
+(without two outliers), but tail and run had drifted from October's
+$0.07 to $0.11-0.12. 24 of the refactor arm's refusals were inline at a
+declaration: the plans saw inline only as an index line. Given inline
+in full, tail and run were back at $0.077 and $0.073 with no such
+refusal; inline now also takes the declaration to mean every call
+(#653), so a plan that guesses gets the change instead of a repair.
+
+The two outliers of the manual arm ($2.08 and $1.84) were runaway
+answers: fake tool calls until the CLI's 128K output cap, hidden by the
+CLI's resume. The loop now caps a request at 40K output tokens
+(`MAX_OUTPUT`) and counts a request that reaches it as a runaway.
+
+On freight-xxl (`gen_freight_scale.py`: the same shapes, five times the
+places) the loop passed 32 of 32 at $0.16-0.19 a task and editing by
+hand 29 of 32 at $0.28-1.08: 1.7x to 5.9x the loop's cost, against 0.9x
+to 3.0x on freight-xl. The loop's cost grew with the module (the
+call-tree view each request carries), not with the places a change
+reaches; by hand it grew with the places, and on routes (505 uses) it
+ran out of repairs in 3 attempts of 8. So the case for the loop is
+changes that reach many places, and its fixed cost is the view: a view
+that scales with the change rather than the module is what would help
+it next. What the loop becomes is the user's decision (roadmap 29).
+
 ## Recording
 
 Each step in its own PR: the results in `docs/cost-history.md`, the

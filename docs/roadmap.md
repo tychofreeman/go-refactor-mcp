@@ -1431,6 +1431,15 @@ part left. What is open, the newest priority first:
     the API with its own context, only if step 1 pays. A research
     instrument: the decision that Claude through MCP is the product
     stands, and the user decides on the result.
+    *2026-11-15:* step 1 is done and measured (cost-history 16-19 and
+    27, `docs/plan-and-execute.md`). With the carrying tools in full
+    the loop costs less than editing by hand on freight-xl's changes
+    that reach many places (routes, run), and on freight-xxl, five times
+    the places, 1.7x-5.9x less on every task, while by hand failed 3 of
+    8 routes. Done along the way: current tool names and a checked
+    `-full-tools` (#651), an output cap (#652), inline at a declaration
+    means every call (#653), freight-xxl (#654). Step 2, a runner of
+    our own, and what the loop becomes, are still the user's decision.
 
 30. **move_parameter counts a local as observable** (2026-10-25, the
     trap run, cost-history 15): with `from := p.Bin()` extracted,
