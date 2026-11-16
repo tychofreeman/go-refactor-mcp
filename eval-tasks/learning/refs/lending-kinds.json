@@ -1,7 +1,7 @@
 {
  "steps": [
   {
-   "tool": "change_field_type",
+   "tool": "change_type",
    "args": {
     "file": "lending/lending.go",
     "name": "Item.Kind",
@@ -515,7 +515,7 @@
    }
   },
   {
-   "tool": "change_field_type",
+   "tool": "change_type",
    "args": {
     "file": "lending/lending.go",
     "name": "Item.Kind",

@@ -426,6 +426,13 @@ function_to_method). With those two in the list (`CARRIERS`, now
 seven): kinds Sonnet 3/4 at 20% below the reference, Haiku 2/4, every
 attempt derived; the plans still asked for the edit tools.
 
+The tools' names changed after these runs (change_field_type became
+change_type, inline_function inline, move_declaration move). On
+2026-11-15 loop.py followed: `CARRIERS` names change_type and adds
+inline (eight), the plan's prompt and the reference batches use the
+current names, and `-full-tools` refuses a name that is not a tool;
+it used to drop it, so a run given an old name planned without it.
+
 ## Recording
 
 Each step in its own PR: the results in `docs/cost-history.md`, the
