@@ -3239,5 +3239,29 @@ candidates and the evidence for each, gathered from the friction log.
     *Done* (2026-11-16, `docs/sessions/method-to-function-qualify.md`):
     an unexported new_name with such a call is refused.
 
+58. **TypeScript gaps the loop's reference batches found** (2026-11-16,
+    writing `eval-tasks/learning/refs/ts-notify-batch.json` for
+    `loop.py -lang typescript`; each reproduces with `cmd/refactor` on a
+    copy of `eval-tasks/testdata/ts-notify`):
+    - **add_declaration with `type` panics** (`tsapi.placeMembers`,
+      place.go:127, slice bounds out of range) when the class has a
+      member with a doc comment after another member: `type: "SMS"` or
+      `"Email"` with any method as content. A documented member's start
+      is taken from its JSDoc, which begins where the member before it
+      ends, so the text between the two is a negative range. Present
+      since placing by kind (#4f7e017); no golden has a documented
+      member. It blocks a reference for ts-notify-fit.
+    - **fold leaves the old import.** Folding `broadcastBatch` into a
+      call in another file adds `import { broadcastBatch }` on a line of
+      its own and leaves `broadcast` in the import it no longer uses;
+      that import then counts as a use: rename to `broadcast` is refused
+      ("already used in src/notify.test.ts:1").
+    - **inline with all_calls keeps an exported function** nothing calls
+      any more, where the description says it deletes it; Go's deletes.
+      The reference removes it with remove_dead_code.
+    The reference works around the last two with a replace_text of the
+    import and a remove_dead_code step; with them fixed it is Go's four
+    steps (wrapper, fold, inline, rename).
+
 Parked: the Ollama loop (`refactor-agent`). It works and stays, but Claude
 through MCP is the priority.

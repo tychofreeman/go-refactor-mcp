@@ -37,6 +37,12 @@ with -server, on its own task file (langs.py):
 
     python3 eval-tasks/learning/loop.py -lang java -server ../java-refactor-mcp \
         -tasks ../java-refactor-mcp/eval-tasks/derivations-freight.json -models ref -runs 1 -out eval-runs/loop-java
+
+-lang typescript runs gorefactor on a TypeScript project, whose tools
+are the same and go by a file's extension:
+
+    python3 eval-tasks/learning/loop.py -lang typescript \
+        -tasks eval-tasks/ts-derivations.json -models ref -runs 1 -out eval-runs/loop-ts
 """
 import argparse
 import json
@@ -688,8 +694,8 @@ def main():
     p.add_argument("-view", default="calltree", choices=sorted(HEADS),
                    help="the plan's view of the module: the whole call tree, or focused on what the prompt names, with use counts and an index of names")
     p.add_argument("-view-asks", type=int, default=0, help="with -view focused, how many times the plan may ask for more of the module")
-    p.add_argument("-lang", default="go", choices=["go", "java"],
-                   help="the language and its server: gorefactor from this checkout, or java-refactor-mcp from -server")
+    p.add_argument("-lang", default="go", choices=["go", "java", "typescript"],
+                   help="the language and its server: gorefactor from this checkout (go, typescript), or java-refactor-mcp from -server")
     p.add_argument("-server", default="", help="with -lang java, the java-refactor-mcp checkout whose bin/jrefactor runs the tools")
     p.add_argument("-stages", type=int, default=2, help="batches after the first that the model may send when asked if it is done")
     a = p.parse_args()
@@ -699,7 +705,7 @@ def main():
         p.error("-view-asks asks for what the focused view leaves out; give -view focused")
     os.makedirs(a.out, exist_ok=True)
     if a.view == "focused" and a.lang != "go":
-        p.error("-view focused reads Go's call tree; -lang java has the outline view only")
+        p.error(f"-view focused reads Go's call tree; -lang {a.lang} has the outline view only")
     tmp = tempfile.mkdtemp(prefix="loop-")
     lang = langs.of(a.lang, tmp, a.server)
     listed = lang.tool_list()
