@@ -5,6 +5,7 @@ package tstest
 
 import (
 	"encoding/json"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -51,4 +52,48 @@ func Read(t testing.TB, dir, rel string) string {
 		t.Fatal(err)
 	}
 	return string(b)
+}
+
+// Unchanged fails t when a file under dir, other than those named in
+// changed, differs from files, the solution as it was written: changed,
+// added or removed. A test checks the files it expects to change itself.
+func Unchanged(t testing.TB, dir string, files map[string]string, changed ...string) {
+	t.Helper()
+	may := map[string]bool{}
+	for _, c := range changed {
+		may[c] = true
+	}
+	seen := map[string]bool{}
+	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		rel, _ := filepath.Rel(dir, p)
+		rel = filepath.ToSlash(rel)
+		seen[rel] = true
+		if may[rel] {
+			return nil
+		}
+		was, ok := files[rel]
+		if !ok {
+			t.Errorf("%s was added", rel)
+			return nil
+		}
+		b, err := os.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		if string(b) != was {
+			t.Errorf("%s changed:\n%s\nwas:\n%s", rel, b, was)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for rel := range files {
+		if !seen[rel] && !may[rel] {
+			t.Errorf("%s was removed", rel)
+		}
+	}
 }

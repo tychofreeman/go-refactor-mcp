@@ -14,18 +14,21 @@ import (
 func edited(t *testing.T, src, args string) (string, string) {
 	t.Helper()
 	dir := t.TempDir()
-	ws := tstest.Load(t, dir, map[string]string{
+	files := map[string]string{
 		"tsconfig.json": `{"compilerOptions": {"strict": true, "module": "ESNext", "moduleResolution": "Bundler", "noEmit": true, "types": []}, "include": ["src"]}`,
 		"src/g.ts":      src,
-	})
+	}
+	ws := tstest.Load(t, dir, files)
 	res := tstest.Run(t, ws, New(), `{"file": "src/g.ts", `+args[1:])
 	if !res.Applied {
+		tstest.Unchanged(t, dir, files)
 		return "", res.Refused
 	}
 	b, err := os.ReadFile(filepath.Join(dir, "src/g.ts"))
 	if err != nil {
 		t.Fatal(err)
 	}
+	tstest.Unchanged(t, dir, files, "src/g.ts")
 	return string(b), ""
 }
 
