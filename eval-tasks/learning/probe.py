@@ -102,8 +102,8 @@ def tools_of(batch):
     return out
 
 
-def sh(cmd, cwd=ROOT, stdin=None):
-    return subprocess.run(cmd, cwd=cwd, input=stdin, capture_output=True, text=True)
+def sh(cmd, cwd=ROOT, stdin=None, env=None):
+    return subprocess.run(cmd, cwd=cwd, input=stdin, capture_output=True, text=True, env=env)
 
 
 def view(kind, module):
