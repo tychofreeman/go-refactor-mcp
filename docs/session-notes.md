@@ -355,6 +355,9 @@ working patterns, with their steps, are in `docs/patterns.md`.
   is a server flag like `-no-code-by-text`, on in this repo's
   `.mcp.json` (the user, 2026-11-05): new Go and TypeScript files come
   from declaration and test_for, and functions from add_declaration.
+  A file under `testdata/` is exempt (2026-11-16): a golden's fixture
+  is data, in no loaded package, so no edit reaches it; write it, and
+  change it, with create_file (`overwrite`).
 - **Fowler's catalog and IntelliJ** (2026-11-04): `docs/catalog.md`.
   Run a composition before calling an entry missing: Encapsulate Variable
   and Record and Replace Function with Command first looked missing and

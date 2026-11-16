@@ -4736,6 +4736,12 @@ with printf, since create_file refuses bodies under -skeleton-only and
 no edit reaches testdata/. The fix went through add_declaration and
 replace_statements.
 
+## Golden fixtures under -skeleton-only (2026-11-16)
+
+`docs/sessions/fixtures-skeleton-only.md`. The gap of #653 and #661
+(fixtures written with printf) is closed: create_file takes a fixture
+under testdata/ whatever it holds. Nothing by hand.
+
 ## The loop's unnamed prompts, recorded (2026-11-16)
 
 `docs/sessions/loop-view-asks.md`. Docs through replace_text; nothing
