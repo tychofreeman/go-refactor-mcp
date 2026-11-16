@@ -50,7 +50,7 @@ func fromDeclaration(ws *workspace.Workspace, declaration string) (string, error
 // Skeleton is create_file for a server that creates structure by command:
 // TypeScript content with a function or method body is refused, while
 // classes with fields, interfaces, types and what declaration and
-// test_for write pass.
+// test_for write pass, and so does a fixture under testdata/.
 type Skeleton struct{ *CreateFile }
 
 // Plan refuses content with a body, else plans as create_file does.
@@ -59,7 +59,7 @@ func (s Skeleton) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
-	if ws.Owns(a.File) && a.Content != "" {
+	if ws.Owns(a.File) && a.Content != "" && !refactor.InTestdata(a.File) {
 		if name := tsapi.Bodied(a.Content); name != "" {
 			return nil, refactor.Refusef("this server creates code by structure: content may hold classes with fields, interfaces and types, not %s's body. Make the class with declaration (implements and extends give its stubs), a test with test_for, and each function or method with add_declaration", name)
 		}

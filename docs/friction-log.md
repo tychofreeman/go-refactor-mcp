@@ -4735,3 +4735,9 @@ fixtures (a go.mod and three short Go files, copied for the refusal),
 with printf, since create_file refuses bodies under -skeleton-only and
 no edit reaches testdata/. The fix went through add_declaration and
 replace_statements.
+
+## Golden fixtures under -skeleton-only (2026-11-16)
+
+`docs/sessions/fixtures-skeleton-only.md`. The gap of #653 and #661
+(fixtures written with printf) is closed: create_file takes a fixture
+under testdata/ whatever it holds. Nothing by hand.

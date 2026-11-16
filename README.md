@@ -179,7 +179,8 @@ Claude Code sets), or its working directory.
   Sessions had used it to paste code where an edit fit.
 - `-skeleton-only` (an experiment): `create_file` refuses code with
   function bodies; a type starts from `declaration`, a test from
-  `test_for`, and functions come from `add_declaration`.
+  `test_for`, and functions come from `add_declaration`. A test's
+  fixture under a `testdata/` directory takes any content.
 
 This repo runs with both.
 
