@@ -460,6 +460,25 @@ changes that reach many places, and its fixed cost is the view: a view
 that scales with the change rather than the module is what would help
 it next. What the loop becomes is the user's decision (roadmap 29).
 
+## A view sized to the change (cost-history 28)
+
+2026-11-16. `-view focused` (`probe.focused`) shows the plan what the
+prompt names, the functions of their package that call them, the
+type checker's use counts for each named function and field
+("`Shipment.Road`: 303 uses in 12 packages (compared 130, ...)"), and
+every package's names on one line, in place of the whole call tree.
+The loop then cost $0.05-0.09 a task on freight-xl and $0.07-0.10 on
+freight-xxl, 32/32 on each: the module's size no longer sets its cost,
+and on freight-xxl editing by hand costs 3.7x-11x as much. No plan
+failed for what the view left out; the counts told plans how far a
+change reaches, and they folded.
+
+The names come from the prompt, matched against the module's
+declarations. A prompt that describes behavior without naming code
+gets only the index, and `-no-read` gives no way to ask for more:
+that is untested, and is the next thing the view needs if the loop is
+pursued.
+
 ## Recording
 
 Each step in its own PR: the results in `docs/cost-history.md`, the

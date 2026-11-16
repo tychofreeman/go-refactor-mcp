@@ -4701,3 +4701,8 @@ gen_freight_scale.py through replace_text and create_file (#651, #652,
 ran separately, were appended to one results.jsonl with a short script
 (gitignored run output, not the repo). #653's by-hand fixtures are in
 its own entry.
+
+## The focused view's record (2026-11-16)
+
+Docs through replace_text; #656's loop.py and probe.py through
+replace_text. Nothing by hand.

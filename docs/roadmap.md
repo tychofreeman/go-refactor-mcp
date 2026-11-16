@@ -1440,6 +1440,10 @@ part left. What is open, the newest priority first:
     `-full-tools` (#651), an output cap (#652), inline at a declaration
     means every call (#653), freight-xxl (#654). Step 2, a runner of
     our own, and what the loop becomes, are still the user's decision.
+    *2026-11-16:* `-view focused` (#656, cost-history 28) takes the
+    module's size out of the loop's cost: $0.07-0.10 a task on
+    freight-xxl (from $0.16-0.19), 32/32. Untested: prompts that name
+    no code, and a way for the plan to ask for more of the module.
 
 30. **move_parameter counts a local as observable** (2026-10-25, the
     trap run, cost-history 15): with `from := p.Bin()` extracted,
@@ -3223,6 +3227,15 @@ candidates and the evidence for each, gathered from the friction log.
     no line, runs all_calls, and the result's `chose:` line says so.
     TypeScript's inline still refuses there; its counterpart is a PR
     of its own.
+
+57. **method_to_function drops the package of calls from other
+    packages** (2026-11-16, found by a loop attempt, cost-history 28).
+    On freight-xl, function_to_method of `Dispatch` and then
+    method_to_function of `Config.Dispatch` writes the calls in depots
+    and schedules as `Dispatch(c, ...)`, not `freight.Dispatch(c, ...)`;
+    the post-check refuses it as a bug in the precondition checks, so
+    nothing is written. Fix: qualify a call outside the method's package
+    (and import it), with a golden of a call from another package.
 
 Parked: the Ollama loop (`refactor-agent`). It works and stays, but Claude
 through MCP is the priority.
