@@ -3301,8 +3301,13 @@ candidates and the evidence for each, gathered from the friction log.
     Found on the way: remove_parameter's "the body of g uses last (at
     ...)" names a different use on different runs (a.go:4:15, 5:2 or
     6:9 in `remove_parameter/refuse_read_first`), so that fragment leaves
-    the position out. A refusal should name the first use in source
-    order; not yet fixed.
+    the position out. fold's refusal in `refuse_hole_twice_written_between`
+    names one of two obstacles by run (about one run in ten names
+    `c.Bump()` evaluated early, the others `c.Get()` evaluated once), so
+    its fragment is the part both share, `which assigns to c.count`; the
+    first fragment matched only the commoner one and failed `go test`
+    on #673's branch. A refusal should name the first use, or obstacle,
+    in source order; not yet fixed.
 
 60. **TypeScript tests check every file** (2026-11-16, a review of the
     tests the user asked for): the table-driven TypeScript tests compared

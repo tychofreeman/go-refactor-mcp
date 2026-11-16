@@ -1,1 +1,1 @@
-which assigns to c.count between its use
+which assigns to c.count
