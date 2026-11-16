@@ -1,0 +1,30 @@
+[
+  {
+    "name": "freight-xxl-unnamed-dispatch",
+    "dir": "testdata/freight-xxl",
+    "tests": "testdata/freight-xxl-dispatch",
+    "check": "go vet ./... && go test ./...",
+    "prompt": "In package freight, each carrier's shipping method logs where it ships to and appends what it shipped to its own record, in nearly the same way. Make them all do it through one package-level function dispatch(shipped *[]string, mode, to, text string), which logs \"<mode> ship to <to>\" with the standard logger and appends \"<to>: <text>\" to *shipped. What they ship and log must not change."
+  },
+  {
+    "name": "freight-xxl-unnamed-routes",
+    "dir": "testdata/freight-xxl",
+    "tests": "testdata/freight-xxl-routes",
+    "check": "go vet ./... && go test ./...",
+    "prompt": "A shipment keeps its road depot code and its rail yard code in two fields of their own. Replace those two fields with one field Routes map[string]string, keyed by route: \"road\" for the road depot code and \"rail\" for the rail yard code. Everything that used them, in every package, must work as before."
+  },
+  {
+    "name": "freight-xxl-unnamed-tail",
+    "dir": "testdata/freight-xxl",
+    "tests": "testdata/freight-xxl-tail",
+    "check": "go vet ./... && go test ./...",
+    "prompt": "Only the truck carrier uses the helper that keeps the final characters of a code. Replace it with a method tail(code string) string on the truck carrier's type that keeps the final 4 bytes of code, the part a driver sees, and remove the helper. What the truck's methods return and ship must not change."
+  },
+  {
+    "name": "freight-xxl-unnamed-run",
+    "dir": "testdata/freight-xxl",
+    "tests": "testdata/freight-xxl-run",
+    "check": "go vet ./... && go test ./...",
+    "prompt": "The package-level function that ships an order to shipments through every configured carrier should take its shipments and order as one value. Add a type freight.Run struct { Shipments []Shipment; Order Order } and change that function, keeping its name, to take (c Config, r Run) and return what it returns now, updating every caller in every package. What it ships and returns must not change."
+  }
+]
