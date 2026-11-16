@@ -1936,6 +1936,67 @@ argument names, one inline of a call that is not a whole return), 7 on
 routes (5 deleting a field its uses still named, before encapsulating
 it; one a step's wrong argument). About $5.40 spent.
 
+## 31. Claude Code sessions on freight-xxl (Nov 16)
+
+Sections 27-29 compared the loop with the loop's own manual arm, which
+writes every change as text edits with four repairs. No Claude Code
+session had run on freight-xxl. Sonnet, 8 runs a task, the user's-moves
+instructions (`claude-md-derivations`, as section 14):
+
+    go run ./cmd/refactor-ab -model sonnet -tasks eval-tasks/derivations-freight-xxl.json \
+      -arms mcp,manual -runs 8 -claude-md eval-tasks/claude-md-derivations \
+      -out eval-runs/ab-freightxxl-sessions-8
+
+and a third arm that works as the loop does (#668): `planned`, the mcp
+arm's tools and permissions with `planned.md` (mcp.md, and: plan the
+whole change from the view at the top of the task, send it as one batch
+with check "end" before reading a body, read only what a refusal or a
+failing test names), on `derivations-freight-xxl-planned.json`, whose
+prompts begin with the loop's focused view:
+
+    go run ./cmd/refactor-ab -model sonnet -tasks eval-tasks/derivations-freight-xxl-planned.json \
+      -arms planned -runs 8 -claude-md eval-tasks/claude-md-derivations \
+      -out eval-runs/ab-freightxxl-planned-8
+
+A check of one run of each arm first (`eval-runs/ab-freightxxl-check`,
+`eval-runs/ab-freightxxl-planned-check`) passed; the mcp arm's first
+inspect of the 21 packages answered in 30 ms. Means a run (medians):
+
+| task | loop, focused (28) | loop's manual arm (27) | session by hand | session, mcp | session, planned |
+|---|---|---|---|---|---|
+| dispatch | 8/8 $0.077 | 8/8 $0.285 | 7/8 $0.122 ($0.119) | 8/8 $0.165 ($0.159) | 8/8 $0.168 ($0.170) |
+| routes | 8/8 $0.096 | 5/8 $1.083 | 8/8 $0.123 ($0.114) | 6/8 $0.377 ($0.301) | 7/8 $0.266 ($0.245) |
+| tail | 8/8 $0.075 | 8/8 $0.283 | 8/8 $0.094 ($0.092) | 8/8 $0.139 ($0.140) | 8/8 $0.139 ($0.139) |
+| run | 8/8 $0.073 | 8/8 $0.552 | 8/8 $0.106 ($0.104) | 8/8 $0.169 ($0.154) | 8/8 $0.141 ($0.124) |
+
+| arm | requests a run | turns with a refused call (32 runs) | lines typed (by hand / in gorefactor arguments) | runaways |
+|---|---|---|---|---|
+| by hand | 4.8-7.1 | 0 | 0-8 / - | 0 |
+| mcp | 6.4-13.5 | 53 (most of them Bash the arm may not run: sed, awk, xargs) | 0-2 / 4-80 | 0 |
+| planned | 4.8-10.4 | 34 (likewise) | 0 / 3-25 | 0 |
+
+By hand, every wide change went through the shell: `sed -i` or
+`perl -pi` over the files (32 commands in 32 runs), or a script (43);
+Edit was used 11 times in all, on run and tail. The model never edited
+use by use. With the tools, the mcp arm folded where the operation was
+obvious (dispatch 8, run 9 with inline 9, tail 4 with inline 6), but on
+routes it made 628 edit steps in 8 runs (replace_expression at each
+use) and 6 folds. The planned arm sent its first batch before reading a
+body in 19 of 32 runs, after 2.2-5.6 requests, folded more on routes
+(10, with 144 edit steps) and cost 29% less there than mcp; elsewhere
+about the same.
+
+What it shows: a Claude Code session by hand is not the loop's manual
+arm. It reaches every place of a wide change with one shell command,
+so by hand costs $0.09-0.12 a run on freight-xxl, two to nine times
+less than the loop's manual arm, and passed 31 of 32. Against it, the
+loop with the focused view is 20-40% cheaper ($0.07-0.10), and the
+sessions with the tools 35-210% dearer. The planned instruction and
+view in a session did not bring a session to the loop's cost: the
+session's fixed context (instructions, tool definitions, 5-10
+requests) outweighs what the view saves. $17.53 spent (Step 1 $10.36,
+Step 2 $5.71, the checks $1.46).
+
 ## What made the difference
 
 - **Smaller results** (#75, rename locations): the largest single win when
