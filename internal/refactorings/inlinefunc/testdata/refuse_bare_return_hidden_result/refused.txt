@@ -1,1 +1,1 @@
-bare return
+a bare return cannot be used where a result is hidden

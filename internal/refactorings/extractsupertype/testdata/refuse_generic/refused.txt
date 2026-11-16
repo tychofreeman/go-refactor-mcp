@@ -1,1 +1,1 @@
-generic
+Tray is generic, which extract_supertype does not support yet

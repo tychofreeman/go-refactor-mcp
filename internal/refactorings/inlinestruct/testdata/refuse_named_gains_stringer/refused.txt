@@ -1,1 +1,1 @@
-String
+would give Bed a method String, through which it could implement an interface

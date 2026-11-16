@@ -1,1 +1,1 @@
-named results
+inlining functions with named results is not supported yet

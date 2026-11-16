@@ -1,1 +1,1 @@
-might block
+which receives from a channel, which might block

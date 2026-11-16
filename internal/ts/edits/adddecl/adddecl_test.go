@@ -196,3 +196,40 @@ func TestKeepsTemplateLiterals(t *testing.T) {
 		t.Fatalf("bed.ts:\n%s\nwant it to end:\n%s", got, want)
 	}
 }
+
+// A class whose members carry doc comments, a field with a trailing
+// comment among them, takes a new member after them.
+func TestAddsToAClassWithDocumentedMembers(t *testing.T) {
+	ws, dir := solution(t)
+	res := run(t, ws, `{"file": "src/bed.ts", "content": "export class Pot {\n  sizes: number[] = []; // in cm\n\n  /** Grows the pot. */\n  grow(): void {}\n\n  /** The pot's name. */\n  name(): string {\n    return \"pot\";\n  }\n}"}`)
+	if !res.Applied {
+		t.Fatalf("the class was not added: %s", res)
+	}
+	res = run(t, ws, `{"file": "src/bed.ts", "type": "Pot", "content": "/** Shrinks the pot. */\nshrink(): void {}"}`)
+	if !res.Applied {
+		t.Fatalf("the member was not added: %s", res)
+	}
+	want := "  /** The pot's name. */\n  name(): string {\n    return \"pot\";\n  }\n\n  /** Shrinks the pot. */\n  shrink(): void {}\n}\n"
+	if got := read(t, dir, "src/bed.ts"); !strings.HasSuffix(got, want) {
+		t.Fatalf("bed.ts:\n%s\nwant it to end:\n%s", got, want)
+	}
+}
+
+// Content whose field has a trailing comment and whose method has a doc
+// comment is split between them: the field goes after the fields, the
+// method with its doc comment at the end.
+func TestSplitsDocumentedContent(t *testing.T) {
+	ws, dir := solution(t)
+	res := run(t, ws, `{"file": "src/bed.ts", "content": "export class Pot {\n  size = 1;\n\n  grow(): void {}\n}"}`)
+	if !res.Applied {
+		t.Fatalf("the class was not added: %s", res)
+	}
+	res = run(t, ws, `{"file": "src/bed.ts", "type": "Pot", "content": "depth = 2; // in cm\n\n/** Shrinks the pot. */\nshrink(): void {}"}`)
+	if !res.Applied {
+		t.Fatalf("the members were not added: %s", res)
+	}
+	want := "export class Pot {\n  size = 1;\n\n  depth = 2; // in cm\n\n  grow(): void {}\n\n  /** Shrinks the pot. */\n  shrink(): void {}\n}\n"
+	if got := read(t, dir, "src/bed.ts"); !strings.HasSuffix(got, want) {
+		t.Fatalf("bed.ts:\n%s\nwant it to end:\n%s", got, want)
+	}
+}

@@ -1,1 +1,1 @@
-import cycle
+moving Double to package q would make an import cycle

@@ -138,7 +138,8 @@ standalone module).
    `InputSchema`, made from the struct `Plan` decodes (a field per
    argument with a `desc` tag, omitempty on the optional ones).
 2. Add golden cases under `testdata/<case>/`: `in/` (a complete module with
-   `go.mod`), `args.json`, and either `out/` or `refused.txt`; with `out/`,
+   `go.mod`), `args.json`, and either `out/` or `refused.txt` (a phrase of the
+   refusal that names the rule, at least 15 characters); with `out/`,
    an optional `notes.txt` lists substrings the result's notes must contain,
    one per line. Generate `out/`
    with `go test ./internal/refactorings/<name>/ -update` and review the diff.

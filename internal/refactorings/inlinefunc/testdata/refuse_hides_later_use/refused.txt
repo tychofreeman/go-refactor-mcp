@@ -1,1 +1,1 @@
-would hide
+which would hide the package-level variable limit used later

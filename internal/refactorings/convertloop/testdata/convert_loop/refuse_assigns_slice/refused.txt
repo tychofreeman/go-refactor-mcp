@@ -1,1 +1,1 @@
-assigns names
+the loop at line 6 assigns names

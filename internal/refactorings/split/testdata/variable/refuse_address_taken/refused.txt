@@ -1,1 +1,1 @@
-address
+the address of n is taken, so code holding it would see the old variable

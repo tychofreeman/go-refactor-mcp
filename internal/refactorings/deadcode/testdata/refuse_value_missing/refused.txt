@@ -1,1 +1,1 @@
-leaves ws zero
+leaves ws zero, not WS; give it ws first
