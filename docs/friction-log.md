@@ -4701,3 +4701,9 @@ gen_freight_scale.py through replace_text and create_file (#651, #652,
 ran separately, were appended to one results.jsonl with a short script
 (gitignored run output, not the repo). #653's by-hand fixtures are in
 its own entry.
+
+## inline: all_calls with function, again (2026-11-16)
+
+The golden copied from another with `move` (copy, then delete of its
+`chose.txt`) and create_file of its args; the fix with
+replace_expression. Nothing by hand.

@@ -91,12 +91,14 @@ func (*Inline) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Pla
 
 // Expand hands a function to inline_function, which runs all_calls, or the
 // function's declaration given in place of a call, as one step per call.
+// function names a local's function, except with all_calls, where it is
+// ignored as before.
 func (*Inline) Expand(ws *workspace.Workspace, raw json.RawMessage) ([]refactor.Step, error) {
 	var a args
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
-	if a.Field != "" || a.Function != "" {
+	if a.Field != "" || a.Function != "" && !a.AllCalls {
 		return nil, nil
 	}
 	to := inlinefunc.New()
