@@ -3236,6 +3236,8 @@ candidates and the evidence for each, gathered from the friction log.
     the post-check refuses it as a bug in the precondition checks, so
     nothing is written. Fix: qualify a call outside the method's package
     (and import it), with a golden of a call from another package.
+    *Done* (2026-11-16, `docs/sessions/method-to-function-qualify.md`):
+    an unexported new_name with such a call is refused.
 
 Parked: the Ollama loop (`refactor-agent`). It works and stays, but Claude
 through MCP is the priority.

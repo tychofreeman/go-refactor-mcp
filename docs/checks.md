@@ -846,7 +846,12 @@ for every call; what can change is which types have the method:
   one of its files, not predeclared, and not hidden by a local at any
   call;
 - a call whose receiver contains another call of the method
-  (`n.after().after()`) is refused; assign the inner one first.
+  (`n.after().after()`) is refused; assign the inner one first;
+- a call in another package names the function through that file's
+  name for the method's package (`freight.Dispatch(c, a)`), importing
+  it where the file holds the receiver without importing its package;
+  such a call is refused if a local hides the package's name there, or
+  if `new_name` is not exported (2026-11-16, roadmap 57).
 
 ## Function to method: what it checks
 
