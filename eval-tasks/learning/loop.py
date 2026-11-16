@@ -55,7 +55,7 @@ the arguments the tool takes):
 
 {tools}
 
-The module, as a call tree (names, signatures and doc comments; no bodies):
+{head}
 
 {view}
 
@@ -90,6 +90,15 @@ with the next batch, which runs on the module as this one left it:
 UNPARSED = """Your answer was not one JSON object with a "batch" key that parses.
 Answer with that JSON alone, nothing before or after it:
 {"batch": {"steps": [...]}}."""
+
+# HEADS introduces the plan's view of the module, by -view.
+HEADS = {
+    "calltree": "The module, as a call tree (names, signatures and doc comments; no bodies):",
+    "focused": """The module, as far as the change reaches: what it names, with signatures,
+doc comments and calls (no bodies), and the functions of their package
+that call them; how many places use each, from the type checker; and
+every package's names.""",
+}
 
 # MAY_READ, in PLAN, lets the first answer ask for source; without it
 # (-no-read), source comes only with a repair, for what failed.
@@ -359,7 +368,7 @@ PLAN_MANUAL = """You are making a change to a Go module. You have no tools in th
 conversation: you answer with JSON, and a program applies it and tells
 you what happened.
 
-The module, as a call tree (names, signatures and doc comments; no bodies):
+{head}
 
 {view}
 
@@ -534,7 +543,7 @@ ARMS = {
 }
 
 
-def attempt(task, model, tools, binary, repairs, log, may_read=True, stages=2, read_after=False, patch=False, arm=ARMS["refactor"], tool_entries=None):
+def attempt(task, model, tools, binary, repairs, log, may_read=True, stages=2, read_after=False, patch=False, arm=ARMS["refactor"], tool_entries=None, view="calltree"):
     """One attempt at task. A batch that applies and passes the module's
     tests is kept, and the model is asked whether the change is done; if
     not, its next batch runs on what the kept ones left, at most stages
@@ -544,9 +553,12 @@ def attempt(task, model, tools, binary, repairs, log, may_read=True, stages=2, r
     repair may answer with the failed batch's steps from one on. arm says
     what the model answers with: steps, or text edits (a batch's steps
     then being the edits). With tool_entries, tools is an index, and the
-    model asks for the entries of the tools it will use."""
+    model asks for the entries of the tools it will use. view is the
+    plan's view of the module: the whole call tree, or focused on what
+    the task's prompt names (probe.focused)."""
     module = os.path.join(ROOT, "eval-tasks", task["dir"])
-    text = arm.plan.format(tools=tools, view=probe.view("calltree", module), prompt=task["prompt"],
+    shown = probe.focused(binary, module, task["prompt"]) if view == "focused" else probe.view("calltree", module)
+    text = arm.plan.format(tools=tools, head=HEADS[view], view=shown, prompt=task["prompt"],
                            read=READ_AFTER if read_after else arm.may_read if may_read else "")
     may_read = may_read and not read_after
     row = {"reads": 0, "repairs": 0, "patches": 0, "tool_asks": 0, "tools_asked": 0, "stages": 0, "refusals": [], "error": ""}
@@ -656,6 +668,8 @@ def main():
                    help="what the model answers with: gorefactor steps, or text edits the loop applies")
     p.add_argument("-reference", default="compact", choices=["compact", "full"],
                    help="the tools as compact signatures and descriptions, or as the server publishes them")
+    p.add_argument("-view", default="calltree", choices=sorted(HEADS),
+                   help="the plan's view of the module: the whole call tree, or focused on what the prompt names, with use counts and an index of names")
     p.add_argument("-stages", type=int, default=2, help="batches after the first that the model may send when asked if it is done")
     a = p.parse_args()
     if a.arm == "manual" and (a.read_after or a.index or "ref" in a.models.split(",")):
@@ -685,7 +699,7 @@ def main():
                 model = Ref(ref) if m == "ref" else Model(m, empty)
                 log = []
                 row = {"task": t["name"], "model": m, "run": n, "arm": a.arm}
-                row.update(attempt(t, model, tools, binary, a.repairs, log, may_read=not a.no_read, stages=a.stages, read_after=a.read_after, patch=a.patch, arm=ARMS[a.arm], tool_entries=tool_entries))
+                row.update(attempt(t, model, tools, binary, a.repairs, log, may_read=not a.no_read, stages=a.stages, read_after=a.read_after, patch=a.patch, arm=ARMS[a.arm], tool_entries=tool_entries, view=a.view))
                 row.update(cost=model.cost, requests=model.requests, usage=model.usage, runaways=model.runaways)
                 with open(os.path.join(a.out, f"{t['name']}-{m}-{n}.txt"), "w") as f:
                     f.write("\n\n==== next answer ====\n\n".join(log))
