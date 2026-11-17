@@ -3342,5 +3342,16 @@ candidates and the evidence for each, gathered from the friction log.
     variable, and the refusals that guard behavior (Java's ProbeTest has
     101 of those, each naming its refusal).
 
+62. **A struct literal's key, everywhere** (2026-11-17, cost-history 32):
+    with `replace_expression` everywhere and holes, routes' reads went in
+    one step each, but its struct literals (`Shipment{Road: "x"}` to
+    `Shipment{Routes: map[string]string{"road": "x"}}`) are not
+    expressions it addresses, and sessions spent 16 refused shell turns
+    and replace_declaration on them. An element of a composite literal
+    as a pattern (`Road: $v` within the literals of one type), as an
+    option of replace_expression or add_element, would cover them; fold
+    of a setter covers them already (derivations, "change a
+    representation") but no session chose it.
+
 Parked: the Ollama loop (`refactor-agent`). It works and stays, but Claude
 through MCP is the priority.

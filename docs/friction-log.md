@@ -4754,3 +4754,8 @@ The planned arm (#668) through add_element and replace_expression on
 replace_text and create_file. Nothing by hand. A check meant to be free
 (`refactor-ab -runs 0`) ran one session of each task ($1.24): `-runs 0`
 means the default of one.
+
+## replace_expression everywhere, measured (2026-11-17)
+
+Docs through replace_text; nothing by hand. The A/B ran from #676's
+branch, before it was merged.

@@ -1997,6 +1997,35 @@ session's fixed context (instructions, tool definitions, 5-10
 requests) outweighs what the view saves. $17.53 spent (Step 1 $10.36,
 Step 2 $5.71, the checks $1.46).
 
+## 32. replace_expression everywhere, with holes (Nov 17)
+
+Section 31's mcp arm again, with the server of #676 (`replace_expression`
+with `everywhere` and `$name` holes; nothing in the instructions names
+it, only the tool's description), from its branch:
+
+    go run ./cmd/refactor-ab -model sonnet -tasks eval-tasks/derivations-freight-xxl.json \
+      -arms mcp -runs 8 -claude-md eval-tasks/claude-md-derivations \
+      -out eval-runs/ab-freightxxl-everywhere-8
+
+| task | before (31): passed, cost, requests, edit steps | with everywhere: passed, cost, requests, edit steps |
+|---|---|---|
+| dispatch | 8/8 $0.165 7.9 12 | 8/8 $0.168 7.9 18 |
+| routes | 6/8 $0.377 13.5 628 | 8/8 $0.391 14.2 153 |
+| tail | 8/8 $0.139 6.8 13 | 8/8 $0.132 6.0 10 |
+| run | 8/8 $0.169 6.4 11 | 8/8 $0.196 8.0 35 |
+| all | 30/32, $6.80 | 32/32, $7.10 |
+
+On routes every replace_expression step used `everywhere` (41 in 8 runs,
+11 of them with holes, against 525 single-use steps before), the edit
+steps fell from 628 to 153 and both failures went; the cost did not
+move ($0.39 a run, 14 requests). What is left is what the option cannot
+reach: struct literals (`Road: "x"`), which the sessions tried to
+rewrite with `sed`/`perl` (16 refused Bash turns) and then with
+replace_declaration; and 16 ToolSearch calls. Run and dispatch did not
+need it and cost about the same as before (run's 35 edit steps are one
+run's per-call edits of Dispatch). By hand stays at $0.09-0.12 (31).
+$7.10 spent.
+
 ## What made the difference
 
 - **Smaller results** (#75, rename locations): the largest single win when
