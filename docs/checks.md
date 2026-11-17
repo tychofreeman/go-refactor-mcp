@@ -1702,6 +1702,19 @@ same types, so `c.Body` in another method of the same type matches and
 `d.Body` of another type does not. A change in the expression's type is
 noted; the result must type-check.
 
+With `everywhere` (2026-11-17) it replaces every such expression in the
+module's files, tests included, each file with the imports `new` needs.
+`$name` holes in `expression` stand for any expression: the occurrence
+at `line` binds each hole's type and each other name's object, and an
+expression elsewhere matches when it has the same shape (node kinds,
+operators, literals, names), its names refer to the same objects (a
+local, to one of the same type) and each hole's expression has the bound
+type; the replacement is `new` with each hole's source, parenthesized
+unless it is a primary expression. Refused: `new` using a hole other
+than once, or in another order than `expression` (what the hole stands
+for would be evaluated another number of times, or in another order).
+A `$` inside a string literal of `expression` is read as a hole too.
+
 ### add_field
 
 `add_field` adds fields to a struct type: one or more, as Go source with
