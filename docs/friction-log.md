@@ -4764,3 +4764,8 @@ its exits a `done, v` pair; fold matches one return, or statements
 without results), so sameObject was declared and both switches replaced
 with calls; and fold does not match a function of statements and a
 result, so one copy of `fitted` became a call by replace_statements.
+
+## replace_expression everywhere, measured (2026-11-17)
+
+Docs through replace_text; nothing by hand. The A/B ran from #676's
+branch, before it was merged.

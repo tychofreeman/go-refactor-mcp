@@ -124,6 +124,8 @@ context.
 
 ## Follow-ups
 
-- The A/B on freight-xxl (sessions with the tools) to see whether a
-  session uses `everywhere` with holes in place of per-use edits.
+- The A/B on freight-xxl: done (cost-history 32). Sessions used
+  `everywhere` for every replace_expression on routes (11 of 41 with
+  holes); edit steps 628 to 153, 8/8 passed, cost unchanged ($0.39).
+  Struct literals are left: roadmap 62.
 - refactor-tokens: large writes inside batches; undone steps.
