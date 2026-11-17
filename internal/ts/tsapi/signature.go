@@ -509,6 +509,21 @@ func (p *Project) family(c *checker.Checker, fn *ast.Node) ([]*ast.Node, string)
 	return family, ""
 }
 
+// DeclaresFunction reports whether the file at path declares the function
+// or method name, as ParamsToObject finds one, and no class, interface or
+// type of that name (whose constructor it would find).
+func (p *Project) DeclaresFunction(path, name string) bool {
+	l, why := p.lined(path)
+	if why != "" {
+		return false
+	}
+	if _, why := l.typeDecl(nil, 0, name, 0); why == "" {
+		return false
+	}
+	_, _, _, why = l.function(name)
+	return why == ""
+}
+
 // typeName is the name of a class or interface, or "the class" for one
 // without a name.
 func typeName(t *ast.Node) string {

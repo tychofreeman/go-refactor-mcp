@@ -4769,3 +4769,15 @@ result, so one copy of `fitted` became a call by replace_statements.
 
 Docs through replace_text; nothing by hand. The A/B ran from #676's
 branch, before it was merged.
+
+## extract_variable as parameter, extract_type of parameters (2026-11-17, #634)
+
+Nothing by hand: the tests through add_declaration and insert_statements,
+the routing through add_field, insert_statements, add_declaration and one
+replace_statements (TypeScript's extract_type, whose one statement gained
+a branch), descriptions and docs through replace_text. Two refusals, each
+answered with the step it named: insert_statements of `changesig.` was
+ambiguous between Go's and TypeScript's package (retried with `imports`);
+and replace_text of a refusal's text with `"parameter"` in quotes was
+refused under -no-code-by-text, rightly: the quotes would have ended the
+string literal.
