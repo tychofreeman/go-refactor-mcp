@@ -33,7 +33,7 @@ func New() *ReplaceExpression {
 }
 
 func (*ReplaceExpression) Description() string {
-	return `Replace an expression with a new one, to change part of a statement without restating it. Replacing s.Unit with s.Attr("unit") on its line changes that read alone. With all_occurrences, every expression in the file that means the same is replaced: the same tokens, the same names referring to the same things, so c.Body in another method of the same type matches and d.Body of another type does not.
+	return `Replace an expression with a new one, to change part of a statement without restating it. Replacing s.Unit with s.Attr("unit") on its line changes that read alone. With all_occurrences, every expression in the file that means the same is replaced: the same tokens, the same names referring to the same things, so c.Body in another method of the same type matches and d.Body of another type does not. With everywhere, every file of the module. A $name hole stands for any expression of the type it has at line: expression $p.Height with new $p.Size("height") rewrites p.Height, beds[i].Height and b.First().Height alike; each hole appears in new once.
 Identify the expression by file, the line it starts on and its source text (whitespace may differ; column if the text is on the line twice). new is parenthesized where its context needs it (b becomes (b + 1) in a * b). A change in the expression's type is noted.`
 }
 
@@ -47,6 +47,7 @@ type args struct {
 	Column         int      `json:"column,omitempty" desc:"Optional 1-based column where it starts, if the text occurs more than once on the line."`
 	New            string   `json:"new" desc:"The new expression, as Go source."`
 	AllOccurrences bool     `json:"all_occurrences,omitempty" desc:"Also replace every other expression in the file that means the same."`
+	Everywhere     bool     `json:"everywhere,omitempty" desc:"Replace every expression in the module (every file, tests included) that means the same as the one at line."`
 	Imports        []string `json:"imports,omitempty" desc:"Optional: import paths to use for package names the new expression uses, when the name alone is ambiguous."`
 }
 
@@ -55,6 +56,9 @@ func (*ReplaceExpression) Plan(ws *workspace.Workspace, raw json.RawMessage) (*r
 	var a args
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
+	}
+	if a.Everywhere || holeRE.MatchString(a.Expression) {
+		return planPattern(ws, a)
 	}
 	path := ws.Abs(a.File)
 	opened, err := site.At(ws, path)
@@ -93,11 +97,7 @@ func (*ReplaceExpression) Plan(ws *workspace.Workspace, raw json.RawMessage) (*r
 	var es []edit.TextEdit
 	for _, t := range targets {
 		text := strings.TrimSpace(a.New)
-		if path := analysis.PathTo(file, t); len(path) > 1 && analysis.NeedsParens(newExpr, path[1], t) {
-			text = "(" + text + ")"
-		} else if analysis.InControlHeader(newExpr, path) {
-			text = gocode.BracketComposites(text)
-		}
+		text = fitted(file, t, newExpr, text)
 		off := ws.Fset.Position(t.Pos()).Offset
 		es = append(es, edit.TextEdit{Start: off, End: ws.Fset.Position(t.End()).Offset, NewText: text})
 	}
@@ -119,4 +119,16 @@ func (*ReplaceExpression) Plan(ws *workspace.Workspace, raw json.RawMessage) (*r
 		plan.Notes = append(plan.Notes, gocode.ImportNote("removed", removed)+", which only the replaced expression used")
 	}
 	return plan, nil
+}
+
+// fitted is text, new's source, as it replaces the expression t of file:
+// parenthesized where t's context needs it, its composite literals
+// bracketed in a control clause's header.
+func fitted(file *ast.File, t ast.Expr, newExpr ast.Expr, text string) string {
+	if path := analysis.PathTo(file, t); len(path) > 1 && analysis.NeedsParens(newExpr, path[1], t) {
+		text = "(" + text + ")"
+	} else if analysis.InControlHeader(newExpr, path) {
+		text = gocode.BracketComposites(text)
+	}
+	return text
 }

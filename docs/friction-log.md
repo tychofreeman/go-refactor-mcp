@@ -4755,6 +4755,16 @@ replace_text and create_file. Nothing by hand. A check meant to be free
 (`refactor-ab -runs 0`) ran one session of each task ($1.24): `-runs 0`
 means the default of one.
 
+## replace_expression everywhere, with holes (2026-11-17)
+
+`docs/sessions/replace-expression-everywhere.md`. Fixtures through
+create_file (#663). By hand, two gaps: a switch whose exits all return
+false could not be extracted as a bool predicate (extract_function makes
+its exits a `done, v` pair; fold matches one return, or statements
+without results), so sameObject was declared and both switches replaced
+with calls; and fold does not match a function of statements and a
+result, so one copy of `fitted` became a call by replace_statements.
+
 ## replace_expression everywhere, measured (2026-11-17)
 
 Docs through replace_text; nothing by hand. The A/B ran from #676's
