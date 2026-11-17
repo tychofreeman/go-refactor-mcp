@@ -13,8 +13,12 @@ working patterns, with their steps, are in `docs/patterns.md`.
 
 ## Working with the user
 
-- **One item per branch and PR; the user merges** (or asks a session to),
-  then pulls main and reconnects the MCP, so the next item uses the new
+- **One item per branch and PR; Claude merges its own** once CI is green
+  and the PR has no conflict, with a merge commit (2026-11-16, the user:
+  "I prefer that you merge in the Go repo as well", as in
+  java-refactor-mcp). Merge main into a PR that a merge left behind, and
+  let CI run on the result before merging it. The user then pulls main and
+  reconnects the MCP, so the next item uses the new
   server. Wait for that before relying on a change to the tools. When the
   user says "do X, then Y", do them in order, each in its own PR.
 - **Stacked PRs:** if one fails CI, fix the lowest branch and merge

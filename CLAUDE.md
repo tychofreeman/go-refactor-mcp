@@ -34,7 +34,8 @@ or composition makes is made by hand and logged in `docs/friction-log.md`
 (one entry per PR: what was done by hand, the sequences tried, why each
 failed); candidate edit tools are in `docs/edits.md`.
 
-One branch and one PR per item, never commits to main; the user merges.
+One branch and one PR per item, never commits to main; merge your own PR
+once CI is green and it has no conflict (session notes).
 When the user says "do X, then Y", do them in order, each in its own PR.
 Before pushing, run what CI runs (`.github/workflows/test.yml`); hand
 edits are not gofmt-ed, so this catches them:
