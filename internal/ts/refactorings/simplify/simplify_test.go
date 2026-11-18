@@ -1958,3 +1958,19 @@ export function use(v: unknown): string[] {
 		t.Errorf("src/g.ts:\n%s", got)
 	}
 }
+
+// A variable whose value reads a parameter that is assigned before the use
+// is not inlined there: the use would see the new value (found by the
+// stress run on Hono, where PatternRouter.add's tests failed).
+func TestInlineVariableReadingAnAssignedParameter(t *testing.T) {
+	ws, _ := load(t, map[string]string{"src/g.ts": `export function add(path: string): string {
+  const suffix = path.endsWith("*") ? "" : "/?$";
+  path = path.replace(/\*$/, "");
+  return path + suffix;
+}
+`})
+	res := run(t, ws, NewInline(), `{"file": "src/g.ts", "line": 2, "name": "suffix"}`)
+	if res.Applied || !strings.Contains(res.Refused, "path") {
+		t.Errorf("want a refusal naming path, got %s", res)
+	}
+}

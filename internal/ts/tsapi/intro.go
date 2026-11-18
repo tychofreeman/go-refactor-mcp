@@ -240,8 +240,12 @@ func operand(l *lined, e *ast.Node) string {
 	return "(" + l.source(e) + ")"
 }
 
-// isConst reports whether the declaration d is of a const.
+// isConst reports whether the declaration d is of a const, or of what
+// cannot be assigned: not a let, var or parameter.
 func isConst(d *ast.Node) bool {
+	if d != nil && ast.IsParameterDeclaration(d) {
+		return false // the body may assign it
+	}
 	if d == nil || !ast.IsVariableDeclaration(d) {
 		return true // a function, class, enum or import
 	}
