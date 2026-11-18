@@ -1077,7 +1077,9 @@ func (w *walk) stmt(n *ast.Node) Effects {
 		out.add(a.Of(s.Expression))
 		w.switches++
 		for _, c := range s.CaseBlock.AsCaseBlock().Clauses.Nodes {
-			out.add(a.Of(c.Expression()))
+			if ast.IsCaseClause(c) { // a default clause has no expression
+				out.add(a.Of(c.Expression()))
+			}
 			out.add(w.stmts(c.Statements()))
 		}
 		w.switches--

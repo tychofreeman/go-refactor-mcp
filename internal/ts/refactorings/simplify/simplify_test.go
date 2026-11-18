@@ -1906,3 +1906,55 @@ export function both(a: Plant, b: Plant): number {
 		})
 	}
 }
+
+// What a call does is found through a switch with a default clause, which
+// has no expression (found by the stress run on Hono: it panicked).
+func TestInlineVariableCallingASwitch(t *testing.T) {
+	ws, dir := load(t, map[string]string{"src/g.ts": `function kind(xs: number[]): number {
+  let n = 0;
+  for (const x of xs) {
+    switch (x) {
+      case 1:
+        n++;
+        break;
+      default:
+        n += 2;
+    }
+  }
+  return n;
+}
+export function use(): number {
+  const k = kind([1, 2]);
+  return k + 1;
+}
+`})
+	if res := run(t, ws, NewInline(), `{"file": "src/g.ts", "line": 15, "name": "k"}`); !res.Applied {
+		t.Fatalf("%s", res)
+	}
+	if got := tstest.Read(t, dir, "src/g.ts"); !strings.Contains(got, "return kind([1, 2]) + 1;") {
+		t.Errorf("src/g.ts:\n%s", got)
+	}
+}
+
+// A type guard whose body narrows as its predicate does is inlined: the
+// inlined condition narrows the argument itself. (On Hono, isObject's
+// predicate named a narrower type than its body proves, and the type
+// check refused the change; roadmap 64.)
+func TestInlineTypeGuardThatNarrows(t *testing.T) {
+	ws, dir := load(t, map[string]string{"src/g.ts": `function isObject(v: unknown): v is object {
+  return typeof v === "object" && v !== null;
+}
+function keys(o: object): string[] {
+  return Object.keys(o);
+}
+export function use(v: unknown): string[] {
+  return isObject(v) ? keys(v) : [];
+}
+`})
+	if res := run(t, ws, NewInline(), `{"file": "src/g.ts", "name": "isObject", "all_calls": true}`); !res.Applied {
+		t.Fatalf("%s", res)
+	}
+	if got := tstest.Read(t, dir, "src/g.ts"); !strings.Contains(got, `return typeof v === "object" && v !== null ? keys(v) : [];`) {
+		t.Errorf("src/g.ts:\n%s", got)
+	}
+}
