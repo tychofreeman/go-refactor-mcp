@@ -14,6 +14,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
 
@@ -179,19 +180,12 @@ func planReadValue(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan
 			}
 		}
 	}
-	plan := &refactor.Plan{Summary: fmt.Sprintf("wrote %s for %s at %d read%s, and deleted it from %d literal%s", a.Value, f.Name(), reads, plural(reads), lits, plural(lits))}
+	plan := &refactor.Plan{Summary: fmt.Sprintf("wrote %s for %s at %d read%s, and deleted it from %d literal%s", a.Value, f.Name(), reads, textutil.Plural(reads), lits, textutil.Plural(lits))}
 	for path, es := range byFile {
 		plan.Edits = append(plan.Edits, edit.FileEdit{Path: path, Edits: es})
 	}
 	plan.Edits = edit.Merge(plan.Edits)
 	return plan, nil
-}
-
-func plural(n int) string {
-	if n == 1 {
-		return ""
-	}
-	return "s"
 }
 
 // valuePath resolves value, a path of named's fields ("WS", "Site.WS"),

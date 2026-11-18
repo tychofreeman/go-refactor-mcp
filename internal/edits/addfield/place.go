@@ -5,6 +5,7 @@ import (
 	"go/token"
 	"strings"
 
+	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/gocode"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
@@ -42,7 +43,7 @@ func fieldNamed(st *ast.StructType, name string) *ast.Field {
 // name for an embedded field).
 func fieldDeclares(f *ast.Field, name string) bool {
 	if len(f.Names) == 0 {
-		return embeddedName(f.Type) == name
+		return analysis.EmbeddedName(f.Type) == name
 	}
 	for _, n := range f.Names {
 		if n.Name == name {
@@ -50,22 +51,6 @@ func fieldDeclares(f *ast.Field, name string) bool {
 		}
 	}
 	return false
-}
-
-func embeddedName(e ast.Expr) string {
-	switch t := e.(type) {
-	case *ast.StarExpr:
-		return embeddedName(t.X)
-	case *ast.SelectorExpr:
-		return t.Sel.Name
-	case *ast.Ident:
-		return t.Name
-	case *ast.IndexExpr:
-		return embeddedName(t.X)
-	case *ast.IndexListExpr:
-		return embeddedName(t.X)
-	}
-	return ""
 }
 
 // insertEdit places the fields' text in the struct: at the end, or just

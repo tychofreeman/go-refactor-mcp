@@ -224,7 +224,7 @@ func (x *extraction) selectFields(names []string) error {
 	var idx []int
 	for _, f := range x.st.Fields.List {
 		if len(f.Names) == 0 {
-			name := embeddedName(f.Type)
+			name := analysis.EmbeddedName(f.Type)
 			if x.moving[name] {
 				return refactor.Refusef("%s is an embedded field; moving embedded fields is not supported yet", name)
 			}
@@ -257,22 +257,6 @@ func (x *extraction) selectFields(names []string) error {
 	x.lo, x.hi = idx[0], idx[len(idx)-1]
 	x.contig = x.hi-x.lo+1 == len(idx)
 	return nil
-}
-
-func embeddedName(e ast.Expr) string {
-	switch t := e.(type) {
-	case *ast.StarExpr:
-		return embeddedName(t.X)
-	case *ast.SelectorExpr:
-		return t.Sel.Name
-	case *ast.Ident:
-		return t.Name
-	case *ast.IndexExpr:
-		return embeddedName(t.X)
-	case *ast.IndexListExpr:
-		return embeddedName(t.X)
-	}
-	return ""
 }
 
 // checkNames refuses a new type name that is taken, and a moving field
