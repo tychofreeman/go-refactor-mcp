@@ -8,8 +8,6 @@ import (
 
 	"github.com/buke/typescript-go-internal/v7/pkg/ast"
 	"github.com/buke/typescript-go-internal/v7/pkg/checker"
-
-	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 )
 
 // MoveMethod returns the edits that move the method name ("Soil.acid") of
@@ -157,7 +155,7 @@ func (p *Project) MoveMethod(ctx context.Context, path, name, to string, also []
 		if !ok {
 			return nil, fmt.Sprintf("%s shares a line with other code; put it on lines of its own first", memberName(m))
 		}
-		texts = append(texts, strings.TrimSuffix(textutil.ReindentSteps(l.text[a:b], l.indent(l.line(l.pos(m))), pl.Indent, fromStep, toStep), "\n"))
+		texts = append(texts, strings.TrimSuffix(l.reindentSteps(a, b, l.indent(l.line(l.pos(m))), pl.Indent, fromStep, toStep), "\n"))
 		edits = append(edits, Edit{File: l.f.FileName(), Start: a, End: b})
 	}
 	text := strings.Join(texts, "\n\n")

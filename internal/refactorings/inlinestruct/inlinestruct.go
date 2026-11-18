@@ -109,7 +109,7 @@ func (x *inlining) find() error {
 	}
 	x.outer, x.outerAST = tn.Type().(*types.Named), st
 	for _, f := range st.Fields.List {
-		if (len(f.Names) == 0 && embeddedName(f.Type) == x.a.Field) || (len(f.Names) == 1 && f.Names[0].Name == x.a.Field) {
+		if (len(f.Names) == 0 && analysis.EmbeddedName(f.Type) == x.a.Field) || (len(f.Names) == 1 && f.Names[0].Name == x.a.Field) {
 			x.fld = f
 		}
 	}
@@ -563,9 +563,6 @@ func typeIdent(e ast.Expr) *ast.Ident {
 	}
 	return &ast.Ident{}
 }
-
-// embeddedName is the name an embedded field of type e has.
-func embeddedName(e ast.Expr) string { return typeIdent(e).Name }
 
 // sameObj reports whether a and b are the same object, though they may
 // come from different variants of a package (the package and its test).

@@ -34,8 +34,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"unicode"
-	"unicode/utf8"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
@@ -1795,12 +1793,8 @@ func (x *extraction) checkNewName() error {
 		}
 	}
 	if strings.HasSuffix(x.path, "_test.go") {
-		for _, prefix := range []string{"Test", "Benchmark", "Example", "Fuzz"} {
-			if rest, ok := strings.CutPrefix(x.name, prefix); ok {
-				if r, _ := utf8.DecodeRuneInString(rest); rest == "" || !unicode.IsLower(r) {
-					return refactor.Refusef("%s in a _test.go file looks like a %s function to go test; choose another name", x.name, strings.ToLower(prefix))
-				}
-			}
+		if k := analysis.TestKind(x.name); k != "" {
+			return refactor.Refusef("%s in a _test.go file looks like a %s function to go test; choose another name", x.name, k)
 		}
 	}
 	// A local declaration of the name in scope at the call site would hide
@@ -1943,7 +1937,7 @@ func (x *extraction) plan() (*refactor.Plan, error) {
 	if err != nil {
 		return nil, err
 	}
-	fn.WriteString(reindent(text, indent, unit))
+	fn.WriteString(textutil.Reindent(text, indent, unit))
 	if tail != "" {
 		fmt.Fprintf(&fn, "\n%sreturn %s", unit, tail)
 	}
@@ -2240,9 +2234,6 @@ func itThem(n int) string {
 	}
 	return "them"
 }
-
-// reindent re-indents text; see textutil.Reindent.
-func reindent(text, from, to string) string { return textutil.Reindent(text, from, to) }
 
 // topDecl returns the top-level declaration containing the selection.
 func (x *extraction) topDecl() ast.Decl {

@@ -877,11 +877,6 @@ func valueReceiver(sel *types.Selection) bool {
 	return recv != nil && !IsPointer(recv.Type())
 }
 
-func isInteger(t types.Type) bool {
-	b, ok := t.Underlying().(*types.Basic)
-	return ok && b.Info()&types.IsInteger != 0
-}
-
 // writes reports whether a call's write goes to memory of its own:
 // target in place (a local variable or part of one), or what target
 // points to (a fresh local, or the address of a local).

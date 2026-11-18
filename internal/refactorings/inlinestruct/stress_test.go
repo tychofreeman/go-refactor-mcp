@@ -18,6 +18,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor/refactortest"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
@@ -58,7 +59,7 @@ func TestStress(t *testing.T) {
 					if _, ok := nt.Underlying().(*types.Struct); !ok {
 						continue
 					}
-					field := embeddedName(fl.Type)
+					field := analysis.EmbeddedName(fl.Type)
 					if len(fl.Names) == 1 {
 						field = fl.Names[0].Name
 					}
