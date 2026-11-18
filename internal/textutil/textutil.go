@@ -278,6 +278,20 @@ func stringLines(text string) map[int]bool {
 	return inside
 }
 
+// LineStart is the offset of the start of the line containing off.
+func LineStart[T ~string | ~[]byte](src T, off int) int {
+	for off > 0 && src[off-1] != '\n' {
+		off--
+	}
+	return off
+}
+
+// IndentAt returns the spaces and tabs that start the line of offset off
+// in src, up to off.
+func IndentAt(src []byte, off int) string {
+	return Indent(string(src[LineStart(src, off):off]))
+}
+
 // LowerFirst returns s with its first letter in lower case.
 func LowerFirst(s string) string {
 	for i, r := range s {

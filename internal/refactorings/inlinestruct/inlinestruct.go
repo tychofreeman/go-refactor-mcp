@@ -411,7 +411,7 @@ func (x *inlining) moveFields() error {
 		x.add(x.TF.Name(), x.fld.Pos(), x.fld.End(), strings.Join(parts, "; "))
 		return nil
 	}
-	from := lineStart(x.Src, x.Off(start))
+	from := textutil.LineStart(x.Src, x.Off(start))
 	indent := gocode.IndentOf(x.Src, from)
 	var lines []string
 	for _, f := range x.innerAST.Fields.List {
@@ -480,7 +480,7 @@ func (x *inlining) deleteDecl(d ast.Decl) {
 		}
 	}
 	tf := x.WS.Fset.File(start)
-	from, to := lineStart(x.Src, x.Off(start)), textutil.NextLine(x.Src, x.Off(d.End()))
+	from, to := textutil.LineStart(x.Src, x.Off(start)), textutil.NextLine(x.Src, x.Off(d.End()))
 	if to < len(x.Src) && x.Src[to] == '\n' {
 		to++
 	}
@@ -588,18 +588,10 @@ func inspectParents(root ast.Node, f func(n, parent ast.Node)) {
 	})
 }
 
-// lineStart returns the offset of the start of the line off is on.
-func lineStart(src []byte, off int) int {
-	for off > 0 && src[off-1] != '\n' {
-		off--
-	}
-	return off
-}
-
 // aloneOnLine reports whether src[from:to] is all its lines hold but
 // blanks and a trailing comment.
 func aloneOnLine(src []byte, from, to int) bool {
-	before := strings.TrimSpace(string(src[lineStart(src, from):from]))
+	before := strings.TrimSpace(string(src[textutil.LineStart(src, from):from]))
 	after := strings.TrimSpace(string(src[to:textutil.NextLine(src, to)]))
 	return before == "" && (after == "" || strings.HasPrefix(after, "//"))
 }

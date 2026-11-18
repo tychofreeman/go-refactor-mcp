@@ -34,8 +34,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"unicode"
-	"unicode/utf8"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
@@ -1355,7 +1353,7 @@ func (x *extraction) redeclareEdits(as *ast.AssignStmt) []edit.TextEdit {
 			if err != nil {
 				return nil
 			}
-			decls = append(decls, "var "+v.Name()+" "+t+"\n"+x.indentOf(as.Pos()))
+			decls = append(decls, "var "+v.Name()+" "+t+"\n"+textutil.IndentAt(x.Src, x.Off(as.Pos())))
 		}
 	}
 	return []edit.TextEdit{
@@ -1795,12 +1793,8 @@ func (x *extraction) checkNewName() error {
 		}
 	}
 	if strings.HasSuffix(x.path, "_test.go") {
-		for _, prefix := range []string{"Test", "Benchmark", "Example", "Fuzz"} {
-			if rest, ok := strings.CutPrefix(x.name, prefix); ok {
-				if r, _ := utf8.DecodeRuneInString(rest); rest == "" || !unicode.IsLower(r) {
-					return refactor.Refusef("%s in a _test.go file looks like a %s function to go test; choose another name", x.name, strings.ToLower(prefix))
-				}
-			}
+		if k := analysis.TestKind(x.name); k != "" {
+			return refactor.Refusef("%s in a _test.go file looks like a %s function to go test; choose another name", x.name, k)
 		}
 	}
 	// A local declaration of the name in scope at the call site would hide
@@ -1845,7 +1839,8 @@ func (x *extraction) plan() (*refactor.Plan, error) {
 		return out
 	}
 	_, _, sig := x.enclosingFunc()
-	indent := x.indentOf(x.stmts[0].Pos())
+	p := x.stmts[0].Pos()
+	indent := textutil.IndentAt(x.Src, x.Off(p))
 	if err := x.checkSpelledTypes(); err != nil {
 		return nil, err
 	}
@@ -2402,22 +2397,12 @@ func (x *extraction) indentUnit(decl ast.Decl) string {
 	if !ok || fd.Body == nil || len(fd.Body.List) == 0 {
 		return "\t"
 	}
-	u := x.indentOf(fd.Body.List[0].Pos())
+	p := fd.Body.List[0].Pos()
+	u := textutil.IndentAt(x.Src, x.Off(p))
 	if u == "" || strings.Trim(u, " ") != "" {
 		return "\t"
 	}
 	return u
-}
-
-func (x *extraction) indentOf(p token.Pos) string {
-	start := x.Off(x.TF.LineStart(x.line(p)))
-	ws := x.Src[start:x.Off(p)]
-	for i, c := range ws {
-		if c != ' ' && c != '\t' {
-			return string(ws[:i])
-		}
-	}
-	return string(ws)
 }
 
 func kindOf(o types.Object) string {

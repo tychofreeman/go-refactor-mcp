@@ -848,8 +848,7 @@ func (s *switcher) args() string {
 
 // indent is the white space before the switch on its line.
 func (s *switcher) indent() string {
-	tf := s.WS.Fset.File(s.stmt.Pos())
-	return leading(string(s.Src[s.Off(tf.LineStart(tf.Line(s.stmt.Pos()))):s.Off(s.stmt.Pos())]) + "x")
+	return textutil.IndentAt(s.Src, s.Off(s.stmt.Pos()))
 }
 
 // body returns the source of a case's body, as whole lines indented by

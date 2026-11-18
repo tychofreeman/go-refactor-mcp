@@ -4770,6 +4770,45 @@ result, so one copy of `fitted` became a call by replace_statements.
 Docs through replace_text; nothing by hand. The A/B ran from #676's
 branch, before it was merged.
 
+## Hidden type names, through analysis.TypeStringAt (2026-11-17, #642's type-spelling row)
+
+TDD rolled back twice when red showed a missing step (move of
+inlinefunc's walkNamed into analysis; add_parameter of extractvar's
+typeString's position): undo of the golden, the step while green, the
+golden again. add_parameter refused `expr.Pos()` as the value (a call
+that could panic, unused by the body), so it took token.NoPos and
+replace_expression changed the one call. add_result refused
+analysis.TypeString's named results (roadmap 63), so TypeStringAt is a
+new function beside it, with importNames extracted from TypeString for
+both. By hand, in effect: analysis.Hidden (16 lines) restates
+inlinefunc's walk over a type's names, since extract_function of that
+block would have taken its refusal with it; and replace_statements
+retyped extractvar's typeString (8 lines) and merged inlinevar's two
+checks into one call. The three new goldens found real gaps: split and
+inline of a variable wrote a hidden type and reported "a bug in the
+precondition checks". Left as they are, with their reason: the
+import-adding qualifiers of extractfunc and inlinefunc (they add
+imports, which TypeString refuses to), and rename's and workspace's
+typeString (for messages, not for a file).
+
+## textutil.LineStart and IndentAt (2026-11-17, #642's second row)
+
+Nothing by hand. move of addelement's lineStart into textutil as
+LineStart, merge_duplicate_function of three identical copies onto it,
+and fold of textutil.Indent, which found nine copies of its expression,
+six in tsapi. The copies that differed in form (movedecl's
+LastIndexByte, convertloop's and the indentOf methods' token-file
+offsets, tsapi's lineStartIn on a string, once LineStart was generic)
+had their bodies replaced by a call (replace_statements: an equivalence
+the tests checked, not a derivation) and were inlined with all_calls.
+Refused, rightly or conservatively, and left as one-line wrappers:
+inlining inlinefunc's indentOf and invertif's would evaluate an argument
+that may panic after `x.Src`; switchmethod's indent is promoted through
+an embedded field ("inlining promoted methods is not supported yet").
+Two `p :=` locals in extractfunc stay for the same order reason. The
+TypeScript adddecl's lineStart takes a line number, not an offset, so it
+is not a copy.
+
 ## extract_variable as parameter, extract_type of parameters (2026-11-17, #634)
 
 Nothing by hand: the tests through add_declaration and insert_statements,
@@ -4797,3 +4836,18 @@ type-switch implicits), replaceexpr's and extractfunc's isLocal (a
 variable; any local object), the firstLine of agent, tokens and
 extractfunc (each cuts differently), and tsapi's Project.fileExists (the
 compiler's file system).
+
+## Shared name checks: TestKind and UsedFromOutside (2026-11-17, #642's name-check row)
+
+move of rename's testKind into analysis as TestKind; extractfunc's copy
+of its loop became a call through replace_statements (9 lines to 5).
+By hand, in effect: analysis.UsedFromOutside (19 lines) restates
+extractvar's walk with the scope test as a parameter, written rather than
+derived because extract_function of that walk would have made a method
+of extractvar's extraction (it reads x.Info and x.name), and a move with
+a predicate parameter after it is three more steps than writing it; and
+replace_statements rewrote changesig's hides loop (24 lines) onto it,
+which was a range over info.Uses, a map, so which use its refusal named
+varied from run to run. The other checks named in #642 are not copies:
+rename's conflicts, extractfunc's package-level and call-site checks,
+and the identifier-syntax refusals each word a different case.

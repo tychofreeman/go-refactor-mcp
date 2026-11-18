@@ -3353,5 +3353,12 @@ candidates and the evidence for each, gathered from the friction log.
     of a setter covers them already (derivations, "change a
     representation") but no session chose it.
 
+63. **add_result on named results** (2026-11-17, #642's type-spelling
+    row): `analysis.TypeString` returns `(s, missing string)`, and
+    add_result refuses a function with named results ("not supported
+    yet"), so a third result meant a new function (`TypeStringAt`)
+    beside it. The new result is one more name, its zero value at a
+    bare return, and `, _` at each call, as for unnamed ones.
+
 Parked: the Ollama loop (`refactor-agent`). It works and stays, but Claude
 through MCP is the priority.

@@ -285,14 +285,7 @@ func (x *inversion) noCommentsBetween(s *ast.IfStmt) error {
 
 // indentOf returns the indentation of the line containing p.
 func (x *inversion) indentOf(p token.Pos) string {
-	start := x.Off(x.TF.LineStart(x.TF.Line(p)))
-	ws := x.Src[start:x.Off(p)]
-	for i, c := range ws {
-		if c != ' ' && c != '\t' {
-			return string(ws[:i])
-		}
-	}
-	return string(ws)
+	return textutil.IndentAt(x.Src, x.Off(p))
 }
 
 // dedented returns the statements of block as lines indented like the if

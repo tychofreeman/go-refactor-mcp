@@ -645,7 +645,7 @@ func (m *mover) deleteDecls() {
 // deleteDecl deletes the declaration's lines from the source file.
 func (m *mover) deleteDecl(d *moved) {
 	fe, _ := m.fileFor(d.from.path) // the source file is loaded
-	fe.edits = append(fe.edits, edit.TextEdit{Start: d.from.lineStart(d.start), End: textutil.NextLine(d.from.Src, d.end)})
+	fe.edits = append(fe.edits, edit.TextEdit{Start: textutil.LineStart(d.from.Src, d.start), End: textutil.NextLine(d.from.Src, d.end)})
 	fe.cuts = append(fe.cuts, [2]int{d.start, d.end})
 }
 
@@ -934,10 +934,6 @@ func (m *mover) appendTo(to, destPath string) error {
 	}
 	fe.edits = append(fe.edits, edit.TextEdit{Start: len(src), End: len(src), NewText: "\n" + code + "\n"})
 	return nil
-}
-
-func (s *source) lineStart(off int) int {
-	return strings.LastIndexByte(string(s.Src[:off]), '\n') + 1
 }
 
 // hasEffect reports whether evaluating the spec's values could have a

@@ -132,7 +132,7 @@ func fromInterface(st *site.Site, path string, a args, iface *ast.InterfaceType,
 		if f.Doc != nil {
 			start = f.Doc.Pos()
 		}
-		from, to := lineStart(st.Src, st.Off(start)), textutil.NextLine(st.Src, st.Off(f.End()))
+		from, to := textutil.LineStart(st.Src, st.Off(start)), textutil.NextLine(st.Src, st.Off(f.End()))
 		methods = append(methods, strings.TrimRight(string(st.Src[from:to]), "\n"))
 		replace := ""
 		if i == 0 {
@@ -211,14 +211,6 @@ func tuple(st *site.Site, t *types.Tuple, variadic bool) (string, error) {
 		parts = append(parts, s)
 	}
 	return strings.Join(parts, ", "), nil
-}
-
-// lineStart returns the offset of the start of the line off is on.
-func lineStart(src []byte, off int) int {
-	for off > 0 && src[off-1] != '\n' {
-		off--
-	}
-	return off
 }
 
 // methodList names methods in a sentence: "the method Water", "the
