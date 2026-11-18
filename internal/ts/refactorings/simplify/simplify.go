@@ -14,6 +14,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/refactorings/changesig"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/tsapi"
+	"github.com/tychofreeman/go-refactor-mcp/internal/ts/tsapi/convertloop"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/workspace"
 )
 
@@ -422,7 +423,7 @@ func (*ConvertLoop) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refacto
 	}
 	said := ""
 	p, err := plan(ws, a.File, "", func(p *tsapi.Project, path string) ([]tsapi.Edit, string) {
-		es, s, why := p.ConvertLoop(bg, path, a.Line, a.Column, a.To)
+		es, s, why := convertloop.ConvertLoop(bg, p, path, a.Line, a.Column, a.To)
 		said = s
 		return es, why
 	})

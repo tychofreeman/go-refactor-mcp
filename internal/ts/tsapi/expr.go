@@ -17,12 +17,12 @@ import (
 // tokens, each name referring to the same thing. The edits come in the
 // order of the file.
 func (p *Project) ReplaceExpression(ctx context.Context, path string, line int, expr string, column int, newText string, all bool) (edits []Edit, refusal string) {
-	l, refusal := p.lined(path)
+	l, refusal := p.Lined(path)
 	if refusal != "" {
 		return nil, refusal
 	}
-	if line < 1 || line > l.count() {
-		return nil, fmt.Sprintf("line %d out of range: the file has %d lines", line, l.count())
+	if line < 1 || line > l.Count() {
+		return nil, fmt.Sprintf("line %d out of range: the file has %d lines", line, l.Count())
 	}
 	nw, refusal := parseExpression(newText)
 	if refusal != "" {
@@ -32,33 +32,33 @@ func (p *Project) ReplaceExpression(ctx context.Context, path string, line int, 
 	if len(want) == 0 {
 		return nil, "expression is empty"
 	}
-	same := func(n *ast.Node) bool { return slices.Equal(tokens(l.text[l.pos(n):n.End()]), want) }
+	same := func(n *ast.Node) bool { return slices.Equal(tokens(l.Text[l.Pos(n):n.End()]), want) }
 	var found []*ast.Node
 	l.expressions(func(n *ast.Node) {
-		start := l.pos(n)
-		if l.line(start) == line && (column == 0 || start-l.start(line)+1 == column) && same(n) &&
-			!slices.ContainsFunc(found, func(f *ast.Node) bool { return l.pos(f) == start }) {
+		start := l.Pos(n)
+		if l.Line(start) == line && (column == 0 || start-l.Start(line)+1 == column) && same(n) &&
+			!slices.ContainsFunc(found, func(f *ast.Node) bool { return l.Pos(f) == start }) {
 			found = append(found, n)
 		}
 	})
 	switch len(found) {
 	case 0:
-		return nil, fmt.Sprintf("no expression %s starts on line %d: %s", strings.TrimSpace(expr), line, strings.TrimSpace(l.text[l.start(line):l.end(line)]))
+		return nil, fmt.Sprintf("no expression %s starts on line %d: %s", strings.TrimSpace(expr), line, strings.TrimSpace(l.Text[l.Start(line):l.End(line)]))
 	case 1:
 	default:
 		var cols []string
 		for _, f := range found {
-			cols = append(cols, fmt.Sprint(l.pos(f)-l.start(line)+1))
+			cols = append(cols, fmt.Sprint(l.Pos(f)-l.Start(line)+1))
 		}
 		return nil, fmt.Sprintf("%s starts on line %d %d times; give column (%s)", strings.TrimSpace(expr), line, len(found), strings.Join(cols, ", "))
 	}
 	targets := found
 	if all {
-		c, done := p.prog.GetProgram().GetTypeCheckerForFile(ctx, l.f)
+		c, done := p.prog.GetProgram().GetTypeCheckerForFile(ctx, l.File)
 		defer done()
 		symbols := func(n *ast.Node) []*ast.Symbol {
 			var out []*ast.Symbol
-			inspect(n, func(n *ast.Node) bool {
+			Inspect(n, func(n *ast.Node) bool {
 				if ast.IsIdentifier(n) {
 					out = append(out, c.GetSymbolAtLocation(n))
 				}
@@ -77,7 +77,7 @@ func (p *Project) ReplaceExpression(ctx context.Context, path string, line int, 
 	}
 	text := strings.TrimSpace(newText)
 	for _, t := range targets {
-		e := Edit{File: path, Start: l.pos(t), End: t.End(), NewText: text}
+		e := Edit{File: path, Start: l.Pos(t), End: t.End(), NewText: text}
 		if needsParens(t, nw) {
 			e.NewText = "(" + text + ")"
 		}
@@ -88,8 +88,8 @@ func (p *Project) ReplaceExpression(ctx context.Context, path string, line int, 
 
 // expressions calls fn with each expression of the file, outer before
 // inner, leaving out names after a dot.
-func (l *lined) expressions(fn func(*ast.Node)) {
-	inspect(l.f.AsNode(), func(n *ast.Node) bool {
+func (l *Lined) expressions(fn func(*ast.Node)) {
+	Inspect(l.File.AsNode(), func(n *ast.Node) bool {
 		if ast.IsExpressionNode(n) && !(ast.IsPropertyAccessExpression(n.Parent) && n.Parent.Name() == n) {
 			fn(n)
 		}

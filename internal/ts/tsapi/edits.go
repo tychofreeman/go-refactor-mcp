@@ -15,7 +15,7 @@ import (
 // indented as it was. Its doc comment stays unless content starts with
 // one of its own.
 func (p *Project) ReplaceDeclaration(path, name, content string) ([]Edit, string) {
-	l, why := p.lined(path)
+	l, why := p.Lined(path)
 	if why != "" {
 		return nil, why
 	}
@@ -38,29 +38,29 @@ func (p *Project) ReplaceDeclaration(path, name, content string) ([]Edit, string
 		}
 		// Deleted, with its doc comment and the blank line after it, or
 		// before it when it is the last.
-		from, to := l.start(d.Start), min(l.end(d.End)+1, len(l.text))
+		from, to := l.Start(d.Start), min(l.End(d.End)+1, len(l.Text))
 		switch {
-		case to < len(l.text) && l.text[to] == '\n':
+		case to < len(l.Text) && l.Text[to] == '\n':
 			to++
-		case from > 1 && l.text[from-1] == '\n' && l.text[from-2] == '\n':
+		case from > 1 && l.Text[from-1] == '\n' && l.Text[from-2] == '\n':
 			from--
 		}
-		return []Edit{{File: l.f.FileName(), Start: from, End: to}}, ""
+		return []Edit{{File: l.File.FileName(), Start: from, End: to}}, ""
 	}
 	first := d.Start
 	content = strings.Trim(content, "\n")
 	if lead := strings.TrimSpace(content); !strings.HasPrefix(lead, "/*") && !strings.HasPrefix(lead, "//") {
 		// The doc comment stays: start below it.
 		for first < d.End {
-			t := strings.TrimSpace(l.text[l.start(first):l.end(first)])
+			t := strings.TrimSpace(l.Text[l.Start(first):l.End(first)])
 			if !(strings.HasPrefix(t, "/*") || strings.HasPrefix(t, "*") || strings.HasPrefix(t, "//")) {
 				break
 			}
 			first++
 		}
 	}
-	text := indented(content, l.indent(first))
-	return []Edit{{File: l.f.FileName(), Start: l.start(first), End: l.end(d.End), NewText: text}}, ""
+	text := indented(content, l.Indent(first))
+	return []Edit{{File: l.File.FileName(), Start: l.Start(first), End: l.End(d.End), NewText: text}}, ""
 }
 
 // AddElement returns the edit that adds element to the object or array
@@ -74,7 +74,7 @@ func (p *Project) ReplaceDeclaration(path, name, content string) ([]Edit, string
 // template of $key and $value (copied when element is empty); from the
 // literal itself rewrites each element.
 func (p *Project) AddElement(path string, line, column int, name, from, element, after, before string) ([]Edit, string) {
-	l, why := p.lined(path)
+	l, why := p.Lined(path)
 	if why != "" {
 		return nil, why
 	}
@@ -101,7 +101,7 @@ func (p *Project) AddElement(path string, line, column int, name, from, element,
 		if src == lit {
 			var edits []Edit
 			for i, e := range l.elements(lit) {
-				edits = append(edits, Edit{File: l.f.FileName(), Start: l.pos(e), End: e.End(), NewText: elems[i]})
+				edits = append(edits, Edit{File: l.File.FileName(), Start: l.Pos(e), End: e.End(), NewText: elems[i]})
 			}
 			return edits, ""
 		}
@@ -114,10 +114,10 @@ func (p *Project) AddElement(path string, line, column int, name, from, element,
 
 // literalAt returns the object or array literal that starts on line (at
 // column, when that is not 0).
-func (l *lined) literalAt(line, column int) (*ast.Node, string) {
+func (l *Lined) literalAt(line, column int) (*ast.Node, string) {
 	var lits []*ast.Node
-	inspect(l.f.AsNode(), func(n *ast.Node) bool {
-		if (ast.IsObjectLiteralExpression(n) || ast.IsArrayLiteralExpression(n)) && l.line(l.pos(n)) == line && (column == 0 || l.pos(n)-l.start(line)+1 == column) {
+	Inspect(l.File.AsNode(), func(n *ast.Node) bool {
+		if (ast.IsObjectLiteralExpression(n) || ast.IsArrayLiteralExpression(n)) && l.Line(l.Pos(n)) == line && (column == 0 || l.Pos(n)-l.Start(line)+1 == column) {
 			lits = append(lits, n)
 		}
 		return true
@@ -128,7 +128,7 @@ func (l *lined) literalAt(line, column int) (*ast.Node, string) {
 	case len(lits) > 1 && column == 0:
 		var at []string
 		for _, n := range lits {
-			at = append(at, fmt.Sprint(l.pos(n)-l.start(line)+1))
+			at = append(at, fmt.Sprint(l.Pos(n)-l.Start(line)+1))
 		}
 		return nil, fmt.Sprintf("%d literals start on line %d (columns %s); give column", len(lits), line, strings.Join(at, ", "))
 	}
@@ -138,8 +138,8 @@ func (l *lined) literalAt(line, column int) (*ast.Node, string) {
 // literalOf returns the object or array literal that the variable name,
 // at the top level of the file, is initialized with (through parentheses,
 // as and satisfies).
-func (l *lined) literalOf(name string) (*ast.Node, string) {
-	for _, s := range l.f.Statements.Nodes {
+func (l *Lined) literalOf(name string) (*ast.Node, string) {
+	for _, s := range l.File.Statements.Nodes {
 		if !ast.IsVariableStatement(s) {
 			continue
 		}
@@ -162,7 +162,7 @@ func (l *lined) literalOf(name string) (*ast.Node, string) {
 
 // elements returns the properties of an object literal or the elements of
 // an array literal.
-func (l *lined) elements(lit *ast.Node) []*ast.Node {
+func (l *Lined) elements(lit *ast.Node) []*ast.Node {
 	if ast.IsObjectLiteralExpression(lit) {
 		return lit.AsObjectLiteralExpression().Properties.Nodes
 	}
@@ -172,22 +172,22 @@ func (l *lined) elements(lit *ast.Node) []*ast.Node {
 // written returns the elements of from, the literal of the variable name,
 // written by the template tmpl, in which $key stands for a property's name
 // and $value for its value; an empty template copies them.
-func (l *lined) written(from *ast.Node, name, tmpl string) ([]string, string) {
+func (l *Lined) written(from *ast.Node, name, tmpl string) ([]string, string) {
 	var out []string
 	for _, e := range l.elements(from) {
-		key, value := "", l.source(e)
+		key, value := "", l.Source(e)
 		switch {
 		case ast.IsPropertyAssignment(e):
-			key, value = l.source(e.Name()), l.source(e.Initializer())
+			key, value = l.Source(e.Name()), l.Source(e.Initializer())
 		case ast.IsShorthandPropertyAssignment(e):
-			key, value = l.source(e.Name()), l.source(e.Name())
+			key, value = l.Source(e.Name()), l.Source(e.Name())
 		case ast.IsObjectLiteralExpression(from) && tmpl != "":
-			return nil, fmt.Sprintf("%s at %s is not a property key: value; write it by hand, or copy the elements without element", l.source(e), l.where(e))
+			return nil, fmt.Sprintf("%s at %s is not a property key: value; write it by hand, or copy the elements without element", l.Source(e), l.Where(e))
 		}
 		t := tmpl
 		switch {
 		case t == "":
-			out = append(out, l.source(e))
+			out = append(out, l.Source(e))
 			continue
 		case key == "" && strings.Contains(t, "$key"):
 			return nil, fmt.Sprintf("the elements of %s have no keys; element may use $value only", name)
@@ -199,20 +199,20 @@ func (l *lined) written(from *ast.Node, name, tmpl string) ([]string, string) {
 
 // addElement returns the edit that adds the elements added to the object
 // or array literal lit, as AddElement does.
-func (l *lined) addElement(lit *ast.Node, added []string, after string, before string) ([]Edit, string) {
+func (l *Lined) addElement(lit *ast.Node, added []string, after string, before string) ([]Edit, string) {
 	elems := l.elements(lit)
 	key := func(e *ast.Node) string {
 		if ast.IsObjectLiteralExpression(lit) && e.Name() != nil {
-			return l.source(e.Name())
+			return l.Source(e.Name())
 		}
-		return l.source(e)
+		return l.Source(e)
 	}
 	element := strings.Join(added, ", ")
 	closing := lit.End() - 1
 	if len(elems) == 0 {
-		return []Edit{{File: l.f.FileName(), Start: l.pos(lit) + 1, End: closing, NewText: map[bool]string{true: " " + element + " ", false: element}[ast.IsObjectLiteralExpression(lit)]}}, ""
+		return []Edit{{File: l.File.FileName(), Start: l.Pos(lit) + 1, End: closing, NewText: map[bool]string{true: " " + element + " ", false: element}[ast.IsObjectLiteralExpression(lit)]}}, ""
 	}
-	multiline := l.line(l.pos(elems[0])) != l.line(l.pos(lit))
+	multiline := l.Line(l.Pos(elems[0])) != l.Line(l.Pos(lit))
 	at := len(elems) // the element goes before elems[at]
 	if name := after + before; name != "" {
 		at = -1
@@ -230,26 +230,26 @@ func (l *lined) addElement(lit *ast.Node, added []string, after string, before s
 	}
 	if !multiline {
 		if at == len(elems) {
-			return []Edit{{File: l.f.FileName(), Start: elems[at-1].End(), End: elems[at-1].End(), NewText: ", " + element}}, ""
+			return []Edit{{File: l.File.FileName(), Start: elems[at-1].End(), End: elems[at-1].End(), NewText: ", " + element}}, ""
 		}
-		return []Edit{{File: l.f.FileName(), Start: l.pos(elems[at]), End: l.pos(elems[at]), NewText: element + ", "}}, ""
+		return []Edit{{File: l.File.FileName(), Start: l.Pos(elems[at]), End: l.Pos(elems[at]), NewText: element + ", "}}, ""
 	}
-	ind := l.indent(l.line(l.pos(elems[0])))
+	ind := l.Indent(l.Line(l.Pos(elems[0])))
 	element = strings.Join(added, ",\n"+ind)
 	if at < len(elems) {
-		s := l.start(l.line(l.pos(elems[at])))
-		if strings.TrimSpace(l.text[s:l.pos(elems[at])]) != "" {
+		s := l.Start(l.Line(l.Pos(elems[at])))
+		if strings.TrimSpace(l.Text[s:l.Pos(elems[at])]) != "" {
 			return nil, fmt.Sprintf("the element %s shares its line with another", key(elems[at]))
 		}
-		return []Edit{{File: l.f.FileName(), Start: s, End: s, NewText: ind + element + ",\n"}}, ""
+		return []Edit{{File: l.File.FileName(), Start: s, End: s, NewText: ind + element + ",\n"}}, ""
 	}
 	last := elems[len(elems)-1]
-	trailing := strings.HasPrefix(strings.TrimSpace(l.text[last.End():closing]), ",")
+	trailing := strings.HasPrefix(strings.TrimSpace(l.Text[last.End():closing]), ",")
 	if trailing {
-		e := l.end(l.line(last.End() - 1))
-		return []Edit{{File: l.f.FileName(), Start: e, End: e, NewText: "\n" + ind + element + ","}}, ""
+		e := l.End(l.Line(last.End() - 1))
+		return []Edit{{File: l.File.FileName(), Start: e, End: e, NewText: "\n" + ind + element + ","}}, ""
 	}
-	return []Edit{{File: l.f.FileName(), Start: last.End(), End: last.End(), NewText: ",\n" + ind + element}}, ""
+	return []Edit{{File: l.File.FileName(), Start: last.End(), End: last.End(), NewText: ",\n" + ind + element}}, ""
 }
 
 // FillLiterals returns the edits that add "name: value" to every object
@@ -257,12 +257,12 @@ func (l *lined) addElement(lit *ast.Node, added []string, after string, before s
 // typeName at the top level of the file at path, and which has no property
 // name (nor a spread, which may give it).
 func (p *Project) FillLiterals(ctx context.Context, path, typeName, name, value string) ([]Edit, string) {
-	l, why := p.lined(path)
+	l, why := p.Lined(path)
 	if why != "" {
 		return nil, why
 	}
 	var decl *ast.Node
-	for _, s := range l.f.Statements.Nodes {
+	for _, s := range l.File.Statements.Nodes {
 		if (ast.IsInterfaceDeclaration(s) || ast.IsClassDeclaration(s) || ast.IsTypeAliasDeclaration(s)) && s.Name() != nil && s.Name().Text() == typeName {
 			decl = s
 		}
@@ -286,7 +286,7 @@ func (p *Project) FillLiterals(ctx context.Context, path, typeName, name, value 
 					var es []Edit
 					es, why = fl.addElement(n, []string{name + ": " + strings.TrimSpace(value)}, "", "")
 					if why != "" {
-						why = fmt.Sprintf("the literal at %s: %s", fl.where(n), why)
+						why = fmt.Sprintf("the literal at %s: %s", fl.Where(n), why)
 						return true
 					}
 					edits = append(edits, es...)
@@ -324,7 +324,7 @@ func mayHave(lit *ast.Node, name string) bool {
 // the chain of the if on line (before its else), or before or after the
 // else if on line.
 func (p *Project) AddCase(path string, line int, where, content string) ([]Edit, string) {
-	l, why := p.lined(path)
+	l, why := p.Lined(path)
 	if why != "" {
 		return nil, why
 	}
@@ -334,8 +334,8 @@ func (p *Project) AddCase(path string, line int, where, content string) ([]Edit,
 	content = strings.Trim(content, "\n")
 	lead := strings.TrimSpace(content)
 	var sw, clause, ifs *ast.Node
-	inspect(l.f.AsNode(), func(n *ast.Node) bool {
-		if l.line(l.pos(n)) == line || ast.IsIfStatement(n) && isElseIf(n) && l.line(elseKeyword(l, n)) == line {
+	Inspect(l.File.AsNode(), func(n *ast.Node) bool {
+		if l.Line(l.Pos(n)) == line || ast.IsIfStatement(n) && isElseIf(n) && l.Line(elseKeyword(l, n)) == line {
 			switch {
 			case ast.IsSwitchStatement(n) && sw == nil && clause == nil:
 				sw = n
@@ -370,7 +370,7 @@ func (p *Project) AddCase(path string, line int, where, content string) ([]Edit,
 // it would run that one, which compiles but does something else. A method
 // whose body only calls that one through super, with its parameters in
 // order, may go.
-func (p *Project) deletesOverride(l *lined, name string) string {
+func (p *Project) deletesOverride(l *Lined, name string) string {
 	cname, mname, ok := strings.Cut(name, ".")
 	if !ok {
 		return ""
@@ -394,14 +394,14 @@ func (p *Project) deletesOverride(l *lined, name string) string {
 			return ""
 		}
 		return fmt.Sprintf("%s overrides the %s of %s: deleted, calls of it would run that one, which compiles but does something else. Keep it; or, if it should run that one, replace its body with %s and delete it again",
-			name, mname, l.source(e), superCall(l, ms[0], mname))
+			name, mname, l.Source(e), superCall(l, ms[0], mname))
 	}
 	return ""
 }
 
 // addClauses adds the clauses content to the switch sw: before or after
 // clause when it is given, else at its end.
-func (l *lined) addClauses(sw, clause *ast.Node, where, content string) ([]Edit, string) {
+func (l *Lined) addClauses(sw, clause *ast.Node, where, content string) ([]Edit, string) {
 	parsed := parseText("switch (0) {\n" + content + "\n}\n")
 	if ds := parsed.Diagnostics(); len(ds) > 0 || len(parsed.Statements.Nodes) != 1 || !ast.IsSwitchStatement(parsed.Statements.Nodes[0]) {
 		return nil, "content is not case or default clauses: " + messages(parsed.Diagnostics())
@@ -412,22 +412,22 @@ func (l *lined) addClauses(sw, clause *ast.Node, where, content string) ([]Edit,
 		if ast.IsDefaultClause(n) {
 			for _, c := range clauses {
 				if ast.IsDefaultClause(c) {
-					return nil, fmt.Sprintf("the switch has a default already (%s)", l.where(c))
+					return nil, fmt.Sprintf("the switch has a default already (%s)", l.Where(c))
 				}
 			}
 		}
 	}
-	ind := l.indent(l.line(l.pos(sw))) + l.unit()
+	ind := l.Indent(l.Line(l.Pos(sw))) + l.Unit()
 	if len(clauses) > 0 {
-		ind = l.indent(l.line(l.pos(clauses[0])))
+		ind = l.Indent(l.Line(l.Pos(clauses[0])))
 	}
 	text := indented(content, ind) + "\n"
 	var at int
 	switch {
 	case clause != nil && where == "before":
-		at = l.start(l.line(l.pos(clause)))
+		at = l.Start(l.Line(l.Pos(clause)))
 	case clause != nil:
-		at = l.start(l.line(clause.End()-1) + 1)
+		at = l.Start(l.Line(clause.End()-1) + 1)
 	default:
 		i := len(clauses)
 		if i > 0 && ast.IsDefaultClause(clauses[i-1]) {
@@ -437,21 +437,21 @@ func (l *lined) addClauses(sw, clause *ast.Node, where, content string) ([]Edit,
 			}
 		}
 		if i < len(clauses) {
-			at = l.start(l.line(l.pos(clauses[i])))
+			at = l.Start(l.Line(l.Pos(clauses[i])))
 		} else {
 			closing := sw.AsSwitchStatement().CaseBlock.End() - 1
-			at = l.start(l.line(closing))
-			if strings.TrimSpace(l.text[at:closing]) != "" {
+			at = l.Start(l.Line(closing))
+			if strings.TrimSpace(l.Text[at:closing]) != "" {
 				return nil, "the switch's closing brace shares its line; put it on a line of its own"
 			}
 		}
 	}
-	return []Edit{{File: l.f.FileName(), Start: at, End: at, NewText: text}}, ""
+	return []Edit{{File: l.File.FileName(), Start: at, End: at, NewText: text}}, ""
 }
 
 // addBranches adds the branches content (else if or else) to the chain
 // of ifs: at its end when ifs heads it, else before or after ifs.
-func (l *lined) addBranches(ifs *ast.Node, where, content string) ([]Edit, string) {
+func (l *Lined) addBranches(ifs *ast.Node, where, content string) ([]Edit, string) {
 	parsed := parseText("if (0) {}\n" + content + "\n")
 	if ds := parsed.Diagnostics(); len(ds) > 0 || len(parsed.Statements.Nodes) != 1 {
 		return nil, "content is not else if or else branches: " + messages(parsed.Diagnostics())
@@ -472,14 +472,14 @@ func (l *lined) addBranches(ifs *ast.Node, where, content string) ([]Edit, strin
 		last = e
 	}
 	hasElse := last.AsIfStatement().ElseStatement != nil
-	ind := l.indent(l.line(l.pos(head)))
+	ind := l.Indent(l.Line(l.Pos(head)))
 	text := indented(content, ind)
 	text = strings.TrimPrefix(text, ind)
 	var after *ast.Node // the then-branch the content follows
 	switch {
 	case ifs == head:
 		if finalElse && hasElse {
-			return nil, fmt.Sprintf("the chain has an else already (%s)", l.where(last.AsIfStatement().ElseStatement))
+			return nil, fmt.Sprintf("the chain has an else already (%s)", l.Where(last.AsIfStatement().ElseStatement))
 		}
 		after = last.AsIfStatement().ThenStatement
 	case where == "before":
@@ -494,7 +494,7 @@ func (l *lined) addBranches(ifs *ast.Node, where, content string) ([]Edit, strin
 		after = ifs.AsIfStatement().ThenStatement
 	}
 	at := after.End()
-	return []Edit{{File: l.f.FileName(), Start: at, End: at, NewText: " " + text}}, ""
+	return []Edit{{File: l.File.FileName(), Start: at, End: at, NewText: " " + text}}, ""
 }
 
 // isElseIf reports whether the if n is the else of another.
@@ -503,12 +503,12 @@ func isElseIf(n *ast.Node) bool {
 }
 
 // elseKeyword returns the position of the else before the else if n.
-func elseKeyword(l *lined, n *ast.Node) int {
+func elseKeyword(l *Lined, n *ast.Node) int {
 	then := n.Parent.AsIfStatement().ThenStatement
-	if i := strings.Index(l.text[then.End():l.pos(n)], "else"); i >= 0 {
+	if i := strings.Index(l.Text[then.End():l.Pos(n)], "else"); i >= 0 {
 		return then.End() + i
 	}
-	return l.pos(n)
+	return l.Pos(n)
 }
 
 // indented returns text without its lines' common indentation, each line
@@ -595,17 +595,17 @@ func callsSuper(c *checker.Checker, m *ast.Node, name string) bool {
 
 // superCall is the body that makes m only call its base's name through
 // super: return super.name(a, b);, without return when m returns void.
-func superCall(l *lined, m *ast.Node, name string) string {
+func superCall(l *Lined, m *ast.Node, name string) string {
 	var args []string
 	for _, p := range m.Parameters() {
-		a := l.source(p.Name())
+		a := l.Source(p.Name())
 		if p.AsParameterDeclaration().DotDotDotToken != nil {
 			a = "..." + a
 		}
 		args = append(args, a)
 	}
 	call := fmt.Sprintf("super.%s(%s);", name, strings.Join(args, ", "))
-	if t := m.Type(); t != nil && strings.TrimSpace(l.source(t)) == "void" {
+	if t := m.Type(); t != nil && strings.TrimSpace(l.Source(t)) == "void" {
 		return call
 	}
 	return "return " + call

@@ -6,9 +6,9 @@ import (
 	"github.com/buke/typescript-go-internal/v7/pkg/ast"
 )
 
-// inspect calls f for n and for each node under it, depth first; where f
+// Inspect calls f for n and for each node under it, depth first; where f
 // returns false, it skips the nodes under that one.
-func inspect(n *ast.Node, f func(*ast.Node) bool) {
+func Inspect(n *ast.Node, f func(*ast.Node) bool) {
 	var visit func(*ast.Node) bool
 	visit = func(n *ast.Node) bool {
 		if f(n) {

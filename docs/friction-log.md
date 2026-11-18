@@ -4910,6 +4910,18 @@ varied from run to run. The other checks named in #642 are not copies:
 rename's conflicts, extractfunc's package-level and call-site checks,
 and the identifier-syntax refusals each word a different case.
 
+## convert_loop's engine moves to tsapi/convertloop (2026-11-18, #643)
+
+All through the tools: renames exported tsapi's core (Lined, its fields
+and methods, Inspect, Identifiers, InList, Declared, Uses, Symbols,
+IsUpdate, Terminates) and added Project.Checker; method_to_function and
+move (with `also` for the helpers) carried ConvertLoop out; move_parameter
+put ctx first. Renaming the type `lined` was refused because looped
+embedded it, so the embedded field became the named field `l` first.
+The move itself needed move to import the package it leaves (#686): it
+was run through `cmd/refactor` built from that branch, since this
+session's server predates it. A loop retried the move and exported each
+helper its refusal named (one: terminates).
 ## move imports the package it moves from (2026-11-18, #643's tsapi split)
 
 Splitting tsapi's convert_loop into a package under tsapi needed moved

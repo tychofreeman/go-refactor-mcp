@@ -98,7 +98,7 @@ func (p *Project) ChangeSignature(ctx context.Context, path, name string, ch Sig
 				continue
 			}
 			ml, prm := newLined(ast.GetSourceFileOfNode(m)), list.Nodes[moff+i]
-			pname := ml.source(prm.Name())
+			pname := ml.Source(prm.Name())
 			if where := ml.reads(c, m.Body(), pname, c.GetSymbolAtLocation(prm.Name())); where != "" {
 				return nil, fmt.Sprintf("the body of %s, which changes with %s, reads %s (%s); change the body first so that it no longer does", memberName(m), name, pname, where)
 			}
@@ -165,7 +165,7 @@ func (p *Project) ChangeSignature(ctx context.Context, path, name string, ch Sig
 			switch k := len(list.Nodes) - ooff; {
 			case k <= lo:
 			case k <= hi:
-				return nil, fmt.Sprintf("the overload at %s has only some of the parameters the move reorders", l.where(o))
+				return nil, fmt.Sprintf("the overload at %s has only some of the parameters the move reorders", l.Where(o))
 			default:
 				edits = append(edits, l.permute(list.Nodes[ooff:ooff+hi+1], order(hi+1, moved, at))...)
 			}
@@ -188,7 +188,7 @@ func (p *Project) ChangeSignature(ctx context.Context, path, name string, ch Sig
 				continue
 			}
 			if e := newEffects(c, cl).Of(args.Nodes[i]); !e.CanDrop() {
-				return nil, fmt.Sprintf("removing the argument %s of the call at %s would drop %s", cl.source(args.Nodes[i]), cl.where(call), e.Why)
+				return nil, fmt.Sprintf("removing the argument %s of the call at %s would drop %s", cl.Source(args.Nodes[i]), cl.Where(call), e.Why)
 			}
 			edits = append(edits, cl.removeAt(args, i))
 		default:
@@ -201,10 +201,10 @@ func (p *Project) ChangeSignature(ctx context.Context, path, name string, ch Sig
 				all = append(all, newEffects(c, cl).Of(a))
 			}
 			if why := canReorder(all); why != "" {
-				return nil, fmt.Sprintf("the move would reorder the arguments of the call at %s, and their order matters: %s", cl.where(call), why)
+				return nil, fmt.Sprintf("the move would reorder the arguments of the call at %s, and their order matters: %s", cl.Where(call), why)
 			}
 			if m <= hi {
-				return nil, fmt.Sprintf("the call at %s passes %d of the arguments the move reorders; pass them all first", cl.where(call), m)
+				return nil, fmt.Sprintf("the call at %s passes %d of the arguments the move reorders; pass them all first", cl.Where(call), m)
 			}
 			edits = append(edits, cl.permute(args.Nodes[:hi+1], order(hi+1, moved, at))...)
 		}
@@ -215,7 +215,7 @@ func (p *Project) ChangeSignature(ctx context.Context, path, name string, ch Sig
 // target is a function whose signature is to change: its declaration and,
 // once findCalls has run, its calls in the project.
 type target struct {
-	l         *lined
+	l         *Lined
 	fn        *ast.Node   // the implementation
 	overloads []*ast.Node // its overload signatures, which change with it
 	nameNode  *ast.Node   // the name its callers use
@@ -234,7 +234,7 @@ type target struct {
 // target finds the function or method called name in the file at path;
 // done releases the checker it holds.
 func (p *Project) target(ctx context.Context, path, name string) (*target, func(), string) {
-	l, refusal := p.lined(path)
+	l, refusal := p.Lined(path)
 	if refusal != "" {
 		return nil, nil, refusal
 	}
@@ -343,10 +343,10 @@ func (t *target) findCalls(p *Project) string {
 // function declaration, a function or arrow function bound to a const, or
 // a method of a class ("Class.method"). It returns the implementation,
 // its overload signatures, and the name its callers use.
-func (l *lined) function(name string) (fn *ast.Node, overloads []*ast.Node, nameNode *ast.Node, refusal string) {
+func (l *Lined) function(name string) (fn *ast.Node, overloads []*ast.Node, nameNode *ast.Node, refusal string) {
 	class, member, isMember := strings.Cut(name, ".")
 	var found []*ast.Node
-	for _, s := range l.f.Statements.Nodes {
+	for _, s := range l.File.Statements.Nodes {
 		switch {
 		case !isMember && ast.IsFunctionDeclaration(s) && s.Name() != nil && s.Name().Text() == name:
 			found = append(found, s)
@@ -372,7 +372,7 @@ func (l *lined) function(name string) (fn *ast.Node, overloads []*ast.Node, name
 				continue
 			}
 			for _, m := range s.Members() {
-				if ast.IsMethodDeclaration(m) && m.Name() != nil && l.text[l.pos(m.Name()):m.Name().End()] == member {
+				if ast.IsMethodDeclaration(m) && m.Name() != nil && l.Text[l.Pos(m.Name()):m.Name().End()] == member {
 					found, nameNode = append(found, m), m.Name()
 				}
 			}
@@ -406,17 +406,17 @@ func (l *lined) function(name string) (fn *ast.Node, overloads []*ast.Node, name
 
 // interfaceMethod returns the method signature that name ("Iface.method")
 // names in an interface at the top level of the file, or nil.
-func (l *lined) interfaceMethod(name string) *ast.Node {
+func (l *Lined) interfaceMethod(name string) *ast.Node {
 	owner, member, ok := strings.Cut(name, ".")
 	if !ok {
 		return nil
 	}
-	for _, s := range l.f.Statements.Nodes {
+	for _, s := range l.File.Statements.Nodes {
 		if !ast.IsInterfaceDeclaration(s) || s.Name().Text() != owner {
 			continue
 		}
 		for _, m := range s.Members() {
-			if ast.IsMethodSignatureDeclaration(m) && m.Name() != nil && l.source(m.Name()) == member {
+			if ast.IsMethodSignatureDeclaration(m) && m.Name() != nil && l.Source(m.Name()) == member {
 				return m
 			}
 		}
@@ -442,7 +442,7 @@ func (p *Project) family(c *checker.Checker, fn *ast.Node) ([]*ast.Node, string)
 		if f.IsDeclarationFile || strings.Contains(f.FileName(), "/node_modules/") {
 			continue
 		}
-		inspect(f.AsNode(), func(n *ast.Node) bool {
+		Inspect(f.AsNode(), func(n *ast.Node) bool {
 			if ast.IsClassDeclaration(n) || ast.IsClassExpression(n) || ast.IsInterfaceDeclaration(n) {
 				types = append(types, n)
 				for _, e := range append(ast.GetExtendsHeritageClauseElements(n), ast.GetImplementsHeritageClauseElements(n)...) {
@@ -501,7 +501,7 @@ func (p *Project) family(c *checker.Checker, fn *ast.Node) ([]*ast.Node, string)
 		ms := declared(t)
 		switch {
 		case len(ms) > 1:
-			return nil, fmt.Sprintf("%s.%s, which changes with it, has overloads (%s); change it on its own first", typeName(t), name, newLined(ast.GetSourceFileOfNode(t)).where(ms[0]))
+			return nil, fmt.Sprintf("%s.%s, which changes with it, has overloads (%s); change it on its own first", typeName(t), name, newLined(ast.GetSourceFileOfNode(t)).Where(ms[0]))
 		case len(ms) == 1:
 			family = append(family, ms[0])
 		}
@@ -513,7 +513,7 @@ func (p *Project) family(c *checker.Checker, fn *ast.Node) ([]*ast.Node, string)
 // or method name, as ParamsToObject finds one, and no class, interface or
 // type of that name (whose constructor it would find).
 func (p *Project) DeclaresFunction(path, name string) bool {
-	l, why := p.lined(path)
+	l, why := p.Lined(path)
 	if why != "" {
 		return false
 	}
@@ -556,7 +556,7 @@ func (t *target) insertInOverloads(at int, text string) ([]Edit, string) {
 	for _, o := range t.overloads {
 		list, off := passed(o)
 		if k := len(list.Nodes) - off; k < at {
-			return nil, fmt.Sprintf("the overload at %s has %d parameters, fewer than the position the new one takes (%d): calls matching it would not pass it there", t.l.where(o), k, at+1)
+			return nil, fmt.Sprintf("the overload at %s has %d parameters, fewer than the position the new one takes (%d): calls matching it would not pass it there", t.l.Where(o), k, at+1)
 		}
 		edits = append(edits, t.l.insertAt(list, off+at, text))
 	}
@@ -596,7 +596,7 @@ func (t *target) familyEdits(ch SignatureChange, at, moved int) ([]Edit, string)
 
 // reads returns where body reads name: the symbol sym if it is given,
 // else any symbol so named; "" if it does not.
-func (l *lined) reads(c *checker.Checker, body *ast.Node, name string, sym *ast.Symbol) string {
+func (l *Lined) reads(c *checker.Checker, body *ast.Node, name string, sym *ast.Symbol) string {
 	where := ""
 	var visit func(n *ast.Node) bool
 	visit = func(n *ast.Node) bool {
@@ -605,7 +605,7 @@ func (l *lined) reads(c *checker.Checker, body *ast.Node, name string, sym *ast.
 		}
 		if ast.IsIdentifier(n) && n.Text() == name && !(ast.IsPropertyAccessExpression(n.Parent) && n.Parent.Name() == n) {
 			if s := c.GetSymbolAtLocation(n); s != nil && (sym == nil || s == sym) || name == "arguments" {
-				where = l.where(n)
+				where = l.Where(n)
 			}
 		}
 		return n.ForEachChild(visit)
@@ -618,7 +618,7 @@ func (l *lined) reads(c *checker.Checker, body *ast.Node, name string, sym *ast.
 
 // callOf returns the call whose callee is the reference id, or nil for
 // an import or export of it; refusal for any other use, as a value.
-func (l *lined) callOf(id *ast.Node) (*ast.Node, string) {
+func (l *Lined) callOf(id *ast.Node) (*ast.Node, string) {
 	switch {
 	case ast.IsImportSpecifier(id.Parent), ast.IsExportSpecifier(id.Parent), ast.IsImportClause(id.Parent):
 		return nil, ""
@@ -630,12 +630,12 @@ func (l *lined) callOf(id *ast.Node) (*ast.Node, string) {
 	if call := callee.Parent; call != nil && ast.IsCallExpression(call) && call.Expression() == callee {
 		for _, a := range call.Arguments() {
 			if ast.IsSpreadElement(a) {
-				return nil, fmt.Sprintf("the call at %s spreads its arguments (%s), so where each goes is not known", l.where(call), l.source(a))
+				return nil, fmt.Sprintf("the call at %s spreads its arguments (%s), so where each goes is not known", l.Where(call), l.Source(a))
 			}
 		}
 		return call, ""
 	}
-	return nil, fmt.Sprintf("%s is used as a value at %s, where what calls it passes is not known", id.Text(), l.where(id))
+	return nil, fmt.Sprintf("%s is used as a value at %s, where what calls it passes is not known", id.Text(), l.Where(id))
 }
 
 // constructionsOf returns the calls of the constructor of the class that
@@ -643,12 +643,12 @@ func (l *lined) callOf(id *ast.Node) (*ast.Node, string) {
 // extending it; none for a use as a type, a static member, instanceof,
 // implements, or an import. It refuses any other use, which could
 // construct the class with arguments that are not known.
-func (l *lined) constructionsOf(id *ast.Node) ([]*ast.Node, string) {
+func (l *Lined) constructionsOf(id *ast.Node) ([]*ast.Node, string) {
 	p := id.Parent
 	spread := func(call *ast.Node) string {
 		for _, a := range call.Arguments() {
 			if ast.IsSpreadElement(a) {
-				return fmt.Sprintf("the call at %s spreads its arguments (%s), so where each goes is not known", l.where(call), l.source(a))
+				return fmt.Sprintf("the call at %s spreads its arguments (%s), so where each goes is not known", l.Where(call), l.Source(a))
 			}
 		}
 		return ""
@@ -662,7 +662,7 @@ func (l *lined) constructionsOf(id *ast.Node) ([]*ast.Node, string) {
 		return nil, ""
 	case ast.IsNewExpression(p) && p.Expression() == id:
 		if p.ArgumentList() == nil {
-			return nil, fmt.Sprintf("new %s at %s has no parentheses to pass arguments in", id.Text(), l.where(p))
+			return nil, fmt.Sprintf("new %s at %s has no parentheses to pass arguments in", id.Text(), l.Where(p))
 		}
 		if why := spread(p); why != "" {
 			return nil, why
@@ -705,7 +705,7 @@ func (l *lined) constructionsOf(id *ast.Node) ([]*ast.Node, string) {
 		ctor.Body().ForEachChild(visit)
 		return calls, why
 	}
-	return nil, fmt.Sprintf("%s is used as a value at %s, where it could be constructed with arguments that are not known", id.Text(), l.where(id))
+	return nil, fmt.Sprintf("%s is used as a value at %s, where it could be constructed with arguments that are not known", id.Text(), l.Where(id))
 }
 
 // sameMeaning refuses a value whose names do not mean the same at every
@@ -728,14 +728,14 @@ func sameMeaning(c *checker.Checker, value *ast.Node, calls []*ast.Node) string 
 				s := c.ResolveName(n.Text(), call, ast.SymbolFlagsValue, false)
 				cl := newLined(ast.GetSourceFileOfNode(call))
 				if s == nil {
-					why = fmt.Sprintf("value names %s, which the call at %s cannot see", n.Text(), cl.where(call))
+					why = fmt.Sprintf("value names %s, which the call at %s cannot see", n.Text(), cl.Where(call))
 					return true
 				}
 				s = c.SkipAlias(s)
 				if first == nil {
 					first, firstCall = s, call
 				} else if s != first {
-					why = fmt.Sprintf("value's %s means one thing at %s and another at %s; pass it at each call yourself", n.Text(), newLined(ast.GetSourceFileOfNode(firstCall)).where(firstCall), cl.where(call))
+					why = fmt.Sprintf("value's %s means one thing at %s and another at %s; pass it at each call yourself", n.Text(), newLined(ast.GetSourceFileOfNode(firstCall)).Where(firstCall), cl.Where(call))
 					return true
 				}
 			}
@@ -792,55 +792,55 @@ func order(n, from, to int) []int {
 }
 
 // insertAt returns the edit that inserts text as element i of list.
-func (l *lined) insertAt(list *ast.NodeList, i int, text string) Edit {
+func (l *Lined) insertAt(list *ast.NodeList, i int, text string) Edit {
 	nodes := list.Nodes
 	switch {
 	case len(nodes) == 0:
-		return Edit{File: l.f.FileName(), Start: list.Pos(), End: list.Pos(), NewText: text}
+		return Edit{File: l.File.FileName(), Start: list.Pos(), End: list.Pos(), NewText: text}
 	case i < len(nodes):
-		at := l.pos(nodes[i])
-		return Edit{File: l.f.FileName(), Start: at, End: at, NewText: text + ", "}
+		at := l.Pos(nodes[i])
+		return Edit{File: l.File.FileName(), Start: at, End: at, NewText: text + ", "}
 	}
 	at := nodes[len(nodes)-1].End()
-	return Edit{File: l.f.FileName(), Start: at, End: at, NewText: ", " + text}
+	return Edit{File: l.File.FileName(), Start: at, End: at, NewText: ", " + text}
 }
 
 // removeAt returns the edit that removes element i of list and a comma
 // beside it.
-func (l *lined) removeAt(list *ast.NodeList, i int) Edit {
+func (l *Lined) removeAt(list *ast.NodeList, i int) Edit {
 	nodes := list.Nodes
 	switch {
 	case i+1 < len(nodes):
-		return Edit{File: l.f.FileName(), Start: l.pos(nodes[i]), End: l.pos(nodes[i+1])}
+		return Edit{File: l.File.FileName(), Start: l.Pos(nodes[i]), End: l.Pos(nodes[i+1])}
 	case i > 0:
-		return Edit{File: l.f.FileName(), Start: nodes[i-1].End(), End: nodes[i].End()}
+		return Edit{File: l.File.FileName(), Start: nodes[i-1].End(), End: nodes[i].End()}
 	}
-	return Edit{File: l.f.FileName(), Start: l.pos(nodes[i]), End: nodes[i].End()}
+	return Edit{File: l.File.FileName(), Start: l.Pos(nodes[i]), End: nodes[i].End()}
 }
 
 // permute returns the edits that put at each position i of nodes the
 // text of nodes[from[i]], keeping what is between them.
-func (l *lined) permute(nodes []*ast.Node, from []int) []Edit {
+func (l *Lined) permute(nodes []*ast.Node, from []int) []Edit {
 	var out []Edit
 	for i, j := range from {
 		if i != j {
-			out = append(out, Edit{File: l.f.FileName(), Start: l.pos(nodes[i]), End: nodes[i].End(), NewText: l.source(nodes[j])})
+			out = append(out, Edit{File: l.File.FileName(), Start: l.Pos(nodes[i]), End: nodes[i].End(), NewText: l.Source(nodes[j])})
 		}
 	}
 	return out
 }
 
-func (l *lined) source(n *ast.Node) string { return l.text[l.pos(n):n.End()] }
+func (l *Lined) Source(n *ast.Node) string { return l.Text[l.Pos(n):n.End()] }
 
-// where is file:line of n, the file by its base name.
-func (l *lined) where(n *ast.Node) string {
-	name := l.f.FileName()
-	return fmt.Sprintf("%s:%d", name[strings.LastIndex(name, "/")+1:], l.line(l.pos(n)))
+// Where is file:line of n, the file by its base name.
+func (l *Lined) Where(n *ast.Node) string {
+	name := l.File.FileName()
+	return fmt.Sprintf("%s:%d", name[strings.LastIndex(name, "/")+1:], l.Line(l.Pos(n)))
 }
 
 // hasClass reports whether the file declares a class called name.
-func (l *lined) hasClass(name string) bool {
-	for _, s := range l.f.Statements.Nodes {
+func (l *Lined) hasClass(name string) bool {
+	for _, s := range l.File.Statements.Nodes {
 		if ast.IsClassDeclaration(s) && s.Name() != nil && s.Name().Text() == name {
 			return true
 		}

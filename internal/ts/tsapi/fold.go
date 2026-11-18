@@ -18,7 +18,7 @@ import (
 // expressions. With line, only the matches that start on that line of
 // in (path when in is ""). skipped says why matches were left.
 func (p *Project) Fold(ctx context.Context, path, name string, line int, in string) (edits []Edit, folded int, skipped []string, refusal string) {
-	l, why := p.lined(path)
+	l, why := p.Lined(path)
 	if why != "" {
 		return nil, 0, nil, why
 	}
@@ -85,12 +85,12 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 	var paramTypes []string
 	for i, prm := range fn.Parameters() {
 		if !ast.IsIdentifier(prm.Name()) || prm.AsParameterDeclaration().DotDotDotToken != nil || ast.IsThisParameter(prm) {
-			return nil, 0, nil, fmt.Sprintf("%s has a parameter that is not a plain name (%s)", name, l.where(prm))
+			return nil, 0, nil, fmt.Sprintf("%s has a parameter that is not a plain name (%s)", name, l.Where(prm))
 		}
 		s := c.GetSymbolAtLocation(prm.Name())
 		holes[s] = i
 		paramTypes = append(paramTypes, c.TypeToString(c.GetTypeAtLocation(prm.Name())))
-		if where := l.assigns(body, s, c); where != "" {
+		if where := l.Assigns(body, s, c); where != "" {
 			return nil, 0, nil, fmt.Sprintf("%s assigns its parameter %s (%s), which code passing it could not see", name, prm.Name().Text(), where)
 		}
 	}
@@ -134,7 +134,7 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 		obj   bool // parameters used by their properties stand for an object of them
 	}
 	var matches []found
-	try := func(cl *lined, roots []*ast.Node, pats []*ast.Node, obj bool) {
+	try := func(cl *Lined, roots []*ast.Node, pats []*ast.Node, obj bool) {
 		m := newMatcher(c, l, cl)
 		m.holes, m.this = holes, method
 		n := nholes
@@ -149,7 +149,7 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 			m.inC = within(enclosing)
 		} else {
 			m.inC = func(s *ast.Symbol) bool {
-				return slices.ContainsFunc(s.Declarations, func(d *ast.Node) bool { return ast.GetSourceFileOfNode(d) == cl.f })
+				return slices.ContainsFunc(s.Declarations, func(d *ast.Node) bool { return ast.GetSourceFileOfNode(d) == cl.File })
 			}
 		}
 		for i := range pats {
@@ -163,15 +163,15 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 				if i < len(fn.Parameters()) {
 					what = fn.Parameters()[i].Name().Text()
 				}
-				skipped = append(skipped, fmt.Sprintf("%s: nothing stands for %s, which the body does not use", cl.where(roots[0]), what))
+				skipped = append(skipped, fmt.Sprintf("%s: nothing stands for %s, which the body does not use", cl.Where(roots[0]), what))
 				return
 			}
 		}
-		matches = append(matches, found{root: roots, args: m.args, texts: m.texts, runs: m.runs, uses: m.uses, where: cl.where(roots[0]), obj: obj})
+		matches = append(matches, found{root: roots, args: m.args, texts: m.texts, runs: m.runs, uses: m.uses, where: cl.Where(roots[0]), obj: obj})
 	}
 	// tryBoth tries a match as it is, then with the parameters used by
 	// their properties standing for an object of them.
-	tryBoth := func(cl *lined, roots []*ast.Node, pats []*ast.Node) {
+	tryBoth := func(cl *Lined, roots []*ast.Node, pats []*ast.Node) {
 		before := len(matches)
 		try(cl, roots, pats, false)
 		if len(matches) == before && len(fields) > 0 {
@@ -180,17 +180,17 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 	}
 	// trySetter matches an object literal of the setter's type that ends
 	// with its property: the others stand for the object it sets.
-	trySetter := func(cl *lined, n *ast.Node) bool {
+	trySetter := func(cl *Lined, n *ast.Node) bool {
 		t := c.GetContextualType(n, checker.ContextFlagsNone)
 		props := n.AsObjectLiteralExpression().Properties.Nodes
 		if t == nil || !sameType(t, st.typ) || len(props) == 0 {
 			return false
 		}
 		last := props[len(props)-1]
-		if !ast.IsPropertyAssignment(last) || last.Name() == nil || ast.IsComputedPropertyName(last.Name()) || cl.source(last.Name()) != st.field {
+		if !ast.IsPropertyAssignment(last) || last.Name() == nil || ast.IsComputedPropertyName(last.Name()) || cl.Source(last.Name()) != st.field {
 			return false
 		}
-		m := found{root: []*ast.Node{n}, args: make([]*ast.Node, nholes), texts: make([]string, nholes), runs: make([][]*ast.Node, nholes), uses: make([][]*ast.Node, nholes), where: cl.where(n)}
+		m := found{root: []*ast.Node{n}, args: make([]*ast.Node, nholes), texts: make([]string, nholes), runs: make([][]*ast.Node, nholes), uses: make([][]*ast.Node, nholes), where: cl.Where(n)}
 		m.args[st.value], m.uses[st.value] = last.Initializer(), []*ast.Node{st.valueUse}
 		m.uses[st.spread] = []*ast.Node{st.spreadUse}
 		rest := props[:len(props)-1]
@@ -199,7 +199,7 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 		} else {
 			var texts []string
 			for _, r := range rest {
-				texts = append(texts, cl.source(r))
+				texts = append(texts, cl.Source(r))
 				switch {
 				case ast.IsPropertyAssignment(r):
 					m.runs[st.spread] = append(m.runs[st.spread], r.Initializer())
@@ -225,10 +225,10 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 		}
 		cl := newLined(f)
 		onLine := func(n *ast.Node) bool {
-			return line == 0 || f.FileName() == in && cl.line(cl.pos(n)) == line
+			return line == 0 || f.FileName() == in && cl.Line(cl.Pos(n)) == line
 		}
 		outside := func(n *ast.Node) bool {
-			return f != l.f || n.End() <= fn.Pos() || n.Pos() >= fn.End()
+			return f != l.File || n.End() <= fn.Pos() || n.Pos() >= fn.End()
 		}
 		if expr != nil {
 			cl.expressions(func(n *ast.Node) {
@@ -301,7 +301,7 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 			if i < len(paramTypes) {
 				pt := c.GetTypeAtLocation(fn.Parameters()[i].Name())
 				if at := c.GetTypeAtLocation(a); at != nil && pt != nil && !c.IsTypeAssignableTo(at, pt) {
-					skip(fmt.Sprintf("%s is a %s, not a %s", cl.source(a), c.TypeToString(at), paramTypes[i]))
+					skip(fmt.Sprintf("%s is a %s, not a %s", cl.Source(a), c.TypeToString(at), paramTypes[i]))
 					ok = false
 					break
 				}
@@ -337,11 +337,11 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 			last := m.root[len(m.root)-1]
 			var leak string
 			for _, r := range m.root {
-				for _, n := range declared(r) {
+				for _, n := range Declared(r) {
 					s := c.GetSymbolAtLocation(n)
-					identifiers(r.Parent, func(id *ast.Node) {
+					Identifiers(r.Parent, func(id *ast.Node) {
 						if leak == "" && id.Pos() >= last.End() && symbolOf(c, id) == s {
-							leak = fmt.Sprintf("%s, declared there, is used after it (%s)", n.Text(), cl.where(id))
+							leak = fmt.Sprintf("%s, declared there, is used after it (%s)", n.Text(), cl.Where(id))
 						}
 					})
 				}
@@ -367,14 +367,14 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 				skip(fmt.Sprintf("%s means something else there", nameNode.Text()))
 				continue
 			case !exported:
-				skip(fmt.Sprintf("%s is not exported, so %s cannot call it", nameNode.Text(), pathpkg.Base(cl.f.FileName())))
+				skip(fmt.Sprintf("%s is not exported, so %s cannot call it", nameNode.Text(), pathpkg.Base(cl.File.FileName())))
 				continue
 			default:
 				callee = nameNode.Text()
-				if !imported[cl.f] {
-					imported[cl.f] = true
+				if !imported[cl.File] {
+					imported[cl.File] = true
 					at, text := cl.importAt()
-					edits = append(edits, Edit{File: cl.f.FileName(), Start: at, End: at, NewText: text(importLine{spec: cl.specFor(l.f.FileName()), named: []string{callee}}.text(cl.quote(), cl.semi()))})
+					edits = append(edits, Edit{File: cl.File.FileName(), Start: at, End: at, NewText: text(importLine{spec: cl.specFor(l.File.FileName()), named: []string{callee}}.text(cl.quote(), cl.Semi()))})
 				}
 			}
 		}
@@ -390,13 +390,13 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 					if ast.IsIdentifier(b) && b.Text() == k {
 						props = append(props, k)
 					} else {
-						props = append(props, k+": "+cl.source(b))
+						props = append(props, k+": "+cl.Source(b))
 					}
 				}
 				args = append(args, "{ "+strings.Join(props, ", ")+" }")
 				continue
 			}
-			s := cl.source(a)
+			s := cl.Source(a)
 			if m.texts[i] != "" {
 				s = m.texts[i]
 			} else if ast.IsBinaryExpression(a) && a.AsBinaryExpression().OperatorToken.Kind == ast.KindCommaToken {
@@ -406,10 +406,10 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 		}
 		call := callee + "(" + strings.Join(args, ", ") + ")"
 		if expr != nil || isArrowBody(root) {
-			edits = append(edits, Edit{File: cl.f.FileName(), Start: cl.pos(root), End: root.End(), NewText: call})
+			edits = append(edits, Edit{File: cl.File.FileName(), Start: cl.Pos(root), End: root.End(), NewText: call})
 		} else {
 			last := m.root[len(m.root)-1]
-			edits = append(edits, Edit{File: cl.f.FileName(), Start: cl.pos(root), End: last.End(), NewText: call + cl.semi()})
+			edits = append(edits, Edit{File: cl.File.FileName(), Start: cl.Pos(root), End: last.End(), NewText: call + cl.Semi()})
 		}
 		folded++
 	}
@@ -435,7 +435,7 @@ func propertiesOnly(c *checker.Checker, body *ast.Node, s *ast.Symbol) []string 
 	}
 	var props []string
 	only := true
-	identifiers(body, func(id *ast.Node) {
+	Identifiers(body, func(id *ast.Node) {
 		if symbolOf(c, id) != s {
 			return
 		}
@@ -501,9 +501,9 @@ func sameType(a, b *checker.Type) bool {
 }
 
 // importNames returns the names the file imports sym by.
-func (l *lined) importNames(c *checker.Checker, sym *ast.Symbol) []string {
+func (l *Lined) importNames(c *checker.Checker, sym *ast.Symbol) []string {
 	var out []string
-	identifiers(l.f.AsNode(), func(id *ast.Node) {
+	Identifiers(l.File.AsNode(), func(id *ast.Node) {
 		if id.Parent != nil && ast.IsImportSpecifier(id.Parent) && id.Parent.Name() == id {
 			if s := c.GetSymbolAtLocation(id); s != nil && c.SkipAlias(s) == sym {
 				out = append(out, id.Text())

@@ -99,11 +99,11 @@ func TestMove(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	l, why := p.lined(filepath.Join(dir, "src/a.ts"))
+	l, why := p.Lined(filepath.Join(dir, "src/a.ts"))
 	if why != "" {
 		t.Fatal(why)
 	}
-	c, done := p.prog.GetProgram().GetTypeCheckerForFile(context.Background(), l.f)
+	c, done := p.prog.GetProgram().GetTypeCheckerForFile(context.Background(), l.File)
 	defer done()
 	a := newEffects(c, l)
 
@@ -213,11 +213,11 @@ func TestCachedGetter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	l, why := p.lined(filepath.Join(dir, "src/a.ts"))
+	l, why := p.Lined(filepath.Join(dir, "src/a.ts"))
 	if why != "" {
 		t.Fatal(why)
 	}
-	c, done := p.prog.GetProgram().GetTypeCheckerForFile(context.Background(), l.f)
+	c, done := p.prog.GetProgram().GetTypeCheckerForFile(context.Background(), l.File)
 	defer done()
 	a := newEffects(c, l)
 	for _, tc := range []struct {

@@ -57,12 +57,12 @@ func (p *Project) UsesOf(ctx context.Context, name string, rel func(string) stri
 			continue
 		}
 		l := newLined(f)
-		inspect(f.AsNode(), func(n *ast.Node) bool {
+		Inspect(f.AsNode(), func(n *ast.Node) bool {
 			if ast.IsIdentifier(n) && n != decls[0] && n.Text() == sym.Name {
 				if s := c.GetSymbolAtLocation(n); s != nil && c.SkipAlias(s) == sym && !ast.IsImportSpecifier(n.Parent) && !ast.IsExportSpecifier(n.Parent) {
-					pos := l.pos(n)
-					line := l.line(pos)
-					uses = append(uses, Use{File: f.FileName(), Line: line, Pos: pos, Role: useRole(n), Text: strings.TrimSpace(l.text[l.start(line):l.end(line)])})
+					pos := l.Pos(n)
+					line := l.Line(pos)
+					uses = append(uses, Use{File: f.FileName(), Line: line, Pos: pos, Role: useRole(n), Text: strings.TrimSpace(l.Text[l.Start(line):l.End(line)])})
 				}
 			}
 			return true
@@ -84,7 +84,7 @@ func declarationNamed(f *ast.SourceFile, name string) *ast.Node {
 			}
 			members, _ := l.members(owner)
 			for _, m := range members {
-				if nm := m.Name(); nm != nil && l.source(nm) == member {
+				if nm := m.Name(); nm != nil && l.Source(nm) == member {
 					return nm
 				}
 			}

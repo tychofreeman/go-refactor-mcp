@@ -16,7 +16,7 @@ import (
 // of to's body. Every use must reach them through a to (or a class that
 // extends it), so that each still finds them there.
 func (p *Project) MoveMethod(ctx context.Context, path, name, to string, also []string, along *[]string) ([]Edit, string) {
-	l, why := p.lined(path)
+	l, why := p.Lined(path)
 	if why != "" {
 		return nil, why
 	}
@@ -58,7 +58,7 @@ func (p *Project) MoveMethod(ctx context.Context, path, name, to string, also []
 	// The class to: one of the solution's that extends from.
 	var targets []*ast.Node
 	for _, f := range p.sources() {
-		inspect(f.AsNode(), func(n *ast.Node) bool {
+		Inspect(f.AsNode(), func(n *ast.Node) bool {
 			if ast.IsClassDeclaration(n) && n.Name() != nil && n.Name().Text() == to && n != from && extends(c, n, from) {
 				targets = append(targets, n)
 			}
@@ -77,7 +77,7 @@ func (p *Project) MoveMethod(ctx context.Context, path, name, to string, also []
 	syms := map[*ast.Symbol]bool{}
 	for _, m := range moved {
 		mname := m.Name().Text()
-		if slices.ContainsFunc(target.Members(), func(x *ast.Node) bool { return x.Name() != nil && tl.source(x.Name()) == mname }) {
+		if slices.ContainsFunc(target.Members(), func(x *ast.Node) bool { return x.Name() != nil && tl.Source(x.Name()) == mname }) {
 			return nil, fmt.Sprintf("%s already has a member %s", to, mname)
 		}
 		family, why := p.family(c, m)
@@ -94,13 +94,13 @@ func (p *Project) MoveMethod(ctx context.Context, path, name, to string, also []
 	for _, f := range p.sources() {
 		fl := newLined(f)
 		why := ""
-		identifiers(f.AsNode(), func(id *ast.Node) {
+		Identifiers(f.AsNode(), func(id *ast.Node) {
 			if why != "" || ast.IsDeclarationName(id) || !syms[symbolOf(c, id)] {
 				return
 			}
 			acc := id.Parent
 			if !ast.IsPropertyAccessExpression(acc) || acc.Name() != id {
-				why = fmt.Sprintf("%s at %s is not reached through a %s", id.Text(), fl.where(id), to)
+				why = fmt.Sprintf("%s at %s is not reached through a %s", id.Text(), fl.Where(id), to)
 				return
 			}
 			recv := ast.SkipParentheses(acc.Expression())
@@ -113,9 +113,9 @@ func (p *Project) MoveMethod(ctx context.Context, path, name, to string, also []
 				case m != nil && slices.Contains(moved, m):
 				case m != nil && m.Parent != nil && ast.IsClassDeclaration(m.Parent) && reaches(m.Parent):
 				case m != nil && m.Parent != nil && ast.IsClassLike(m.Parent) && m.Parent.Name() != nil:
-					why = fmt.Sprintf("%s at %s reaches %s in %s, which does not move; name it in also", fl.source(acc.Parent), fl.where(id), id.Text(), memberName(m))
+					why = fmt.Sprintf("%s at %s reaches %s in %s, which does not move; name it in also", fl.Source(acc.Parent), fl.Where(id), id.Text(), memberName(m))
 				default:
-					why = fmt.Sprintf("%s at %s is not reached through a %s", fl.source(acc), fl.where(id), to)
+					why = fmt.Sprintf("%s at %s is not reached through a %s", fl.Source(acc), fl.Where(id), to)
 				}
 				return
 			}
@@ -133,7 +133,7 @@ func (p *Project) MoveMethod(ctx context.Context, path, name, to string, also []
 				if t != nil {
 					what = "a " + c.TypeToString(t)
 				}
-				why = fmt.Sprintf("the call at %s reaches %s through %s, not a %s", fl.where(id), id.Text(), what, to)
+				why = fmt.Sprintf("the call at %s reaches %s through %s, not a %s", fl.Where(id), id.Text(), what, to)
 			}
 		})
 		if why != "" {
@@ -141,13 +141,13 @@ func (p *Project) MoveMethod(ctx context.Context, path, name, to string, also []
 		}
 	}
 	// The methods go, and their text goes to the end of to's body.
-	pl, _, why := p.MemberPlace(tl.f.FileName(), to, "", "")
+	pl, _, why := p.MemberPlace(tl.File.FileName(), to, "", "")
 	if why != "" {
 		return nil, why
 	}
 	// Each class's step: its members' indentation past its own.
-	fromStep := strings.TrimPrefix(l.indent(l.line(l.pos(moved[0]))), l.indent(l.line(l.pos(from))))
-	toStep := strings.TrimPrefix(pl.Indent, tl.indent(tl.line(tl.pos(target))))
+	fromStep := strings.TrimPrefix(l.Indent(l.Line(l.Pos(moved[0]))), l.Indent(l.Line(l.Pos(from))))
+	toStep := strings.TrimPrefix(pl.Indent, tl.Indent(tl.Line(tl.Pos(target))))
 	var edits []Edit
 	var texts []string
 	for _, m := range moved {
@@ -155,14 +155,14 @@ func (p *Project) MoveMethod(ctx context.Context, path, name, to string, also []
 		if !ok {
 			return nil, fmt.Sprintf("%s shares a line with other code; put it on lines of its own first", memberName(m))
 		}
-		texts = append(texts, strings.TrimSuffix(l.reindentSteps(a, b, l.indent(l.line(l.pos(m))), pl.Indent, fromStep, toStep), "\n"))
-		edits = append(edits, Edit{File: l.f.FileName(), Start: a, End: b})
+		texts = append(texts, strings.TrimSuffix(l.reindentSteps(a, b, l.Indent(l.Line(l.Pos(m))), pl.Indent, fromStep, toStep), "\n"))
+		edits = append(edits, Edit{File: l.File.FileName(), Start: a, End: b})
 	}
 	text := strings.Join(texts, "\n\n")
 	if pl.Prefix == "" {
 		text = "\n" + text
 	}
-	edits = append(edits, Edit{File: tl.f.FileName(), Start: pl.At, End: pl.End, NewText: pl.Prefix + text + pl.Suffix})
+	edits = append(edits, Edit{File: tl.File.FileName(), Start: pl.At, End: pl.End, NewText: pl.Prefix + text + pl.Suffix})
 	return edits, ""
 }
 
@@ -193,7 +193,7 @@ func extends(c *checker.Checker, cls, base *ast.Node) bool {
 // privateCallees returns the private instance methods of the class of
 // moved that are called as this.m(...) from moved, directly or through
 // each other, and used nowhere else in the class; in the order found.
-func privateCallees(l *lined, moved []*ast.Node) []*ast.Node {
+func privateCallees(l *Lined, moved []*ast.Node) []*ast.Node {
 	class := moved[0].Parent
 	byName := map[string]*ast.Node{}
 	for _, m := range class.Members() {
@@ -208,7 +208,7 @@ func privateCallees(l *lined, moved []*ast.Node) []*ast.Node {
 	var found []*ast.Node
 	group := slices.Clone(moved)
 	for i := 0; i < len(group); i++ {
-		inspect(group[i], func(n *ast.Node) bool {
+		Inspect(group[i], func(n *ast.Node) bool {
 			if ast.IsPropertyAccessExpression(n) && n.Expression().Kind == ast.KindThisKeyword {
 				if m := byName[n.Name().Text()]; m != nil && !slices.Contains(group, m) {
 					group = append(group, m)
@@ -222,7 +222,7 @@ func privateCallees(l *lined, moved []*ast.Node) []*ast.Node {
 	for _, m := range found {
 		name := m.Name().Text()
 		elsewhere := false
-		inspect(class, func(n *ast.Node) bool {
+		Inspect(class, func(n *ast.Node) bool {
 			if !elsewhere && ast.IsIdentifier(n) && n.Text() == name && n != m.Name() && !in(group, n) {
 				elsewhere = true
 			}

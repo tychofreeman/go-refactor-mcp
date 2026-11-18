@@ -16,7 +16,7 @@ import (
 // members, be used nowhere else, and share no member name with holder; and
 // the property may only be used as x.field.m.
 func (p *Project) InlineClass(ctx context.Context, path, holder, field string) ([]Edit, string) {
-	l, why := p.lined(path)
+	l, why := p.Lined(path)
 	if why != "" {
 		return nil, why
 	}
@@ -43,12 +43,12 @@ func (p *Project) InlineClass(ctx context.Context, path, holder, field string) (
 		return nil, fmt.Sprintf("%s is not initialized with new S() of a class S, which inline takes", field)
 	}
 	if args := init.ArgumentList(); args != nil && len(args.Nodes) > 0 {
-		return nil, fmt.Sprintf("%s is initialized with %s, not new %s() with no arguments", field, l.source(init), init.Expression().Text())
+		return nil, fmt.Sprintf("%s is initialized with %s, not new %s() with no arguments", field, l.Source(init), init.Expression().Text())
 	}
-	c, done := p.prog.GetProgram().GetTypeCheckerForFile(ctx, l.f)
+	c, done := p.prog.GetProgram().GetTypeCheckerForFile(ctx, l.File)
 	defer done()
 	sym := symbolOf(c, init.Expression())
-	if sym == nil || sym.ValueDeclaration == nil || !ast.IsClassDeclaration(sym.ValueDeclaration) || ast.GetSourceFileOfNode(sym.ValueDeclaration) != l.f {
+	if sym == nil || sym.ValueDeclaration == nil || !ast.IsClassDeclaration(sym.ValueDeclaration) || ast.GetSourceFileOfNode(sym.ValueDeclaration) != l.File {
 		return nil, fmt.Sprintf("%s is not a class declared in this file", init.Expression().Text())
 	}
 	s := sym.ValueDeclaration
@@ -69,9 +69,9 @@ func (p *Project) InlineClass(ctx context.Context, path, holder, field string) (
 	for _, m := range members {
 		switch {
 		case ast.IsConstructorDeclaration(m):
-			return nil, fmt.Sprintf("%s has a constructor (%s), which %s's would have to run", name, l.where(m), holder)
+			return nil, fmt.Sprintf("%s has a constructor (%s), which %s's would have to run", name, l.Where(m), holder)
 		case m.ModifierFlags()&ast.ModifierFlagsStatic != 0:
-			return nil, fmt.Sprintf("%s has a static member (%s)", name, l.where(m))
+			return nil, fmt.Sprintf("%s has a static member (%s)", name, l.Where(m))
 		case m.Name() != nil && taken[m.Name().Text()]:
 			return nil, fmt.Sprintf("%s and %s both have %s", holder, name, m.Name().Text())
 		}
@@ -84,20 +84,20 @@ func (p *Project) InlineClass(ctx context.Context, path, holder, field string) (
 		fl := newLined(f)
 		psym := c.GetSymbolAtLocation(prop.Name())
 		var refusal string
-		identifiers(f.AsNode(), func(id *ast.Node) {
+		Identifiers(f.AsNode(), func(id *ast.Node) {
 			if refusal != "" || id == s.Name() || id == prop.Name() {
 				return
 			}
 			switch symbolOf(c, id) {
 			case sym:
 				if id.Pos() < prop.Pos() || id.Pos() >= prop.End() {
-					refusal = fmt.Sprintf("%s is used outside %s.%s, at %s", name, holder, field, fl.where(id))
+					refusal = fmt.Sprintf("%s is used outside %s.%s, at %s", name, holder, field, fl.Where(id))
 				}
 			case psym:
 				pa := id.Parent
 				if !ast.IsPropertyAccessExpression(pa) || pa.Name() != id || !ast.IsPropertyAccessExpression(pa.Parent) || pa.Parent.Expression() != pa ||
 					pa.AsPropertyAccessExpression().QuestionDotToken != nil || pa.Parent.AsPropertyAccessExpression().QuestionDotToken != nil {
-					refusal = fmt.Sprintf("the value of %s is used whole at %s, which would have no object to stand for once %s is inlined", field, fl.where(id), name)
+					refusal = fmt.Sprintf("the value of %s is used whole at %s, which would have no object to stand for once %s is inlined", field, fl.Where(id), name)
 					return
 				}
 				edits = append(edits, Edit{File: f.FileName(), Start: pa.Expression().End(), End: pa.End(), NewText: ""})
@@ -113,13 +113,13 @@ func (p *Project) InlineClass(ctx context.Context, path, holder, field string) (
 	}
 	ma, _, _ := l.lineRange(members[0])
 	_, mb, _ := l.lineRange(members[len(members)-1])
-	from, to := l.indent(l.line(l.pos(members[0]))), l.indent(l.line(l.pos(prop)))
-	edits = append(edits, Edit{File: l.f.FileName(), Start: pa, End: pb, NewText: l.reindent(ma, mb, from, to)})
+	from, to := l.Indent(l.Line(l.Pos(members[0]))), l.Indent(l.Line(l.Pos(prop)))
+	edits = append(edits, Edit{File: l.File.FileName(), Start: pa, End: pb, NewText: l.reindent(ma, mb, from, to)})
 	sa, sb, ok := l.lineRange(s)
 	if !ok {
 		return nil, fmt.Sprintf("%s shares its lines with other code", name)
 	}
 	sa, sb = l.withBlank(sa, sb)
-	edits = append(edits, Edit{File: l.f.FileName(), Start: sa, End: sb, NewText: ""})
+	edits = append(edits, Edit{File: l.File.FileName(), Start: sa, End: sb, NewText: ""})
 	return edits, ""
 }

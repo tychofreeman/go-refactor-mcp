@@ -21,7 +21,7 @@ import (
 // newType is an interface, and every object literal of the type is
 // restructured: { id, street, city } becomes { id, as: { street, city } }.
 func (p *Project) ExtractType(ctx context.Context, path string, line int, name string, column int, fields []string, newType, as string) ([]Edit, string) {
-	l, why := p.lined(path)
+	l, why := p.Lined(path)
 	if why != "" {
 		return nil, why
 	}
@@ -59,7 +59,7 @@ func (p *Project) ExtractType(ctx context.Context, path string, line int, name s
 	for _, f := range fields {
 		n := 0
 		for _, m := range members {
-			if m.Name() != nil && l.source(m.Name()) == f {
+			if m.Name() != nil && l.Source(m.Name()) == f {
 				chosen = append(chosen, m)
 				n++
 			}
@@ -70,7 +70,7 @@ func (p *Project) ExtractType(ctx context.Context, path string, line int, name s
 		moved[f] = true
 	}
 	for _, m := range members {
-		if m.Name() != nil && l.source(m.Name()) == as {
+		if m.Name() != nil && l.Source(m.Name()) == as {
 			return nil, fmt.Sprintf("%s already has a member %s; choose another as", name, as)
 		}
 	}
@@ -101,7 +101,7 @@ func (p *Project) ExtractType(ctx context.Context, path string, line int, name s
 	declSym := c.GetSymbolAtLocation(decl.Name())
 	for _, id := range p.references(c, []*ast.Symbol{declSym}) {
 		if h := id.Parent; h != nil && ast.IsExpressionWithTypeArguments(h) && h.Parent != nil && ast.IsHeritageClause(h.Parent) {
-			return nil, fmt.Sprintf("%s is extended or implemented at %s, which would have to change with it", name, newLined(ast.GetSourceFileOfNode(id)).where(id))
+			return nil, fmt.Sprintf("%s is extended or implemented at %s, which would have to change with it", name, newLined(ast.GetSourceFileOfNode(id)).Where(id))
 		}
 	}
 	if why := p.byName(c, declSym, name, newType); why != "" {
@@ -112,7 +112,7 @@ func (p *Project) ExtractType(ctx context.Context, path string, line int, name s
 		syms = append(syms, c.GetSymbolAtLocation(m.Name()))
 	}
 	inMoved := func(n *ast.Node) bool {
-		if ast.GetSourceFileOfNode(n) != l.f {
+		if ast.GetSourceFileOfNode(n) != l.File {
 			return false
 		}
 		return slices.ContainsFunc(chosen, func(m *ast.Node) bool { return n.Pos() >= m.Pos() && n.End() <= m.End() })
@@ -123,16 +123,16 @@ func (p *Project) ExtractType(ctx context.Context, path string, line int, name s
 		pa := id.Parent
 		access := ast.IsPropertyAccessExpression(pa) && pa.Name() == id
 		switch {
-		case ast.GetSourceFileOfNode(id) == l.f && slices.ContainsFunc(rewritten, func(r [2]int) bool { return id.Pos() >= r[0] && id.End() <= r[1] }):
+		case ast.GetSourceFileOfNode(id) == l.File && slices.ContainsFunc(rewritten, func(r [2]int) bool { return id.Pos() >= r[0] && id.End() <= r[1] }):
 			// In a statement of the constructor that buildInConstructor rewrites.
 		case inMoved(id) && access && pa.Expression().Kind == ast.KindThisKeyword:
 			// Moves with its member, where this is the new type.
 		case inMoved(id):
-			return nil, fmt.Sprintf("%s is read from another value at %s, in a member that moves", id.Text(), fl.where(id))
+			return nil, fmt.Sprintf("%s is read from another value at %s, in a member that moves", id.Text(), fl.Where(id))
 		case access:
-			edits = append(edits, Edit{File: fl.f.FileName(), Start: fl.pos(id), End: fl.pos(id), NewText: as + "."})
+			edits = append(edits, Edit{File: fl.File.FileName(), Start: fl.Pos(id), End: fl.Pos(id), NewText: as + "."})
 		default:
-			return nil, fmt.Sprintf("%s is used at %s other than as x.%s", id.Text(), fl.where(id), id.Text())
+			return nil, fmt.Sprintf("%s is used at %s other than as x.%s", id.Text(), fl.Where(id), id.Text())
 		}
 	}
 	lits, why := p.literals(c, declSym, name, class, moved, as)
@@ -147,8 +147,8 @@ func (p *Project) ExtractType(ctx context.Context, path string, line int, name s
 }
 
 // movable says why the member m of name cannot move into newType, or "".
-func (l *lined) movable(m *ast.Node, class bool, name, newType string, moved map[string]bool) string {
-	what := l.source(m.Name())
+func (l *Lined) movable(m *ast.Node, class bool, name, newType string, moved map[string]bool) string {
+	what := l.Source(m.Name())
 	if _, _, ok := l.lineRange(m); !ok {
 		return fmt.Sprintf("%s shares its line with other members; put each member on a line of its own", what)
 	}
@@ -173,29 +173,29 @@ func (l *lined) movable(m *ast.Node, class bool, name, newType string, moved map
 			return "" // the constructor sets it: buildInConstructor
 		}
 		var this *ast.Node
-		inspect(init, func(n *ast.Node) bool {
+		Inspect(init, func(n *ast.Node) bool {
 			if n.Kind == ast.KindThisKeyword && this == nil {
 				this = n
 			}
 			return this == nil
 		})
 		if this != nil {
-			return fmt.Sprintf("%s's initializer reads this, at %s", what, l.where(this))
+			return fmt.Sprintf("%s's initializer reads this, at %s", what, l.Where(this))
 		}
 		return ""
 	}
 	why := ""
-	inspect(m, func(n *ast.Node) bool {
+	Inspect(m, func(n *ast.Node) bool {
 		if why != "" {
 			return false
 		}
 		switch n.Kind {
 		case ast.KindSuperKeyword:
-			why = fmt.Sprintf("%s uses super, at %s", what, l.where(n))
+			why = fmt.Sprintf("%s uses super, at %s", what, l.Where(n))
 		case ast.KindThisKeyword:
 			pa := n.Parent
 			if !ast.IsPropertyAccessExpression(pa) || pa.Expression() != n {
-				why = fmt.Sprintf("%s uses this as a whole, at %s", what, l.where(n))
+				why = fmt.Sprintf("%s uses this as a whole, at %s", what, l.Where(n))
 			} else if used := pa.Name().Text(); !moved[used] {
 				why = fmt.Sprintf("%s uses %s, which stays in %s; move it too, or pass it in", what, used, name)
 			}
@@ -212,28 +212,28 @@ func (p *Project) byName(c *checker.Checker, sym *ast.Symbol, name, newType stri
 	why := ""
 	for _, f := range p.sources() {
 		fl := newLined(f)
-		inspect(f.AsNode(), func(n *ast.Node) bool {
+		Inspect(f.AsNode(), func(n *ast.Node) bool {
 			if why != "" {
 				return false
 			}
 			switch {
 			case ast.IsCallExpression(n) && ast.IsPropertyAccessExpression(n.Expression()):
-				callee := fl.source(n.Expression())
+				callee := fl.Source(n.Expression())
 				for _, a := range n.Arguments() {
 					switch {
 					case !holds(c.GetTypeAtLocation(a)):
 					case byKey[callee]:
-						why = fmt.Sprintf("a value of %s is passed to %s at %s, which finds properties by name, so moving members into %s would change what it does", name, callee, fl.where(n), newType)
+						why = fmt.Sprintf("a value of %s is passed to %s at %s, which finds properties by name, so moving members into %s would change what it does", name, callee, fl.Where(n), newType)
 					case strings.HasPrefix(callee, "console."):
-						why = fmt.Sprintf("a value of %s is printed by %s at %s, whose output would change", name, callee, fl.where(n))
+						why = fmt.Sprintf("a value of %s is printed by %s at %s, whose output would change", name, callee, fl.Where(n))
 					}
 				}
 			case ast.IsForInStatement(n) && holds(c.GetTypeAtLocation(n.Expression())):
-				why = fmt.Sprintf("a value of %s is looped over with for...in at %s, which finds properties by name", name, fl.where(n))
+				why = fmt.Sprintf("a value of %s is looped over with for...in at %s, which finds properties by name", name, fl.Where(n))
 			case ast.IsBinaryExpression(n) && n.AsBinaryExpression().OperatorToken.Kind == ast.KindInKeyword && holds(c.GetTypeAtLocation(n.AsBinaryExpression().Right)):
-				why = fmt.Sprintf("a value of %s is tested for a property by name at %s", name, fl.where(n))
+				why = fmt.Sprintf("a value of %s is tested for a property by name at %s", name, fl.Where(n))
 			case ast.IsObjectBindingPattern(n) && holds(c.GetTypeAtLocation(n)):
-				why = fmt.Sprintf("a value of %s is destructured at %s; read its members as x.m first", name, fl.where(n))
+				why = fmt.Sprintf("a value of %s is destructured at %s; read its members as x.m first", name, fl.Where(n))
 			}
 			return true
 		})
@@ -251,7 +251,7 @@ func (p *Project) literals(c *checker.Checker, sym *ast.Symbol, name string, cla
 	why := ""
 	for _, f := range p.sources() {
 		fl := newLined(f)
-		inspect(f.AsNode(), func(n *ast.Node) bool {
+		Inspect(f.AsNode(), func(n *ast.Node) bool {
 			if why != "" {
 				return false
 			}
@@ -267,9 +267,9 @@ func (p *Project) literals(c *checker.Checker, sym *ast.Symbol, name string, cla
 			for i, pr := range props {
 				switch {
 				case ast.IsSpreadAssignment(pr):
-					why = fmt.Sprintf("a literal of %s at %s spreads another value, whose members would not move", name, fl.where(n))
+					why = fmt.Sprintf("a literal of %s at %s spreads another value, whose members would not move", name, fl.Where(n))
 					return false
-				case pr.Name() != nil && moved[fl.source(pr.Name())]:
+				case pr.Name() != nil && moved[fl.Source(pr.Name())]:
 					at = append(at, i)
 				}
 			}
@@ -277,15 +277,15 @@ func (p *Project) literals(c *checker.Checker, sym *ast.Symbol, name string, cla
 				return true
 			}
 			if class {
-				why = fmt.Sprintf("an object literal stands for a %s at %s", name, fl.where(n))
+				why = fmt.Sprintf("an object literal stands for a %s at %s", name, fl.Where(n))
 				return false
 			}
 			var parts []string
 			for _, i := range at {
-				parts = append(parts, fl.source(props[i]))
+				parts = append(parts, fl.Source(props[i]))
 			}
 			first := props[at[0]]
-			edits = append(edits, Edit{File: f.FileName(), Start: fl.pos(first), End: first.End(), NewText: as + ": { " + strings.Join(parts, ", ") + " }"})
+			edits = append(edits, Edit{File: f.FileName(), Start: fl.Pos(first), End: first.End(), NewText: as + ": { " + strings.Join(parts, ", ") + " }"})
 			for _, i := range at[1:] {
 				edits = append(edits, Edit{File: f.FileName(), Start: props[i-1].End(), End: props[i].End()})
 			}
@@ -300,9 +300,9 @@ func (p *Project) literals(c *checker.Checker, sym *ast.Symbol, name string, cla
 
 // moveMembers returns the edits that declare newType, just before decl,
 // with the chosen members, and put the property as in their place.
-func (l *lined) moveMembers(c *checker.Checker, decl *ast.Node, chosen []*ast.Node, class bool, newType, as string, ctorSet []*ast.Node, private bool) []Edit {
-	ind := l.indent(l.line(l.pos(decl)))
-	in := ind + l.unit()
+func (l *Lined) moveMembers(c *checker.Checker, decl *ast.Node, chosen []*ast.Node, class bool, newType, as string, ctorSet []*ast.Node, private bool) []Edit {
+	ind := l.Indent(l.Line(l.Pos(decl)))
+	in := ind + l.Unit()
 	export := ""
 	if ast.HasSyntacticModifier(decl, ast.ModifierFlagsExport) {
 		export = "export "
@@ -321,14 +321,14 @@ func (l *lined) moveMembers(c *checker.Checker, decl *ast.Node, chosen []*ast.No
 			for _, mod := range mods.Nodes {
 				if mod.Kind == ast.KindPrivateKeyword {
 					end := mod.End()
-					for end < len(l.text) && l.text[end] == ' ' {
+					for end < len(l.Text) && l.Text[end] == ' ' {
 						end++
 					}
-					drop = append(drop, repl{start: l.pos(mod), end: end})
+					drop = append(drop, repl{start: l.Pos(mod), end: end})
 				}
 			}
 		}
-		text += l.reindent(a, b, l.indent(l.line(l.pos(m))), in, drop...)
+		text += l.reindent(a, b, l.Indent(l.Line(l.Pos(m))), in, drop...)
 		held := ""
 		if i == 0 {
 			if class {
@@ -340,13 +340,13 @@ func (l *lined) moveMembers(c *checker.Checker, decl *ast.Node, chosen []*ast.No
 					}
 				}
 				if len(ctorSet) > 0 {
-					held = in + mods + as + ": " + newType + l.semi() + "\n"
+					held = in + mods + as + ": " + newType + l.Semi() + "\n"
 				} else {
-					held = in + mods + as + " = new " + newType + "()" + l.semi() + "\n"
+					held = in + mods + as + " = new " + newType + "()" + l.Semi() + "\n"
 				}
 			} else {
 				end := ";"
-				if s := strings.TrimSpace(l.text[a:b]); !strings.HasSuffix(s, ";") && !strings.HasSuffix(s, ",") {
+				if s := strings.TrimSpace(l.Text[a:b]); !strings.HasSuffix(s, ";") && !strings.HasSuffix(s, ",") {
 					end = ""
 				} else if strings.HasSuffix(s, ",") {
 					end = ","
@@ -354,29 +354,29 @@ func (l *lined) moveMembers(c *checker.Checker, decl *ast.Node, chosen []*ast.No
 				held = in + as + ": " + newType + end + "\n"
 			}
 		}
-		edits = append(edits, Edit{File: l.f.FileName(), Start: a, End: b, NewText: held})
+		edits = append(edits, Edit{File: l.File.FileName(), Start: a, End: b, NewText: held})
 	}
 	if len(ctorSet) > 0 {
 		var params, sets []string
 		for _, m := range ctorSet {
-			f := l.source(m.Name())
+			f := l.Source(m.Name())
 			t := ""
 			if m.Type() != nil {
-				t = l.source(m.Type())
+				t = l.Source(m.Type())
 			} else {
 				t = c.TypeToString(c.GetTypeAtLocation(m.Name()))
 			}
 			params = append(params, f+": "+t)
-			sets = append(sets, in+l.unit()+"this."+f+" = "+f+l.semi()+"\n")
+			sets = append(sets, in+l.Unit()+"this."+f+" = "+f+l.Semi()+"\n")
 		}
 		text += "\n" + in + "constructor(" + strings.Join(params, ", ") + ") {\n" + strings.Join(sets, "") + in + "}\n"
 	}
 	text += ind + "}\n\n"
 	a, _, ok := l.lineRange(decl)
 	if !ok {
-		a = l.start(l.line(l.pos(decl)))
+		a = l.Start(l.Line(l.Pos(decl)))
 	}
-	return append(edits, Edit{File: l.f.FileName(), Start: a, End: a, NewText: text})
+	return append(edits, Edit{File: l.File.FileName(), Start: a, End: a, NewText: text})
 }
 
 // allReadonly reports whether every property of members is readonly.
@@ -395,7 +395,7 @@ func allReadonly(members []*ast.Node) bool {
 // parameters and literals): the first becomes this.as = new
 // NewType(e1, ...), the others go. It also returns the ranges of those
 // statements, whose references are rewritten so. As java's #345.
-func (l *lined) buildInConstructor(c *checker.Checker, decl *ast.Node, fields, chosen []*ast.Node, newType, as string) ([]Edit, [][2]int, string) {
+func (l *Lined) buildInConstructor(c *checker.Checker, decl *ast.Node, fields, chosen []*ast.Node, newType, as string) ([]Edit, [][2]int, string) {
 	var ctor *ast.Node
 	for _, m := range decl.Members() {
 		if ast.IsConstructorDeclaration(m) && m.Body() != nil {
@@ -403,7 +403,7 @@ func (l *lined) buildInConstructor(c *checker.Checker, decl *ast.Node, fields, c
 		}
 	}
 	if ctor == nil {
-		return nil, nil, fmt.Sprintf("%s has no initializer and no constructor sets it; give it one where it is declared first", l.source(fields[0].Name()))
+		return nil, nil, fmt.Sprintf("%s has no initializer and no constructor sets it; give it one where it is declared first", l.Source(fields[0].Name()))
 	}
 	stmts := ctor.Body().Statements()
 	sets := map[string]int{}
@@ -421,7 +421,7 @@ func (l *lined) buildInConstructor(c *checker.Checker, decl *ast.Node, fields, c
 		}
 		name := left.Name().Text()
 		for _, f := range fields {
-			if l.source(f.Name()) != name {
+			if l.Source(f.Name()) != name {
 				continue
 			}
 			if _, twice := sets[name]; twice {
@@ -433,16 +433,16 @@ func (l *lined) buildInConstructor(c *checker.Checker, decl *ast.Node, fields, c
 	var args []string
 	lo, hi := len(stmts), -1
 	for _, f := range fields {
-		name := l.source(f.Name())
+		name := l.Source(f.Name())
 		i, ok := sets[name]
 		if !ok {
 			return nil, nil, fmt.Sprintf("the constructor does not set %s in a statement of its own body (this.%s = ...;), so the holder cannot be built there; give it an initializer, or leave it out", name, name)
 		}
 		right := stmts[i].Expression().AsBinaryExpression().Right
 		if why := l.fromParameters(c, ctor, right); why != "" {
-			return nil, nil, fmt.Sprintf("the constructor sets %s to %s, which %s; built into the holder it would run at another point. Assign it to a local first, or leave %s out", name, l.source(right), why, name)
+			return nil, nil, fmt.Sprintf("the constructor sets %s to %s, which %s; built into the holder it would run at another point. Assign it to a local first, or leave %s out", name, l.Source(right), why, name)
 		}
-		args = append(args, l.source(right))
+		args = append(args, l.Source(right))
 		lo, hi = min(lo, i), max(hi, i)
 	}
 	set := map[int]bool{}
@@ -454,9 +454,9 @@ func (l *lined) buildInConstructor(c *checker.Checker, decl *ast.Node, fields, c
 			continue
 		}
 		why := ""
-		inspect(stmts[i], func(n *ast.Node) bool {
-			if why == "" && ast.IsPropertyAccessExpression(n) && n.Expression().Kind == ast.KindThisKeyword && slices.ContainsFunc(chosen, func(m *ast.Node) bool { return m.Name() != nil && l.source(m.Name()) == n.Name().Text() }) {
-				why = fmt.Sprintf("the constructor reads %s between setting the fields (%s), and the holder sets them all at once; move that statement first", l.source(n), l.where(n))
+		Inspect(stmts[i], func(n *ast.Node) bool {
+			if why == "" && ast.IsPropertyAccessExpression(n) && n.Expression().Kind == ast.KindThisKeyword && slices.ContainsFunc(chosen, func(m *ast.Node) bool { return m.Name() != nil && l.Source(m.Name()) == n.Name().Text() }) {
+				why = fmt.Sprintf("the constructor reads %s between setting the fields (%s), and the holder sets them all at once; move that statement first", l.Source(n), l.Where(n))
 			}
 			return why == ""
 		})
@@ -470,13 +470,13 @@ func (l *lined) buildInConstructor(c *checker.Checker, decl *ast.Node, fields, c
 		s := stmts[i]
 		a, b, ok := l.lineRange(s)
 		if !ok {
-			a, b = l.pos(s), s.End()
+			a, b = l.Pos(s), s.End()
 		}
 		ranges = append(ranges, [2]int{a, b})
 		if i == lo {
-			edits = append(edits, Edit{File: l.f.FileName(), Start: l.pos(s), End: s.End(), NewText: "this." + as + " = new " + newType + "(" + strings.Join(args, ", ") + ")" + l.semi()})
+			edits = append(edits, Edit{File: l.File.FileName(), Start: l.Pos(s), End: s.End(), NewText: "this." + as + " = new " + newType + "(" + strings.Join(args, ", ") + ")" + l.Semi()})
 		} else {
-			edits = append(edits, Edit{File: l.f.FileName(), Start: a, End: b})
+			edits = append(edits, Edit{File: l.File.FileName(), Start: a, End: b})
 		}
 	}
 	return edits, ranges, ""
@@ -484,9 +484,9 @@ func (l *lined) buildInConstructor(c *checker.Checker, decl *ast.Node, fields, c
 
 // fromParameters says why e reads more than the parameters of ctor that
 // it never assigns, and literals, or calls or makes something; or "".
-func (l *lined) fromParameters(c *checker.Checker, ctor, e *ast.Node) string {
+func (l *Lined) fromParameters(c *checker.Checker, ctor, e *ast.Node) string {
 	why := ""
-	inspect(e, func(n *ast.Node) bool {
+	Inspect(e, func(n *ast.Node) bool {
 		if why != "" {
 			return false
 		}
@@ -496,7 +496,7 @@ func (l *lined) fromParameters(c *checker.Checker, ctor, e *ast.Node) string {
 		case n.Kind == ast.KindThisKeyword:
 			why = "reads this"
 		case ast.IsBinaryExpression(n) && ast.IsAssignmentOperator(n.AsBinaryExpression().OperatorToken.Kind),
-			ast.IsPrefixUnaryExpression(n) && isUpdate(n.AsPrefixUnaryExpression().Operator), ast.IsPostfixUnaryExpression(n):
+			ast.IsPrefixUnaryExpression(n) && IsUpdate(n.AsPrefixUnaryExpression().Operator), ast.IsPostfixUnaryExpression(n):
 			why = "assigns"
 		case ast.IsFunctionLike(n):
 			return false
@@ -508,7 +508,7 @@ func (l *lined) fromParameters(c *checker.Checker, ctor, e *ast.Node) string {
 			param := s != nil && s.ValueDeclaration != nil && ast.IsParameterDeclaration(s.ValueDeclaration) && s.ValueDeclaration.Parent == ctor
 			if !param && n.Text() != "undefined" {
 				why = "reads " + n.Text() + ", not a parameter"
-			} else if param && l.assigns(ctor.Body(), s, c) != "" {
+			} else if param && l.Assigns(ctor.Body(), s, c) != "" {
 				why = "reads " + n.Text() + ", which the constructor assigns"
 			}
 		}

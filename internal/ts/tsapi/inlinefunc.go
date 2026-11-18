@@ -18,7 +18,7 @@ type repl struct {
 }
 
 // substitute returns the bytes [start, end) of l's text with rs made.
-func (l *lined) substitute(start, end int, rs []repl) string {
+func (l *Lined) substitute(start, end int, rs []repl) string {
 	rs = slices.Clone(rs)
 	sort.Slice(rs, func(i, j int) bool { // from the end; at one place, what is inserted there last
 		if rs[i].start != rs[j].start {
@@ -26,7 +26,7 @@ func (l *lined) substitute(start, end int, rs []repl) string {
 		}
 		return rs[i].end > rs[j].end
 	})
-	text := l.text[start:end]
+	text := l.Text[start:end]
 	for _, r := range rs {
 		if r.start >= start && r.end <= end {
 			text = text[:r.start-start] + r.text + text[r.end-start:]
@@ -40,7 +40,7 @@ type inliner struct {
 	p      *Project
 	c      *checker.Checker
 	ef     *effects
-	fl     *lined // the function's file
+	fl     *Lined // the function's file
 	fn     *ast.Node
 	sym    *ast.Symbol
 	params []*ast.Node
@@ -61,7 +61,7 @@ type inliner struct {
 // the function goes; every, whether every call ran because line held the
 // function's declaration, or no line was given, in place of a call.
 func (p *Project) InlineFunction(ctx context.Context, path string, line int, name string, column int, keep, all bool) ([]Edit, bool, string, bool) {
-	l, why := p.lined(path)
+	l, why := p.Lined(path)
 	if why != "" {
 		return nil, false, why, false
 	}
@@ -82,12 +82,12 @@ func (p *Project) InlineFunction(ctx context.Context, path string, line int, nam
 	var sym *ast.Symbol
 	every := false // the declaration was given in place of a call: every call
 	if line > 0 {
-		if line > l.count() {
-			return nil, false, fmt.Sprintf("line %d out of range: the file has %d lines", line, l.count()), false
+		if line > l.Count() {
+			return nil, false, fmt.Sprintf("line %d out of range: the file has %d lines", line, l.Count()), false
 		}
-		identifiers(l.f.AsNode(), func(id *ast.Node) {
-			start := l.pos(id)
-			if id.Text() == name && l.line(start) == line && (column == 0 || start-l.start(line)+1 == column) {
+		Identifiers(l.File.AsNode(), func(id *ast.Node) {
+			start := l.Pos(id)
+			if id.Text() == name && l.Line(start) == line && (column == 0 || start-l.Start(line)+1 == column) {
 				if call := isCallee(id); call != nil {
 					calls = append(calls, call)
 				} else if sym == nil && ast.IsDeclarationName(id) {
@@ -104,7 +104,7 @@ func (p *Project) InlineFunction(ctx context.Context, path string, line int, nam
 				sym = symbolOf(c, calls[0].Expression().Name())
 			}
 		case sym == nil:
-			return nil, false, fmt.Sprintf("no call of %s on line %d: %s", name, line, strings.TrimSpace(l.text[l.start(line):l.end(line)])), false
+			return nil, false, fmt.Sprintf("no call of %s on line %d: %s", name, line, strings.TrimSpace(l.Text[l.Start(line):l.End(line)])), false
 		case !all:
 			all, every = true, true
 		}
@@ -131,7 +131,7 @@ func (p *Project) InlineFunction(ctx context.Context, path string, line int, nam
 		if f.IsDeclarationFile {
 			continue
 		}
-		identifiers(f.AsNode(), func(id *ast.Node) {
+		Identifiers(f.AsNode(), func(id *ast.Node) {
 			if !ast.IsDeclarationName(id) && symbolOf(c, id) == sym {
 				refs = append(refs, id)
 			}
@@ -152,11 +152,11 @@ func (p *Project) InlineFunction(ctx context.Context, path string, line int, nam
 	for i, call := range calls {
 		for _, other := range calls[:i] {
 			if other.Pos() <= call.Pos() && call.End() <= other.End() || call.Pos() <= other.Pos() && other.End() <= call.End() {
-				return nil, false, fmt.Sprintf("the call at %s is inside another (%s); inline one at a time", l.where(call), l.where(other)), false
+				return nil, false, fmt.Sprintf("the call at %s is inside another (%s); inline one at a time", l.Where(call), l.Where(other)), false
 			}
 		}
-		if call.Pos() >= in.fn.Pos() && call.End() <= in.fn.End() && ast.GetSourceFileOfNode(call) == in.fl.f {
-			return nil, false, fmt.Sprintf("%s calls itself (%s)", name, l.where(call)), false
+		if call.Pos() >= in.fn.Pos() && call.End() <= in.fn.End() && ast.GetSourceFileOfNode(call) == in.fl.File {
+			return nil, false, fmt.Sprintf("%s calls itself (%s)", name, l.Where(call)), false
 		}
 		es, why := in.inline(newLined(ast.GetSourceFileOfNode(call)), call)
 		if why != "" {
@@ -173,7 +173,7 @@ func (p *Project) InlineFunction(ctx context.Context, path string, line int, nam
 			callee = callee.Name()
 		}
 		gone[callee] = true
-		if f := ast.GetSourceFileOfNode(call); f != in.fl.f {
+		if f := ast.GetSourceFileOfNode(call); f != in.fl.File {
 			files[f] = true
 		}
 	}
@@ -189,13 +189,13 @@ func (p *Project) InlineFunction(ctx context.Context, path string, line int, nam
 		if !ast.HasSyntacticModifier(decl, ast.ModifierFlagsExport) {
 			if a, b, ok := in.fl.lineRange(decl); ok {
 				a, b = in.fl.withBlank(a, b)
-				edits = append(edits, Edit{File: in.fl.f.FileName(), Start: a, End: b})
+				edits = append(edits, Edit{File: in.fl.File.FileName(), Start: a, End: b})
 				deleted = true
 				// Its overload signatures go with it.
 				for _, o := range in.sym.Declarations {
-					if o != decl && ast.GetSourceFileOfNode(o) == in.fl.f {
+					if o != decl && ast.GetSourceFileOfNode(o) == in.fl.File {
 						if oa, ob, ok := in.fl.lineRange(o); ok {
-							edits = append(edits, Edit{File: in.fl.f.FileName(), Start: oa, End: ob})
+							edits = append(edits, Edit{File: in.fl.File.FileName(), Start: oa, End: ob})
 						}
 					}
 				}
@@ -229,8 +229,8 @@ func (p *Project) newInliner(c *checker.Checker, ef *effects, sym *ast.Symbol, n
 	}
 	fl := ef.lined(fn)
 	switch {
-	case fl.f.IsDeclarationFile:
-		return nil, fmt.Sprintf("%s is declared in %s, which has no bodies", name, fl.f.FileName())
+	case fl.File.IsDeclarationFile:
+		return nil, fmt.Sprintf("%s is declared in %s, which has no bodies", name, fl.File.FileName())
 	case ast.GetFunctionFlags(fn)&(ast.FunctionFlagsAsync|ast.FunctionFlagsGenerator) != 0:
 		return nil, fmt.Sprintf("%s is async or a generator; its body cannot run in the caller's", name)
 	case ast.IsMethodDeclaration(fn) && fn.ModifierFlags()&(ast.ModifierFlagsStatic|ast.ModifierFlagsPrivate) == 0 && !ast.IsPrivateIdentifier(fn.Name()):
@@ -242,7 +242,7 @@ func (p *Project) newInliner(c *checker.Checker, ef *effects, sym *ast.Symbol, n
 		case ast.IsThisParameter(prm):
 			return nil, fmt.Sprintf("%s declares this", name)
 		case prm.AsParameterDeclaration().DotDotDotToken != nil && !ast.IsIdentifier(prm.Name()):
-			return nil, fmt.Sprintf("%s destructures its rest parameter (%s)", name, fl.where(prm))
+			return nil, fmt.Sprintf("%s destructures its rest parameter (%s)", name, fl.Where(prm))
 		}
 	}
 	root := fn.Body()
@@ -261,9 +261,9 @@ func (p *Project) newInliner(c *checker.Checker, ef *effects, sym *ast.Symbol, n
 		case n.Kind == ast.KindThisKeyword && !inFunc:
 			in.this = append(in.this, n)
 		case n.Kind == ast.KindSuperKeyword && !inFunc:
-			bad = fmt.Sprintf("%s uses super (%s)", name, fl.where(n))
+			bad = fmt.Sprintf("%s uses super (%s)", name, fl.Where(n))
 		case ast.IsIdentifier(n) && symbolOf(c, n) == sym:
-			bad = fmt.Sprintf("%s calls itself (%s)", name, fl.where(n))
+			bad = fmt.Sprintf("%s calls itself (%s)", name, fl.Where(n))
 		}
 		n.ForEachChild(func(x *ast.Node) bool { visit(x, inFunc); return false })
 	}
@@ -281,7 +281,7 @@ func (p *Project) newInliner(c *checker.Checker, ef *effects, sym *ast.Symbol, n
 	// parameters, which the call would not see.
 	for _, id := range identifiersOf(root) {
 		if in.typeParam(id) {
-			return nil, fmt.Sprintf("%s's body uses its type parameter %s (%s)", name, id.Text(), fl.where(id))
+			return nil, fmt.Sprintf("%s's body uses its type parameter %s (%s)", name, id.Text(), fl.Where(id))
 		}
 	}
 	switch {
@@ -337,7 +337,7 @@ func guards(stmts []*ast.Node) (conds, vals []*ast.Node, last *ast.Node, ok bool
 // identifiersOf returns the identifiers in n.
 func identifiersOf(n *ast.Node) []*ast.Node {
 	var out []*ast.Node
-	identifiers(n, func(id *ast.Node) { out = append(out, id) })
+	Identifiers(n, func(id *ast.Node) { out = append(out, id) })
 	return out
 }
 
@@ -359,7 +359,7 @@ func (in *inliner) typeParam(id *ast.Node) bool {
 // bindingNames returns the names a binding pattern declares.
 func bindingNames(pattern *ast.Node) []*ast.Node {
 	var out []*ast.Node
-	identifiers(pattern, func(id *ast.Node) {
+	Identifiers(pattern, func(id *ast.Node) {
 		if id.Parent != nil && ast.IsBindingElement(id.Parent) && id.Parent.Name() == id {
 			out = append(out, id)
 		}
@@ -369,8 +369,8 @@ func bindingNames(pattern *ast.Node) []*ast.Node {
 
 // ternaryPart returns the text of e as a part of a conditional
 // expression: its condition, or one of its values.
-func ternaryPart(fl *lined, e *ast.Node, rs []repl, cond bool) string {
-	s := fl.substitute(fl.pos(e), e.End(), rs)
+func ternaryPart(fl *Lined, e *ast.Node, rs []repl, cond bool) string {
+	s := fl.substitute(fl.Pos(e), e.End(), rs)
 	prec := ast.GetExpressionPrecedence(e)
 	if cond && prec <= ast.OperatorPrecedenceConditional || prec <= ast.OperatorPrecedenceComma {
 		s = "(" + s + ")"
@@ -383,7 +383,7 @@ func ternaryPart(fl *lined, e *ast.Node, rs []repl, cond bool) string {
 type binding struct {
 	param *ast.Node
 	arg   *ast.Node // nil for undefined
-	argL  *lined
+	argL  *Lined
 	text  string // the argument's source, or "undefined"
 	bound bool
 	name  string      // when bound under a name other than the parameter's
@@ -393,7 +393,7 @@ type binding struct {
 // identifierTexts returns the names of the identifiers in n.
 func identifierTexts(n *ast.Node) []string {
 	var out []string
-	identifiers(n, func(id *ast.Node) { out = append(out, id.Text()) })
+	Identifiers(n, func(id *ast.Node) { out = append(out, id.Text()) })
 	return out
 }
 
@@ -416,40 +416,40 @@ func mayBeUndefined(t *checker.Type) bool {
 }
 
 // inline returns the edits that inline call, in the file l.
-func (in *inliner) inline(l *lined, call *ast.Node) ([]Edit, string) {
+func (in *inliner) inline(l *Lined, call *ast.Node) ([]Edit, string) {
 	c, fl := in.c, in.fl
 	name := in.sym.Name
 	args := call.Arguments()
 	for _, a := range args {
 		if ast.IsSpreadElement(a) {
-			return nil, fmt.Sprintf("the call at %s spreads its arguments", l.where(call))
+			return nil, fmt.Sprintf("the call at %s spreads its arguments", l.Where(call))
 		}
 	}
 	if n := len(in.params); len(args) > n && (n == 0 || in.params[n-1].AsParameterDeclaration().DotDotDotToken == nil) {
-		return nil, fmt.Sprintf("the call at %s passes more arguments than %s has parameters", l.where(call), name)
+		return nil, fmt.Sprintf("the call at %s passes more arguments than %s has parameters", l.Where(call), name)
 	}
 	bodyRoot := in.fn.Body()
 	// The names the body sees from outside must mean the same at the call.
 	var outer []*ast.Node
 	for _, id := range free(c, bodyRoot) {
-		if d := symbolOf(c, id).ValueDeclaration; d != nil && ast.GetSourceFileOfNode(d) == fl.f && d.Pos() >= in.fn.Pos() && d.End() <= in.fn.End() {
+		if d := symbolOf(c, id).ValueDeclaration; d != nil && ast.GetSourceFileOfNode(d) == fl.File && d.Pos() >= in.fn.Pos() && d.End() <= in.fn.End() {
 			continue
 		}
 		outer = append(outer, id)
 	}
 	if why := seenAlike(c, l, outer, call); why != "" {
-		return nil, fmt.Sprintf("%s cannot be inlined at %s: %s", name, l.where(call), why)
+		return nil, fmt.Sprintf("%s cannot be inlined at %s: %s", name, l.Where(call), why)
 	}
 	// The receiver stands for this.
 	recv := ""
 	if len(in.this) > 0 {
 		callee := call.Expression()
 		if !ast.IsPropertyAccessExpression(callee) {
-			return nil, fmt.Sprintf("the call at %s has no receiver to stand for this", l.where(call))
+			return nil, fmt.Sprintf("the call at %s has no receiver to stand for this", l.Where(call))
 		}
 		r := callee.Expression()
 		if re := in.ef.Of(r); r.Kind != ast.KindThisKeyword && (len(in.this) > 1 && !re.CanRepeat() || !re.CanDrop()) {
-			return nil, fmt.Sprintf("the receiver %s at %s would be evaluated for each this in the body: %s", l.source(r), l.where(call), re.Why)
+			return nil, fmt.Sprintf("the receiver %s at %s would be evaluated for each this in the body: %s", l.Source(r), l.Where(call), re.Why)
 		}
 		recv = operand(l, r)
 	}
@@ -464,15 +464,15 @@ func (in *inliner) inline(l *lined, call *ast.Node) ([]Edit, string) {
 	for i, prm := range in.params {
 		b := &binding{param: prm, argL: l, text: "undefined"}
 		if i < len(args) {
-			b.arg, b.text = args[i], l.source(args[i])
+			b.arg, b.text = args[i], l.Source(args[i])
 		} else if init := prm.Initializer(); init != nil {
 			if ids := free(c, init); slices.ContainsFunc(ids, func(id *ast.Node) bool {
 				d := symbolOf(c, id).ValueDeclaration
 				return d != nil && d.Parent == in.fn
 			}) {
-				return nil, fmt.Sprintf("the default of %s reads another parameter; pass it at %s", prm.Name().Text(), l.where(call))
+				return nil, fmt.Sprintf("the default of %s reads another parameter; pass it at %s", prm.Name().Text(), l.Where(call))
 			}
-			b.arg, b.argL, b.text = init, fl, fl.source(init)
+			b.arg, b.argL, b.text = init, fl, fl.Source(init)
 		}
 		bs = append(bs, b)
 		if prm.AsParameterDeclaration().DotDotDotToken != nil {
@@ -480,7 +480,7 @@ func (in *inliner) inline(l *lined, call *ast.Node) ([]Edit, string) {
 			var texts []string
 			b.rest = args[min(i, len(args)):]
 			for _, a := range b.rest {
-				texts = append(texts, l.source(a))
+				texts = append(texts, l.Source(a))
 			}
 			b.arg, b.argL, b.text, b.bound = nil, l, "["+strings.Join(texts, ", ")+"]", true
 			continue
@@ -491,7 +491,7 @@ func (in *inliner) inline(l *lined, call *ast.Node) ([]Edit, string) {
 		}
 		ps := c.GetSymbolAtLocation(prm.Name())
 		var useNodes []*ast.Node
-		identifiers(bodyRoot, func(id *ast.Node) {
+		Identifiers(bodyRoot, func(id *ast.Node) {
 			if symbolOf(c, id) == ps {
 				useNodes = append(useNodes, id)
 			}
@@ -555,12 +555,12 @@ func (in *inliner) inline(l *lined, call *ast.Node) ([]Edit, string) {
 	}
 	if needStmt {
 		if stmt == nil {
-			return nil, fmt.Sprintf("the call at %s is in no statement of a block, before which its arguments could be declared", l.where(call))
+			return nil, fmt.Sprintf("the call at %s is in no statement of a block, before which its arguments could be declared", l.Where(call))
 		}
 		if t, place, why := l.timesIn(call, stmt, nil); why != "" || t != Once {
-			return nil, fmt.Sprintf("the call at %s is evaluated only sometimes or more than once (in %s), so its arguments cannot be declared before it", l.where(call), place+why)
+			return nil, fmt.Sprintf("the call at %s is evaluated only sometimes or more than once (in %s), so its arguments cannot be declared before it", l.Where(call), place+why)
 		}
-		before := parts(stmt, l.pos(call), nil)
+		before := parts(stmt, l.Pos(call), nil)
 		for i, b := range bs {
 			if !b.bound {
 				continue
@@ -578,10 +578,10 @@ func (in *inliner) inline(l *lined, call *ast.Node) ([]Edit, string) {
 					}
 				}
 				if why := in.ef.Check(Move{Expr: arg, Past: past}); why != "" {
-					return nil, fmt.Sprintf("the argument %s at %s cannot be declared before its statement: %s", l.source(arg), l.where(call), why)
+					return nil, fmt.Sprintf("the argument %s at %s cannot be declared before its statement: %s", l.Source(arg), l.Where(call), why)
 				}
 			}
-			pn := fl.source(b.param.Name())
+			pn := fl.Source(b.param.Name())
 			syms := []*ast.Symbol{c.GetSymbolAtLocation(b.param.Name())}
 			if !ast.IsIdentifier(b.param.Name()) {
 				syms = nil
@@ -621,13 +621,13 @@ func (in *inliner) inline(l *lined, call *ast.Node) ([]Edit, string) {
 			}
 			typ := ""
 			if t := b.param.Type(); t != nil && !slices.ContainsFunc(identifiersOf(t), in.typeParam) {
-				typ = ": " + fl.source(t)
+				typ = ": " + fl.Source(t)
 			}
-			decls = append(decls, kw+" "+pn+typ+" = "+b.text+l.semi())
+			decls = append(decls, kw+" "+pn+typ+" = "+b.text+l.Semi())
 		}
 		if !exprForm {
 			for _, s := range in.stmts {
-				for _, n := range declared(s) {
+				for _, n := range Declared(s) {
 					if why := taken(c, l, n.Text(), stmt); why != "" {
 						return nil, fmt.Sprintf("%s declares %s, which the call's statement already sees: %s", name, n.Text(), why)
 					}
@@ -642,7 +642,7 @@ func (in *inliner) inline(l *lined, call *ast.Node) ([]Edit, string) {
 			continue
 		}
 		ps := c.GetSymbolAtLocation(b.param.Name())
-		identifiers(bodyRoot, func(id *ast.Node) {
+		Identifiers(bodyRoot, func(id *ast.Node) {
 			if symbolOf(c, id) != ps {
 				return
 			}
@@ -651,7 +651,7 @@ func (in *inliner) inline(l *lined, call *ast.Node) ([]Edit, string) {
 				if ast.IsShorthandPropertyAssignment(id.Parent) {
 					text = id.Text() + ": " + b.name
 				}
-				rs = append(rs, repl{fl.pos(id), id.End(), text})
+				rs = append(rs, repl{fl.Pos(id), id.End(), text})
 				return
 			}
 			text := b.text
@@ -661,17 +661,17 @@ func (in *inliner) inline(l *lined, call *ast.Node) ([]Edit, string) {
 			if ast.IsShorthandPropertyAssignment(id.Parent) {
 				text = id.Text() + ": " + b.text
 			}
-			rs = append(rs, repl{fl.pos(id), id.End(), text})
+			rs = append(rs, repl{fl.Pos(id), id.End(), text})
 		})
 	}
 	for _, t := range in.this {
 		if recv != "this" {
-			rs = append(rs, repl{fl.pos(t), t.End(), recv})
+			rs = append(rs, repl{fl.Pos(t), t.End(), recv})
 		}
 	}
 	indent := ""
 	if stmt != nil {
-		indent = l.indent(l.line(l.pos(stmt)))
+		indent = l.Indent(l.Line(l.Pos(stmt)))
 	}
 	var edits []Edit
 	if exprForm && len(in.conds) > 0 {
@@ -684,23 +684,23 @@ func (in *inliner) inline(l *lined, call *ast.Node) ([]Edit, string) {
 		if p := call.Parent; !(ast.IsReturnStatement(p) || ast.IsVariableDeclaration(p) || ast.IsExpressionStatement(p) || ast.IsParenthesizedExpression(p) || ast.IsCallExpression(p) && p.Expression() != call) {
 			text = "(" + text + ")"
 		}
-		edits = append(edits, Edit{File: l.f.FileName(), Start: l.pos(call), End: call.End(), NewText: text})
+		edits = append(edits, Edit{File: l.File.FileName(), Start: l.Pos(call), End: call.End(), NewText: text})
 		if len(decls) > 0 {
-			at := l.start(l.line(l.pos(stmt)))
-			edits = append(edits, Edit{File: l.f.FileName(), Start: at, End: at, NewText: indent + strings.Join(decls, "\n"+indent) + "\n"})
+			at := l.Start(l.Line(l.Pos(stmt)))
+			edits = append(edits, Edit{File: l.File.FileName(), Start: at, End: at, NewText: indent + strings.Join(decls, "\n"+indent) + "\n"})
 		}
 		slices.SortFunc(edits, func(a, b Edit) int { return a.Start - b.Start })
 		return edits, ""
 	}
 	if exprForm {
-		text := fl.substitute(fl.pos(in.expr), in.expr.End(), rs)
+		text := fl.substitute(fl.Pos(in.expr), in.expr.End(), rs)
 		if needsParens(call, in.expr) || ast.IsObjectLiteralExpression(in.expr) && ast.IsArrowFunction(call.Parent) {
 			text = "(" + text + ")"
 		}
-		edits = append(edits, Edit{File: l.f.FileName(), Start: l.pos(call), End: call.End(), NewText: text})
+		edits = append(edits, Edit{File: l.File.FileName(), Start: l.Pos(call), End: call.End(), NewText: text})
 		if len(decls) > 0 {
-			at := l.start(l.line(l.pos(stmt)))
-			edits = append(edits, Edit{File: l.f.FileName(), Start: at, End: at, NewText: indent + strings.Join(decls, "\n"+indent) + "\n"})
+			at := l.Start(l.Line(l.Pos(stmt)))
+			edits = append(edits, Edit{File: l.File.FileName(), Start: at, End: at, NewText: indent + strings.Join(decls, "\n"+indent) + "\n"})
 		}
 		slices.SortFunc(edits, func(a, b Edit) int { return a.Start - b.Start })
 		return edits, ""
@@ -722,31 +722,31 @@ func (in *inliner) inline(l *lined, call *ast.Node) ([]Edit, string) {
 			stmt.Expression().AsBinaryExpression().Right == call && ast.IsIdentifier(stmt.Expression().AsBinaryExpression().Left):
 		shape = "value"
 	default:
-		return nil, fmt.Sprintf("%s's body is several statements, so its call at %s must be a statement of its own, a declaration's or assignment's value, or a return", name, l.where(call))
+		return nil, fmt.Sprintf("%s's body is several statements, so its call at %s must be a statement of its own, a declaration's or assignment's value, or a return", name, l.Where(call))
 	}
 	if shape == "value" && in.ret == nil {
-		return nil, fmt.Sprintf("%s returns nothing, but the call at %s uses its result", name, l.where(call))
+		return nil, fmt.Sprintf("%s returns nothing, but the call at %s uses its result", name, l.Where(call))
 	}
 	body := in.stmts
 	var pre []string
 	if earlyMode {
 		var why string
 		if body, pre, why = in.earlyBody(l, call, stmt, &rs); why != "" {
-			return nil, fmt.Sprintf("%s returns early (%s), and %s", name, fl.where(in.early[0]), why)
+			return nil, fmt.Sprintf("%s returns early (%s), and %s", name, fl.Where(in.early[0]), why)
 		}
 	}
 	a, b, ok := l.lineRange(stmt)
 	if !ok {
-		return nil, fmt.Sprintf("the call's statement at %s shares its lines with other code", l.where(stmt))
+		return nil, fmt.Sprintf("the call's statement at %s shares its lines with other code", l.Where(stmt))
 	}
 	var out strings.Builder
-	out.WriteString(l.text[a:l.start(l.line(l.pos(stmt)))]) // its comments
+	out.WriteString(l.Text[a:l.Start(l.Line(l.Pos(stmt)))]) // its comments
 	for _, d := range append(decls, pre...) {
 		out.WriteString(indent + d + "\n")
 	}
 	if len(body) > 0 {
-		s0, s1 := fl.start(fl.line(fl.pos(body[0]))), fl.start(fl.line(body[len(body)-1].End()-1)+1)
-		from := fl.indent(fl.line(fl.pos(body[0])))
+		s0, s1 := fl.Start(fl.Line(fl.Pos(body[0]))), fl.Start(fl.Line(body[len(body)-1].End()-1)+1)
+		from := fl.Indent(fl.Line(fl.Pos(body[0])))
 		for _, line := range strings.SplitAfter(fl.substitute(s0, s1, rs), "\n") {
 			if strings.HasPrefix(line, from) {
 				line = indent + line[len(from):]
@@ -755,37 +755,37 @@ func (in *inliner) inline(l *lined, call *ast.Node) ([]Edit, string) {
 		}
 	}
 	if in.ret != nil && !earlyMode {
-		value := fl.substitute(fl.pos(in.ret), in.ret.End(), rs)
+		value := fl.substitute(fl.Pos(in.ret), in.ret.End(), rs)
 		switch {
 		case shape == "value":
 			if needsParens(call, in.ret) {
 				value = "(" + value + ")"
 			}
-			out.WriteString(indent + l.text[l.pos(stmt):l.pos(call)] + value + l.text[call.End():stmt.End()] + "\n")
+			out.WriteString(indent + l.Text[l.Pos(stmt):l.Pos(call)] + value + l.Text[call.End():stmt.End()] + "\n")
 		case !in.ef.Of(in.ret).CanDrop():
 			if ast.IsObjectLiteralExpression(in.ret) || ast.IsFunctionExpression(in.ret) || ast.IsClassExpression(in.ret) {
 				value = "(" + value + ")"
 			}
-			out.WriteString(indent + value + l.semi() + "\n")
+			out.WriteString(indent + value + l.Semi() + "\n")
 		}
 	}
-	edits = append(edits, Edit{File: l.f.FileName(), Start: a, End: b, NewText: out.String()})
+	edits = append(edits, Edit{File: l.File.FileName(), Start: a, End: b, NewText: out.String()})
 	return edits, ""
 }
 
 // earlyBody plans a body that returns early for the call's statement
 // stmt (see early): the statements to put in its place, the declarations
 // to put before them, and rs with the body's edits added; or why not.
-func (in *inliner) earlyBody(l *lined, call, stmt *ast.Node, rs *[]repl) ([]*ast.Node, []string, string) {
+func (in *inliner) earlyBody(l *Lined, call, stmt *ast.Node, rs *[]repl) ([]*ast.Node, []string, string) {
 	c, fl := in.c, in.fl
 	if stmt.Parent == nil || ast.IsSourceFile(stmt.Parent) {
-		return nil, nil, fmt.Sprintf("its call at %s is at the top of a module, where the variable each return assigns would be one of the module's", l.where(call))
+		return nil, nil, fmt.Sprintf("its call at %s is at the top of a module, where the variable each return assigns would be one of the module's", l.Where(call))
 	}
 	caller := stmt
 	for caller != nil && !ast.IsFunctionLike(caller) {
 		caller = caller.Parent
 	}
-	e := &early{in: in, used: map[string]bool{}, exits: map[*ast.Node]string{}, flagged: map[*ast.Node]bool{}, breaks: map[*ast.Node]bool{}, hoisted: map[*ast.Node]*ast.Node{}, params: *rs, unit: fl.unit(),
+	e := &early{in: in, used: map[string]bool{}, exits: map[*ast.Node]string{}, flagged: map[*ast.Node]bool{}, breaks: map[*ast.Node]bool{}, hoisted: map[*ast.Node]*ast.Node{}, params: *rs, unit: fl.Unit(),
 		taken: func(name string) bool { return taken(c, l, name, stmt) != "" }}
 	for _, n := range identifierTexts(in.fn) {
 		e.used[n] = true
@@ -800,17 +800,17 @@ func (in *inliner) earlyBody(l *lined, call, stmt *ast.Node, rs *[]repl) ([]*ast
 	case ast.IsVariableStatement(stmt):
 		d := stmt.AsVariableStatement().DeclarationList.AsVariableDeclarationList().Declarations.Nodes[0]
 		if !ast.IsIdentifier(d.Name()) {
-			return nil, nil, fmt.Sprintf("its value at %s is destructured", l.where(call))
+			return nil, nil, fmt.Sprintf("its value at %s is destructured", l.Where(call))
 		}
 		typ := ""
 		if t := d.Type(); t != nil {
-			typ = l.source(t)
+			typ = l.Source(t)
 		} else {
 			typ = c.TypeToString(c.GetWidenedType(c.GetTypeAtLocation(d.Name())))
 		}
 		e.target, decl, e.decl = d.Name().Text(), ": "+typ, true
 	case ast.IsExpressionStatement(stmt) && ast.IsBinaryExpression(stmt.Expression()):
-		e.target = l.source(stmt.Expression().AsBinaryExpression().Left)
+		e.target = l.Source(stmt.Expression().AsBinaryExpression().Left)
 	}
 	if _, why := e.plan(in.fn.Body().Statements(), true, ""); why != "" {
 		return nil, nil, why
@@ -821,15 +821,15 @@ func (in *inliner) earlyBody(l *lined, call, stmt *ast.Node, rs *[]repl) ([]*ast
 	if decl != "" {
 		switch {
 		case e.declInit != "":
-			pre = append(pre, "let "+e.target+decl+" = "+e.declInit+fl.semi())
+			pre = append(pre, "let "+e.target+decl+" = "+e.declInit+fl.Semi())
 		case len(e.flagged) > 0: // a flag hides from the checker that every path assigns
-			pre = append(pre, "let "+e.target+"!"+decl+fl.semi())
+			pre = append(pre, "let "+e.target+"!"+decl+fl.Semi())
 		default:
-			pre = append(pre, "let "+e.target+decl+fl.semi())
+			pre = append(pre, "let "+e.target+decl+fl.Semi())
 		}
 	}
 	if e.flag != "" {
-		pre = append(pre, "let "+e.flag+" = false"+fl.semi())
+		pre = append(pre, "let "+e.flag+" = false"+fl.Semi())
 	}
 	return in.fn.Body().Statements(), pre, ""
 }

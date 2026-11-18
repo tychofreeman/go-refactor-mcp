@@ -14,7 +14,7 @@ import (
 // Class.method) of the file at path; without a last unlabeled break unless
 // withBreak.
 func (p *Project) CaseLines(path, function, value string, withBreak bool) (first, last int, refusal string) {
-	l, why := p.lined(path)
+	l, why := p.Lined(path)
 	if why != "" {
 		return 0, 0, why
 	}
@@ -27,7 +27,7 @@ func (p *Project) CaseLines(path, function, value string, withBreak bool) (first
 
 // caseClause returns the clause of the case value of a switch in the
 // function.
-func (l *lined) caseClause(function, value string) (*ast.Node, string) {
+func (l *Lined) caseClause(function, value string) (*ast.Node, string) {
 	fn, _, _, why := l.function(function)
 	if why != "" {
 		return nil, why
@@ -36,11 +36,11 @@ func (l *lined) caseClause(function, value string) (*ast.Node, string) {
 		if ast.IsDefaultClause(cl) {
 			return value == "default"
 		}
-		s := l.source(cl.Expression())
+		s := l.Source(cl.Expression())
 		return s == value || s == `"`+value+`"` || s == "'"+value+"'" || strings.Trim(s, `"'`) == strings.Trim(value, `"'`) && strings.ContainsAny(s, `"'`)
 	}
 	var found []*ast.Node
-	inspect(fn.Body(), func(n *ast.Node) bool {
+	Inspect(fn.Body(), func(n *ast.Node) bool {
 		if ast.IsSwitchStatement(n) {
 			for _, cl := range n.AsSwitchStatement().CaseBlock.AsCaseBlock().Clauses.Nodes {
 				if matches(cl) {
@@ -54,7 +54,7 @@ func (l *lined) caseClause(function, value string) (*ast.Node, string) {
 	case len(found) == 0:
 		return nil, fmt.Sprintf("%s has no case %s", function, value)
 	case len(found) > 1:
-		return nil, fmt.Sprintf("%s has %d cases %s (%s and %s); give start_line and end_line", function, len(found), value, l.where(found[0]), l.where(found[1]))
+		return nil, fmt.Sprintf("%s has %d cases %s (%s and %s); give start_line and end_line", function, len(found), value, l.Where(found[0]), l.Where(found[1]))
 	}
 	return found[0], ""
 }
@@ -71,15 +71,15 @@ func caseStatements(cl *ast.Node) []*ast.Node {
 
 // caseBody returns the first and last lines of the body of the clause cl,
 // of the case value; without a last unlabeled break unless withBreak.
-func (l *lined) caseBody(cl *ast.Node, value string, withBreak bool) (first, last int, refusal string) {
+func (l *Lined) caseBody(cl *ast.Node, value string, withBreak bool) (first, last int, refusal string) {
 	stmts := caseStatements(cl)
 	if n := len(stmts); !withBreak && n > 0 && stmts[n-1].Kind == ast.KindBreakStatement && stmts[n-1].Label() == nil {
 		stmts = stmts[:n-1]
 	}
 	if len(stmts) == 0 {
-		return 0, 0, fmt.Sprintf("the case %s at %s has no statements of its own (it falls into the next case, or only breaks)", value, l.where(cl))
+		return 0, 0, fmt.Sprintf("the case %s at %s has no statements of its own (it falls into the next case, or only breaks)", value, l.Where(cl))
 	}
-	return l.line(l.pos(stmts[0])), l.line(stmts[len(stmts)-1].End() - 1), ""
+	return l.Line(l.Pos(stmts[0])), l.Line(stmts[len(stmts)-1].End() - 1), ""
 }
 
 // CaseBody returns the lines of the body of the case value of a switch in
@@ -88,7 +88,7 @@ func (l *lined) caseBody(cl *ast.Node, value string, withBreak bool) (first, las
 // that shared body, and, when split, the edits that give value a case of
 // its own with that body and the others a copy of it before.
 func (p *Project) CaseBody(path, function, value string, split bool) (first, last int, edits []Edit, refusal string) {
-	l, why := p.lined(path)
+	l, why := p.Lined(path)
 	if why != "" {
 		return 0, 0, nil, why
 	}
@@ -118,44 +118,44 @@ func (p *Project) CaseBody(path, function, value string, split bool) (first, las
 	switch end.Kind {
 	case ast.KindBreakStatement, ast.KindReturnStatement, ast.KindThrowStatement, ast.KindContinueStatement:
 	default:
-		return 0, 0, nil, fmt.Sprintf("the body the case %s shares (%s) does not end in break, return, throw or continue, so a copy of it would fall into the next case; give split false to extract the shared body", value, l.where(body))
+		return 0, 0, nil, fmt.Sprintf("the body the case %s shares (%s) does not end in break, return, throw or continue, so a copy of it would fall into the next case; give split false to extract the shared body", value, l.Where(body))
 	}
 	for _, s := range body.Statements() {
-		if names := declared(s); len(names) > 0 {
-			return 0, 0, nil, fmt.Sprintf("the body the case %s shares (%s) declares %s; splitting it would copy the declaration into the same scope; give split false to extract the shared body", value, l.where(body), names[0].Text())
+		if names := Declared(s); len(names) > 0 {
+			return 0, 0, nil, fmt.Sprintf("the body the case %s shares (%s) declares %s; splitting it would copy the declaration into the same scope; give split false to extract the shared body", value, l.Where(body), names[0].Text())
 		}
 	}
 	// header is the text of a clause up to its colon.
 	header := func(c *ast.Node) string {
-		from := l.pos(c) + len("default")
+		from := l.Pos(c) + len("default")
 		if !ast.IsDefaultClause(c) {
 			if e := c.Expression(); !ast.IsLiteralExpression(e) && !ast.IsIdentifier(e) && !ast.IsPropertyAccessExpression(e) {
 				return ""
 			}
 			from = c.Expression().End()
 		}
-		colon := strings.IndexByte(l.text[from:], ':')
-		return l.text[l.pos(c) : from+colon+1]
+		colon := strings.IndexByte(l.Text[from:], ':')
+		return l.Text[l.Pos(c) : from+colon+1]
 	}
 	var others []string
 	for m := j; m <= k; m++ {
 		c := clauses[m]
 		h := header(c)
 		if h == "" {
-			return 0, 0, nil, fmt.Sprintf("the case at %s is not a constant; splitting the cases would change the order they are compared in", l.where(c))
+			return 0, 0, nil, fmt.Sprintf("the case at %s is not a constant; splitting the cases would change the order they are compared in", l.Where(c))
 		}
-		if l.line(l.pos(c)) != l.line(l.pos(clauses[j]))+m-j || strings.TrimSpace(l.text[l.start(l.line(l.pos(c))):l.end(l.line(l.pos(c)))]) != h {
-			return 0, 0, nil, fmt.Sprintf("the cases %s shares its body with are not one to a line (%s); put each on a line of its own first", value, l.where(c))
+		if l.Line(l.Pos(c)) != l.Line(l.Pos(clauses[j]))+m-j || strings.TrimSpace(l.Text[l.Start(l.Line(l.Pos(c))):l.End(l.Line(l.Pos(c)))]) != h {
+			return 0, 0, nil, fmt.Sprintf("the cases %s shares its body with are not one to a line (%s); put each on a line of its own first", value, l.Where(c))
 		}
 		if m != i {
-			others = append(others, l.indent(l.line(l.pos(c)))+h+"\n")
+			others = append(others, l.Indent(l.Line(l.Pos(c)))+h+"\n")
 		}
 	}
-	firstAll := l.line(l.pos(stmts[0]))
-	lastAll := l.line(end.End() - 1)
-	text := strings.Join(others, "") + l.text[l.start(firstAll):l.start(lastAll+1)] + l.indent(l.line(l.pos(cl))) + header(cl) + "\n"
-	from, to := l.start(l.line(l.pos(clauses[j]))), l.start(l.line(l.pos(body))+1)
-	return first, last, []Edit{{File: l.f.FileName(), Start: from, End: to, NewText: text}}, ""
+	firstAll := l.Line(l.Pos(stmts[0]))
+	lastAll := l.Line(end.End() - 1)
+	text := strings.Join(others, "") + l.Text[l.Start(firstAll):l.Start(lastAll+1)] + l.Indent(l.Line(l.Pos(cl))) + header(cl) + "\n"
+	from, to := l.Start(l.Line(l.Pos(clauses[j]))), l.Start(l.Line(l.Pos(body))+1)
+	return first, last, []Edit{{File: l.File.FileName(), Start: from, End: to, NewText: text}}, ""
 }
 
 // A MissingCase is a case to add at the end of a switch, for a value it
@@ -176,7 +176,7 @@ type MissingCase struct {
 // ends in a jump, and the statements after it in its block end in a return
 // or throw. Otherwise it returns the refusal.
 func (p *Project) MissingCase(path, function, value, refusal string) (*MissingCase, string) {
-	l, why := p.lined(path)
+	l, why := p.Lined(path)
 	if why != "" || value == "default" || !strings.Contains(refusal, " has no case ") {
 		return nil, refusal
 	}
@@ -185,13 +185,13 @@ func (p *Project) MissingCase(path, function, value, refusal string) (*MissingCa
 		return nil, refusal
 	}
 	var switches []*ast.Node
-	inspect(fn.Body(), func(n *ast.Node) bool {
+	Inspect(fn.Body(), func(n *ast.Node) bool {
 		if ast.IsSwitchStatement(n) {
 			switches = append(switches, n)
 		}
 		return true
 	})
-	if len(switches) != 1 || !inList(switches[0]) {
+	if len(switches) != 1 || !InList(switches[0]) {
 		return nil, refusal
 	}
 	sw := switches[0]
@@ -199,7 +199,7 @@ func (p *Project) MissingCase(path, function, value, refusal string) (*MissingCa
 	quoted := false
 	for i, cl := range clauses {
 		stmts := caseStatements(cl)
-		if ast.IsDefaultClause(cl) || len(stmts) == 0 && i == len(clauses)-1 || len(stmts) > 0 && !terminates(stmts[len(stmts)-1]) {
+		if ast.IsDefaultClause(cl) || len(stmts) == 0 && i == len(clauses)-1 || len(stmts) > 0 && !Terminates(stmts[len(stmts)-1]) {
 			return nil, refusal
 		}
 		quoted = quoted || ast.IsStringLiteral(cl.Expression())
@@ -209,27 +209,27 @@ func (p *Project) MissingCase(path, function, value, refusal string) (*MissingCa
 	if len(rest) == 0 || len(clauses) == 0 {
 		return nil, refusal
 	}
-	if end := rest[len(rest)-1]; !terminates(end) || end.Kind == ast.KindBreakStatement || end.Kind == ast.KindContinueStatement {
+	if end := rest[len(rest)-1]; !Terminates(end) || end.Kind == ast.KindBreakStatement || end.Kind == ast.KindContinueStatement {
 		return nil, refusal
 	}
-	closing := l.line(sw.End() - 1)
-	if closing == l.line(l.pos(sw)) {
+	closing := l.Line(sw.End() - 1)
+	if closing == l.Line(l.Pos(sw)) {
 		return nil, refusal
 	}
 	if quoted && !strings.ContainsAny(value, `"'.`) {
 		value = l.quote() + value + l.quote() // a bare word, as for a case that is there
 	}
-	caseIndent := l.indent(l.line(l.pos(clauses[0])))
+	caseIndent := l.Indent(l.Line(l.Pos(clauses[0])))
 	last := rest[len(rest)-1]
 	return &MissingCase{
-		First:  l.line(l.pos(rest[0])),
-		Last:   l.line(last.End() - 1),
-		file:   l.f.FileName(),
-		from:   l.pos(rest[0]),
+		First:  l.Line(l.Pos(rest[0])),
+		Last:   l.Line(last.End() - 1),
+		file:   l.File.FileName(),
+		from:   l.Pos(rest[0]),
 		to:     last.End(),
-		at:     l.start(closing),
+		at:     l.Start(closing),
 		header: caseIndent + "case " + value + ":\n",
-		indent: caseIndent + l.unit(),
+		indent: caseIndent + l.Unit(),
 	}, ""
 }
 
@@ -256,7 +256,7 @@ func (m *MissingCase) Place(edits []Edit) []Edit {
 // FunctionSpan returns the byte offsets of the function (name, or
 // Class.method) of the file at path, from its first token to its end.
 func (p *Project) FunctionSpan(path, function string) (start, end int, refusal string) {
-	l, why := p.lined(path)
+	l, why := p.Lined(path)
 	if why != "" {
 		return 0, 0, why
 	}
@@ -264,5 +264,5 @@ func (p *Project) FunctionSpan(path, function string) (start, end int, refusal s
 	if why != "" {
 		return 0, 0, why
 	}
-	return l.pos(fn), fn.End(), ""
+	return l.Pos(fn), fn.End(), ""
 }

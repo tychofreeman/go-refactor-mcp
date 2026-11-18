@@ -39,7 +39,7 @@ func (p *Project) IntroduceParameter(ctx context.Context, path, name, expr, para
 	var occurrences []*ast.Node
 	var visit func(n *ast.Node) bool
 	visit = func(n *ast.Node) bool {
-		if ast.IsExpressionNode(n) && !(ast.IsPropertyAccessExpression(n.Parent) && n.Parent.Name() == n) && slices.Equal(tokens(l.source(n)), want) {
+		if ast.IsExpressionNode(n) && !(ast.IsPropertyAccessExpression(n.Parent) && n.Parent.Name() == n) && slices.Equal(tokens(l.Source(n)), want) {
 			occurrences = append(occurrences, n)
 			return false
 		}
@@ -52,7 +52,7 @@ func (p *Project) IntroduceParameter(ctx context.Context, path, name, expr, para
 	}
 	for _, o := range occurrences {
 		if written(o) {
-			return nil, fmt.Sprintf("the body of %s assigns %s (%s), which a parameter cannot stand for", name, strings.TrimSpace(expr), l.where(o))
+			return nil, fmt.Sprintf("the body of %s assigns %s (%s), which a parameter cannot stand for", name, strings.TrimSpace(expr), l.Where(o))
 		}
 	}
 	e := occurrences[0]
@@ -76,14 +76,14 @@ func (p *Project) IntroduceParameter(ctx context.Context, path, name, expr, para
 	}
 	edits = append(edits, more...)
 	meaning := func(x *ast.Node) bool {
-		if !slices.Equal(tokens(l.source(x)), want) {
+		if !slices.Equal(tokens(l.Source(x)), want) {
 			return false
 		}
 		return slices.Equal(symbolsOf(c, x), symbolsOf(c, e))
 	}
 	for _, o := range occurrences {
 		if meaning(o) {
-			edits = append(edits, Edit{File: l.f.FileName(), Start: l.pos(o), End: o.End(), NewText: param})
+			edits = append(edits, Edit{File: l.File.FileName(), Start: l.Pos(o), End: o.End(), NewText: param})
 		}
 	}
 	for i, call := range t.calls {
@@ -153,7 +153,7 @@ func (t *target) introduced(e *ast.Node, expr string, n int, name string) ([]str
 					why = fmt.Sprintf("%s reads the rest parameter %s", strings.TrimSpace(expr), n.Text())
 					return true
 				}
-				if where := l.assigns(fn.Body(), s, c); where != "" {
+				if where := l.Assigns(fn.Body(), s, c); where != "" {
 					why = fmt.Sprintf("the body of %s assigns %s (%s), so %s may not have the value the call passed", name, n.Text(), where, strings.TrimSpace(expr))
 					return true
 				}
@@ -199,29 +199,29 @@ func (t *target) introduced(e *ast.Node, expr string, n int, name string) ([]str
 			case r.outer != nil:
 				s := c.ResolveName(r.node.Text(), call, ast.SymbolFlagsValue, false)
 				if s == nil || c.SkipAlias(s) != r.outer {
-					return nil, fmt.Sprintf("%s in %s is not the same at the call at %s; pass it yourself", r.node.Text(), strings.TrimSpace(expr), cl.where(call))
+					return nil, fmt.Sprintf("%s in %s is not the same at the call at %s; pass it yourself", r.node.Text(), strings.TrimSpace(expr), cl.Where(call))
 				}
 			case r.param >= 0:
 				text := "undefined"
 				if r.param < len(args.Nodes) {
 					a := args.Nodes[r.param]
 					if ef := newEffects(c, cl).Of(a); !ef.CanRepeat() {
-						return nil, fmt.Sprintf("the argument %s at %s would be evaluated twice: %s", cl.source(a), cl.where(call), ef.Why+map[bool]string{true: "it makes a new value each time"}[ef.Why == ""])
+						return nil, fmt.Sprintf("the argument %s at %s would be evaluated twice: %s", cl.Source(a), cl.Where(call), ef.Why+map[bool]string{true: "it makes a new value each time"}[ef.Why == ""])
 					}
 					text = operand(cl, a)
 				}
-				subs = append(subs, sub{l.pos(r.node), r.node.End(), text})
+				subs = append(subs, sub{l.Pos(r.node), r.node.End(), text})
 			default: // this
 				callee := call.Expression()
 				if !ast.IsPropertyAccessExpression(callee) || !newEffects(c, cl).Of(callee.Expression()).CanRepeat() {
-					return nil, fmt.Sprintf("the call at %s has no plain receiver to stand for this", cl.where(call))
+					return nil, fmt.Sprintf("the call at %s has no plain receiver to stand for this", cl.Where(call))
 				}
-				subs = append(subs, sub{l.pos(r.node), r.node.End(), operand(cl, callee.Expression())})
+				subs = append(subs, sub{l.Pos(r.node), r.node.End(), operand(cl, callee.Expression())})
 			}
 		}
 		sort.Slice(subs, func(i, j int) bool { return subs[i].start > subs[j].start })
-		text := l.source(e)
-		base := l.pos(e)
+		text := l.Source(e)
+		base := l.Pos(e)
 		for _, s := range subs {
 			text = text[:s.start-base] + s.text + text[s.end-base:]
 		}
@@ -232,12 +232,12 @@ func (t *target) introduced(e *ast.Node, expr string, n int, name string) ([]str
 
 // operand is the source of e, parenthesized unless it is a primary
 // expression that stays one operand anywhere.
-func operand(l *lined, e *ast.Node) string {
+func operand(l *Lined, e *ast.Node) string {
 	switch {
 	case ast.IsIdentifier(e), ast.IsLiteralExpression(e), ast.IsPropertyAccessExpression(e), ast.IsParenthesizedExpression(e), e.Kind == ast.KindThisKeyword:
-		return l.source(e)
+		return l.Source(e)
 	}
-	return "(" + l.source(e) + ")"
+	return "(" + l.Source(e) + ")"
 }
 
 // isConst reports whether the declaration d is of a const, or of what
@@ -257,7 +257,7 @@ func symbolsOf(c interface {
 	GetSymbolAtLocation(*ast.Node) *ast.Symbol
 }, n *ast.Node) []*ast.Symbol {
 	var out []*ast.Symbol
-	inspect(n, func(x *ast.Node) bool {
+	Inspect(n, func(x *ast.Node) bool {
 		if ast.IsIdentifier(x) {
 			out = append(out, c.GetSymbolAtLocation(x))
 		}
@@ -266,8 +266,8 @@ func symbolsOf(c interface {
 	return out
 }
 
-// assigns returns where body assigns the variable s, or "".
-func (l *lined) assigns(body *ast.Node, s *ast.Symbol, c interface {
+// Assigns returns where body assigns the variable s, or "".
+func (l *Lined) Assigns(body *ast.Node, s *ast.Symbol, c interface {
 	GetSymbolAtLocation(*ast.Node) *ast.Symbol
 }) string {
 	where := ""
@@ -286,7 +286,7 @@ func (l *lined) assigns(body *ast.Node, s *ast.Symbol, c interface {
 			target = n.AsPostfixUnaryExpression().Operand
 		}
 		if target != nil && slices.ContainsFunc(assigned(target), func(id *ast.Node) bool { return valueSymbol(c, id) == s }) {
-			where = l.where(n)
+			where = l.Where(n)
 		}
 		return n.ForEachChild(visit)
 	}
@@ -297,12 +297,12 @@ func (l *lined) assigns(body *ast.Node, s *ast.Symbol, c interface {
 // changesBefore returns where body may change state before it evaluates
 // e: a call, a new, an assignment, an update or a delete that ends before
 // e starts; or "".
-func (l *lined) changesBefore(body *ast.Node, e *ast.Node) string {
+func (l *Lined) changesBefore(body *ast.Node, e *ast.Node) string {
 	where := ""
-	start := l.pos(e)
+	start := l.Pos(e)
 	var visit func(n *ast.Node) bool
 	visit = func(n *ast.Node) bool {
-		if where != "" || l.pos(n) >= start {
+		if where != "" || l.Pos(n) >= start {
 			return true
 		}
 		if ast.IsFunctionLike(n) {
@@ -313,7 +313,7 @@ func (l *lined) changesBefore(body *ast.Node, e *ast.Node) string {
 			ast.IsPostfixUnaryExpression(n) ||
 			ast.IsBinaryExpression(n) && ast.IsAssignmentOperator(n.AsBinaryExpression().OperatorToken.Kind)
 		if changes && n.End() <= start {
-			where = l.where(n)
+			where = l.Where(n)
 			return true
 		}
 		n.ForEachChild(visit)
@@ -325,13 +325,13 @@ func (l *lined) changesBefore(body *ast.Node, e *ast.Node) string {
 
 // repeated returns the loop or function inside fn that e is in, which may
 // evaluate it more than once; or "".
-func (l *lined) repeated(fn, e *ast.Node) string {
+func (l *Lined) repeated(fn, e *ast.Node) string {
 	for n := e.Parent; n != nil && n != fn; n = n.Parent {
 		switch {
 		case ast.IsForStatement(n), ast.IsForInStatement(n), ast.IsForOfStatement(n), ast.IsWhileStatement(n), ast.IsDoStatement(n):
-			return "a loop at " + l.where(n)
+			return "a loop at " + l.Where(n)
 		case ast.IsFunctionLike(n):
-			return "a function at " + l.where(n)
+			return "a function at " + l.Where(n)
 		}
 	}
 	return ""

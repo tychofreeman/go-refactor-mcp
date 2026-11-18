@@ -19,7 +19,7 @@ import (
 // implements it yet, so nothing changes. Cases sharing a body are split,
 // each with a copy, so that each can move alone.
 func (p *Project) PrepareSwitchForTypes(ctx context.Context, path string, line int, function, iface, method string) ([]Edit, string) {
-	l, why := p.lined(path)
+	l, why := p.Lined(path)
 	if why != "" {
 		return nil, why
 	}
@@ -30,7 +30,7 @@ func (p *Project) PrepareSwitchForTypes(ctx context.Context, path string, line i
 	}
 	c, done := p.prog.GetProgram().GetTypeChecker(ctx)
 	defer done()
-	var scope *ast.Node = l.f.AsNode()
+	var scope *ast.Node = l.File.AsNode()
 	if function != "" {
 		fn, _, _, why := l.function(function)
 		if why != "" {
@@ -41,7 +41,7 @@ func (p *Project) PrepareSwitchForTypes(ctx context.Context, path string, line i
 	var found []*ast.Node
 	var visit func(n *ast.Node) bool
 	visit = func(n *ast.Node) bool {
-		if ast.IsSwitchStatement(n) && (line == 0 || l.line(l.pos(n)) == line) {
+		if ast.IsSwitchStatement(n) && (line == 0 || l.Line(l.Pos(n)) == line) {
 			found = append(found, n)
 		}
 		n.ForEachChild(visit)
@@ -63,10 +63,10 @@ func (p *Project) PrepareSwitchForTypes(ctx context.Context, path string, line i
 	}
 	subject := sw.AsSwitchStatement().Expression
 	if t := c.GetTypeAtLocation(subject); !mayHoldObject(t) {
-		return nil, fmt.Sprintf("the subject %s is of %s, which holds no object; widen it first (change_type to unknown)", l.source(subject), c.TypeToString(t))
+		return nil, fmt.Sprintf("the subject %s is of %s, which holds no object; widen it first (change_type to unknown)", l.Source(subject), c.TypeToString(t))
 	}
 	if re := newEffects(c, l).Of(subject); !re.CanRepeat() {
-		return nil, fmt.Sprintf("the subject %s %s; name it first", l.source(subject), re.Why)
+		return nil, fmt.Sprintf("the subject %s %s; name it first", l.Source(subject), re.Why)
 	}
 	// The cases: each returns, or none does; a case without a body takes
 	// a copy of the next one's.
@@ -78,7 +78,7 @@ func (p *Project) PrepareSwitchForTypes(ctx context.Context, path string, line i
 		own := cl.Statements()
 		if len(own) == 0 {
 			if i == len(clauses)-1 {
-				return nil, fmt.Sprintf("the last case (%s) has no body", l.where(cl))
+				return nil, fmt.Sprintf("the last case (%s) has no body", l.Where(cl))
 			}
 			splits = append(splits, cl)
 			continue
@@ -92,10 +92,10 @@ func (p *Project) PrepareSwitchForTypes(ctx context.Context, path string, line i
 		case b.why != "":
 			return nil, b.why
 		case b.this:
-			return nil, fmt.Sprintf("the case at %s uses this, which would then be the class's", l.where(cl))
+			return nil, fmt.Sprintf("the case at %s uses this, which would then be the class's", l.Where(cl))
 		case len(b.returns) > 0:
-			if !terminates(own[len(own)-1]) {
-				return nil, fmt.Sprintf("the case at %s returns on some paths only", l.where(cl))
+			if !Terminates(own[len(own)-1]) {
+				return nil, fmt.Sprintf("the case at %s returns on some paths only", l.Where(cl))
 			}
 			returning++
 		}
@@ -110,8 +110,8 @@ func (p *Project) PrepareSwitchForTypes(ctx context.Context, path string, line i
 			next = next[1:]
 		}
 		for _, s := range next[0].Statements() {
-			if len(declared(s)) > 0 || ast.IsClassDeclaration(s) || ast.IsFunctionDeclaration(s) {
-				return nil, fmt.Sprintf("the case at %s shares a body that declares %s, whose copies would clash", l.where(cl), l.part(s))
+			if len(Declared(s)) > 0 || ast.IsClassDeclaration(s) || ast.IsFunctionDeclaration(s) {
+				return nil, fmt.Sprintf("the case at %s shares a body that declares %s, whose copies would clash", l.Where(cl), l.part(s))
 			}
 		}
 	}
@@ -127,7 +127,7 @@ func (p *Project) PrepareSwitchForTypes(ctx context.Context, path string, line i
 	var params []param
 	why = ""
 	for _, s := range stmts {
-		identifiers(s, func(id *ast.Node) {
+		Identifiers(s, func(id *ast.Node) {
 			if why != "" || propertyName(id) || ast.IsDeclarationName(id) {
 				return
 			}
@@ -158,7 +158,7 @@ func (p *Project) PrepareSwitchForTypes(ctx context.Context, path string, line i
 		ps = append(ps, p.name+": "+p.typ)
 		args = append(args, p.name)
 	}
-	sig := method + "(" + strings.Join(ps, ", ") + "): " + ret + l.semi()
+	sig := method + "(" + strings.Join(ps, ", ") + "): " + ret + l.Semi()
 	var edits []Edit
 	// The interface: the file's, given the method, or a new one before
 	// the function's statement.
@@ -167,27 +167,27 @@ func (p *Project) PrepareSwitchForTypes(ctx context.Context, path string, line i
 		top = top.Parent
 	}
 	var decl *ast.Node
-	for _, s := range l.f.Statements.Nodes {
+	for _, s := range l.File.Statements.Nodes {
 		if s.Name() != nil && s.Name().Text() == iface {
 			if !ast.IsInterfaceDeclaration(s) {
-				return nil, fmt.Sprintf("%s is declared at %s, and is not an interface", iface, l.where(s))
+				return nil, fmt.Sprintf("%s is declared at %s, and is not an interface", iface, l.Where(s))
 			}
 			decl = s
 		}
 	}
-	unit := l.unit()
+	unit := l.Unit()
 	if decl != nil {
 		for _, m := range decl.Members() {
-			if m.Name() != nil && l.source(m.Name()) == method {
+			if m.Name() != nil && l.Source(m.Name()) == method {
 				return nil, fmt.Sprintf("%s already has %s", iface, method)
 			}
 		}
 		closing := decl.End() - 1
-		at := l.start(l.line(closing))
-		if strings.TrimSpace(l.text[at:closing]) != "" {
+		at := l.Start(l.Line(closing))
+		if strings.TrimSpace(l.Text[at:closing]) != "" {
 			return nil, fmt.Sprintf("%s's closing brace shares its line; put it on a line of its own", iface)
 		}
-		edits = append(edits, Edit{File: l.f.FileName(), Start: at, End: at, NewText: l.indent(l.line(l.pos(decl))) + unit + sig + "\n"})
+		edits = append(edits, Edit{File: l.File.FileName(), Start: at, End: at, NewText: l.Indent(l.Line(l.Pos(decl))) + unit + sig + "\n"})
 	} else {
 		if r := c.ResolveName(iface, top, ast.SymbolFlagsType, false); r != nil {
 			return nil, fmt.Sprintf("%s is already a type there", iface)
@@ -198,15 +198,15 @@ func (p *Project) PrepareSwitchForTypes(ctx context.Context, path string, line i
 		}
 		a, _, ok := l.lineRange(top)
 		if !ok {
-			a = l.start(l.line(l.pos(top)))
+			a = l.Start(l.Line(l.Pos(top)))
 		}
-		edits = append(edits, Edit{File: l.f.FileName(), Start: a, End: a, NewText: export + "interface " + iface + " {\n" + unit + sig + "\n}\n\n"})
+		edits = append(edits, Edit{File: l.File.FileName(), Start: a, End: a, NewText: export + "interface " + iface + " {\n" + unit + sig + "\n}\n\n"})
 	}
 	// The guard, and the splits.
-	s := l.source(subject)
+	s := l.Source(subject)
 	cond := "typeof " + s + " === \"object\" && " + s + " !== null && \"" + method + "\" in " + s
 	call := "(" + s + " as " + iface + ")." + method + "(" + strings.Join(args, ", ") + ")"
-	ind := l.indent(l.line(l.pos(sw)))
+	ind := l.Indent(l.Line(l.Pos(sw)))
 	extra := "" // what the switch's lines gain: a unit when it goes in the else
 	if returning == 0 {
 		extra = unit
@@ -218,37 +218,37 @@ func (p *Project) PrepareSwitchForTypes(ctx context.Context, path string, line i
 			next = next[1:]
 		}
 		body := next[0].Statements()
-		a := l.start(l.line(l.pos(body[0])))
-		b := l.end(l.line(body[len(body)-1].End() - 1))
-		if strings.TrimSpace(l.text[a:l.pos(body[0])]) != "" || l.line(l.pos(cl)) == l.line(l.pos(body[0])) {
-			return nil, fmt.Sprintf("the body after %s shares its lines with its case; put it on lines of its own", l.where(cl))
+		a := l.Start(l.Line(l.Pos(body[0])))
+		b := l.End(l.Line(body[len(body)-1].End() - 1))
+		if strings.TrimSpace(l.Text[a:l.Pos(body[0])]) != "" || l.Line(l.Pos(cl)) == l.Line(l.Pos(body[0])) {
+			return nil, fmt.Sprintf("the body after %s shares its lines with its case; put it on lines of its own", l.Where(cl))
 		}
 		copied := ""
-		for _, ln := range strings.Split(l.text[a:b], "\n") {
+		for _, ln := range strings.Split(l.Text[a:b], "\n") {
 			if strings.TrimSpace(ln) != "" {
 				ln = extra + ln
 			}
 			copied += "\n" + ln
 		}
-		at := l.end(l.line(cl.End() - 1))
+		at := l.End(l.Line(cl.End() - 1))
 		rs = append(rs, repl{at, at, copied})
 	}
 	if returning > 0 {
 		for _, r := range rs {
-			edits = append(edits, Edit{File: l.f.FileName(), Start: r.start, End: r.end, NewText: r.text})
+			edits = append(edits, Edit{File: l.File.FileName(), Start: r.start, End: r.end, NewText: r.text})
 		}
-		guard := "if (" + cond + ") {\n" + ind + unit + "return " + call + l.semi() + "\n" + ind + "}\n" + ind
-		edits = append(edits, Edit{File: l.f.FileName(), Start: l.pos(sw), End: l.pos(sw), NewText: guard})
+		guard := "if (" + cond + ") {\n" + ind + unit + "return " + call + l.Semi() + "\n" + ind + "}\n" + ind
+		edits = append(edits, Edit{File: l.File.FileName(), Start: l.Pos(sw), End: l.Pos(sw), NewText: guard})
 		return edits, ""
 	}
-	a := l.start(l.line(l.pos(sw)))
-	b := l.start(l.line(sw.End()-1) + 1)
-	if strings.TrimSpace(l.text[a:l.pos(sw)]) != "" || !quiet(l.text[sw.End():l.end(l.line(sw.End()-1))]) {
+	a := l.Start(l.Line(l.Pos(sw)))
+	b := l.Start(l.Line(sw.End()-1) + 1)
+	if strings.TrimSpace(l.Text[a:l.Pos(sw)]) != "" || !quiet(l.Text[sw.End():l.End(l.Line(sw.End()-1))]) {
 		return nil, "the switch shares its lines with other code"
 	}
 	body := l.reindent(a, b, ind, ind+unit, rs...)
-	text := ind + "if (" + cond + ") {\n" + ind + unit + call + l.semi() + "\n" + ind + "} else {\n" + body + ind + "}\n"
-	edits = append(edits, Edit{File: l.f.FileName(), Start: a, End: b, NewText: text})
+	text := ind + "if (" + cond + ") {\n" + ind + unit + call + l.Semi() + "\n" + ind + "} else {\n" + body + ind + "}\n"
+	edits = append(edits, Edit{File: l.File.FileName(), Start: a, End: b, NewText: text})
 	return edits, ""
 }
 

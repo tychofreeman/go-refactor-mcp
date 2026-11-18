@@ -16,7 +16,7 @@ import (
 // top-level interfaces and classes; found is false when one is not.
 func (p *Project) ClassMembers(implements []string, base string) (members []string, found bool, refusal string) {
 	decls := map[string][]*ast.Node{}
-	files := map[*ast.Node]*lined{}
+	files := map[*ast.Node]*Lined{}
 	for _, f := range p.sources() {
 		l := newLined(f)
 		for _, s := range f.Statements.Nodes {
@@ -63,15 +63,15 @@ func (p *Project) ClassMembers(implements []string, base string) (members []stri
 				if abstractOnly && !ast.HasSyntacticModifier(m, ast.ModifierFlagsAbstract) {
 					continue
 				}
-				text := strings.TrimSuffix(strings.TrimSpace(l.source(m)), ";")
+				text := strings.TrimSuffix(strings.TrimSpace(l.Source(m)), ";")
 				text = strings.TrimPrefix(text, "abstract ")
 				switch {
 				case ast.IsMethodSignatureDeclaration(m) || ast.IsMethodDeclaration(m):
 					text += " {\n    throw new Error(\"not implemented\");\n  }"
 				case ast.IsPropertySignatureDeclaration(m) || ast.IsPropertyDeclaration(m):
-					nameEnd := m.Name().End() - l.pos(m)
-					rest := strings.TrimPrefix(strings.TrimSpace(l.source(m)), "abstract ")
-					nameEnd -= len(strings.TrimSpace(l.source(m))) - len(rest)
+					nameEnd := m.Name().End() - l.Pos(m)
+					rest := strings.TrimPrefix(strings.TrimSpace(l.Source(m)), "abstract ")
+					nameEnd -= len(strings.TrimSpace(l.Source(m))) - len(rest)
 					text = strings.TrimSuffix(rest[:nameEnd]+"!"+rest[nameEnd:], ";") + ";"
 				default:
 					continue

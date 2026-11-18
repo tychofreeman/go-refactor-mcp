@@ -15,7 +15,7 @@ import (
 // code's, and its holes, which match any expression.
 type matcher struct {
 	c        *checker.Checker
-	pl, cl   *lined
+	pl, cl   *Lined
 	inP, inC func(*ast.Symbol) bool         // whether a symbol is declared in the pattern's, the code's function
 	holes    map[*ast.Symbol]int            // the pattern's parameters that match any expression, by position
 	fields   map[*ast.Symbol]map[string]int // parameters whose properties (d.plants) are holes of their own, at these positions
@@ -31,7 +31,7 @@ type matcher struct {
 	why      string // the first difference
 }
 
-func newMatcher(c *checker.Checker, pl, cl *lined) *matcher {
+func newMatcher(c *checker.Checker, pl, cl *Lined) *matcher {
 	return &matcher{c: c, pl: pl, cl: cl, pair: map[*ast.Symbol]*ast.Symbol{}, back: map[*ast.Symbol]*ast.Symbol{}, inP: func(*ast.Symbol) bool { return false }, inC: func(*ast.Symbol) bool { return false }}
 }
 
@@ -120,7 +120,7 @@ func (m *matcher) match(p, x *ast.Node) bool {
 				m.why = fmt.Sprintf("%s stands for text in one place and for %s in another", m.pl.part(p), m.cl.part(x))
 				return false
 			}
-			if !slices.Equal(tokens(m.cl.source(a)), tokens(m.cl.source(x))) || !slices.Equal(symbolsOf(m.c, a), symbolsOf(m.c, x)) {
+			if !slices.Equal(tokens(m.cl.Source(a)), tokens(m.cl.Source(x))) || !slices.Equal(symbolsOf(m.c, a), symbolsOf(m.c, x)) {
 				m.why = fmt.Sprintf("%s and %s stand for the same parameter but differ", m.cl.part(a), m.cl.part(x))
 				return false
 			}
@@ -178,7 +178,7 @@ func (m *matcher) match(p, x *ast.Node) bool {
 		}
 		return ps == xs || m.differ(p, x)
 	case ast.IsLiteralKind(p.Kind) || ast.IsTemplateLiteralKind(p.Kind):
-		if m.pl.source(p) == m.cl.source(x) {
+		if m.pl.Source(p) == m.cl.Source(x) {
 			return true
 		}
 		if m.literals && !ast.IsTemplateLiteralKind(p.Kind) {
@@ -208,7 +208,7 @@ func (m *matcher) objectOf(p *ast.Node) map[string]int {
 func (m *matcher) matchChildren(p, x *ast.Node) bool {
 	pc, xc := children(p), children(x)
 	if len(pc) == 0 {
-		if !slices.Equal(tokens(m.pl.source(p)), tokens(m.cl.source(x))) {
+		if !slices.Equal(tokens(m.pl.Source(p)), tokens(m.cl.Source(x))) {
 			return m.differ(p, x)
 		}
 		return true
@@ -227,10 +227,10 @@ func (m *matcher) matchChildren(p, x *ast.Node) bool {
 // dropImports returns the edits that remove the imports of l's file that
 // only code gone used (gone reports whether a node is in it); with blank,
 // the blank line after them too when they all go.
-func dropImports(c *checker.Checker, l *lined, gone func(*ast.Node) bool, blank bool) []Edit {
+func dropImports(c *checker.Checker, l *Lined, gone func(*ast.Node) bool, blank bool) []Edit {
 	used := map[*ast.Node]bool{}
 	usedGone := map[*ast.Node]bool{}
-	identifiers(l.f.AsNode(), func(id *ast.Node) {
+	Identifiers(l.File.AsNode(), func(id *ast.Node) {
 		if ast.IsDeclarationName(id) || id.Parent != nil && ast.IsImportSpecifier(id.Parent) {
 			return
 		}
@@ -242,7 +242,7 @@ func dropImports(c *checker.Checker, l *lined, gone func(*ast.Node) bool, blank 
 			return
 		}
 		d := sym.Declarations[0]
-		if !(ast.IsImportSpecifier(d) || ast.IsImportClause(d) || ast.IsNamespaceImport(d)) || ast.GetSourceFileOfNode(d) != l.f {
+		if !(ast.IsImportSpecifier(d) || ast.IsImportClause(d) || ast.IsNamespaceImport(d)) || ast.GetSourceFileOfNode(d) != l.File {
 			return
 		}
 		if gone(id) {
@@ -253,7 +253,7 @@ func dropImports(c *checker.Checker, l *lined, gone func(*ast.Node) bool, blank 
 	})
 	var edits []Edit
 	imports, whole := 0, -1 // how many imports, and the edit of the last removed whole
-	for _, s := range l.f.Statements.Nodes {
+	for _, s := range l.File.Statements.Nodes {
 		if ast.IsImportDeclaration(s) {
 			imports++
 		}
@@ -281,7 +281,7 @@ func dropImports(c *checker.Checker, l *lined, gone func(*ast.Node) bool, blank 
 		case len(unused) == 0:
 		case len(unused) == len(all):
 			if a, b, ok := l.lineRange(s); ok {
-				edits = append(edits, Edit{File: l.f.FileName(), Start: a, End: b})
+				edits = append(edits, Edit{File: l.File.FileName(), Start: a, End: b})
 				whole = len(edits) - 1
 			}
 		default:
@@ -311,7 +311,7 @@ func (p *Project) references(c *checker.Checker, syms []*ast.Symbol) []*ast.Node
 		if f.IsDeclarationFile {
 			continue
 		}
-		identifiers(f.AsNode(), func(id *ast.Node) {
+		Identifiers(f.AsNode(), func(id *ast.Node) {
 			spec := id.Parent != nil && (ast.IsImportSpecifier(id.Parent) || ast.IsExportSpecifier(id.Parent))
 			if (!ast.IsDeclarationName(id) || spec) && slices.Contains(syms, symbolOf(c, id)) {
 				out = append(out, id)
@@ -323,12 +323,12 @@ func (p *Project) references(c *checker.Checker, syms []*ast.Symbol) []*ast.Node
 
 // member returns the members of the class or interface named class in
 // the file that are called name.
-func (l *lined) member(class, name string) (*ast.Node, []*ast.Node, string) {
-	for _, s := range l.f.Statements.Nodes {
+func (l *Lined) member(class, name string) (*ast.Node, []*ast.Node, string) {
+	for _, s := range l.File.Statements.Nodes {
 		if (ast.IsClassDeclaration(s) || ast.IsInterfaceDeclaration(s)) && s.Name() != nil && s.Name().Text() == class {
 			var out []*ast.Node
 			for _, m := range s.Members() {
-				if m.Name() != nil && l.text[l.pos(m.Name()):m.Name().End()] == name {
+				if m.Name() != nil && l.Text[l.Pos(m.Name()):m.Name().End()] == name {
 					out = append(out, m)
 				}
 			}
@@ -346,7 +346,7 @@ func (l *lined) member(class, name string) (*ast.Node, []*ast.Node, string) {
 // Class.member; and the imports only they used. note says whether one
 // was exported.
 func (p *Project) RemoveDeadCode(ctx context.Context, path string, line int, name string, column int, also []string) (edits []Edit, note, refusal string) {
-	l, why := p.lined(path)
+	l, why := p.Lined(path)
 	if why != "" {
 		return nil, "", why
 	}
@@ -358,8 +358,8 @@ func (p *Project) RemoveDeadCode(ctx context.Context, path string, line int, nam
 	addNodes := func(label string, nodes []*ast.Node) string {
 		for _, n := range nodes {
 			switch {
-			case ast.IsVariableStatement(n) && len(declared(n)) > 1:
-				return fmt.Sprintf("%s is declared with %s in one statement (%s); split it first", label, joinNames(declared(n)), l.where(n))
+			case ast.IsVariableStatement(n) && len(Declared(n)) > 1:
+				return fmt.Sprintf("%s is declared with %s in one statement (%s); split it first", label, joinNames(Declared(n)), l.Where(n))
 			case ast.IsModuleDeclaration(n):
 				return fmt.Sprintf("%s is a namespace", label)
 			case ast.IsConstructorDeclaration(n):
@@ -418,9 +418,9 @@ func (p *Project) RemoveDeadCode(ctx context.Context, path string, line int, nam
 	}
 	if line > 0 {
 		var decl *ast.Node
-		identifiers(l.f.AsNode(), func(id *ast.Node) {
-			start := l.pos(id)
-			if decl == nil && id.Text() == name && l.line(start) == line && (column == 0 || start-l.start(line)+1 == column) && ast.IsDeclarationName(id) {
+		Identifiers(l.File.AsNode(), func(id *ast.Node) {
+			start := l.Pos(id)
+			if decl == nil && id.Text() == name && l.Line(start) == line && (column == 0 || start-l.Start(line)+1 == column) && ast.IsDeclarationName(id) {
 				decl = id.Parent
 			}
 		})
@@ -444,7 +444,7 @@ func (p *Project) RemoveDeadCode(ctx context.Context, path string, line int, nam
 	for _, r := range p.references(c, syms) {
 		if !in(r) {
 			rl := newLined(ast.GetSourceFileOfNode(r))
-			return nil, "", fmt.Sprintf("%s is still used at %s: %s", r.Text(), rl.where(r), strings.TrimSpace(rl.text[rl.start(rl.line(rl.pos(r))):rl.end(rl.line(rl.pos(r)))]))
+			return nil, "", fmt.Sprintf("%s is still used at %s: %s", r.Text(), rl.Where(r), strings.TrimSpace(rl.Text[rl.Start(rl.Line(rl.Pos(r))):rl.End(rl.Line(rl.Pos(r)))]))
 		}
 	}
 	for _, g := range gone {
@@ -453,7 +453,7 @@ func (p *Project) RemoveDeadCode(ctx context.Context, path string, line int, nam
 			return nil, "", fmt.Sprintf("%s shares its lines with other code", l.part(g))
 		}
 		a, b = l.withBlank(a, b)
-		edits = append(edits, Edit{File: l.f.FileName(), Start: a, End: b})
+		edits = append(edits, Edit{File: l.File.FileName(), Start: a, End: b})
 	}
 	edits = append(edits, dropImports(c, l, in, true)...)
 	if len(exported) > 0 {
@@ -464,11 +464,11 @@ func (p *Project) RemoveDeadCode(ctx context.Context, path string, line int, nam
 
 // overrides returns why the member m of class may not go: it overrides
 // a member of a base class, or implements one of an interface.
-func (p *Project) overrides(c *checker.Checker, l *lined, class, m *ast.Node) string {
+func (p *Project) overrides(c *checker.Checker, l *Lined, class, m *ast.Node) string {
 	if m.Name() == nil {
 		return ""
 	}
-	name := l.source(m.Name())
+	name := l.Source(m.Name())
 	hs := class.AsClassDeclaration().HeritageClauses
 	if hs == nil {
 		return ""
@@ -476,7 +476,7 @@ func (p *Project) overrides(c *checker.Checker, l *lined, class, m *ast.Node) st
 	for _, h := range hs.Nodes {
 		for _, t := range h.AsHeritageClause().Types.Nodes {
 			if typ := c.GetTypeAtLocation(t); typ != nil && c.GetPropertyOfType(typ, name) != nil {
-				return fmt.Sprintf("%s.%s implements or overrides a member of %s", class.Name().Text(), name, l.source(t))
+				return fmt.Sprintf("%s.%s implements or overrides a member of %s", class.Name().Text(), name, l.Source(t))
 			}
 		}
 	}
@@ -528,7 +528,7 @@ func functionDecl(fn *ast.Node) *ast.Node {
 // name (named on line at column, or declared at the top of path) with the
 // function keepName of keepPath, whose body is the same, and delete it.
 func (p *Project) MergeDuplicate(ctx context.Context, path string, line int, name string, column int, keepPath, keepName string) ([]Edit, string) {
-	l, why := p.lined(path)
+	l, why := p.Lined(path)
 	if why != "" {
 		return nil, why
 	}
@@ -536,9 +536,9 @@ func (p *Project) MergeDuplicate(ctx context.Context, path string, line int, nam
 	defer done()
 	if line > 0 {
 		var sym *ast.Symbol
-		identifiers(l.f.AsNode(), func(id *ast.Node) {
-			start := l.pos(id)
-			if sym == nil && id.Text() == name && l.line(start) == line && (column == 0 || start-l.start(line)+1 == column) {
+		Identifiers(l.File.AsNode(), func(id *ast.Node) {
+			start := l.Pos(id)
+			if sym == nil && id.Text() == name && l.Line(start) == line && (column == 0 || start-l.Start(line)+1 == column) {
 				sym = symbolOf(c, id)
 			}
 		})
@@ -547,7 +547,7 @@ func (p *Project) MergeDuplicate(ctx context.Context, path string, line int, nam
 		}
 		l = newLined(ast.GetSourceFileOfNode(sym.Declarations[0]))
 	}
-	kl, why := p.lined(keepPath)
+	kl, why := p.Lined(keepPath)
 	if why != "" {
 		return nil, why
 	}
@@ -590,14 +590,14 @@ func (p *Project) MergeDuplicate(ctx context.Context, path string, line int, nam
 	keepExported := ast.HasSyntacticModifier(functionDecl(keep), ast.ModifierFlagsExport)
 	declStmt := functionDecl(del)
 	inDel := func(n *ast.Node) bool {
-		return ast.GetSourceFileOfNode(n) == l.f && n.Pos() >= declStmt.Pos() && n.End() <= declStmt.End()
+		return ast.GetSourceFileOfNode(n) == l.File && n.Pos() >= declStmt.Pos() && n.End() <= declStmt.End()
 	}
 	var edits []Edit
 	byFile := map[*ast.SourceFile][]*ast.Node{}
 	var order []*ast.SourceFile
 	for _, r := range p.references(c, []*ast.Symbol{delSym}) {
 		if inDel(r) {
-			return nil, fmt.Sprintf("%s calls itself (%s); merge by hand", name, l.where(r))
+			return nil, fmt.Sprintf("%s calls itself (%s); merge by hand", name, l.Where(r))
 		}
 		f := ast.GetSourceFileOfNode(r)
 		if byFile[f] == nil {
@@ -608,8 +608,8 @@ func (p *Project) MergeDuplicate(ctx context.Context, path string, line int, nam
 	for _, f := range order {
 		fl := newLined(f)
 		local := keepName // the name the file knows keep by
-		known := f == kl.f
-		identifiers(f.AsNode(), func(id *ast.Node) {
+		known := f == kl.File
+		Identifiers(f.AsNode(), func(id *ast.Node) {
 			if ast.IsImportSpecifier(id.Parent) && id.Parent.Name() == id && symbolOf(c, id) == keepSym {
 				local, known = id.Text(), true
 			}
@@ -622,24 +622,24 @@ func (p *Project) MergeDuplicate(ctx context.Context, path string, line int, nam
 				importsDel = append(importsDel, r.Parent)
 				continue
 			case ast.IsExportSpecifier(r.Parent):
-				return nil, fmt.Sprintf("%s re-exports %s; change that first", fl.where(r), name)
+				return nil, fmt.Sprintf("%s re-exports %s; change that first", fl.Where(r), name)
 			}
 			uses = true
 			text := local
 			if ast.IsShorthandPropertyAssignment(r.Parent) {
 				text = r.Text() + ": " + local
 			}
-			edits = append(edits, Edit{File: f.FileName(), Start: fl.pos(r), End: r.End(), NewText: text})
+			edits = append(edits, Edit{File: f.FileName(), Start: fl.Pos(r), End: r.End(), NewText: text})
 		}
 		if uses && !known {
 			if !keepExported {
-				return nil, fmt.Sprintf("%s is used in %s, where %s is not seen: export %s first", name, fl.f.FileName(), keepName, keepName)
+				return nil, fmt.Sprintf("%s is used in %s, where %s is not seen: export %s first", name, fl.File.FileName(), keepName, keepName)
 			}
 			if s := c.ResolveName(keepName, byFile[f][0], ast.SymbolFlagsValue, false); s != nil && c.SkipAlias(s) != keepSym {
-				return nil, fmt.Sprintf("%s already means something else in %s", keepName, fl.f.FileName())
+				return nil, fmt.Sprintf("%s already means something else in %s", keepName, fl.File.FileName())
 			}
 			at, text := fl.importAt()
-			edits = append(edits, Edit{File: f.FileName(), Start: at, End: at, NewText: text(importLine{spec: fl.specFor(kl.f.FileName()), named: []string{keepName}}.text(fl.quote(), fl.semi()))})
+			edits = append(edits, Edit{File: f.FileName(), Start: at, End: at, NewText: text(importLine{spec: fl.specFor(kl.File.FileName()), named: []string{keepName}}.text(fl.quote(), fl.Semi()))})
 		}
 		for _, spec := range importsDel {
 			list := spec.Parent.AsNamedImports().Elements
@@ -658,7 +658,7 @@ func (p *Project) MergeDuplicate(ctx context.Context, path string, line int, nam
 		return nil, fmt.Sprintf("%s shares its lines with other code", name)
 	}
 	a, b = l.withBlank(a, b)
-	edits = append(edits, Edit{File: l.f.FileName(), Start: a, End: b})
+	edits = append(edits, Edit{File: l.File.FileName(), Start: a, End: b})
 	edits = append(edits, dropImports(c, l, inDel, true)...)
 	return edits, ""
 }
@@ -668,7 +668,7 @@ func (p *Project) MergeDuplicate(ctx context.Context, path string, line int, nam
 // those literals as parameters, named params in the order they appear in
 // the first function.
 func (p *Project) Parameterize(ctx context.Context, path string, functions []string, name string, params []string) ([]Edit, string) {
-	l, why := p.lined(path)
+	l, why := p.Lined(path)
 	if why != "" {
 		return nil, why
 	}
@@ -726,7 +726,7 @@ func (p *Project) Parameterize(ctx context.Context, path string, functions []str
 	if len(params) != len(at) {
 		var lits []string
 		for _, a := range at {
-			lits = append(lits, l.source(a))
+			lits = append(lits, l.Source(a))
 		}
 		return nil, fmt.Sprintf("the functions differ in %d literals (%s in %s); give a parameter name for each", len(at), strings.Join(lits, ", "), functions[0])
 	}
@@ -739,10 +739,10 @@ func (p *Project) Parameterize(ctx context.Context, path string, functions []str
 			m.match(first.Body(), fn.Body())
 		}
 		for _, a := range at {
-			v := l.source(a)
+			v := l.Source(a)
 			for _, d := range m.diffs {
 				if d[0] == a {
-					v = l.source(d[1])
+					v = l.Source(d[1])
 				}
 			}
 			values[a] = append(values[a], v)
@@ -775,7 +775,7 @@ func (p *Project) Parameterize(ctx context.Context, path string, functions []str
 	if !method && !ast.IsFunctionDeclaration(first) {
 		nameNode = first.Parent.Name()
 	}
-	rs = append(rs, repl{l.pos(nameNode), nameNode.End(), name})
+	rs = append(rs, repl{l.Pos(nameNode), nameNode.End(), name})
 	var added []string
 	for i, prm := range params {
 		added = append(added, prm+": "+types[i])
@@ -787,11 +787,11 @@ func (p *Project) Parameterize(ctx context.Context, path string, functions []str
 	}
 	rs = append(rs, repl{list.End(), list.End(), sep + strings.Join(added, ", ")})
 	for i, a := range at {
-		rs = append(rs, repl{l.pos(a), a.End(), params[i]})
+		rs = append(rs, repl{l.Pos(a), a.End(), params[i]})
 	}
-	start, end := l.pos(owner), owner.End()
+	start, end := l.Pos(owner), owner.End()
 	if method {
-		start, end = l.pos(first), first.End()
+		start, end = l.Pos(first), first.End()
 	}
 	text := strings.TrimPrefix(l.substitute(start, end, rs), "export ")
 	var edits []Edit
@@ -805,14 +805,14 @@ func (p *Project) Parameterize(ctx context.Context, path string, functions []str
 			}
 		}
 	}
-	_, lastLine := l.lines(last)
-	ind := l.indent(l.line(l.pos(last)))
-	insertAt := l.start(lastLine + 1)
+	_, lastLine := l.Lines(last)
+	ind := l.Indent(l.Line(l.Pos(last)))
+	insertAt := l.Start(lastLine + 1)
 	nl := "\n"
-	if insertAt == len(l.text) && !strings.HasSuffix(l.text, "\n") {
+	if insertAt == len(l.Text) && !strings.HasSuffix(l.Text, "\n") {
 		nl = "\n\n"
 	}
-	edits = append(edits, Edit{File: l.f.FileName(), Start: insertAt, End: insertAt, NewText: nl + ind + text + "\n"})
+	edits = append(edits, Edit{File: l.File.FileName(), Start: insertAt, End: insertAt, NewText: nl + ind + text + "\n"})
 	// Each function calls it.
 	for i, fn := range fns {
 		var args []string
@@ -831,14 +831,14 @@ func (p *Project) Parameterize(ctx context.Context, path string, functions []str
 		}
 		body := fn.Body()
 		if !ast.IsBlock(body) {
-			edits = append(edits, Edit{File: l.f.FileName(), Start: l.pos(body), End: body.End(), NewText: strings.TrimPrefix(call, "return ")})
+			edits = append(edits, Edit{File: l.File.FileName(), Start: l.Pos(body), End: body.End(), NewText: strings.TrimPrefix(call, "return ")})
 			continue
 		}
-		bind := l.indent(l.line(l.pos(fn)))
+		bind := l.Indent(l.Line(l.Pos(fn)))
 		if !method && !ast.IsFunctionDeclaration(fn) {
-			bind = l.indent(l.line(l.pos(functionDecl(fn))))
+			bind = l.Indent(l.Line(l.Pos(functionDecl(fn))))
 		}
-		edits = append(edits, Edit{File: l.f.FileName(), Start: l.pos(body), End: body.End(), NewText: "{\n" + bind + l.unit() + call + l.semi() + "\n" + bind + "}"})
+		edits = append(edits, Edit{File: l.File.FileName(), Start: l.Pos(body), End: body.End(), NewText: "{\n" + bind + l.Unit() + call + l.Semi() + "\n" + bind + "}"})
 	}
 	slices.SortFunc(edits, func(a, b Edit) int { return a.Start - b.Start })
 	return edits, ""
