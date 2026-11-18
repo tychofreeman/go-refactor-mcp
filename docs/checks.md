@@ -1550,15 +1550,18 @@ exported (`defaultHost` in a command becomes `agent.DefaultHost`).
 
 Refused, besides the checks above:
 
-- **what moves:** a method on its own (it must stay with its type), a
-  declaration of several names (`var a, b = 1, 2`), and code
-  that uses other top-level declarations of its package: the new package
-  would have to import the old one, which imports it (move those first,
-  or with it in `also`);
+- **what moves:** a method on its own (it must stay with its type), a declaration of several names (`var a, b = 1, 2`), and code
+  that uses unexported top-level declarations of its package, which the
+  new package cannot reach (move those first, or with it in `also`, or
+  export them). Exported ones it uses become `p.Name`, the new package
+  importing the old, which is how a package's code moves into a package
+  under it (2026-11-18, #643); if the old package still uses the moved
+  code, that is an import cycle, refused below;
 - **where:** a test file on either side, a file with build constraints, a
   name the package already declares;
 - **who uses it:** a package that would then import the destination while
-  the destination (or the moved code's imports) already depends on it,
+  the destination (or the moved code's imports, or the old package when
+  the moved code uses it) already depends on it,
   which is an import cycle; a package that cannot import the destination
   (`internal`); a use through a dot import.
 
