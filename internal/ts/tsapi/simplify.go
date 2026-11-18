@@ -9,6 +9,7 @@ import (
 	"github.com/buke/typescript-go-internal/v7/pkg/ast"
 	"github.com/buke/typescript-go-internal/v7/pkg/checker"
 	"github.com/buke/typescript-go-internal/v7/pkg/scanner"
+	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 )
 
 // This file has what the refactorings that simplify code share: where a
@@ -974,6 +975,27 @@ func (l *lined) pastTryNote(aTry *ast.Node, below bool) string {
 		return "it now runs after everything the try does, and only when the try completes normally: not when it returns, throws, breaks or continues" + exit
 	}
 	return "it now runs before everything the try does, and also when the try does not complete normally" + exit
+}
+
+// reindentSteps is reindent, also turning each step of fromStep in the
+// indentation after from into one of toStep, for text moved into a class
+// that indents by another step.
+func (l *lined) reindentSteps(start, end int, from, to, fromStep, toStep string) string {
+	out := l.reindent(start, end, from, to)
+	if fromStep == toStep || fromStep == "" {
+		return out
+	}
+	inside := l.literalLines(start, end)
+	lines := strings.Split(out, "\n")
+	first := l.line(start)
+	for i, line := range lines {
+		if inside[first+i] || !strings.HasPrefix(line, to) {
+			continue
+		}
+		rest, n := textutil.CutSteps(line, to, fromStep)
+		lines[i] = to + strings.Repeat(toStep, n) + rest
+	}
+	return strings.Join(lines, "\n")
 }
 
 // RemoveElse returns the edits that un-nest the else of the if on line,

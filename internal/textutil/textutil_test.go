@@ -65,26 +65,3 @@ func TestScanAutoSemicolon(t *testing.T) {
 		t.Errorf("want ident, empty semicolon, ident, semicolon; got %v", toks)
 	}
 }
-
-// A step of the source's indentation becomes one of the target's, as
-// java's #316: a method moved into a class indented by four kept two.
-func TestReindentSteps(t *testing.T) {
-	got := ReindentSteps("  f() {\n    if (x) {\n      y();\n    }\n  }\n", "  ", "    ", "  ", "    ")
-	want := "    f() {\n        if (x) {\n            y();\n        }\n    }\n"
-	if got != want {
-		t.Errorf("got\n%s\nwant\n%s", got, want)
-	}
-	if got := ReindentSteps("  a\n", "  ", "\t", "  ", "  "); got != "\ta\n" {
-		t.Errorf("the same step: %q", got)
-	}
-}
-
-// A line inside a multi-line string is part of its value: its steps are
-// not converted either.
-func TestReindentStepsKeepsStrings(t *testing.T) {
-	in := "    foo() {\n        return `a\n        b`;\n    }\n"
-	want := "  foo() {\n    return `a\n        b`;\n  }\n"
-	if got := ReindentSteps(in, "    ", "  ", "    ", "  "); got != want {
-		t.Errorf("got\n%q\nwant\n%q", got, want)
-	}
-}

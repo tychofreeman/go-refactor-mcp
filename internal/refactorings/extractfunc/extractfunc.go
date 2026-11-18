@@ -1937,7 +1937,7 @@ func (x *extraction) plan() (*refactor.Plan, error) {
 	if err != nil {
 		return nil, err
 	}
-	fn.WriteString(reindent(text, indent, unit))
+	fn.WriteString(textutil.Reindent(text, indent, unit))
 	if tail != "" {
 		fmt.Fprintf(&fn, "\n%sreturn %s", unit, tail)
 	}
@@ -2234,9 +2234,6 @@ func itThem(n int) string {
 	}
 	return "them"
 }
-
-// reindent re-indents text; see textutil.Reindent.
-func reindent(text, from, to string) string { return textutil.Reindent(text, from, to) }
 
 // topDecl returns the top-level declaration containing the selection.
 func (x *extraction) topDecl() ast.Decl {

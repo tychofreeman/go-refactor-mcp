@@ -237,29 +237,16 @@ func Indent(line string) string {
 	return line[:len(line)-len(strings.TrimLeft(line, " \t"))]
 }
 
-// ReindentSteps is Reindent, also turning each step of fromStep in the
-// indentation after from into one of toStep, for text moved into a file
-// that indents by another step.
-func ReindentSteps(text, from, to, fromStep, toStep string) string {
-	out := Reindent(text, from, to)
-	if fromStep == toStep || fromStep == "" {
-		return out
+// CutSteps cuts to, then every step of fromStep after it, from the start
+// of line: rest is what follows them, n how many steps there were.
+func CutSteps(line string, to string, fromStep string) (string, int) {
+	rest := line[len(to):]
+	n := 0
+	for strings.HasPrefix(rest, fromStep) {
+		rest = rest[len(fromStep):]
+		n++
 	}
-	inside := stringLines(text)
-	lines := strings.Split(out, "\n")
-	for i, line := range lines {
-		if inside[i] || !strings.HasPrefix(line, to) {
-			continue
-		}
-		rest := line[len(to):]
-		n := 0
-		for strings.HasPrefix(rest, fromStep) {
-			rest = rest[len(fromStep):]
-			n++
-		}
-		lines[i] = to + strings.Repeat(toStep, n) + rest
-	}
-	return strings.Join(lines, "\n")
+	return rest, n
 }
 
 // stringLines is the indexes of text's lines that start inside a string
