@@ -457,6 +457,23 @@ func OutermostFunc(path []ast.Node) ast.Node {
 // using the file's import names. If t needs a package the file does not
 // import, missing is that package's path.
 func TypeString(t types.Type, file *ast.File, pkg *types.Package, imports map[string]*types.Package) (s, missing string) {
+	names := importNames(file, imports)
+	s = types.TypeString(t, func(p *types.Package) string {
+		if p == pkg {
+			return ""
+		}
+		if n, ok := names[p.Path()]; ok {
+			return n
+		}
+		missing = p.Path()
+		return p.Name()
+	})
+	return s, missing
+}
+
+// importNames returns the name file refers to each package it imports by,
+// by path: "" for a dot import.
+func importNames(file *ast.File, imports map[string]*types.Package) map[string]string {
 	names := map[string]string{}
 	for _, imp := range file.Imports {
 		path := strings.Trim(imp.Path.Value, `"`)
@@ -472,17 +489,7 @@ func TypeString(t types.Type, file *ast.File, pkg *types.Package, imports map[st
 			}
 		}
 	}
-	s = types.TypeString(t, func(p *types.Package) string {
-		if p == pkg {
-			return ""
-		}
-		if n, ok := names[p.Path()]; ok {
-			return n
-		}
-		missing = p.Path()
-		return p.Name()
-	})
-	return s, missing
+	return names
 }
 
 // ImportMap returns pkg's direct imports by path.
@@ -579,4 +586,94 @@ func under(t types.Type) types.Type {
 		return nil
 	}
 	return t.Underlying()
+}
+
+func WalkNamed(t types.Type, seen map[types.Type]bool, f func(*types.TypeName)) {
+	if t == nil || seen[t] {
+		return
+	}
+	seen[t] = true
+	switch t := t.(type) {
+	case *types.Named:
+		f(t.Obj())
+		if ta := t.TypeArgs(); ta != nil {
+			for i := 0; i < ta.Len(); i++ {
+				WalkNamed(ta.At(i), seen, f)
+			}
+		}
+	case *types.Alias:
+		f(t.Obj())
+	case *types.Basic:
+		if o, ok := types.Universe.Lookup(t.Name()).(*types.TypeName); ok {
+			f(o)
+		}
+	case *types.Pointer:
+		WalkNamed(t.Elem(), seen, f)
+	case *types.Slice:
+		WalkNamed(t.Elem(), seen, f)
+	case *types.Array:
+		WalkNamed(t.Elem(), seen, f)
+	case *types.Map:
+		WalkNamed(t.Key(), seen, f)
+		WalkNamed(t.Elem(), seen, f)
+	case *types.Chan:
+		WalkNamed(t.Elem(), seen, f)
+	case *types.Signature:
+		for _, tup := range []*types.Tuple{t.Params(), t.Results()} {
+			for i := 0; i < tup.Len(); i++ {
+				WalkNamed(tup.At(i).Type(), seen, f)
+			}
+		}
+	case *types.Struct:
+		for i := 0; i < t.NumFields(); i++ {
+			WalkNamed(t.Field(i).Type(), seen, f)
+		}
+	case *types.Interface:
+		for i := 0; i < t.NumEmbeddeds(); i++ {
+			WalkNamed(t.EmbeddedType(i), seen, f)
+		}
+		for i := 0; i < t.NumExplicitMethods(); i++ {
+			WalkNamed(t.ExplicitMethod(i).Type(), seen, f)
+		}
+	}
+}
+
+// Hidden returns the first type name of pkg, or a predeclared one, that
+// t is spelled with unqualified and that at pos, in scope, means something
+// else, with what it means there; nil when there is none.
+func Hidden(t types.Type, pkg *types.Package, scope *types.Scope, pos token.Pos) (*types.TypeName, types.Object) {
+	var name *types.TypeName
+	var got types.Object
+	WalkNamed(t, map[types.Type]bool{}, func(o *types.TypeName) {
+		if name != nil || o.Pkg() != pkg && o.Pkg() != nil {
+			return
+		}
+		if _, g := scope.LookupParent(o.Name(), pos); g != o {
+			name, got = o, g
+		}
+	})
+	return name, got
+}
+
+// TypeStringAt is TypeString for code at pos, in scope (the innermost
+// there): hidden is what a name the spelling uses (a type of pkg, a
+// predeclared one, or an imported package's) refers to there instead,
+// when a local hides it, or nil.
+func TypeStringAt(t types.Type, file *ast.File, pkg *types.Package, imports map[string]*types.Package, scope *types.Scope, pos token.Pos) (s, missing string, hidden types.Object) {
+	s, missing = TypeString(t, file, pkg, imports)
+	if o, got := Hidden(t, pkg, scope, pos); o != nil {
+		hidden = got
+	}
+	names := importNames(file, imports)
+	types.TypeString(t, func(p *types.Package) string {
+		if n := names[p.Path()]; p != pkg && n != "" && hidden == nil {
+			if _, got := scope.LookupParent(n, pos); got != nil {
+				if pn, ok := got.(*types.PkgName); !ok || pn.Imported() != p {
+					hidden = got
+				}
+			}
+		}
+		return p.Name()
+	})
+	return s, missing, hidden
 }

@@ -1409,17 +1409,10 @@ func (x *inliner) typeString(t types.Type) (string, error) {
 		return "", refusal
 	}
 	// Unqualified names in the spelling must not be hidden at the call.
-	scope := x.Pkg.Types.Scope().Innermost(x.call.Pos())
-	var bad error
-	walkNamed(t, map[types.Type]bool{}, func(o *types.TypeName) {
-		if o.Pkg() != x.Pkg.Types && o.Pkg() != nil {
-			return
-		}
-		if _, got := scope.LookupParent(o.Name(), x.call.Pos()); got != o && bad == nil {
-			bad = refactor.Refusef("the inlined code needs the type %s, but at the call %s refers to something else", s, o.Name())
-		}
-	})
-	return s, bad
+	if o, _ := analysis.Hidden(t, x.Pkg.Types, x.Pkg.Types.Scope().Innermost(x.call.Pos()), x.call.Pos()); o != nil {
+		return s, refactor.Refusef("the inlined code needs the type %s, but at the call %s refers to something else", s, o.Name())
+	}
+	return s, nil
 }
 
 // checkDeclaredNames ensures the names the inlined code declares in the
@@ -1506,56 +1499,6 @@ func (x *inliner) callerHasGoto() bool {
 // indentOf returns the leading white space of the line holding p in src.
 func indentOf(src []byte, tf *token.File, p token.Pos) string {
 	return textutil.IndentAt(src, tf.Offset(p))
-}
-
-func walkNamed(t types.Type, seen map[types.Type]bool, f func(*types.TypeName)) {
-	if t == nil || seen[t] {
-		return
-	}
-	seen[t] = true
-	switch t := t.(type) {
-	case *types.Named:
-		f(t.Obj())
-		if ta := t.TypeArgs(); ta != nil {
-			for i := 0; i < ta.Len(); i++ {
-				walkNamed(ta.At(i), seen, f)
-			}
-		}
-	case *types.Alias:
-		f(t.Obj())
-	case *types.Basic:
-		if o, ok := types.Universe.Lookup(t.Name()).(*types.TypeName); ok {
-			f(o)
-		}
-	case *types.Pointer:
-		walkNamed(t.Elem(), seen, f)
-	case *types.Slice:
-		walkNamed(t.Elem(), seen, f)
-	case *types.Array:
-		walkNamed(t.Elem(), seen, f)
-	case *types.Map:
-		walkNamed(t.Key(), seen, f)
-		walkNamed(t.Elem(), seen, f)
-	case *types.Chan:
-		walkNamed(t.Elem(), seen, f)
-	case *types.Signature:
-		for _, tup := range []*types.Tuple{t.Params(), t.Results()} {
-			for i := 0; i < tup.Len(); i++ {
-				walkNamed(tup.At(i).Type(), seen, f)
-			}
-		}
-	case *types.Struct:
-		for i := 0; i < t.NumFields(); i++ {
-			walkNamed(t.Field(i).Type(), seen, f)
-		}
-	case *types.Interface:
-		for i := 0; i < t.NumEmbeddeds(); i++ {
-			walkNamed(t.EmbeddedType(i), seen, f)
-		}
-		for i := 0; i < t.NumExplicitMethods(); i++ {
-			walkNamed(t.ExplicitMethod(i).Type(), seen, f)
-		}
-	}
 }
 
 func quoteAll(ss []string) []string {
