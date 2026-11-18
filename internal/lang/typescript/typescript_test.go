@@ -490,3 +490,41 @@ func TestChangeTypeCovers(t *testing.T) {
 		t.Errorf("published: %v", names)
 	}
 }
+
+// extract_variable with as "parameter" runs introduce_parameter, and
+// extract_type of a function's parameters convert_params_to_object; both
+// are published in their place.
+func TestExtractCovers(t *testing.T) {
+	root := t.TempDir()
+	for name, text := range map[string]string{
+		"tsconfig.json": `{"compilerOptions": {"strict": true, "noEmit": true, "types": []}, "include": ["src"]}`,
+		"src/a.ts":      "export interface Plant {\n  name: string;\n}\n\nfunction label(p: Plant): string {\n  return p.name;\n}\n\nexport function use(p: Plant): string {\n  return label(p);\n}\n\nfunction water(bed: string, liters: number): string {\n  return bed;\n}\n\nexport function run(): string {\n  return water(\"roses\", 3);\n}\n",
+	} {
+		p := filepath.Join(root, name)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	l := New(root, &history.Stack{})
+	for tool, args := range map[string]string{
+		"extract_variable": `{"file": "src/a.ts", "function": "label", "expression": "p.name", "name": "name", "as": "parameter"}`,
+		"extract_type":     `{"file": "src/a.ts", "name": "water", "fields": ["bed", "liters"], "new_type": "WaterOptions"}`,
+	} {
+		if text, refused, err := l.Step(tool, []byte(args)); err != nil || refused {
+			t.Fatalf("%s %s: %v %v\n%s", tool, args, err, refused, text)
+		}
+	}
+	if b, _ := os.ReadFile(filepath.Join(root, "src/a.ts")); !strings.Contains(string(b), "label(p: Plant, name: string)") || !strings.Contains(string(b), "interface WaterOptions") || !strings.Contains(string(b), `water({ bed: "roses", liters: 3 })`) {
+		t.Errorf("a.ts:\n%s", b)
+	}
+	var names []string
+	for _, tool := range l.Tools() {
+		names = append(names, tool.Name)
+	}
+	if !slices.Contains(names, "extract_variable") || !slices.Contains(names, "extract_type") || slices.Contains(names, "introduce_parameter") || slices.Contains(names, "convert_params_to_object") {
+		t.Errorf("published: %v", names)
+	}
+}

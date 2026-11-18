@@ -8,6 +8,7 @@ import (
 
 	"github.com/buke/typescript-go-internal/v7/pkg/ast"
 	"github.com/buke/typescript-go-internal/v7/pkg/scanner"
+	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 )
 
 // StrictPropertyInitialization reports whether the project needs a
@@ -86,7 +87,8 @@ func WriteConstructors(before, after string) (string, []string) {
 			if !emptyBody.MatchString(after[from:body.End()]) || !ok {
 				continue
 			}
-			indent := leadingSpace(after[lineStartIn(after, scanner.GetTokenPosOfNode(ctors[0], f, false)):])
+			s := after[textutil.LineStart(after, scanner.GetTokenPosOfNode(ctors[0], f, false)):]
+			indent := textutil.Indent(s)
 			var lines []string
 			for i, fl := range fields {
 				lines = append(lines, indent+"  this."+fl.name+" = "+params[i]+semi)

@@ -26,6 +26,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/imports"
 	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/changesig"
 	"github.com/tychofreeman/go-refactor-mcp/internal/site"
 	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
@@ -41,15 +42,16 @@ func (*ExtractType) Description() string {
 	return `Move some fields of a struct into a new struct type, embedded in their place, so that every use (m.path) keeps working: moving path and mode of type mover struct { path string; mode int; n int } into source declares type source struct { path string; mode int } and makes mover struct { source; n int }, and mover{path: p} becomes mover{source: source{path: p}}. To hold it as a named field instead, then rename mover.source (to src: m.path becomes m.src.path). Use it to split a struct that holds two things, or to group fields that belong together, before giving the new type methods or a file of its own.
 With into in place of new_type, the fields go to the end of a struct that already exists, one the struct embeds or holds in a field by value: moving depth of Bed into Soil, held as soil, b.depth becomes b.soil.depth and Bed{depth: 3} becomes Bed{soil: Soil{depth: 3}}.
 Identify the struct by file and name, or by line at its declaration or a use; fields are the names to move, new_type the new type's name.
+With name a function (Type.Method for a method) and fields all its parameters, they become one struct that every call builds: water("roses", 3) of func water(bed string, litres int) becomes water(waterArgs{bed: "roses", litres: 3}), and the body reads a.bed and a.litres; new_type names the struct (by default after the function).
 For an exported struct the result notes that the module's API changed.`
 }
 
 type args struct {
 	File    string   `json:"file" desc:"Path of a file containing the struct type's declaration or a use, relative to the workspace root."`
 	Line    int      `json:"line,omitempty" desc:"1-based line of that occurrence. Omit it to find name as a symbol of the package of file."`
-	Name    string   `json:"name" desc:"The struct type's name; without line, it is found among the package-level names."`
+	Name    string   `json:"name" desc:"The struct type's name, or a function's (Type.Method for a method); without line, it is found among the package-level names."`
 	Column  int      `json:"column,omitempty" desc:"Optional 1-based column, only needed to disambiguate."`
-	Fields  []string `json:"fields" desc:"The fields to move into the new type."`
+	Fields  []string `json:"fields" desc:"The fields to move into the new type; for a function, all its parameters."`
 	NewType string   `json:"new_type,omitempty" desc:"Name of the new struct type, which is also the embedded field's name."`
 	Into    string   `json:"into,omitempty" desc:"Instead of new_type: an existing struct type the struct embeds or holds in a field, by value, to move the fields into."`
 }
@@ -131,6 +133,33 @@ func (*ExtractType) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refacto
 		plan.Notes = append(plan.Notes, "what these calls print changes, since fmt prints the moved fields inside "+x.newType+" now: "+textutil.FirstFew(x.printed, 5))
 	}
 	return plan, nil
+}
+
+// Covers names the tool extract_type stands for with a function's
+// parameters.
+func (*ExtractType) Covers() []string { return []string{"convert_params_to_object"} }
+
+// Expand hands a function, whose parameters fields names, to
+// convert_params_to_object, with new_type as its type_name; a struct is
+// planned by Plan.
+func (*ExtractType) Expand(ws *workspace.Workspace, raw json.RawMessage) ([]refactor.Step, error) {
+	var a args
+	if err := refactor.DecodeArgs(raw, &a); err != nil {
+		return nil, err
+	}
+	fn := function(ws, a)
+	if fn == nil {
+		return nil, nil
+	}
+	var params []string
+	for v := range fn.Type().(*types.Signature).Params().Variables() {
+		params = append(params, v.Name())
+	}
+	if !slices.Equal(slices.Sorted(slices.Values(a.Fields)), slices.Sorted(slices.Values(params))) {
+		return nil, refactor.Refusef("%s's parameters go into the struct together: give fields %s", a.Name, joinAnd(params))
+	}
+	object, _ := json.Marshal(map[string]any{"file": a.File, "name": a.Name, "type_name": a.NewType})
+	return changesig.NewParamsToObject().Expand(ws, object)
 }
 
 // find resolves the struct type and its declaration.
@@ -632,4 +661,34 @@ func joinAnd(names []string) string {
 		return strings.Join(names, "")
 	}
 	return strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1]
+}
+
+// function returns the function or method a's name names, or nil when it
+// names something else.
+func function(ws *workspace.Workspace, a args) *types.Func {
+	if a.Line > 0 {
+		pkg, id, err := locate.Ident(ws, locate.IdentQuery{File: a.File, Line: a.Line, Column: a.Column, Name: a.Name})
+		if err != nil {
+			return nil
+		}
+		fn, _ := pkg.TypesInfo.ObjectOf(id).(*types.Func)
+		return fn
+	}
+	st, err := site.At(ws, ws.Abs(a.File))
+	if err != nil {
+		return nil
+	}
+	scope := st.Pkg.Types.Scope()
+	recv, name, method := strings.Cut(a.Name, ".")
+	if !method {
+		fn, _ := scope.Lookup(a.Name).(*types.Func)
+		return fn
+	}
+	tn, ok := scope.Lookup(recv).(*types.TypeName)
+	if !ok {
+		return nil
+	}
+	obj, _, _ := types.LookupFieldOrMethod(tn.Type(), true, st.Pkg.Types, name)
+	fn, _ := obj.(*types.Func)
+	return fn
 }

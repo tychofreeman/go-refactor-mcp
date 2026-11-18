@@ -663,7 +663,7 @@ func paramSteps(name string, old, new *ast.FuncType) []string {
 		}
 	}
 	if len(add) > 0 && len(remove) > 0 {
-		add = append(add, "the edits that make the body (each implementation, for an interface method) use the new parameters in place of the old (or, for a new parameter that stands for an expression of the old ones, introduce_parameter of that expression by function on one body, in place of add_parameter and these edits: every implementation gets it)")
+		add = append(add, "the edits that make the body (each implementation, for an interface method) use the new parameters in place of the old (or, for a new parameter that stands for an expression of the old ones, extract_variable of that expression with as parameter, by function, on one body, in place of add_parameter and these edits: every implementation gets it)")
 	}
 	return slices.Concat(add, retype, remove)
 }

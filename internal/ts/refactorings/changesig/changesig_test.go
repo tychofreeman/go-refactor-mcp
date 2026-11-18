@@ -937,6 +937,13 @@ func TestMoreMethodFamilies(t *testing.T) {
 			"return super.pour({ bed, liters: liters * 2 });",
 			`w.pour({ bed: "roses", liters: 1 })`)
 	})
+	t.Run("convert_params_to_object naming every parameter", func(t *testing.T) {
+		ws, dir := load(t, map[string]string{"src/hoses.ts": hoses})
+		if res := in(t, ws, NewParamsToObject(), `{"name": "Hose.pour", "parameters": ["liters", "bed"]}`); !res.Applied {
+			t.Fatalf("%s", res)
+		}
+		mustContain(t, dir, "src/hoses.ts", `w.pour({ bed: "roses", liters: 1 })`)
+	})
 }
 
 // values: narrowing a property's type, each old constant given becomes

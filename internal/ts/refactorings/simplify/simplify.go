@@ -11,6 +11,7 @@ import (
 	"slices"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/ts/refactorings/changesig"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/tsapi"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/workspace"
 )
@@ -43,17 +44,20 @@ func NewExtractVariable() *ExtractVariable {
 
 func (*ExtractVariable) Description() string {
 	return `Name an expression: const name = expression; is inserted just before its statement and the name used in its place. Extracting p.height * 2 as tall, return p.height * 2 + margin becomes const tall = p.height * 2; return tall + margin;
-Identify the expression by file, the line it starts on and its source text (column if the text is on the line twice). all_occurrences also replaces the same expression later in the block, where nothing in between could change it.`
+Identify the expression by file, the line it starts on and its source text (column if the text is on the line twice). all_occurrences also replaces the same expression later in the block, where nothing in between could change it.
+With as "parameter" and function (name, Class.method or Class.constructor) in place of line, the expression becomes a new parameter of that function, passed at every call: p.height as height in function label(p: Plant): string { return p.name + p.height; } gives label(p: Plant, height: number), and label(rose) becomes label(rose, rose.height). Every occurrence in the body is replaced; the expression must have no effects and read nothing the body changes before it.`
 }
 
 // extractVariableArgs are the arguments of extract_variable.
 type extractVariableArgs struct {
 	File       string `json:"file" desc:"Path of the file, relative to the root."`
-	Line       int    `json:"line" desc:"1-based line on which the expression starts."`
+	Line       int    `json:"line,omitempty" desc:"1-based line on which the expression starts."`
 	Expression string `json:"expression" desc:"Source text of the expression, e.g. \"p.height * 2\"."`
 	Name       string `json:"name" desc:"Name for the new constant."`
 	Column     int    `json:"column,omitempty" desc:"Optional 1-based column where the expression starts, only needed if the text occurs more than once on the line."`
 	All        bool   `json:"all_occurrences,omitempty" desc:"Also replace identical occurrences later in the same block."`
+	As         string `json:"as,omitempty" desc:"Optional: parameter, to make the expression a new parameter of its function, passed at every call."`
+	Function   string `json:"function,omitempty" desc:"Instead of line, with as parameter: the function whose body has the expression (name, Class.method or Class.constructor)."`
 	Pointer    bool   `json:"pointer" schema:"-"`
 }
 
@@ -61,6 +65,10 @@ func (*ExtractVariable) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 	var a extractVariableArgs
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
+	}
+	if a.As == "parameter" {
+		intro, _ := json.Marshal(map[string]any{"file": a.File, "function": a.Function, "expression": a.Expression, "parameter": a.Name})
+		return changesig.NewIntroduce().Plan(ws, intro)
 	}
 	if a.Pointer {
 		return nil, refactor.Refusef("pointer is for Go; TypeScript has no pointers")
@@ -77,6 +85,9 @@ func (*ExtractVariable) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 	p.Summary = fmt.Sprintf("extracted %s as %s (%d occurrence%s)", a.Expression, a.Name, n, plural(n))
 	return p, nil
 }
+
+// Covers names the tool extract_variable stands for with as parameter.
+func (*ExtractVariable) Covers() []string { return []string{"introduce_parameter"} }
 
 func plural(n int) string {
 	if n == 1 {

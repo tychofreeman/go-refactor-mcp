@@ -10,6 +10,7 @@ import (
 	"github.com/buke/typescript-go-internal/v7/pkg/core"
 	"github.com/buke/typescript-go-internal/v7/pkg/parser"
 	"github.com/buke/typescript-go-internal/v7/pkg/scanner"
+	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 )
 
 // Place is where new statements go: the bytes [At, End) of a file are
@@ -64,8 +65,7 @@ func (l *lined) end(line int) int {
 }
 
 func (l *lined) indent(line int) string {
-	s := l.text[l.start(line):l.end(line)]
-	return s[:len(s)-len(strings.TrimLeft(s, " \t"))]
+	return textutil.Indent(l.text[l.start(line):l.end(line)])
 }
 
 // unit is the file's indentation step: a tab if a line starts with one,

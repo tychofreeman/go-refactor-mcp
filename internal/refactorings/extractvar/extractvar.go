@@ -34,6 +34,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings/changesig"
 	"github.com/tychofreeman/go-refactor-mcp/internal/site"
 	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
@@ -49,17 +50,20 @@ func New() *ExtractVariable {
 
 func (*ExtractVariable) Description() string {
 	return `Name an expression: a declaration is inserted just before its statement and the name used in its place. Extracting price*qty as total, return price*qty + tax becomes total := price * qty; return total + tax. A constant expression becomes a const.
-Identify the expression by file, the line it starts on and its source text (column if the text is on the line twice). all_occurrences replaces the same expression later in the block too, when it has no calls with side effects and nothing it reads changes in between. pointer declares an alias instead, entries := &s.Log, and writes *entries in its place: for a field that is assigned to or whose address is taken.`
+Identify the expression by file, the line it starts on and its source text (column if the text is on the line twice). all_occurrences replaces the same expression later in the block too, when it has no calls with side effects and nothing it reads changes in between. pointer declares an alias instead, entries := &s.Log, and writes *entries in its place: for a field that is assigned to or whose address is taken.
+With as "parameter", the expression becomes a new last parameter of its function, passed at every call in the call's own terms: u.Name as name in func greet(u User) string { return "hi " + u.Name } gives greet(u User, name string), and greet(a) becomes greet(a, a.Name); then remove_parameter u once the body no longer uses it. function (its first use in that body) may take the place of line. In a method of an interface, every implementation gets it. The expression is then evaluated once, at the call, so it must give the same value and do the same there.`
 }
 
 type args struct {
 	File           string `json:"file" desc:"Path of the file, relative to the workspace root."`
-	Line           int    `json:"line" desc:"1-based line on which the expression starts."`
+	Line           int    `json:"line,omitempty" desc:"1-based line on which the expression starts."`
 	Expression     string `json:"expression" desc:"Source text of the expression, e.g. \"len(items) * unitPrice\"."`
 	Name           string `json:"name" desc:"Name for the new variable."`
 	Column         int    `json:"column,omitempty" desc:"Optional 1-based column where the expression starts, only needed if the text occurs more than once on the line."`
 	AllOccurrences bool   `json:"all_occurrences,omitempty" desc:"Also replace identical occurrences later in the same block."`
 	Pointer        bool   `json:"pointer,omitempty" desc:"Declare a pointer to the expression (name := &e.f) and use *name in its place, so writes still reach the original."`
+	As             string `json:"as,omitempty" desc:"Optional: parameter, to make the expression a new parameter of its function, passed at every call."`
+	Function       string `json:"function,omitempty" desc:"Instead of line, with as parameter: the function (Name or Type.Method) whose body uses the expression; its first use."`
 }
 
 // extraction holds the state of one planning run.
@@ -77,6 +81,10 @@ func (*ExtractVariable) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 	var a args
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
+	}
+	if a.As == "parameter" {
+		intro, _ := json.Marshal(map[string]any{"file": a.File, "function": a.Function, "line": a.Line, "column": a.Column, "expression": a.Expression, "parameter": a.Name})
+		return changesig.NewIntroduceParameter().Plan(ws, intro)
 	}
 	switch {
 	case a.File == "":
@@ -110,6 +118,9 @@ func (*ExtractVariable) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 	}
 	return x.plan(expr, a.AllOccurrences)
 }
+
+// Covers names the tool extract_variable stands for with as parameter.
+func (*ExtractVariable) Covers() []string { return []string{"introduce_parameter"} }
 
 func checkName(name string) error {
 	switch {
@@ -196,7 +207,7 @@ func (x *extraction) plan(expr ast.Expr, all bool) (*refactor.Plan, error) {
 	edits := []edit.TextEdit{{
 		Start:   x.Off(insertPos),
 		End:     x.Off(insertPos),
-		NewText: decl + "\n" + x.indentOf(insertPos),
+		NewText: decl + "\n" + textutil.IndentAt(x.Src, x.Off(insertPos)),
 	}}
 	for _, s := range sites {
 		n, text := x.replacement(s)
@@ -759,17 +770,6 @@ func idents(e ast.Expr) []*ast.Ident {
 
 // ---------------------------------------------------------------------------
 // Helpers
-
-func (x *extraction) indentOf(p token.Pos) string {
-	start := x.Off(x.TF.LineStart(x.TF.Line(p)))
-	ws := x.Src[start:x.Off(p)]
-	for i, c := range ws {
-		if c != ' ' && c != '\t' {
-			return string(ws[:i])
-		}
-	}
-	return string(ws)
-}
 
 // widenParens returns the outermost parenthesized expression whose only
 // content is e, or e itself.

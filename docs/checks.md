@@ -760,6 +760,11 @@ own edit would have to move with it.
 
 ## Introduce parameter: what it checks
 
+Published as `extract_variable` with `as` `"parameter"` (2026-11-17,
+#634), in Go and TypeScript: its `name` is the parameter's, and
+`function` may take the place of `line`; `introduce_parameter` still runs
+by its name, with its own arguments.
+
 `introduce_parameter` replaces an expression in a function's body with a
 new parameter, and passes that expression at every call, written in terms
 of the call's arguments: introducing `p.x` as `x` in `label(p point)`
@@ -1028,6 +1033,15 @@ or declared, or with methods, in another file than T (move_declaration
 it first).
 
 ## Convert parameters to an object: what it checks
+
+Published as `extract_type` whose `name` is a function or `Type.Method`
+(2026-11-17, #634; in TypeScript, a top-level name that is a class,
+interface or type stays extract_type's own): `fields` names the
+parameters, `new_type` the type. Go bundles every parameter, so `fields`
+must name all of them, and a list of some is refused naming them all;
+TypeScript bundles those named, and a list of every one counts as none,
+so a method that changes with its family is not refused for it.
+`convert_params_to_object` still runs by its name.
 
 `convert_params_to_object` (Go's, with TypeScript's name and arguments:
 `file`, `name`, `type_name`) bundles a function's parameters into one

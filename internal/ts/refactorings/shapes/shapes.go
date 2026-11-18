@@ -246,7 +246,8 @@ func NewExtractType() *ExtractType {
 func (*ExtractType) Description() string {
 	return `Move some members of a type into a new type held in a property in their place, every use following.
 - A class's properties and methods: with fields street, city and move of class Person, new_type Address and as home, they move into class Address, Person gets home = new Address(), and p.street becomes p.home.street.
-- An interface's or object type's properties: with fields street and city of interface Order, new_type Address and as home, Order gets home: Address, o.city becomes o.home.city, and the literal { id, street: s, city: c } becomes { id, home: { street: s, city: c } }.`
+- An interface's or object type's properties: with fields street and city of interface Order, new_type Address and as home, Order gets home: Address, o.city becomes o.home.city, and the literal { id, street: s, city: c } becomes { id, home: { street: s, city: c } }.
+- A function's parameters (name the function, Class.method or Class.constructor; fields its parameters): they become one object, destructured so the body keeps its names, and water("roses", 3) becomes water({ bed: "roses", liters: 3 }); new_type declares the object's type as an interface, and no as is needed.`
 }
 
 // extractTypeArgs are the arguments of extract_type.
@@ -255,9 +256,9 @@ type extractTypeArgs struct {
 	Line    int      `json:"line,omitempty" desc:"1-based line of its declaration or a use. Omit it to find name at the top level of file."`
 	Name    string   `json:"name" desc:"The class, interface or type alias."`
 	Column  int      `json:"column,omitempty" desc:"Optional 1-based column, only needed to disambiguate."`
-	Fields  []string `json:"fields" desc:"The members to move."`
+	Fields  []string `json:"fields" desc:"The members to move, or a function's parameters to bundle."`
 	NewType string   `json:"new_type" desc:"Name of the new type, declared just before the old one (exported with it)."`
-	As      string   `json:"as" desc:"Name of the property that holds the new type."`
+	As      string   `json:"as,omitempty" desc:"Name of the property that holds the new type."`
 }
 
 func (*ExtractType) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, error) {
@@ -265,12 +266,24 @@ func (*ExtractType) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refacto
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
+	function := false
 	return plan(ws, a.File, func() string {
+		if function {
+			return fmt.Sprintf("bundled %s of %s into one object", strings.Join(a.Fields, ", "), a.Name)
+		}
 		return fmt.Sprintf("moved %s of %s into %s, held in %s", strings.Join(a.Fields, ", "), a.Name, a.NewType, a.As)
 	}, func(p *tsapi.Project, path string) ([]tsapi.Edit, string) {
+		if a.Line == 0 && p.DeclaresFunction(path, a.Name) {
+			function = true
+			return p.ParamsToObject(bg, path, a.Name, a.NewType, a.Fields)
+		}
 		return p.ExtractType(bg, path, a.Line, a.Name, a.Column, a.Fields, a.NewType, a.As)
 	})
 }
+
+// Covers names the tool extract_type stands for with a function's
+// parameters.
+func (*ExtractType) Covers() []string { return []string{"convert_params_to_object"} }
 
 // UnionSwitchToMethod turns a switch on a union of classes into methods.
 type UnionSwitchToMethod struct {

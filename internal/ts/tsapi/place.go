@@ -8,6 +8,7 @@ import (
 
 	"github.com/buke/typescript-go-internal/v7/pkg/ast"
 	"github.com/buke/typescript-go-internal/v7/pkg/scanner"
+	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 )
 
 // Placed is a part of what add_declaration adds and where it goes in a
@@ -117,13 +118,15 @@ func placeMembers(f *ast.SourceFile, text, content, class string) ([]placedPart,
 		return nil, fmt.Sprintf("content is not members of a class; with type %s, give only the members, without the class around them", class)
 	}
 	members := cls.Members()
-	start := func(m *ast.Node) int { return lineStartIn(text, docStart(f, text, 0, m)) }
-	classIndent := leadingSpace(text[lineStartIn(text, scanner.GetTokenPosOfNode(cls, f, false)):])
+	start := func(m *ast.Node) int {
+		return textutil.LineStart(text, docStart(f, text, 0, m))
+	}
+	classIndent := textutil.Indent(text[textutil.LineStart(text, scanner.GetTokenPosOfNode(cls, f, false)):])
 	indent, sep := classIndent+"  ", "\n"
 	lastField, lastCtor := -1, -1
 	for i, m := range members {
 		if i == 0 {
-			indent = leadingSpace(text[start(m):])
+			indent = textutil.Indent(text[start(m):])
 		} else if strings.Count(text[members[i-1].End():start(m)], "\n") >= 2 {
 			sep = "\n\n"
 		}
@@ -155,8 +158,8 @@ func placeMembers(f *ast.SourceFile, text, content, class string) ([]placedPart,
 			parts = append(parts, placedPart{at: start(members[0]), sep: sep, suffix: sep, text: seg, rank: rank})
 		default:
 			closing := cls.End() - 1
-			if strings.TrimSpace(text[lineStartIn(text, closing):closing]) == "" {
-				parts = append(parts, placedPart{at: lineStartIn(text, closing), sep: sep, suffix: "\n", text: seg, rank: rank})
+			if strings.TrimSpace(text[textutil.LineStart(text, closing):closing]) == "" {
+				parts = append(parts, placedPart{at: textutil.LineStart(text, closing), sep: sep, suffix: "\n", text: seg, rank: rank})
 			} else {
 				parts = append(parts, placedPart{at: closing, prefix: "\n", sep: sep, suffix: "\n" + classIndent, text: seg, rank: rank})
 			}
@@ -172,7 +175,7 @@ func segmentStart(cf *ast.SourceFile, content string, nodes []*ast.Node, i, skip
 	if i == 0 {
 		return 0
 	}
-	return lineStartIn(content, docStart(cf, content, skip, nodes[i]))
+	return textutil.LineStart(content, docStart(cf, content, skip, nodes[i]))
 }
 
 // segmentEnd is where the i'th node's text ends: where the next one's
@@ -228,15 +231,10 @@ func firstUse(f *ast.SourceFile, text string, names []string) int {
 			continue
 		}
 		if word.MatchString(text[scanner.GetTokenPosOfNode(s, f, false):s.End()]) {
-			return lineStartIn(text, scanner.GetTokenPosOfNode(s, f, true))
+			return textutil.LineStart(text, scanner.GetTokenPosOfNode(s, f, true))
 		}
 	}
 	return -1
-}
-
-// lineStartIn is the offset of the start of the line holding off.
-func lineStartIn(s string, off int) int {
-	return strings.LastIndexByte(s[:off], '\n') + 1
 }
 
 // lineEndIn is the offset of the newline that ends the line holding off,
@@ -246,11 +244,6 @@ func lineEndIn(s string, off int) int {
 		return off + i
 	}
 	return len(s)
-}
-
-// leadingSpace is the spaces and tabs s starts with.
-func leadingSpace(s string) string {
-	return s[:len(s)-len(strings.TrimLeft(s, " \t"))]
 }
 
 // reindent returns s, class members, with the indentation its lines share
@@ -266,7 +259,7 @@ func reindent(s, indent string) string {
 		if skip(i, l) {
 			continue
 		}
-		if lead := leadingSpace(l); !set || len(lead) < len(common) {
+		if lead := textutil.Indent(l); !set || len(lead) < len(common) {
 			common, set = lead, true
 		}
 	}
