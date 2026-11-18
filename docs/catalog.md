@@ -27,7 +27,7 @@ it; IntelliJ's and GoLand's lists are from JetBrains' help pages
 | Change Function Declaration | `rename`, `add_parameter`, `remove_parameter`, `move_parameter`, `add_result`, `change_parameter_type` |
 | Encapsulate Variable | composition, run: `add_declaration` of a getter and a setter, `fold` each (derivations 14). Compound assignments (`x++`) are left: gap P |
 | Rename Variable | `rename` |
-| Introduce Parameter Object | `convert_params_to_object` (derivations 5 as one change) |
+| Introduce Parameter Object | `extract_type` of a function's parameters (convert_params_to_object; derivations 5 as one change) |
 | Combine Functions into Class | `function_to_method` per function, `move_method` |
 | Combine Functions into Transform | missing |
 | Split Phase | `split` kind phase (Go; TypeScript: roadmap 52.2) |
@@ -90,7 +90,7 @@ it; IntelliJ's and GoLand's lists are from JetBrains' help pages
 | Remove Flag Argument | composition, run: a wrapper per value, `fold`, `inline_function` (derivations 17) |
 | Preserve Whole Object | composition: a wrapper taking the whole value, `fold` (stage 2 of fold); unverified whether it passes `r` or rebuilds `Range{Low: r.Low, ...}` |
 | Replace Parameter with Query | `remove_parameter` with `value` |
-| Replace Query with Parameter | `introduce_parameter`; `add_parameter` with `replace_variable` |
+| Replace Query with Parameter | `extract_variable` `as` `"parameter"`; `add_parameter` with `replace_variable` |
 | Remove Setting Method | composition: `inline_function` of the setter's calls, `remove_dead_code` |
 | Replace Constructor with Factory Function | Go has none (constructors are functions already) |
 | Replace Function with Command | composition, run: a struct of the parameters and a function taking it, `fold`, `inline_function` of the old function, `function_to_method` (derivations 16). A local cannot then become a field, which is what lets a command's body split into methods: gap Q |
@@ -136,8 +136,8 @@ Delete; IntelliJ adds, for Java, the entries below Safe Delete.
 | Type Migration | `change_parameter_type`, `change_field_type`, `change_type` |
 | Convert to Instance Method / Make Static | `function_to_method` / `method_to_function` |
 | Find and Replace Code Duplicates | `fold`, `merge_duplicate_function` |
-| Extract Parameter | `introduce_parameter` |
-| Extract Parameter Object | `convert_params_to_object` |
+| Extract Parameter | `extract_variable` `as` `"parameter"` |
+| Extract Parameter Object | `extract_type` of a function's parameters |
 | Extract Delegate, Extract Superclass | `extract_type` |
 | Replace Temp with Query | composition (Fowler's, above) |
 | Remove Middleman | `inline_function` |

@@ -359,3 +359,37 @@ func TestInlineAllCalls(t *testing.T) {
 		t.Errorf("a.go keeps double, or lacks a call inlined:\n%s", b)
 	}
 }
+
+// extract_variable with as "parameter" runs introduce_parameter, and
+// extract_type of a function's parameters convert_params_to_object; both
+// are published in their place.
+func TestExtractCovers(t *testing.T) {
+	root := t.TempDir()
+	write(t, root, map[string]string{
+		"go.mod": "module example.com/home\n\ngo 1.22\n",
+		"a.go":   "package home\n\ntype Plant struct{ Name string }\n\nfunc label(p Plant) string { return p.Name }\n\nfunc Use(p Plant) string { return label(p) }\n\nfunc water(bed string, litres int) string { return bed }\n\nfunc Run() string { return water(\"roses\", 3) }\n",
+	})
+	l := New(root, []string{"./..."}, &history.Stack{})
+	if text, refused, _ := l.Step("extract_type", []byte(`{"file": "a.go", "name": "water", "fields": ["bed"], "new_type": "waterArgs"}`)); !refused || !strings.Contains(text, "litres") {
+		t.Errorf("extract_type of some of a function's parameters is not refused, naming the others:\n%s", text)
+	}
+	for tool, args := range map[string]string{
+		"extract_variable": `{"file": "a.go", "function": "label", "expression": "p.Name", "name": "name", "as": "parameter"}`,
+		"extract_type":     `{"file": "a.go", "name": "water", "fields": ["bed", "litres"], "new_type": "waterArgs"}`,
+	} {
+		if text, refused, err := l.Step(tool, []byte(args)); err != nil || refused {
+			t.Fatalf("%s %s: %v %v\n%s", tool, args, err, refused, text)
+		}
+	}
+	b, _ := os.ReadFile(filepath.Join(root, "a.go"))
+	if !strings.Contains(string(b), "func label(p Plant, name string)") || !strings.Contains(string(b), "waterArgs{") {
+		t.Errorf("a.go:\n%s", b)
+	}
+	tools := map[string]bool{}
+	for _, tool := range l.Tools() {
+		tools[tool.Name] = true
+	}
+	if !tools["extract_variable"] || !tools["extract_type"] || tools["introduce_parameter"] || tools["convert_params_to_object"] {
+		t.Errorf("published: %v", tools)
+	}
+}
