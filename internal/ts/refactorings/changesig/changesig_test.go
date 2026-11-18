@@ -1142,3 +1142,34 @@ func TestMoveMethodIndentStep(t *testing.T) {
 	}
 	mustContain(t, dir, "src/soil.ts", "    acid(): boolean {\n        if (this.ph < 6) {\n            return true;\n        }\n        return false;\n    }\n")
 }
+
+// A backtick inside a regular expression starts nothing: the lines after
+// it take the new step too (Go's scanner, used before, read it as the
+// start of a raw string).
+func TestMoveMethodIndentStepRegexBacktick(t *testing.T) {
+	src := "export class Soil {\n  ph = 7;\n  acid(): boolean {\n    const a = /`/;\n    const b = /`/;\n    return a.test(\"x\") || b.test(\"y\");\n  }\n}\n\nexport class Bed extends Soil {\n    name = \"bed\";\n}\n\nexport function sour(b: Bed): boolean {\n    return b.acid();\n}\n"
+	ws, dir := load(t, map[string]string{"src/soil.ts": src})
+	res, err := refactor.Run(ws, NewMoveMethod(), json.RawMessage(`{"file": "src/soil.ts", "name": "Soil.acid", "to": "Bed"}`), refactor.OptionsOf[*workspace.Workspace]{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Applied {
+		t.Fatalf("%s", res)
+	}
+	mustContain(t, dir, "src/soil.ts", "    acid(): boolean {\n        const a = /`/;\n        const b = /`/;\n        return a.test(\"x\") || b.test(\"y\");\n    }\n")
+}
+
+// The lines of a template literal spanning lines are part of its value:
+// moved into a class indented by another step, they keep their own.
+func TestMoveMethodIndentStepKeepsTemplate(t *testing.T) {
+	src := "export class Soil {\n  ph = 7;\n  label(): string {\n    return `a\n    b`;\n  }\n}\n\nexport class Bed extends Soil {\n    name = \"bed\";\n}\n\nexport function tag(b: Bed): string {\n    return b.label();\n}\n"
+	ws, dir := load(t, map[string]string{"src/soil.ts": src})
+	res, err := refactor.Run(ws, NewMoveMethod(), json.RawMessage(`{"file": "src/soil.ts", "name": "Soil.label", "to": "Bed"}`), refactor.OptionsOf[*workspace.Workspace]{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Applied {
+		t.Fatalf("%s", res)
+	}
+	mustContain(t, dir, "src/soil.ts", "    label(): string {\n        return `a\n    b`;\n    }\n")
+}

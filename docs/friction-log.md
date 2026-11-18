@@ -4799,3 +4799,17 @@ ambiguous between Go's and TypeScript's package (retried with `imports`);
 and replace_text of a refusal's text with `"parameter"` in quotes was
 refused under -no-code-by-text, rightly: the quotes would have ended the
 string literal.
+
+## One re-indent rule per language (2026-11-17, #642's re-indent row)
+
+Nothing by hand but the new behavior: lined.reindentSteps (TypeScript's
+step conversion over literalLines), written red-green. The first red test
+(a backtick in a quoted string) passed at once, since Go's scanner reads
+`'it`s'` as one rune literal; a regular expression (`/`/`) was the case
+Go's scanner reads wrong. Then extract_function of the step-counting loop
+in both ReindentSteps and reindentSteps and merge_duplicate_function onto
+textutil.CutSteps; inline of extractfunc's reindent wrapper; and, with
+movemethod off it, replace_declaration of ReindentSteps' two tests (their
+TypeScript cases now in changesig_test) and remove_dead_code of
+ReindentSteps. By mistake I made these edits on #680's branch, uncommitted,
+and moved them to their own with git stash.
