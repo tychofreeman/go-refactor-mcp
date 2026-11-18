@@ -4820,3 +4820,18 @@ ambiguous between Go's and TypeScript's package (retried with `imports`);
 and replace_text of a refusal's text with `"parameter"` in quotes was
 refused under -no-code-by-text, rightly: the quotes would have ended the
 string literal.
+
+## Shared name checks: TestKind and UsedFromOutside (2026-11-17, #642's name-check row)
+
+move of rename's testKind into analysis as TestKind; extractfunc's copy
+of its loop became a call through replace_statements (9 lines to 5).
+By hand, in effect: analysis.UsedFromOutside (19 lines) restates
+extractvar's walk with the scope test as a parameter, written rather than
+derived because extract_function of that walk would have made a method
+of extractvar's extraction (it reads x.Info and x.name), and a move with
+a predicate parameter after it is three more steps than writing it; and
+replace_statements rewrote changesig's hides loop (24 lines) onto it,
+which was a range over info.Uses, a map, so which use its refusal named
+varied from run to run. The other checks named in #642 are not copies:
+rename's conflicts, extractfunc's package-level and call-site checks,
+and the identifier-syntax refusals each word a different case.

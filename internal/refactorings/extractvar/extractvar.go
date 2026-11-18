@@ -501,21 +501,9 @@ func (x *extraction) checkNewName(container ast.Node, scope *types.Scope, insert
 		return refactor.Refusef("%q is already declared in this block, at %s", x.name, site.DeclaredAt(x.WS, o))
 	}
 	// Later uses of an outer x.name in this block would bind to the new one.
-	var hidden *ast.Ident
-	ast.Inspect(container, func(n ast.Node) bool {
-		id, ok := n.(*ast.Ident)
-		if !ok || hidden != nil || id.Name != x.name || id.Pos() < insertPos {
-			return hidden == nil
-		}
-		if o := x.Info.Uses[id]; o != nil && o.Parent() != nil && !within(o.Parent(), scope) {
-			hidden = id
-		}
-		return true
-	})
-	if hidden != nil {
-		o := x.Info.Uses[hidden]
+	if id, o := analysis.UsedFromOutside(x.Info, container, insertPos, x.name, func(o types.Object) bool { return within(o.Parent(), scope) }); id != nil {
 		return refactor.Refusef("a new %q would hide the %s %q declared at %s, which is used at %s; choose another name",
-			x.name, kindOf(o), x.name, site.DeclaredAt(x.WS, o), x.WS.Position(hidden.Pos()))
+			x.name, kindOf(o), x.name, site.DeclaredAt(x.WS, o), x.WS.Position(id.Pos()))
 	}
 	return nil
 }
