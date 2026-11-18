@@ -34,8 +34,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"unicode"
-	"unicode/utf8"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
@@ -1795,12 +1793,8 @@ func (x *extraction) checkNewName() error {
 		}
 	}
 	if strings.HasSuffix(x.path, "_test.go") {
-		for _, prefix := range []string{"Test", "Benchmark", "Example", "Fuzz"} {
-			if rest, ok := strings.CutPrefix(x.name, prefix); ok {
-				if r, _ := utf8.DecodeRuneInString(rest); rest == "" || !unicode.IsLower(r) {
-					return refactor.Refusef("%s in a _test.go file looks like a %s function to go test; choose another name", x.name, strings.ToLower(prefix))
-				}
-			}
+		if k := analysis.TestKind(x.name); k != "" {
+			return refactor.Refusef("%s in a _test.go file looks like a %s function to go test; choose another name", x.name, k)
 		}
 	}
 	// A local declaration of the name in scope at the call site would hide
