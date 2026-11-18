@@ -1,0 +1,6 @@
+[
+  {"name": "notify-channels-param", "dir": "testdata/notify", "tests": "testdata/notify-channels-param", "check": "go vet ./... && go test ./...",
+   "prompt": "Broadcast should take the channels it sends on as a parameter: give notify.Broadcast a last parameter channels []Notifier and send on it in place of c.Channels, with every call passing the channels its Config holds, so behaviour does not change. Keep the parameter c."},
+  {"name": "notify-broadcast-args", "dir": "testdata/notify", "tests": "testdata/notify-broadcast-args", "check": "go vet ./... && go test ./...",
+   "prompt": "Bundle the parameters of notify.Broadcast into one struct, notify.BroadcastArgs, with a field for each parameter named as the parameter is (c, users and m): Broadcast takes a BroadcastArgs, and every call passes one, so behaviour does not change."}
+]
