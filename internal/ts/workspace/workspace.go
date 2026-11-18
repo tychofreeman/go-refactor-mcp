@@ -15,6 +15,7 @@ import (
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/history"
+	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/tsapi"
 )
 
@@ -42,7 +43,7 @@ func Load(dir string) (*Workspace, error) {
 		return nil, err
 	}
 	root := abs
-	for !fileExists(filepath.Join(root, "tsconfig.json")) {
+	for !textutil.FileExists(filepath.Join(root, "tsconfig.json")) {
 		parent := filepath.Dir(root)
 		if parent == root {
 			return nil, fmt.Errorf("no tsconfig.json at or above %s", abs)
@@ -290,11 +291,6 @@ func snapshot(root string) (map[string]stamp, error) {
 		return nil
 	})
 	return out, err
-}
-
-func fileExists(p string) bool {
-	fi, err := os.Stat(p)
-	return err == nil && !fi.IsDir()
 }
 
 // Owns reports whether file, relative to the root or absolute, is a

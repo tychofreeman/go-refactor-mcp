@@ -194,7 +194,7 @@ func (x *extraction) hoistEdits(decl ast.Decl) (file, body []edit.TextEdit) {
 	var texts []string
 	for _, h := range x.hoists {
 		start, end := x.Off(h.decl.Pos()), x.Off(h.decl.End())
-		texts = append(texts, reindent(string(x.Src[start:end]), textutil.IndentAt(x.Src, x.Off(h.decl.Pos())), ""))
+		texts = append(texts, textutil.Reindent(string(x.Src[start:end]), textutil.IndentAt(x.Src, x.Off(h.decl.Pos())), ""))
 
 		// Remove the statement, with its line if nothing else is on it.
 		ls := x.Off(x.TF.LineStart(x.line(h.decl.Pos())))

@@ -2048,3 +2048,66 @@ export function scan(): any {
 		}
 	}
 }
+
+// TestMoveCodeProbes runs each program with node before and after inline
+// or extract_function: it must print the same.
+func TestMoveCodeProbes(t *testing.T) {
+	tstest.NeedNode(t)
+	for _, tc := range []struct {
+		name      string
+		r         refactor.RefactoringOf[*workspace.Workspace]
+		args, src string
+	}{
+		{"inline a function whose parameter is read twice", NewInline(), `{"name": "area", "all_calls": true}`, `let calls = 0;
+function next(): number {
+  calls++;
+  return calls;
+}
+function area(w: number, h: number): number {
+  return w * h + w;
+}
+const x = area(next(), 2);
+const y = area(next(), next());
+console.log(x, y, calls);
+`},
+		{"inline a function with an early return", NewInline(), `{"name": "clamp", "all_calls": true}`, `function clamp(n: number): number {
+  if (n > 10) {
+    return 10;
+  }
+  return n;
+}
+let total = 0;
+for (const n of [3, 12, 7]) {
+  total += clamp(n);
+}
+console.log(total);
+`},
+		{"extract a loop that sets two locals", NewExtractFunction(), `{"start_line": 4, "end_line": 8, "name": "sum"}`, `function run(xs: number[]): string {
+  let total = 0;
+  let out = "";
+  for (const x of xs) {
+    if (x < 0) continue;
+    total += x;
+    out += x + ",";
+  }
+  return out + total;
+}
+console.log(run([1, -2, 3]));
+`},
+		{"extract statements with an early return", NewExtractFunction(), `{"start_line": 3, "end_line": 5, "name": "check"}`, `function grade(n: number): string {
+  let label = "low";
+  if (n < 0) {
+    return "none";
+  }
+  if (n > 5) label = "high";
+  return label;
+}
+console.log(grade(-1), grade(3), grade(9));
+`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ws, dir := load(t, map[string]string{"src/g.ts": tc.src})
+			tstest.Probe(t, ws, dir, tc.r, `{"file": "src/g.ts", `+tc.args[1:])
+		})
+	}
+}

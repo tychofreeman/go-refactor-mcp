@@ -13,6 +13,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/gocode"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/tsapi"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/workspace"
 )
@@ -78,7 +79,7 @@ func (*AddDeclaration) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refa
 	}
 	edits, replaced := replaceStubs(ws.Outline(path), text, content, owner)
 	n := strings.Count(content, "\n") + 1
-	summary := fmt.Sprintf("added %d line%s to %s", n, plural(n), ws.Rel(path))
+	summary := fmt.Sprintf("added %d line%s to %s", n, textutil.Plural(n), ws.Rel(path))
 	if len(edits) == 0 {
 		placed, why := tsapi.PlaceDeclarations(text, content, owner)
 		if why != "" {
@@ -156,13 +157,6 @@ func lineEnd(text string, l int) int {
 		return off + i
 	}
 	return len(text)
-}
-
-func plural(n int) string {
-	if n == 1 {
-		return ""
-	}
-	return "s"
 }
 
 // assigningBody is the body of a constructor that only sets fields from

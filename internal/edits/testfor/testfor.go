@@ -10,6 +10,7 @@ import (
 	"unicode"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 )
 
 // Source returns a test function for target, a function or Type.Method
@@ -34,7 +35,7 @@ func Source(pkg *types.Package, target string) (string, error) {
 			return "", refactor.Refusef("%s has no method %s", typeName, method)
 		}
 		sig = fn.Type().(*types.Signature)
-		recv := lowerFirst(typeName)
+		recv := textutil.LowerFirst(typeName)
 		if ctor := constructor(pkg, tn); ctor != nil {
 			fmt.Fprintf(&b, "\t%s := %s(%s)\n", recv, ctor.Name(), zeros(ctor.Type().(*types.Signature), qualify))
 		} else {
@@ -59,7 +60,7 @@ func Source(pkg *types.Package, target string) (string, error) {
 		case types.Identical(v.Type(), types.Universe.Lookup("error").Type()):
 			name = "err"
 		case i == 0:
-			name = lowerFirst(method)
+			name = textutil.LowerFirst(method)
 		default:
 			name = fmt.Sprintf("r%d", i+1)
 		}
@@ -140,13 +141,6 @@ func zero(t types.Type, qualify types.Qualifier) string {
 		return types.TypeString(t, qualify) + "{}"
 	}
 	return "nil"
-}
-
-func lowerFirst(s string) string {
-	for i, r := range s {
-		return string(unicode.ToLower(r)) + s[i+len(string(r)):]
-	}
-	return s
 }
 
 func upperFirst(s string) string {

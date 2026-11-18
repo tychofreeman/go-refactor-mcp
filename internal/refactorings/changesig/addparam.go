@@ -197,34 +197,29 @@ func (t *target) hides(name string, replace bool) (*types.Var, error) {
 			return nil, refactor.Refusef("%s already has a parameter or result named %q", t.obj.Name(), name)
 		}
 	}
-	var hidden *types.Var
-	for id, o := range info.Uses {
-		if id.Name != name || id.Pos() < t.body().Pos() || id.Pos() >= t.body().End() {
-			continue
-		}
-		if o.Parent() == nil {
-			continue // a field or method, not found through scope
-		}
-		if o.Pos().IsValid() && t.fnNode().Pos() <= o.Pos() && o.Pos() < t.fnNode().End() {
-			continue // declared inside the function, in a nested scope
-		}
-		v, isVar := o.(*types.Var)
-		pkgVar := isVar && o.Parent() == t.Pkg.Types.Scope()
-		if replace && pkgVar {
-			hidden = v
-			continue
-		}
+	fn := t.fnNode()
+	pkgVar := func(o types.Object) bool {
+		_, isVar := o.(*types.Var)
+		return isVar && o.Parent() == t.Pkg.Types.Scope()
+	}
+	inFn := func(o types.Object) bool { return o.Pos().IsValid() && fn.Pos() <= o.Pos() && o.Pos() < fn.End() }
+	if id, o := analysis.UsedFromOutside(info, t.body(), t.body().Pos(), name, func(o types.Object) bool { return inFn(o) || replace && pkgVar(o) }); id != nil {
 		where := "the universe"
 		if o.Pos().IsValid() {
 			where = t.WS.Position(o.Pos())
 		}
 		hint := ""
-		if pkgVar {
+		if pkgVar(o) {
 			hint = "; with replace_variable, the parameter takes its place"
 		}
 		return nil, refactor.Refusef("the body of %s uses the %s %q declared at %s; a parameter named %q would hide it%s",
 			t.obj.Name(), kind(o), name, where, name, hint)
 	}
+	if !replace {
+		return nil, nil
+	}
+	_, o := analysis.UsedFromOutside(info, t.body(), t.body().Pos(), name, func(o types.Object) bool { return inFn(o) || !pkgVar(o) })
+	hidden, _ := o.(*types.Var)
 	return hidden, nil
 }
 

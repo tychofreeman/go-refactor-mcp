@@ -160,7 +160,7 @@ func (x *inversion) plan(s *ast.IfStmt, keepElse bool) (*refactor.Plan, error) {
 		if !refactor.IsRefusal(err) {
 			return nil, err
 		}
-		notes = append(notes, "the else was kept because "+lowerFirst(err.Error()))
+		notes = append(notes, "the else was kept because "+textutil.LowerFirst(err.Error()))
 	}
 	thenIn := x.inner(s.Body)
 	elseIn := x.inner(els)
@@ -309,21 +309,6 @@ func (x *inversion) funcResults(p *place) int {
 		return 0
 	}
 	return ft.Results.NumFields()
-}
-
-// returnFrom returns "return" for a function without results, or "".
-func (x *inversion) returnFrom(ft *ast.FuncType) string {
-	if ft.Results == nil || len(ft.Results.List) == 0 {
-		return "return"
-	}
-	return ""
-}
-
-func lowerFirst(s string) string {
-	if s == "" {
-		return s
-	}
-	return strings.ToLower(s[:1]) + s[1:]
 }
 
 // inner returns the text between a block's braces.

@@ -11,6 +11,7 @@ import (
 	"slices"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/refactorings/changesig"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/tsapi"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/workspace"
@@ -82,19 +83,12 @@ func (*ExtractVariable) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 	if err != nil {
 		return nil, err
 	}
-	p.Summary = fmt.Sprintf("extracted %s as %s (%d occurrence%s)", a.Expression, a.Name, n, plural(n))
+	p.Summary = fmt.Sprintf("extracted %s as %s (%d occurrence%s)", a.Expression, a.Name, n, textutil.Plural(n))
 	return p, nil
 }
 
 // Covers names the tool extract_variable stands for with as parameter.
 func (*ExtractVariable) Covers() []string { return []string{"introduce_parameter"} }
-
-func plural(n int) string {
-	if n == 1 {
-		return ""
-	}
-	return "s"
-}
 
 // InlineVariable replaces a variable's uses with its value.
 type InlineVariable struct {
@@ -134,7 +128,7 @@ func (*InlineVariable) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refa
 	if err != nil {
 		return nil, err
 	}
-	p.Summary = fmt.Sprintf("inlined %s (%d use%s)", a.Name, n, plural(n))
+	p.Summary = fmt.Sprintf("inlined %s (%d use%s)", a.Name, n, textutil.Plural(n))
 	return p, nil
 }
 

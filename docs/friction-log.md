@@ -4850,3 +4850,62 @@ file went back to HEAD and the test was added again here. Hono's pnpm 12
 did not run through corepack; `npx pnpm@12.6.0 install --ignore-scripts`
 under node 24 did. The timeout went in with replace_statements; its
 imports were added by the tool.
+## TypeScript behavior probes (2026-11-17, #643 part 1)
+
+move of convertloop_test's runNode into tstest was refused ("moving to or
+from a test file in another package is not supported yet"); composed
+instead: add_declaration of tstest.RunNode with the same body, then
+merge_duplicate_function of the test's copy onto it. The probes
+(add_declaration into each package's tests) found one bug: inline with
+all_calls bound a parameter under the same name at two calls of one
+block (`const w` twice), which the type check caught as a rollback; the
+inliner now counts the names its earlier calls declared (add_field,
+two replace_expression, insert_statements). One probe was rewritten,
+not the tool: inlining `area(next(), 2)` inside `console.log(...)` is
+refused rightly, since binding next() would move it before the read of
+console. The probes need node 22.6 or later (--experimental-strip-types);
+the workstation's default node is 20.12, so they skip or fail there
+unless PATH puts a newer one first.
+## One re-indent rule per language (2026-11-17, #642's re-indent row)
+
+Nothing by hand but the new behavior: lined.reindentSteps (TypeScript's
+step conversion over literalLines), written red-green. The first red test
+(a backtick in a quoted string) passed at once, since Go's scanner reads
+`'it`s'` as one rune literal; a regular expression (`/`/`) was the case
+Go's scanner reads wrong. Then extract_function of the step-counting loop
+in both ReindentSteps and reindentSteps and merge_duplicate_function onto
+textutil.CutSteps; inline of extractfunc's reindent wrapper; and, with
+movemethod off it, replace_declaration of ReindentSteps' two tests (their
+TypeScript cases now in changesig_test) and remove_dead_code of
+ReindentSteps. By mistake I made these edits on #680's branch, uncommitted,
+and moved them to their own with git stash.
+## Small helpers and staticcheck's unused code (2026-11-17, #642's last rows)
+
+Nothing by hand but three doc comments for the helpers made exported
+(replace_text) and a dead assignment in refactor_test.go (two one-line
+replace_statements: replace_expression of `path` with `_` was refused,
+rightly, since a later `=` needed it declared). merge_duplicate_function
+onto textutil.Plural (three copies), move then merge for LowerFirst,
+FileExists and analysis.EmbeddedName, a one-line body then inline for
+invertif's byte-wise lowerFirst (now rune-wise) and inlinestruct's
+embeddedName, and remove_dead_code of the four functions staticcheck
+listed. Not copies, so left: locate's and rename's objectOf (a nil guard;
+type-switch implicits), replaceexpr's and extractfunc's isLocal (a
+variable; any local object), the firstLine of agent, tokens and
+extractfunc (each cuts differently), and tsapi's Project.fileExists (the
+compiler's file system).
+
+## Shared name checks: TestKind and UsedFromOutside (2026-11-17, #642's name-check row)
+
+move of rename's testKind into analysis as TestKind; extractfunc's copy
+of its loop became a call through replace_statements (9 lines to 5).
+By hand, in effect: analysis.UsedFromOutside (19 lines) restates
+extractvar's walk with the scope test as a parameter, written rather than
+derived because extract_function of that walk would have made a method
+of extractvar's extraction (it reads x.Info and x.name), and a move with
+a predicate parameter after it is three more steps than writing it; and
+replace_statements rewrote changesig's hides loop (24 lines) onto it,
+which was a range over info.Uses, a map, so which use its refusal named
+varied from run to run. The other checks named in #642 are not copies:
+rename's conflicts, extractfunc's package-level and call-site checks,
+and the identifier-syntax refusals each word a different case.

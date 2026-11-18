@@ -27,6 +27,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/history"
+	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 )
 
 // Workspace is a loaded, type-checked set of packages rooted at Root.
@@ -246,8 +247,8 @@ func (w *Workspace) Abs(path string) string {
 		return filepath.Clean(path)
 	}
 	p := filepath.Join(w.Root, path)
-	if !fileExists(p) && w.Base != "" && w.Base != w.Root {
-		if b := filepath.Join(w.Base, path); fileExists(b) {
+	if !textutil.FileExists(p) && w.Base != "" && w.Base != w.Root {
+		if b := filepath.Join(w.Base, path); textutil.FileExists(b) {
 			return b
 		}
 	}
@@ -258,7 +259,7 @@ func (w *Workspace) Abs(path string) string {
 // go.mod, or dir itself if there is none.
 func ModuleRoot(dir string) string {
 	for d := dir; ; {
-		if fileExists(filepath.Join(d, "go.mod")) {
+		if textutil.FileExists(filepath.Join(d, "go.mod")) {
 			return d
 		}
 		parent := filepath.Dir(d)
@@ -267,11 +268,6 @@ func ModuleRoot(dir string) string {
 		}
 		d = parent
 	}
-}
-
-func fileExists(p string) bool {
-	fi, err := os.Stat(p)
-	return err == nil && !fi.IsDir()
 }
 
 // Rel returns path relative to the workspace root, for display.

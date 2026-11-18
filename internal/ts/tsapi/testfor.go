@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"unicode"
 
 	"github.com/buke/typescript-go-internal/v7/pkg/ast"
 	"github.com/buke/typescript-go-internal/v7/pkg/checker"
+	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 )
 
 // TestFor returns a red test of target, a top-level function or a
@@ -52,13 +52,13 @@ func (p *Project) TestFor(ctx context.Context, target string) (test string, foun
 		if fn == nil {
 			return "", true, fmt.Sprintf("%s has no instance method %s", className, method)
 		}
-		recv := lowerFirst(className)
+		recv := textutil.LowerFirst(className)
 		args := ""
 		if ctor != nil {
 			args = placeholders(c, ctor)
 		}
 		fmt.Fprintf(&body, "  const %s = new %s(%s);\n", recv, className, args)
-		call, name = recv+"."+method, lowerFirst(method)
+		call, name = recv+"."+method, textutil.LowerFirst(method)
 	} else {
 		method = className
 	}
@@ -101,11 +101,4 @@ func placeholders(c *checker.Checker, fn *ast.Node) string {
 		}
 	}
 	return strings.Join(out, ", ")
-}
-
-func lowerFirst(s string) string {
-	for i, r := range s {
-		return string(unicode.ToLower(r)) + s[i+len(string(r)):]
-	}
-	return s
 }

@@ -907,3 +907,50 @@ func TestFoldArrowBody(t *testing.T) {
 	}
 	want(t, dir, "src/s.ts", "const logged: string[] = [];\n\nfunction skipped(file: string): void {\n  logged.push(\"skipped \" + file);\n}\n\nexport function all(files: string[]): void {\n  files.forEach((f) => skipped(f));\n}\n")
 }
+
+// TestShapeProbes runs each program with node before and after fold or
+// union_switch_to_method: it must print the same.
+func TestShapeProbes(t *testing.T) {
+	tstest.NeedNode(t)
+	for _, tc := range []struct {
+		name      string
+		r         refactor.RefactoringOf[*workspace.Workspace]
+		args, src string
+	}{
+		{"fold over expressions with calls", NewFold(), `{"name": "double"}`, `let calls = 0;
+function next(): number {
+  calls++;
+  return calls;
+}
+function double(n: number): number {
+  return n * 2;
+}
+const a = next() * 2;
+const b = (a + next()) * 2;
+console.log(a, b, double(5), calls);
+`},
+		{"a switch on a union into methods", NewUnionSwitchToMethod(), `{"function": "water", "method": "water"}`, `class Fern {
+  kind = "fern" as const;
+  mist = 2;
+}
+class Cactus {
+  kind = "cactus" as const;
+}
+type Plant = Fern | Cactus;
+function water(p: Plant, days: number): number {
+  switch (p.kind) {
+    case "fern":
+      return days * p.mist;
+    case "cactus":
+      return 1;
+  }
+}
+console.log(water(new Fern(), 3), water(new Cactus(), 3));
+`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ws, dir := load(t, map[string]string{"src/g.ts": tc.src})
+			tstest.Probe(t, ws, dir, tc.r, `{"file": "src/g.ts", `+tc.args[1:])
+		})
+	}
+}

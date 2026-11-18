@@ -17,6 +17,8 @@ import (
 	"go/token"
 	"go/types"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 // Func holds facts about one function body (a FuncDecl, or a FuncLit at
@@ -676,4 +678,56 @@ func TypeStringAt(t types.Type, file *ast.File, pkg *types.Package, imports map[
 		return p.Name()
 	})
 	return s, missing, hidden
+}
+
+// TestKind is what go test runs a function of a _test.go file named name
+// as: "test", "benchmark", "fuzz" or "example", or "" for none. The
+// prefix must end the name or be followed by a character that is not a
+// lower-case letter.
+func TestKind(name string) string {
+	for _, k := range []struct{ prefix, kind string }{{"Test", "test"}, {"Benchmark", "benchmark"}, {"Fuzz", "fuzz"}, {"Example", "example"}} {
+		rest, ok := strings.CutPrefix(name, k.prefix)
+		if r, _ := utf8.DecodeRuneInString(rest); ok && (rest == "" || !unicode.IsLower(r)) {
+			return k.kind
+		}
+	}
+	return ""
+}
+
+// UsedFromOutside returns the first use in region, at or after from, of
+// name for something found through scope (not a field or method) that
+// inside does not claim, with what it refers to: the use a new
+// declaration of name would capture. It returns nil when there is none.
+func UsedFromOutside(info *types.Info, region ast.Node, from token.Pos, name string, inside func(types.Object) bool) (*ast.Ident, types.Object) {
+	var id *ast.Ident
+	var obj types.Object
+	ast.Inspect(region, func(n ast.Node) bool {
+		i, ok := n.(*ast.Ident)
+		if !ok || id != nil || i.Name != name || i.Pos() < from {
+			return id == nil
+		}
+		if o := info.Uses[i]; o != nil && o.Parent() != nil && !inside(o) {
+			id, obj = i, o
+		}
+		return true
+	})
+	return id, obj
+}
+
+// EmbeddedName is the name of an embedded field of type e (*pkg.T[X]
+// gives T), or "" for a type that cannot be embedded.
+func EmbeddedName(e ast.Expr) string {
+	switch t := e.(type) {
+	case *ast.StarExpr:
+		return EmbeddedName(t.X)
+	case *ast.SelectorExpr:
+		return t.Sel.Name
+	case *ast.Ident:
+		return t.Name
+	case *ast.IndexExpr:
+		return EmbeddedName(t.X)
+	case *ast.IndexListExpr:
+		return EmbeddedName(t.X)
+	}
+	return ""
 }
