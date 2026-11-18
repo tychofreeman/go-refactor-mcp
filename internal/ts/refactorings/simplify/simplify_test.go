@@ -1907,6 +1907,148 @@ export function both(a: Plant, b: Plant): number {
 	}
 }
 
+// What a call does is found through a switch with a default clause, which
+// has no expression (found by the stress run on Hono: it panicked).
+func TestInlineVariableCallingASwitch(t *testing.T) {
+	ws, dir := load(t, map[string]string{"src/g.ts": `function kind(xs: number[]): number {
+  let n = 0;
+  for (const x of xs) {
+    switch (x) {
+      case 1:
+        n++;
+        break;
+      default:
+        n += 2;
+    }
+  }
+  return n;
+}
+export function use(): number {
+  const k = kind([1, 2]);
+  return k + 1;
+}
+`})
+	if res := run(t, ws, NewInline(), `{"file": "src/g.ts", "line": 15, "name": "k"}`); !res.Applied {
+		t.Fatalf("%s", res)
+	}
+	if got := tstest.Read(t, dir, "src/g.ts"); !strings.Contains(got, "return kind([1, 2]) + 1;") {
+		t.Errorf("src/g.ts:\n%s", got)
+	}
+}
+
+// A type guard whose body narrows as its predicate does is inlined: the
+// inlined condition narrows the argument itself. (On Hono, isObject's
+// predicate named a narrower type than its body proves, and the type
+// check refused the change; roadmap 64.)
+func TestInlineTypeGuardThatNarrows(t *testing.T) {
+	ws, dir := load(t, map[string]string{"src/g.ts": `function isObject(v: unknown): v is object {
+  return typeof v === "object" && v !== null;
+}
+function keys(o: object): string[] {
+  return Object.keys(o);
+}
+export function use(v: unknown): string[] {
+  return isObject(v) ? keys(v) : [];
+}
+`})
+	if res := run(t, ws, NewInline(), `{"file": "src/g.ts", "name": "isObject", "all_calls": true}`); !res.Applied {
+		t.Fatalf("%s", res)
+	}
+	if got := tstest.Read(t, dir, "src/g.ts"); !strings.Contains(got, `return typeof v === "object" && v !== null ? keys(v) : [];`) {
+		t.Errorf("src/g.ts:\n%s", got)
+	}
+}
+
+// A variable whose value reads a parameter that is assigned before the use
+// is not inlined there: the use would see the new value (found by the
+// stress run on Hono, where PatternRouter.add's tests failed).
+func TestInlineVariableReadingAnAssignedParameter(t *testing.T) {
+	ws, _ := load(t, map[string]string{"src/g.ts": `export function add(path: string): string {
+  const suffix = path.endsWith("*") ? "" : "/?$";
+  path = path.replace(/\*$/, "");
+  return path + suffix;
+}
+`})
+	res := run(t, ws, NewInline(), `{"file": "src/g.ts", "line": 2, "name": "suffix"}`)
+	if res.Applied || !strings.Contains(res.Refused, "path") {
+		t.Errorf("want a refusal naming path, got %s", res)
+	}
+}
+
+// A variable holding the new array a method returns is not inlined at
+// several uses: each would make its own array, and a change through one
+// would not reach the others (found by the stress run on Hono, where
+// expandIPv6's loop never ended).
+func TestInlineVariableHoldingANewArray(t *testing.T) {
+	for _, call := range []string{`ip.split(":")`, `ip.split(":").slice(1)`, `ip.split(":").map((s) => s)`} {
+		ws, _ := load(t, map[string]string{"src/g.ts": `export function expand(ip: string): string {
+  const sections = ` + call + `;
+  sections[0] = "0";
+  return sections.join(":");
+}
+`})
+		res := run(t, ws, NewInline(), `{"file": "src/g.ts", "line": 2, "name": "sections"}`)
+		if res.Applied || !strings.Contains(res.Refused, "new value") {
+			t.Errorf("%s: want a refusal, got %s", call, res)
+		}
+	}
+}
+
+// A function type among a call's type arguments is not a function the
+// call runs (found by the stress run on Hono, where it panicked).
+func TestInlineVariableBesideAFunctionTypeArgument(t *testing.T) {
+	ws, _ := load(t, map[string]string{"src/g.ts": `function run<T>(f: T): T {
+  return f;
+}
+export function g(): number {
+  let n = 1;
+  const k = n + 1;
+  run<() => void>(() => {});
+  return k;
+}
+`})
+	res := run(t, ws, NewInline(), `{"file": "src/g.ts", "line": 6, "name": "k"}`)
+	if !res.Applied {
+		t.Errorf("want k inlined, got %s", res)
+	}
+}
+
+// A variable assigned through a destructuring assignment is assigned (the
+// stress run on Hono found the type check rolling back its inline).
+func TestInlineVariableAssignedByArrayPattern(t *testing.T) {
+	ws, _ := load(t, map[string]string{"src/g.ts": `declare function next(s: string, i: number): [number, string];
+export function scan(s: string): number {
+  let i = 0;
+  let a = "";
+  while (i < s.length) {
+    ;[i, a] = next(s, i);
+  }
+  return i + a.length;
+}
+`})
+	res := run(t, ws, NewInline(), `{"file": "src/g.ts", "line": 3, "name": "i"}`)
+	if res.Applied || !strings.Contains(res.Refused, "assigned") {
+		t.Errorf("i: want a refusal saying it is assigned, got %s", res)
+	}
+}
+
+// An object pattern assigns its shorthand names and its values' names.
+func TestInlineVariableAssignedByObjectPattern(t *testing.T) {
+	for _, assign := range []string{"({ i } = next(i));", "({ n: i } = next(i));", "({ ...i } = next(i));"} {
+		ws, _ := load(t, map[string]string{"src/g.ts": `declare function next(i: any): any;
+export function scan(): any {
+  let i: any = 0;
+  ` + assign + `
+  return i;
+}
+`})
+		res := run(t, ws, NewInline(), `{"file": "src/g.ts", "line": 3, "name": "i"}`)
+		if res.Applied || !strings.Contains(res.Refused, "is assigned") {
+			t.Errorf("%s: want a refusal saying i is assigned, got %s", assign, res)
+		}
+	}
+}
+
 // TestMoveCodeProbes runs each program with node before and after inline
 // or extract_function: it must print the same.
 func TestMoveCodeProbes(t *testing.T) {
