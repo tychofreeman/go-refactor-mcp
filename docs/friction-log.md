@@ -4770,6 +4770,27 @@ result, so one copy of `fitted` became a call by replace_statements.
 Docs through replace_text; nothing by hand. The A/B ran from #676's
 branch, before it was merged.
 
+## Hidden type names, through analysis.TypeStringAt (2026-11-17, #642's type-spelling row)
+
+TDD rolled back twice when red showed a missing step (move of
+inlinefunc's walkNamed into analysis; add_parameter of extractvar's
+typeString's position): undo of the golden, the step while green, the
+golden again. add_parameter refused `expr.Pos()` as the value (a call
+that could panic, unused by the body), so it took token.NoPos and
+replace_expression changed the one call. add_result refused
+analysis.TypeString's named results (roadmap 63), so TypeStringAt is a
+new function beside it, with importNames extracted from TypeString for
+both. By hand, in effect: analysis.Hidden (16 lines) restates
+inlinefunc's walk over a type's names, since extract_function of that
+block would have taken its refusal with it; and replace_statements
+retyped extractvar's typeString (8 lines) and merged inlinevar's two
+checks into one call. The three new goldens found real gaps: split and
+inline of a variable wrote a hidden type and reported "a bug in the
+precondition checks". Left as they are, with their reason: the
+import-adding qualifiers of extractfunc and inlinefunc (they add
+imports, which TypeString refuses to), and rename's and workspace's
+typeString (for messages, not for a file).
+
 ## textutil.LineStart and IndentAt (2026-11-17, #642's second row)
 
 Nothing by hand. move of addelement's lineStart into textutil as
@@ -4813,3 +4834,33 @@ movemethod off it, replace_declaration of ReindentSteps' two tests (their
 TypeScript cases now in changesig_test) and remove_dead_code of
 ReindentSteps. By mistake I made these edits on #680's branch, uncommitted,
 and moved them to their own with git stash.
+## Small helpers and staticcheck's unused code (2026-11-17, #642's last rows)
+
+Nothing by hand but three doc comments for the helpers made exported
+(replace_text) and a dead assignment in refactor_test.go (two one-line
+replace_statements: replace_expression of `path` with `_` was refused,
+rightly, since a later `=` needed it declared). merge_duplicate_function
+onto textutil.Plural (three copies), move then merge for LowerFirst,
+FileExists and analysis.EmbeddedName, a one-line body then inline for
+invertif's byte-wise lowerFirst (now rune-wise) and inlinestruct's
+embeddedName, and remove_dead_code of the four functions staticcheck
+listed. Not copies, so left: locate's and rename's objectOf (a nil guard;
+type-switch implicits), replaceexpr's and extractfunc's isLocal (a
+variable; any local object), the firstLine of agent, tokens and
+extractfunc (each cuts differently), and tsapi's Project.fileExists (the
+compiler's file system).
+
+## Shared name checks: TestKind and UsedFromOutside (2026-11-17, #642's name-check row)
+
+move of rename's testKind into analysis as TestKind; extractfunc's copy
+of its loop became a call through replace_statements (9 lines to 5).
+By hand, in effect: analysis.UsedFromOutside (19 lines) restates
+extractvar's walk with the scope test as a parameter, written rather than
+derived because extract_function of that walk would have made a method
+of extractvar's extraction (it reads x.Info and x.name), and a move with
+a predicate parameter after it is three more steps than writing it; and
+replace_statements rewrote changesig's hides loop (24 lines) onto it,
+which was a range over info.Uses, a map, so which use its refusal named
+varied from run to run. The other checks named in #642 are not copies:
+rename's conflicts, extractfunc's package-level and call-site checks,
+and the identifier-syntax refusals each word a different case.

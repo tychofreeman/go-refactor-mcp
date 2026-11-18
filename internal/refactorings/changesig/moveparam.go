@@ -151,22 +151,3 @@ func (t *target) checkNoCallIn(arg ast.Expr) error {
 	}
 	return nil
 }
-
-// plainValue reports whether values of t hold no pointers, so that a copy
-// shares nothing with the original.
-func plainValue(t types.Type) bool {
-	switch u := t.Underlying().(type) {
-	case *types.Basic:
-		return u.Kind() != types.UnsafePointer
-	case *types.Array:
-		return plainValue(u.Elem())
-	case *types.Struct:
-		for i := range u.NumFields() {
-			if !plainValue(u.Field(i).Type()) {
-				return false
-			}
-		}
-		return true
-	}
-	return false
-}
