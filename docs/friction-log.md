@@ -4821,6 +4821,22 @@ and replace_text of a refusal's text with `"parameter"` in quotes was
 refused under -no-code-by-text, rightly: the quotes would have ended the
 string literal.
 
+## Small helpers and staticcheck's unused code (2026-11-17, #642's last rows)
+
+Nothing by hand but three doc comments for the helpers made exported
+(replace_text) and a dead assignment in refactor_test.go (two one-line
+replace_statements: replace_expression of `path` with `_` was refused,
+rightly, since a later `=` needed it declared). merge_duplicate_function
+onto textutil.Plural (three copies), move then merge for LowerFirst,
+FileExists and analysis.EmbeddedName, a one-line body then inline for
+invertif's byte-wise lowerFirst (now rune-wise) and inlinestruct's
+embeddedName, and remove_dead_code of the four functions staticcheck
+listed. Not copies, so left: locate's and rename's objectOf (a nil guard;
+type-switch implicits), replaceexpr's and extractfunc's isLocal (a
+variable; any local object), the firstLine of agent, tokens and
+extractfunc (each cuts differently), and tsapi's Project.fileExists (the
+compiler's file system).
+
 ## Shared name checks: TestKind and UsedFromOutside (2026-11-17, #642's name-check row)
 
 move of rename's testKind into analysis as TestKind; extractfunc's copy

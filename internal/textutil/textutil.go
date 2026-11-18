@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"go/scanner"
 	"go/token"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode"
 )
 
 // Token is one token of source text, by byte offsets.
@@ -288,4 +290,18 @@ func LineStart[T ~string | ~[]byte](src T, off int) int {
 // in src, up to off.
 func IndentAt(src []byte, off int) string {
 	return Indent(string(src[LineStart(src, off):off]))
+}
+
+// LowerFirst returns s with its first letter in lower case.
+func LowerFirst(s string) string {
+	for i, r := range s {
+		return string(unicode.ToLower(r)) + s[i+len(string(r)):]
+	}
+	return s
+}
+
+// FileExists reports whether p is a file, not a directory, on disk.
+func FileExists(p string) bool {
+	fi, err := os.Stat(p)
+	return err == nil && !fi.IsDir()
 }

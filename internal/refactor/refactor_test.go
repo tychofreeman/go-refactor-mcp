@@ -670,7 +670,7 @@ func (useN) Plan(ws *workspace.Workspace, _ json.RawMessage) (*refactor.Plan, er
 func TestBatchCheckedAtEnd(t *testing.T) {
 	steps := []refactor.Step{{Refactoring: declareN{}}, {Refactoring: useN{}}}
 
-	ws, path := setup(t, src)
+	ws, _ := setup(t, src)
 	b, err := refactor.RunBatch(ws, steps, refactor.Options{})
 	if err != nil {
 		t.Fatal(err)
@@ -679,7 +679,7 @@ func TestBatchCheckedAtEnd(t *testing.T) {
 		t.Errorf("checked at each step, want it applied on a retry, got %+v", b)
 	}
 
-	ws, path = setup(t, src)
+	ws, path := setup(t, src)
 	b, err = refactor.RunBatch(ws, steps, refactor.Options{Unchecked: true})
 	if err != nil {
 		t.Fatal(err)

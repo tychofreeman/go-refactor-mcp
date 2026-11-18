@@ -713,3 +713,21 @@ func UsedFromOutside(info *types.Info, region ast.Node, from token.Pos, name str
 	})
 	return id, obj
 }
+
+// EmbeddedName is the name of an embedded field of type e (*pkg.T[X]
+// gives T), or "" for a type that cannot be embedded.
+func EmbeddedName(e ast.Expr) string {
+	switch t := e.(type) {
+	case *ast.StarExpr:
+		return EmbeddedName(t.X)
+	case *ast.SelectorExpr:
+		return t.Sel.Name
+	case *ast.Ident:
+		return t.Name
+	case *ast.IndexExpr:
+		return EmbeddedName(t.X)
+	case *ast.IndexListExpr:
+		return EmbeddedName(t.X)
+	}
+	return ""
+}

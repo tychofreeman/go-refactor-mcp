@@ -393,12 +393,6 @@ func (x *extraction) alwaysNonZero(fn *types.Func) bool {
 	return ok
 }
 
-// isString reports whether the early exits carry a string.
-func (x *extraction) isString() bool {
-	b, ok := x.exitType.Underlying().(*types.Basic)
-	return ok && b.Info()&types.IsString != 0
-}
-
 // nonNilValue reports whether e (type-checked in info), converted to an
 // error, is certainly not nil without looking at the code around it: a
 // call of a function that always returns a non-nil error (see
