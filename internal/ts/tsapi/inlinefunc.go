@@ -47,10 +47,11 @@ type inliner struct {
 	expr   *ast.Node   // the value of a body that is one expression or one return, or the last return's of guards
 	conds  []*ast.Node // guards: a body of if (conds[i]) return vals[i]; and a last return
 	vals   []*ast.Node
-	early  []*ast.Node // returns before the last, for a call that is a return's whole value
-	stmts  []*ast.Node // otherwise, its statements, but for a last return
-	ret    *ast.Node   // that return's value, if any
-	this   []*ast.Node // this in the body, not in a function of its own
+	early  []*ast.Node                   // returns before the last, for a call that is a return's whole value
+	stmts  []*ast.Node                   // otherwise, its statements, but for a last return
+	ret    *ast.Node                     // that return's value, if any
+	this   []*ast.Node                   // this in the body, not in a function of its own
+	added  map[*ast.Node]map[string]bool // names earlier calls of the pass declared, by the block they are in
 }
 
 // InlineFunction returns the edits that replace the call of name on line
@@ -590,13 +591,13 @@ func (in *inliner) inline(l *lined, call *ast.Node) ([]Edit, string) {
 					}
 					syms = append(syms, c.GetSymbolAtLocation(id))
 				}
-			} else if taken(c, l, pn, stmt) != "" {
+			} else if taken(c, l, pn, stmt) != "" || in.added[stmt.Parent][pn] {
 				// Taken at the call: another name, which neither the call's
 				// statement sees nor the function uses.
 				free := ""
 				for i := 2; i < 10 && free == ""; i++ {
 					cand := fmt.Sprintf("%s%d", pn, i)
-					if taken(c, l, cand, stmt) == "" && !slices.ContainsFunc(identifierTexts(in.fn), func(s string) bool { return s == cand }) {
+					if taken(c, l, cand, stmt) == "" && !in.added[stmt.Parent][cand] && !slices.ContainsFunc(identifierTexts(in.fn), func(s string) bool { return s == cand }) {
 						free = cand
 					}
 				}
@@ -605,6 +606,13 @@ func (in *inliner) inline(l *lined, call *ast.Node) ([]Edit, string) {
 				}
 				b.name, pn = free, free
 			}
+			if in.added == nil {
+				in.added = map[*ast.Node]map[string]bool{}
+			}
+			if in.added[stmt.Parent] == nil {
+				in.added[stmt.Parent] = map[string]bool{}
+			}
+			in.added[stmt.Parent][pn] = true
 			kw := "const"
 			for _, s := range syms {
 				if s != nil && assignedIn(c, []*ast.Node{bodyRoot}, s) {

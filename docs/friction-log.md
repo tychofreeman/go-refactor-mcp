@@ -4821,6 +4821,22 @@ and replace_text of a refusal's text with `"parameter"` in quotes was
 refused under -no-code-by-text, rightly: the quotes would have ended the
 string literal.
 
+## TypeScript behavior probes (2026-11-17, #643 part 1)
+
+move of convertloop_test's runNode into tstest was refused ("moving to or
+from a test file in another package is not supported yet"); composed
+instead: add_declaration of tstest.RunNode with the same body, then
+merge_duplicate_function of the test's copy onto it. The probes
+(add_declaration into each package's tests) found one bug: inline with
+all_calls bound a parameter under the same name at two calls of one
+block (`const w` twice), which the type check caught as a rollback; the
+inliner now counts the names its earlier calls declared (add_field,
+two replace_expression, insert_statements). One probe was rewritten,
+not the tool: inlining `area(next(), 2)` inside `console.log(...)` is
+refused rightly, since binding next() would move it before the read of
+console. The probes need node 22.6 or later (--experimental-strip-types);
+the workstation's default node is 20.12, so they skip or fail there
+unless PATH puts a newer one first.
 ## One re-indent rule per language (2026-11-17, #642's re-indent row)
 
 Nothing by hand but the new behavior: lined.reindentSteps (TypeScript's
