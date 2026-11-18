@@ -196,7 +196,7 @@ func (x *extraction) plan(expr ast.Expr, all bool) (*refactor.Plan, error) {
 	edits := []edit.TextEdit{{
 		Start:   x.Off(insertPos),
 		End:     x.Off(insertPos),
-		NewText: decl + "\n" + x.indentOf(insertPos),
+		NewText: decl + "\n" + textutil.IndentAt(x.Src, x.Off(insertPos)),
 	}}
 	for _, s := range sites {
 		n, text := x.replacement(s)
@@ -756,17 +756,6 @@ func idents(e ast.Expr) []*ast.Ident {
 
 // ---------------------------------------------------------------------------
 // Helpers
-
-func (x *extraction) indentOf(p token.Pos) string {
-	start := x.Off(x.TF.LineStart(x.TF.Line(p)))
-	ws := x.Src[start:x.Off(p)]
-	for i, c := range ws {
-		if c != ' ' && c != '\t' {
-			return string(ws[:i])
-		}
-	}
-	return string(ws)
-}
 
 // widenParens returns the outermost parenthesized expression whose only
 // content is e, or e itself.

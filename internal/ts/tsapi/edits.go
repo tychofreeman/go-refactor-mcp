@@ -7,6 +7,7 @@ import (
 
 	"github.com/buke/typescript-go-internal/v7/pkg/ast"
 	"github.com/buke/typescript-go-internal/v7/pkg/checker"
+	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 )
 
 // ReplaceDeclaration returns the edit that puts content in place of the
@@ -519,7 +520,7 @@ func indented(text, indent string) string {
 		if strings.TrimSpace(ln) == "" {
 			continue
 		}
-		lead := ln[:len(ln)-len(strings.TrimLeft(ln, " \t"))]
+		lead := textutil.Indent(ln)
 		if first {
 			common, first = lead, false
 		}

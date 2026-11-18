@@ -4769,3 +4769,21 @@ result, so one copy of `fitted` became a call by replace_statements.
 
 Docs through replace_text; nothing by hand. The A/B ran from #676's
 branch, before it was merged.
+
+## textutil.LineStart and IndentAt (2026-11-17, #642's second row)
+
+Nothing by hand. move of addelement's lineStart into textutil as
+LineStart, merge_duplicate_function of three identical copies onto it,
+and fold of textutil.Indent, which found nine copies of its expression,
+six in tsapi. The copies that differed in form (movedecl's
+LastIndexByte, convertloop's and the indentOf methods' token-file
+offsets, tsapi's lineStartIn on a string, once LineStart was generic)
+had their bodies replaced by a call (replace_statements: an equivalence
+the tests checked, not a derivation) and were inlined with all_calls.
+Refused, rightly or conservatively, and left as one-line wrappers:
+inlining inlinefunc's indentOf and invertif's would evaluate an argument
+that may panic after `x.Src`; switchmethod's indent is promoted through
+an embedded field ("inlining promoted methods is not supported yet").
+Two `p :=` locals in extractfunc stay for the same order reason. The
+TypeScript adddecl's lineStart takes a line number, not an offset, so it
+is not a copy.
