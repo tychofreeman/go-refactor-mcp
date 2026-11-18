@@ -180,6 +180,10 @@ What it produces:
 - when `:=` would infer a different type than the context gave the
   expression, it declares the type: `var m uint8 = 1 << n` →
   `var bit uint8 = 1 << n`, not `bit := 1 << n` (which would be an `int`);
+  refused when a name that type is spelled with is hidden there by a
+  local (a type of the package, or an import's name: `time := 3` before
+  `time.Duration`), as `split` of a variable and `inline` of one that
+  needs a conversion are (`analysis.TypeStringAt`, #642);
 - an extraction from an `if`/`switch` init, `if` condition or `range`
   expression is placed before that statement.
 

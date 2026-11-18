@@ -403,6 +403,9 @@ func declare(st *site.Site, as *ast.AssignStmt, lhs *ast.Ident, v *types.Var, na
 	if err != nil {
 		return nil, err
 	}
+	if _, _, hidden := analysis.TypeStringAt(v.Type(), st.File, st.Pkg.Types, analysis.ImportMap(st.Pkg.Types), st.Pkg.Types.Scope().Innermost(as.Pos()), as.Pos()); hidden != nil {
+		return nil, refactor.Refusef("the new variable needs the type %s, but %s here is the %s declared at %s", typ, hidden.Name(), analysis.KindOf(hidden), st.WS.Position(hidden.Pos()))
+	}
 	if len(as.Lhs) == 1 {
 		rename.NewText = "var " + name + " " + typ
 		return []edit.TextEdit{rename}, nil

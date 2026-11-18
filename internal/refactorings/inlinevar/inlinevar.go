@@ -545,8 +545,12 @@ func (x *inliner) replacement(use *ast.Ident) (ast.Node, string, bool, error) {
 		if strings.HasPrefix(t, "*") || strings.HasPrefix(t, "<-") || strings.HasPrefix(t, "func") || strings.HasPrefix(t, "chan") {
 			t = "(" + t + ")"
 		}
-		if _, missing := analysis.TypeString(x.obj.Type(), x.File, x.Pkg.Types, analysis.ImportMap(x.Pkg.Types)); missing != "" {
+		_, missing, hidden := analysis.TypeStringAt(x.obj.Type(), x.File, x.Pkg.Types, analysis.ImportMap(x.Pkg.Types), x.Pkg.Types.Scope().Innermost(use.Pos()), use.Pos())
+		switch {
+		case missing != "":
 			return nil, "", false, refactor.Refusef("the inlined expression needs a conversion to %s, but this file does not import %q", x.typeName(), missing)
+		case hidden != nil:
+			return nil, "", false, refactor.Refusef("the inlined expression needs a conversion to %s, but %s here is the %s declared at %s", x.typeName(), hidden.Name(), analysis.KindOf(hidden), x.WS.Position(hidden.Pos()))
 		}
 		return use, t + "(" + strings.TrimSpace(x.Text(ast.Unparen(x.init))) + ")", true, nil
 	}

@@ -4769,3 +4769,24 @@ result, so one copy of `fitted` became a call by replace_statements.
 
 Docs through replace_text; nothing by hand. The A/B ran from #676's
 branch, before it was merged.
+
+## Hidden type names, through analysis.TypeStringAt (2026-11-17, #642's type-spelling row)
+
+TDD rolled back twice when red showed a missing step (move of
+inlinefunc's walkNamed into analysis; add_parameter of extractvar's
+typeString's position): undo of the golden, the step while green, the
+golden again. add_parameter refused `expr.Pos()` as the value (a call
+that could panic, unused by the body), so it took token.NoPos and
+replace_expression changed the one call. add_result refused
+analysis.TypeString's named results (roadmap 63), so TypeStringAt is a
+new function beside it, with importNames extracted from TypeString for
+both. By hand, in effect: analysis.Hidden (16 lines) restates
+inlinefunc's walk over a type's names, since extract_function of that
+block would have taken its refusal with it; and replace_statements
+retyped extractvar's typeString (8 lines) and merged inlinevar's two
+checks into one call. The three new goldens found real gaps: split and
+inline of a variable wrote a hidden type and reported "a bug in the
+precondition checks". Left as they are, with their reason: the
+import-adding qualifiers of extractfunc and inlinefunc (they add
+imports, which TypeString refuses to), and rename's and workspace's
+typeString (for messages, not for a file).
