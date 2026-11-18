@@ -4909,3 +4909,17 @@ which was a range over info.Uses, a map, so which use its refusal named
 varied from run to run. The other checks named in #642 are not copies:
 rename's conflicts, extractfunc's package-level and call-site checks,
 and the identifier-syntax refusals each word a different case.
+
+## move imports the package it moves from (2026-11-18, #643's tsapi split)
+
+Splitting tsapi's convert_loop into a package under tsapi needed moved
+code to call tsapi's exported core, and move refused any use of the old
+package ("cannot import p back"), though nothing in tsapi would import
+the new package. The change went through the tools: add_field (srcQual),
+replace_statements of checkNoSourceRefs, insert_statements in code,
+newFile, appendTo and checkNoCycle. One insert_statements "before" the
+sort put the new block between the sort and its comment; a
+replace_statements of the lines put the comment back. Before it, the
+export step on the split's branch found that rename cannot rename a type
+another struct embeds ("not supported yet"); renaming the embedded field
+to a named one first (looped.lined to l) made the rename go through.

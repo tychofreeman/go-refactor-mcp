@@ -248,8 +248,9 @@ func packageIn(pkgs []*packages.Package, dir string) *packages.Package {
 	return found
 }
 
-// checkNoSourceRefs refuses code that uses other top-level declarations of
-// its package, which the destination would have to import.
+// checkNoSourceRefs refuses code that uses unexported top-level
+// declarations of its package, which the destination could not reach. The
+// destination imports the package for the exported ones (srcQual).
 func (m *mover) checkNoSourceRefs() error {
 	info := m.Pkg.TypesInfo
 	scope := m.Pkg.Types.Scope()
@@ -260,9 +261,14 @@ func (m *mover) checkNoSourceRefs() error {
 			if !ok || err != nil {
 				return err == nil
 			}
-			if o := info.Uses[id]; o != nil && o.Parent() == scope && !m.is(o) {
-				err = refactor.Refusef("%s refers to %s, declared in package %s at %s; move that first (or with it, in also, or with with_dependencies), since package %s cannot import %s back",
-					d.obj.Name(), o.Name(), m.Pkg.Name, m.WS.Position(o.Pos()), m.dest.Name, m.Pkg.Name)
+			o := info.Uses[id]
+			switch {
+			case o == nil || o.Parent() != scope || m.is(o):
+			case o.Exported():
+				m.srcQual = m.Pkg.Types.Name()
+			default:
+				err = refactor.Refusef("%s refers to %s, declared in package %s at %s; move that first (or with it, in also, or with with_dependencies), or export it (rename) for package %s to import",
+					d.obj.Name(), o.Name(), m.Pkg.Name, m.WS.Position(o.Pos()), m.dest.Name)
 			}
 			return true
 		})
@@ -406,6 +412,11 @@ func (m *mover) checkNoCycle(users map[string]bool) error {
 		if p.PkgPath == m.dest.PkgPath {
 			walk(p, m.dest.PkgPath)
 		}
+	}
+	if m.srcQual != "" {
+		// The moved code imports its old package, and what that imports.
+		deps[m.Pkg.PkgPath] = m.obj.Name()
+		walk(m.Pkg, m.obj.Name())
 	}
 	for _, imp := range m.allImports() {
 		path := gocode.PkgNameOf(m.Pkg.TypesInfo, imp).Imported().Path()

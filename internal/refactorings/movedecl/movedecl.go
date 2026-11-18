@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 
 	"golang.org/x/tools/go/packages"
@@ -81,6 +82,9 @@ type mover struct {
 	// emptied holds the source files the move leaves with only a package
 	// clause, which it deletes.
 	emptied []string
+	// srcQual is the name the destination imports the source package as,
+	// when the moved code uses its exported declarations; else "".
+	srcQual string
 
 	// withDeps moves the declarations the moved code uses along;
 	// needed records, for each one added that way, the moved code that
@@ -739,6 +743,9 @@ func (m *mover) code(d *moved, qual func(*types.PkgName) string) (string, error)
 			if r := m.movedOf(o); r != nil && r.newName != r.obj.Name() && n.Name == r.obj.Name() {
 				edits = append(edits, edit.TextEdit{Start: rel(n.Pos()), End: rel(n.End()), NewText: r.newName})
 			}
+			if o := info.Uses[n]; m.srcQual != "" && o != nil && o.Parent() == m.Pkg.Types.Scope() && !m.is(o) {
+				edits = append(edits, edit.TextEdit{Start: rel(n.Pos()), End: rel(n.Pos()), NewText: m.srcQual + "."})
+			}
 		}
 		return true
 	})
@@ -863,6 +870,14 @@ func (m *mover) newFile(qual func(*types.PkgName) string) (string, error) {
 			specs = append(specs, spec{path, string(s.Src[m.Off(imp.Pos()):m.Off(imp.End())])})
 		}
 	}
+	if m.srcQual != "" {
+		for _, imp := range m.allImports() {
+			if pn := gocode.PkgNameOf(m.Pkg.TypesInfo, imp); qual(pn) != "" && pn.Name() == m.srcQual {
+				return "", refactor.Refusef("the moved code imports %q as %s, the name of the package it moves from, which the new file imports too; rename that import first", pn.Imported().Path(), m.srcQual)
+			}
+		}
+		specs = append(specs, spec{m.Pkg.PkgPath, strconv.Quote(m.Pkg.PkgPath)})
+	}
 	// As goimports writes them: the standard library first, then the others,
 	// each sorted.
 	sort.SliceStable(specs, func(i, j int) bool {
@@ -923,6 +938,13 @@ func (m *mover) appendTo(to, destPath string) error {
 			return refactor.Refusef("%s cannot import %s: %v", m.WS.Rel(to), pn.Imported().Path(), err)
 		}
 		names[pn] = q
+	}
+	if m.srcQual != "" {
+		q, err := fe.adder.Name(m.Pkg.Types)
+		if err != nil {
+			return refactor.Refusef("%s cannot import %s: %v", m.WS.Rel(to), m.Pkg.PkgPath, err)
+		}
+		m.srcQual = q
 	}
 	code, err := m.allCode(func(pn *types.PkgName) string { return names[pn] })
 	if err != nil {
