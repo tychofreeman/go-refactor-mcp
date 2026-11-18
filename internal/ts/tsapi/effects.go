@@ -338,8 +338,10 @@ func (a *effects) runsDuring(lit *ast.Node) bool {
 	if !ast.IsCallExpression(p) || p.Expression() == lit {
 		return false
 	}
+	// A function type among the type arguments is no argument.
+	i := slices.Index(p.Arguments(), lit)
 	g := a.ownFunction(p.Expression())
-	return g != nil && a.runsOnlyDuring(g, slices.Index(p.Arguments(), lit))
+	return i >= 0 && g != nil && a.runsOnlyDuring(g, i)
 }
 
 // lined returns the file of n.

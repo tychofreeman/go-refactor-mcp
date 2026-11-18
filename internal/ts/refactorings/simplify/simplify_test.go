@@ -1993,3 +1993,58 @@ func TestInlineVariableHoldingANewArray(t *testing.T) {
 		}
 	}
 }
+
+// A function type among a call's type arguments is not a function the
+// call runs (found by the stress run on Hono, where it panicked).
+func TestInlineVariableBesideAFunctionTypeArgument(t *testing.T) {
+	ws, _ := load(t, map[string]string{"src/g.ts": `function run<T>(f: T): T {
+  return f;
+}
+export function g(): number {
+  let n = 1;
+  const k = n + 1;
+  run<() => void>(() => {});
+  return k;
+}
+`})
+	res := run(t, ws, NewInline(), `{"file": "src/g.ts", "line": 6, "name": "k"}`)
+	if !res.Applied {
+		t.Errorf("want k inlined, got %s", res)
+	}
+}
+
+// A variable assigned through a destructuring assignment is assigned (the
+// stress run on Hono found the type check rolling back its inline).
+func TestInlineVariableAssignedByArrayPattern(t *testing.T) {
+	ws, _ := load(t, map[string]string{"src/g.ts": `declare function next(s: string, i: number): [number, string];
+export function scan(s: string): number {
+  let i = 0;
+  let a = "";
+  while (i < s.length) {
+    ;[i, a] = next(s, i);
+  }
+  return i + a.length;
+}
+`})
+	res := run(t, ws, NewInline(), `{"file": "src/g.ts", "line": 3, "name": "i"}`)
+	if res.Applied || !strings.Contains(res.Refused, "assigned") {
+		t.Errorf("i: want a refusal saying it is assigned, got %s", res)
+	}
+}
+
+// An object pattern assigns its shorthand names and its values' names.
+func TestInlineVariableAssignedByObjectPattern(t *testing.T) {
+	for _, assign := range []string{"({ i } = next(i));", "({ n: i } = next(i));", "({ ...i } = next(i));"} {
+		ws, _ := load(t, map[string]string{"src/g.ts": `declare function next(i: any): any;
+export function scan(): any {
+  let i: any = 0;
+  ` + assign + `
+  return i;
+}
+`})
+		res := run(t, ws, NewInline(), `{"file": "src/g.ts", "line": 3, "name": "i"}`)
+		if res.Applied || !strings.Contains(res.Refused, "is assigned") {
+			t.Errorf("%s: want a refusal saying i is assigned, got %s", assign, res)
+		}
+	}
+}

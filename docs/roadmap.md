@@ -3368,7 +3368,15 @@ candidates and the evidence for each, gathered from the friction log.
     was wanted); isObject's predicate (`item is ObjectType`) names a
     narrower type than its body's checks prove, so the inlined condition
     narrows less. Either keep the type (`satisfies` or an annotated
-    const) or refuse with the reason before the change is made.
+    const) or refuse with the reason before the change is made. The
+    full run over Hono's 1,257 variables (245 applied, no test failing)
+    rolled back six more the same way: an annotation's type lost
+    (`this[]` in trie-router's node.ts, a tuple in secure-headers, `{}`
+    for html.ts's callbacks, `void` props in jsx/dom/css.ts), an import
+    left unused by a dropped annotation (bun/websocket.ts), and one in
+    trie-router (`targetCurNodes`, inlined into a `#children` loop) whose
+    new errors name `componentCount` before its declaration, not
+    reproduced in a small test yet.
 
 Parked: the Ollama loop (`refactor-agent`). It works and stays, but Claude
 through MCP is the priority.

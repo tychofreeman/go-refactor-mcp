@@ -4836,7 +4836,13 @@ ip.split(':')` in expandIPv6 duplicated the call, so the loop's splices
 went to new arrays and it never ended. Pure string and array methods
 were not marked as making a new value. The harness now kills a test
 command after STRESS_TEST_TIMEOUT seconds (300) and reports a hang with
-its candidate. Each fix came after a red test; one test I first wrote
+its candidate. The full run over all 1,257 variables then found a
+panic (a function type among a call's type arguments was taken for an
+argument) and a rollback that is a missed check: `[i, a] = next()`
+assigns `i`, which inline did not see; `({ i } = ...)` needed the
+checker's shorthand symbol, and change_type refused narrowing `assigns`'
+checker interface to `*checker.Checker` (rightly: an edit), so a helper
+asks for the method instead. Each fix came after a red test; one test I first wrote
 expected a refusal of every type guard, and inlining a guard whose body
 narrows is right, so it became a test that one applies. By mistake I
 added a test on #682's branch; a stash moved it, and conflicted, so the
