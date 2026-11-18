@@ -1,10 +1,9 @@
 package simplify
 
 import (
-	"os"
-	"os/exec"
-	"path/filepath"
 	"testing"
+
+	"github.com/tychofreeman/go-refactor-mcp/internal/ts/tstest"
 )
 
 const garden = `export function water(p: unknown): void {}
@@ -204,12 +203,7 @@ func TestConvertLoop(t *testing.T) {
 // TestConvertLoopProbes runs each program with node before and after a
 // conversion: it must print the same.
 func TestConvertLoopProbes(t *testing.T) {
-	if testing.Short() {
-		t.Skip("runs node")
-	}
-	if _, err := exec.LookPath("node"); err != nil {
-		t.Skip("no node")
-	}
+	tstest.NeedNode(t)
 	r := NewConvertLoop()
 	for _, tc := range []struct{ name, args, src string }{
 		{"for to while with continue", `{"line": 3, "to": "while"}`, `let out = "";
@@ -248,31 +242,7 @@ console.log(out);
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ws, dir := load(t, map[string]string{"src/g.ts": tc.src})
-			before := runNode(t, dir)
-			res := run(t, ws, r, `{"file": "src/g.ts", `+tc.args[1:])
-			if !res.Applied {
-				t.Fatalf("%s", res)
-			}
-			if after := runNode(t, dir); after != before {
-				t.Errorf("printed\n%s\nbefore, and\n%s\nafter:\n%s", before, after, res)
-			}
+			tstest.Probe(t, ws, dir, r, `{"file": "src/g.ts", `+tc.args[1:])
 		})
 	}
-}
-
-func runNode(t *testing.T, dir string) string {
-	t.Helper()
-	src, err := os.ReadFile(filepath.Join(dir, "src/g.ts"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	f := filepath.Join(t.TempDir(), "g.mts")
-	if err := os.WriteFile(f, src, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	out, err := exec.Command("node", "--experimental-strip-types", "--no-warnings", f).CombinedOutput()
-	if err != nil {
-		t.Fatalf("node: %v\n%s", err, out)
-	}
-	return string(out)
 }

@@ -338,8 +338,10 @@ func (a *effects) runsDuring(lit *ast.Node) bool {
 	if !ast.IsCallExpression(p) || p.Expression() == lit {
 		return false
 	}
+	// A function type among the type arguments is no argument.
+	i := slices.Index(p.Arguments(), lit)
 	g := a.ownFunction(p.Expression())
-	return g != nil && a.runsOnlyDuring(g, slices.Index(p.Arguments(), lit))
+	return i >= 0 && g != nil && a.runsOnlyDuring(g, i)
 }
 
 // lined returns the file of n.
@@ -759,6 +761,11 @@ func (a *effects) call(n *ast.Node) Effects {
 	if a.maybeNullish(recv) && n.Flags&ast.NodeFlagsOptionalChain == 0 {
 		out.add(a.nullish(n, "a method of what may be null or undefined"))
 	}
+	// An array or object result is a new one each call (split, slice, map),
+	// except an element of the receiver (at, find).
+	if method != "at" && method != "find" && !a.primitive(n) && out.At.Fresh == "" {
+		out.Fresh, out.At.Fresh = true, a.part(n, "the call")
+	}
 	return out
 }
 
@@ -1077,7 +1084,9 @@ func (w *walk) stmt(n *ast.Node) Effects {
 		out.add(a.Of(s.Expression))
 		w.switches++
 		for _, c := range s.CaseBlock.AsCaseBlock().Clauses.Nodes {
-			out.add(a.Of(c.Expression()))
+			if ast.IsCaseClause(c) { // a default clause has no expression
+				out.add(a.Of(c.Expression()))
+			}
 			out.add(w.stmts(c.Statements()))
 		}
 		w.switches--

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -95,5 +96,49 @@ func Unchanged(t testing.TB, dir string, files map[string]string, changed ...str
 		if !seen[rel] && !may[rel] {
 			t.Errorf("%s was removed", rel)
 		}
+	}
+}
+
+// RunNode runs src/g.ts of the solution in dir with node, stripping its
+// types, and returns what it printed.
+func RunNode(t *testing.T, dir string) string {
+	t.Helper()
+	src, err := os.ReadFile(filepath.Join(dir, "src/g.ts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := filepath.Join(t.TempDir(), "g.mts")
+	if err := os.WriteFile(f, src, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, err := exec.Command("node", "--experimental-strip-types", "--no-warnings", f).CombinedOutput()
+	if err != nil {
+		t.Fatalf("node: %v\n%s", err, out)
+	}
+	return string(out)
+}
+
+// NeedNode skips t in -short mode, or when there is no node to run.
+func NeedNode(t *testing.T) {
+	t.Helper()
+	if testing.Short() {
+		t.Skip("runs node")
+	}
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("no node")
+	}
+}
+
+// Probe runs src/g.ts of the solution in dir with node, applies r with
+// args to ws, and runs it again: it must print the same.
+func Probe(t *testing.T, ws *workspace.Workspace, dir string, r refactor.RefactoringOf[*workspace.Workspace], args string) {
+	t.Helper()
+	before := RunNode(t, dir)
+	res := Run(t, ws, r, args)
+	if !res.Applied {
+		t.Fatalf("%s", res)
+	}
+	if after := RunNode(t, dir); after != before {
+		t.Errorf("printed\n%s\nbefore, and\n%s\nafter:\n%s", before, after, res)
 	}
 }

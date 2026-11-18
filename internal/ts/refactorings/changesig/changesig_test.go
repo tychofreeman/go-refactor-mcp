@@ -1173,3 +1173,23 @@ func TestMoveMethodIndentStepKeepsTemplate(t *testing.T) {
 	}
 	mustContain(t, dir, "src/soil.ts", "    label(): string {\n        return `a\n    b`;\n    }\n")
 }
+
+// TestMoveMethodProbe runs a program with node before and after a method
+// moves down to the subclass every call is on: it must print the same.
+func TestMoveMethodProbe(t *testing.T) {
+	tstest.NeedNode(t)
+	ws, dir := load(t, map[string]string{"src/g.ts": `class Soil {
+  ph = 5;
+  acid(): boolean {
+    return this.ph < 6;
+  }
+}
+class Bed extends Soil {
+  name = "bed";
+}
+const b = new Bed();
+b.ph = 7;
+console.log(b.acid(), new Bed().acid());
+`})
+	tstest.Probe(t, ws, dir, NewMoveMethod(), `{"file": "src/g.ts", "name": "Soil.acid", "to": "Bed"}`)
+}

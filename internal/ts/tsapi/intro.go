@@ -240,8 +240,12 @@ func operand(l *Lined, e *ast.Node) string {
 	return "(" + l.Source(e) + ")"
 }
 
-// isConst reports whether the declaration d is of a const.
+// isConst reports whether the declaration d is of a const, or of what
+// cannot be assigned: not a let, var or parameter.
 func isConst(d *ast.Node) bool {
+	if d != nil && ast.IsParameterDeclaration(d) {
+		return false // the body may assign it
+	}
 	if d == nil || !ast.IsVariableDeclaration(d) {
 		return true // a function, class, enum or import
 	}
@@ -281,7 +285,7 @@ func (l *Lined) Assigns(body *ast.Node, s *ast.Symbol, c interface {
 		case ast.IsPostfixUnaryExpression(n):
 			target = n.AsPostfixUnaryExpression().Operand
 		}
-		if target != nil && ast.IsIdentifier(target) && c.GetSymbolAtLocation(target) == s {
+		if target != nil && slices.ContainsFunc(assigned(target), func(id *ast.Node) bool { return valueSymbol(c, id) == s }) {
 			where = l.Where(n)
 		}
 		return n.ForEachChild(visit)
@@ -331,4 +335,51 @@ func (l *Lined) repeated(fn, e *ast.Node) string {
 		}
 	}
 	return ""
+}
+
+// assigned returns the names an assignment to target writes: target
+// itself, or each name of a destructuring pattern ([i, a] = ..., {a, b: c}
+// = ..., with defaults and a rest), not the names its keys or indexes read.
+func assigned(target *ast.Node) []*ast.Node {
+	switch {
+	case ast.IsIdentifier(target):
+		return []*ast.Node{target}
+	case ast.IsParenthesizedExpression(target), ast.IsSpreadElement(target), ast.IsSpreadAssignment(target):
+		return assigned(target.Expression())
+	case ast.IsBinaryExpression(target) && target.AsBinaryExpression().OperatorToken.Kind == ast.KindEqualsToken:
+		return assigned(target.AsBinaryExpression().Left)
+	case ast.IsArrayLiteralExpression(target):
+		var out []*ast.Node
+		for _, el := range target.AsArrayLiteralExpression().Elements.Nodes {
+			out = append(out, assigned(el)...)
+		}
+		return out
+	case ast.IsObjectLiteralExpression(target):
+		var out []*ast.Node
+		for _, p := range target.AsObjectLiteralExpression().Properties.Nodes {
+			switch {
+			case ast.IsShorthandPropertyAssignment(p):
+				out = append(out, p.Name())
+			case ast.IsPropertyAssignment(p):
+				out = append(out, assigned(p.Initializer())...)
+			case ast.IsSpreadAssignment(p):
+				out = append(out, assigned(p.Expression())...)
+			}
+		}
+		return out
+	}
+	return nil
+}
+
+// valueSymbol is the symbol of the name id, and for a shorthand property
+// ({ i } = ...) the variable it assigns, when c can tell (a checker).
+func valueSymbol(c interface {
+	GetSymbolAtLocation(*ast.Node) *ast.Symbol
+}, id *ast.Node) *ast.Symbol {
+	if sc, ok := c.(interface {
+		GetShorthandAssignmentValueSymbol(*ast.Node) *ast.Symbol
+	}); ok && id.Parent != nil && ast.IsShorthandPropertyAssignment(id.Parent) && id.Parent.Name() == id {
+		return sc.GetShorthandAssignmentValueSymbol(id.Parent)
+	}
+	return c.GetSymbolAtLocation(id)
 }

@@ -163,7 +163,15 @@ working patterns, with their steps, are in `docs/patterns.md`.
   jsonschema-go, uritemplate and x/tools from the module cache, copied to
   a scratch directory, are enough; x/tools'
   `go/analysis/passes/modernize` fails without a Go toolchain binary,
-  whatever the change.
+  whatever the change. TypeScript's (2026-11-18, #643): simplify's
+  TestStress on a clone of Hono (ed1d5f7; `npx pnpm@12.6.0 install
+  --ignore-scripts` under node 24, corepack fails on pnpm 12), with
+  `STRESS_TEST_CMD='npx vitest run --project main
+  --coverage.enabled=false --passWithNoTests {dir}'`; its runs found
+  a panic, a behavior change and a hang (an inlined `split` made a loop
+  endless; `STRESS_TEST_TIMEOUT` bounds each test command, 300 s). The TypeScript probes (`tstest.Probe`)
+  need node 22.6 or later; the workstation's default node is 20.12, so
+  put nvm's v22 first on PATH to run them.
 - **A GOROOT whose `src` is a symlink** made every golden that imports the
   standard library fail on the user's workstation until 2026-10-31 (item
   47.4): where an import of `strings` is refused, suspect that first.
