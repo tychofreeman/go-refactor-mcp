@@ -94,7 +94,7 @@ func (p *Project) PrepareSwitchForTypes(ctx context.Context, path string, line i
 		case b.this:
 			return nil, fmt.Sprintf("the case at %s uses this, which would then be the class's", l.Where(cl))
 		case len(b.returns) > 0:
-			if !terminates(own[len(own)-1]) {
+			if !Terminates(own[len(own)-1]) {
 				return nil, fmt.Sprintf("the case at %s returns on some paths only", l.Where(cl))
 			}
 			returning++

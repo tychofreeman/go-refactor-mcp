@@ -1,4 +1,4 @@
-package tsapi
+package convertloop
 
 import (
 	"context"
@@ -9,12 +9,13 @@ import (
 
 	"github.com/buke/typescript-go-internal/v7/pkg/ast"
 	"github.com/buke/typescript-go-internal/v7/pkg/checker"
+	"github.com/tychofreeman/go-refactor-mcp/internal/ts/tsapi"
 )
 
 // looped is a loop being converted: the file, the loop, the loop with its
 // labels (whole) and the checker.
 type looped struct {
-	l     *Lined
+	l     *tsapi.Lined
 	c     *checker.Checker
 	loop  *ast.Node
 	whole *ast.Node
@@ -24,7 +25,7 @@ type looped struct {
 // ConvertLoop returns the edits that rewrite the loop on line as the
 // statement form to (for_each, for, while or do_while), with what it
 // became and notes; or why it cannot.
-func (p *Project) ConvertLoop(ctx context.Context, path string, line, column int, to string) ([]Edit, string, string) {
+func ConvertLoop(ctx context.Context, p *tsapi.Project, path string, line, column int, to string) ([]tsapi.Edit, string, string) {
 	l, why := p.Lined(path)
 	if why != "" {
 		return nil, "", why
@@ -33,7 +34,7 @@ func (p *Project) ConvertLoop(ctx context.Context, path string, line, column int
 		return nil, "", fmt.Sprintf("line %d out of range: the file has %d lines", line, l.Count())
 	}
 	var found []*ast.Node
-	Inspect(l.File.AsNode(), func(n *ast.Node) bool {
+	tsapi.Inspect(l.File.AsNode(), func(n *ast.Node) bool {
 		if ast.IsIterationStatement(n, false) && l.Line(l.Pos(n)) == line && (column == 0 || l.Pos(n)-l.Start(line)+1 == column) {
 			found = append(found, n)
 		}
@@ -53,7 +54,7 @@ func (p *Project) ConvertLoop(ctx context.Context, path string, line, column int
 		x.whole = x.whole.Parent
 	}
 	n := x.loop
-	var edits []Edit
+	var edits []tsapi.Edit
 	var said string
 	switch {
 	case ast.IsForStatement(n) && to == "for_each":
@@ -112,7 +113,7 @@ func takes(n *ast.Node) string {
 
 // indexToEach turns for (let i = 0; i < xs.length; i++) over an array
 // into for (const x of xs): each xs[i] becomes the element.
-func (x *looped) indexToEach() ([]Edit, string, string) {
+func (x *looped) indexToEach() ([]tsapi.Edit, string, string) {
 	f := x.loop.AsForStatement()
 	shape := "the loop is not an index loop over an array, for (let i = 0; i < xs.length; i++)"
 	if f.Initializer == nil || !ast.IsVariableDeclarationList(f.Initializer) || f.Initializer.Flags&ast.NodeFlagsLet == 0 {
@@ -148,7 +149,7 @@ func (x *looped) indexToEach() ([]Edit, string, string) {
 	arr := x.c.GetSymbolAtLocation(over)
 	var reads []*ast.Node
 	why := ""
-	Identifiers(body, func(id *ast.Node) {
+	tsapi.Identifiers(body, func(id *ast.Node) {
 		if why != "" || x.c.GetSymbolAtLocation(id) != i {
 			return
 		}
@@ -162,7 +163,7 @@ func (x *looped) indexToEach() ([]Edit, string, string) {
 	if why != "" {
 		return nil, "", why
 	}
-	var edits []Edit
+	var edits []tsapi.Edit
 	kw, name := "const", ""
 	if ast.IsBlock(body) && len(body.Statements()) > 0 && ast.IsVariableStatement(body.Statements()[0]) {
 		first := body.Statements()[0]
@@ -193,7 +194,7 @@ func (x *looped) indexToEach() ([]Edit, string, string) {
 
 // eachToIndex turns for (const x of xs) over an array into an index loop,
 // the element assigned first in the body.
-func (x *looped) eachToIndex() ([]Edit, string, string) {
+func (x *looped) eachToIndex() ([]tsapi.Edit, string, string) {
 	f := x.loop.AsForInOrOfStatement()
 	if f.AwaitModifier != nil {
 		return nil, "", "the loop is a for await...of, which has no index"
@@ -222,13 +223,13 @@ func (x *looped) eachToIndex() ([]Edit, string, string) {
 
 // forToWhile turns for (init; cond; inc) into init followed by while
 // (cond), inc last in the body and before each continue of the loop.
-func (x *looped) forToWhile() ([]Edit, string, string) {
+func (x *looped) forToWhile() ([]tsapi.Edit, string, string) {
 	f := x.loop.AsForStatement()
 	body := f.Statement
 	var declared []*ast.Node
 	if f.Initializer != nil && ast.IsVariableDeclarationList(f.Initializer) {
 		for _, d := range f.Initializer.AsVariableDeclarationList().Declarations.Nodes {
-			Identifiers(d.Name(), func(id *ast.Node) { declared = append(declared, id) })
+			tsapi.Identifiers(d.Name(), func(id *ast.Node) { declared = append(declared, id) })
 		}
 		if f.Initializer.Flags&ast.NodeFlagsBlockScoped != 0 {
 			if why := x.notCaptured(declared, "each pass of a for has its own copy of a let it declares, and a while shares one"); why != "" {
@@ -242,7 +243,7 @@ func (x *looped) forToWhile() ([]Edit, string, string) {
 	if f.Incrementor != nil {
 		inc = x.l.Source(f.Incrementor) + x.l.Semi()
 	}
-	var inner []Edit
+	var inner []tsapi.Edit
 	if inc != "" {
 		for _, c := range x.continues() {
 			inner = append(inner, x.before(c, inc))
@@ -254,7 +255,7 @@ func (x *looped) forToWhile() ([]Edit, string, string) {
 	}
 	inner = append(inner, x.edit(x.l.Pos(x.loop), x.l.Pos(body), "while ("+cond+") "))
 	var text string
-	if inc != "" && !terminates(body) {
+	if inc != "" && !tsapi.Terminates(body) {
 		text = x.applied(x.l.Pos(x.whole), x.l.Pos(body), inner) + x.withLast(body, inc, inner)
 	} else {
 		text = x.applied(x.l.Pos(x.whole), x.whole.End(), inner)
@@ -266,7 +267,7 @@ func (x *looped) forToWhile() ([]Edit, string, string) {
 		}
 		text = init + "\n" + indent + text
 	}
-	wrap := !InList(x.whole)
+	wrap := !tsapi.InList(x.whole)
 	for _, d := range declared {
 		wrap = wrap || x.clashes(d.Text())
 	}
@@ -281,19 +282,19 @@ func (x *looped) forToWhile() ([]Edit, string, string) {
 		text = "{\n" + indent + unit + strings.Join(lines, "\n") + "\n" + indent + "}"
 		said += ", in a block with its init"
 	}
-	return []Edit{x.edit(x.l.Pos(x.whole), x.whole.End(), text)}, said, ""
+	return []tsapi.Edit{x.edit(x.l.Pos(x.whole), x.whole.End(), text)}, said, ""
 }
 
 // whileToFor turns a while into a for: the let declared just before it,
 // which the condition reads and nothing after the loop does, becomes the
 // init, and the body's last assignment or update the incrementor, unless
 // a continue of the loop would skip it.
-func (x *looped) whileToFor() ([]Edit, string, string) {
+func (x *looped) whileToFor() ([]tsapi.Edit, string, string) {
 	w := x.loop.AsWhileStatement()
 	body := w.Statement
-	var edits []Edit
+	var edits []tsapi.Edit
 	init := ""
-	if InList(x.whole) {
+	if tsapi.InList(x.whole) {
 		list := x.whole.Parent.Statements()
 		at := slices.Index(list, x.whole)
 		if at > 0 && ast.IsVariableStatement(list[at-1]) {
@@ -340,7 +341,7 @@ func (x *looped) whileToFor() ([]Edit, string, string) {
 
 // doToWhile turns do { body } while (cond) into while (true) { body if
 // (!cond) break }.
-func (x *looped) doToWhile() ([]Edit, string, string) {
+func (x *looped) doToWhile() ([]tsapi.Edit, string, string) {
 	d := x.loop.AsDoStatement()
 	if cs := x.continues(); len(cs) > 0 {
 		return nil, "", fmt.Sprintf("the do...while has a continue (%s), which goes to its condition; in a while (true) it would skip it. Rewrite the body without it first (invert_if, remove_else)", x.l.Where(cs[0]))
@@ -349,18 +350,18 @@ func (x *looped) doToWhile() ([]Edit, string, string) {
 	exit := "if (" + neg + ") break" + x.l.Semi()
 	body := d.Statement
 	text := "while (true) "
-	if terminates(body) {
+	if tsapi.Terminates(body) {
 		text += x.l.Source(body)
 	} else {
 		text += x.withLast(body, exit, nil)
 	}
-	return []Edit{x.edit(x.l.Pos(x.loop), x.loop.End(), text)}, "a while (true) that ends in " + exit, ""
+	return []tsapi.Edit{x.edit(x.l.Pos(x.loop), x.loop.End(), text)}, "a while (true) that ends in " + exit, ""
 }
 
 // whileToDo turns while (cond) body into if (cond) { do body while
 // (cond) }: the condition is read twice on the first pass, so it may only
 // read locals.
-func (x *looped) whileToDo() ([]Edit, string, string) {
+func (x *looped) whileToDo() ([]tsapi.Edit, string, string) {
 	w := x.loop.AsWhileStatement()
 	if n := x.notLocal(w.Expression); n != nil {
 		return nil, "", fmt.Sprintf("the condition would be read twice on the first pass, by an if and by the do...while, and %s does more than read a local. Put the condition in a local first", x.l.Source(n))
@@ -377,14 +378,14 @@ func (x *looped) whileToDo() ([]Edit, string, string) {
 		}
 	}
 	text := "if (" + cond + ") {\n" + indent + unit + strings.Join(lines, "\n") + "\n" + indent + "}"
-	return []Edit{x.edit(x.l.Pos(x.whole), x.whole.End(), text)}, "a do...while under if (" + cond + ")", ""
+	return []tsapi.Edit{x.edit(x.l.Pos(x.whole), x.whole.End(), text)}, "a do...while under if (" + cond + ")", ""
 }
 
 // notLocal returns the first part of e that is not a read of a local, a
 // literal or an operator on them, or nil.
 func (x *looped) notLocal(e *ast.Node) *ast.Node {
 	var bad *ast.Node
-	Inspect(e, func(n *ast.Node) bool {
+	tsapi.Inspect(e, func(n *ast.Node) bool {
 		if bad != nil {
 			return false
 		}
@@ -420,9 +421,9 @@ func updates(e *ast.Node) bool {
 	case ast.IsBinaryExpression(e):
 		return ast.IsAssignmentOperator(e.AsBinaryExpression().OperatorToken.Kind)
 	case ast.IsPostfixUnaryExpression(e):
-		return IsUpdate(e.AsPostfixUnaryExpression().Operator)
+		return tsapi.IsUpdate(e.AsPostfixUnaryExpression().Operator)
 	case ast.IsPrefixUnaryExpression(e):
-		return IsUpdate(e.AsPrefixUnaryExpression().Operator)
+		return tsapi.IsUpdate(e.AsPrefixUnaryExpression().Operator)
 	}
 	return false
 }
@@ -435,7 +436,7 @@ func (x *looped) is(e *ast.Node, s *ast.Symbol) bool {
 // uses reports whether n refers to s.
 func (x *looped) uses(n *ast.Node, s *ast.Symbol) bool {
 	found := false
-	Identifiers(n, func(id *ast.Node) { found = found || x.c.GetSymbolAtLocation(id) == s })
+	tsapi.Identifiers(n, func(id *ast.Node) { found = found || x.c.GetSymbolAtLocation(id) == s })
 	return found
 }
 
@@ -484,7 +485,7 @@ var mutators = map[string]bool{"push": true, "pop": true, "shift": true, "unshif
 func (x *looped) unchanged(over, body *ast.Node) string {
 	s := x.c.GetSymbolAtLocation(over)
 	why := ""
-	Inspect(body, func(n *ast.Node) bool {
+	tsapi.Inspect(body, func(n *ast.Node) bool {
 		if why != "" {
 			return false
 		}
@@ -515,14 +516,14 @@ func (x *looped) unchanged(over, body *ast.Node) string {
 // notCaptured refuses when a function in the loop refers to one of the
 // names: the two forms then differ in how many copies there are (why).
 func (x *looped) notCaptured(names []*ast.Node, why string) string {
-	syms := Symbols(x.c, names)
+	syms := tsapi.Symbols(x.c, names)
 	out := ""
-	Inspect(x.loop, func(n *ast.Node) bool {
+	tsapi.Inspect(x.loop, func(n *ast.Node) bool {
 		if out != "" {
 			return false
 		}
 		if ast.IsFunctionLike(n) {
-			if u := Uses(x.c, n, syms); u != nil {
+			if u := tsapi.Uses(x.c, n, syms); u != nil {
 				out = fmt.Sprintf("a function (%s) captures %s; %s. Copy it into a local in the body first", x.l.Where(n), u.Text(), why)
 			}
 			return false
@@ -564,8 +565,8 @@ func (x *looped) continues() []*ast.Node {
 
 // before returns the edit that runs stmt just before c, in braces when c
 // is not in a block.
-func (x *looped) before(c *ast.Node, stmt string) Edit {
-	if InList(c) {
+func (x *looped) before(c *ast.Node, stmt string) tsapi.Edit {
+	if tsapi.InList(c) {
 		return x.edit(x.l.Pos(c), x.l.Pos(c), stmt+"\n"+x.l.Indent(x.l.Line(x.l.Pos(c))))
 	}
 	outer := x.l.Indent(x.l.Line(x.l.Pos(c.Parent)))
@@ -576,8 +577,8 @@ func (x *looped) before(c *ast.Node, stmt string) Edit {
 // withLast returns body's source with edits, which fall inside it,
 // applied and stmt (when not empty) last: before the closing brace of a
 // block that has it on a line of its own, else in a new block.
-func (x *looped) withLast(body *ast.Node, stmt string, edits []Edit) string {
-	var in []Edit
+func (x *looped) withLast(body *ast.Node, stmt string, edits []tsapi.Edit) string {
+	var in []tsapi.Edit
 	for _, e := range edits {
 		if e.Start >= x.l.Pos(body) && e.End <= body.End() {
 			in = append(in, e)
@@ -616,7 +617,7 @@ func (x *looped) withLast(body *ast.Node, stmt string, edits []Edit) string {
 
 // first returns the edits that put stmt first in body: on a line of its
 // own after the brace of a block, or with the body in a new block.
-func (x *looped) first(body *ast.Node, stmt string) []Edit {
+func (x *looped) first(body *ast.Node, stmt string) []tsapi.Edit {
 	indent := x.l.Indent(x.l.Line(x.l.Pos(x.whole)))
 	unit := x.l.Unit()
 	if ast.IsBlock(body) && x.l.Line(x.l.Pos(body)) != x.l.Line(body.End()-1) {
@@ -627,7 +628,7 @@ func (x *looped) first(body *ast.Node, stmt string) []Edit {
 				at = x.l.Indent(x.l.Line(x.l.Pos(st[0])))
 			}
 			after := x.l.Pos(body) + 1
-			return []Edit{x.edit(after, after, "\n"+at+stmt)}
+			return []tsapi.Edit{x.edit(after, after, "\n"+at+stmt)}
 		}
 	}
 	rest := strings.TrimSpace(x.l.Source(body))
@@ -638,14 +639,14 @@ func (x *looped) first(body *ast.Node, stmt string) []Edit {
 	if rest != "" {
 		text += indent + unit + rest + "\n"
 	}
-	return []Edit{x.edit(x.l.Pos(body), body.End(), text+indent+"}")}
+	return []tsapi.Edit{x.edit(x.l.Pos(body), body.End(), text+indent+"}")}
 }
 
 // clashes reports whether declaring name before the loop, in its list,
 // would redeclare a name of the list or reach a statement after the loop
 // that names it.
 func (x *looped) clashes(name string) bool {
-	if !InList(x.whole) {
+	if !tsapi.InList(x.whole) {
 		return true
 	}
 	after := false
@@ -654,14 +655,14 @@ func (x *looped) clashes(name string) bool {
 			after = true
 			continue
 		}
-		for _, d := range Declared(s) {
+		for _, d := range tsapi.Declared(s) {
 			if d.Text() == name {
 				return true
 			}
 		}
 		if after {
 			hit := false
-			Identifiers(s, func(id *ast.Node) { hit = hit || id.Text() == name })
+			tsapi.Identifiers(s, func(id *ast.Node) { hit = hit || id.Text() == name })
 			if hit {
 				return true
 			}
@@ -674,7 +675,7 @@ func (x *looped) clashes(name string) bool {
 // file uses.
 func (x *looped) unused(name string) string {
 	taken := map[string]bool{}
-	Identifiers(x.l.File.AsNode(), func(id *ast.Node) { taken[id.Text()] = true })
+	tsapi.Identifiers(x.l.File.AsNode(), func(id *ast.Node) { taken[id.Text()] = true })
 	if !taken[name] {
 		return name
 	}
@@ -713,20 +714,20 @@ func scannerKeyword(s string) bool {
 }
 
 // dropLine returns the edit that removes the lines of statement s.
-func (x *looped) dropLine(s *ast.Node) Edit {
+func (x *looped) dropLine(s *ast.Node) tsapi.Edit {
 	a, b := x.l.Lines(s)
 	return x.edit(x.l.Start(a), x.l.Start(b+1), "")
 }
 
 // edit is an edit of this file.
-func (x *looped) edit(start, end int, text string) Edit {
-	return Edit{File: x.l.File.FileName(), Start: start, End: end, NewText: text}
+func (x *looped) edit(start, end int, text string) tsapi.Edit {
+	return tsapi.Edit{File: x.l.File.FileName(), Start: start, End: end, NewText: text}
 }
 
 // applied returns the text from start to end with edits, those inside it,
 // applied.
-func (x *looped) applied(start, end int, edits []Edit) string {
-	var in []Edit
+func (x *looped) applied(start, end int, edits []tsapi.Edit) string {
+	var in []tsapi.Edit
 	for _, e := range edits {
 		if e.Start >= start && e.End <= end {
 			in = append(in, e)

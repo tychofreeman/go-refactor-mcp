@@ -467,7 +467,7 @@ func (p *Project) UnionSwitchToMethod(ctx context.Context, path string, line int
 			return nil, fmt.Sprintf("the body at %s uses this, which would then be the class's", l.Where(a.at))
 		}
 		if len(b.returns) > 0 {
-			if len(a.body) == 0 || !terminates(a.body[len(a.body)-1]) {
+			if len(a.body) == 0 || !Terminates(a.body[len(a.body)-1]) {
 				return nil, fmt.Sprintf("the body at %s returns on some paths only", l.Where(a.at))
 			}
 			returning++

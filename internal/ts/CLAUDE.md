@@ -6,11 +6,16 @@ its steps done; the gaps against Go were README item 41, done too),
 loads this file when a session reads files here; the root CLAUDE.md
 still applies.
 
-- `tsapi` is the only package that imports the compiler
+- Only the `tsapi` tree imports the compiler
   (`buke/typescript-go-internal`, the Go port of TypeScript 7, pinned
   in go.mod). Everything else uses its types, so that an official Go
-  API, when there is one, changes only `tsapi`. Upgrade the mirror in
+  API, when there is one, changes only that tree. Upgrade the mirror in
   its own PR, with the tests as the gate.
+- `tsapi` is the shared core (`Project`, `Lined`, the effects analysis,
+  the AST walkers); a refactoring's engine moves into a package under it
+  (`tsapi/convertloop`) when it next changes, one per PR (#643): make
+  the method a function (`method_to_function`), export what it calls in
+  `tsapi` (`rename`), then `move` it with its helpers (`also`).
 - `workspace` is the engine's `refactor.Workspace` for TypeScript: a
   solution, the projects its root tsconfig.json references, each kept
   up to date incrementally. Changes are written to disk and the

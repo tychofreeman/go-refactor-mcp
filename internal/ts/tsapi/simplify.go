@@ -709,9 +709,9 @@ func (l *Lined) ifAt(line, column int) (*ast.Node, string) {
 	return nil, fmt.Sprintf("line %d has %d ifs; give column", line, len(found))
 }
 
-// terminates reports whether running s never goes on to what follows it:
+// Terminates reports whether running s never goes on to what follows it:
 // it ends with a return, throw, break or continue on every path.
-func terminates(s *ast.Node) bool {
+func Terminates(s *ast.Node) bool {
 	switch {
 	case s == nil:
 		return false
@@ -719,10 +719,10 @@ func terminates(s *ast.Node) bool {
 		return true
 	case ast.IsBlock(s):
 		st := s.Statements()
-		return len(st) > 0 && terminates(st[len(st)-1])
+		return len(st) > 0 && Terminates(st[len(st)-1])
 	case ast.IsIfStatement(s):
 		is := s.AsIfStatement()
-		return terminates(is.ThenStatement) && terminates(is.ElseStatement)
+		return Terminates(is.ThenStatement) && Terminates(is.ElseStatement)
 	}
 	return false
 }
@@ -883,7 +883,7 @@ func (p *Project) InvertIf(ctx context.Context, path string, line, column int, k
 	if ast.IsIfStatement(els) {
 		return nil, fmt.Sprintf("the else is another if (%s); invert that one, or give it braces first", l.part(els))
 	}
-	if keepElse || !terminates(els) {
+	if keepElse || !Terminates(els) {
 		return edit(head + l.Source(els) + " else " + l.Source(then)), ""
 	}
 	rest, why := l.unnest(c, ifs, then)
@@ -905,11 +905,11 @@ func (l *Lined) invertBefore(c *checker.Checker, ifs *ast.Node, head, jump strin
 	then := ifs.AsIfStatement().ThenStatement
 	list := ifs.Parent.Statements()
 	rest := list[slices.Index(list, ifs)+1:]
-	if !terminates(then) {
+	if !Terminates(then) {
 		return nil, "an if without else is inverted, with what follows it as its new first branch, only when its branch ends with a return, throw, break or continue"
 	}
 	last := rest[len(rest)-1]
-	if terminates(last) {
+	if Terminates(last) {
 		jump = ""
 	} else if jump == "" {
 		return nil, fmt.Sprintf("what follows the if can fall through (%s), and it would then go on to the if's branch", l.part(last))
@@ -1013,8 +1013,8 @@ func (p *Project) RemoveElse(ctx context.Context, path string, line, column int)
 	switch {
 	case is.ElseStatement == nil:
 		return nil, "the if has no else"
-	case !terminates(is.ThenStatement):
-		return nil, fmt.Sprintf("the if's first branch can fall through to what follows it (it does not end with a return, throw, break or continue on every path); %s", map[bool]string{true: "the else does, so use invert_if", false: "neither branch can be un-nested"}[terminates(is.ElseStatement)])
+	case !Terminates(is.ThenStatement):
+		return nil, fmt.Sprintf("the if's first branch can fall through to what follows it (it does not end with a return, throw, break or continue on every path); %s", map[bool]string{true: "the else does, so use invert_if", false: "neither branch can be un-nested"}[Terminates(is.ElseStatement)])
 	case !InList(ifs):
 		return nil, fmt.Sprintf("the if is %s's only statement; give it braces first", l.part(ifs.Parent))
 	}
@@ -1053,7 +1053,7 @@ func (p *Project) WrapElse(ctx context.Context, path string, line, column int) (
 	switch {
 	case is.ElseStatement != nil:
 		return nil, "the if has an else already"
-	case !terminates(is.ThenStatement):
+	case !Terminates(is.ThenStatement):
 		return nil, "the if's branch can fall through to what follows it (it does not end with a return, throw, break or continue on every path), so in an else that code would no longer run after it"
 	case !InList(ifs):
 		return nil, fmt.Sprintf("the if is %s's only statement, so nothing follows it", l.part(ifs.Parent))

@@ -199,7 +199,7 @@ func (p *Project) MissingCase(path, function, value, refusal string) (*MissingCa
 	quoted := false
 	for i, cl := range clauses {
 		stmts := caseStatements(cl)
-		if ast.IsDefaultClause(cl) || len(stmts) == 0 && i == len(clauses)-1 || len(stmts) > 0 && !terminates(stmts[len(stmts)-1]) {
+		if ast.IsDefaultClause(cl) || len(stmts) == 0 && i == len(clauses)-1 || len(stmts) > 0 && !Terminates(stmts[len(stmts)-1]) {
 			return nil, refusal
 		}
 		quoted = quoted || ast.IsStringLiteral(cl.Expression())
@@ -209,7 +209,7 @@ func (p *Project) MissingCase(path, function, value, refusal string) (*MissingCa
 	if len(rest) == 0 || len(clauses) == 0 {
 		return nil, refusal
 	}
-	if end := rest[len(rest)-1]; !terminates(end) || end.Kind == ast.KindBreakStatement || end.Kind == ast.KindContinueStatement {
+	if end := rest[len(rest)-1]; !Terminates(end) || end.Kind == ast.KindBreakStatement || end.Kind == ast.KindContinueStatement {
 		return nil, refusal
 	}
 	closing := l.Line(sw.End() - 1)
