@@ -4820,3 +4820,27 @@ ambiguous between Go's and TypeScript's package (retried with `imports`);
 and replace_text of a refusal's text with `"parameter"` in quotes was
 refused under -no-code-by-text, rightly: the quotes would have ended the
 string literal.
+
+## A stress run of TypeScript's inline on Hono (2026-11-18, #643 part 2)
+
+The harness (simplify's stress_test.go) through create_file (the
+variables, under -skeleton-only) and add_declaration (the functions;
+math/rand and the TypeScript workspace named in imports after an
+ambiguity refusal; a retried step replaces its whole args, so the batch
+was sent again). On Hono at ed1d5f7 it found a panic (the effects walk
+read a default clause's expression), a behavior change (inline of a
+variable moved a read of a parameter past its reassignment: isConst took
+parameters for consts; 33 router tests failed) and two rollbacks
+(roadmap 64). A rerun hung for two hours: inlining `sections =
+ip.split(':')` in expandIPv6 duplicated the call, so the loop's splices
+went to new arrays and it never ended. Pure string and array methods
+were not marked as making a new value. The harness now kills a test
+command after STRESS_TEST_TIMEOUT seconds (300) and reports a hang with
+its candidate. Each fix came after a red test; one test I first wrote
+expected a refusal of every type guard, and inlining a guard whose body
+narrows is right, so it became a test that one applies. By mistake I
+added a test on #682's branch; a stash moved it, and conflicted, so the
+file went back to HEAD and the test was added again here. Hono's pnpm 12
+did not run through corepack; `npx pnpm@12.6.0 install --ignore-scripts`
+under node 24 did. The timeout went in with replace_statements; its
+imports were added by the tool.

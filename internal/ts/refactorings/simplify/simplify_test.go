@@ -1974,3 +1974,22 @@ func TestInlineVariableReadingAnAssignedParameter(t *testing.T) {
 		t.Errorf("want a refusal naming path, got %s", res)
 	}
 }
+
+// A variable holding the new array a method returns is not inlined at
+// several uses: each would make its own array, and a change through one
+// would not reach the others (found by the stress run on Hono, where
+// expandIPv6's loop never ended).
+func TestInlineVariableHoldingANewArray(t *testing.T) {
+	for _, call := range []string{`ip.split(":")`, `ip.split(":").slice(1)`, `ip.split(":").map((s) => s)`} {
+		ws, _ := load(t, map[string]string{"src/g.ts": `export function expand(ip: string): string {
+  const sections = ` + call + `;
+  sections[0] = "0";
+  return sections.join(":");
+}
+`})
+		res := run(t, ws, NewInline(), `{"file": "src/g.ts", "line": 2, "name": "sections"}`)
+		if res.Applied || !strings.Contains(res.Refused, "new value") {
+			t.Errorf("%s: want a refusal, got %s", call, res)
+		}
+	}
+}

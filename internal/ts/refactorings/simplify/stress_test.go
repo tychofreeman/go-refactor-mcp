@@ -12,6 +12,7 @@ package simplify
 //	[STRESS_TEST_CMD='npx vitest run {dir}'] go test -run TestStress -v -timeout 2h .
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -22,7 +23,9 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/workspace"
@@ -57,11 +60,21 @@ func TestStress(t *testing.T) {
 			if cmd := os.Getenv("STRESS_TEST_CMD"); cmd != "" {
 				var a struct{ File string }
 				_ = json.Unmarshal([]byte(args), &a)
-				c := exec.Command("sh", "-c", strings.ReplaceAll(cmd, "{dir}", filepath.Dir(a.File)))
+				ctx, cancel := context.WithTimeout(context.Background(), time.Duration(envInt("STRESS_TEST_TIMEOUT", 300))*time.Second)
+				c := exec.CommandContext(ctx, "sh", "-c", strings.ReplaceAll(cmd, "{dir}", filepath.Dir(a.File)))
 				c.Dir = dir
-				if out, err := c.CombinedOutput(); err != nil {
+				// The test runner's workers outlive sh: kill the whole group on a timeout.
+				c.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+				c.Cancel = func() error { return syscall.Kill(-c.Process.Pid, syscall.SIGKILL) }
+				c.WaitDelay = 5 * time.Second
+				out, err := c.CombinedOutput()
+				switch {
+				case ctx.Err() != nil:
+					bugs = append(bugs, fmt.Sprintf("TESTS HANG %s:\n%s", args, res.Diff))
+				case err != nil:
 					bugs = append(bugs, fmt.Sprintf("TESTS FAIL %s:\n%s\n%s", args, res.Diff, lastLines(string(out), 15)))
 				}
+				cancel()
 			}
 			if _, err := ws.Undo(); err != nil {
 				t.Fatalf("undo: %v", err)

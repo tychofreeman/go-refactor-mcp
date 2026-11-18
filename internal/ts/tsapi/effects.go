@@ -759,6 +759,11 @@ func (a *effects) call(n *ast.Node) Effects {
 	if a.maybeNullish(recv) && n.Flags&ast.NodeFlagsOptionalChain == 0 {
 		out.add(a.nullish(n, "a method of what may be null or undefined"))
 	}
+	// An array or object result is a new one each call (split, slice, map),
+	// except an element of the receiver (at, find).
+	if method != "at" && method != "find" && !a.primitive(n) && out.At.Fresh == "" {
+		out.Fresh, out.At.Fresh = true, a.part(n, "the call")
+	}
 	return out
 }
 
