@@ -75,7 +75,7 @@ func (m *matcher) matchConcat(p, x *ast.Node) bool {
 					break
 				}
 				n := m.fork()
-				text := m.cl.text[m.cl.pos(xs[j]):xs[k-1].End()]
+				text := m.cl.Text[m.cl.Pos(xs[j]):xs[k-1].End()]
 				if n.bindText(ps[i], h, text, xs[j:k], xs[j]) {
 					if r := try(n, i+1, k); r != nil {
 						return r
@@ -104,22 +104,22 @@ type piece struct {
 
 // pieces returns the parts of a template or string literal, its literal
 // text as it is written (escapes kept).
-func pieces(l *lined, n *ast.Node) ([]piece, bool) {
+func pieces(l *Lined, n *ast.Node) ([]piece, bool) {
 	raw := func(s string, cut int) string { return s[1 : len(s)-cut] }
 	switch {
 	case ast.IsStringLiteral(n) || n.Kind == ast.KindNoSubstitutionTemplateLiteral:
-		s := l.source(n)
+		s := l.Source(n)
 		if ast.IsStringLiteral(n) && strings.ContainsAny(s, "`$") {
 			return nil, false
 		}
 		return []piece{{text: raw(s, 1)}}, true
 	case ast.IsTemplateExpression(n):
 		te := n.AsTemplateExpression()
-		out := []piece{{text: raw(l.source(te.Head), 2)}}
+		out := []piece{{text: raw(l.Source(te.Head), 2)}}
 		for _, sp := range te.TemplateSpans.Nodes {
 			s := sp.AsTemplateSpan()
 			out = append(out, piece{expr: s.Expression})
-			lit := l.source(s.Literal)
+			lit := l.Source(s.Literal)
 			cut := 2
 			if s.Literal.Kind == ast.KindTemplateTail {
 				cut = 1

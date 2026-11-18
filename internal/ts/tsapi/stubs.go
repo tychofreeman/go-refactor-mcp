@@ -39,11 +39,11 @@ type Stub struct {
 // ("cannot tell the results of name from ..."): the engine leaves such a
 // name out and asks for the rest.
 func (p *Project) Stubs(ctx context.Context, path string, names []string, results map[string]string) ([]Stub, string) {
-	l, refusal := p.lined(path)
+	l, refusal := p.Lined(path)
 	if refusal != "" {
 		return nil, refusal
 	}
-	c, done := p.prog.GetProgram().GetTypeCheckerForFile(ctx, l.f)
+	c, done := p.prog.GetProgram().GetTypeCheckerForFile(ctx, l.File)
 	defer done()
 	var stubs []Stub
 	for _, name := range names {
@@ -59,9 +59,9 @@ func (p *Project) Stubs(ctx context.Context, path string, names []string, result
 // stub returns the stub of name, from its first use in the file: a call,
 // else a new, else a property read or written; result, if not "", is its
 // type.
-func (l *lined) stub(c *checker.Checker, name, result string) (Stub, string) {
-	rel := tspath.GetBaseFileName(l.f.FileName())
-	s := Stub{Name: name, File: l.f.FileName(), Before: -1}
+func (l *Lined) stub(c *checker.Checker, name, result string) (Stub, string) {
+	rel := tspath.GetBaseFileName(l.File.FileName())
+	s := Stub{Name: name, File: l.File.FileName(), Before: -1}
 	exported := false
 	if from, ok := l.importedFrom(c, name); ok {
 		if from == "" {
@@ -72,7 +72,7 @@ func (l *lined) stub(c *checker.Checker, name, result string) (Stub, string) {
 	var call, made, prop *ast.Node
 	var statics []*ast.Node
 	method := false
-	inspect(l.f.AsNode(), func(n *ast.Node) bool {
+	Inspect(l.File.AsNode(), func(n *ast.Node) bool {
 		switch {
 		case call == nil && ast.IsCallExpression(n):
 			callee := n.Expression()
@@ -109,7 +109,7 @@ func (l *lined) stub(c *checker.Checker, name, result string) (Stub, string) {
 			for top.Parent != nil && !ast.IsSourceFile(top.Parent) {
 				top = top.Parent
 			}
-			s.Before = l.start(l.line(scanner.GetTokenPosOfNode(top, l.f, true)))
+			s.Before = l.Start(l.Line(scanner.GetTokenPosOfNode(top, l.File, true)))
 		}
 		return s, ""
 	case call == nil && prop != nil:
@@ -159,7 +159,7 @@ func (l *lined) stub(c *checker.Checker, name, result string) (Stub, string) {
 			for top.Parent != nil && !ast.IsSourceFile(top.Parent) {
 				top = top.Parent
 			}
-			s.Before = l.start(l.line(scanner.GetTokenPosOfNode(top, l.f, true)))
+			s.Before = l.Start(l.Line(scanner.GetTokenPosOfNode(top, l.File, true)))
 		}
 		return s, ""
 	case call == nil:
@@ -191,7 +191,7 @@ func (l *lined) stub(c *checker.Checker, name, result string) (Stub, string) {
 // owner returns the class or interface of the solution that the value of
 // expr is, which a member name used on it goes in, its file, and whether
 // it is a class; or why there is none.
-func (l *lined) owner(c *checker.Checker, expr *ast.Node, name string) (file, owner string, class bool, why string) {
+func (l *Lined) owner(c *checker.Checker, expr *ast.Node, name string) (file, owner string, class bool, why string) {
 	t := c.GetTypeAtLocation(expr)
 	sym := t.Symbol()
 	if sym == nil {
@@ -230,8 +230,8 @@ func propertyType(c *checker.Checker, prop *ast.Node) (string, bool) {
 
 // importedFrom reports whether the file imports name, and from which file
 // of the solution ("" for a module outside it).
-func (l *lined) importedFrom(c *checker.Checker, name string) (string, bool) {
-	for _, s := range l.f.Statements.Nodes {
+func (l *Lined) importedFrom(c *checker.Checker, name string) (string, bool) {
+	for _, s := range l.File.Statements.Nodes {
 		if !ast.IsImportDeclaration(s) {
 			continue
 		}
@@ -398,11 +398,11 @@ func nameOfType(typ string, i int) string {
 // ImportedFrom reports whether the file at path imports name, and from
 // which file of the solution ("" for a module outside it).
 func (p *Project) ImportedFrom(ctx context.Context, path, name string) (string, bool) {
-	l, refusal := p.lined(path)
+	l, refusal := p.Lined(path)
 	if refusal != "" {
 		return "", false
 	}
-	c, done := p.prog.GetProgram().GetTypeCheckerForFile(ctx, l.f)
+	c, done := p.prog.GetProgram().GetTypeCheckerForFile(ctx, l.File)
 	defer done()
 	return l.importedFrom(c, name)
 }

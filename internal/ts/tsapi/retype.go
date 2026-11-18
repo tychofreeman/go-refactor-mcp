@@ -18,7 +18,7 @@ import (
 // put where the property is given, assigned, compared or switched on
 // with them (valueEdits).
 func (p *Project) ChangeFieldType(path, name, typ string, values map[string]string) ([]Edit, string) {
-	l, why := p.lined(path)
+	l, why := p.Lined(path)
 	if why != "" {
 		return nil, why
 	}
@@ -32,7 +32,7 @@ func (p *Project) ChangeFieldType(path, name, typ string, values map[string]stri
 	}
 	var found []*ast.Node
 	for _, m := range members {
-		if m.Name() != nil && l.source(m.Name()) == prop {
+		if m.Name() != nil && l.Source(m.Name()) == prop {
 			found = append(found, m)
 		}
 	}
@@ -67,16 +67,16 @@ func (p *Project) valueEdits(prop *ast.Node, values map[string]string) []Edit {
 		put := func(e *ast.Node) {
 			e = ast.SkipParentheses(e)
 			for old, v := range values {
-				if fl.source(e) == old || ast.IsStringLiteral(e) && e.Text() == strings.Trim(old, `"'`) {
-					edits = append(edits, Edit{File: f.FileName(), Start: fl.pos(e), End: e.End(), NewText: strings.TrimSpace(v)})
+				if fl.Source(e) == old || ast.IsStringLiteral(e) && e.Text() == strings.Trim(old, `"'`) {
+					edits = append(edits, Edit{File: f.FileName(), Start: fl.Pos(e), End: e.End(), NewText: strings.TrimSpace(v)})
 					return
 				}
 			}
 		}
-		inspect(f.AsNode(), func(n *ast.Node) bool {
+		Inspect(f.AsNode(), func(n *ast.Node) bool {
 			switch {
 			case ast.IsPropertyAssignment(n) && ast.IsObjectLiteralExpression(n.Parent):
-				if t := c.GetContextualType(n.Parent, checker.ContextFlagsNone); t != nil && n.Name() != nil && c.GetPropertyOfType(t, fl.source(n.Name())) == sym {
+				if t := c.GetContextualType(n.Parent, checker.ContextFlagsNone); t != nil && n.Name() != nil && c.GetPropertyOfType(t, fl.Source(n.Name())) == sym {
 					put(n.Initializer())
 				}
 			case ast.IsBinaryExpression(n):
@@ -113,7 +113,7 @@ func (p *Project) valueEdits(prop *ast.Node, values map[string]string) []Edit {
 // function with overload signatures is refused: they type its parameters
 // apart.
 func (p *Project) ChangeParameterType(path, name, param, typ string) ([]Edit, string) {
-	l, why := p.lined(path)
+	l, why := p.Lined(path)
 	if why != "" {
 		return nil, why
 	}
@@ -131,9 +131,9 @@ func (p *Project) ChangeParameterType(path, name, param, typ string) ([]Edit, st
 		if nm := prm.Name(); nm == nil || !ast.IsIdentifier(nm) || nm.Text() != param {
 			continue
 		}
-		if prm.Type() == nil && ast.IsArrowFunction(fn) && !strings.Contains(l.text[l.pos(fn):l.pos(prm)], "(") {
+		if prm.Type() == nil && ast.IsArrowFunction(fn) && !strings.Contains(l.Text[l.Pos(fn):l.Pos(prm)], "(") {
 			// x => ... takes parentheses to take a type.
-			return []Edit{{File: l.f.FileName(), Start: l.pos(prm), End: prm.End(), NewText: "(" + l.source(prm) + ": " + typ + ")"}}, ""
+			return []Edit{{File: l.File.FileName(), Start: l.Pos(prm), End: prm.End(), NewText: "(" + l.Source(prm) + ": " + typ + ")"}}, ""
 		}
 		edits := []Edit{l.annotate(prm, prm.AsParameterDeclaration().QuestionToken, typ)}
 		c, done := p.prog.GetProgram().GetTypeChecker(context.Background())
@@ -157,18 +157,18 @@ func (p *Project) ChangeParameterType(path, name, param, typ string) ([]Edit, st
 // ChangeType returns the edit that makes typ what the type alias name, at
 // the top level of the file at path, stands for.
 func (p *Project) ChangeType(path, name, typ string) ([]Edit, string) {
-	l, why := p.lined(path)
+	l, why := p.Lined(path)
 	if why != "" {
 		return nil, why
 	}
-	for _, s := range l.f.Statements.Nodes {
+	for _, s := range l.File.Statements.Nodes {
 		if s.Name() == nil || s.Name().Text() != name {
 			continue
 		}
 		switch {
 		case ast.IsTypeAliasDeclaration(s):
 			t := s.Type()
-			return []Edit{{File: l.f.FileName(), Start: l.pos(t), End: t.End(), NewText: typ}}, ""
+			return []Edit{{File: l.File.FileName(), Start: l.Pos(t), End: t.End(), NewText: typ}}, ""
 		case ast.IsInterfaceDeclaration(s), ast.IsClassDeclaration(s):
 			return nil, fmt.Sprintf("%s is an interface or a class, not a type alias; change its members with change_type", name)
 		}
@@ -179,21 +179,21 @@ func (p *Project) ChangeType(path, name, typ string) ([]Edit, string) {
 // annotate returns the edit that makes typ the annotation of decl, a
 // property or a parameter: in place of its type, or after its name and
 // postfix (? or !) when it has none.
-func (l *lined) annotate(decl, postfix *ast.Node, typ string) Edit {
+func (l *Lined) annotate(decl, postfix *ast.Node, typ string) Edit {
 	if t := decl.Type(); t != nil {
-		return Edit{File: l.f.FileName(), Start: l.pos(t), End: t.End(), NewText: typ}
+		return Edit{File: l.File.FileName(), Start: l.Pos(t), End: t.End(), NewText: typ}
 	}
 	at := decl.Name().End()
 	if postfix != nil {
 		at = postfix.End()
 	}
-	return Edit{File: l.f.FileName(), Start: at, End: at, NewText: ": " + typ}
+	return Edit{File: l.File.FileName(), Start: at, End: at, NewText: ": " + typ}
 }
 
 // members returns the members of the class, interface or object type
 // alias named owner at the top level of the file.
-func (l *lined) members(owner string) ([]*ast.Node, string) {
-	for _, s := range l.f.Statements.Nodes {
+func (l *Lined) members(owner string) ([]*ast.Node, string) {
+	for _, s := range l.File.Statements.Nodes {
 		if s.Name() == nil || s.Name().Text() != owner {
 			continue
 		}
@@ -203,7 +203,7 @@ func (l *lined) members(owner string) ([]*ast.Node, string) {
 		case ast.IsTypeAliasDeclaration(s) && ast.IsTypeLiteralNode(s.Type()):
 			return s.Type().Members(), ""
 		case ast.IsTypeAliasDeclaration(s):
-			return nil, fmt.Sprintf("%s is a type alias of %s, not of an object type; change it with change_type", owner, l.source(s.Type()))
+			return nil, fmt.Sprintf("%s is a type alias of %s, not of an object type; change it with change_type", owner, l.Source(s.Type()))
 		}
 	}
 	return nil, fmt.Sprintf("the file declares no class, interface or object type %s", owner)

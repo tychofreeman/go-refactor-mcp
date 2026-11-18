@@ -13,12 +13,12 @@ import (
 
 // typeDecl returns the class, interface or type alias of the file named
 // name, or the one named on line (at column).
-func (l *lined) typeDecl(c *checker.Checker, line int, name string, column int) (*ast.Node, string) {
+func (l *Lined) typeDecl(c *checker.Checker, line int, name string, column int) (*ast.Node, string) {
 	if line > 0 {
 		var decl *ast.Node
-		identifiers(l.f.AsNode(), func(id *ast.Node) {
-			start := l.pos(id)
-			if decl == nil && id.Text() == name && l.line(start) == line && (column == 0 || start-l.start(line)+1 == column) {
+		Identifiers(l.File.AsNode(), func(id *ast.Node) {
+			start := l.Pos(id)
+			if decl == nil && id.Text() == name && l.Line(start) == line && (column == 0 || start-l.Start(line)+1 == column) {
 				if s := symbolOf(c, id); s != nil && len(s.Declarations) > 0 {
 					decl = s.Declarations[0]
 				}
@@ -27,12 +27,12 @@ func (l *lined) typeDecl(c *checker.Checker, line int, name string, column int) 
 		if decl == nil {
 			return nil, fmt.Sprintf("no name %s on line %d", name, line)
 		}
-		if ast.GetSourceFileOfNode(decl) != l.f {
+		if ast.GetSourceFileOfNode(decl) != l.File {
 			return nil, fmt.Sprintf("%s is declared in %s; give that file", name, ast.GetSourceFileOfNode(decl).FileName())
 		}
 		return decl, ""
 	}
-	for _, s := range l.f.Statements.Nodes {
+	for _, s := range l.File.Statements.Nodes {
 		if (ast.IsClassDeclaration(s) || ast.IsInterfaceDeclaration(s) || ast.IsTypeAliasDeclaration(s)) && s.Name() != nil && s.Name().Text() == name {
 			return s, ""
 		}
@@ -58,7 +58,7 @@ func (p *Project) abstractMembers(c *checker.Checker, members []*checker.Type) (
 		if f.IsDeclarationFile {
 			continue
 		}
-		inspect(f.AsNode(), func(n *ast.Node) bool {
+		Inspect(f.AsNode(), func(n *ast.Node) bool {
 			if ast.IsClassDeclaration(n) && n.Name() != nil {
 				for _, h := range nodes(n.AsClassDeclaration().HeritageClauses) {
 					if h.AsHeritageClause().Token != ast.KindExtendsKeyword {
@@ -97,11 +97,11 @@ func nodes(list *ast.NodeList) []*ast.Node {
 // memberSignature returns the class member m as a member of an
 // interface: a property with its type, a method with its parameters and
 // result, an accessor as a property (readonly without a setter).
-func (l *lined) memberSignature(c *checker.Checker, class, m *ast.Node) (string, string) {
-	name := l.source(m.Name())
+func (l *Lined) memberSignature(c *checker.Checker, class, m *ast.Node) (string, string) {
+	name := l.Source(m.Name())
 	typeOf := func(n, annotation *ast.Node) string {
 		if annotation != nil {
-			return l.source(annotation)
+			return l.Source(annotation)
 		}
 		return c.TypeToString(c.GetWidenedType(c.GetTypeAtLocation(n)))
 	}
@@ -115,7 +115,7 @@ func (l *lined) memberSignature(c *checker.Checker, class, m *ast.Node) (string,
 		if ast.HasSyntacticModifier(m, ast.ModifierFlagsReadonly) {
 			ro = "readonly "
 		}
-		return ro + name + opt + ": " + typeOf(m.Name(), m.Type()) + l.semi(), ""
+		return ro + name + opt + ": " + typeOf(m.Name(), m.Type()) + l.Semi(), ""
 	case ast.IsMethodDeclaration(m):
 		var ps []string
 		for _, prm := range m.Parameters() {
@@ -127,19 +127,19 @@ func (l *lined) memberSignature(c *checker.Checker, class, m *ast.Node) (string,
 			if prm.AsParameterDeclaration().DotDotDotToken != nil {
 				dots = "..."
 			}
-			ps = append(ps, dots+l.source(prm.Name())+opt+": "+typeOf(prm.Name(), prm.Type()))
+			ps = append(ps, dots+l.Source(prm.Name())+opt+": "+typeOf(prm.Name(), prm.Type()))
 		}
 		ret := l.returnType(m, c)
-		return name + "(" + strings.Join(ps, ", ") + "): " + ret + l.semi(), ""
+		return name + "(" + strings.Join(ps, ", ") + "): " + ret + l.Semi(), ""
 	case ast.IsGetAccessorDeclaration(m):
 		setter := slices.ContainsFunc(class.Members(), func(o *ast.Node) bool {
-			return ast.IsSetAccessorDeclaration(o) && o.Name() != nil && l.source(o.Name()) == name
+			return ast.IsSetAccessorDeclaration(o) && o.Name() != nil && l.Source(o.Name()) == name
 		})
 		ret := l.returnType(m, c)
 		if setter {
-			return name + ": " + ret + l.semi(), ""
+			return name + ": " + ret + l.Semi(), ""
 		}
-		return "readonly " + name + ": " + ret + l.semi(), ""
+		return "readonly " + name + ": " + ret + l.Semi(), ""
 	case ast.IsSetAccessorDeclaration(m):
 		return "", "" // with its getter
 	}
@@ -153,7 +153,7 @@ func (l *lined) memberSignature(c *checker.Checker, class, m *ast.Node) (string,
 // old extends; from a type alias of an object type, into the new one,
 // which the alias joins (newType & { the rest }).
 func (p *Project) ExtractSupertype(ctx context.Context, path string, line int, name string, column int, fields []string, newType string) ([]Edit, string) {
-	l, why := p.lined(path)
+	l, why := p.Lined(path)
 	if why != "" {
 		return nil, why
 	}
@@ -189,7 +189,7 @@ func (p *Project) ExtractSupertype(ctx context.Context, path string, line int, n
 	for _, f := range fields {
 		n := 0
 		for _, m := range members {
-			if m.Name() != nil && l.source(m.Name()) == f {
+			if m.Name() != nil && l.Source(m.Name()) == f {
 				chosen = append(chosen, m)
 				n++
 			}
@@ -199,8 +199,8 @@ func (p *Project) ExtractSupertype(ctx context.Context, path string, line int, n
 		}
 	}
 	slices.SortFunc(chosen, func(a, b *ast.Node) int { return a.Pos() - b.Pos() })
-	ind := l.indent(l.line(l.pos(decl)))
-	unit := l.unit()
+	ind := l.Indent(l.Line(l.Pos(decl)))
+	unit := l.Unit()
 	export := ""
 	if ast.HasSyntacticModifier(decl, ast.ModifierFlagsExport) {
 		export = "export "
@@ -210,7 +210,7 @@ func (p *Project) ExtractSupertype(ctx context.Context, path string, line int, n
 	if ast.IsClassDeclaration(decl) {
 		for _, m := range chosen {
 			if m.ModifierFlags()&(ast.ModifierFlagsPrivate|ast.ModifierFlagsProtected|ast.ModifierFlagsStatic) != 0 || ast.IsPrivateIdentifier(m.Name()) {
-				return nil, fmt.Sprintf("%s is private, protected or static, which an interface cannot name", l.source(m.Name()))
+				return nil, fmt.Sprintf("%s is private, protected or static, which an interface cannot name", l.Source(m.Name()))
 			}
 			sig, why := l.memberSignature(c, decl, m)
 			if why != "" {
@@ -235,15 +235,15 @@ func (p *Project) ExtractSupertype(ctx context.Context, path string, line int, n
 			}
 			text = " implements " + newType
 		}
-		edits = append(edits, Edit{File: l.f.FileName(), Start: at, End: at, NewText: text})
+		edits = append(edits, Edit{File: l.File.FileName(), Start: at, End: at, NewText: text})
 	} else {
 		for _, m := range chosen {
 			a, b, ok := l.lineRange(m)
 			if !ok {
-				return nil, fmt.Sprintf("%s shares its line with other members; put each member on a line of its own", l.source(m.Name()))
+				return nil, fmt.Sprintf("%s shares its line with other members; put each member on a line of its own", l.Source(m.Name()))
 			}
-			body = append(body, strings.TrimSpace(l.text[a:b]))
-			edits = append(edits, Edit{File: l.f.FileName(), Start: a, End: b})
+			body = append(body, strings.TrimSpace(l.Text[a:b]))
+			edits = append(edits, Edit{File: l.File.FileName(), Start: a, End: b})
 		}
 		if ast.IsInterfaceDeclaration(decl) {
 			at, text := -1, ""
@@ -254,19 +254,19 @@ func (p *Project) ExtractSupertype(ctx context.Context, path string, line int, n
 			if at < 0 {
 				at, text = decl.Name().End(), " extends "+newType
 			}
-			edits = append(edits, Edit{File: l.f.FileName(), Start: at, End: at, NewText: text})
+			edits = append(edits, Edit{File: l.File.FileName(), Start: at, End: at, NewText: text})
 		} else {
 			lit := decl.Type()
 			if len(chosen) == len(members) {
-				edits = []Edit{{File: l.f.FileName(), Start: l.pos(lit), End: lit.End(), NewText: newType}}
+				edits = []Edit{{File: l.File.FileName(), Start: l.Pos(lit), End: lit.End(), NewText: newType}}
 			} else {
-				edits = append(edits, Edit{File: l.f.FileName(), Start: l.pos(lit), End: l.pos(lit), NewText: newType + " & "})
+				edits = append(edits, Edit{File: l.File.FileName(), Start: l.Pos(lit), End: l.Pos(lit), NewText: newType + " & "})
 			}
 		}
 	}
 	a, _, ok := l.lineRange(decl)
 	if !ok {
-		a = l.start(l.line(l.pos(decl)))
+		a = l.Start(l.Line(l.Pos(decl)))
 	}
 	text := ind + export + "interface " + newType + " {\n"
 	for _, b := range body {
@@ -275,7 +275,7 @@ func (p *Project) ExtractSupertype(ctx context.Context, path string, line int, n
 		}
 	}
 	text += ind + "}\n\n"
-	edits = append(edits, Edit{File: l.f.FileName(), Start: a, End: a, NewText: text})
+	edits = append(edits, Edit{File: l.File.FileName(), Start: a, End: a, NewText: text})
 	slices.SortFunc(edits, func(x, y Edit) int { return x.Start - y.Start })
 	return edits, ""
 }
@@ -285,7 +285,7 @@ func (p *Project) ExtractSupertype(ctx context.Context, path string, line int, n
 // each class of the union it tells apart: each case's body becomes that
 // class's method, the subject becoming this, and the switch one call.
 func (p *Project) UnionSwitchToMethod(ctx context.Context, path string, line int, function, method string) ([]Edit, string) {
-	l, why := p.lined(path)
+	l, why := p.Lined(path)
 	if why != "" {
 		return nil, why
 	}
@@ -306,7 +306,7 @@ func (p *Project) UnionSwitchToMethod(ctx context.Context, path string, line int
 		}
 		return false
 	}
-	var scope *ast.Node = l.f.AsNode()
+	var scope *ast.Node = l.File.AsNode()
 	if function != "" {
 		fn, _, _, why := l.function(function)
 		if why != "" {
@@ -317,7 +317,7 @@ func (p *Project) UnionSwitchToMethod(ctx context.Context, path string, line int
 	var found []*ast.Node
 	var visit func(n *ast.Node) bool
 	visit = func(n *ast.Node) bool {
-		if isSubject(n) && (line == 0 || l.line(l.pos(n)) == line) {
+		if isSubject(n) && (line == 0 || l.Line(l.Pos(n)) == line) {
 			found = append(found, n)
 		}
 		n.ForEachChild(visit)
@@ -373,10 +373,10 @@ func (p *Project) UnionSwitchToMethod(ctx context.Context, path string, line int
 		clauses := stmt.AsSwitchStatement().CaseBlock.AsCaseBlock().Clauses.Nodes
 		for _, cl := range clauses {
 			if ast.IsDefaultClause(cl) {
-				return nil, fmt.Sprintf("the switch has a default (%s); give each class a case instead", l.where(cl))
+				return nil, fmt.Sprintf("the switch has a default (%s); give each class a case instead", l.Where(cl))
 			}
 			if len(cl.Statements()) == 0 {
-				return nil, fmt.Sprintf("the case at %s falls through to the next; give it its own body", l.where(cl))
+				return nil, fmt.Sprintf("the case at %s falls through to the next; give it its own body", l.Where(cl))
 			}
 			want := c.TypeToString(c.GetTypeAtLocation(cl.Expression()))
 			var class *ast.Node
@@ -384,12 +384,12 @@ func (p *Project) UnionSwitchToMethod(ctx context.Context, path string, line int
 				if ps := c.GetPropertyOfType(m, prop); ps != nil && c.TypeToString(c.GetTypeOfSymbol(ps)) == want {
 					class = classOf(m)
 					if class == nil {
-						return nil, fmt.Sprintf("%s's case %s is of %s, which is not a class of the solution", prop, l.source(cl.Expression()), c.TypeToString(m))
+						return nil, fmt.Sprintf("%s's case %s is of %s, which is not a class of the solution", prop, l.Source(cl.Expression()), c.TypeToString(m))
 					}
 				}
 			}
 			if class == nil {
-				return nil, fmt.Sprintf("no class of %s has %s %s", c.TypeToString(t), prop, l.source(cl.Expression()))
+				return nil, fmt.Sprintf("no class of %s has %s %s", c.TypeToString(t), prop, l.Source(cl.Expression()))
 			}
 			body := cl.Statements()
 			if last := body[len(body)-1]; last.Kind == ast.KindBreakStatement && last.Label() == nil {
@@ -408,8 +408,8 @@ func (p *Project) UnionSwitchToMethod(ctx context.Context, path string, line int
 			e := is.Expression.AsBinaryExpression()
 			if subject == nil {
 				subject = e.Left
-			} else if !slices.Equal(tokens(l.source(subject)), tokens(l.source(e.Left))) {
-				return nil, fmt.Sprintf("%s tests %s, not %s", l.where(s), l.source(e.Left), l.source(subject))
+			} else if !slices.Equal(tokens(l.Source(subject)), tokens(l.Source(e.Left))) {
+				return nil, fmt.Sprintf("%s tests %s, not %s", l.Where(s), l.Source(e.Left), l.Source(subject))
 			}
 			class := classOf(c.GetTypeAtLocation(e.Right))
 			if s := c.GetSymbolAtLocation(e.Right); s != nil {
@@ -420,7 +420,7 @@ func (p *Project) UnionSwitchToMethod(ctx context.Context, path string, line int
 				}
 			}
 			if class == nil {
-				return nil, fmt.Sprintf("%s is not a class of the solution", l.source(e.Right))
+				return nil, fmt.Sprintf("%s is not a class of the solution", l.Source(e.Right))
 			}
 			body := []*ast.Node{is.ThenStatement}
 			if ast.IsBlock(is.ThenStatement) {
@@ -433,7 +433,7 @@ func (p *Project) UnionSwitchToMethod(ctx context.Context, path string, line int
 			case ast.IsIfStatement(next) && ast.IsBinaryExpression(next.AsIfStatement().Expression) && next.AsIfStatement().Expression.AsBinaryExpression().OperatorToken.Kind == ast.KindInstanceOfKeyword:
 				s = next
 			default:
-				return nil, fmt.Sprintf("the chain ends with an else (%s); give each class a branch instead", l.where(next))
+				return nil, fmt.Sprintf("the chain ends with an else (%s); give each class a branch instead", l.Where(next))
 			}
 		}
 		t := c.GetTypeAtLocation(subject)
@@ -451,7 +451,7 @@ func (p *Project) UnionSwitchToMethod(ctx context.Context, path string, line int
 		}
 	}
 	if re := newEffects(c, l).Of(subject); !re.CanRepeat() {
-		return nil, fmt.Sprintf("the subject %s %s; name it first", l.source(subject), re.Why)
+		return nil, fmt.Sprintf("the subject %s %s; name it first", l.Source(subject), re.Why)
 	}
 	// Every arm returns, or none does.
 	returning := 0
@@ -464,11 +464,11 @@ func (p *Project) UnionSwitchToMethod(ctx context.Context, path string, line int
 			return nil, b.why
 		}
 		if b.this {
-			return nil, fmt.Sprintf("the body at %s uses this, which would then be the class's", l.where(a.at))
+			return nil, fmt.Sprintf("the body at %s uses this, which would then be the class's", l.Where(a.at))
 		}
 		if len(b.returns) > 0 {
 			if len(a.body) == 0 || !terminates(a.body[len(a.body)-1]) {
-				return nil, fmt.Sprintf("the body at %s returns on some paths only", l.where(a.at))
+				return nil, fmt.Sprintf("the body at %s returns on some paths only", l.Where(a.at))
 			}
 			returning++
 		}
@@ -491,7 +491,7 @@ func (p *Project) UnionSwitchToMethod(ctx context.Context, path string, line int
 			return slices.ContainsFunc(a.body, func(s *ast.Node) bool { return n.Pos() >= s.Pos() && n.End() <= s.End() })
 		}
 		for _, s := range a.body {
-			identifiers(s, func(id *ast.Node) {
+			Identifiers(s, func(id *ast.Node) {
 				if why2 != "" || propertyName(id) || ast.IsDeclarationName(id) {
 					return
 				}
@@ -503,7 +503,7 @@ func (p *Project) UnionSwitchToMethod(ctx context.Context, path string, line int
 					return // this
 				}
 				if assignedIn(c, a.body, sym) {
-					why2 = fmt.Sprintf("the body at %s assigns %s, which a method could not", l.where(a.at), id.Text())
+					why2 = fmt.Sprintf("the body at %s assigns %s, which a method could not", l.Where(a.at), id.Text())
 					return
 				}
 				if !slices.ContainsFunc(params, func(p param) bool { return p.sym == sym }) {
@@ -526,20 +526,20 @@ func (p *Project) UnionSwitchToMethod(ctx context.Context, path string, line int
 		ps = append(ps, p.name+": "+p.typ)
 		args = append(args, p.name)
 	}
-	subjText := l.source(subject)
+	subjText := l.Source(subject)
 	for _, a := range arms {
 		cl := newLined(ast.GetSourceFileOfNode(a.class))
 		for _, m := range a.class.Members() {
-			if m.Name() != nil && cl.source(m.Name()) == method {
+			if m.Name() != nil && cl.Source(m.Name()) == method {
 				return nil, fmt.Sprintf("%s already has a member %s", a.class.Name().Text(), method)
 			}
 		}
 		// The body, with the subject as this.
 		var rs []repl
 		for _, s := range a.body {
-			inspect(s, func(n *ast.Node) bool {
-				if ast.IsExpression(n) && slices.Equal(tokens(l.source(n)), tokens(subjText)) && slices.Equal(symbolsOf(c, n), symbolsOf(c, subject)) && !propertyName(n) {
-					rs = append(rs, repl{l.pos(n), n.End(), "this"})
+			Inspect(s, func(n *ast.Node) bool {
+				if ast.IsExpression(n) && slices.Equal(tokens(l.Source(n)), tokens(subjText)) && slices.Equal(symbolsOf(c, n), symbolsOf(c, subject)) && !propertyName(n) {
+					rs = append(rs, repl{l.Pos(n), n.End(), "this"})
 					return false
 				}
 				return true
@@ -551,20 +551,20 @@ func (p *Project) UnionSwitchToMethod(ctx context.Context, path string, line int
 					continue
 				}
 				if r := c.ResolveName(id.Text(), a.class, ast.SymbolFlagsValue, false); r == nil || c.SkipAlias(r) != symbolOf(c, id) {
-					return nil, fmt.Sprintf("%s, which the body at %s uses, is not seen in %s", id.Text(), l.where(a.at), a.class.Name().Text())
+					return nil, fmt.Sprintf("%s, which the body at %s uses, is not seen in %s", id.Text(), l.Where(a.at), a.class.Name().Text())
 				}
 			}
 		}
-		mind := cl.indent(cl.line(cl.pos(a.class))) + cl.unit()
+		mind := cl.Indent(cl.Line(cl.Pos(a.class))) + cl.Unit()
 		text := ""
 		if len(a.body) > 0 {
 			first, last := a.body[0], a.body[len(a.body)-1]
-			start := l.start(l.line(l.pos(first)))
-			end := l.start(l.line(last.End()-1) + 1)
-			from := l.indent(l.line(l.pos(first)))
+			start := l.Start(l.Line(l.Pos(first)))
+			end := l.Start(l.Line(last.End()-1) + 1)
+			from := l.Indent(l.Line(l.Pos(first)))
 			for _, ln := range strings.SplitAfter(l.substitute(start, end, rs), "\n") {
 				if strings.HasPrefix(ln, from) {
-					ln = mind + cl.unit() + ln[len(from):]
+					ln = mind + cl.Unit() + ln[len(from):]
 				}
 				text += ln
 			}
@@ -575,35 +575,35 @@ func (p *Project) UnionSwitchToMethod(ctx context.Context, path string, line int
 		}
 		decl := "\n" + mind + head + "(" + strings.Join(ps, ", ") + "): " + ret + " {\n" + text + mind + "}\n"
 		closing := a.class.End() - 1
-		at := cl.start(cl.line(closing))
-		if strings.TrimSpace(cl.text[at:closing]) != "" {
+		at := cl.Start(cl.Line(closing))
+		if strings.TrimSpace(cl.Text[at:closing]) != "" {
 			return nil, fmt.Sprintf("%s's closing brace shares its line; put it on a line of its own", a.class.Name().Text())
 		}
 		if len(a.class.Members()) == 0 {
 			decl = strings.TrimPrefix(decl, "\n")
 		}
-		edits = append(edits, Edit{File: cl.f.FileName(), Start: at, End: at, NewText: decl})
+		edits = append(edits, Edit{File: cl.File.FileName(), Start: at, End: at, NewText: decl})
 	}
 	if base != nil {
 		// The base declares the method its subclasses now have.
 		bl := newLined(ast.GetSourceFileOfNode(base))
 		for _, m := range base.Members() {
-			if m.Name() != nil && bl.source(m.Name()) == method {
+			if m.Name() != nil && bl.Source(m.Name()) == method {
 				return nil, fmt.Sprintf("%s already has a member %s", base.Name().Text(), method)
 			}
 		}
 		closing := base.End() - 1
-		at := bl.start(bl.line(closing))
-		if strings.TrimSpace(bl.text[at:closing]) != "" {
+		at := bl.Start(bl.Line(closing))
+		if strings.TrimSpace(bl.Text[at:closing]) != "" {
 			return nil, fmt.Sprintf("%s's closing brace shares its line; put it on a line of its own", base.Name().Text())
 		}
-		mind := bl.indent(bl.line(bl.pos(base))) + bl.unit()
-		edits = append(edits, Edit{File: bl.f.FileName(), Start: at, End: at, NewText: mind + "abstract " + method + "(" + strings.Join(ps, ", ") + "): " + ret + bl.semi() + "\n"})
+		mind := bl.Indent(bl.Line(bl.Pos(base))) + bl.Unit()
+		edits = append(edits, Edit{File: bl.File.FileName(), Start: at, End: at, NewText: mind + "abstract " + method + "(" + strings.Join(ps, ", ") + "): " + ret + bl.Semi() + "\n"})
 	}
 	call := operand(l, subject) + "." + method + "(" + strings.Join(args, ", ") + ")"
 	if returning > 0 {
 		call = "return " + call
 	}
-	edits = append(edits, Edit{File: l.f.FileName(), Start: l.pos(stmt), End: stmt.End(), NewText: call + l.semi()})
+	edits = append(edits, Edit{File: l.File.FileName(), Start: l.Pos(stmt), End: stmt.End(), NewText: call + l.Semi()})
 	return edits, ""
 }

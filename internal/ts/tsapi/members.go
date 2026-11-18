@@ -16,12 +16,12 @@ import (
 // "interface" otherwise. A type on one line is opened up into lines, one
 // member a line.
 func (p *Project) MemberPlace(path, name, after, before string) (pl Place, kind string, refusal string) {
-	l, refusal := p.lined(path)
+	l, refusal := p.Lined(path)
 	if refusal != "" {
 		return Place{}, "", refusal
 	}
 	var members *ast.NodeList
-	for _, s := range l.f.Statements.Nodes {
+	for _, s := range l.File.Statements.Nodes {
 		if nm := s.Name(); nm == nil || nm.Text() != name {
 			continue
 		}
@@ -41,12 +41,12 @@ func (p *Project) MemberPlace(path, name, after, before string) (pl Place, kind 
 	if members == nil {
 		return Place{}, "", fmt.Sprintf("the file declares no interface, class or object type %s", name)
 	}
-	open := strings.LastIndexByte(l.text[:members.Pos()], '{')
-	closing := members.End() + strings.IndexByte(l.text[members.End():], '}')
+	open := strings.LastIndexByte(l.Text[:members.Pos()], '{')
+	closing := members.End() + strings.IndexByte(l.Text[members.End():], '}')
 	nodes := members.Nodes
 	nameOf := func(m *ast.Node) string {
 		if nm := m.Name(); nm != nil {
-			return l.text[l.pos(nm):nm.End()]
+			return l.Text[l.Pos(nm):nm.End()]
 		}
 		return ""
 	}
@@ -65,13 +65,13 @@ func (p *Project) MemberPlace(path, name, after, before string) (pl Place, kind 
 			at = i + 1
 		}
 	}
-	outer := l.indent(l.line(open))
-	inner := outer + l.unit()
-	if l.line(open) == l.line(closing) {
+	outer := l.Indent(l.Line(open))
+	inner := outer + l.Unit()
+	if l.Line(open) == l.Line(closing) {
 		line := func(ms []*ast.Node) string {
 			var sb strings.Builder
 			for _, m := range ms {
-				text := strings.TrimSpace(l.text[l.pos(m):m.End()])
+				text := strings.TrimSpace(l.Text[l.Pos(m):m.End()])
 				if !strings.HasSuffix(text, ";") && !strings.HasSuffix(text, ",") {
 					text += ";"
 				}
@@ -85,12 +85,12 @@ func (p *Project) MemberPlace(path, name, after, before string) (pl Place, kind 
 		return Place{At: open + 1, End: open + 1, Indent: inner, Prefix: "\n"}, kind, ""
 	}
 	if at < len(nodes) {
-		start := l.start(l.line(scanner.GetTokenPosOfNode(nodes[at], l.f, true)))
-		return Place{At: start, End: start, Indent: l.indent(l.line(l.pos(nodes[at]))), Suffix: "\n"}, kind, ""
+		start := l.Start(l.Line(scanner.GetTokenPosOfNode(nodes[at], l.File, true)))
+		return Place{At: start, End: start, Indent: l.Indent(l.Line(l.Pos(nodes[at]))), Suffix: "\n"}, kind, ""
 	}
 	last := nodes[len(nodes)-1]
-	end := l.start(l.line(last.End()-1) + 1)
-	return Place{At: end, End: end, Indent: l.indent(l.line(l.pos(last))), Suffix: "\n"}, kind, ""
+	end := l.Start(l.Line(last.End()-1) + 1)
+	return Place{At: end, End: end, Indent: l.Indent(l.Line(l.Pos(last))), Suffix: "\n"}, kind, ""
 }
 
 // ParseMembers parses content as members of an interface, or of a class

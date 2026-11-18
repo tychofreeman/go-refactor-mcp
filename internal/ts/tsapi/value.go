@@ -37,7 +37,7 @@ func (p *Project) WriteValue(ctx context.Context, path, name, param, value strin
 		return nil, strings.Replace(why, "new is", "value is", 1)
 	}
 	mentions := false
-	identifiers(v, func(id *ast.Node) {
+	Identifiers(v, func(id *ast.Node) {
 		named := id.Parent != nil && (ast.IsPropertyAccessExpression(id.Parent) && id.Parent.Name() == id || ast.IsPropertyAssignment(id.Parent) && id.Parent.Name() == id)
 		mentions = mentions || id.Text() == param && !named
 	})
@@ -46,19 +46,19 @@ func (p *Project) WriteValue(ctx context.Context, path, name, param, value strin
 	}
 	text := operand(newLined(ast.GetSourceFileOfNode(v)), v)
 	sym := c.GetSymbolAtLocation(t.params[t.off+i].Name())
-	if where := l.assigns(fn.Body(), sym, c); where != "" {
+	if where := l.Assigns(fn.Body(), sym, c); where != "" {
 		return nil, fmt.Sprintf("the body of %s assigns %s (%s), so no expression can stand for it", name, param, where)
 	}
 	var edits []Edit
-	identifiers(fn.Body(), func(id *ast.Node) {
+	Identifiers(fn.Body(), func(id *ast.Node) {
 		if symbolOf(c, id) != sym || ast.IsDeclarationName(id) && !ast.IsShorthandPropertyAssignment(id.Parent) {
 			return
 		}
 		if ast.IsShorthandPropertyAssignment(id.Parent) {
-			edits = append(edits, Edit{File: l.f.FileName(), Start: l.pos(id), End: id.End(), NewText: param + ": " + strings.TrimSpace(value)})
+			edits = append(edits, Edit{File: l.File.FileName(), Start: l.Pos(id), End: id.End(), NewText: param + ": " + strings.TrimSpace(value)})
 			return
 		}
-		edits = append(edits, Edit{File: l.f.FileName(), Start: l.pos(id), End: id.End(), NewText: text})
+		edits = append(edits, Edit{File: l.File.FileName(), Start: l.Pos(id), End: id.End(), NewText: text})
 	})
 	return edits, ""
 }
@@ -112,7 +112,7 @@ func (t *target) shown(ch SignatureChange, name string) string {
 		if dropped[x] {
 			return false
 		}
-		if ast.IsExpressionNode(x) && !(ast.IsPropertyAccessExpression(x.Parent) && x.Parent.Name() == x) && slices.Equal(tokens(l.source(x)), want) {
+		if ast.IsExpressionNode(x) && !(ast.IsPropertyAccessExpression(x.Parent) && x.Parent.Name() == x) && slices.Equal(tokens(l.Source(x)), want) {
 			found = append(found, x)
 			return false
 		}
@@ -125,12 +125,12 @@ func (t *target) shown(ch SignatureChange, name string) string {
 	}
 	for _, o := range found {
 		if written(o) {
-			return fmt.Sprintf("the body of %s assigns %s (%s), so it does not keep the value the calls passed", name, strings.TrimSpace(ch.Value), l.where(o))
+			return fmt.Sprintf("the body of %s assigns %s (%s), so it does not keep the value the calls passed", name, strings.TrimSpace(ch.Value), l.Where(o))
 		}
 	}
 	for _, o := range found[1:] {
 		if !slices.Equal(symbolsOf(c, o), symbolsOf(c, found[0])) {
-			return fmt.Sprintf("%s means something else at %s than at %s", strings.TrimSpace(ch.Value), l.where(o), l.where(found[0]))
+			return fmt.Sprintf("%s means something else at %s than at %s", strings.TrimSpace(ch.Value), l.Where(o), l.Where(found[0]))
 		}
 	}
 	texts, why := t.introduced(found[0], ch.Value, len(found), name)
@@ -142,10 +142,10 @@ func (t *target) shown(ch SignatureChange, name string) string {
 		cl := newLined(ast.GetSourceFileOfNode(call))
 		args := call.Arguments()
 		if i >= len(args) {
-			return fmt.Sprintf("the call at %s does not pass %s, so it gets undefined, not %s", cl.where(call), ch.Remove, texts[k])
+			return fmt.Sprintf("the call at %s does not pass %s, so it gets undefined, not %s", cl.Where(call), ch.Remove, texts[k])
 		}
-		if got := cl.source(args[i]); !slices.Equal(unparenTokens(tokens(got)), unparenTokens(tokens(texts[k]))) {
-			return fmt.Sprintf("the call at %s passes %s, not %s; change what it passes first, or, if its function passes on a parameter of its own, name that function in also", cl.where(call), got, texts[k])
+		if got := cl.Source(args[i]); !slices.Equal(unparenTokens(tokens(got)), unparenTokens(tokens(texts[k]))) {
+			return fmt.Sprintf("the call at %s passes %s, not %s; change what it passes first, or, if its function passes on a parameter of its own, name that function in also", cl.Where(call), got, texts[k])
 		}
 	}
 	return ""
@@ -183,10 +183,10 @@ func written(o *ast.Node) bool {
 // reads by name, which a parameter so named would take the place of; or
 // nil, with where body reads another of that name (a local, a function,
 // an import of something else), or "" when it reads none.
-func (l *lined) hidden(c *checker.Checker, body *ast.Node, name string) (*ast.Symbol, string) {
+func (l *Lined) hidden(c *checker.Checker, body *ast.Node, name string) (*ast.Symbol, string) {
 	var sym *ast.Symbol
 	where := ""
-	identifiers(body, func(id *ast.Node) {
+	Identifiers(body, func(id *ast.Node) {
 		if where != "" || id.Text() != name || id.Parent != nil && (ast.IsPropertyAccessExpression(id.Parent) && id.Parent.Name() == id || ast.IsPropertyAssignment(id.Parent) && id.Parent.Name() == id) {
 			return
 		}
@@ -199,7 +199,7 @@ func (l *lined) hidden(c *checker.Checker, body *ast.Node, name string) (*ast.Sy
 			sym = s
 			return
 		}
-		where = l.where(id)
+		where = l.Where(id)
 	})
 	if where != "" {
 		return nil, where
@@ -236,7 +236,7 @@ func (t *target) hides(add *NewParameter, name string) string {
 		if strings.Join(strings.Fields(vt), "") != strings.Join(strings.Fields(add.Type), "") {
 			return fmt.Sprintf("the parameter's type %s is not the type %s of the variable %s it would replace", strings.TrimSpace(add.Type), vt, add.Name)
 		}
-		if where := ml.assigns(m.Body(), v, c); where != "" {
+		if where := ml.Assigns(m.Body(), v, c); where != "" {
 			return fmt.Sprintf("the body of %s assigns %s (%s); a parameter would take that write from the variable", owner, add.Name, where)
 		}
 	}
@@ -268,10 +268,10 @@ func (p *Project) ReplacedNote(ctx context.Context, path, name, param, value str
 		}
 		fl := newLined(f)
 		where := ""
-		identifiers(f.AsNode(), func(id *ast.Node) {
+		Identifiers(f.AsNode(), func(id *ast.Node) {
 			if where == "" && id.Text() == param && written(id) {
 				if s := c.GetSymbolAtLocation(id); s != nil && c.SkipAlias(s) == v {
-					where = fl.where(id)
+					where = fl.Where(id)
 				}
 			}
 		})

@@ -41,7 +41,7 @@ func (p *Project) FileRename(ctx context.Context, oldPath, newPath string) []Edi
 // moduleSpecifiers calls fn with each module specifier of the file: of
 // imports, exports, import types, import() and require().
 func moduleSpecifiers(f *ast.SourceFile, fn func(spec, owner *ast.Node)) {
-	inspect(f.AsNode(), func(n *ast.Node) bool {
+	Inspect(f.AsNode(), func(n *ast.Node) bool {
 		switch {
 		case ast.IsImportDeclaration(n) || ast.IsJSImportDeclaration(n):
 			fn(n.AsImportDeclaration().ModuleSpecifier, n)
@@ -86,7 +86,7 @@ func (p *Project) Importers(ctx context.Context, dir string) []string {
 		l := newLined(f)
 		moduleSpecifiers(f, func(spec, _ *ast.Node) {
 			if t := fileOf(c, spec); t != "" && inside(t) {
-				out = append(out, fmt.Sprintf("%s:%d", f.FileName(), l.line(l.pos(spec))))
+				out = append(out, fmt.Sprintf("%s:%d", f.FileName(), l.Line(l.Pos(spec))))
 			}
 		})
 	}
@@ -96,16 +96,16 @@ func (p *Project) Importers(ctx context.Context, dir string) []string {
 // topLevel returns the top-level statements of the file that declare
 // name: a function with its overloads, a class, interface, type alias,
 // enum, or a variable statement.
-func (l *lined) topLevel(name string) []*ast.Node {
+func (l *Lined) topLevel(name string) []*ast.Node {
 	var out []*ast.Node
-	for _, s := range l.f.Statements.Nodes {
+	for _, s := range l.File.Statements.Nodes {
 		switch {
 		case ast.IsInterfaceDeclaration(s), ast.IsTypeAliasDeclaration(s), ast.IsFunctionDeclaration(s), ast.IsClassDeclaration(s), ast.IsEnumDeclaration(s), ast.IsModuleDeclaration(s):
 			if s.Name() != nil && s.Name().Text() == name {
 				out = append(out, s)
 			}
 		case ast.IsVariableStatement(s):
-			if slices.ContainsFunc(declared(s), func(n *ast.Node) bool { return n.Text() == name }) {
+			if slices.ContainsFunc(Declared(s), func(n *ast.Node) bool { return n.Text() == name }) {
 				out = append(out, s)
 			}
 		}
@@ -122,7 +122,7 @@ func topNames(s *ast.Node) []*ast.Node {
 		}
 		return nil
 	}
-	return declared(s)
+	return Declared(s)
 }
 
 // importLine is an import of what the file at from exports as names,
@@ -170,14 +170,14 @@ func respec(spec, from, to string) string {
 // specFor returns the module specifier of the file at target for a file
 // at from, in the style of the file's own relative imports (with .js,
 // with .ts or without an extension).
-func (l *lined) specFor(target string) string {
+func (l *Lined) specFor(target string) string {
 	ext := ""
-	moduleSpecifiers(l.f, func(spec, _ *ast.Node) {
+	moduleSpecifiers(l.File, func(spec, _ *ast.Node) {
 		if s := spec.Text(); strings.HasPrefix(s, ".") && (strings.HasSuffix(s, ".js") || strings.HasSuffix(s, ".ts")) {
 			ext = path.Ext(s)
 		}
 	})
-	rel := relPath(path.Dir(l.f.FileName()), target)
+	rel := relPath(path.Dir(l.File.FileName()), target)
 	spec := strings.TrimSuffix(rel, path.Ext(rel)) + ext
 	if !strings.HasPrefix(spec, ".") {
 		spec = "./" + spec
@@ -193,7 +193,7 @@ func (l *lined) specFor(target string) string {
 // withDeps also moves the declarations of the old file it uses, and what
 // they use. created says whether to is new.
 func (p *Project) MoveDeclaration(ctx context.Context, file string, line int, name string, column int, to string, also []string, withDeps bool) (edits []Edit, created bool, refusal string) {
-	l, why := p.lined(file)
+	l, why := p.Lined(file)
 	if why != "" {
 		return nil, false, why
 	}
@@ -202,27 +202,27 @@ func (p *Project) MoveDeclaration(ctx context.Context, file string, line int, na
 	c, done := prog.GetTypeChecker(ctx)
 	defer done()
 	if line > 0 {
-		if line > l.count() {
-			return nil, false, fmt.Sprintf("line %d out of range: the file has %d lines", line, l.count())
+		if line > l.Count() {
+			return nil, false, fmt.Sprintf("line %d out of range: the file has %d lines", line, l.Count())
 		}
 		var decl *ast.Node
-		identifiers(l.f.AsNode(), func(id *ast.Node) {
-			start := l.pos(id)
-			if decl == nil && id.Text() == name && l.line(start) == line && (column == 0 || start-l.start(line)+1 == column) {
+		Identifiers(l.File.AsNode(), func(id *ast.Node) {
+			start := l.Pos(id)
+			if decl == nil && id.Text() == name && l.Line(start) == line && (column == 0 || start-l.Start(line)+1 == column) {
 				if s := symbolOf(c, id); s != nil && len(s.Declarations) > 0 {
 					decl = s.Declarations[0]
 				}
 			}
 		})
 		if decl == nil {
-			return nil, false, fmt.Sprintf("no name %s on line %d: %s", name, line, strings.TrimSpace(l.text[l.start(line):l.end(line)]))
+			return nil, false, fmt.Sprintf("no name %s on line %d: %s", name, line, strings.TrimSpace(l.Text[l.Start(line):l.End(line)]))
 		}
 		l = newLined(ast.GetSourceFileOfNode(decl))
-		if l.f.IsDeclarationFile {
-			return nil, false, fmt.Sprintf("%s is declared in %s, not in the solution's code", name, l.f.FileName())
+		if l.File.IsDeclarationFile {
+			return nil, false, fmt.Sprintf("%s is declared in %s, not in the solution's code", name, l.File.FileName())
 		}
 	}
-	from := l.f.FileName()
+	from := l.File.FileName()
 	if from == to {
 		return nil, false, fmt.Sprintf("%s is already in %s", name, path.Base(to))
 	}
@@ -243,10 +243,10 @@ func (p *Project) MoveDeclaration(ctx context.Context, file string, line int, na
 				return fmt.Sprintf("%s is a namespace; move its contents instead", n)
 			case ast.HasSyntacticModifier(s, ast.ModifierFlagsDefault):
 				return fmt.Sprintf("%s is the file's default export", n)
-			case ast.IsVariableStatement(s) && len(declared(s)) > 1:
-				return fmt.Sprintf("%s is declared with %s in one statement (%s); split it first", n, joinNames(declared(s)), l.where(s))
+			case ast.IsVariableStatement(s) && len(Declared(s)) > 1:
+				return fmt.Sprintf("%s is declared with %s in one statement (%s); split it first", n, joinNames(Declared(s)), l.Where(s))
 			case ast.IsInterfaceDeclaration(s) && len(l.topLevel(n)) > 1 && !ast.IsInterfaceDeclaration(l.topLevel(n)[0]):
-				return fmt.Sprintf("%s is declared more than once (%s)", n, l.where(s))
+				return fmt.Sprintf("%s is declared more than once (%s)", n, l.Where(s))
 			}
 			moving = append(moving, s)
 		}
@@ -262,7 +262,7 @@ func (p *Project) MoveDeclaration(ctx context.Context, file string, line int, na
 		}
 	}
 	in := func(n *ast.Node) bool {
-		return ast.GetSourceFileOfNode(n) == l.f && slices.ContainsFunc(moving, func(s *ast.Node) bool { return n.Pos() >= s.Pos() && n.End() <= s.End() })
+		return ast.GetSourceFileOfNode(n) == l.File && slices.ContainsFunc(moving, func(s *ast.Node) bool { return n.Pos() >= s.Pos() && n.End() <= s.End() })
 	}
 	// What the moving code uses from its file: declarations that stay,
 	// and imports.
@@ -273,7 +273,7 @@ func (p *Project) MoveDeclaration(ctx context.Context, file string, line int, na
 	for {
 		var stay []use
 		for _, s := range moving {
-			identifiers(s, func(id *ast.Node) {
+			Identifiers(s, func(id *ast.Node) {
 				if ast.IsDeclarationName(id) {
 					return
 				}
@@ -285,11 +285,11 @@ func (p *Project) MoveDeclaration(ctx context.Context, file string, line int, na
 					return
 				}
 				d := sym.Declarations[0]
-				if ast.GetSourceFileOfNode(d) != l.f || in(d) {
+				if ast.GetSourceFileOfNode(d) != l.File || in(d) {
 					return
 				}
 				for x := d; x != nil; x = x.Parent {
-					if x.Parent == l.f.AsNode() {
+					if x.Parent == l.File.AsNode() {
 						if !ast.IsImportDeclaration(x) && !slices.ContainsFunc(stay, func(u use) bool { return u.decl == x }) {
 							stay = append(stay, use{x, id})
 						}
@@ -301,7 +301,7 @@ func (p *Project) MoveDeclaration(ctx context.Context, file string, line int, na
 		if len(stay) == 0 || !withDeps {
 			for _, u := range stay {
 				if !ast.HasSyntacticModifier(u.decl, ast.ModifierFlagsExport) {
-					return nil, false, fmt.Sprintf("%s uses %s (%s), which stays in %s and is not exported; move it too (also, or with_dependencies), or export it first", l.part(moving[0]), u.id.Text(), l.where(u.id), path.Base(from))
+					return nil, false, fmt.Sprintf("%s uses %s (%s), which stays in %s and is not exported; move it too (also, or with_dependencies), or export it first", l.part(moving[0]), u.id.Text(), l.Where(u.id), path.Base(from))
 				}
 			}
 			break
@@ -326,12 +326,12 @@ func (p *Project) MoveDeclaration(ctx context.Context, file string, line int, na
 
 	// The destination: its text, and the names it declares already.
 	dest := prog.GetSourceFile(to)
-	var dl *lined
+	var dl *Lined
 	if dest != nil {
 		dl = newLined(dest)
 		for n := range names {
 			if len(dl.topLevel(n)) > 0 {
-				return nil, false, fmt.Sprintf("%s already declares %s (%s)", path.Base(to), n, dl.where(dl.topLevel(n)[0]))
+				return nil, false, fmt.Sprintf("%s already declares %s (%s)", path.Base(to), n, dl.Where(dl.topLevel(n)[0]))
 			}
 		}
 	} else if p.fileExists(to) {
@@ -346,8 +346,8 @@ func (p *Project) MoveDeclaration(ctx context.Context, file string, line int, na
 		if f.IsDeclarationFile {
 			continue
 		}
-		identifiers(f.AsNode(), func(id *ast.Node) {
-			if ast.IsDeclarationName(id) || f == l.f && in(id) {
+		Identifiers(f.AsNode(), func(id *ast.Node) {
+			if ast.IsDeclarationName(id) || f == l.File && in(id) {
 				return
 			}
 			if s := symbolOf(c, id); slices.Contains(movedSyms, s) && !(dest != nil && f == dest) {
@@ -360,13 +360,13 @@ func (p *Project) MoveDeclaration(ctx context.Context, file string, line int, na
 	}
 	// The moved text.
 	var moved strings.Builder
-	quote, semi := l.quote(), l.semi()
+	quote, semi := l.quote(), l.Semi()
 	for i, s := range moving {
 		a, b, ok := l.lineRange(s)
 		if !ok {
 			return nil, false, fmt.Sprintf("%s shares its lines with other code", l.part(s))
 		}
-		text := l.text[a:b]
+		text := l.Text[a:b]
 		exported := ast.HasSyntacticModifier(s, ast.ModifierFlagsExport)
 		need := false
 		for _, n := range topNames(s) {
@@ -374,7 +374,7 @@ func (p *Project) MoveDeclaration(ctx context.Context, file string, line int, na
 			need = need || usedOutside[sym]
 		}
 		if need && !exported {
-			at := l.pos(s) - a
+			at := l.Pos(s) - a
 			text = text[:at] + "export " + text[at:]
 		}
 		if i > 0 {
@@ -408,7 +408,7 @@ func (p *Project) MoveDeclaration(ctx context.Context, file string, line int, na
 		}
 		needs = append(needs, im)
 	}
-	identifiers(l.f.AsNode(), func(id *ast.Node) {
+	Identifiers(l.File.AsNode(), func(id *ast.Node) {
 		if ast.IsDeclarationName(id) || ast.IsImportSpecifier(id.Parent) {
 			return
 		}
@@ -420,7 +420,7 @@ func (p *Project) MoveDeclaration(ctx context.Context, file string, line int, na
 			return
 		}
 		d := sym.Declarations[0]
-		if ast.GetSourceFileOfNode(d) != l.f {
+		if ast.GetSourceFileOfNode(d) != l.File {
 			return
 		}
 		isImport := ast.IsImportSpecifier(d) || ast.IsImportClause(d) || ast.IsNamespaceImport(d)
@@ -455,7 +455,7 @@ func (p *Project) MoveDeclaration(ctx context.Context, file string, line int, na
 	var back []string
 	for _, sym := range movedSyms {
 		used := false
-		identifiers(l.f.AsNode(), func(id *ast.Node) {
+		Identifiers(l.File.AsNode(), func(id *ast.Node) {
 			if !used && !in(id) && !ast.IsDeclarationName(id) && symbolOf(c, id) == sym {
 				used = true
 			}
@@ -474,7 +474,7 @@ func (p *Project) MoveDeclaration(ctx context.Context, file string, line int, na
 	// Other files that import the moved code from the old file import it
 	// from the new one.
 	for _, f := range prog.GetSourceFiles() {
-		if f.IsDeclarationFile || f == l.f {
+		if f.IsDeclarationFile || f == l.File {
 			continue
 		}
 		fl := newLined(f)
@@ -489,8 +489,8 @@ func (p *Project) MoveDeclaration(ctx context.Context, file string, line int, na
 				clause := owner.AsImportDeclaration().ImportClause
 				nb := clause.AsImportClause().NamedBindings
 				if nb != nil && ast.IsNamespaceImport(nb) {
-					if uses(c, f.AsNode(), movedSyms) != nil {
-						why = fmt.Sprintf("%s imports %s as a namespace and uses what moves; import it by name first", fl.where(owner), path.Base(from))
+					if Uses(c, f.AsNode(), movedSyms) != nil {
+						why = fmt.Sprintf("%s imports %s as a namespace and uses what moves; import it by name first", fl.Where(owner), path.Base(from))
 					}
 					return
 				}
@@ -516,7 +516,7 @@ func (p *Project) MoveDeclaration(ctx context.Context, file string, line int, na
 							continue
 						}
 						alias := c.GetSymbolAtLocation(el.Name())
-						identifiers(f.AsNode(), func(id *ast.Node) {
+						Identifiers(f.AsNode(), func(id *ast.Node) {
 							if id == el.Name() {
 								return
 							}
@@ -532,7 +532,7 @@ func (p *Project) MoveDeclaration(ctx context.Context, file string, line int, na
 							if shorthand {
 								text = id.Text() + ": " + text
 							}
-							edits = append(edits, Edit{File: f.FileName(), Start: fl.pos(id), End: id.End(), NewText: text})
+							edits = append(edits, Edit{File: f.FileName(), Start: fl.Pos(id), End: id.End(), NewText: text})
 						})
 					}
 					if len(moves) == len(list.Nodes) && clause.Name() == nil {
@@ -554,12 +554,12 @@ func (p *Project) MoveDeclaration(ctx context.Context, file string, line int, na
 						}
 					}
 				case len(moves) == len(list.Nodes) && clause.Name() == nil:
-					edits = append(edits, Edit{File: f.FileName(), Start: fl.pos(spec) + 1, End: spec.End() - 1, NewText: fl.specFor(to)})
+					edits = append(edits, Edit{File: f.FileName(), Start: fl.Pos(spec) + 1, End: spec.End() - 1, NewText: fl.specFor(to)})
 				default:
 					var named []string
 					for i := len(moves) - 1; i >= 0; i-- {
 						el := list.Nodes[moves[i]]
-						named = append([]string{fl.source(el)}, named...)
+						named = append([]string{fl.Source(el)}, named...)
 						edits = append(edits, fl.removeAt(list, moves[i]))
 					}
 					fresh = append(fresh, importLine{spec: fl.specFor(to), named: named, typeOnly: clause.IsTypeOnly()})
@@ -567,7 +567,7 @@ func (p *Project) MoveDeclaration(ctx context.Context, file string, line int, na
 			case ast.IsExportDeclaration(owner):
 				ed := owner.AsExportDeclaration()
 				if ed.ExportClause == nil {
-					why = fmt.Sprintf("%s re-exports everything of %s, which would then not have what moves", fl.where(owner), path.Base(from))
+					why = fmt.Sprintf("%s re-exports everything of %s, which would then not have what moves", fl.Where(owner), path.Base(from))
 					return
 				}
 				list := ed.ExportClause.AsNamedExports().Elements
@@ -580,13 +580,13 @@ func (p *Project) MoveDeclaration(ctx context.Context, file string, line int, na
 				switch {
 				case n == 0:
 				case n == len(list.Nodes):
-					edits = append(edits, Edit{File: f.FileName(), Start: fl.pos(spec) + 1, End: spec.End() - 1, NewText: fl.specFor(to)})
+					edits = append(edits, Edit{File: f.FileName(), Start: fl.Pos(spec) + 1, End: spec.End() - 1, NewText: fl.specFor(to)})
 				default:
-					why = fmt.Sprintf("%s re-exports some of what moves and some of what stays; split it first", fl.where(owner))
+					why = fmt.Sprintf("%s re-exports some of what moves and some of what stays; split it first", fl.Where(owner))
 				}
 			default:
 				if !ast.IsImportDeclaration(owner) {
-					why = fmt.Sprintf("%s refers to %s by import() or require(), which this does not follow", fl.where(owner), path.Base(from))
+					why = fmt.Sprintf("%s refers to %s by import() or require(), which this does not follow", fl.Where(owner), path.Base(from))
 				}
 			}
 		})
@@ -594,7 +594,7 @@ func (p *Project) MoveDeclaration(ctx context.Context, file string, line int, na
 			return nil, false, why
 		}
 		if len(fresh) > 0 {
-			fq, fs := fl.quote(), fl.semi()
+			fq, fs := fl.quote(), fl.Semi()
 			var texts []string
 			for _, im := range fresh {
 				texts = append(texts, im.text(fq, fs))
@@ -606,7 +606,7 @@ func (p *Project) MoveDeclaration(ctx context.Context, file string, line int, na
 	// The new place.
 	var header []string
 	if dest != nil {
-		quote, semi = dl.quote(), dl.semi()
+		quote, semi = dl.quote(), dl.Semi()
 	}
 	for _, im := range needs {
 		if dest != nil {
@@ -630,11 +630,11 @@ func (p *Project) MoveDeclaration(ctx context.Context, file string, line int, na
 		at, text := dl.importAt()
 		edits = append(edits, Edit{File: to, Start: at, End: at, NewText: text(strings.Join(header, "\n"))})
 	}
-	end := len(dl.text)
+	end := len(dl.Text)
 	sep := "\n"
-	if !strings.HasSuffix(dl.text, "\n") {
+	if !strings.HasSuffix(dl.Text, "\n") {
 		sep = "\n\n"
-	} else if strings.TrimSpace(dl.text) == "" {
+	} else if strings.TrimSpace(dl.Text) == "" {
 		sep = ""
 	}
 	edits = append(edits, Edit{File: to, Start: end, End: end, NewText: sep + moved.String()})
@@ -643,9 +643,9 @@ func (p *Project) MoveDeclaration(ctx context.Context, file string, line int, na
 
 // newLinedSpec is the specifier for the file at target from a file at
 // to, in the style of l's relative imports.
-func newLinedSpec(to, target string, l *lined) string {
+func newLinedSpec(to, target string, l *Lined) string {
 	ext := ""
-	moduleSpecifiers(l.f, func(spec, _ *ast.Node) {
+	moduleSpecifiers(l.File, func(spec, _ *ast.Node) {
 		if s := spec.Text(); strings.HasPrefix(s, ".") && strings.HasSuffix(s, ".js") {
 			ext = ".js"
 		}
@@ -661,9 +661,9 @@ func newLinedSpec(to, target string, l *lined) string {
 // importAt returns where a new import goes in the file, at the start of
 // the line after its last import (where removing that import's lines
 // ends) or at its top, and how to write one there.
-func (l *lined) importAt() (int, func(string) string) {
+func (l *Lined) importAt() (int, func(string) string) {
 	var last *ast.Node
-	for _, s := range l.f.Statements.Nodes {
+	for _, s := range l.File.Statements.Nodes {
 		if ast.IsImportDeclaration(s) {
 			last = s
 		}
@@ -671,16 +671,16 @@ func (l *lined) importAt() (int, func(string) string) {
 	if last == nil {
 		return 0, func(s string) string { return s + "\n\n" }
 	}
-	line := l.line(last.End() - 1)
-	if line == l.count() && !strings.HasSuffix(l.text, "\n") {
-		return len(l.text), func(s string) string { return "\n" + s }
+	line := l.Line(last.End() - 1)
+	if line == l.Count() && !strings.HasSuffix(l.Text, "\n") {
+		return len(l.Text), func(s string) string { return "\n" + s }
 	}
-	return l.start(line + 1), func(s string) string { return s + "\n" }
+	return l.Start(line + 1), func(s string) string { return s + "\n" }
 }
 
 // imports reports whether the file imports name from the module spec.
-func (l *lined) imports(c *checker.Checker, spec, name string) bool {
-	for _, s := range l.f.Statements.Nodes {
+func (l *Lined) imports(c *checker.Checker, spec, name string) bool {
+	for _, s := range l.File.Statements.Nodes {
 		if !ast.IsImportDeclaration(s) || s.AsImportDeclaration().ModuleSpecifier.Text() != spec || s.AsImportDeclaration().ImportClause == nil {
 			continue
 		}

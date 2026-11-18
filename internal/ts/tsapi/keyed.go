@@ -24,20 +24,20 @@ var byKey = map[string]bool{
 // whose output changes. Both are empty for what is not a member of a
 // class, interface or object type.
 func (p *Project) KeyedUses(ctx context.Context, path string, offset int) (refusal string, printed []string) {
-	l, why := p.lined(path)
+	l, why := p.Lined(path)
 	if why != "" {
 		return "", nil
 	}
 	var id *ast.Node
 	var find func(n *ast.Node) bool
 	find = func(n *ast.Node) bool {
-		if ast.IsIdentifier(n) && l.pos(n) == offset {
+		if ast.IsIdentifier(n) && l.Pos(n) == offset {
 			id = n
 			return true
 		}
 		return n.ForEachChild(find)
 	}
-	find(l.f.AsNode())
+	find(l.File.AsNode())
 	if id == nil {
 		return "", nil
 	}
@@ -58,24 +58,24 @@ func (p *Project) KeyedUses(ctx context.Context, path string, offset int) (refus
 			}
 			switch {
 			case ast.IsCallExpression(n) && ast.IsPropertyAccessExpression(n.Expression()):
-				callee := fl.source(n.Expression())
+				callee := fl.Source(n.Expression())
 				for _, a := range n.Arguments() {
 					if !holds(c.GetTypeAtLocation(a)) {
 						continue
 					}
 					switch {
 					case byKey[callee]:
-						refusal = fmt.Sprintf("a value holding %s is passed to %s at %s, which finds properties by name, so renaming %s could change what it does", owner.Name, callee, fl.where(n), sym.Name)
+						refusal = fmt.Sprintf("a value holding %s is passed to %s at %s, which finds properties by name, so renaming %s could change what it does", owner.Name, callee, fl.Where(n), sym.Name)
 					case strings.HasPrefix(callee, "console."):
-						printed = append(printed, fl.where(n)+" "+callee)
+						printed = append(printed, fl.Where(n)+" "+callee)
 					}
 				}
 			case ast.IsForInStatement(n) && holds(c.GetTypeAtLocation(n.Expression())):
-				refusal = fmt.Sprintf("a value holding %s is looped over with for...in at %s, which finds properties by name, so renaming %s could change what it does", owner.Name, fl.where(n), sym.Name)
+				refusal = fmt.Sprintf("a value holding %s is looped over with for...in at %s, which finds properties by name, so renaming %s could change what it does", owner.Name, fl.Where(n), sym.Name)
 			case ast.IsBinaryExpression(n) && n.AsBinaryExpression().OperatorToken.Kind == ast.KindInKeyword:
 				b := n.AsBinaryExpression()
 				if ast.IsStringLiteral(b.Left) && b.Left.Text() == sym.Name && holds(c.GetTypeAtLocation(b.Right)) {
-					refusal = fmt.Sprintf("%q in tests a value of %s for the property by name at %s; the rename would leave the string, so change the test first", sym.Name, owner.Name, fl.where(n))
+					refusal = fmt.Sprintf("%q in tests a value of %s for the property by name at %s; the rename would leave the string, so change the test first", sym.Name, owner.Name, fl.Where(n))
 				}
 			}
 			return n.ForEachChild(visit)

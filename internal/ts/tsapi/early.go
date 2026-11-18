@@ -58,8 +58,8 @@ func (e *early) fresh(base string) string {
 // template literal.
 func (e *early) indentLines(off, end int) {
 	fl := e.in.fl
-	for _, n := range fl.indentable(fl.line(off), fl.line(end)) {
-		e.insert(fl.start(n), e.unit)
+	for _, n := range fl.indentable(fl.Line(off), fl.Line(end)) {
+		e.insert(fl.Start(n), e.unit)
 	}
 }
 
@@ -79,7 +79,7 @@ func (e *early) plan(list []*ast.Node, tail bool, loop string) (flagged bool, wh
 		switch {
 		case ast.IsReturnStatement(s):
 			if !last {
-				return false, "it has statements after a return (" + fl.where(s) + "), which never run"
+				return false, "it has statements after a return (" + fl.Where(s) + "), which never run"
 			}
 			e.exits[s] = loop
 			if e.sw && loop == "" {
@@ -99,8 +99,8 @@ func (e *early) plan(list []*ast.Node, tail bool, loop string) (flagged bool, wh
 					return false, why
 				}
 				e.insert(is.ThenStatement.End(), " else {")
-				e.indentLines(fl.pos(rest[0]), rest[len(rest)-1].End())
-				e.insert(rest[len(rest)-1].End(), "\n"+fl.indent(fl.line(fl.pos(s)))+"}")
+				e.indentLines(fl.Pos(rest[0]), rest[len(rest)-1].End())
+				e.insert(rest[len(rest)-1].End(), "\n"+fl.Indent(fl.Line(fl.Pos(s)))+"}")
 				g, why := e.plan(rest, true, loop)
 				return flagged || g, why
 			}
@@ -140,14 +140,14 @@ func (e *early) plan(list []*ast.Node, tail bool, loop string) (flagged bool, wh
 				body = s.AsLabeledStatement().Statement
 			}
 			if !(ast.IsForStatement(body) || ast.IsForInOrOfStatement(body) || ast.IsWhileStatement(body) || ast.IsDoStatement(body)) {
-				return false, "it returns inside a labelled statement that is not a loop (" + fl.where(s) + ")"
+				return false, "it returns inside a labelled statement that is not a loop (" + fl.Where(s) + ")"
 			}
 			if label == "" { // the outermost loop: a return breaks out of all of them
 				if ast.IsLabeledStatement(s) {
 					label = s.AsLabeledStatement().Label.Text()
 				} else {
 					label = e.fresh("loop")
-					e.insert(fl.pos(s), label+": ")
+					e.insert(fl.Pos(s), label+": ")
 				}
 			}
 			var why string
@@ -158,7 +158,7 @@ func (e *early) plan(list []*ast.Node, tail bool, loop string) (flagged bool, wh
 				return false, why
 			}
 		default:
-			return false, "it returns inside a statement other than an if, switch, block or loop (" + fl.where(s) + ")"
+			return false, "it returns inside a statement other than an if, switch, block or loop (" + fl.Where(s) + ")"
 		}
 		flagged = flagged || f
 		if f && tail && loop == "" && e.hoistable(s, rest) {
@@ -173,10 +173,10 @@ func (e *early) plan(list []*ast.Node, tail bool, loop string) (flagged bool, wh
 			if e.flag == "" {
 				e.flag = e.fresh("returned")
 			}
-			at := fl.start(fl.line(fl.pos(rest[0])))
-			ind := fl.indent(fl.line(fl.pos(rest[0])))
+			at := fl.Start(fl.Line(fl.Pos(rest[0])))
+			ind := fl.Indent(fl.Line(fl.Pos(rest[0])))
 			e.insert(at, ind+"if (!"+e.flag+") {\n")
-			e.indentLines(fl.pos(rest[0]), rest[len(rest)-1].End())
+			e.indentLines(fl.Pos(rest[0]), rest[len(rest)-1].End())
 			e.insert(rest[len(rest)-1].End(), "\n"+ind+"}")
 			g, why := e.plan(rest, tail, loop)
 			return flagged || g, why
@@ -199,20 +199,20 @@ func (e *early) hoistable(s *ast.Node, rest []*ast.Node) bool {
 // finish adds the edits of the returns: each assigns its value to the
 // target, sets the flag and breaks out of its loop as planned.
 func (e *early) finish() {
-	fl, semi := e.in.fl, e.in.fl.semi()
+	fl, semi := e.in.fl, e.in.fl.Semi()
 	for r, s := range e.hoisted {
 		x := r.Expression()
-		value := fl.substitute(fl.pos(x), x.End(), e.params)
+		value := fl.substitute(fl.Pos(x), x.End(), e.params)
 		if a, b, ok := fl.lineRange(r); ok {
 			e.rs = append(e.rs, repl{a, b, ""})
 		} else {
-			e.rs = append(e.rs, repl{fl.pos(r), r.End(), ""})
+			e.rs = append(e.rs, repl{fl.Pos(r), r.End(), ""})
 		}
 		if e.decl && s.Parent == e.in.fn.Body() {
 			e.declInit = value
 			continue
 		}
-		e.insert(fl.start(fl.line(fl.pos(s))), fl.indent(fl.line(fl.pos(s)))+e.target+" = "+value+semi+"\n")
+		e.insert(fl.Start(fl.Line(fl.Pos(s))), fl.Indent(fl.Line(fl.Pos(s)))+e.target+" = "+value+semi+"\n")
 	}
 	for r, label := range e.exits {
 		var then []string
@@ -225,21 +225,21 @@ func (e *early) finish() {
 		case e.breaks[r]:
 			then = append(then, "break"+semi)
 		}
-		ind := fl.indent(fl.line(fl.pos(r)))
+		ind := fl.Indent(fl.Line(fl.Pos(r)))
 		x := r.Expression()
 		switch {
 		case x != nil && e.target != "":
-			e.rs = append(e.rs, repl{fl.pos(r), fl.pos(r) + len("return"), e.target + " ="})
+			e.rs = append(e.rs, repl{fl.Pos(r), fl.Pos(r) + len("return"), e.target + " ="})
 		case x != nil && !e.in.ef.Of(x).CanDrop():
-			e.rs = append(e.rs, repl{fl.pos(r), fl.pos(x), ""})
+			e.rs = append(e.rs, repl{fl.Pos(r), fl.Pos(x), ""})
 		case len(then) > 0:
-			e.rs = append(e.rs, repl{fl.pos(r), r.End(), strings.Join(then, "\n"+ind)})
+			e.rs = append(e.rs, repl{fl.Pos(r), r.End(), strings.Join(then, "\n"+ind)})
 			continue
 		default:
 			if a, b, ok := fl.lineRange(r); ok {
 				e.rs = append(e.rs, repl{a, b, ""})
 			} else {
-				e.rs = append(e.rs, repl{fl.pos(r), r.End(), ""})
+				e.rs = append(e.rs, repl{fl.Pos(r), r.End(), ""})
 			}
 			continue
 		}
@@ -281,7 +281,7 @@ func returnsAtEnd(s *ast.Node) bool {
 // hasReturn reports whether s holds a return of the function it is in.
 func hasReturn(s *ast.Node) bool {
 	found := false
-	inspect(s, func(n *ast.Node) bool {
+	Inspect(s, func(n *ast.Node) bool {
 		switch {
 		case found || ast.IsFunctionLike(n) || ast.IsClassLike(n):
 			return false

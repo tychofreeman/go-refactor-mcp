@@ -13,15 +13,15 @@ import (
 
 // chosen returns the statements of one list that lines first-last hold
 // whole, besides comments and blank lines, or why they do not.
-func (l *lined) chosen(first, last int) ([]*ast.Node, string) {
-	if first < 1 || last < first || last > l.count() {
-		return nil, fmt.Sprintf("lines %d-%d are not a range of lines of the file, which has %d", first, last, l.count())
+func (l *Lined) chosen(first, last int) ([]*ast.Node, string) {
+	if first < 1 || last < first || last > l.Count() {
+		return nil, fmt.Sprintf("lines %d-%d are not a range of lines of the file, which has %d", first, last, l.Count())
 	}
 	var chosen, over []*ast.Node
 	l.lists(func(_ *ast.Node, list []*ast.Node) {
 		var in, o []*ast.Node
 		for _, s := range list {
-			a, b := l.lines(s)
+			a, b := l.Lines(s)
 			if a >= first && b <= last {
 				in = append(in, s)
 			}
@@ -39,8 +39,8 @@ func (l *lined) chosen(first, last int) ([]*ast.Node, string) {
 	if !l.whole(chosen, first, last) {
 		msg := fmt.Sprintf("lines %d-%d do not hold whole statements of one block", first, last)
 		if len(over) > 0 {
-			a, _ := l.lines(over[0])
-			_, b := l.lines(over[len(over)-1])
+			a, _ := l.Lines(over[0])
+			_, b := l.Lines(over[len(over)-1])
 			if (a != first || b != last) && l.whole(over, a, b) {
 				msg += fmt.Sprintf("; lines %d-%d do", a, b)
 			}
@@ -75,7 +75,7 @@ func assignedIn(c *checker.Checker, nodes []*ast.Node, s *ast.Symbol) bool {
 			switch {
 			case ast.IsBinaryExpression(x) && ast.IsAssignmentOperator(x.AsBinaryExpression().OperatorToken.Kind):
 				target = x.AsBinaryExpression().Left
-			case ast.IsPrefixUnaryExpression(x) && isUpdate(x.AsPrefixUnaryExpression().Operator):
+			case ast.IsPrefixUnaryExpression(x) && IsUpdate(x.AsPrefixUnaryExpression().Operator):
 				target = x.AsPrefixUnaryExpression().Operand
 			case ast.IsPostfixUnaryExpression(x):
 				target = x.AsPostfixUnaryExpression().Operand
@@ -98,7 +98,7 @@ func assignedIn(c *checker.Checker, nodes []*ast.Node, s *ast.Symbol) bool {
 // body is what a run of statements does that a function made of them
 // must keep: awaits, this, returns, and jumps out of them.
 type body struct {
-	l                   *lined
+	l                   *Lined
 	c                   *checker.Checker
 	async, this         bool
 	returns             []*ast.Node
@@ -176,7 +176,7 @@ func (b *body) visit(n *ast.Node) {
 // class, when the new code is not its method) around stmts that the
 // statements or the new parameters' types name: the new function declares
 // them.
-func (l *lined) typeParamsUsed(c *checker.Checker, stmts []*ast.Node, params []string, member *ast.Node) []*ast.Node {
+func (l *Lined) typeParamsUsed(c *checker.Checker, stmts []*ast.Node, params []string, member *ast.Node) []*ast.Node {
 	var out []*ast.Node
 	for n := stmts[0].Parent; n != nil; n = n.Parent {
 		if !(ast.IsFunctionLike(n) || ast.IsClassLike(n)) || member != nil && n == member.Parent {
@@ -186,7 +186,7 @@ func (l *lined) typeParamsUsed(c *checker.Checker, stmts []*ast.Node, params []s
 			name := tp.Name().Text()
 			used := slices.ContainsFunc(params, func(p string) bool { return containsWord(p, name) })
 			for _, s := range stmts {
-				identifiers(s, func(id *ast.Node) {
+				Identifiers(s, func(id *ast.Node) {
 					if !used && id.Text() == name {
 						if sym := c.GetSymbolAtLocation(id); sym != nil && slices.Contains(sym.Declarations, tp) {
 							used = true
@@ -225,7 +225,7 @@ func containsWord(s, word string) bool {
 // call it in their place. Locals they read become parameters; those they
 // declare or assign that are used elsewhere come back as its result.
 func (p *Project) ExtractFunction(ctx context.Context, path string, first, last int, name, doc, visibility string) ([]Edit, string) {
-	l, why := p.lined(path)
+	l, why := p.Lined(path)
 	if why != "" {
 		return nil, why
 	}
@@ -233,11 +233,11 @@ func (p *Project) ExtractFunction(ctx context.Context, path string, first, last 
 	if why != "" {
 		return nil, why
 	}
-	c, done := p.prog.GetProgram().GetTypeCheckerForFile(ctx, l.f)
+	c, done := p.prog.GetProgram().GetTypeCheckerForFile(ctx, l.File)
 	defer done()
-	start, end := l.pos(stmts[0]), stmts[len(stmts)-1].End()
+	start, end := l.Pos(stmts[0]), stmts[len(stmts)-1].End()
 	in := func(n *ast.Node) bool {
-		return ast.GetSourceFileOfNode(n) == l.f && n.Pos() >= stmts[0].Pos() && n.End() <= end
+		return ast.GetSourceFileOfNode(n) == l.File && n.Pos() >= stmts[0].Pos() && n.End() <= end
 	}
 	b := &body{l: l, c: c, labels: map[string]bool{}}
 	for _, s := range stmts {
@@ -249,7 +249,7 @@ func (p *Project) ExtractFunction(ctx context.Context, path string, first, last 
 	owner := stmts[0].Parent
 	if ast.IsSourceFile(owner) {
 		for _, s := range stmts {
-			if names := declared(s); len(names) > 0 {
+			if names := Declared(s); len(names) > 0 {
 				return nil, fmt.Sprintf("%s declares %s at the module's top level, which a function would hide", l.part(s), names[0].Text())
 			}
 		}
@@ -294,7 +294,7 @@ func (p *Project) ExtractFunction(ctx context.Context, path string, first, last 
 	if member != nil {
 		for _, m := range member.Parent.Members() {
 			if m.Name() != nil && m.Name().Text() == name {
-				return nil, fmt.Sprintf("%s already has a member %s (%s)", member.Parent.Name().Text(), name, l.where(m))
+				return nil, fmt.Sprintf("%s already has a member %s (%s)", member.Parent.Name().Text(), name, l.Where(m))
 			}
 		}
 		if !scanner.IsIdentifierText(name, 0) {
@@ -333,7 +333,7 @@ func (p *Project) ExtractFunction(ctx context.Context, path string, first, last 
 	byS := map[*ast.Symbol]*local{}
 	for _, s := range stmts {
 		var bad string
-		identifiers(s, func(id *ast.Node) {
+		Identifiers(s, func(id *ast.Node) {
 			if bad != "" {
 				return
 			}
@@ -345,7 +345,7 @@ func (p *Project) ExtractFunction(ctx context.Context, path string, first, last 
 			if d == nil {
 				d = sym.Declarations[0]
 			}
-			if ast.GetSourceFileOfNode(d) != l.f || moduleLevel(d) || ast.IsPropertyDeclaration(d) || ast.IsMethodDeclaration(d) || ast.IsPropertySignatureDeclaration(d) ||
+			if ast.GetSourceFileOfNode(d) != l.File || moduleLevel(d) || ast.IsPropertyDeclaration(d) || ast.IsMethodDeclaration(d) || ast.IsPropertySignatureDeclaration(d) ||
 				ast.IsPropertyAssignment(d) || ast.IsShorthandPropertyAssignment(d) || ast.IsEnumMember(d) || ast.IsAccessor(d) {
 				return
 			}
@@ -354,7 +354,7 @@ func (p *Project) ExtractFunction(ctx context.Context, path string, first, last 
 			}
 			if sym.Flags&ast.SymbolFlagsValue == 0 {
 				if !in(d) {
-					bad = fmt.Sprintf("the lines use the type %s declared in the function (%s)", id.Text(), l.where(d))
+					bad = fmt.Sprintf("the lines use the type %s declared in the function (%s)", id.Text(), l.Where(d))
 				}
 				return
 			}
@@ -381,9 +381,9 @@ func (p *Project) ExtractFunction(ctx context.Context, path string, first, last 
 		for scope != nil && !(ast.IsBlock(scope) || ast.IsFunctionLike(scope) || ast.IsSourceFile(scope) || ast.IsForStatement(scope) || ast.IsForInOrOfStatement(scope) || ast.IsCaseBlock(scope)) {
 			scope = scope.Parent
 		}
-		identifiers(scope, func(id *ast.Node) {
+		Identifiers(scope, func(id *ast.Node) {
 			if v.usedOutside == "" && !in(id) && id != d.Name() && symbolOf(c, id) == v.sym {
-				v.usedOutside = l.where(id)
+				v.usedOutside = l.Where(id)
 			}
 		})
 		v.assigned = !v.declared && assignedIn(c, stmts, v.sym)
@@ -399,7 +399,7 @@ func (p *Project) ExtractFunction(ctx context.Context, path string, first, last 
 		if v.usedOutside != "" && (v.declared || v.assigned) && !ast.IsReturnStatement(stmts[len(stmts)-1]) {
 			if v.declared {
 				if !slices.ContainsFunc(stmts, func(s *ast.Node) bool { return s == d.Parent.Parent || s == d }) && !(ast.IsVariableDeclaration(d) && d.Parent.Flags&ast.NodeFlagsBlockScoped == 0) {
-					return nil, fmt.Sprintf("%s is declared inside a block of the lines (%s) and used after them (%s)", v.first.Text(), l.where(d), v.usedOutside)
+					return nil, fmt.Sprintf("%s is declared inside a block of the lines (%s) and used after them (%s)", v.first.Text(), l.Where(d), v.usedOutside)
 				}
 				v.keyword = "const"
 				if ast.IsVariableDeclaration(d) {
@@ -430,7 +430,7 @@ func (p *Project) ExtractFunction(ctx context.Context, path string, first, last 
 	}
 
 	// The call, in place of the lines.
-	indent := l.indent(l.line(start))
+	indent := l.Indent(l.Line(start))
 	call := name + "(" + strings.Join(args, ", ") + ")"
 	if member != nil {
 		call = "this." + call
@@ -454,7 +454,7 @@ func (p *Project) ExtractFunction(ctx context.Context, path string, first, last 
 	case early == "value":
 		r := ""
 		for _, cand := range []string{"result", name + "Result", "returned"} {
-			if taken(c, l, cand, stmts[0]) == "" && !strings.Contains(l.text[start:end], cand) {
+			if taken(c, l, cand, stmts[0]) == "" && !strings.Contains(l.Text[start:end], cand) {
 				r = cand
 				break
 			}
@@ -462,39 +462,39 @@ func (p *Project) ExtractFunction(ctx context.Context, path string, first, last 
 		if r == "" {
 			return nil, "no name is free for what the lines return; rename a local result first"
 		}
-		call = "const " + r + " = " + call + l.semi() + "\n" + indent + "if (" + r + " !== undefined) {\n" + indent + l.unit() + "return " + r + l.semi() + "\n" + indent + "}"
-		result = "return undefined" + l.semi()
+		call = "const " + r + " = " + call + l.Semi() + "\n" + indent + "if (" + r + " !== undefined) {\n" + indent + l.Unit() + "return " + r + l.Semi() + "\n" + indent + "}"
+		result = "return undefined" + l.Semi()
 	case early == "bare":
-		call = "if (" + call + ") {\n" + indent + l.unit() + "return" + l.semi() + "\n" + indent + "}"
-		result = "return false" + l.semi()
+		call = "if (" + call + ") {\n" + indent + l.Unit() + "return" + l.Semi() + "\n" + indent + "}"
+		result = "return false" + l.Semi()
 		for _, r := range b.returns {
-			rs = append(rs, repl{l.pos(r), l.pos(r) + len("return"), "return true"})
+			rs = append(rs, repl{l.Pos(r), l.Pos(r) + len("return"), "return true"})
 		}
 	case len(b.returns) > 0:
-		call = "return " + call + l.semi()
+		call = "return " + call + l.Semi()
 	case len(outs) == 0:
-		call += l.semi()
+		call += l.Semi()
 	case len(outs) == 1:
-		result = "return " + names[0] + l.semi()
+		result = "return " + names[0] + l.Semi()
 		if declaredOuts == 1 {
-			call = keyword + " " + names[0] + " = " + call + l.semi()
+			call = keyword + " " + names[0] + " = " + call + l.Semi()
 		} else {
-			call = names[0] + " = " + call + l.semi()
+			call = names[0] + " = " + call + l.Semi()
 		}
 	default:
-		result = "return { " + strings.Join(names, ", ") + " }" + l.semi()
+		result = "return { " + strings.Join(names, ", ") + " }" + l.Semi()
 		if declaredOuts > 0 {
-			call = keyword + " { " + strings.Join(names, ", ") + " } = " + call + l.semi()
+			call = keyword + " { " + strings.Join(names, ", ") + " } = " + call + l.Semi()
 		} else {
-			call = "({ " + strings.Join(names, ", ") + " } = " + call + ")" + l.semi()
+			call = "({ " + strings.Join(names, ", ") + " } = " + call + ")" + l.Semi()
 		}
 	}
-	lineStart, lineEnd := l.start(first), l.start(last+1)
-	edits := []Edit{{File: l.f.FileName(), Start: lineStart, End: lineEnd, NewText: indent + call + "\n"}}
+	lineStart, lineEnd := l.Start(first), l.Start(last+1)
+	edits := []Edit{{File: l.File.FileName(), Start: lineStart, End: lineEnd, NewText: indent + call + "\n"}}
 
 	// The new function.
-	ind := l.indent(l.line(l.pos(top)))
-	unit := l.unit()
+	ind := l.Indent(l.Line(l.Pos(top)))
+	unit := l.Unit()
 	text := l.reindent(lineStart, lineEnd, indent, ind+unit, rs...)
 	if !strings.HasSuffix(text, "\n") {
 		text += "\n"
@@ -506,7 +506,7 @@ func (p *Project) ExtractFunction(ctx context.Context, path string, first, last 
 	if tps := l.typeParamsUsed(c, stmts, params, member); len(tps) > 0 {
 		var srcs []string
 		for _, tp := range tps {
-			srcs = append(srcs, l.source(tp))
+			srcs = append(srcs, l.Source(tp))
 		}
 		name += "<" + strings.Join(srcs, ", ") + ">"
 		head += "<" + strings.Join(srcs, ", ") + ">"
@@ -544,17 +544,17 @@ func (p *Project) ExtractFunction(ctx context.Context, path string, first, last 
 		}
 	}
 	decl += ind + head + "(" + strings.Join(params, ", ") + ") {\n" + text + ind + "}\n"
-	_, topEnd := l.lines(top)
-	at := l.start(topEnd + 1)
+	_, topEnd := l.Lines(top)
+	at := l.Start(topEnd + 1)
 	if at == lineEnd || at > lineStart && at < lineEnd {
 		edits[0].NewText += "\n" + decl
 		return edits, ""
 	}
 	prefix := "\n"
-	if at == len(l.text) && !strings.HasSuffix(l.text, "\n") {
+	if at == len(l.Text) && !strings.HasSuffix(l.Text, "\n") {
 		prefix = "\n\n"
 	}
-	edits = append(edits, Edit{File: l.f.FileName(), Start: at, End: at, NewText: prefix + decl})
+	edits = append(edits, Edit{File: l.File.FileName(), Start: at, End: at, NewText: prefix + decl})
 	slices.SortFunc(edits, func(a, b Edit) int { return a.Start - b.Start })
 	return edits, ""
 }
@@ -570,7 +570,7 @@ func (p *Project) overrideOf(c *checker.Checker, class *ast.Node, name string) (
 	cname := class.Name().Text()
 	for _, f := range p.sources() {
 		why := ""
-		inspect(f.AsNode(), func(n *ast.Node) bool {
+		Inspect(f.AsNode(), func(n *ast.Node) bool {
 			if why == "" && ast.IsClassDeclaration(n) && n != class && extends(c, n, class) {
 				for _, m := range n.Members() {
 					if m.Name() != nil && m.Name().Text() == name {
@@ -605,7 +605,7 @@ func (p *Project) overrideOf(c *checker.Checker, class *ast.Node, name string) (
 		}
 		fl := newLined(ast.GetSourceFileOfNode(id))
 		refuse := func(why string) (bool, string) {
-			return false, fmt.Sprintf("%s.%s would override %s, and the call at %s could then run the new one: %s; choose another name, or keep the method private", cname, name, memberName(d), fl.where(id), why)
+			return false, fmt.Sprintf("%s.%s would override %s, and the call at %s could then run the new one: %s; choose another name, or keep the method private", cname, name, memberName(d), fl.Where(id), why)
 		}
 		acc := id.Parent
 		if !ast.IsPropertyAccessExpression(acc) || acc.Name() != id {

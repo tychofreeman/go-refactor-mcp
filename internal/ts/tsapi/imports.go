@@ -23,12 +23,12 @@ type Import struct {
 // import declaration after its last one, in the file's quotes and
 // semicolons.
 func (p *Project) AddImports(file string, imports []Import) ([]Edit, string) {
-	l, refusal := p.lined(file)
+	l, refusal := p.Lined(file)
 	if refusal != "" {
 		return nil, refusal
 	}
 	var decls []*ast.Node
-	for _, s := range l.f.Statements.Nodes {
+	for _, s := range l.File.Statements.Nodes {
 		if ast.IsImportDeclaration(s) {
 			decls = append(decls, s)
 		}
@@ -38,7 +38,7 @@ func (p *Project) AddImports(file string, imports []Import) ([]Edit, string) {
 		semi = ";"
 	}
 	if len(decls) > 0 {
-		quote = l.text[l.pos(decls[0].AsImportDeclaration().ModuleSpecifier):][:1]
+		quote = l.Text[l.Pos(decls[0].AsImportDeclaration().ModuleSpecifier):][:1]
 	}
 	specOf := func(d *ast.Node) string { return d.AsImportDeclaration().ModuleSpecifier.Text() }
 	for _, d := range decls {
@@ -104,7 +104,7 @@ func (p *Project) AddImports(file string, imports []Import) ([]Edit, string) {
 	if len(fresh) > 0 {
 		text := strings.Join(fresh, "\n")
 		if len(decls) > 0 {
-			at := l.end(l.line(decls[len(decls)-1].End() - 1))
+			at := l.End(l.Line(decls[len(decls)-1].End() - 1))
 			edits = append(edits, Edit{File: file, Start: at, End: at, NewText: "\n" + text})
 		} else {
 			edits = append(edits, Edit{File: file, Start: 0, End: 0, NewText: text + "\n\n"})
@@ -116,15 +116,15 @@ func (p *Project) AddImports(file string, imports []Import) ([]Edit, string) {
 // Semi is what ends a statement or member in the style of the file at
 // path: ";" or nothing.
 func (p *Project) Semi(path string) string {
-	l, why := p.lined(path)
+	l, why := p.Lined(path)
 	if why != "" {
 		return ";"
 	}
-	return l.semi()
+	return l.Semi()
 }
 
-// semi is what ends a statement in the file's style: ";" or nothing.
-func (l *lined) semi() string {
+// Semi is what ends a statement in the file's style: ";" or nothing.
+func (l *Lined) Semi() string {
 	if l.semicolons() {
 		return ";"
 	}
@@ -133,11 +133,11 @@ func (l *lined) semi() string {
 
 // quote is the file's quote for strings: its imports', else its first
 // string's, else a double quote.
-func (l *lined) quote() string {
+func (l *Lined) quote() string {
 	q := ""
-	moduleSpecifiers(l.f, func(spec, _ *ast.Node) {
+	moduleSpecifiers(l.File, func(spec, _ *ast.Node) {
 		if q == "" {
-			q = l.text[l.pos(spec):][:1]
+			q = l.Text[l.Pos(spec):][:1]
 		}
 	})
 	if q != "" {
@@ -146,14 +146,14 @@ func (l *lined) quote() string {
 	var visit func(n *ast.Node) bool
 	visit = func(n *ast.Node) bool {
 		if q == "" && ast.IsStringLiteral(n) {
-			q = l.text[l.pos(n):][:1]
+			q = l.Text[l.Pos(n):][:1]
 		}
 		if q == "" {
 			n.ForEachChild(visit)
 		}
 		return q != ""
 	}
-	visit(l.f.AsNode())
+	visit(l.File.AsNode())
 	if q == `'` {
 		return q
 	}
@@ -163,7 +163,7 @@ func (l *lined) quote() string {
 // semicolons reports whether the file ends statements with semicolons, as
 // its first import does, or else its first statement, at any depth, not
 // ending in a brace; true when it has none.
-func (l *lined) semicolons() bool {
+func (l *Lined) semicolons() bool {
 	found, semi := false, true
 	var visit func(n *ast.Node) bool
 	visit = func(n *ast.Node) bool {
@@ -172,7 +172,7 @@ func (l *lined) semicolons() bool {
 		}
 		if n.CanHaveStatements() {
 			for _, s := range n.Statements() {
-				src := l.text[l.pos(s):s.End()]
+				src := l.Text[l.Pos(s):s.End()]
 				if ast.IsImportDeclaration(s) || ast.IsStatement(s) && !strings.HasSuffix(src, "}") {
 					found, semi = true, strings.HasSuffix(src, ";")
 					return true
@@ -182,7 +182,7 @@ func (l *lined) semicolons() bool {
 		n.ForEachChild(visit)
 		return found
 	}
-	visit(l.f.AsNode())
+	visit(l.File.AsNode())
 	return semi
 }
 

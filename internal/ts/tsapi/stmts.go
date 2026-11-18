@@ -1,12 +1,14 @@
 package tsapi
 
 import (
+	"context"
 	"fmt"
 	"slices"
 	"sort"
 	"strings"
 
 	"github.com/buke/typescript-go-internal/v7/pkg/ast"
+	"github.com/buke/typescript-go-internal/v7/pkg/checker"
 	"github.com/buke/typescript-go-internal/v7/pkg/core"
 	"github.com/buke/typescript-go-internal/v7/pkg/parser"
 	"github.com/buke/typescript-go-internal/v7/pkg/scanner"
@@ -21,66 +23,66 @@ type Place struct {
 	Prefix, Suffix string
 }
 
-// lined is a file's text with the offsets its lines start at.
-type lined struct {
-	f      *ast.SourceFile
-	text   string
+// Lined is a file's text with the offsets its lines start at.
+type Lined struct {
+	File   *ast.SourceFile
+	Text   string
 	starts []int
 }
 
-func newLined(f *ast.SourceFile) *lined {
-	l := &lined{f: f, text: f.Text(), starts: []int{0}}
-	for i := 0; i < len(l.text); i++ {
-		if l.text[i] == '\n' && i+1 < len(l.text) {
+func newLined(f *ast.SourceFile) *Lined {
+	l := &Lined{File: f, Text: f.Text(), starts: []int{0}}
+	for i := 0; i < len(l.Text); i++ {
+		if l.Text[i] == '\n' && i+1 < len(l.Text) {
 			l.starts = append(l.starts, i+1)
 		}
 	}
 	return l
 }
 
-// count is the number of lines.
-func (l *lined) count() int { return len(l.starts) }
+// Count is the number of lines.
+func (l *Lined) Count() int { return len(l.starts) }
 
-// line is the 1-based line of offset off.
-func (l *lined) line(off int) int {
+// Line is the 1-based line of offset off.
+func (l *Lined) Line(off int) int {
 	return sort.Search(len(l.starts), func(i int) bool { return l.starts[i] > off })
 }
 
-// start is the offset line starts at; past the last line, the end of the
+// Start is the offset line starts at; past the last line, the end of the
 // text.
-func (l *lined) start(line int) int {
+func (l *Lined) Start(line int) int {
 	if line > len(l.starts) {
-		return len(l.text)
+		return len(l.Text)
 	}
 	return l.starts[line-1]
 }
 
-// end is the offset of the end of line, before its newline.
-func (l *lined) end(line int) int {
-	e := l.start(line + 1)
-	if e > l.start(line) && l.text[e-1] == '\n' {
+// End is the offset of the end of line, before its newline.
+func (l *Lined) End(line int) int {
+	e := l.Start(line + 1)
+	if e > l.Start(line) && l.Text[e-1] == '\n' {
 		e--
 	}
 	return e
 }
 
-func (l *lined) indent(line int) string {
-	return textutil.Indent(l.text[l.start(line):l.end(line)])
+func (l *Lined) Indent(line int) string {
+	return textutil.Indent(l.Text[l.Start(line):l.End(line)])
 }
 
-// unit is the file's indentation step: a tab if a line starts with one,
+// Unit is the file's indentation step: a tab if a line starts with one,
 // else the fewest spaces a line starts with, else two spaces.
-func (l *lined) unit() string {
+func (l *Lined) Unit() string {
 	least := 0
-	for n := 1; n <= l.count(); n++ {
-		ind := l.indent(n)
+	for n := 1; n <= l.Count(); n++ {
+		ind := l.Indent(n)
 		if strings.HasPrefix(ind, "\t") {
 			return "\t"
 		}
-		if line := strings.TrimSpace(l.text[l.start(n):l.end(n)]); strings.HasPrefix(line, "*") {
+		if line := strings.TrimSpace(l.Text[l.Start(n):l.End(n)]); strings.HasPrefix(line, "*") {
 			continue // a block comment's continuation
 		}
-		if len(ind) > 0 && len(ind) < len(l.text[l.start(n):l.end(n)]) && (least == 0 || len(ind) < least) {
+		if len(ind) > 0 && len(ind) < len(l.Text[l.Start(n):l.End(n)]) && (least == 0 || len(ind) < least) {
 			least = len(ind)
 		}
 	}
@@ -93,19 +95,19 @@ func (l *lined) unit() string {
 // indentable returns the lines from first to last that a change of
 // indentation may touch: not blank, and not starting inside a template
 // literal, whose text the change would alter.
-func (l *lined) indentable(first, last int) []int {
+func (l *Lined) indentable(first, last int) []int {
 	var spans [][2]int
-	inspect(l.f.AsNode(), func(n *ast.Node) bool {
+	Inspect(l.File.AsNode(), func(n *ast.Node) bool {
 		if n.Kind == ast.KindNoSubstitutionTemplateLiteral || n.Kind == ast.KindTemplateExpression {
-			spans = append(spans, [2]int{l.pos(n), n.End()})
+			spans = append(spans, [2]int{l.Pos(n), n.End()})
 		}
 		return true
 	})
 	var lines []int
 	for n := first; n <= last; n++ {
-		s := l.start(n)
+		s := l.Start(n)
 		inside := slices.ContainsFunc(spans, func(sp [2]int) bool { return sp[0] < s && s < sp[1] })
-		if !inside && strings.TrimSpace(l.text[s:l.end(n)]) != "" {
+		if !inside && strings.TrimSpace(l.Text[s:l.End(n)]) != "" {
 			lines = append(lines, n)
 		}
 	}
@@ -118,17 +120,17 @@ func quiet(text string) bool {
 	return t == "" || strings.HasPrefix(t, "//") || strings.HasPrefix(t, "/*") || strings.HasPrefix(t, "*")
 }
 
-// pos is where n's first token starts.
-func (l *lined) pos(n *ast.Node) int { return scanner.GetTokenPosOfNode(n, l.f, false) }
+// Pos is where n's first token starts.
+func (l *Lined) Pos(n *ast.Node) int { return scanner.GetTokenPosOfNode(n, l.File, false) }
 
-// lines are the lines n's tokens start and end on.
-func (l *lined) lines(n *ast.Node) (int, int) {
-	return l.line(l.pos(n)), l.line(max(n.End()-1, l.pos(n)))
+// Lines are the lines n's tokens start and end on.
+func (l *Lined) Lines(n *ast.Node) (int, int) {
+	return l.Line(l.Pos(n)), l.Line(max(n.End()-1, l.Pos(n)))
 }
 
 // lists calls fn with each statement list of the file, outer before inner.
-func (l *lined) lists(fn func(owner *ast.Node, list []*ast.Node)) {
-	inspect(l.f.AsNode(), func(n *ast.Node) bool {
+func (l *Lined) lists(fn func(owner *ast.Node, list []*ast.Node)) {
+	Inspect(l.File.AsNode(), func(n *ast.Node) bool {
 		if n.CanHaveStatements() {
 			fn(n, n.Statements())
 		}
@@ -136,7 +138,7 @@ func (l *lined) lists(fn func(owner *ast.Node, list []*ast.Node)) {
 	})
 }
 
-func (p *Project) lined(path string) (*lined, string) {
+func (p *Project) Lined(path string) (*Lined, string) {
 	f := p.sourceFile(path)
 	if f == nil {
 		return nil, "the file is in no project of the solution"
@@ -151,7 +153,7 @@ func (p *Project) lined(path string) (*lined, string) {
 // they do not, it returns a refusal, naming the lines of whole statements
 // that cover them where there are some.
 func (p *Project) Statements(path string, first, last int) (start, end int, indent string, n int, refusal string) {
-	l, refusal := p.lined(path)
+	l, refusal := p.Lined(path)
 	if refusal != "" {
 		return 0, 0, "", 0, refusal
 	}
@@ -162,30 +164,30 @@ func (p *Project) Statements(path string, first, last int) (start, end int, inde
 		}
 		return 0, 0, "", 0, why
 	}
-	return l.start(first), l.start(last + 1), l.indent(l.line(l.pos(chosen[0]))), len(chosen), ""
+	return l.Start(first), l.Start(last + 1), l.Indent(l.Line(l.Pos(chosen[0]))), len(chosen), ""
 }
 
 // whole reports whether stmts, of one list, are all that lines first-last
 // hold besides comments and blank lines.
-func (l *lined) whole(stmts []*ast.Node, first, last int) bool {
+func (l *Lined) whole(stmts []*ast.Node, first, last int) bool {
 	if len(stmts) == 0 {
 		return false
 	}
 	covered := map[int]bool{}
 	for _, s := range stmts {
-		a, b := l.lines(s)
+		a, b := l.Lines(s)
 		for n := a; n <= b; n++ {
 			covered[n] = true
 		}
 	}
 	for n := first; n <= last; n++ {
-		if !covered[n] && !quiet(l.text[l.start(n):l.end(n)]) {
+		if !covered[n] && !quiet(l.Text[l.Start(n):l.End(n)]) {
 			return false
 		}
 	}
-	head := l.pos(stmts[0])
+	head := l.Pos(stmts[0])
 	tail := stmts[len(stmts)-1].End()
-	return strings.TrimSpace(l.text[l.start(l.line(head)):head]) == "" && quiet(l.text[tail:l.end(l.line(tail-1))])
+	return strings.TrimSpace(l.Text[l.Start(l.Line(head)):head]) == "" && quiet(l.Text[tail:l.End(l.Line(tail-1))])
 }
 
 // Body returns where the statements of the body of the function at
@@ -193,15 +195,15 @@ func (l *lined) whole(stmts []*ast.Node, first, last int) bool {
 // indented as its statements are or one step in from the opening brace's
 // line.
 func (p *Project) Body(path string, blockStart, blockEnd int) (Place, string) {
-	l, refusal := p.lined(path)
+	l, refusal := p.Lined(path)
 	if refusal != "" {
 		return Place{}, refusal
 	}
-	outer := l.indent(l.line(blockStart))
-	pl := Place{At: blockStart + 1, End: blockEnd - 1, Indent: outer + l.unit(), Prefix: "\n", Suffix: "\n" + outer}
+	outer := l.Indent(l.Line(blockStart))
+	pl := Place{At: blockStart + 1, End: blockEnd - 1, Indent: outer + l.Unit(), Prefix: "\n", Suffix: "\n" + outer}
 	l.lists(func(owner *ast.Node, list []*ast.Node) {
-		if ast.IsBlock(owner) && l.pos(owner) == blockStart && len(list) > 0 && l.line(l.pos(list[0])) != l.line(blockStart) {
-			pl.Indent = l.indent(l.line(l.pos(list[0])))
+		if ast.IsBlock(owner) && l.Pos(owner) == blockStart && len(list) > 0 && l.Line(l.Pos(list[0])) != l.Line(blockStart) {
+			pl.Indent = l.Indent(l.Line(l.Pos(list[0])))
 		}
 	})
 	return pl, ""
@@ -212,20 +214,20 @@ func (p *Project) Body(path string, blockStart, blockEnd int) (Place, string) {
 // outermost), or "into" the block whose opening brace, or the case clause
 // whose colon, is on line.
 func (p *Project) Insertion(path string, line int, where string) (Place, string) {
-	l, refusal := p.lined(path)
+	l, refusal := p.Lined(path)
 	if refusal != "" {
 		return Place{}, refusal
 	}
-	if line < 1 || line > l.count() {
-		return Place{}, fmt.Sprintf("line %d out of range: the file has %d lines", line, l.count())
+	if line < 1 || line > l.Count() {
+		return Place{}, fmt.Sprintf("line %d out of range: the file has %d lines", line, l.Count())
 	}
 	var pl *Place
 	switch where {
 	case "before":
 		l.lists(func(_ *ast.Node, list []*ast.Node) {
 			for _, s := range list {
-				if pl == nil && l.line(l.pos(s)) == line && strings.TrimSpace(l.text[l.start(line):l.pos(s)]) == "" {
-					pl = &Place{At: l.start(line), End: l.start(line), Indent: l.indent(line), Suffix: "\n"}
+				if pl == nil && l.Line(l.Pos(s)) == line && strings.TrimSpace(l.Text[l.Start(line):l.Pos(s)]) == "" {
+					pl = &Place{At: l.Start(line), End: l.Start(line), Indent: l.Indent(line), Suffix: "\n"}
 				}
 			}
 		})
@@ -235,10 +237,10 @@ func (p *Project) Insertion(path string, line int, where string) (Place, string)
 	case "after":
 		l.lists(func(_ *ast.Node, list []*ast.Node) {
 			for _, s := range list {
-				if pl == nil && l.line(s.End()-1) == line && quiet(l.text[s.End():l.end(line)]) {
-					at := l.start(line + 1)
-					pl = &Place{At: at, End: at, Indent: l.indent(l.line(l.pos(s))), Suffix: "\n"}
-					if at == len(l.text) && !strings.HasSuffix(l.text, "\n") {
+				if pl == nil && l.Line(s.End()-1) == line && quiet(l.Text[s.End():l.End(line)]) {
+					at := l.Start(line + 1)
+					pl = &Place{At: at, End: at, Indent: l.Indent(l.Line(l.Pos(s))), Suffix: "\n"}
+					if at == len(l.Text) && !strings.HasSuffix(l.Text, "\n") {
 						pl.Prefix, pl.Suffix = "\n", ""
 					}
 				}
@@ -252,26 +254,26 @@ func (p *Project) Insertion(path string, line int, where string) (Place, string)
 			if pl != nil || ast.IsSourceFile(owner) {
 				return
 			}
-			open := l.pos(owner)
+			open := l.Pos(owner)
 			if !ast.IsBlock(owner) && !ast.IsModuleBlock(owner) {
 				from := open + len("default")
 				if e := owner.Expression(); e != nil {
 					from = e.End()
 				}
-				open = from + strings.IndexByte(l.text[from:], ':')
+				open = from + strings.IndexByte(l.Text[from:], ':')
 			}
-			if l.line(open) != line {
+			if l.Line(open) != line {
 				return
 			}
-			pl = &Place{At: open + 1, End: open + 1, Indent: l.indent(line) + l.unit(), Prefix: "\n"}
+			pl = &Place{At: open + 1, End: open + 1, Indent: l.Indent(line) + l.Unit(), Prefix: "\n"}
 			switch {
-			case len(list) > 0 && l.line(l.pos(list[0])) == line:
+			case len(list) > 0 && l.Line(l.Pos(list[0])) == line:
 				pl, refusal = nil, fmt.Sprintf("the block on line %d has a statement on that line; use replace_statements", line)
 			case len(list) > 0:
-				pl.Indent = l.indent(l.line(l.pos(list[0])))
-			case ast.IsBlock(owner) && l.line(owner.End()-1) == line:
+				pl.Indent = l.Indent(l.Line(l.Pos(list[0])))
+			case ast.IsBlock(owner) && l.Line(owner.End()-1) == line:
 				pl.End = owner.End() - 1
-				pl.Suffix = "\n" + l.indent(line)
+				pl.Suffix = "\n" + l.Indent(line)
 			}
 		})
 		if refusal != "" {
@@ -284,6 +286,12 @@ func (p *Project) Insertion(path string, line int, where string) (Place, string)
 		return Place{}, fmt.Sprintf("where must be before, after or into, not %q", where)
 	}
 	return *pl, ""
+}
+
+// Checker returns the type checker for f, and the function to call when
+// done with it.
+func (p *Project) Checker(ctx context.Context, f *ast.SourceFile) (*checker.Checker, func()) {
+	return p.prog.GetProgram().GetTypeCheckerForFile(ctx, f)
 }
 
 // ParseStatements parses content as statements of a function's body and

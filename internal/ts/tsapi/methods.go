@@ -17,7 +17,7 @@ import (
 // f(x, args) becomes x.method(args), which evaluates x and args in the
 // same order. method is the method's name ("" keeps the function's).
 func (p *Project) FunctionToMethod(ctx context.Context, path, name, method string) ([]Edit, string) {
-	l, why := p.lined(path)
+	l, why := p.Lined(path)
 	if why != "" {
 		return nil, why
 	}
@@ -44,7 +44,7 @@ func (p *Project) FunctionToMethod(ctx context.Context, path, name, method strin
 	recv := fn.Parameters()[0]
 	pd := recv.AsParameterDeclaration()
 	if !ast.IsIdentifier(recv.Name()) || pd.DotDotDotToken != nil || pd.QuestionToken != nil || recv.Initializer() != nil {
-		return nil, fmt.Sprintf("%s's first parameter %s is optional, rest, defaulted or destructured", name, l.source(recv))
+		return nil, fmt.Sprintf("%s's first parameter %s is optional, rest, defaulted or destructured", name, l.Source(recv))
 	}
 	c, done := p.prog.GetProgram().GetTypeChecker(ctx)
 	defer done()
@@ -55,7 +55,7 @@ func (p *Project) FunctionToMethod(ctx context.Context, path, name, method strin
 		return nil, fmt.Sprintf("%s's first parameter is of %s, not of a class of the solution", name, c.TypeToString(rt))
 	}
 	cname := class.Name().Text()
-	if ast.GetSourceFileOfNode(class) != l.f {
+	if ast.GetSourceFileOfNode(class) != l.File {
 		return nil, fmt.Sprintf("%s is declared in another file; move %s next to it first (move, with to_file)", cname, name)
 	}
 	if why := p.memberTaken(c, class, method); why != "" {
@@ -74,16 +74,16 @@ func (p *Project) FunctionToMethod(ctx context.Context, path, name, method strin
 		}
 		switch {
 		case n.Kind == ast.KindThisKeyword && !nested:
-			why = fmt.Sprintf("%s uses this (%s), which would then be the instance", name, l.where(n))
+			why = fmt.Sprintf("%s uses this (%s), which would then be the instance", name, l.Where(n))
 		case ast.IsIdentifier(n) && !propertyName(n) && symbolOf(c, n) == rsym:
 			if nested {
-				why = fmt.Sprintf("%s uses %s inside a nested function or class (%s), where this is another", name, n.Text(), l.where(n))
+				why = fmt.Sprintf("%s uses %s inside a nested function or class (%s), where this is another", name, n.Text(), l.Where(n))
 			}
 			text := "this"
 			if ast.IsShorthandPropertyAssignment(n.Parent) {
 				text = n.Text() + ": this"
 			}
-			rs = append(rs, repl{l.pos(n), n.End(), text})
+			rs = append(rs, repl{l.Pos(n), n.End(), text})
 		}
 		inner := nested || (ast.IsFunctionLike(n) && !ast.IsArrowFunction(n)) || ast.IsClassLike(n)
 		n.ForEachChild(func(ch *ast.Node) bool { walk(ch, inner); return false })
@@ -115,26 +115,26 @@ func (p *Project) FunctionToMethod(ctx context.Context, path, name, method strin
 			files[f] = true
 			continue
 		case ast.IsExportSpecifier(id.Parent):
-			return nil, fmt.Sprintf("%s is exported again at %s", name, fl.where(id))
-		case f == l.f && id.Pos() >= fn.Pos() && id.End() <= fn.End():
+			return nil, fmt.Sprintf("%s is exported again at %s", name, fl.Where(id))
+		case f == l.File && id.Pos() >= fn.Pos() && id.End() <= fn.End():
 			return nil, fmt.Sprintf("%s calls itself", name)
 		}
 		call, w := fl.callOf(id)
 		if call == nil || call.Expression() != id {
 			if w == "" {
-				w = fmt.Sprintf("%s is used at %s other than as a call", name, fl.where(id))
+				w = fmt.Sprintf("%s is used at %s other than as a call", name, fl.Where(id))
 			}
 			return nil, w
 		}
 		args := call.Arguments()
 		if len(args) == 0 {
-			return nil, fmt.Sprintf("the call at %s passes nothing to become this", fl.where(call))
+			return nil, fmt.Sprintf("the call at %s passes nothing to become this", fl.Where(call))
 		}
 		rest := ""
 		if len(args) > 1 {
-			rest = fl.text[fl.pos(args[1]):args[len(args)-1].End()]
+			rest = fl.Text[fl.Pos(args[1]):args[len(args)-1].End()]
 		}
-		edits = append(edits, Edit{File: f.FileName(), Start: fl.pos(call), End: call.End(), NewText: operand(fl, args[0]) + "." + method + "(" + rest + ")"})
+		edits = append(edits, Edit{File: f.FileName(), Start: fl.Pos(call), End: call.End(), NewText: operand(fl, args[0]) + "." + method + "(" + rest + ")"})
 		gone[id] = true
 		files[f] = true
 	}
@@ -154,24 +154,24 @@ func (p *Project) FunctionToMethod(ctx context.Context, path, name, method strin
 		head = "async " + head
 	}
 	if ps := fn.Parameters()[1:]; len(ps) > 0 {
-		head += l.text[l.pos(ps[0]):ps[len(ps)-1].End()]
+		head += l.Text[l.Pos(ps[0]):ps[len(ps)-1].End()]
 	}
 	head += ")"
 	if t := fn.Type(); t != nil {
-		head += ": " + l.source(t)
+		head += ": " + l.Source(t)
 	}
-	mind := l.indent(l.line(l.pos(class))) + l.unit()
-	text := l.rewritten(a, b, fn, fn.Body(), head+" ", l.indent(l.line(l.pos(fn))), mind, rs)
+	mind := l.Indent(l.Line(l.Pos(class))) + l.Unit()
+	text := l.rewritten(a, b, fn, fn.Body(), head+" ", l.Indent(l.Line(l.Pos(fn))), mind, rs)
 	closing := class.End() - 1
-	at := l.start(l.line(closing))
-	if strings.TrimSpace(l.text[at:closing]) != "" {
+	at := l.Start(l.Line(closing))
+	if strings.TrimSpace(l.Text[at:closing]) != "" {
 		return nil, fmt.Sprintf("%s's closing brace shares its line; put it on a line of its own", cname)
 	}
 	if len(class.Members()) > 0 {
 		text = "\n" + text
 	}
 	a, b = l.withBlank(a, b)
-	edits = append(edits, Edit{File: l.f.FileName(), Start: at, End: at, NewText: text}, Edit{File: l.f.FileName(), Start: a, End: b})
+	edits = append(edits, Edit{File: l.File.FileName(), Start: at, End: at, NewText: text}, Edit{File: l.File.FileName(), Start: a, End: b})
 	return edits, ""
 }
 
@@ -182,7 +182,7 @@ func (p *Project) FunctionToMethod(ctx context.Context, path, name, method strin
 // file that calls it imports it, and it is exported when one does. fname
 // is the function's name ("" keeps the method's).
 func (p *Project) MethodToFunction(ctx context.Context, path, name, fname string) ([]Edit, string) {
-	l, why := p.lined(path)
+	l, why := p.Lined(path)
 	if why != "" {
 		return nil, why
 	}
@@ -243,9 +243,9 @@ func (p *Project) MethodToFunction(ctx context.Context, path, name, fname string
 		}
 		switch {
 		case n.Kind == ast.KindThisKeyword && !nested:
-			rs = append(rs, repl{l.pos(n), n.End(), recv})
+			rs = append(rs, repl{l.Pos(n), n.End(), recv})
 		case n.Kind == ast.KindSuperKeyword && !nested:
-			why = fmt.Sprintf("%s uses super (%s), which only a method has", name, l.where(n))
+			why = fmt.Sprintf("%s uses super (%s), which only a method has", name, l.Where(n))
 		case ast.IsPrivateIdentifier(n):
 			why = fmt.Sprintf("%s uses the private name %s, which only the class sees", name, n.Text())
 		}
@@ -268,32 +268,32 @@ func (p *Project) MethodToFunction(ctx context.Context, path, name, fname string
 		}
 		access := id.Parent
 		if !ast.IsPropertyAccessExpression(access) || access.Name() != id || access.Parent == nil || !ast.IsCallExpression(access.Parent) || access.Parent.Expression() != access {
-			return nil, fmt.Sprintf("%s is used at %s other than as a call", name, fl.where(id))
+			return nil, fmt.Sprintf("%s is used at %s other than as a call", name, fl.Where(id))
 		}
 		call := access.Parent
 		switch {
 		case access.AsPropertyAccessExpression().QuestionDotToken != nil || call.AsCallExpression().QuestionDotToken != nil:
-			return nil, fmt.Sprintf("the call at %s is optional (?.), which a function call is not", fl.where(call))
+			return nil, fmt.Sprintf("the call at %s is optional (?.), which a function call is not", fl.Where(call))
 		case access.Expression().Kind == ast.KindSuperKeyword:
-			return nil, fmt.Sprintf("the call at %s is through super", fl.where(call))
-		case f == l.f && id.Pos() >= m.Pos() && id.End() <= m.End():
+			return nil, fmt.Sprintf("the call at %s is through super", fl.Where(call))
+		case f == l.File && id.Pos() >= m.Pos() && id.End() <= m.End():
 			return nil, fmt.Sprintf("%s calls itself", name)
 		}
 		if _, w := fl.callOf(id); w != "" {
 			return nil, w
 		}
-		args := fl.source(access.Expression())
+		args := fl.Source(access.Expression())
 		if as := call.Arguments(); len(as) > 0 {
-			args += ", " + fl.text[fl.pos(as[0]):as[len(as)-1].End()]
+			args += ", " + fl.Text[fl.Pos(as[0]):as[len(as)-1].End()]
 		}
-		edits = append(edits, Edit{File: f.FileName(), Start: fl.pos(call), End: call.End(), NewText: fname + "(" + args + ")"})
-		if f != l.f && !imported[f] {
+		edits = append(edits, Edit{File: f.FileName(), Start: fl.Pos(call), End: call.End(), NewText: fname + "(" + args + ")"})
+		if f != l.File && !imported[f] {
 			if w := taken(c, fl, fname, call); w != "" {
 				return nil, w
 			}
 			imported[f], exported = true, true
 			at, text := fl.importAt()
-			edits = append(edits, Edit{File: f.FileName(), Start: at, End: at, NewText: text(importLine{spec: fl.specFor(l.f.FileName()), named: []string{fname}}.text(fl.quote(), fl.semi()))})
+			edits = append(edits, Edit{File: f.FileName(), Start: at, End: at, NewText: text(importLine{spec: fl.specFor(l.File.FileName()), named: []string{fname}}.text(fl.quote(), fl.Semi()))})
 		}
 	}
 	// The function, after the class; the method goes.
@@ -314,32 +314,32 @@ func (p *Project) MethodToFunction(ctx context.Context, path, name, fname string
 	}
 	head += fname
 	if tps := m.TypeParameterList(); tps != nil && len(tps.Nodes) > 0 {
-		head += "<" + l.text[l.pos(tps.Nodes[0]):tps.Nodes[len(tps.Nodes)-1].End()] + ">"
+		head += "<" + l.Text[l.Pos(tps.Nodes[0]):tps.Nodes[len(tps.Nodes)-1].End()] + ">"
 	}
 	head += "(" + recv + ": " + cname
 	if ps := m.Parameters(); len(ps) > 0 {
-		head += ", " + l.text[l.pos(ps[0]):ps[len(ps)-1].End()]
+		head += ", " + l.Text[l.Pos(ps[0]):ps[len(ps)-1].End()]
 	}
 	head += ")"
 	if t := m.Type(); t != nil {
-		head += ": " + l.source(t)
+		head += ": " + l.Source(t)
 	}
-	text := l.rewritten(a, b, m, m.Body(), head+" ", l.indent(l.line(l.pos(m))), l.indent(l.line(l.pos(class))), rs)
-	end := l.end(l.line(class.End() - 1))
+	text := l.rewritten(a, b, m, m.Body(), head+" ", l.Indent(l.Line(l.Pos(m))), l.Indent(l.Line(l.Pos(class))), rs)
+	end := l.End(l.Line(class.End() - 1))
 	a, b = l.withBlank(a, b)
-	edits = append(edits, Edit{File: l.f.FileName(), Start: a, End: b}, Edit{File: l.f.FileName(), Start: end, End: end, NewText: "\n\n" + strings.TrimRight(text, "\n")})
+	edits = append(edits, Edit{File: l.File.FileName(), Start: a, End: b}, Edit{File: l.File.FileName(), Start: end, End: end, NewText: "\n\n" + strings.TrimRight(text, "\n")})
 	return edits, ""
 }
 
 // rewritten returns the whole lines [a, b) of decl, whose body is body,
 // with what comes before body (from decl's first token) replaced by head,
 // the lines' indentation from changed to to, and rs applied.
-func (l *lined) rewritten(a, b int, decl, body *ast.Node, head, from, to string, rs []repl) string {
-	declLine, openLine := l.line(l.pos(decl)), l.line(l.pos(body))
-	text := l.reindent(a, l.start(declLine), from, to)
-	text += to + head + l.substitute(l.pos(body), l.end(openLine), rs) + "\n"
-	if l.line(b-1) > openLine {
-		text += l.reindent(l.start(openLine+1), b, from, to, rs...)
+func (l *Lined) rewritten(a, b int, decl, body *ast.Node, head, from, to string, rs []repl) string {
+	declLine, openLine := l.Line(l.Pos(decl)), l.Line(l.Pos(body))
+	text := l.reindent(a, l.Start(declLine), from, to)
+	text += to + head + l.substitute(l.Pos(body), l.End(openLine), rs) + "\n"
+	if l.Line(b-1) > openLine {
+		text += l.reindent(l.Start(openLine+1), b, from, to, rs...)
 	}
 	if !strings.HasSuffix(text, "\n") {
 		text += "\n"
@@ -419,8 +419,8 @@ func (p *Project) overriddenBy(c *checker.Checker, class *ast.Node, name string)
 			if ast.IsClassDeclaration(n) && n != class && extends(n) {
 				fl := newLined(f)
 				for _, m := range n.Members() {
-					if m.Name() != nil && fl.source(m.Name()) == name {
-						found = "a class at " + fl.where(n)
+					if m.Name() != nil && fl.Source(m.Name()) == name {
+						found = "a class at " + fl.Where(n)
 						if n.Name() != nil {
 							found = n.Name().Text()
 						}

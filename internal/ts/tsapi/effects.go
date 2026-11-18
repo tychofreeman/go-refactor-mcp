@@ -235,7 +235,7 @@ type Move struct {
 // when it would not.
 func (a *effects) Check(m Move) string {
 	e := a.ofNodes([]*ast.Node{m.Expr})
-	q := a.lined(m.Expr).source(m.Expr)
+	q := a.lined(m.Expr).Source(m.Expr)
 	assigns := ""
 	if s := sortedSymbols(e.Assigns); len(s) > 0 {
 		assigns = e.Assigns[s[0]]
@@ -263,15 +263,15 @@ func (a *effects) Check(m Move) string {
 // effects is the analysis of code of one program.
 type effects struct {
 	c      *checker.Checker
-	l      *lined
-	files  map[*ast.SourceFile]*lined
+	l      *Lined
+	files  map[*ast.SourceFile]*Lined
 	local  map[*ast.Symbol]bool
 	sums   map[*ast.Node]*Effects // a module function's body; nil while it is summarized
 	during map[during]bool        // runsOnlyDuring's answers; true while judged
 }
 
-func newEffects(c *checker.Checker, l *lined) *effects {
-	return &effects{c: c, l: l, files: map[*ast.SourceFile]*lined{l.f: l}, local: map[*ast.Symbol]bool{}, sums: map[*ast.Node]*Effects{}, during: map[during]bool{}}
+func newEffects(c *checker.Checker, l *Lined) *effects {
+	return &effects{c: c, l: l, files: map[*ast.SourceFile]*Lined{l.File: l}, local: map[*ast.Symbol]bool{}, sums: map[*ast.Node]*Effects{}, during: map[during]bool{}}
 }
 
 // during is a parameter of a function: the parameter i of fn.
@@ -300,7 +300,7 @@ func (a *effects) runsOnlyDuring(fn *ast.Node, i int) bool {
 	name := params[i].Name()
 	sym := a.c.GetSymbolAtLocation(name)
 	v := true
-	identifiers(fn.Body(), func(id *ast.Node) {
+	Identifiers(fn.Body(), func(id *ast.Node) {
 		if v && id != name && a.c.GetSymbolAtLocation(id) == sym {
 			v = a.calledDuring(id, fn)
 		}
@@ -343,7 +343,7 @@ func (a *effects) runsDuring(lit *ast.Node) bool {
 }
 
 // lined returns the file of n.
-func (a *effects) lined(n *ast.Node) *lined {
+func (a *effects) lined(n *ast.Node) *Lined {
 	f := ast.GetSourceFileOfNode(n)
 	if l, ok := a.files[f]; ok {
 		return l
@@ -359,7 +359,7 @@ func (a *effects) part(n *ast.Node, what string) string {
 	if what != "" {
 		what += " "
 	}
-	return fmt.Sprintf("%s%s at %s", what, l.source(n), l.where(n))
+	return fmt.Sprintf("%s%s at %s", what, l.Source(n), l.Where(n))
 }
 
 // unknown is what code does whose effects are not known.
@@ -372,7 +372,7 @@ func (a *effects) unknown(n *ast.Node, what string) Effects {
 
 // throws is what code does that may throw and nothing else.
 func (a *effects) throws(n *ast.Node, why string) Effects {
-	p := fmt.Sprintf("%s, %s, at %s", a.lined(n).source(n), why, a.lined(n).where(n))
+	p := fmt.Sprintf("%s, %s, at %s", a.lined(n).Source(n), why, a.lined(n).Where(n))
 	e := Effects{Throws: true, OtherThrows: true, Why: p}
 	e.At.Throw = p
 	return e
@@ -420,7 +420,7 @@ func (a *effects) assignedInside(n *ast.Node, s *ast.Symbol, nested bool) bool {
 			switch {
 			case ast.IsBinaryExpression(x) && ast.IsAssignmentOperator(x.AsBinaryExpression().OperatorToken.Kind):
 				target = x.AsBinaryExpression().Left
-			case ast.IsPrefixUnaryExpression(x) && isUpdate(x.AsPrefixUnaryExpression().Operator):
+			case ast.IsPrefixUnaryExpression(x) && IsUpdate(x.AsPrefixUnaryExpression().Operator):
 				target = x.AsPrefixUnaryExpression().Operand
 			case ast.IsPostfixUnaryExpression(x):
 				target = x.AsPostfixUnaryExpression().Operand
@@ -437,7 +437,7 @@ func (a *effects) assignedInside(n *ast.Node, s *ast.Symbol, nested bool) bool {
 	return found
 }
 
-func isUpdate(op ast.Kind) bool { return op == ast.KindPlusPlusToken || op == ast.KindMinusMinusToken }
+func IsUpdate(op ast.Kind) bool { return op == ast.KindPlusPlusToken || op == ast.KindMinusMinusToken }
 
 // primitive reports whether every value of n's type is a number, bigint,
 // string, boolean or enum, which operators coerce without running code.
@@ -599,7 +599,7 @@ func (a *effects) Of(n *ast.Node) Effects {
 		return out
 	case ast.IsPrefixUnaryExpression(n):
 		u := n.AsPrefixUnaryExpression()
-		if isUpdate(u.Operator) {
+		if IsUpdate(u.Operator) {
 			return a.assign(n, u.Operand, true)
 		}
 		out.add(a.Of(u.Operand))

@@ -14,7 +14,7 @@ import (
 // looped is a loop being converted: the file, the loop, the loop with its
 // labels (whole) and the checker.
 type looped struct {
-	*lined
+	l     *Lined
 	c     *checker.Checker
 	loop  *ast.Node
 	whole *ast.Node
@@ -25,30 +25,30 @@ type looped struct {
 // statement form to (for_each, for, while or do_while), with what it
 // became and notes; or why it cannot.
 func (p *Project) ConvertLoop(ctx context.Context, path string, line, column int, to string) ([]Edit, string, string) {
-	l, why := p.lined(path)
+	l, why := p.Lined(path)
 	if why != "" {
 		return nil, "", why
 	}
-	if line < 1 || line > l.count() {
-		return nil, "", fmt.Sprintf("line %d out of range: the file has %d lines", line, l.count())
+	if line < 1 || line > l.Count() {
+		return nil, "", fmt.Sprintf("line %d out of range: the file has %d lines", line, l.Count())
 	}
 	var found []*ast.Node
-	inspect(l.f.AsNode(), func(n *ast.Node) bool {
-		if ast.IsIterationStatement(n, false) && l.line(l.pos(n)) == line && (column == 0 || l.pos(n)-l.start(line)+1 == column) {
+	Inspect(l.File.AsNode(), func(n *ast.Node) bool {
+		if ast.IsIterationStatement(n, false) && l.Line(l.Pos(n)) == line && (column == 0 || l.Pos(n)-l.Start(line)+1 == column) {
 			found = append(found, n)
 		}
 		return true
 	})
 	switch len(found) {
 	case 0:
-		return nil, "", fmt.Sprintf("no loop starts on line %d: %s", line, strings.TrimSpace(l.text[l.start(line):l.end(line)]))
+		return nil, "", fmt.Sprintf("no loop starts on line %d: %s", line, strings.TrimSpace(l.Text[l.Start(line):l.End(line)]))
 	case 1:
 	default:
 		return nil, "", fmt.Sprintf("line %d has %d loops; give column", line, len(found))
 	}
-	c, done := p.prog.GetProgram().GetTypeCheckerForFile(ctx, l.f)
+	c, done := p.Checker(ctx, l.File)
 	defer done()
-	x := &looped{lined: l, c: c, loop: found[0], whole: found[0]}
+	x := &looped{l: l, c: c, loop: found[0], whole: found[0]}
 	for ast.IsLabeledStatement(x.whole.Parent) {
 		x.whole = x.whole.Parent
 	}
@@ -129,11 +129,11 @@ func (x *looped) indexToEach() ([]Edit, string, string) {
 	}
 	bound := cond.AsBinaryExpression().Right
 	if !ast.IsPropertyAccessExpression(bound) || bound.Name().Text() != "length" || !ast.IsIdentifier(bound.Expression()) {
-		return nil, "", fmt.Sprintf("the loop is bounded by %s; to=for_each takes i < xs.length of a local array. Put it in a local first (extract_variable)", x.source(bound))
+		return nil, "", fmt.Sprintf("the loop is bounded by %s; to=for_each takes i < xs.length of a local array. Put it in a local first (extract_variable)", x.l.Source(bound))
 	}
 	over := bound.Expression()
 	if !x.array(over) {
-		return nil, "", fmt.Sprintf("%s is not an array", x.source(over))
+		return nil, "", fmt.Sprintf("%s is not an array", x.l.Source(over))
 	}
 	if !x.increments(f.Incrementor, i) {
 		return nil, "", shape
@@ -148,13 +148,13 @@ func (x *looped) indexToEach() ([]Edit, string, string) {
 	arr := x.c.GetSymbolAtLocation(over)
 	var reads []*ast.Node
 	why := ""
-	identifiers(body, func(id *ast.Node) {
+	Identifiers(body, func(id *ast.Node) {
 		if why != "" || x.c.GetSymbolAtLocation(id) != i {
 			return
 		}
 		ea := id.Parent
 		if ea == nil || !ast.IsElementAccessExpression(ea) || ea.AsElementAccessExpression().ArgumentExpression != id || !x.is(ea.AsElementAccessExpression().Expression, arr) {
-			why = fmt.Sprintf("the loop reads i other than as %s[i] (%s), and a for...of has no index", over.Text(), x.where(id))
+			why = fmt.Sprintf("the loop reads i other than as %s[i] (%s), and a for...of has no index", over.Text(), x.l.Where(id))
 			return
 		}
 		reads = append(reads, ea)
@@ -170,7 +170,7 @@ func (x *looped) indexToEach() ([]Edit, string, string) {
 		ds := list.AsVariableDeclarationList().Declarations.Nodes
 		if len(ds) == 1 && ast.IsIdentifier(ds[0].Name()) && slices.Contains(reads, ds[0].Initializer()) {
 			s := x.c.GetSymbolAtLocation(ds[0].Name())
-			if list.Flags&ast.NodeFlagsConst != 0 || x.assigns(body, s, x.c) == "" {
+			if list.Flags&ast.NodeFlagsConst != 0 || x.l.Assigns(body, s, x.c) == "" {
 				name = ds[0].Name().Text()
 				if list.Flags&ast.NodeFlagsLet != 0 {
 					kw = "let"
@@ -184,10 +184,10 @@ func (x *looped) indexToEach() ([]Edit, string, string) {
 		name = x.unused(singular(over.Text()))
 	}
 	for _, r := range reads {
-		edits = append(edits, x.edit(x.pos(r), r.End(), name))
+		edits = append(edits, x.edit(x.l.Pos(r), r.End(), name))
 	}
 	head := fmt.Sprintf("for (%s %s of %s)", kw, name, over.Text())
-	edits = append(edits, x.edit(x.pos(x.loop), x.pos(body), head+" "))
+	edits = append(edits, x.edit(x.l.Pos(x.loop), x.l.Pos(body), head+" "))
 	return edits, "a " + head, ""
 }
 
@@ -200,10 +200,10 @@ func (x *looped) eachToIndex() ([]Edit, string, string) {
 	}
 	over := f.Expression
 	if !x.array(over) {
-		return nil, "", fmt.Sprintf("the loop walks %s, which is not an array or a tuple, so it has no index (a Map, a Set or a generator)", x.source(over))
+		return nil, "", fmt.Sprintf("the loop walks %s, which is not an array or a tuple, so it has no index (a Map, a Set or a generator)", x.l.Source(over))
 	}
 	if !ast.IsIdentifier(over) {
-		return nil, "", fmt.Sprintf("the loop walks %s, which a for...of reads once and an index loop on each pass. Put it in a local first (extract_variable)", x.source(over))
+		return nil, "", fmt.Sprintf("the loop walks %s, which a for...of reads once and an index loop on each pass. Put it in a local first (extract_variable)", x.l.Source(over))
 	}
 	body := f.Statement
 	if why := x.stable(over, body); why != "" {
@@ -214,9 +214,9 @@ func (x *looped) eachToIndex() ([]Edit, string, string) {
 	}
 	i := x.unused("i")
 	head := fmt.Sprintf("for (let %s = 0; %s < %s.length; %s++)", i, i, over.Text(), i)
-	first := x.source(f.Initializer) + " = " + over.Text() + "[" + i + "]" + x.semi()
+	first := x.l.Source(f.Initializer) + " = " + over.Text() + "[" + i + "]" + x.l.Semi()
 	edits := x.first(body, first)
-	edits = append(edits, x.edit(x.pos(x.loop), x.pos(body), head+" "))
+	edits = append(edits, x.edit(x.l.Pos(x.loop), x.l.Pos(body), head+" "))
 	return edits, "a " + head, ""
 }
 
@@ -228,7 +228,7 @@ func (x *looped) forToWhile() ([]Edit, string, string) {
 	var declared []*ast.Node
 	if f.Initializer != nil && ast.IsVariableDeclarationList(f.Initializer) {
 		for _, d := range f.Initializer.AsVariableDeclarationList().Declarations.Nodes {
-			identifiers(d.Name(), func(id *ast.Node) { declared = append(declared, id) })
+			Identifiers(d.Name(), func(id *ast.Node) { declared = append(declared, id) })
 		}
 		if f.Initializer.Flags&ast.NodeFlagsBlockScoped != 0 {
 			if why := x.notCaptured(declared, "each pass of a for has its own copy of a let it declares, and a while shares one"); why != "" {
@@ -236,11 +236,11 @@ func (x *looped) forToWhile() ([]Edit, string, string) {
 			}
 		}
 	}
-	unit := x.unit()
-	indent := x.indent(x.line(x.pos(x.whole)))
+	unit := x.l.Unit()
+	indent := x.l.Indent(x.l.Line(x.l.Pos(x.whole)))
 	inc := ""
 	if f.Incrementor != nil {
-		inc = x.source(f.Incrementor) + x.semi()
+		inc = x.l.Source(f.Incrementor) + x.l.Semi()
 	}
 	var inner []Edit
 	if inc != "" {
@@ -250,23 +250,23 @@ func (x *looped) forToWhile() ([]Edit, string, string) {
 	}
 	cond := "true"
 	if f.Condition != nil {
-		cond = x.source(f.Condition)
+		cond = x.l.Source(f.Condition)
 	}
-	inner = append(inner, x.edit(x.pos(x.loop), x.pos(body), "while ("+cond+") "))
+	inner = append(inner, x.edit(x.l.Pos(x.loop), x.l.Pos(body), "while ("+cond+") "))
 	var text string
 	if inc != "" && !terminates(body) {
-		text = x.applied(x.pos(x.whole), x.pos(body), inner) + x.withLast(body, inc, inner)
+		text = x.applied(x.l.Pos(x.whole), x.l.Pos(body), inner) + x.withLast(body, inc, inner)
 	} else {
-		text = x.applied(x.pos(x.whole), x.whole.End(), inner)
+		text = x.applied(x.l.Pos(x.whole), x.whole.End(), inner)
 	}
 	if f.Initializer != nil {
-		init := x.source(f.Initializer)
+		init := x.l.Source(f.Initializer)
 		if !strings.HasSuffix(strings.TrimSpace(init), ";") {
-			init += x.semi()
+			init += x.l.Semi()
 		}
 		text = init + "\n" + indent + text
 	}
-	wrap := !inList(x.whole)
+	wrap := !InList(x.whole)
 	for _, d := range declared {
 		wrap = wrap || x.clashes(d.Text())
 	}
@@ -281,7 +281,7 @@ func (x *looped) forToWhile() ([]Edit, string, string) {
 		text = "{\n" + indent + unit + strings.Join(lines, "\n") + "\n" + indent + "}"
 		said += ", in a block with its init"
 	}
-	return []Edit{x.edit(x.pos(x.whole), x.whole.End(), text)}, said, ""
+	return []Edit{x.edit(x.l.Pos(x.whole), x.whole.End(), text)}, said, ""
 }
 
 // whileToFor turns a while into a for: the let declared just before it,
@@ -293,7 +293,7 @@ func (x *looped) whileToFor() ([]Edit, string, string) {
 	body := w.Statement
 	var edits []Edit
 	init := ""
-	if inList(x.whole) {
+	if InList(x.whole) {
 		list := x.whole.Parent.Statements()
 		at := slices.Index(list, x.whole)
 		if at > 0 && ast.IsVariableStatement(list[at-1]) {
@@ -312,7 +312,7 @@ func (x *looped) whileToFor() ([]Edit, string, string) {
 							return nil, "", why
 						}
 					}
-					init = strings.TrimSuffix(strings.TrimSpace(x.source(prev)), ";")
+					init = strings.TrimSuffix(strings.TrimSpace(x.l.Source(prev)), ";")
 					edits = append(edits, x.dropLine(prev))
 				}
 			}
@@ -323,18 +323,18 @@ func (x *looped) whileToFor() ([]Edit, string, string) {
 		last := body.Statements()[len(body.Statements())-1]
 		if ast.IsExpressionStatement(last) && updates(last.Expression()) {
 			if len(x.continues()) == 0 {
-				inc = x.source(last.Expression())
+				inc = x.l.Source(last.Expression())
 				edits = append(edits, x.dropLine(last))
 			} else {
-				x.notes = append(x.notes, x.source(last)+" stays last in the body: a continue of the loop skips it, and as the incrementor it would run")
+				x.notes = append(x.notes, x.l.Source(last)+" stays last in the body: a continue of the loop skips it, and as the incrementor it would run")
 			}
 		}
 	}
 	if init == "" && inc == "" {
 		return nil, "", "the while has nothing to move into a for's header: no let or const declared just before it that its condition reads and nothing after it does, and no assignment or update last in its body"
 	}
-	head := "for (" + init + "; " + x.source(w.Expression) + ";" + map[bool]string{true: "", false: " " + inc}[inc == ""] + ")"
-	edits = append(edits, x.edit(x.pos(x.loop), x.pos(body), head+" "))
+	head := "for (" + init + "; " + x.l.Source(w.Expression) + ";" + map[bool]string{true: "", false: " " + inc}[inc == ""] + ")"
+	edits = append(edits, x.edit(x.l.Pos(x.loop), x.l.Pos(body), head+" "))
 	return edits, "a " + head, ""
 }
 
@@ -343,18 +343,18 @@ func (x *looped) whileToFor() ([]Edit, string, string) {
 func (x *looped) doToWhile() ([]Edit, string, string) {
 	d := x.loop.AsDoStatement()
 	if cs := x.continues(); len(cs) > 0 {
-		return nil, "", fmt.Sprintf("the do...while has a continue (%s), which goes to its condition; in a while (true) it would skip it. Rewrite the body without it first (invert_if, remove_else)", x.where(cs[0]))
+		return nil, "", fmt.Sprintf("the do...while has a continue (%s), which goes to its condition; in a while (true) it would skip it. Rewrite the body without it first (invert_if, remove_else)", x.l.Where(cs[0]))
 	}
-	neg, _ := x.negate(x.c, d.Expression)
-	exit := "if (" + neg + ") break" + x.semi()
+	neg, _ := x.l.Negate(x.c, d.Expression)
+	exit := "if (" + neg + ") break" + x.l.Semi()
 	body := d.Statement
 	text := "while (true) "
 	if terminates(body) {
-		text += x.source(body)
+		text += x.l.Source(body)
 	} else {
 		text += x.withLast(body, exit, nil)
 	}
-	return []Edit{x.edit(x.pos(x.loop), x.loop.End(), text)}, "a while (true) that ends in " + exit, ""
+	return []Edit{x.edit(x.l.Pos(x.loop), x.loop.End(), text)}, "a while (true) that ends in " + exit, ""
 }
 
 // whileToDo turns while (cond) body into if (cond) { do body while
@@ -363,13 +363,13 @@ func (x *looped) doToWhile() ([]Edit, string, string) {
 func (x *looped) whileToDo() ([]Edit, string, string) {
 	w := x.loop.AsWhileStatement()
 	if n := x.notLocal(w.Expression); n != nil {
-		return nil, "", fmt.Sprintf("the condition would be read twice on the first pass, by an if and by the do...while, and %s does more than read a local. Put the condition in a local first", x.source(n))
+		return nil, "", fmt.Sprintf("the condition would be read twice on the first pass, by an if and by the do...while, and %s does more than read a local. Put the condition in a local first", x.l.Source(n))
 	}
-	cond := x.source(w.Expression)
-	unit := x.unit()
-	indent := x.indent(x.line(x.pos(x.whole)))
-	label := x.text[x.pos(x.whole):x.pos(x.loop)]
-	inner := label + "do " + x.withLast(w.Statement, "", nil) + " while (" + cond + ")" + x.semi()
+	cond := x.l.Source(w.Expression)
+	unit := x.l.Unit()
+	indent := x.l.Indent(x.l.Line(x.l.Pos(x.whole)))
+	label := x.l.Text[x.l.Pos(x.whole):x.l.Pos(x.loop)]
+	inner := label + "do " + x.withLast(w.Statement, "", nil) + " while (" + cond + ")" + x.l.Semi()
 	lines := strings.Split(inner, "\n")
 	for k := 1; k < len(lines); k++ {
 		if strings.TrimSpace(lines[k]) != "" {
@@ -377,14 +377,14 @@ func (x *looped) whileToDo() ([]Edit, string, string) {
 		}
 	}
 	text := "if (" + cond + ") {\n" + indent + unit + strings.Join(lines, "\n") + "\n" + indent + "}"
-	return []Edit{x.edit(x.pos(x.whole), x.whole.End(), text)}, "a do...while under if (" + cond + ")", ""
+	return []Edit{x.edit(x.l.Pos(x.whole), x.whole.End(), text)}, "a do...while under if (" + cond + ")", ""
 }
 
 // notLocal returns the first part of e that is not a read of a local, a
 // literal or an operator on them, or nil.
 func (x *looped) notLocal(e *ast.Node) *ast.Node {
 	var bad *ast.Node
-	inspect(e, func(n *ast.Node) bool {
+	Inspect(e, func(n *ast.Node) bool {
 		if bad != nil {
 			return false
 		}
@@ -420,9 +420,9 @@ func updates(e *ast.Node) bool {
 	case ast.IsBinaryExpression(e):
 		return ast.IsAssignmentOperator(e.AsBinaryExpression().OperatorToken.Kind)
 	case ast.IsPostfixUnaryExpression(e):
-		return isUpdate(e.AsPostfixUnaryExpression().Operator)
+		return IsUpdate(e.AsPostfixUnaryExpression().Operator)
 	case ast.IsPrefixUnaryExpression(e):
-		return isUpdate(e.AsPrefixUnaryExpression().Operator)
+		return IsUpdate(e.AsPrefixUnaryExpression().Operator)
 	}
 	return false
 }
@@ -435,7 +435,7 @@ func (x *looped) is(e *ast.Node, s *ast.Symbol) bool {
 // uses reports whether n refers to s.
 func (x *looped) uses(n *ast.Node, s *ast.Symbol) bool {
 	found := false
-	identifiers(n, func(id *ast.Node) { found = found || x.c.GetSymbolAtLocation(id) == s })
+	Identifiers(n, func(id *ast.Node) { found = found || x.c.GetSymbolAtLocation(id) == s })
 	return found
 }
 
@@ -470,7 +470,7 @@ func (x *looped) stable(over, body *ast.Node) string {
 	if s == nil || s.ValueDeclaration == nil || !(ast.IsVariableDeclaration(s.ValueDeclaration) || ast.IsParameterDeclaration(s.ValueDeclaration)) {
 		return fmt.Sprintf("the loop walks %s, which is not a local; a for...of reads it once and an index loop on each pass. Put it in a local first (extract_variable)", over.Text())
 	}
-	if w := x.assigns(body, s, x.c); w != "" {
+	if w := x.l.Assigns(body, s, x.c); w != "" {
 		return fmt.Sprintf("the loop assigns %s (%s); a for...of reads it once and an index loop on each pass", over.Text(), w)
 	}
 	return ""
@@ -484,7 +484,7 @@ var mutators = map[string]bool{"push": true, "pop": true, "shift": true, "unshif
 func (x *looped) unchanged(over, body *ast.Node) string {
 	s := x.c.GetSymbolAtLocation(over)
 	why := ""
-	inspect(body, func(n *ast.Node) bool {
+	Inspect(body, func(n *ast.Node) bool {
 		if why != "" {
 			return false
 		}
@@ -501,11 +501,11 @@ func (x *looped) unchanged(over, body *ast.Node) string {
 		case ast.IsCallExpression(n) && ast.IsPropertyAccessExpression(n.Expression()):
 			pa := n.Expression()
 			if mutators[pa.Name().Text()] && x.is(pa.Expression(), s) {
-				why = fmt.Sprintf("the loop changes %s (%s); a for...of reads each element at the start of its pass, an index loop where it is used", over.Text(), x.where(n))
+				why = fmt.Sprintf("the loop changes %s (%s); a for...of reads each element at the start of its pass, an index loop where it is used", over.Text(), x.l.Where(n))
 			}
 		}
 		if target != nil && (ast.IsElementAccessExpression(target) || ast.IsPropertyAccessExpression(target)) && x.is(target.Expression(), s) {
-			why = fmt.Sprintf("the loop writes %s (%s); a for...of reads each element at the start of its pass, an index loop where it is used", x.source(target), x.where(n))
+			why = fmt.Sprintf("the loop writes %s (%s); a for...of reads each element at the start of its pass, an index loop where it is used", x.l.Source(target), x.l.Where(n))
 		}
 		return why == ""
 	})
@@ -515,15 +515,15 @@ func (x *looped) unchanged(over, body *ast.Node) string {
 // notCaptured refuses when a function in the loop refers to one of the
 // names: the two forms then differ in how many copies there are (why).
 func (x *looped) notCaptured(names []*ast.Node, why string) string {
-	syms := symbols(x.c, names)
+	syms := Symbols(x.c, names)
 	out := ""
-	inspect(x.loop, func(n *ast.Node) bool {
+	Inspect(x.loop, func(n *ast.Node) bool {
 		if out != "" {
 			return false
 		}
 		if ast.IsFunctionLike(n) {
-			if u := uses(x.c, n, syms); u != nil {
-				out = fmt.Sprintf("a function (%s) captures %s; %s. Copy it into a local in the body first", x.where(n), u.Text(), why)
+			if u := Uses(x.c, n, syms); u != nil {
+				out = fmt.Sprintf("a function (%s) captures %s; %s. Copy it into a local in the body first", x.l.Where(n), u.Text(), why)
 			}
 			return false
 		}
@@ -565,12 +565,12 @@ func (x *looped) continues() []*ast.Node {
 // before returns the edit that runs stmt just before c, in braces when c
 // is not in a block.
 func (x *looped) before(c *ast.Node, stmt string) Edit {
-	if inList(c) {
-		return x.edit(x.pos(c), x.pos(c), stmt+"\n"+x.indent(x.line(x.pos(c))))
+	if InList(c) {
+		return x.edit(x.l.Pos(c), x.l.Pos(c), stmt+"\n"+x.l.Indent(x.l.Line(x.l.Pos(c))))
 	}
-	outer := x.indent(x.line(x.pos(c.Parent)))
-	inner := outer + x.unit()
-	return x.edit(x.pos(c), c.End(), "{\n"+inner+stmt+"\n"+inner+x.source(c)+"\n"+outer+"}")
+	outer := x.l.Indent(x.l.Line(x.l.Pos(c.Parent)))
+	inner := outer + x.l.Unit()
+	return x.edit(x.l.Pos(c), c.End(), "{\n"+inner+stmt+"\n"+inner+x.l.Source(c)+"\n"+outer+"}")
 }
 
 // withLast returns body's source with edits, which fall inside it,
@@ -579,22 +579,22 @@ func (x *looped) before(c *ast.Node, stmt string) Edit {
 func (x *looped) withLast(body *ast.Node, stmt string, edits []Edit) string {
 	var in []Edit
 	for _, e := range edits {
-		if e.Start >= x.pos(body) && e.End <= body.End() {
+		if e.Start >= x.l.Pos(body) && e.End <= body.End() {
 			in = append(in, e)
 		}
 	}
-	text := x.applied(x.pos(body), body.End(), in)
-	indent := x.indent(x.line(x.pos(x.whole)))
-	unit := x.unit()
+	text := x.applied(x.l.Pos(body), body.End(), in)
+	indent := x.l.Indent(x.l.Line(x.l.Pos(x.whole)))
+	unit := x.l.Unit()
 	if ast.IsBlock(body) && len(body.Statements()) > 0 {
 		last := body.Statements()[len(body.Statements())-1]
-		if x.line(body.End()-1) != x.line(last.End()-1) {
+		if x.l.Line(body.End()-1) != x.l.Line(last.End()-1) {
 			if stmt == "" {
 				return text
 			}
 			close := strings.LastIndex(text, "}")
 			lineStart := strings.LastIndex(text[:close], "\n") + 1
-			at := x.indent(x.line(x.pos(last)))
+			at := x.l.Indent(x.l.Line(x.l.Pos(last)))
 			return text[:lineStart] + at + stmt + "\n" + text[lineStart:]
 		}
 	}
@@ -617,20 +617,20 @@ func (x *looped) withLast(body *ast.Node, stmt string, edits []Edit) string {
 // first returns the edits that put stmt first in body: on a line of its
 // own after the brace of a block, or with the body in a new block.
 func (x *looped) first(body *ast.Node, stmt string) []Edit {
-	indent := x.indent(x.line(x.pos(x.whole)))
-	unit := x.unit()
-	if ast.IsBlock(body) && x.line(x.pos(body)) != x.line(body.End()-1) {
+	indent := x.l.Indent(x.l.Line(x.l.Pos(x.whole)))
+	unit := x.l.Unit()
+	if ast.IsBlock(body) && x.l.Line(x.l.Pos(body)) != x.l.Line(body.End()-1) {
 		st := body.Statements()
-		if len(st) == 0 || x.line(x.pos(st[0])) != x.line(x.pos(body)) {
+		if len(st) == 0 || x.l.Line(x.l.Pos(st[0])) != x.l.Line(x.l.Pos(body)) {
 			at := indent + unit
 			if len(st) > 0 {
-				at = x.indent(x.line(x.pos(st[0])))
+				at = x.l.Indent(x.l.Line(x.l.Pos(st[0])))
 			}
-			after := x.pos(body) + 1
+			after := x.l.Pos(body) + 1
 			return []Edit{x.edit(after, after, "\n"+at+stmt)}
 		}
 	}
-	rest := strings.TrimSpace(x.source(body))
+	rest := strings.TrimSpace(x.l.Source(body))
 	if ast.IsBlock(body) {
 		rest = strings.TrimSpace(rest[1 : len(rest)-1])
 	}
@@ -638,14 +638,14 @@ func (x *looped) first(body *ast.Node, stmt string) []Edit {
 	if rest != "" {
 		text += indent + unit + rest + "\n"
 	}
-	return []Edit{x.edit(x.pos(body), body.End(), text+indent+"}")}
+	return []Edit{x.edit(x.l.Pos(body), body.End(), text+indent+"}")}
 }
 
 // clashes reports whether declaring name before the loop, in its list,
 // would redeclare a name of the list or reach a statement after the loop
 // that names it.
 func (x *looped) clashes(name string) bool {
-	if !inList(x.whole) {
+	if !InList(x.whole) {
 		return true
 	}
 	after := false
@@ -654,14 +654,14 @@ func (x *looped) clashes(name string) bool {
 			after = true
 			continue
 		}
-		for _, d := range declared(s) {
+		for _, d := range Declared(s) {
 			if d.Text() == name {
 				return true
 			}
 		}
 		if after {
 			hit := false
-			identifiers(s, func(id *ast.Node) { hit = hit || id.Text() == name })
+			Identifiers(s, func(id *ast.Node) { hit = hit || id.Text() == name })
 			if hit {
 				return true
 			}
@@ -674,7 +674,7 @@ func (x *looped) clashes(name string) bool {
 // file uses.
 func (x *looped) unused(name string) string {
 	taken := map[string]bool{}
-	identifiers(x.f.AsNode(), func(id *ast.Node) { taken[id.Text()] = true })
+	Identifiers(x.l.File.AsNode(), func(id *ast.Node) { taken[id.Text()] = true })
 	if !taken[name] {
 		return name
 	}
@@ -714,13 +714,13 @@ func scannerKeyword(s string) bool {
 
 // dropLine returns the edit that removes the lines of statement s.
 func (x *looped) dropLine(s *ast.Node) Edit {
-	a, b := x.lines(s)
-	return x.edit(x.start(a), x.start(b+1), "")
+	a, b := x.l.Lines(s)
+	return x.edit(x.l.Start(a), x.l.Start(b+1), "")
 }
 
 // edit is an edit of this file.
 func (x *looped) edit(start, end int, text string) Edit {
-	return Edit{File: x.f.FileName(), Start: start, End: end, NewText: text}
+	return Edit{File: x.l.File.FileName(), Start: start, End: end, NewText: text}
 }
 
 // applied returns the text from start to end with edits, those inside it,
@@ -733,7 +733,7 @@ func (x *looped) applied(start, end int, edits []Edit) string {
 		}
 	}
 	sort.Slice(in, func(i, j int) bool { return in[i].Start > in[j].Start })
-	s := x.text[start:end]
+	s := x.l.Text[start:end]
 	for _, e := range in {
 		s = s[:e.Start-start] + e.NewText + s[e.End-start:]
 	}

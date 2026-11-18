@@ -21,7 +21,7 @@ const Hole = "$body"
 // a loop, a function passed to a call. notes say what their return, break
 // and continue do once wrapped.
 func (p *Project) Wrap(ctx context.Context, path string, first, last int, template string) (start, end int, text string, notes []string, why string) {
-	l, why := p.lined(path)
+	l, why := p.Lined(path)
 	if why != "" {
 		return 0, 0, "", nil, why
 	}
@@ -41,8 +41,8 @@ func (p *Project) Wrap(ctx context.Context, path string, first, last int, templa
 	if why := p.usedAfter(ctx, l, chosen); why != "" {
 		return 0, 0, "", nil, why
 	}
-	start, end = l.start(first), l.start(last+1)
-	indent := l.indent(l.line(l.pos(chosen[0])))
+	start, end = l.Start(first), l.Start(last+1)
+	indent := l.Indent(l.Line(l.Pos(chosen[0])))
 	var out []string
 	for _, s := range strings.Split(gocode.Reindent(template, indent, raw), "\n") {
 		if strings.TrimSpace(s) != Hole {
@@ -55,10 +55,10 @@ func (p *Project) Wrap(ctx context.Context, path string, first, last int, templa
 			prev := out[len(out)-1]
 			pi := textutil.Indent(prev)
 			if t := strings.TrimSpace(prev); t != "" && len(inner) <= len(pi) && strings.ContainsAny(t[len(t)-1:], "{(:>") {
-				inner = pi + l.unit()
+				inner = pi + l.Unit()
 			}
 		}
-		out = append(out, strings.TrimSuffix(textutil.Reindent(l.text[start:end], indent, inner), "\n"))
+		out = append(out, strings.TrimSuffix(textutil.Reindent(l.Text[start:end], indent, inner), "\n"))
 	}
 	return start, end, strings.Join(out, "\n") + "\n", wrapNotes(l, template, chosen), ""
 }
@@ -66,22 +66,22 @@ func (p *Project) Wrap(ctx context.Context, path string, first, last int, templa
 // BodyLines returns the lines of the statements of the function body whose
 // braces are at [blockStart, blockEnd) of the file at path.
 func (p *Project) BodyLines(path string, blockStart, blockEnd int) (first, last int, why string) {
-	l, why := p.lined(path)
+	l, why := p.Lined(path)
 	if why != "" {
 		return 0, 0, why
 	}
 	var stmts []*ast.Node
 	l.lists(func(owner *ast.Node, list []*ast.Node) {
-		if ast.IsBlock(owner) && l.pos(owner) == blockStart {
+		if ast.IsBlock(owner) && l.Pos(owner) == blockStart {
 			stmts = list
 		}
 	})
 	if len(stmts) == 0 {
 		return 0, 0, "the body has no statements to wrap"
 	}
-	first, _ = l.lines(stmts[0])
-	_, last = l.lines(stmts[len(stmts)-1])
-	if first == l.line(blockStart) || last == l.line(blockEnd-1) {
+	first, _ = l.Lines(stmts[0])
+	_, last = l.Lines(stmts[len(stmts)-1])
+	if first == l.Line(blockStart) || last == l.Line(blockEnd-1) {
 		return 0, 0, "the body's statements share a line with its braces; give them lines of their own first"
 	}
 	return first, last, ""
@@ -89,17 +89,17 @@ func (p *Project) BodyLines(path string, blockStart, blockEnd int) (first, last 
 
 // usedAfter says which name the statements stmts declare is used after
 // them, where, wrapped, it would be out of scope.
-func (p *Project) usedAfter(ctx context.Context, l *lined, stmts []*ast.Node) string {
+func (p *Project) usedAfter(ctx context.Context, l *Lined, stmts []*ast.Node) string {
 	c, done := p.prog.GetProgram().GetTypeChecker(ctx)
 	defer done()
 	tail := stmts[len(stmts)-1].End()
 	var why string
 	for _, s := range stmts {
-		for _, n := range declared(s) {
+		for _, n := range Declared(s) {
 			sym := c.GetSymbolAtLocation(n)
-			identifiers(s.Parent, func(id *ast.Node) {
+			Identifiers(s.Parent, func(id *ast.Node) {
 				if why == "" && id.Pos() >= tail && symbolOf(c, id) == sym {
-					why = fmt.Sprintf("%s is declared in the statements and used after them (%s); wrapped, it would be out of scope there, so declare it before them first", n.Text(), l.where(id))
+					why = fmt.Sprintf("%s is declared in the statements and used after them (%s); wrapped, it would be out of scope there, so declare it before them first", n.Text(), l.Where(id))
 				}
 			})
 		}
@@ -110,7 +110,7 @@ func (p *Project) usedAfter(ctx context.Context, l *lined, stmts []*ast.Node) st
 // wrapNotes says what the return, break and continue of stmts do once at
 // the hole of template: inside a function they act on it, inside a loop
 // or switch on that.
-func wrapNotes(l *lined, template string, stmts []*ast.Node) []string {
+func wrapNotes(l *Lined, template string, stmts []*ast.Node) []string {
 	f := parseText("function __wrap() {\n" + template + "\n}\n")
 	var outer []*ast.Node // the template's nodes around the hole, outermost first
 	var stack []*ast.Node
@@ -139,7 +139,7 @@ func wrapNotes(l *lined, template string, stmts []*ast.Node) []string {
 	}
 	var notes []string
 	note := func(n *ast.Node, what string) {
-		notes = append(notes, fmt.Sprintf("%s at line %d %s", what, l.line(l.pos(n)), map[string]string{
+		notes = append(notes, fmt.Sprintf("%s at line %d %s", what, l.Line(l.Pos(n)), map[string]string{
 			"return":   "now leaves the new function, not the one it was in",
 			"break":    "now leaves the new loop or switch",
 			"continue": "now continues the new loop",

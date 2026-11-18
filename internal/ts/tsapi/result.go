@@ -64,7 +64,7 @@ func (p *Project) AddResult(ctx context.Context, path, name, field, typ, value, 
 			continue
 		}
 		cl := newLined(ast.GetSourceFileOfNode(call))
-		edits = append(edits, Edit{File: cl.f.FileName(), Start: call.End(), End: call.End(), NewText: "." + kept})
+		edits = append(edits, Edit{File: cl.File.FileName(), Start: call.End(), End: call.End(), NewText: "." + kept})
 	}
 	return edits, ""
 }
@@ -97,11 +97,11 @@ func (r *result) edits(m *ast.Node, name string) ([]Edit, string) {
 	// function inside it (a recursive call), which then needs no edit of
 	// its own.
 	inner := func(e *ast.Node) string {
-		src := l.source(e)
-		base := l.pos(e)
+		src := l.Source(e)
+		base := l.Pos(e)
 		for i := len(r.t.calls) - 1; i >= 0; i-- {
 			call := r.t.calls[i]
-			if ast.GetSourceFileOfNode(call) == l.f && l.pos(call) >= base && call.End() <= e.End() && !ast.IsExpressionStatement(call.Parent) {
+			if ast.GetSourceFileOfNode(call) == l.File && l.Pos(call) >= base && call.End() <= e.End() && !ast.IsExpressionStatement(call.Parent) {
 				r.inside[call] = true
 				at := call.End() - base
 				src = src[:at] + "." + r.kept + src[at:]
@@ -113,29 +113,29 @@ func (r *result) edits(m *ast.Node, name string) ([]Edit, string) {
 	newType := fmt.Sprintf("{ %s: %s; %s: %s }", r.kept, old, r.field, r.typ)
 	var edits []Edit
 	if rt := m.Type(); rt != nil {
-		edits = append(edits, Edit{File: l.f.FileName(), Start: l.pos(rt), End: rt.End(), NewText: newType})
+		edits = append(edits, Edit{File: l.File.FileName(), Start: l.Pos(rt), End: rt.End(), NewText: newType})
 	} else {
 		params := m.ParameterList()
-		at := params.End() + strings.IndexByte(l.text[params.End():], ')')
-		if at < params.End() || ast.IsArrowFunction(m) && l.text[l.pos(m)] != '(' && l.text[l.pos(m)] != '<' {
+		at := params.End() + strings.IndexByte(l.Text[params.End():], ')')
+		if at < params.End() || ast.IsArrowFunction(m) && l.Text[l.Pos(m)] != '(' && l.Text[l.Pos(m)] != '<' {
 			return nil, fmt.Sprintf("give %s's parameter parentheses first, to write its result type after them", name)
 		}
-		edits = append(edits, Edit{File: l.f.FileName(), Start: at + 1, End: at + 1, NewText: ": " + newType})
+		edits = append(edits, Edit{File: l.File.FileName(), Start: at + 1, End: at + 1, NewText: ": " + newType})
 	}
 	if m == r.t.fn {
 		for _, o := range r.t.overloads {
 			rt := o.Type()
 			if rt == nil {
-				return nil, fmt.Sprintf("the overload at %s has no result type written; write it first", l.where(o))
+				return nil, fmt.Sprintf("the overload at %s has no result type written; write it first", l.Where(o))
 			}
-			edits = append(edits, Edit{File: l.f.FileName(), Start: l.pos(rt), End: rt.End(), NewText: fmt.Sprintf("{ %s: %s; %s: %s }", r.kept, l.source(rt), r.field, r.typ)})
+			edits = append(edits, Edit{File: l.File.FileName(), Start: l.Pos(rt), End: rt.End(), NewText: fmt.Sprintf("{ %s: %s; %s: %s }", r.kept, l.Source(rt), r.field, r.typ)})
 		}
 	}
 	body := m.Body()
 	switch {
 	case body == nil:
 	case !ast.IsBlock(body):
-		edits = append(edits, Edit{File: l.f.FileName(), Start: l.pos(body), End: body.End(), NewText: "(" + obj(inner(body)) + ")"})
+		edits = append(edits, Edit{File: l.File.FileName(), Start: l.Pos(body), End: body.End(), NewText: "(" + obj(inner(body)) + ")"})
 	default:
 		var visit func(n *ast.Node) bool
 		visit = func(n *ast.Node) bool {
@@ -145,12 +145,12 @@ func (r *result) edits(m *ast.Node, name string) ([]Edit, string) {
 			if ast.IsReturnStatement(n) {
 				e := n.Expression()
 				if e == nil {
-					edits = append(edits, Edit{File: l.f.FileName(), Start: n.End() - 1, End: n.End() - 1, NewText: " " + obj("undefined")})
-					if l.text[n.End()-1] != ';' {
+					edits = append(edits, Edit{File: l.File.FileName(), Start: n.End() - 1, End: n.End() - 1, NewText: " " + obj("undefined")})
+					if l.Text[n.End()-1] != ';' {
 						edits[len(edits)-1].Start, edits[len(edits)-1].End = n.End(), n.End()
 					}
 				} else {
-					edits = append(edits, Edit{File: l.f.FileName(), Start: l.pos(e), End: e.End(), NewText: obj(inner(e))})
+					edits = append(edits, Edit{File: l.File.FileName(), Start: l.Pos(e), End: e.End(), NewText: obj(inner(e))})
 				}
 			}
 			n.ForEachChild(visit)
@@ -163,10 +163,10 @@ func (r *result) edits(m *ast.Node, name string) ([]Edit, string) {
 
 // returnType is the type fn returns, as written or else as checked by c,
 // or "" when neither is known.
-func (l *lined) returnType(fn *ast.Node, c *checker.Checker) string {
+func (l *Lined) returnType(fn *ast.Node, c *checker.Checker) string {
 	ret := ""
 	if rt := fn.Type(); rt != nil {
-		ret = l.source(rt)
+		ret = l.Source(rt)
 	} else if sig := c.GetSignatureFromDeclaration(fn); sig != nil {
 		ret = c.TypeToString(c.GetReturnTypeOfSignature(sig))
 	}

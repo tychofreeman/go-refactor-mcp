@@ -14,17 +14,17 @@ import (
 // becomes the declaration of newName, a const (let when it is assigned
 // again), and the uses of name after it read newName.
 func (p *Project) SplitVariable(ctx context.Context, path string, line int, name, newName string) ([]Edit, string) {
-	l, why := p.lined(path)
+	l, why := p.Lined(path)
 	if why != "" {
 		return nil, why
 	}
-	if line < 1 || line > l.count() {
-		return nil, fmt.Sprintf("line %d out of range: the file has %d lines", line, l.count())
+	if line < 1 || line > l.Count() {
+		return nil, fmt.Sprintf("line %d out of range: the file has %d lines", line, l.Count())
 	}
 	var stmt, as *ast.Node
 	l.lists(func(_ *ast.Node, list []*ast.Node) {
 		for _, s := range list {
-			if stmt != nil || l.line(l.pos(s)) != line || !ast.IsExpressionStatement(s) {
+			if stmt != nil || l.Line(l.Pos(s)) != line || !ast.IsExpressionStatement(s) {
 				continue
 			}
 			e := s.Expression()
@@ -36,9 +36,9 @@ func (p *Project) SplitVariable(ctx context.Context, path string, line int, name
 		}
 	})
 	if stmt == nil {
-		return nil, fmt.Sprintf("no assignment %s = ... starts on line %d: %s", name, line, strings.TrimSpace(l.text[l.start(line):l.end(line)]))
+		return nil, fmt.Sprintf("no assignment %s = ... starts on line %d: %s", name, line, strings.TrimSpace(l.Text[l.Start(line):l.End(line)]))
 	}
-	c, done := p.prog.GetProgram().GetTypeCheckerForFile(ctx, l.f)
+	c, done := p.prog.GetProgram().GetTypeCheckerForFile(ctx, l.File)
 	defer done()
 	b := as.AsBinaryExpression()
 	sym := symbolOf(c, b.Left)
@@ -46,17 +46,17 @@ func (p *Project) SplitVariable(ctx context.Context, path string, line int, name
 		return nil, fmt.Sprintf("%s is not a variable declared with let or var", name)
 	}
 	decl := sym.ValueDeclaration
-	if ast.GetSourceFileOfNode(decl) != l.f || decl.Parent.Parent == nil || decl.Parent.Parent.Parent != stmt.Parent {
-		return nil, fmt.Sprintf("%s is in a block inside the one that declares %s (%s), where the variable may hold its old value after it; split it there", l.part(stmt), name, l.where(decl))
+	if ast.GetSourceFileOfNode(decl) != l.File || decl.Parent.Parent == nil || decl.Parent.Parent.Parent != stmt.Parent {
+		return nil, fmt.Sprintf("%s is in a block inside the one that declares %s (%s), where the variable may hold its old value after it; split it there", l.part(stmt), name, l.Where(decl))
 	}
-	if u := uses(c, b.Right, []*ast.Symbol{sym}); u != nil {
-		return nil, fmt.Sprintf("the new value %s reads %s, so it is the same variable", l.source(b.Right), name)
+	if u := Uses(c, b.Right, []*ast.Symbol{sym}); u != nil {
+		return nil, fmt.Sprintf("the new value %s reads %s, so it is the same variable", l.Source(b.Right), name)
 	}
 	fn := ast.FindAncestor(decl, ast.IsFunctionLike)
 	var later []*ast.Node
 	assigned := false
 	var closure *ast.Node
-	identifiers(l.f.AsNode(), func(id *ast.Node) {
+	Identifiers(l.File.AsNode(), func(id *ast.Node) {
 		if id == b.Left || ast.IsDeclarationName(id) || symbolOf(c, id) != sym {
 			return
 		}
@@ -69,7 +69,7 @@ func (p *Project) SplitVariable(ctx context.Context, path string, line int, name
 		}
 	})
 	if closure != nil {
-		return nil, fmt.Sprintf("a closure refers to %s at %s, and may run after the assignment or before it", name, l.where(closure))
+		return nil, fmt.Sprintf("a closure refers to %s at %s, and may run after the assignment or before it", name, l.Where(closure))
 	}
 	if why := taken(c, l, newName, stmt); why != "" {
 		return nil, why
@@ -80,15 +80,15 @@ func (p *Project) SplitVariable(ctx context.Context, path string, line int, name
 	}
 	declared := keyword + newName
 	if t := decl.Type(); t != nil {
-		declared += ": " + l.source(t)
+		declared += ": " + l.Source(t)
 	}
-	edits := []Edit{{File: l.f.FileName(), Start: l.pos(b.Left), End: b.Left.End(), NewText: declared}}
+	edits := []Edit{{File: l.File.FileName(), Start: l.Pos(b.Left), End: b.Left.End(), NewText: declared}}
 	for _, id := range later {
 		text := newName
 		if ast.IsShorthandPropertyAssignment(id.Parent) && id.Parent.Name() == id {
 			text = name + ": " + newName
 		}
-		edits = append(edits, Edit{File: l.f.FileName(), Start: l.pos(id), End: id.End(), NewText: text})
+		edits = append(edits, Edit{File: l.File.FileName(), Start: l.Pos(id), End: id.End(), NewText: text})
 	}
 	return edits, ""
 }
@@ -101,7 +101,7 @@ func isAssigned(id *ast.Node) bool {
 	case ast.IsBinaryExpression(p):
 		return ast.IsAssignmentOperator(p.AsBinaryExpression().OperatorToken.Kind) && p.AsBinaryExpression().Left == id
 	case ast.IsPrefixUnaryExpression(p):
-		return isUpdate(p.AsPrefixUnaryExpression().Operator)
+		return IsUpdate(p.AsPrefixUnaryExpression().Operator)
 	case ast.IsPostfixUnaryExpression(p):
 		return true
 	}
@@ -112,29 +112,29 @@ func isAssigned(id *ast.Node) bool {
 // body of the for loop on line, from the one on line at, go to a second
 // loop with the same header, after the first.
 func (p *Project) SplitLoop(ctx context.Context, path string, line, at int) ([]Edit, string) {
-	l, why := p.lined(path)
+	l, why := p.Lined(path)
 	if why != "" {
 		return nil, why
 	}
-	if line < 1 || line > l.count() {
-		return nil, fmt.Sprintf("line %d out of range: the file has %d lines", line, l.count())
+	if line < 1 || line > l.Count() {
+		return nil, fmt.Sprintf("line %d out of range: the file has %d lines", line, l.Count())
 	}
 	var loop *ast.Node
-	inspect(l.f.AsNode(), func(n *ast.Node) bool {
-		if loop == nil && (ast.IsForStatement(n) || ast.IsForInOrOfStatement(n)) && l.line(l.pos(n)) == line {
+	Inspect(l.File.AsNode(), func(n *ast.Node) bool {
+		if loop == nil && (ast.IsForStatement(n) || ast.IsForInOrOfStatement(n)) && l.Line(l.Pos(n)) == line {
 			loop = n
 		}
 		return loop == nil
 	})
 	if loop == nil {
-		return nil, fmt.Sprintf("no for loop starts on line %d: %s", line, strings.TrimSpace(l.text[l.start(line):l.end(line)]))
+		return nil, fmt.Sprintf("no for loop starts on line %d: %s", line, strings.TrimSpace(l.Text[l.Start(line):l.End(line)]))
 	}
 	body := loop.Statement()
 	if !ast.IsBlock(body) {
 		return nil, fmt.Sprintf("the body of %s is not a block", l.part(loop))
 	}
 	list := body.Statements()
-	i := slices.IndexFunc(list, func(s *ast.Node) bool { return l.line(l.pos(s)) == at })
+	i := slices.IndexFunc(list, func(s *ast.Node) bool { return l.Line(l.Pos(s)) == at })
 	switch {
 	case i < 0:
 		return nil, fmt.Sprintf("no statement of the body of %s starts on line %d", l.part(loop), at)
@@ -142,7 +142,7 @@ func (p *Project) SplitLoop(ctx context.Context, path string, line, at int) ([]E
 		return nil, fmt.Sprintf("%s is the first statement of the body; at is where the second loop's statements start", l.part(list[0]))
 	}
 	first, second := list[:i], list[i:]
-	c, done := p.prog.GetProgram().GetTypeCheckerForFile(ctx, l.f)
+	c, done := p.prog.GetProgram().GetTypeCheckerForFile(ctx, l.File)
 	defer done()
 	a := newEffects(c, l)
 	// The parts may not use what the other declares.
@@ -152,7 +152,7 @@ func (p *Project) SplitLoop(ctx context.Context, path string, line, at int) ([]E
 				continue
 			}
 			for _, u := range pair[1] {
-				if id := uses(c, u, symbols(c, declared(d))); id != nil {
+				if id := Uses(c, u, Symbols(c, Declared(d))); id != nil {
 					return nil, fmt.Sprintf("%s uses %s, which %s declares", l.part(u), id.Text(), l.part(d))
 				}
 			}
@@ -178,14 +178,14 @@ func (p *Project) SplitLoop(ctx context.Context, path string, line, at int) ([]E
 		init = f.Initializer
 		header.add(a.Of(f.Expression))
 		if ast.IsForOfStatement(loop) && !c.IsArrayType(c.GetTypeAtLocation(f.Expression)) {
-			return nil, fmt.Sprintf("%s loops over %s, which is not known to be an array: a second loop over an iterator would see nothing", l.part(loop), l.source(f.Expression))
+			return nil, fmt.Sprintf("%s loops over %s, which is not known to be an array: a second loop over an iterator would see nothing", l.part(loop), l.Source(f.Expression))
 		}
 	}
 	if init != nil && ast.IsVariableDeclarationList(init) {
 		for _, d := range init.AsVariableDeclarationList().Declarations.Nodes {
 			var names []*ast.Node
-			identifiers(d.Name(), func(id *ast.Node) { names = append(names, id) })
-			own = append(own, symbols(c, names)...)
+			Identifiers(d.Name(), func(id *ast.Node) { names = append(names, id) })
+			own = append(own, Symbols(c, names)...)
 		}
 	} else if init != nil {
 		return nil, fmt.Sprintf("the header of %s assigns variables declared outside it, which a second loop would assign again", l.part(loop))
@@ -223,9 +223,9 @@ func (p *Project) SplitLoop(ctx context.Context, path string, line, at int) ([]E
 	if _, _, ok := l.lineRange(first[len(first)-1]); !ok {
 		return nil, fmt.Sprintf("%s shares its line with other code", l.part(first[len(first)-1]))
 	}
-	indent := l.indent(line)
-	text := indent + "}\n" + indent + l.text[l.pos(loop):l.pos(body)] + "{\n"
-	return []Edit{{File: l.f.FileName(), Start: start, End: start, NewText: text}}, ""
+	indent := l.Indent(line)
+	text := indent + "}\n" + indent + l.Text[l.Pos(loop):l.Pos(body)] + "{\n"
+	return []Edit{{File: l.File.FileName(), Start: start, End: start, NewText: text}}, ""
 }
 
 // PhaseAt finds the second phase of a function that starts with the
@@ -235,7 +235,7 @@ func (p *Project) SplitLoop(ctx context.Context, path string, line, at int) ([]E
 // its first, a second phase that uses nothing the first computes or
 // assigns some of it, or typeName taken.
 func (p *Project) PhaseAt(ctx context.Context, path string, line int, typeName string) (last int, names []string, refusal string) {
-	l, why := p.lined(path)
+	l, why := p.Lined(path)
 	if why != "" {
 		return 0, nil, why
 	}
@@ -243,7 +243,7 @@ func (p *Project) PhaseAt(ctx context.Context, path string, line int, typeName s
 	var list []*ast.Node
 	l.lists(func(_ *ast.Node, ls []*ast.Node) {
 		for _, s := range ls {
-			if stmt == nil && l.line(l.pos(s)) == line {
+			if stmt == nil && l.Line(l.Pos(s)) == line {
 				stmt, list = s, ls
 			}
 		}
@@ -259,23 +259,23 @@ func (p *Project) PhaseAt(ctx context.Context, path string, line int, typeName s
 	if i == 0 {
 		return 0, nil, fmt.Sprintf("line %d is the function's first statement, so there would be no first phase", line)
 	}
-	c, done := p.prog.GetProgram().GetTypeCheckerForFile(ctx, l.f)
+	c, done := p.prog.GetProgram().GetTypeCheckerForFile(ctx, l.File)
 	defer done()
 	if taken(c, l, typeName, stmt) != "" {
 		return 0, nil, fmt.Sprintf("%s is already declared; choose another type name", typeName)
 	}
 	for _, s := range list[:i] {
-		for _, d := range declared(s) {
+		for _, d := range Declared(s) {
 			sym := c.GetSymbolAtLocation(d)
 			if sym == nil {
 				continue
 			}
 			used := false
 			for _, later := range list[i:] {
-				if where := l.assigns(later, sym, c); where != "" {
+				if where := l.Assigns(later, sym, c); where != "" {
 					return 0, nil, fmt.Sprintf("%s assigns %s, which the first phase computes; split it first, with kind variable", where, d.Text())
 				}
-				used = used || uses(c, later, []*ast.Symbol{sym}) != nil
+				used = used || Uses(c, later, []*ast.Symbol{sym}) != nil
 			}
 			if used {
 				names = append(names, d.Text())
@@ -285,5 +285,5 @@ func (p *Project) PhaseAt(ctx context.Context, path string, line int, typeName s
 	if len(names) == 0 {
 		return 0, nil, fmt.Sprintf("the statements from line %d on use nothing the ones before compute, so there is nothing to pass between phases", line)
 	}
-	return l.line(list[len(list)-1].End() - 1), names, ""
+	return l.Line(list[len(list)-1].End() - 1), names, ""
 }

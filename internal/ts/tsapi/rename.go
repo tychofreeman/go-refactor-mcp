@@ -111,8 +111,8 @@ func (p *Project) TopLevel(path, name string) (int, bool) {
 			return 0, false
 		}
 		for _, m := range members {
-			if nm := m.Name(); nm != nil && l.text[l.pos(nm):nm.End()] == member {
-				return l.pos(nm), true
+			if nm := m.Name(); nm != nil && l.Text[l.Pos(nm):nm.End()] == member {
+				return l.Pos(nm), true
 			}
 		}
 		return 0, false
@@ -144,7 +144,7 @@ func (p *Project) TopLevel(path, name string) (int, bool) {
 // parameter, variable, constant, function or class; or why there is none,
 // or more than one.
 func (p *Project) Local(path, fn, name string) (int, string) {
-	l, refusal := p.lined(path)
+	l, refusal := p.Lined(path)
 	if refusal != "" {
 		return 0, refusal
 	}
@@ -167,11 +167,11 @@ func (p *Project) Local(path, fn, name string) (int, string) {
 	case 0:
 		return 0, fmt.Sprintf("%s declares no %s", fn, name)
 	case 1:
-		return l.pos(found[0]), ""
+		return l.Pos(found[0]), ""
 	}
 	var lines []string
 	for _, nm := range found {
-		lines = append(lines, fmt.Sprint(l.line(l.pos(nm))))
+		lines = append(lines, fmt.Sprint(l.Line(l.Pos(nm))))
 	}
 	return 0, fmt.Sprintf("%s declares %s %d times, on lines %s: give line", fn, name, len(found), strings.Join(lines, ", "))
 }

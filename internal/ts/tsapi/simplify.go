@@ -15,8 +15,8 @@ import (
 // This file has what the refactorings that simplify code share: where a
 // node's statement is, what runs before a node in it, and how often.
 
-// inList reports whether n is a statement of a statement list.
-func inList(n *ast.Node) bool {
+// InList reports whether n is a statement of a statement list.
+func InList(n *ast.Node) bool {
 	return n.Parent != nil && n.Parent.CanHaveStatements() && slices.Contains(n.Parent.Statements(), n)
 }
 
@@ -24,7 +24,7 @@ func inList(n *ast.Node) bool {
 // when a function lies between them.
 func stmtOf(n *ast.Node) *ast.Node {
 	for x := n; x != nil; x = x.Parent {
-		if inList(x) {
+		if InList(x) {
 			return x
 		}
 		if x != n && ast.IsFunctionLike(x) || ast.IsClassLike(x) {
@@ -39,7 +39,7 @@ func stmtOf(n *ast.Node) *ast.Node {
 // condition or body), with the part that makes it so; or a refusal when a
 // function lies between them, unless during (which may be nil) says it runs
 // only during the call it is passed to: then Shared, as in a loop.
-func (l *lined) timesIn(n, stmt *ast.Node, during func(*ast.Node) bool) (Times, string, string) {
+func (l *Lined) timesIn(n, stmt *ast.Node, during func(*ast.Node) bool) (Times, string, string) {
 	times, why := Once, ""
 	for x := n; x != stmt && x.Parent != nil; x = x.Parent {
 		p := x.Parent
@@ -81,12 +81,12 @@ func (l *lined) timesIn(n, stmt *ast.Node, during func(*ast.Node) bool) (Times, 
 }
 
 // part names n by its first line and where it is: "the if at a.ts:3".
-func (l *lined) part(n *ast.Node) string {
-	src := l.source(n)
+func (l *Lined) part(n *ast.Node) string {
+	src := l.Source(n)
 	if i := strings.IndexByte(src, '\n'); i >= 0 {
 		src = strings.TrimSpace(src[:i]) + " ..."
 	}
-	return fmt.Sprintf("%s at %s", src, l.where(n))
+	return fmt.Sprintf("%s at %s", src, l.Where(n))
 }
 
 // parts returns the largest pieces of root, statements or expressions,
@@ -133,9 +133,9 @@ func symbolOf(c *checker.Checker, id *ast.Node) *ast.Symbol {
 	return s
 }
 
-// identifiers calls fn with each identifier in n, n included.
-func identifiers(n *ast.Node, fn func(id *ast.Node)) {
-	inspect(n, func(x *ast.Node) bool {
+// Identifiers calls fn with each identifier in n, n included.
+func Identifiers(n *ast.Node, fn func(id *ast.Node)) {
+	Inspect(n, func(x *ast.Node) bool {
 		if ast.IsIdentifier(x) {
 			fn(x)
 		}
@@ -147,7 +147,7 @@ func identifiers(n *ast.Node, fn func(id *ast.Node)) {
 // it, leaving out property names.
 func free(c *checker.Checker, e *ast.Node) []*ast.Node {
 	var out []*ast.Node
-	identifiers(e, func(id *ast.Node) {
+	Identifiers(e, func(id *ast.Node) {
 		p := id.Parent
 		if p != nil && (ast.IsPropertyAccessExpression(p) && p.Name() == id || ast.IsPropertyAssignment(p) && p.Name() == id ||
 			ast.IsQualifiedName(p) || ast.IsPartOfTypeNode(id)) {
@@ -167,11 +167,11 @@ func free(c *checker.Checker, e *ast.Node) []*ast.Node {
 
 // seenAlike returns why the names ids would not mean at at what they mean
 // where they are, or "".
-func seenAlike(c *checker.Checker, l *lined, ids []*ast.Node, at *ast.Node) string {
+func seenAlike(c *checker.Checker, l *Lined, ids []*ast.Node, at *ast.Node) string {
 	for _, id := range ids {
 		s := symbolOf(c, id)
 		if r := c.ResolveName(id.Text(), at, ast.SymbolFlagsValue, false); r == nil || c.SkipAlias(r) != s {
-			return fmt.Sprintf("%s at %s would mean something else at %s", id.Text(), newLined(ast.GetSourceFileOfNode(id)).where(id), l.where(at))
+			return fmt.Sprintf("%s at %s would mean something else at %s", id.Text(), newLined(ast.GetSourceFileOfNode(id)).Where(id), l.Where(at))
 		}
 	}
 	return ""
@@ -179,50 +179,50 @@ func seenAlike(c *checker.Checker, l *lined, ids []*ast.Node, at *ast.Node) stri
 
 // taken returns why name cannot be declared where at is: something of
 // that name is already seen there.
-func taken(c *checker.Checker, l *lined, name string, at *ast.Node) string {
+func taken(c *checker.Checker, l *Lined, name string, at *ast.Node) string {
 	if !scanner.IsIdentifierText(name, 0) {
 		return fmt.Sprintf("%q is not a valid name", name)
 	}
 	if s := c.ResolveName(name, at, ast.SymbolFlagsValue|ast.SymbolFlagsType|ast.SymbolFlagsNamespace, false); s != nil {
 		where := "the standard library"
 		if d := s.ValueDeclaration; d != nil && !ast.GetSourceFileOfNode(d).IsDeclarationFile {
-			where = newLined(ast.GetSourceFileOfNode(d)).where(d)
+			where = newLined(ast.GetSourceFileOfNode(d)).Where(d)
 		} else if len(s.Declarations) > 0 && !ast.GetSourceFileOfNode(s.Declarations[0]).IsDeclarationFile {
-			where = newLined(ast.GetSourceFileOfNode(s.Declarations[0])).where(s.Declarations[0])
+			where = newLined(ast.GetSourceFileOfNode(s.Declarations[0])).Where(s.Declarations[0])
 		}
-		return fmt.Sprintf("%s is already a name at %s (declared at %s); choose another", name, l.where(at), where)
+		return fmt.Sprintf("%s is already a name at %s (declared at %s); choose another", name, l.Where(at), where)
 	}
 	return ""
 }
 
 // lineRange returns the bytes of the whole lines n is on, with the
 // comments directly above it, or false when other code shares them.
-func (l *lined) lineRange(n *ast.Node) (int, int, bool) {
-	first, last := l.lines(n)
-	if strings.TrimSpace(l.text[l.start(first):l.pos(n)]) != "" || !quiet(l.text[n.End():l.end(last)]) {
+func (l *Lined) lineRange(n *ast.Node) (int, int, bool) {
+	first, last := l.Lines(n)
+	if strings.TrimSpace(l.Text[l.Start(first):l.Pos(n)]) != "" || !quiet(l.Text[n.End():l.End(last)]) {
 		return 0, 0, false
 	}
 	for first > 1 {
-		above := strings.TrimSpace(l.text[l.start(first-1):l.end(first-1)])
-		if above == "" || !quiet(above) || l.start(first-1) < n.Pos() {
+		above := strings.TrimSpace(l.Text[l.Start(first-1):l.End(first-1)])
+		if above == "" || !quiet(above) || l.Start(first-1) < n.Pos() {
 			break
 		}
 		first--
 	}
-	return l.start(first), l.start(last + 1), true
+	return l.Start(first), l.Start(last + 1), true
 }
 
 // withBlank widens the whole lines [a, b) by a blank line after them, or
 // else before them, so that removing them leaves no two blank lines.
-func (l *lined) withBlank(a, b int) (int, int) {
+func (l *Lined) withBlank(a, b int) (int, int) {
 	blank := func(line int) bool {
-		return line >= 1 && line <= l.count() && strings.TrimSpace(l.text[l.start(line):l.end(line)]) == ""
+		return line >= 1 && line <= l.Count() && strings.TrimSpace(l.Text[l.Start(line):l.End(line)]) == ""
 	}
-	switch first, last := l.line(a), l.line(b-1); {
+	switch first, last := l.Line(a), l.Line(b-1); {
 	case blank(last + 1):
-		return a, l.start(last + 2)
+		return a, l.Start(last + 2)
 	case blank(first - 1):
-		return l.start(first - 1), b
+		return l.Start(first - 1), b
 	}
 	return a, b
 }
@@ -230,11 +230,11 @@ func (l *lined) withBlank(a, b int) (int, int) {
 // reindent returns the text of the whole lines [start, end) with the
 // indentation from replaced by to, but for lines inside a string or
 // template that spans lines.
-func (l *lined) reindent(start, end int, from, to string, rs ...repl) string {
+func (l *Lined) reindent(start, end int, from, to string, rs ...repl) string {
 	inside := l.literalLines(start, end)
 	var b strings.Builder
-	for line := l.line(start); line <= l.count() && l.start(line) < end; line++ {
-		s := l.substitute(l.start(line), min(l.start(line+1), end), rs)
+	for line := l.Line(start); line <= l.Count() && l.Start(line) < end; line++ {
+		s := l.substitute(l.Start(line), min(l.Start(line+1), end), rs)
 		if !inside[line] {
 			if strings.HasPrefix(s, from) {
 				s = to + s[len(from):]
@@ -249,14 +249,14 @@ func (l *lined) reindent(start, end int, from, to string, rs ...repl) string {
 
 // literalLines is the lines in [start, end) that start inside a string or
 // template spanning lines: changing their indentation changes the string.
-func (l *lined) literalLines(start int, end int) map[int]bool {
+func (l *Lined) literalLines(start int, end int) map[int]bool {
 	inside := map[int]bool{}
-	inspect(l.f.AsNode(), func(n *ast.Node) bool {
+	Inspect(l.File.AsNode(), func(n *ast.Node) bool {
 		if n.End() <= start || n.Pos() >= end {
 			return false
 		}
 		if ast.IsTemplateLiteralKind(n.Kind) || ast.IsTemplateExpression(n) || ast.IsStringLiteral(n) {
-			a, b := l.lines(n)
+			a, b := l.Lines(n)
 			for i := a + 1; i <= b; i++ {
 				inside[i] = true
 			}
@@ -267,14 +267,14 @@ func (l *lined) literalLines(start int, end int) map[int]bool {
 	return inside
 }
 
-// declared returns the names stmt declares in its block: variables,
+// Declared returns the names stmt declares in its block: variables,
 // functions, classes and enums.
-func declared(stmt *ast.Node) []*ast.Node {
+func Declared(stmt *ast.Node) []*ast.Node {
 	var out []*ast.Node
 	switch {
 	case ast.IsVariableStatement(stmt):
 		for _, d := range stmt.AsVariableStatement().DeclarationList.AsVariableDeclarationList().Declarations.Nodes {
-			identifiers(d.Name(), func(id *ast.Node) {
+			Identifiers(d.Name(), func(id *ast.Node) {
 				if !(ast.IsBindingElement(id.Parent) && id.Parent.AsBindingElement().PropertyName == id) {
 					out = append(out, id)
 				}
@@ -288,10 +288,10 @@ func declared(stmt *ast.Node) []*ast.Node {
 	return out
 }
 
-// uses returns the first identifier in n that refers to one of syms.
-func uses(c *checker.Checker, n *ast.Node, syms []*ast.Symbol) *ast.Node {
+// Uses returns the first identifier in n that refers to one of syms.
+func Uses(c *checker.Checker, n *ast.Node, syms []*ast.Symbol) *ast.Node {
 	var found *ast.Node
-	identifiers(n, func(id *ast.Node) {
+	Identifiers(n, func(id *ast.Node) {
 		if found == nil && !ast.IsDeclarationName(id) && slices.Contains(syms, symbolOf(c, id)) {
 			found = id
 		}
@@ -299,8 +299,8 @@ func uses(c *checker.Checker, n *ast.Node, syms []*ast.Symbol) *ast.Node {
 	return found
 }
 
-// symbols returns the symbols of the names.
-func symbols(c *checker.Checker, names []*ast.Node) []*ast.Symbol {
+// Symbols returns the symbols of the names.
+func Symbols(c *checker.Checker, names []*ast.Node) []*ast.Symbol {
 	var out []*ast.Symbol
 	for _, n := range names {
 		if s := c.GetSymbolAtLocation(n); s != nil {
@@ -315,7 +315,7 @@ func symbols(c *checker.Checker, names []*ast.Node) []*ast.Symbol {
 // before its statement, and name in its place; with all, also in place of
 // the same expression later in the same block.
 func (p *Project) ExtractVariable(ctx context.Context, path string, line int, expr string, column int, name string, all bool) ([]Edit, string) {
-	l, why := p.lined(path)
+	l, why := p.Lined(path)
 	if why != "" {
 		return nil, why
 	}
@@ -323,18 +323,18 @@ func (p *Project) ExtractVariable(ctx context.Context, path string, line int, ex
 	if why != "" {
 		return nil, why
 	}
-	c, done := p.prog.GetProgram().GetTypeCheckerForFile(ctx, l.f)
+	c, done := p.prog.GetProgram().GetTypeCheckerForFile(ctx, l.File)
 	defer done()
 	src := strings.TrimSpace(expr)
 	par := e.Parent
 	switch {
 	case ast.IsBinaryExpression(par) && ast.IsAssignmentOperator(par.AsBinaryExpression().OperatorToken.Kind) && par.AsBinaryExpression().Left == e,
-		ast.IsPrefixUnaryExpression(par) && isUpdate(par.AsPrefixUnaryExpression().Operator), ast.IsPostfixUnaryExpression(par), ast.IsDeleteExpression(par):
-		return nil, fmt.Sprintf("%s is assigned to at %s; a variable would take the assignment instead", src, l.where(e))
+		ast.IsPrefixUnaryExpression(par) && IsUpdate(par.AsPrefixUnaryExpression().Operator), ast.IsPostfixUnaryExpression(par), ast.IsDeleteExpression(par):
+		return nil, fmt.Sprintf("%s is assigned to at %s; a variable would take the assignment instead", src, l.Where(e))
 	case (ast.IsCallExpression(par) || ast.IsTaggedTemplateExpression(par)) && par.Expression() == e && (ast.IsPropertyAccessExpression(e) || ast.IsElementAccessExpression(e)):
 		return nil, fmt.Sprintf("%s is the method of a call; called through a variable it would lose its this", src)
 	case e.Flags&ast.NodeFlagsOptionalChain != 0 && par.Flags&ast.NodeFlagsOptionalChain != 0 && par.Expression() == e:
-		return nil, fmt.Sprintf("%s is part of the optional chain %s, which a variable would cut", src, l.source(par))
+		return nil, fmt.Sprintf("%s is part of the optional chain %s, which a variable would cut", src, l.Source(par))
 	case ast.IsSpreadElement(e), ast.IsOmittedExpression(e), e.Kind == ast.KindSuperKeyword:
 		return nil, fmt.Sprintf("%s is not a value of its own", src)
 	}
@@ -347,7 +347,7 @@ func (p *Project) ExtractVariable(ctx context.Context, path string, line int, ex
 	if why != "" {
 		return nil, fmt.Sprintf("%s cannot be evaluated before its statement: %s", src, why)
 	}
-	past := parts(stmt, l.pos(e), nil)
+	past := parts(stmt, l.Pos(e), nil)
 	if times == Shared {
 		past = []*ast.Node{stmt} // the loop's other parts run between evaluations
 	}
@@ -367,9 +367,9 @@ func (p *Project) ExtractVariable(ctx context.Context, path string, line int, ex
 	if all {
 		list := stmt.Parent.Statements()
 		i := slices.Index(list, stmt)
-		want, meaning := tokens(l.source(e)), symbolsOf(c, e)
+		want, meaning := tokens(l.Source(e)), symbolsOf(c, e)
 		l.expressions(func(n *ast.Node) {
-			if n.Pos() < e.End() || n.Kind != e.Kind || !slices.Equal(tokens(l.source(n)), want) || !slices.Equal(symbolsOf(c, n), meaning) {
+			if n.Pos() < e.End() || n.Kind != e.Kind || !slices.Equal(tokens(l.Source(n)), want) || !slices.Equal(symbolsOf(c, n), meaning) {
 				return
 			}
 			if slices.ContainsFunc(targets, func(t *ast.Node) bool { return t.Pos() <= n.Pos() && n.End() <= t.End() }) {
@@ -397,35 +397,35 @@ func (p *Project) ExtractVariable(ctx context.Context, path string, line int, ex
 			for _, x := range past {
 				between = append(between, parts(x, x.End(), skip)...)
 			}
-			between = append(between, parts(s, l.pos(n), skip)...)
+			between = append(between, parts(s, l.Pos(n), skip)...)
 			if ef.Check(Move{Expr: n, Past: between, Times: Shared}) == "" {
 				targets = append(targets, n)
 			}
 		})
 	}
 	var edits []Edit
-	indent := l.indent(l.line(l.pos(stmt)))
+	indent := l.Indent(l.Line(l.Pos(stmt)))
 	decl := "const " + name + " = " + typedFunction(c, l, e)
-	if at := l.start(l.line(l.pos(stmt))); strings.TrimSpace(l.text[at:l.pos(stmt)]) == "" {
-		edits = append(edits, Edit{File: l.f.FileName(), Start: at, End: at, NewText: indent + decl + l.semi() + "\n"})
+	if at := l.Start(l.Line(l.Pos(stmt))); strings.TrimSpace(l.Text[at:l.Pos(stmt)]) == "" {
+		edits = append(edits, Edit{File: l.File.FileName(), Start: at, End: at, NewText: indent + decl + l.Semi() + "\n"})
 	} else {
-		edits = append(edits, Edit{File: l.f.FileName(), Start: l.pos(stmt), End: l.pos(stmt), NewText: decl + "; "})
+		edits = append(edits, Edit{File: l.File.FileName(), Start: l.Pos(stmt), End: l.Pos(stmt), NewText: decl + "; "})
 	}
 	for _, t := range targets {
 		text := name
 		if t.Parent != nil && ast.IsShorthandPropertyAssignment(t.Parent) {
 			text = t.Text() + ": " + name
 		}
-		edits = append(edits, Edit{File: l.f.FileName(), Start: l.pos(t), End: t.End(), NewText: text})
+		edits = append(edits, Edit{File: l.File.FileName(), Start: l.Pos(t), End: t.End(), NewText: text})
 	}
 	return edits, ""
 }
 
 // expressionAt returns the expression written expr that starts on line,
 // at column when it is given.
-func (l *lined) expressionAt(line int, expr string, column int) (*ast.Node, string) {
-	if line < 1 || line > l.count() {
-		return nil, fmt.Sprintf("line %d out of range: the file has %d lines", line, l.count())
+func (l *Lined) expressionAt(line int, expr string, column int) (*ast.Node, string) {
+	if line < 1 || line > l.Count() {
+		return nil, fmt.Sprintf("line %d out of range: the file has %d lines", line, l.Count())
 	}
 	want := tokens(expr)
 	if len(want) == 0 {
@@ -433,27 +433,27 @@ func (l *lined) expressionAt(line int, expr string, column int) (*ast.Node, stri
 	}
 	var found []*ast.Node
 	l.expressions(func(n *ast.Node) {
-		start := l.pos(n)
-		if l.line(start) == line && (column == 0 || start-l.start(line)+1 == column) && slices.Equal(tokens(l.source(n)), want) &&
-			!slices.ContainsFunc(found, func(f *ast.Node) bool { return l.pos(f) == start }) {
+		start := l.Pos(n)
+		if l.Line(start) == line && (column == 0 || start-l.Start(line)+1 == column) && slices.Equal(tokens(l.Source(n)), want) &&
+			!slices.ContainsFunc(found, func(f *ast.Node) bool { return l.Pos(f) == start }) {
 			found = append(found, n)
 		}
 	})
-	identifiers(l.f.AsNode(), func(id *ast.Node) { // a shorthand property's value: { name }
-		start := l.pos(id)
-		if ast.IsShorthandPropertyAssignment(id.Parent) && l.line(start) == line && (column == 0 || start-l.start(line)+1 == column) && slices.Equal(tokens(id.Text()), want) {
+	Identifiers(l.File.AsNode(), func(id *ast.Node) { // a shorthand property's value: { name }
+		start := l.Pos(id)
+		if ast.IsShorthandPropertyAssignment(id.Parent) && l.Line(start) == line && (column == 0 || start-l.Start(line)+1 == column) && slices.Equal(tokens(id.Text()), want) {
 			found = append(found, id)
 		}
 	})
 	switch len(found) {
 	case 0:
-		return nil, fmt.Sprintf("no expression %s starts on line %d: %s", strings.TrimSpace(expr), line, strings.TrimSpace(l.text[l.start(line):l.end(line)]))
+		return nil, fmt.Sprintf("no expression %s starts on line %d: %s", strings.TrimSpace(expr), line, strings.TrimSpace(l.Text[l.Start(line):l.End(line)]))
 	case 1:
 		return found[0], ""
 	}
 	var cols []string
 	for _, f := range found {
-		cols = append(cols, fmt.Sprint(l.pos(f)-l.start(line)+1))
+		cols = append(cols, fmt.Sprint(l.Pos(f)-l.Start(line)+1))
 	}
 	return nil, fmt.Sprintf("%s starts on line %d %d times; give column (%s)", strings.TrimSpace(expr), line, len(found), strings.Join(cols, ", "))
 }
@@ -462,11 +462,11 @@ func (l *lined) expressionAt(line int, expr string, column int) (*ast.Node, stri
 // name with its value and delete its declaration. The variable is the one
 // named on line (at column, when given), or declared in function.
 func (p *Project) InlineVariable(ctx context.Context, path string, line int, function, name string, column int) ([]Edit, string) {
-	l, why := p.lined(path)
+	l, why := p.Lined(path)
 	if why != "" {
 		return nil, why
 	}
-	c, done := p.prog.GetProgram().GetTypeCheckerForFile(ctx, l.f)
+	c, done := p.prog.GetProgram().GetTypeCheckerForFile(ctx, l.File)
 	defer done()
 	var sym *ast.Symbol
 	switch {
@@ -475,7 +475,7 @@ func (p *Project) InlineVariable(ctx context.Context, path string, line int, fun
 		if why != "" {
 			return nil, why
 		}
-		identifiers(fn, func(id *ast.Node) {
+		Identifiers(fn, func(id *ast.Node) {
 			if sym == nil && id.Text() == name && ast.IsVariableDeclaration(id.Parent) && id.Parent.Name() == id {
 				sym = c.GetSymbolAtLocation(id)
 			}
@@ -483,11 +483,11 @@ func (p *Project) InlineVariable(ctx context.Context, path string, line int, fun
 		if sym == nil {
 			return nil, fmt.Sprintf("%s declares no variable %s", function, name)
 		}
-	case line >= 1 && line <= l.count():
+	case line >= 1 && line <= l.Count():
 		var found []*ast.Symbol
-		identifiers(l.f.AsNode(), func(id *ast.Node) {
-			start := l.pos(id)
-			if id.Text() == name && !propertyName(id) && l.line(start) == line && (column == 0 || start-l.start(line)+1 == column) {
+		Identifiers(l.File.AsNode(), func(id *ast.Node) {
+			start := l.Pos(id)
+			if id.Text() == name && !propertyName(id) && l.Line(start) == line && (column == 0 || start-l.Start(line)+1 == column) {
 				if s := symbolOf(c, id); s != nil && !slices.Contains(found, s) {
 					found = append(found, s)
 				}
@@ -495,7 +495,7 @@ func (p *Project) InlineVariable(ctx context.Context, path string, line int, fun
 		})
 		switch len(found) {
 		case 0:
-			return nil, fmt.Sprintf("no name %s on line %d: %s", name, line, strings.TrimSpace(l.text[l.start(line):l.end(line)]))
+			return nil, fmt.Sprintf("no name %s on line %d: %s", name, line, strings.TrimSpace(l.Text[l.Start(line):l.End(line)]))
 		case 1:
 			sym = found[0]
 		default:
@@ -505,7 +505,7 @@ func (p *Project) InlineVariable(ctx context.Context, path string, line int, fun
 		return nil, "give line, or function"
 	}
 	d := sym.ValueDeclaration
-	if d == nil || !ast.IsVariableDeclaration(d) || ast.GetSourceFileOfNode(d) != l.f {
+	if d == nil || !ast.IsVariableDeclaration(d) || ast.GetSourceFileOfNode(d) != l.File {
 		return nil, fmt.Sprintf("%s is not a variable declared in this file", name)
 	}
 	init := d.Initializer()
@@ -513,20 +513,20 @@ func (p *Project) InlineVariable(ctx context.Context, path string, line int, fun
 	stmt := list.Parent
 	switch {
 	case !ast.IsIdentifier(d.Name()):
-		return nil, fmt.Sprintf("%s is declared by a pattern at %s", name, l.where(d))
+		return nil, fmt.Sprintf("%s is declared by a pattern at %s", name, l.Where(d))
 	case init == nil:
-		return nil, fmt.Sprintf("%s has no value where it is declared (%s)", name, l.where(d))
-	case !ast.IsVariableStatement(stmt) || !inList(stmt):
+		return nil, fmt.Sprintf("%s has no value where it is declared (%s)", name, l.Where(d))
+	case !ast.IsVariableStatement(stmt) || !InList(stmt):
 		return nil, fmt.Sprintf("%s is declared in %s, not by a statement of its own", name, l.part(stmt))
 	case ast.HasSyntacticModifier(stmt, ast.ModifierFlagsExport):
 		return nil, fmt.Sprintf("%s is exported; other modules may use it", name)
 	}
 	scope := stmt.Parent
-	if where := l.assigns(scope, sym, c); where != "" {
+	if where := l.Assigns(scope, sym, c); where != "" {
 		return nil, fmt.Sprintf("%s is assigned at %s after its declaration", name, where)
 	}
 	var refs []*ast.Node
-	identifiers(scope, func(id *ast.Node) {
+	Identifiers(scope, func(id *ast.Node) {
 		if id != d.Name() && symbolOf(c, id) == sym {
 			refs = append(refs, id)
 		}
@@ -534,14 +534,14 @@ func (p *Project) InlineVariable(ctx context.Context, path string, line int, fun
 	ef := newEffects(c, l)
 	ie := ef.Of(init)
 	idx := slices.Index(scope.Statements(), stmt)
-	src := l.source(init)
+	src := l.Source(init)
 	edits := []Edit{l.dropDeclaration(d)}
 	if len(refs) == 0 && !ie.CanDrop() {
 		return nil, fmt.Sprintf("nothing uses %s, but its value %s would no longer be evaluated: %s", name, src, ie.Why)
 	}
 	for _, r := range refs {
 		if r.Pos() < stmt.End() {
-			return nil, fmt.Sprintf("%s is used at %s, before or inside its declaration", name, l.where(r))
+			return nil, fmt.Sprintf("%s is used at %s, before or inside its declaration", name, l.Where(r))
 		}
 		// What lies between the declaration and the use.
 		var at *ast.Node
@@ -554,7 +554,7 @@ func (p *Project) InlineVariable(ctx context.Context, path string, line int, fun
 		times, place, why := l.timesIn(r, at, ef.runsDuring)
 		if why != "" {
 			if !ie.CanRepeat() || ie.Reads || len(ie.Locals) > 0 {
-				return nil, fmt.Sprintf("%s is used at %s, and %s, so %s would be evaluated then", name, l.where(r), why, src)
+				return nil, fmt.Sprintf("%s is used at %s, and %s, so %s would be evaluated then", name, l.Where(r), why, src)
 			}
 			times = Several
 		} else {
@@ -562,7 +562,7 @@ func (p *Project) InlineVariable(ctx context.Context, path string, line int, fun
 			if times == Shared {
 				past = append(past, at) // the loop runs its other parts between evaluations
 			} else {
-				past = append(past, parts(at, l.pos(r), nil)...)
+				past = append(past, parts(at, l.Pos(r), nil)...)
 			}
 			if len(refs) > 1 {
 				times = Several
@@ -571,13 +571,13 @@ func (p *Project) InlineVariable(ctx context.Context, path string, line int, fun
 			}
 			if why := ef.Check(Move{Expr: init, Past: past, Times: times}); why != "" {
 				if place != "" {
-					why += " (the use at " + l.where(r) + " is in " + place + ")"
+					why += " (the use at " + l.Where(r) + " is in " + place + ")"
 				}
 				return nil, why
 			}
 		}
 		if why := seenAlike(c, l, free(c, init), r); why != "" {
-			return nil, fmt.Sprintf("%s cannot be used at %s: %s", src, l.where(r), why)
+			return nil, fmt.Sprintf("%s cannot be used at %s: %s", src, l.Where(r), why)
 		}
 		text := src
 		if ast.IsShorthandPropertyAssignment(r.Parent) {
@@ -585,23 +585,23 @@ func (p *Project) InlineVariable(ctx context.Context, path string, line int, fun
 		} else if needsParens(r, init) {
 			text = "(" + src + ")"
 		}
-		edits = append(edits, Edit{File: l.f.FileName(), Start: l.pos(r), End: r.End(), NewText: text})
+		edits = append(edits, Edit{File: l.File.FileName(), Start: l.Pos(r), End: r.End(), NewText: text})
 	}
 	return edits, ""
 }
 
 // dropDeclaration returns the edit that removes the declaration d: its
 // statement, with the lines it is on, when it is the only one there.
-func (l *lined) dropDeclaration(d *ast.Node) Edit {
+func (l *Lined) dropDeclaration(d *ast.Node) Edit {
 	list := d.Parent.AsVariableDeclarationList().Declarations
 	stmt := d.Parent.Parent
 	if len(list.Nodes) > 1 {
 		return l.removeAt(list, slices.Index(list.Nodes, d))
 	}
 	if a, b, ok := l.lineRange(stmt); ok {
-		return Edit{File: l.f.FileName(), Start: a, End: b}
+		return Edit{File: l.File.FileName(), Start: a, End: b}
 	}
-	return Edit{File: l.f.FileName(), Start: l.pos(stmt), End: stmt.End()}
+	return Edit{File: l.File.FileName(), Start: l.Pos(stmt), End: stmt.End()}
 }
 
 // MoveStatement returns the edits that swap the statement starting on
@@ -609,23 +609,23 @@ func (l *lined) dropDeclaration(d *ast.Node) Edit {
 // directly above it. With pastTry, one of the two must be a try, and they
 // swap whatever their side effects, and note is set to what that changes.
 func (p *Project) MoveStatement(ctx context.Context, path string, line int, down, pastTry bool, note *string) ([]Edit, string) {
-	l, why := p.lined(path)
+	l, why := p.Lined(path)
 	if why != "" {
 		return nil, why
 	}
-	if line < 1 || line > l.count() {
-		return nil, fmt.Sprintf("line %d out of range: the file has %d lines", line, l.count())
+	if line < 1 || line > l.Count() {
+		return nil, fmt.Sprintf("line %d out of range: the file has %d lines", line, l.Count())
 	}
 	var stmt *ast.Node
 	l.lists(func(_ *ast.Node, list []*ast.Node) {
 		for _, s := range list {
-			if stmt == nil && l.line(l.pos(s)) == line {
+			if stmt == nil && l.Line(l.Pos(s)) == line {
 				stmt = s
 			}
 		}
 	})
 	if stmt == nil {
-		return nil, fmt.Sprintf("no statement starts on line %d: %s", line, strings.TrimSpace(l.text[l.start(line):l.end(line)]))
+		return nil, fmt.Sprintf("no statement starts on line %d: %s", line, strings.TrimSpace(l.Text[l.Start(line):l.End(line)]))
 	}
 	list := stmt.Parent.Statements()
 	i := slices.Index(list, stmt)
@@ -637,7 +637,7 @@ func (p *Project) MoveStatement(ctx context.Context, path string, line int, down
 		return nil, fmt.Sprintf("%s is the %s statement of its block", l.part(stmt), map[bool]string{true: "last", false: "first"}[down])
 	}
 	other := list[j]
-	c, done := p.prog.GetProgram().GetTypeCheckerForFile(ctx, l.f)
+	c, done := p.prog.GetProgram().GetTypeCheckerForFile(ctx, l.File)
 	defer done()
 	first, second := other, stmt // in their order now
 	if down {
@@ -646,12 +646,12 @@ func (p *Project) MoveStatement(ctx context.Context, path string, line int, down
 	// What the first declares, the second may not use once before it;
 	// a function declaration is hoisted, so it may.
 	if !ast.IsFunctionDeclaration(first) {
-		if u := uses(c, second, symbols(c, declared(first))); u != nil {
+		if u := Uses(c, second, Symbols(c, Declared(first))); u != nil {
 			return nil, fmt.Sprintf("%s uses %s, which %s declares", l.part(second), u.Text(), l.part(first))
 		}
 	}
 	if !ast.IsFunctionDeclaration(second) {
-		if u := uses(c, first, symbols(c, declared(second))); u != nil {
+		if u := Uses(c, first, Symbols(c, Declared(second))); u != nil {
 			return nil, fmt.Sprintf("%s uses %s, which %s declares", l.part(first), u.Text(), l.part(second))
 		}
 	}
@@ -680,29 +680,29 @@ func (p *Project) MoveStatement(ctx context.Context, path string, line int, down
 	if !ok1 || !ok2 {
 		return nil, fmt.Sprintf("%s or %s shares its lines with other code", l.part(first), l.part(second))
 	}
-	text := l.text[b0:b1] + l.text[a1:b0] + l.text[a0:a1]
+	text := l.Text[b0:b1] + l.Text[a1:b0] + l.Text[a0:a1]
 	if pastTry {
 		*note = l.pastTryNote(aTry, aTry == second)
 	}
-	return []Edit{{File: l.f.FileName(), Start: a0, End: b1, NewText: text}}, ""
+	return []Edit{{File: l.File.FileName(), Start: a0, End: b1, NewText: text}}, ""
 }
 
 // ifAt returns the if statement whose keyword is on line, at column when
 // given.
-func (l *lined) ifAt(line, column int) (*ast.Node, string) {
-	if line < 1 || line > l.count() {
-		return nil, fmt.Sprintf("line %d out of range: the file has %d lines", line, l.count())
+func (l *Lined) ifAt(line, column int) (*ast.Node, string) {
+	if line < 1 || line > l.Count() {
+		return nil, fmt.Sprintf("line %d out of range: the file has %d lines", line, l.Count())
 	}
 	var found []*ast.Node
-	inspect(l.f.AsNode(), func(n *ast.Node) bool {
-		if ast.IsIfStatement(n) && l.line(l.pos(n)) == line && (column == 0 || l.pos(n)-l.start(line)+1 == column) {
+	Inspect(l.File.AsNode(), func(n *ast.Node) bool {
+		if ast.IsIfStatement(n) && l.Line(l.Pos(n)) == line && (column == 0 || l.Pos(n)-l.Start(line)+1 == column) {
 			found = append(found, n)
 		}
 		return true
 	})
 	switch len(found) {
 	case 0:
-		return nil, fmt.Sprintf("no if starts on line %d: %s", line, strings.TrimSpace(l.text[l.start(line):l.end(line)]))
+		return nil, fmt.Sprintf("no if starts on line %d: %s", line, strings.TrimSpace(l.Text[l.Start(line):l.End(line)]))
 	case 1:
 		return found[0], ""
 	}
@@ -730,8 +730,8 @@ func terminates(s *ast.Node) bool {
 // unnest returns the statements of branch, a block or one statement, as
 // text re-indented to the if's own indentation; or why they cannot leave
 // it: a name they declare is seen at the if already.
-func (l *lined) unnest(c *checker.Checker, ifs, branch *ast.Node) (string, string) {
-	indent := l.indent(l.line(l.pos(ifs)))
+func (l *Lined) unnest(c *checker.Checker, ifs, branch *ast.Node) (string, string) {
+	indent := l.Indent(l.Line(l.Pos(ifs)))
 	stmts := []*ast.Node{branch}
 	if ast.IsBlock(branch) {
 		stmts = branch.Statements()
@@ -740,24 +740,24 @@ func (l *lined) unnest(c *checker.Checker, ifs, branch *ast.Node) (string, strin
 		return "", ""
 	}
 	for _, s := range stmts {
-		for _, n := range declared(s) {
+		for _, n := range Declared(s) {
 			if r := c.ResolveName(n.Text(), ifs, ast.SymbolFlagsValue, false); r != nil {
-				return "", fmt.Sprintf("%s, declared at %s, would then be seen where %s already is", n.Text(), l.where(n), n.Text())
+				return "", fmt.Sprintf("%s, declared at %s, would then be seen where %s already is", n.Text(), l.Where(n), n.Text())
 			}
 		}
 	}
 	first, last := stmts[0], stmts[len(stmts)-1]
-	start := l.start(l.line(l.pos(first)))
-	if strings.TrimSpace(l.text[start:l.pos(first)]) != "" {
-		return indent + l.source(first), "" // on the else's line: if (c) {...} else foo();
+	start := l.Start(l.Line(l.Pos(first)))
+	if strings.TrimSpace(l.Text[start:l.Pos(first)]) != "" {
+		return indent + l.Source(first), "" // on the else's line: if (c) {...} else foo();
 	}
-	end := l.end(l.line(last.End() - 1))
-	return strings.TrimRight(l.reindent(start, end, l.indent(l.line(l.pos(first))), indent), "\n"), ""
+	end := l.End(l.Line(last.End() - 1))
+	return strings.TrimRight(l.reindent(start, end, l.Indent(l.Line(l.Pos(first))), indent), "\n"), ""
 }
 
-// negate returns the source of the negation of e, simplified where that
+// Negate returns the source of the negation of e, simplified where that
 // is exact, with whether it is an || at its top.
-func (l *lined) negate(c *checker.Checker, e *ast.Node) (string, bool) {
+func (l *Lined) Negate(c *checker.Checker, e *ast.Node) (string, bool) {
 	for ast.IsParenthesizedExpression(e) {
 		e = e.Expression()
 	}
@@ -767,14 +767,14 @@ func (l *lined) negate(c *checker.Checker, e *ast.Node) (string, bool) {
 		for ast.IsParenthesizedExpression(inner) {
 			inner = inner.Expression()
 		}
-		return l.source(inner), ast.IsBinaryExpression(inner)
+		return l.Source(inner), ast.IsBinaryExpression(inner)
 	case e.Kind == ast.KindTrueKeyword:
 		return "false", false
 	case e.Kind == ast.KindFalseKeyword:
 		return "true", false
 	case ast.IsBinaryExpression(e):
 		b := e.AsBinaryExpression()
-		left, right := l.source(b.Left), l.source(b.Right)
+		left, right := l.Source(b.Left), l.Source(b.Right)
 		swap := map[ast.Kind]string{ast.KindEqualsEqualsEqualsToken: "!==", ast.KindExclamationEqualsEqualsToken: "===",
 			ast.KindEqualsEqualsToken: "!=", ast.KindExclamationEqualsToken: "=="}
 		ordered := map[ast.Kind]string{ast.KindLessThanToken: ">=", ast.KindGreaterThanEqualsToken: "<",
@@ -787,8 +787,8 @@ func (l *lined) negate(c *checker.Checker, e *ast.Node) (string, bool) {
 			return left + " " + s + " " + right, false
 		}
 		if op == ast.KindAmpersandAmpersandToken || op == ast.KindBarBarToken {
-			nl, lor := l.negate(c, b.Left)
-			nr, ror := l.negate(c, b.Right)
+			nl, lor := l.Negate(c, b.Left)
+			nr, ror := l.Negate(c, b.Right)
 			if op == ast.KindBarBarToken { // !(a || b) is !a && !b
 				if lor {
 					nl = "(" + nl + ")"
@@ -803,15 +803,15 @@ func (l *lined) negate(c *checker.Checker, e *ast.Node) (string, bool) {
 	}
 	switch {
 	case ast.IsIdentifier(e), ast.IsPropertyAccessExpression(e), ast.IsElementAccessExpression(e), ast.IsCallExpression(e), e.Kind == ast.KindThisKeyword:
-		return "!" + l.source(e), false
+		return "!" + l.Source(e), false
 	}
-	return "!(" + l.source(e) + ")", false
+	return "!(" + l.Source(e) + ")", false
 }
 
 // ordered reports whether every value of e's type is a string or a
 // bigint, for which < and >= are each other's negation (a number may be
 // NaN).
-func (l *lined) ordered(c *checker.Checker, e *ast.Node) bool {
+func (l *Lined) ordered(c *checker.Checker, e *ast.Node) bool {
 	t := c.GetTypeAtLocation(e)
 	if t == nil {
 		return false
@@ -834,7 +834,7 @@ func (l *lined) ordered(c *checker.Checker, e *ast.Node) bool {
 // is un-nested when it is the last statement of a function's body
 // (return) or a loop's (continue).
 func (p *Project) InvertIf(ctx context.Context, path string, line, column int, keepElse bool) ([]Edit, string) {
-	l, why := p.lined(path)
+	l, why := p.Lined(path)
 	if why != "" {
 		return nil, why
 	}
@@ -842,27 +842,27 @@ func (p *Project) InvertIf(ctx context.Context, path string, line, column int, k
 	if why != "" {
 		return nil, why
 	}
-	c, done := p.prog.GetProgram().GetTypeCheckerForFile(ctx, l.f)
+	c, done := p.prog.GetProgram().GetTypeCheckerForFile(ctx, l.File)
 	defer done()
 	is := ifs.AsIfStatement()
-	cond, _ := l.negate(c, is.Expression)
+	cond, _ := l.Negate(c, is.Expression)
 	head := "if (" + cond + ") "
 	then, els := is.ThenStatement, is.ElseStatement
-	indent := l.indent(l.line(l.pos(ifs)))
+	indent := l.Indent(l.Line(l.Pos(ifs)))
 	edit := func(text string) []Edit {
-		return []Edit{{File: l.f.FileName(), Start: l.pos(ifs), End: ifs.End(), NewText: text}}
+		return []Edit{{File: l.File.FileName(), Start: l.Pos(ifs), End: ifs.End(), NewText: text}}
 	}
 	if els == nil {
 		jump := ""
 		owner := ifs.Parent
 		switch {
-		case !inList(ifs):
+		case !InList(ifs):
 		case ast.IsBlock(owner) && ast.IsFunctionLike(owner.Parent):
-			jump = "return" + l.semi()
+			jump = "return" + l.Semi()
 		case ast.IsBlock(owner) && ast.IsIterationStatement(owner.Parent, false):
-			jump = "continue" + l.semi()
+			jump = "continue" + l.Semi()
 		}
-		if list := owner.Statements(); inList(ifs) && list[len(list)-1] != ifs {
+		if list := owner.Statements(); InList(ifs) && list[len(list)-1] != ifs {
 			// if (c) { T, which leaves } R becomes if (!c) { R } T: R
 			// must then leave too, or end the body it is the end of.
 			return l.invertBefore(c, ifs, head, jump)
@@ -874,7 +874,7 @@ func (p *Project) InvertIf(ctx context.Context, path string, line, column int, k
 		if why != "" {
 			return nil, why
 		}
-		text := head + "{\n" + indent + l.unit() + jump + "\n" + indent + "}"
+		text := head + "{\n" + indent + l.Unit() + jump + "\n" + indent + "}"
 		if rest != "" {
 			text += "\n" + rest
 		}
@@ -884,13 +884,13 @@ func (p *Project) InvertIf(ctx context.Context, path string, line, column int, k
 		return nil, fmt.Sprintf("the else is another if (%s); invert that one, or give it braces first", l.part(els))
 	}
 	if keepElse || !terminates(els) {
-		return edit(head + l.source(els) + " else " + l.source(then)), ""
+		return edit(head + l.Source(els) + " else " + l.Source(then)), ""
 	}
 	rest, why := l.unnest(c, ifs, then)
 	if why != "" {
 		return nil, why
 	}
-	text := head + l.source(els)
+	text := head + l.Source(els)
 	if rest != "" {
 		text += "\n" + rest
 	}
@@ -901,7 +901,7 @@ func (p *Project) InvertIf(ctx context.Context, path string, line, column int, k
 // statements after it, R: its first branch T leaves, so if (c) { T } R
 // becomes if (!c) { R } T. R must leave too, or end a function's or a
 // loop's body, where jump ends it.
-func (l *lined) invertBefore(c *checker.Checker, ifs *ast.Node, head, jump string) ([]Edit, string) {
+func (l *Lined) invertBefore(c *checker.Checker, ifs *ast.Node, head, jump string) ([]Edit, string) {
 	then := ifs.AsIfStatement().ThenStatement
 	list := ifs.Parent.Statements()
 	rest := list[slices.Index(list, ifs)+1:]
@@ -916,19 +916,19 @@ func (l *lined) invertBefore(c *checker.Checker, ifs *ast.Node, head, jump strin
 	}
 	var syms []*ast.Symbol
 	for _, s := range rest {
-		syms = append(syms, symbols(c, declared(s))...)
+		syms = append(syms, Symbols(c, Declared(s))...)
 	}
-	if u := uses(c, then, syms); u != nil {
+	if u := Uses(c, then, syms); u != nil {
 		return nil, fmt.Sprintf("the if's branch uses %s, which what follows it declares", u.Text())
 	}
-	indent := l.indent(l.line(l.pos(ifs)))
-	unit := l.unit()
-	a := l.start(l.line(l.pos(rest[0])))
-	_, endLine := l.lines(last)
-	if strings.TrimSpace(l.text[a:l.pos(rest[0])]) != "" || !quiet(l.text[last.End():l.end(endLine)]) {
+	indent := l.Indent(l.Line(l.Pos(ifs)))
+	unit := l.Unit()
+	a := l.Start(l.Line(l.Pos(rest[0])))
+	_, endLine := l.Lines(last)
+	if strings.TrimSpace(l.Text[a:l.Pos(rest[0])]) != "" || !quiet(l.Text[last.End():l.End(endLine)]) {
 		return nil, "what follows the if shares its lines with other code"
 	}
-	body := l.reindent(a, l.start(endLine+1), indent, indent+unit)
+	body := l.reindent(a, l.Start(endLine+1), indent, indent+unit)
 	if !strings.HasSuffix(body, "\n") {
 		body += "\n"
 	}
@@ -943,15 +943,15 @@ func (l *lined) invertBefore(c *checker.Checker, ifs *ast.Node, head, jump strin
 	if unnested != "" {
 		text += "\n" + unnested
 	}
-	return []Edit{{File: l.f.FileName(), Start: l.pos(ifs), End: l.end(endLine), NewText: text}}, ""
+	return []Edit{{File: l.File.FileName(), Start: l.Pos(ifs), End: l.End(endLine), NewText: text}}, ""
 }
 
 // pastTryNote says what moving a statement past aTry changes: below it
 // (below), it runs after everything the try does and only when the try
 // completes normally; above it, before and also when it does not.
-func (l *lined) pastTryNote(aTry *ast.Node, below bool) string {
+func (l *Lined) pastTryNote(aTry *ast.Node, below bool) string {
 	exit := ""
-	inspect(aTry, func(n *ast.Node) bool {
+	Inspect(aTry, func(n *ast.Node) bool {
 		if exit != "" || ast.IsFunctionLike(n) {
 			return false
 		}
@@ -967,7 +967,7 @@ func (l *lined) pastTryNote(aTry *ast.Node, below bool) string {
 			kind = "continues"
 		}
 		if kind != "" {
-			exit = " (" + l.where(n) + " " + kind + ")"
+			exit = " (" + l.Where(n) + " " + kind + ")"
 		}
 		return exit == ""
 	})
@@ -980,14 +980,14 @@ func (l *lined) pastTryNote(aTry *ast.Node, below bool) string {
 // reindentSteps is reindent, also turning each step of fromStep in the
 // indentation after from into one of toStep, for text moved into a class
 // that indents by another step.
-func (l *lined) reindentSteps(start, end int, from, to, fromStep, toStep string) string {
+func (l *Lined) reindentSteps(start, end int, from, to, fromStep, toStep string) string {
 	out := l.reindent(start, end, from, to)
 	if fromStep == toStep || fromStep == "" {
 		return out
 	}
 	inside := l.literalLines(start, end)
 	lines := strings.Split(out, "\n")
-	first := l.line(start)
+	first := l.Line(start)
 	for i, line := range lines {
 		if inside[first+i] || !strings.HasPrefix(line, to) {
 			continue
@@ -1001,7 +1001,7 @@ func (l *lined) reindentSteps(start, end int, from, to, fromStep, toStep string)
 // RemoveElse returns the edits that un-nest the else of the if on line,
 // whose first branch cannot fall through: its statements follow the if.
 func (p *Project) RemoveElse(ctx context.Context, path string, line, column int) ([]Edit, string) {
-	l, why := p.lined(path)
+	l, why := p.Lined(path)
 	if why != "" {
 		return nil, why
 	}
@@ -1015,33 +1015,33 @@ func (p *Project) RemoveElse(ctx context.Context, path string, line, column int)
 		return nil, "the if has no else"
 	case !terminates(is.ThenStatement):
 		return nil, fmt.Sprintf("the if's first branch can fall through to what follows it (it does not end with a return, throw, break or continue on every path); %s", map[bool]string{true: "the else does, so use invert_if", false: "neither branch can be un-nested"}[terminates(is.ElseStatement)])
-	case !inList(ifs):
+	case !InList(ifs):
 		return nil, fmt.Sprintf("the if is %s's only statement; give it braces first", l.part(ifs.Parent))
 	}
-	c, done := p.prog.GetProgram().GetTypeCheckerForFile(ctx, l.f)
+	c, done := p.prog.GetProgram().GetTypeCheckerForFile(ctx, l.File)
 	defer done()
 	els := is.ElseStatement
 	var rest, why2 string
 	if ast.IsIfStatement(els) {
-		rest = l.indent(l.line(l.pos(ifs))) + l.source(els)
+		rest = l.Indent(l.Line(l.Pos(ifs))) + l.Source(els)
 	} else {
 		rest, why2 = l.unnest(c, ifs, els)
 	}
 	if why2 != "" {
 		return nil, why2
 	}
-	text := l.source(is.ThenStatement)
+	text := l.Source(is.ThenStatement)
 	if rest != "" {
 		text += "\n" + rest
 	}
-	return []Edit{{File: l.f.FileName(), Start: l.pos(is.ThenStatement), End: ifs.End(), NewText: text}}, ""
+	return []Edit{{File: l.File.FileName(), Start: l.Pos(is.ThenStatement), End: ifs.End(), NewText: text}}, ""
 }
 
 // WrapElse returns the edits that make the statements after the if on
 // line (at column, when given), whose first branch cannot fall through,
 // its else branch: the inverse of RemoveElse.
 func (p *Project) WrapElse(ctx context.Context, path string, line, column int) ([]Edit, string) {
-	l, why := p.lined(path)
+	l, why := p.Lined(path)
 	if why != "" {
 		return nil, why
 	}
@@ -1055,7 +1055,7 @@ func (p *Project) WrapElse(ctx context.Context, path string, line, column int) (
 		return nil, "the if has an else already"
 	case !terminates(is.ThenStatement):
 		return nil, "the if's branch can fall through to what follows it (it does not end with a return, throw, break or continue on every path), so in an else that code would no longer run after it"
-	case !inList(ifs):
+	case !InList(ifs):
 		return nil, fmt.Sprintf("the if is %s's only statement, so nothing follows it", l.part(ifs.Parent))
 	}
 	list := ifs.Parent.Statements()
@@ -1065,16 +1065,16 @@ func (p *Project) WrapElse(ctx context.Context, path string, line, column int) (
 	}
 	for _, s := range rest {
 		if ast.IsFunctionDeclaration(s) || ast.IsClassDeclaration(s) || ast.IsVariableStatement(s) && s.AsVariableStatement().DeclarationList.Flags&ast.NodeFlagsBlockScoped == 0 {
-			return nil, fmt.Sprintf("%s declares what the code before the if may use, which in the else it could not", l.where(s))
+			return nil, fmt.Sprintf("%s declares what the code before the if may use, which in the else it could not", l.Where(s))
 		}
 	}
-	f := l.f.FileName()
+	f := l.File.FileName()
 	edits := []Edit{{File: f, Start: is.ThenStatement.End(), End: is.ThenStatement.End(), NewText: " else {"}}
 	end := rest[len(rest)-1].End()
-	for _, n := range l.indentable(l.line(l.pos(rest[0])), l.line(end)) {
-		edits = append(edits, Edit{File: f, Start: l.start(n), End: l.start(n), NewText: l.unit()})
+	for _, n := range l.indentable(l.Line(l.Pos(rest[0])), l.Line(end)) {
+		edits = append(edits, Edit{File: f, Start: l.Start(n), End: l.Start(n), NewText: l.Unit()})
 	}
-	edits = append(edits, Edit{File: f, Start: end, End: end, NewText: "\n" + l.indent(l.line(l.pos(ifs))) + "}"})
+	edits = append(edits, Edit{File: f, Start: end, End: end, NewText: "\n" + l.Indent(l.Line(l.Pos(ifs))) + "}"})
 	return edits, ""
 }
 
@@ -1082,8 +1082,8 @@ func (p *Project) WrapElse(ctx context.Context, path string, line, column int) (
 // an arrow function's or function expression's untyped parameters
 // written on them: away from that context, as a variable's value, they
 // would have none (java's #298).
-func typedFunction(c *checker.Checker, l *lined, e *ast.Node) string {
-	src := l.source(e)
+func typedFunction(c *checker.Checker, l *Lined, e *ast.Node) string {
+	src := l.Source(e)
 	if !ast.IsArrowFunction(e) && !ast.IsFunctionExpression(e) {
 		return src
 	}
@@ -1091,7 +1091,7 @@ func typedFunction(c *checker.Checker, l *lined, e *ast.Node) string {
 	if len(params) == 0 {
 		return src
 	}
-	start := l.pos(e)
+	start := l.Pos(e)
 	var b strings.Builder
 	at := start
 	typed := false
@@ -1104,7 +1104,7 @@ func typedFunction(c *checker.Checker, l *lined, e *ast.Node) string {
 		if t == nil {
 			continue
 		}
-		b.WriteString(l.text[at:p.Name().End()])
+		b.WriteString(l.Text[at:p.Name().End()])
 		b.WriteString(": " + c.TypeToString(t))
 		at = p.Name().End()
 		typed = true
@@ -1112,10 +1112,10 @@ func typedFunction(c *checker.Checker, l *lined, e *ast.Node) string {
 	if !typed {
 		return src
 	}
-	b.WriteString(l.text[at:e.End()])
+	b.WriteString(l.Text[at:e.End()])
 	out := b.String()
-	first := l.pos(params[0])
-	if ast.IsArrowFunction(e) && strings.TrimSpace(l.text[start:first]) == "" {
+	first := l.Pos(params[0])
+	if ast.IsArrowFunction(e) && strings.TrimSpace(l.Text[start:first]) == "" {
 		// A lone parameter without parentheses gets them, to take a type.
 		last := params[len(params)-1].End()
 		head := out[:last-start+len(out)-(e.End()-start)]

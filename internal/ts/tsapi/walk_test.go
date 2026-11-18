@@ -11,7 +11,7 @@ func TestInspect(t *testing.T) {
 	f := parseText("function water(bed) { const depth = 2; }\nconst plant = 1;")
 	names := func(descend func(*ast.Node) bool) []string {
 		var out []string
-		inspect(f.AsNode(), func(n *ast.Node) bool {
+		Inspect(f.AsNode(), func(n *ast.Node) bool {
 			if ast.IsIdentifier(n) {
 				out = append(out, n.Text())
 			}

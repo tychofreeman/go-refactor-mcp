@@ -75,22 +75,22 @@ func (p *Project) ParamsToObject(ctx context.Context, path, name, typeName strin
 		nm := prm.Name()
 		switch {
 		case nm == nil || !ast.IsIdentifier(nm):
-			return nil, fmt.Sprintf("%s already destructures a parameter (%s)", name, l.source(prm))
+			return nil, fmt.Sprintf("%s already destructures a parameter (%s)", name, l.Source(prm))
 		case d.DotDotDotToken != nil:
-			return nil, fmt.Sprintf("%s has a rest parameter (%s), which an object cannot hold in order", name, l.source(prm))
+			return nil, fmt.Sprintf("%s has a rest parameter (%s), which an object cannot hold in order", name, l.Source(prm))
 		case prm.Modifiers() != nil && len(prm.Modifiers().Nodes) > 0:
 			return nil, fmt.Sprintf("%s is a parameter property, which declares a field of the class too", nm.Text())
 		}
 		typ := ""
 		if d.Type != nil {
-			typ = l.source(d.Type)
+			typ = l.Source(d.Type)
 		} else {
 			typ = c.TypeToString(c.GetWidenedType(c.GetTypeAtLocation(nm)))
 		}
 		optional := d.QuestionToken != nil || d.Initializer != nil
 		bind := nm.Text()
 		if d.Initializer != nil {
-			bind += " = " + l.source(d.Initializer)
+			bind += " = " + l.Source(d.Initializer)
 		}
 		binds = append(binds, bind)
 		mark := ""
@@ -118,10 +118,10 @@ func (p *Project) ParamsToObject(ctx context.Context, path, name, typeName strin
 		case i == first:
 			list = append(list, param)
 		case !chosen[i]:
-			list = append(list, l.source(prm))
+			list = append(list, l.Source(prm))
 		}
 	}
-	edits := []Edit{{File: l.f.FileName(), Start: l.pos(params[0]), End: params[len(params)-1].End(), NewText: strings.Join(list, ", ")}}
+	edits := []Edit{{File: l.File.FileName(), Start: l.Pos(params[0]), End: params[len(params)-1].End(), NewText: strings.Join(list, ", ")}}
 	// Each method of the family takes the same object, keyed by these
 	// names, binding its own.
 	for _, m := range t.family {
@@ -136,14 +136,14 @@ func (p *Project) ParamsToObject(ctx context.Context, path, name, typeName strin
 			d := mp.AsParameterDeclaration()
 			nm := mp.Name()
 			if nm == nil || !ast.IsIdentifier(nm) || d.DotDotDotToken != nil {
-				return nil, fmt.Sprintf("%s, which changes with %s, has a rest or destructured parameter (%s)", memberName(m), name, ml.source(mp))
+				return nil, fmt.Sprintf("%s, which changes with %s, has a rest or destructured parameter (%s)", memberName(m), name, ml.Source(mp))
 			}
 			b := params[i].Name().Text()
 			if nm.Text() != b {
 				b += ": " + nm.Text()
 			}
 			if d.Initializer != nil {
-				b += " = " + ml.source(d.Initializer)
+				b += " = " + ml.Source(d.Initializer)
 			}
 			mb = append(mb, b)
 		}
@@ -154,7 +154,7 @@ func (p *Project) ParamsToObject(ctx context.Context, path, name, typeName strin
 				text = "{ " + strings.Join(mb, ", ") + " }: " + objType + " = {}"
 			}
 		}
-		edits = append(edits, Edit{File: ml.f.FileName(), Start: ml.pos(mps[0]), End: mps[len(mps)-1].End(), NewText: text})
+		edits = append(edits, Edit{File: ml.File.FileName(), Start: ml.Pos(mps[0]), End: mps[len(mps)-1].End(), NewText: text})
 	}
 	// Each overload takes an object of its own type, keyed by the
 	// implementation's names.
@@ -165,14 +165,14 @@ func (p *Project) ParamsToObject(ctx context.Context, path, name, typeName strin
 			continue
 		}
 		if len(ops) > len(params) {
-			return nil, fmt.Sprintf("the overload at %s has more parameters than the implementation", l.where(o))
+			return nil, fmt.Sprintf("the overload at %s has more parameters than the implementation", l.Where(o))
 		}
 		var keys, types []string
 		optional := true
 		for i, op := range ops {
 			d := op.AsParameterDeclaration()
 			if d.DotDotDotToken != nil || op.Name() == nil || !ast.IsIdentifier(op.Name()) {
-				return nil, fmt.Sprintf("the overload at %s has a rest or destructured parameter (%s)", l.where(o), l.source(op))
+				return nil, fmt.Sprintf("the overload at %s has a rest or destructured parameter (%s)", l.Where(o), l.Source(op))
 			}
 			key := params[i].Name().Text()
 			mark := ""
@@ -183,7 +183,7 @@ func (p *Project) ParamsToObject(ctx context.Context, path, name, typeName strin
 			}
 			typ := "any"
 			if d.Type != nil {
-				typ = l.source(d.Type)
+				typ = l.Source(d.Type)
 			}
 			keys = append(keys, key)
 			types = append(types, fmt.Sprintf("%s%s: %s", key, mark, typ))
@@ -192,7 +192,7 @@ func (p *Project) ParamsToObject(ctx context.Context, path, name, typeName strin
 		if optional {
 			text = "{ " + strings.Join(keys, ", ") + " }?: { " + strings.Join(types, "; ") + " }"
 		}
-		edits = append(edits, Edit{File: l.f.FileName(), Start: l.pos(ops[0]), End: ops[len(ops)-1].End(), NewText: text})
+		edits = append(edits, Edit{File: l.File.FileName(), Start: l.Pos(ops[0]), End: ops[len(ops)-1].End(), NewText: text})
 	}
 	if typeName != "" {
 		decl := fn
@@ -212,15 +212,15 @@ func (p *Project) ParamsToObject(ctx context.Context, path, name, typeName strin
 		for _, f := range fields {
 			lines = append(lines, "  "+f+";")
 		}
-		start := l.start(l.line(scanner.GetTokenPosOfNode(decl, l.f, true)))
-		edits = append(edits, Edit{File: l.f.FileName(), Start: start, End: start, NewText: fmt.Sprintf("%sinterface %s {\n%s\n}\n\n", export, typeName, strings.Join(lines, "\n"))})
+		start := l.Start(l.Line(scanner.GetTokenPosOfNode(decl, l.File, true)))
+		edits = append(edits, Edit{File: l.File.FileName(), Start: start, End: start, NewText: fmt.Sprintf("%sinterface %s {\n%s\n}\n\n", export, typeName, strings.Join(lines, "\n"))})
 	}
 	for _, call := range t.calls {
 		cl := newLined(ast.GetSourceFileOfNode(call))
 		args := call.ArgumentList().Nodes
 		if len(args) == 0 {
 			if !allOptional {
-				return nil, fmt.Sprintf("the call at %s passes no arguments, though %s has required ones", cl.where(call), name)
+				return nil, fmt.Sprintf("the call at %s passes no arguments, though %s has required ones", cl.Where(call), name)
 			}
 			continue
 		}
@@ -228,10 +228,10 @@ func (p *Project) ParamsToObject(ctx context.Context, path, name, typeName strin
 		objAt := -1
 		for i, a := range args {
 			if i >= len(params) {
-				return nil, fmt.Sprintf("the call at %s passes more arguments than %s has parameters", cl.where(call), name)
+				return nil, fmt.Sprintf("the call at %s passes more arguments than %s has parameters", cl.Where(call), name)
 			}
 			if !chosen[i] {
-				out = append(out, cl.source(a))
+				out = append(out, cl.Source(a))
 				continue
 			}
 			if i == first {
@@ -242,13 +242,13 @@ func (p *Project) ParamsToObject(ctx context.Context, path, name, typeName strin
 			if ast.IsIdentifier(a) && a.Text() == key {
 				props = append(props, key)
 			} else {
-				props = append(props, key+": "+cl.source(a))
+				props = append(props, key+": "+cl.Source(a))
 			}
 		}
 		if objAt >= 0 {
 			out[objAt] = "{ " + strings.Join(props, ", ") + " }"
 		}
-		edits = append(edits, Edit{File: cl.f.FileName(), Start: cl.pos(args[0]), End: args[len(args)-1].End(), NewText: strings.Join(out, ", ")})
+		edits = append(edits, Edit{File: cl.File.FileName(), Start: cl.Pos(args[0]), End: args[len(args)-1].End(), NewText: strings.Join(out, ", ")})
 	}
 	return edits, ""
 }
