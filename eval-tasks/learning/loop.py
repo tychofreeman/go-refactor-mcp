@@ -273,7 +273,7 @@ every place it reaches:
 
 {entries}"""
 
-CARRIERS = "fold,extract_function,change_type,introduce_parameter,remove_dead_code,inline,prepare_switch_for_types,function_to_method"
+CARRIERS = "fold,extract_function,change_type,extract_variable,remove_dead_code,inline,prepare_switch_for_types,function_to_method"
 
 # TOOLS_HINT ends the later prompts with -index.
 TOOLS_HINT = """

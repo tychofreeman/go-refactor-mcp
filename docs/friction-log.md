@@ -4787,3 +4787,15 @@ an embedded field ("inlining promoted methods is not supported yet").
 Two `p :=` locals in extractfunc stay for the same order reason. The
 TypeScript adddecl's lineStart takes a line number, not an offset, so it
 is not a copy.
+
+## extract_variable as parameter, extract_type of parameters (2026-11-17, #634)
+
+Nothing by hand: the tests through add_declaration and insert_statements,
+the routing through add_field, insert_statements, add_declaration and one
+replace_statements (TypeScript's extract_type, whose one statement gained
+a branch), descriptions and docs through replace_text. Two refusals, each
+answered with the step it named: insert_statements of `changesig.` was
+ambiguous between Go's and TypeScript's package (retried with `imports`);
+and replace_text of a refusal's text with `"parameter"` in quotes was
+refused under -no-code-by-text, rightly: the quotes would have ended the
+string literal.

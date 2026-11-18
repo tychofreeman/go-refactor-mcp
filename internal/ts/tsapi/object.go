@@ -29,6 +29,11 @@ func (p *Project) ParamsToObject(ctx context.Context, path, name, typeName strin
 	if len(params) == 0 {
 		return nil, fmt.Sprintf("%s has no parameters to bundle", name)
 	}
+	if len(only) == len(params) && !slices.ContainsFunc(params, func(prm *ast.Node) bool {
+		return prm.Name() == nil || !ast.IsIdentifier(prm.Name()) || !slices.Contains(only, prm.Name().Text())
+	}) {
+		only = nil // every parameter, named
+	}
 	keep, first, chosen := params, 0, map[int]bool{} // the parameters bundled, the first's index
 	for i := range params {
 		chosen[i] = len(only) == 0

@@ -113,6 +113,15 @@ schema must stay under `TestLoadedToolsStaySmall`'s 1,700 characters, and
 a merge changes what the baselines saw, so it waits for an A/B check of
 the merged descriptions (ask before running it).
 
+*Done for the last two* (2026-11-17, #634): `extract_variable` with `as`
+`"parameter"` runs introduce_parameter (`function` may take the place of
+`line`), and `extract_type` whose `name` is a function (or `Type.Method`)
+runs convert_params_to_object, `fields` naming its parameters (all of
+them in Go; in TypeScript a list of every one counts as none, so a
+method with a family is not refused) and `new_type` the type's name.
+Both old names are unpublished aliases taking their own arguments, in Go
+and TypeScript.
+
 Server-level gaps:
 - Java: `inspect` with no arguments lists the project (Java #111); the
   session log has no token counts (Java #18).

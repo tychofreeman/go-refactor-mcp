@@ -2026,6 +2026,30 @@ need it and cost about the same as before (run's 35 edit steps are one
 run's per-call edits of Dispatch). By hand stays at $0.09-0.12 (31).
 $7.10 spent.
 
+## 33. extract_variable and extract_type in place of two tools (Nov 17)
+
+#634 (#678) unpublishes introduce_parameter and convert_params_to_object:
+`extract_variable` with `as` `"parameter"` and `extract_type` of a
+function's parameters run them. The check of the merged descriptions:
+two tasks on the notify module (`eval-tasks/merged-extract.json`), one
+for each operation, Sonnet, hybrid arm with
+`claude-md-refactor-when-needed`, 2 runs each, main's server against the
+branch's (`eval-runs/merged-extract-main`, `-branch`).
+
+| task | server | passed | cost | input | turns | the tool it used |
+|---|---|---|---|---|---|---|
+| notify-channels-param | main | 2/2 | $0.09 | 141K | 8.0 | add_parameter, Edit |
+| notify-channels-param | branch | 2/2 | $0.09 | 115K | 6.5 | add_parameter, Edit |
+| notify-broadcast-args | main | 2/2 | $0.08 | 123K | 6.0 | convert_params_to_object |
+| notify-broadcast-args | branch | 2/2 | $0.09 | 164K | 7.5 | extract_type, every parameter in fields |
+
+No refusals on either server. A parameter object is found as readily
+under extract_type as under its own name. The parameter task does not
+test `as`: on neither server did a run choose the one-step tool (it was
+add_parameter, then an edit of the body), so whether a model reaches for
+`as` "parameter" is unmeasured. The branch's extra turns on
+broadcast-args were one run's inspect calls, one with a wrong path.
+
 ## What made the difference
 
 - **Smaller results** (#75, rename locations): the largest single win when
