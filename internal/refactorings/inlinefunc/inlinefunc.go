@@ -1505,12 +1505,7 @@ func (x *inliner) callerHasGoto() bool {
 
 // indentOf returns the leading white space of the line holding p in src.
 func indentOf(src []byte, tf *token.File, p token.Pos) string {
-	start := tf.Offset(tf.LineStart(tf.Line(p)))
-	end := start
-	for end < len(src) && (src[end] == ' ' || src[end] == '\t') {
-		end++
-	}
-	return string(src[start:end])
+	return textutil.IndentAt(src, tf.Offset(p))
 }
 
 func walkNamed(t types.Type, seen map[types.Type]bool, f func(*types.TypeName)) {

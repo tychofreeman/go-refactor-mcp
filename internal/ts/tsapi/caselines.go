@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/buke/typescript-go-internal/v7/pkg/ast"
+	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 )
 
 // CaseLines returns the first and last lines of the body of the case
@@ -243,7 +244,7 @@ func (m *MissingCase) Place(edits []Edit) []Edit {
 			continue
 		}
 		lines := strings.Split(strings.Trim(e.NewText, "\n"), "\n")
-		from := lines[0][:len(lines[0])-len(strings.TrimLeft(lines[0], " \t"))]
+		from := textutil.Indent(lines[0])
 		for j, line := range lines {
 			lines[j] = m.indent + strings.TrimPrefix(line, from)
 		}

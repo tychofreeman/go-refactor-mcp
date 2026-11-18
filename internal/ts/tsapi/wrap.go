@@ -49,11 +49,11 @@ func (p *Project) Wrap(ctx context.Context, path string, first, last int, templa
 			out = append(out, s)
 			continue
 		}
-		inner := s[:len(s)-len(strings.TrimLeft(s, " \t"))]
+		inner := textutil.Indent(s)
 		if len(out) > 0 {
 			// A hole written at its block's indent goes a step in.
 			prev := out[len(out)-1]
-			pi := prev[:len(prev)-len(strings.TrimLeft(prev, " \t"))]
+			pi := textutil.Indent(prev)
 			if t := strings.TrimSpace(prev); t != "" && len(inner) <= len(pi) && strings.ContainsAny(t[len(t)-1:], "{(:>") {
 				inner = pi + l.unit()
 			}

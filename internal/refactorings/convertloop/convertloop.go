@@ -25,6 +25,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/site"
+	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
 
@@ -265,7 +266,7 @@ func (x *conversion) indexToRange(l *ast.ForStmt) (string, []edit.TextEdit, erro
 	if len(reads) > 0 {
 		if first, name := x.firstCopy(l.Body, reads); first != nil {
 			value = name
-			edits = append(edits, edit.TextEdit{Start: x.lineStart(first.Pos()), End: x.lineEnd(first.End()), NewText: ""})
+			edits = append(edits, edit.TextEdit{Start: textutil.LineStart(x.Src, x.Off(first.Pos())), End: x.lineEnd(first.End()), NewText: ""})
 			reads = remove(reads, first.Rhs[0].(*ast.IndexExpr))
 		} else {
 			value = x.unused(singular(ix.over.Name), l)
@@ -344,7 +345,7 @@ func (x *conversion) rangeToIndex(l *ast.RangeStmt) (string, []edit.TextEdit, er
 	head := fmt.Sprintf("for %s := 0; %s < len(%s); %s++", key, key, over.Name, key)
 	edits := []edit.TextEdit{{Start: x.Off(l.For), End: x.Off(l.Body.Lbrace), NewText: head + " "}}
 	if v := name(l.Value); v != "" && v != "_" {
-		indent := x.indentOf(l.Pos()) + "\t"
+		indent := textutil.IndentAt(x.Src, x.Off(l.Pos())) + "\t"
 		at := x.Off(l.Body.Lbrace) + 1
 		edits = append(edits, edit.TextEdit{Start: at, End: at, NewText: fmt.Sprintf("\n%s%s := %s[%s]", indent, v, over.Name, key)})
 	}
@@ -599,20 +600,6 @@ func name(e ast.Expr) string {
 	return ""
 }
 
-func (x *conversion) indentOf(p token.Pos) string {
-	start := x.Off(x.TF.LineStart(x.TF.Line(p)))
-	ws := x.Src[start:x.Off(p)]
-	for i, c := range ws {
-		if c != ' ' && c != '\t' {
-			return string(ws[:i])
-		}
-	}
-	return string(ws)
-}
-
-// lineStart is the offset of the start of p's line.
-func (x *conversion) lineStart(p token.Pos) int { return x.Off(x.TF.LineStart(x.TF.Line(p))) }
-
 // lineEnd is the offset just past the newline that ends the line of p.
 func (x *conversion) lineEnd(p token.Pos) int {
 	off := x.Off(p)
@@ -648,19 +635,19 @@ func (x *conversion) forToWhile(l *ast.ForStmt) (string, []edit.TextEdit, error)
 			}
 		}
 	}
-	indent := x.indentOf(l.Pos())
-	start := x.lineStart(whole.Pos())
+	indent := textutil.IndentAt(x.Src, x.Off(l.Pos()))
+	start := textutil.LineStart(x.Src, x.Off(whole.Pos()))
 	var inner []edit.TextEdit
 	if l.Post != nil {
 		post := x.Text(l.Post)
 		for _, c := range x.continues(l) {
-			inner = append(inner, edit.TextEdit{Start: x.Off(c.Pos()), End: x.Off(c.Pos()), NewText: post + "\n" + x.indentOf(c.Pos())})
+			inner = append(inner, edit.TextEdit{Start: x.Off(c.Pos()), End: x.Off(c.Pos()), NewText: post + "\n" + textutil.IndentAt(x.Src, x.Off(c.Pos()))})
 		}
 		if !analysis.EndsFlow(x.Info, l.Body.List) {
 			if x.TF.Line(l.Body.Lbrace) == x.TF.Line(l.Body.Rbrace) {
 				inner = append(inner, edit.TextEdit{Start: x.Off(l.Body.Lbrace), End: x.Off(l.Body.End()), NewText: "{\n" + indent + "\t" + post + "\n" + indent + "}"})
 			} else {
-				at := x.lineStart(l.Body.Rbrace)
+				at := textutil.LineStart(x.Src, x.Off(l.Body.Rbrace))
 				inner = append(inner, edit.TextEdit{Start: at, End: at, NewText: indent + "\t" + post + "\n"})
 			}
 		}
@@ -720,7 +707,7 @@ func (x *conversion) whileToFor(l *ast.ForStmt) (string, []edit.TextEdit, error)
 					}
 				}
 				init = x.Text(a)
-				edits = append(edits, edit.TextEdit{Start: x.lineStart(a.Pos()), End: x.lineEnd(a.End()), NewText: ""})
+				edits = append(edits, edit.TextEdit{Start: textutil.LineStart(x.Src, x.Off(a.Pos())), End: x.lineEnd(a.End()), NewText: ""})
 			}
 		}
 	}
@@ -732,7 +719,7 @@ func (x *conversion) whileToFor(l *ast.ForStmt) (string, []edit.TextEdit, error)
 		if inc || (assign && a.Tok != token.DEFINE) {
 			if len(x.continues(l)) == 0 {
 				post = x.Text(last)
-				edits = append(edits, edit.TextEdit{Start: x.lineStart(last.Pos()), End: x.lineEnd(last.End()), NewText: ""})
+				edits = append(edits, edit.TextEdit{Start: textutil.LineStart(x.Src, x.Off(last.Pos())), End: x.lineEnd(last.End()), NewText: ""})
 			} else {
 				x.notes = append(x.notes, fmt.Sprintf("%s stays last in the body: a continue of the loop skips it, and as the post statement it would run", x.Text(last)))
 			}

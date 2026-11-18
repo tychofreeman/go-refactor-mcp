@@ -22,6 +22,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/imports"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
+	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
 
@@ -373,7 +374,7 @@ func Reindent(text, indent string, raw bool) string {
 		if strings.TrimSpace(l) == "" {
 			continue
 		}
-		lead := l[:len(l)-len(strings.TrimLeft(l, " \t"))]
+		lead := textutil.Indent(l)
 		if first {
 			common, first = lead, false
 		}

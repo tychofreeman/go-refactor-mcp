@@ -261,7 +261,7 @@ func planData(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan, err
 		decls = append(decls, "\t"+v.Name()+" "+typ)
 	}
 	src := st.Src
-	at := lineStart(src, st.Off(stmt.Pos()))
+	at := textutil.LineStart(src, st.Off(stmt.Pos()))
 	indent := gocode.IndentOf(src, at)
 	edits := []edit.TextEdit{
 		{Start: at, End: at, NewText: indent + name + " := " + a.Type + "{" + strings.Join(lits, ", ") + "}\n"},
@@ -408,7 +408,7 @@ func declare(st *site.Site, as *ast.AssignStmt, lhs *ast.Ident, v *types.Var, na
 		return []edit.TextEdit{rename}, nil
 	}
 	start := st.Off(as.Pos())
-	indent := gocode.IndentOf(st.Src, lineStart(st.Src, start))
+	indent := gocode.IndentOf(st.Src, textutil.LineStart(st.Src, start))
 	return []edit.TextEdit{{Start: start, End: start, NewText: "var " + name + " " + typ + "\n" + indent}, rename}, nil
 }
 
@@ -469,7 +469,7 @@ func splitLoop(st *site.Site, a args) (*refactor.Plan, error) {
 		return nil, err
 	}
 	start := st.Off(loop.Pos())
-	indent := gocode.IndentOf(src, lineStart(src, start))
+	indent := gocode.IndentOf(src, textutil.LineStart(src, start))
 	lb, rb := st.Off(body.Lbrace), st.Off(body.Rbrace)
 	first := strings.TrimRight(string(src[lb+1:cut]), " \t\n") + "\n"
 	text := header(st, loop, body.List[:k]) + "{" + first + indent + "}\n" +
@@ -660,14 +660,6 @@ func typeIn(st *site.Site, t types.Type) (string, error) {
 		return "", refactor.Refusef("the variable's type needs package %s, which the file does not import", missing)
 	}
 	return s, nil
-}
-
-// lineStart returns the offset of the start of the line off is on.
-func lineStart(src []byte, off int) int {
-	for off > 0 && src[off-1] != '\n' {
-		off--
-	}
-	return off
 }
 
 // scopeOf returns the scope of path[1], the block whose statement is
