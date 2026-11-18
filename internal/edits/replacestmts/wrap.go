@@ -54,7 +54,7 @@ func wrapStatements(ws *workspace.Workspace, pkg *packages.Package, file *ast.Fi
 			out = append(out, l)
 			continue
 		}
-		inner := l[:len(l)-len(strings.TrimLeft(l, " \t"))]
+		inner := textutil.Indent(l)
 		out = append(out, strings.TrimSuffix(textutil.Reindent(string(src[start:end]), indent, inner), "\n"))
 	}
 	adder := imports.New(ws, pkg, file, src)

@@ -16,6 +16,7 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/imports"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/site"
+	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
 	"github.com/tychofreeman/go-refactor-mcp/internal/workspace"
 )
 
@@ -340,14 +341,14 @@ func place(offset func(p token.Pos) int, src []byte, lit *ast.CompositeLit, afte
 		// One element per line: insert a whole line.
 		var at int
 		if i < len(lit.Elts) {
-			at = lineStart(src, offset(lit.Elts[i].Pos()))
+			at = textutil.LineStart(src, offset(lit.Elts[i].Pos()))
 		} else {
-			at = lineStart(src, rbrace)
+			at = textutil.LineStart(src, rbrace)
 		}
-		indent := gocode.IndentOf(src, lineStart(src, offset(lit.Elts[0].Pos())))
+		indent := gocode.IndentOf(src, textutil.LineStart(src, offset(lit.Elts[0].Pos())))
 		return at, indent + strings.Join(elems, ",\n"+indent) + ",\n", nil
 	case multiline && len(lit.Elts) == 0:
-		at := lineStart(src, rbrace)
+		at := textutil.LineStart(src, rbrace)
 		indent := gocode.IndentOf(src, at) + "\t"
 		return at, indent + strings.Join(elems, ",\n"+indent) + ",\n", nil
 	case len(lit.Elts) == 0:
@@ -357,12 +358,4 @@ func place(offset func(p token.Pos) int, src []byte, lit *ast.CompositeLit, afte
 	default:
 		return offset(lit.Elts[i-1].End()), ", " + strings.Join(elems, ", "), nil
 	}
-}
-
-// lineStart is the offset of the start of the line containing off.
-func lineStart(src []byte, off int) int {
-	for off > 0 && src[off-1] != '\n' {
-		off--
-	}
-	return off
 }

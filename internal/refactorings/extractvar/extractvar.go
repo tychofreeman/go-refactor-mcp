@@ -207,7 +207,7 @@ func (x *extraction) plan(expr ast.Expr, all bool) (*refactor.Plan, error) {
 	edits := []edit.TextEdit{{
 		Start:   x.Off(insertPos),
 		End:     x.Off(insertPos),
-		NewText: decl + "\n" + x.indentOf(insertPos),
+		NewText: decl + "\n" + textutil.IndentAt(x.Src, x.Off(insertPos)),
 	}}
 	for _, s := range sites {
 		n, text := x.replacement(s)
@@ -547,7 +547,7 @@ func (x *extraction) declaration(expr ast.Expr, tv types.TypeAndValue, isConst b
 	// expressions (comparisons, shifts of untyped constants) that is the
 	// default type, which may differ from the type the context gave it.
 	if x.needsExplicitType(expr, tv) {
-		t, err := x.typeString(tv.Type)
+		t, err := x.typeString(tv.Type, expr.Pos())
 		if err != nil {
 			return "", err
 		}
@@ -583,10 +583,13 @@ func (x *extraction) needsExplicitType(expr ast.Expr, tv types.TypeAndValue) boo
 }
 
 // typeString spells t as it must appear in this file.
-func (x *extraction) typeString(t types.Type) (string, error) {
-	str, missing := analysis.TypeString(t, x.File, x.Pkg.Types, analysis.ImportMap(x.Pkg.Types))
+func (x *extraction) typeString(t types.Type, at token.Pos) (string, error) {
+	str, missing, hidden := analysis.TypeStringAt(t, x.File, x.Pkg.Types, analysis.ImportMap(x.Pkg.Types), x.Pkg.Types.Scope().Innermost(at), at)
 	if missing != "" {
 		return "", refactor.Refusef("the new variable needs the explicit type %s, but this file does not import %q", str, missing)
+	}
+	if hidden != nil {
+		return "", refactor.Refusef("the new variable needs the explicit type %s, but %s here is the %s declared at %s", str, hidden.Name(), analysis.KindOf(hidden), x.WS.Position(hidden.Pos()))
 	}
 	return str, nil
 }
@@ -755,17 +758,6 @@ func idents(e ast.Expr) []*ast.Ident {
 
 // ---------------------------------------------------------------------------
 // Helpers
-
-func (x *extraction) indentOf(p token.Pos) string {
-	start := x.Off(x.TF.LineStart(x.TF.Line(p)))
-	ws := x.Src[start:x.Off(p)]
-	for i, c := range ws {
-		if c != ' ' && c != '\t' {
-			return string(ws[:i])
-		}
-	}
-	return string(ws)
-}
 
 // widenParens returns the outermost parenthesized expression whose only
 // content is e, or e itself.

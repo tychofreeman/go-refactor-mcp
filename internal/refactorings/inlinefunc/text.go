@@ -231,7 +231,7 @@ func (x *inliner) bodyText(ind string) string {
 		return ""
 	}
 	if from == "" {
-		from = text[:len(text)-len(strings.TrimLeft(text, " \t"))]
+		from = textutil.Indent(text)
 	}
 	return textutil.Reindent(text, from, ind)
 }
