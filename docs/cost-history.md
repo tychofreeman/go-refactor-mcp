@@ -2095,3 +2095,55 @@ though turns barely moved. 7 element steps were refused:
 
 replace_declaration (8 calls, mostly of the accessors' bodies) is left.
 The run cost $2.16.
+
+## 35. A routine for "make the change easy" (Nov 19)
+
+The user's question: "make the change easy, then make the easy change"
+is not resonating with the models; make it specific. The variant
+(`eval-tasks/claude-md-design-routine`) replaces the control's "refactor
+first only when the change needs it" paragraph with four things to
+write before the first edit: the easy change (the lines you wish you
+could write, and the one place), the places today (every place the
+feature would touch now, each existing branch or copy counting), the
+refactorings that make the first true when there is more than one place,
+then the work. Control: `claude-md-refactor-when-needed`, run again the
+same day. Sonnet, hybrid arm, 5 runs each, the tasks of section 11
+(`design-tangled` and the negative control `notify-optout` from
+`level-question.json`, `lending-magazine` and `freight-air` from
+`level-question-2.json`), graded against the reference designs in
+`docs/naming-the-level.md`. Runs: `eval-runs/routine-{design-routine,
+refactor-when-needed}-{q,q2}`.
+
+| task | routine: cost · turns · diff lines | control |
+|---|---|---|
+| design-tangled | $0.12 · 9.6 · 33 | $0.10 · 10.4 · 6 |
+| notify-optout | $0.11 · 9.6 · 29 | $0.10 · 7.8 · 29 |
+| lending-magazine | $0.13 · 10.0 · 79 | $0.11 · 5.6 · 21 |
+| freight-air | $0.16 · 9.6 · 168 | $0.10 · 6.2 · 85 |
+
+Every session passed (40/40). Level reached before the feature:
+
+| task | routine | control |
+|---|---|---|
+| lending-magazine | design, 5/5: one table of rules per kind in place of five switches (complexity -10 or -11) | none, 0/5: a case per switch (+4) |
+| freight-air | design, 5/5: one helper per operation taking the route, Road and Rail calls of it (108 duplicated lines gone) | none, 0/5: eight functions copied |
+| design-tangled | function, 3/5 (each chain extracted); none 2/5; design 0/5 | none, 0/5 |
+| notify-optout | none, 5/5 (no false positive) | none, 5/5 |
+
+In one session the routine did what section 11 needed a preparing
+session for (15 of 15 there), on two of three shapes, at 10-60% more
+a session against the preparing session's 1.5-2.6 times; pricing's
+customer kind stayed at function level, as the clause variants of
+section 11 did. No session wrote the four things in its visible text
+(they may be in thinking, which the transcripts do not keep), but what
+they did changed. The design changes went in mostly as edits, not
+refactorings: lending's table and freight's shared helpers were
+add_declaration and replace_declaration of the old functions; a
+refactoring tool was used in 0 of 5 lending and 1 of 5 freight
+sessions (3 of 5 on pricing, extract_function). The model chose the
+design and wrote it; no tool turns switches on one value into a table,
+or copies that differ in a field into one function of it.
+
+Next: whether the routine belongs in `examples/CLAUDE.md` (the user's
+call), and the two operations above, which would let the tools carry
+the design changes the routine now gets the model to choose.
