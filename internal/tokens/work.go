@@ -69,6 +69,7 @@ func AnalyzeWork(r io.Reader) (*WorkReport, error) {
 		if json.Unmarshal(sc.Bytes(), &e) != nil || e.ToolUseID == "" {
 			continue
 		}
+		e.Result = withoutModule(e.Result)
 		c := byID[e.ToolUseID]
 		if c == nil {
 			c = &logged{Event: e}
@@ -342,4 +343,14 @@ func textEditsNote(text, edits int) string {
 		return ""
 	}
 	return fmt.Sprintf(" (%d of them text edits of Go)", text)
+}
+
+// withoutModule is a result without the line naming the module a call
+// worked in, which the server puts first when that is not the workspace's
+// own (a worktree's), so the result starts APPLIED or REFUSED as others do.
+func withoutModule(text string) string {
+	if first, rest, ok := strings.Cut(text, "\n"); ok && strings.HasPrefix(first, "In the module at ") {
+		return rest
+	}
+	return text
 }

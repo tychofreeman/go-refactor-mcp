@@ -377,3 +377,18 @@ func TestReadKindOfInspect(t *testing.T) {
 		}
 	}
 }
+
+// A subagent's own transcript is all sidechain: its requests count.
+func TestAnalyzeASubagentTranscript(t *testing.T) {
+	var tr transcript
+	usage := map[string]any{"input_tokens": 5, "output_tokens": 1}
+	tr.add(map[string]any{"type": "user", "isSidechain": true, "message": map[string]any{"content": []any{map[string]any{"type": "text", "text": "go"}}}})
+	tr.add(map[string]any{"type": "assistant", "isSidechain": true, "requestId": "s1", "message": map[string]any{"usage": usage, "content": []any{toolUse("x", "Read", 8)}}})
+	r, err := Analyze(strings.NewReader(tr.String()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Requests != 1 || len(r.Tools) != 1 {
+		t.Errorf("subagent transcript: %+v, want its one request and tool", r)
+	}
+}

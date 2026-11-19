@@ -5066,3 +5066,13 @@ then asked for each call to be sent again as rewritten (one extra turn
 for the first inspect and the first batch). The test cases went in by
 add_element on TestFold's literal, their strings changed by
 replace_text.
+
+## Measuring the worktree subagents' records (2026-11-19, #701)
+
+Nothing by hand in Go. refactor-tokens counted nothing a worktree
+subagent did through gorefactor, since each result starts with "In the
+module at ..." before APPLIED or REFUSED, and found no requests in a
+subagent's own transcript, all of whose lines are sidechain. Fixed by
+edits (withoutModule, and a transcript's own lines decided by its first
+message). The split of `main.jsonl` by tool_use id was a Python script
+on the gitignored logs.

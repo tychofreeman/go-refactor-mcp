@@ -149,3 +149,18 @@ func TestAnalyzeWorkLargeWrites(t *testing.T) {
 		t.Errorf("Markdown lacks the large or scratch writes:\n%s", md)
 	}
 }
+
+// A call from a worktree's module gets a first line naming the module.
+func TestAnalyzeWorkFromAWorktree(t *testing.T) {
+	var l sessionLog
+	module := "In the module at .claude/worktrees/a (paths below are relative to it):\n"
+	l.call("t1", "mcp__gorefactor__rename", map[string]any{"file": "a.go", "name": "X", "new_name": "Y"}, module+"APPLIED rename: renamed \"X\" to \"Y\"\n\nchanged lines:\n  a.go: 3-4\n")
+	l.call("t2", "mcp__gorefactor__inline", map[string]any{"file": "a.go", "name": "f"}, module+"REFUSED inline: f is recursive")
+	w, err := AnalyzeWork(strings.NewReader(l.String()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w.RefactoringSteps != 1 || w.Refused[RefusedTool] != 1 {
+		t.Errorf("RefactoringSteps = %d, Refused = %v; want 1 and one refusal", w.RefactoringSteps, w.Refused)
+	}
+}
