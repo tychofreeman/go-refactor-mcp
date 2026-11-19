@@ -44,3 +44,7 @@ eval-runs/
 
 # Third-party A/B: clones and the hidden tests extracted from them
 /eval-tasks/third-party/testdata/
+
+# Python bytecode (eval-tasks scripts)
+__pycache__/
+*.pyc
