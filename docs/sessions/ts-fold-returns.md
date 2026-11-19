@@ -55,10 +55,20 @@ decide whether TypeScript has a counterpart before writing any of it.
 
 ## Measured
 
-Not measured: no `.claude/session-log/ts-fold-returns.jsonl` exists (the
-session ran as a subagent in a worktree; the hook writes logs per branch
-of the main checkout's session). By count: 3 Go reads, 5 batches or
-edits to Go, 1 to docs.
+Measured afterwards (2026-11-19, #701): the hook had logged this
+subagent's calls to `main.jsonl` (roadmap 70); they were split out by
+their tool_use ids in its transcript and measured against that
+transcript.
+`refactor-tokens -log .claude/session-log/ts-fold-returns.jsonl`:
+49 tool calls; 0 refactoring steps and 25 edit steps through gorefactor,
+13 of them text edits of Go (replace_statements and replace_text on
+fold.go and shapes_test.go); no refusals; 4 by hand (this record by
+Write and Edit, two shell commands); 3 large writes, all to
+`internal/ts/tsapi/fold.go` (replace_statements of 21 and 24 lines,
+add_declaration of 21); 5 shell reads of Go refused by read-guard, 18
+shell reads in all (grep of the TypeScript compiler's sources in the
+module cache among them). 48 requests, 5.05M input tokens, 39.9K
+output; 2 turns of ToolSearch alone.
 
 ## Assessment
 
@@ -68,6 +78,13 @@ above. TypeScript's fold had no goldens, only shapes_test.go's cases, so
 the Go goldens were mirrored as cases there. One change that would have
 helped: the worktree hook's rewrite costing a turn under auto mode
 (friction log).
+
+Added with the measurement (#701): "through the tools" holds (no Go
+by hand), but no step was a refactoring, and 13 of 25 edit steps wrote
+Go as text: the change went in as edits of fold.go's statements rather
+than as refactorings that make the change easy and a small edit. The
+three large writes are the new matching and checks (new behavior). The
+shell reads, 5 refused, cost turns that inspect would not have.
 
 ## Follow-ups
 

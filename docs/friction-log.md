@@ -5073,3 +5073,13 @@ main's path code became a call of the new logPath by replace_statements
 (five statements retyped as two). extract_function of them first was
 the derived route; I wrote the test and logPath first and did not go
 back.
+
+## Measuring the worktree subagents' records (2026-11-19, #701)
+
+Nothing by hand in Go. refactor-tokens counted nothing a worktree
+subagent did through gorefactor, since each result starts with "In the
+module at ..." before APPLIED or REFUSED, and found no requests in a
+subagent's own transcript, all of whose lines are sidechain. Fixed by
+edits (withoutModule, and a transcript's own lines decided by its first
+message). The split of `main.jsonl` by tool_use id was a Python script
+on the gitignored logs.

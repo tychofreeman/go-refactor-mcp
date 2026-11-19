@@ -35,9 +35,17 @@ drops the symbol of `switch v := x.(type)` from the names.
 
 ## Measured
 
-Not measured: no `.claude/session-log/add-case-typeswitch-var.jsonl`
-in this worktree (the session-log hook writes under the session's
-starting checkout).
+Measured afterwards (2026-11-19, #701): the hook had logged this
+subagent's calls to `main.jsonl` (roadmap 70); they were split out by
+their tool_use ids in its transcript and measured against that
+transcript.
+`refactor-tokens -log .claude/session-log/add-case-typeswitch-var.jsonl`:
+29 tool calls; 1 refactoring step (the rename) and 3 edit steps through
+gorefactor (1 a text edit of Go: the replace_statements in Plan); no
+refusals; 2 by hand (Write and Edit of this record); no large writes;
+2 shell reads of Go refused by read-guard. 24 requests, 1.88M input
+tokens, 11.7K output; 14 Bash calls, 5 of them reads other than go and
+git.
 
 ## Assessment
 

@@ -148,9 +148,18 @@ func analyze(r io.Reader, ids map[string]bool) (*Report, error) {
 	var cost float64 // from claude -p's result line
 	var turns int
 	finished := false
+	// A subagent's own transcript is all sidechain; in a session's, the
+	// sidechain lines are a subagent's, not the session's.
+	decided, own := false, false
 	for sc.Scan() {
 		var l line
-		if json.Unmarshal(sc.Bytes(), &l) != nil || l.IsSidechain || l.ParentToolUseID != nil {
+		if json.Unmarshal(sc.Bytes(), &l) != nil {
+			continue
+		}
+		if !decided && (l.Type == "assistant" || l.Type == "user") {
+			decided, own = true, l.IsSidechain
+		}
+		if l.IsSidechain != own || l.ParentToolUseID != nil {
 			continue
 		}
 		switch l.Type {
@@ -257,13 +266,13 @@ func textLen(raw json.RawMessage) int {
 func resultText(raw json.RawMessage) string {
 	var s string
 	if json.Unmarshal(raw, &s) == nil {
-		return s
+		return withoutModule(s)
 	}
 	var sb strings.Builder
 	for _, b := range blocks(raw) {
 		sb.WriteString(b.Text)
 	}
-	return sb.String()
+	return withoutModule(sb.String())
 }
 
 // writesFiles matches a shell command that changes files.

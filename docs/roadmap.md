@@ -3467,7 +3467,10 @@ candidates and the evidence for each, gathered from the friction log.
     `docs/sessions/session-log-worktrees.md`): the log is named for the
     branch in the hook input's `cwd`, and stays in the starting
     checkout's `.claude/session-log/`. Their calls had gone to
-    `main.jsonl`.
+    `main.jsonl`. Measuring them also needed refactor-tokens to read a
+    worktree's results (a first line naming the module) and a
+    subagent's own transcript (all sidechain): #701, which filled in the
+    records of #697 and #698.
 
 71. **Relative paths in a worktree cost a turn** (2026-11-19, #698):
     `cmd/worktree-paths` rewrites a relative path to the worktree's
