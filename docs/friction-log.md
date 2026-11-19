@@ -4951,3 +4951,19 @@ with add_declaration and insert_statements. One insert_statements
 "before" a comment line was refused, and the retry put the block
 "after" the statement before it. Record:
 `docs/sessions/batch-anchor-by-text.md`.
+
+## Duplicated finders merged (2026-11-18, the user's request)
+
+- **fold's try and trySetter** ended in the same nine lines. Each tail
+  was extracted, then method_to_function. The merge was refused once,
+  because trySetter's copy took `why`, a variable declared before it
+  that the tail only assigns, as a parameter. remove_parameter took it
+  out, and merge_duplicate_function and function_to_method made the
+  method `folder.apply`.
+- **convertloop's and invertif's find** share a skeleton. Each finds the
+  statement whose keyword is at a line and column, and words its
+  refusals by what it looks for. By hand: `locate.AtKeyword`, generic
+  over the node type, was written with add_declaration, and each find's
+  body became a call with replace_statements. No tool makes a function
+  generic, and parameterize takes constants, not the node type and the
+  keyword's field. The refusals' wording is unchanged.
