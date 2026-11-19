@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"slices"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
@@ -23,15 +22,7 @@ var bg = context.Background()
 // plan runs change on the file's projects and returns the plan with the
 // summary given.
 func plan(ws *workspace.Workspace, file, summary string, change func(p *tsapi.Project, path string) ([]tsapi.Edit, string)) (*refactor.Plan, error) {
-	path := ws.Abs(file)
-	if _, err := os.Stat(path); err != nil {
-		return nil, refactor.Refusef("%s: no such file", file)
-	}
-	edits, why := ws.Edits(path, func(p *tsapi.Project) ([]tsapi.Edit, string) { return change(p, path) })
-	if why != "" {
-		return nil, refactor.Refusef("%s", why)
-	}
-	return &refactor.Plan{Summary: summary, Edits: edits}, nil
+	return ws.PlanChange(file, func() string { return summary }, change)
 }
 
 // ExtractVariable names an expression.

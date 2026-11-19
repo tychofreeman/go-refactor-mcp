@@ -42,31 +42,12 @@ func (p *Project) ExtractType(ctx context.Context, path string, line int, name s
 		return nil, fmt.Sprintf("%s is generic", name)
 	}
 	class := ast.IsClassDeclaration(decl)
-	var members []*ast.Node
-	switch {
-	case class, ast.IsInterfaceDeclaration(decl):
-		members = decl.Members()
-	case ast.IsTypeAliasDeclaration(decl) && ast.IsTypeLiteralNode(decl.Type()):
-		members = decl.Type().Members()
-	default:
-		return nil, fmt.Sprintf("%s is a type alias of something other than an object type", name)
+	members, chosen, why := l.chooseMembers(decl, name, fields, "give fields: the members to move")
+	if why != "" {
+		return nil, why
 	}
-	if len(fields) == 0 {
-		return nil, "give fields: the members to move"
-	}
-	var chosen []*ast.Node
 	moved := map[string]bool{}
 	for _, f := range fields {
-		n := 0
-		for _, m := range members {
-			if m.Name() != nil && l.Source(m.Name()) == f {
-				chosen = append(chosen, m)
-				n++
-			}
-		}
-		if n == 0 {
-			return nil, fmt.Sprintf("%s has no member %s", name, f)
-		}
 		moved[f] = true
 	}
 	for _, m := range members {

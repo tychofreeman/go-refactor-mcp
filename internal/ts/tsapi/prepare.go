@@ -30,24 +30,10 @@ func (p *Project) PrepareSwitchForTypes(ctx context.Context, path string, line i
 	}
 	c, done := p.prog.GetProgram().GetTypeChecker(ctx)
 	defer done()
-	var scope *ast.Node = l.File.AsNode()
-	if function != "" {
-		fn, _, _, why := l.function(function)
-		if why != "" {
-			return nil, why
-		}
-		scope = fn
+	found, why2 := l.statementsAt(function, line, ast.IsSwitchStatement)
+	if why2 != "" {
+		return nil, why2
 	}
-	var found []*ast.Node
-	var visit func(n *ast.Node) bool
-	visit = func(n *ast.Node) bool {
-		if ast.IsSwitchStatement(n) && (line == 0 || l.Line(l.Pos(n)) == line) {
-			found = append(found, n)
-		}
-		n.ForEachChild(visit)
-		return false
-	}
-	visit(scope)
 	switch {
 	case len(found) == 0 && line > 0:
 		return nil, fmt.Sprintf("no switch starts on line %d", line)
@@ -250,6 +236,30 @@ func (p *Project) PrepareSwitchForTypes(ctx context.Context, path string, line i
 	text := ind + "if (" + cond + ") {\n" + ind + unit + call + l.Semi() + "\n" + ind + "} else {\n" + body + ind + "}\n"
 	edits = append(edits, Edit{File: l.File.FileName(), Start: a, End: b, NewText: text})
 	return edits, ""
+}
+
+// statementsAt returns the nodes is accepts on line (on any line, when
+// it is 0) of function (of the whole file, when function is empty).
+func (l *Lined) statementsAt(function string, line int, is func(node *ast.Node) bool) ([]*ast.Node, string) {
+	var scope *ast.Node = l.File.AsNode()
+	if function != "" {
+		fn, _, _, why := l.function(function)
+		if why != "" {
+			return nil, why
+		}
+		scope = fn
+	}
+	var found []*ast.Node
+	var visit func(n *ast.Node) bool
+	visit = func(n *ast.Node) bool {
+		if is(n) && (line == 0 || l.Line(l.Pos(n)) == line) {
+			found = append(found, n)
+		}
+		n.ForEachChild(visit)
+		return false
+	}
+	visit(scope)
+	return found, ""
 }
 
 // mayHoldObject reports whether a value of t may be an object: t is any,

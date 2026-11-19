@@ -181,24 +181,7 @@ func (w *Workspace) Contains(path string) bool {
 
 // Preview computes the change the edits would make without writing it.
 func (w *Workspace) Preview(label string, fes []edit.FileEdit) (history.Change, error) {
-	c := history.Change{Label: label, Before: map[string][]byte{}, After: map[string][]byte{}, Created: map[string]bool{}, Deleted: map[string]bool{}}
-	var diffs []string
-	for _, fe := range edit.Merge(fes) {
-		if !w.Contains(fe.Path) {
-			return history.Change{}, fmt.Errorf("refusing to edit %s: outside workspace %s", fe.Path, w.Root)
-		}
-		if err := history.Outside(w.Root, fe.Path); err != nil {
-			return history.Change{}, fmt.Errorf("refusing to edit %s: %v; only files inside the workspace are edited", w.Rel(fe.Path), err)
-		}
-		d, err := c.Add(w.Rel(fe.Path), fe, history.Format{})
-		if err != nil {
-			return history.Change{}, err
-		}
-		diffs = append(diffs, d)
-	}
-	sort.Strings(diffs)
-	c.Diff = strings.Join(diffs, "")
-	return c, nil
+	return history.Preview(label, fes, w.Contains, w.Root, w.Rel, history.Format{})
 }
 
 // Apply writes the edits to disk, updates the projects and pushes the

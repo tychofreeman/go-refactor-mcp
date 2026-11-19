@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
@@ -17,20 +16,6 @@ import (
 )
 
 var bg = context.Background()
-
-// plan runs change on the file's projects and returns the plan with the
-// summary given.
-func plan(ws *workspace.Workspace, file string, summary func() string, change func(p *tsapi.Project, path string) ([]tsapi.Edit, string)) (*refactor.Plan, error) {
-	path := ws.Abs(file)
-	if _, err := os.Stat(path); err != nil {
-		return nil, refactor.Refusef("%s: no such file", file)
-	}
-	edits, why := ws.Edits(path, func(p *tsapi.Project) ([]tsapi.Edit, string) { return change(p, path) })
-	if why != "" {
-		return nil, refactor.Refusef("%s", why)
-	}
-	return &refactor.Plan{Summary: summary(), Edits: edits}, nil
-}
 
 // Fold replaces code that does what a function does with calls of it.
 type Fold struct{ refactor.Named[foldArgs] }
@@ -68,7 +53,7 @@ func (*Fold) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Plan,
 	}
 	n := 0
 	var skipped []string
-	return plan(ws, a.File, func() string {
+	return ws.PlanChange(a.File, func() string {
 		s := fmt.Sprintf("folded %d match%s of %s into calls", n, map[bool]string{true: "", false: "es"}[n == 1], a.Name)
 		for _, k := range skipped {
 			s += "\nleft " + k
@@ -109,7 +94,7 @@ func (*Parameterize) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refact
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
-	return plan(ws, a.File, func() string {
+	return ws.PlanChange(a.File, func() string {
 		return fmt.Sprintf("made %s calls of %s(%s)", strings.Join(a.Functions, ", "), a.Name, strings.Join(a.Parameters, ", "))
 	}, func(p *tsapi.Project, path string) ([]tsapi.Edit, string) {
 		return p.Parameterize(bg, path, a.Functions, a.Name, a.Parameters)
@@ -147,7 +132,7 @@ func (*MergeDuplicate) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refa
 		return nil, err
 	}
 	keep := ws.Abs(a.KeepFile)
-	return plan(ws, a.File, func() string { return fmt.Sprintf("merged %s into %s", a.Name, a.KeepName) }, func(p *tsapi.Project, path string) ([]tsapi.Edit, string) {
+	return ws.PlanChange(a.File, func() string { return fmt.Sprintf("merged %s into %s", a.Name, a.KeepName) }, func(p *tsapi.Project, path string) ([]tsapi.Edit, string) {
 		return p.MergeDuplicate(bg, path, a.Line, a.Name, a.Column, keep, a.KeepName)
 	})
 }
@@ -183,7 +168,7 @@ func (*RemoveDeadCode) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refa
 		return nil, err
 	}
 	note := ""
-	return plan(ws, a.File, func() string {
+	return ws.PlanChange(a.File, func() string {
 		s := "removed " + strings.Join(append([]string{a.Name}, a.Also...), ", ")
 		if note != "" {
 			s += "\nnote: " + note
@@ -226,7 +211,7 @@ func (*ExtractSupertype) Plan(ws *workspace.Workspace, raw json.RawMessage) (*re
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
-	return plan(ws, a.File, func() string {
+	return ws.PlanChange(a.File, func() string {
 		return fmt.Sprintf("named %s of %s as interface %s", strings.Join(a.Fields, ", "), a.Name, a.NewType)
 	}, func(p *tsapi.Project, path string) ([]tsapi.Edit, string) {
 		return p.ExtractSupertype(bg, path, a.Line, a.Name, a.Column, a.Fields, a.NewType)
@@ -267,7 +252,7 @@ func (*ExtractType) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refacto
 		return nil, err
 	}
 	function := false
-	return plan(ws, a.File, func() string {
+	return ws.PlanChange(a.File, func() string {
 		if function {
 			return fmt.Sprintf("bundled %s of %s into one object", strings.Join(a.Fields, ", "), a.Name)
 		}
@@ -317,7 +302,7 @@ func (*UnionSwitchToMethod) Plan(ws *workspace.Workspace, raw json.RawMessage) (
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
-	return plan(ws, a.File, func() string { return fmt.Sprintf("moved the switch's cases into method %s", a.Method) }, func(p *tsapi.Project, path string) ([]tsapi.Edit, string) {
+	return ws.PlanChange(a.File, func() string { return fmt.Sprintf("moved the switch's cases into method %s", a.Method) }, func(p *tsapi.Project, path string) ([]tsapi.Edit, string) {
 		return p.UnionSwitchToMethod(bg, path, a.Line, a.Function, a.Method)
 	})
 }
@@ -357,7 +342,7 @@ func (*PrepareSwitchForTypes) Plan(ws *workspace.Workspace, raw json.RawMessage)
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
-	return plan(ws, a.File, func() string {
+	return ws.PlanChange(a.File, func() string {
 		return fmt.Sprintf("prepared the switch for its cases to move into classes implementing %s.%s", a.Interface, a.Method)
 	}, func(p *tsapi.Project, path string) ([]tsapi.Edit, string) {
 		return p.PrepareSwitchForTypes(bg, path, a.Line, a.Function, a.Interface, a.Method)

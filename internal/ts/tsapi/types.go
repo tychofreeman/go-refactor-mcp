@@ -173,30 +173,9 @@ func (p *Project) ExtractSupertype(ctx context.Context, path string, line int, n
 	if decl.TypeParameters() != nil {
 		return nil, fmt.Sprintf("%s is generic", name)
 	}
-	var members []*ast.Node
-	switch {
-	case ast.IsClassDeclaration(decl), ast.IsInterfaceDeclaration(decl):
-		members = decl.Members()
-	case ast.IsTypeAliasDeclaration(decl) && ast.IsTypeLiteralNode(decl.Type()):
-		members = decl.Type().Members()
-	default:
-		return nil, fmt.Sprintf("%s is a type alias of something other than an object type", name)
-	}
-	if len(fields) == 0 {
-		return nil, "give fields: the members to name"
-	}
-	var chosen []*ast.Node
-	for _, f := range fields {
-		n := 0
-		for _, m := range members {
-			if m.Name() != nil && l.Source(m.Name()) == f {
-				chosen = append(chosen, m)
-				n++
-			}
-		}
-		if n == 0 {
-			return nil, fmt.Sprintf("%s has no member %s", name, f)
-		}
+	members, chosen, why2 := l.chooseMembers(decl, name, fields, "give fields: the members to name")
+	if why2 != "" {
+		return nil, why2
 	}
 	slices.SortFunc(chosen, func(a, b *ast.Node) int { return a.Pos() - b.Pos() })
 	ind := l.Indent(l.Line(l.Pos(decl)))
@@ -280,6 +259,38 @@ func (p *Project) ExtractSupertype(ctx context.Context, path string, line int, n
 	return edits, ""
 }
 
+// chooseMembers returns the members of decl, the class, interface or
+// type alias name, and those of them that fields names, in fields'
+// order.
+func (l *Lined) chooseMembers(decl *ast.Node, name string, fields []string, noFields string) ([]*ast.Node, []*ast.Node, string) {
+	var members []*ast.Node
+	switch {
+	case ast.IsClassDeclaration(decl), ast.IsInterfaceDeclaration(decl):
+		members = decl.Members()
+	case ast.IsTypeAliasDeclaration(decl) && ast.IsTypeLiteralNode(decl.Type()):
+		members = decl.Type().Members()
+	default:
+		return nil, nil, fmt.Sprintf("%s is a type alias of something other than an object type", name)
+	}
+	if len(fields) == 0 {
+		return nil, nil, noFields
+	}
+	var chosen []*ast.Node
+	for _, f := range fields {
+		n := 0
+		for _, m := range members {
+			if m.Name() != nil && l.Source(m.Name()) == f {
+				chosen = append(chosen, m)
+				n++
+			}
+		}
+		if n == 0 {
+			return nil, nil, fmt.Sprintf("%s has no member %s", name, f)
+		}
+	}
+	return members, chosen, ""
+}
+
 // UnionSwitchToMethod returns the edits that turn a switch on a
 // discriminant (switch (s.kind)) or an instanceof chain into a method of
 // each class of the union it tells apart: each case's body becomes that
@@ -306,24 +317,10 @@ func (p *Project) UnionSwitchToMethod(ctx context.Context, path string, line int
 		}
 		return false
 	}
-	var scope *ast.Node = l.File.AsNode()
-	if function != "" {
-		fn, _, _, why := l.function(function)
-		if why != "" {
-			return nil, why
-		}
-		scope = fn
+	found, why := l.statementsAt(function, line, isSubject)
+	if why != "" {
+		return nil, why
 	}
-	var found []*ast.Node
-	var visit func(n *ast.Node) bool
-	visit = func(n *ast.Node) bool {
-		if isSubject(n) && (line == 0 || l.Line(l.Pos(n)) == line) {
-			found = append(found, n)
-		}
-		n.ForEachChild(visit)
-		return false
-	}
-	visit(scope)
 	switch {
 	case len(found) == 0 && line > 0:
 		return nil, fmt.Sprintf("no switch on a property, or if on instanceof, starts on line %d", line)
