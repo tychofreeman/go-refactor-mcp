@@ -4975,6 +4975,37 @@ with add_declaration and insert_statements. One insert_statements
 "after" the statement before it. Record:
 `docs/sessions/batch-anchor-by-text.md`.
 
+## Duplicated TypeScript helpers merged (2026-11-18, the user's request)
+
+- **PlanChange:** shapes' `plan` was moved to ts/workspace as
+  `PlanChange`, then made a method with function_to_method.
+  simplify's `plan` and changesig's `retype` became one-line calls of it
+  through replace_statements.
+- **history.Preview:** both workspaces' `Preview` now call it. Go's body
+  was extracted, its format became a parameter (add_parameter
+  `replace_variable`), and the result was moved to history. Two
+  refusals were answered with preparing steps:
+  - extract_variable and add_parameter refused `w.Contains`, `w.Rel` and
+    `w.Root` as parameters, being read through `w` in a loop. They were
+    read into locals before the loop first (insert_statements and
+    replace_expression), and the extraction took the locals as
+    parameters.
+  - inline refused those locals afterwards ("declared together with
+    other names"), and split has no kind for a declaration of several
+    names. The two-line body became the call by replace_statements.
+- **Lined.statementsAt:** extracted from PrepareSwitchForTypes. Its test
+  became a parameter (extract_variable as parameter), and
+  UnionSwitchToMethod's copy became a call (replace_statements).
+- **Lined.chooseMembers:** extracted from ExtractSupertype, with its
+  refusal text as a parameter. ExtractType's copy became a call by
+  replace_statements, plus the loop that records `moved`. split refused
+  to split that loop off first, because its first part returns.
+
+Left as they are: the Go and TypeScript `route`, `Inspect` and
+`skeleton`, which are the same shape over different types (and ASTs).
+golden.go's `compareTrees` and workspace's `Compare` share only the
+sorted union of two maps' keys. RemoveElse and WrapElse share a
+three-statement preamble whose refusals differ.
 ## Duplicated finders merged (2026-11-18, the user's request)
 
 - **fold's try and trySetter** ended in the same nine lines. Each tail

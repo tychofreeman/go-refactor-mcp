@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
+	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/tsapi"
 )
 
@@ -108,4 +109,18 @@ func (w *Workspace) Construct(path, before string, edits []edit.TextEdit) ([]edi
 		return edits, nil
 	}
 	return []edit.TextEdit{{Start: 0, End: len(before), NewText: written}}, notes
+}
+
+// PlanChange runs change on the file's projects and returns the plan,
+// with the summary that summary gives after it ran.
+func (w *Workspace) PlanChange(file string, summary func() string, change func(p *tsapi.Project, path string) ([]tsapi.Edit, string)) (*refactor.Plan, error) {
+	path := w.Abs(file)
+	if _, err := os.Stat(path); err != nil {
+		return nil, refactor.Refusef("%s: no such file", file)
+	}
+	edits, why := w.Edits(path, func(p *tsapi.Project) ([]tsapi.Edit, string) { return change(p, path) })
+	if why != "" {
+		return nil, refactor.Refusef("%s", why)
+	}
+	return &refactor.Plan{Summary: summary(), Edits: edits}, nil
 }

@@ -351,15 +351,7 @@ func (*AddResult) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.
 
 // retype plans change, a change of a declared type, in the file named.
 func retype(ws *workspace.Workspace, file string, change func(p *tsapi.Project, path string) ([]tsapi.Edit, string), summary string) (*refactor.Plan, error) {
-	path := ws.Abs(file)
-	if _, err := os.Stat(path); err != nil {
-		return nil, refactor.Refusef("%s: no such file", file)
-	}
-	edits, why := ws.Edits(path, func(p *tsapi.Project) ([]tsapi.Edit, string) { return change(p, path) })
-	if why != "" {
-		return nil, refactor.Refusef("%s", why)
-	}
-	return &refactor.Plan{Summary: summary, Edits: edits}, nil
+	return ws.PlanChange(file, func() string { return summary }, change)
 }
 
 // ChangeFieldType changes a property's declared type.
