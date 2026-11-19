@@ -3362,21 +3362,6 @@ candidates and the evidence for each, gathered from the friction log.
     element without a hole or `everywhere` (`Road: "nw"` at its line)
     takes the same path since 2026-11-18.
 
-65. **A batch step anchored on a line an earlier step rewrote**
-    (2026-11-18, cost-history 34): in 6 of 8 routes runs, a batch held
-    `Road: $v` and `Rail: $v` with `everywhere`, both anchored on one
-    literal's line. The first step rewrote the line, so the second was
-    refused ("rewritten by step N") and resent alone. An anchor whose
-    text the earlier step left in place (`Rail: "Y7"` is still on the
-    line, and only `Road`'s element changed) could be found again by its
-    text. Or a pattern with `everywhere` could take the first match in
-    the file when its line is gone. *Done* (2026-11-18,
-    `docs/sessions/batch-anchor-by-text.md`): the first. A step with
-    `line` and `expression` but no column, on a line an earlier step
-    rewrote, gets the column of the expression's text up to its first
-    hole, when that text occurs once on the line as it was. That column
-    is then followed as a position, as a given column was before.
-
 63. **add_result on named results** (2026-11-17, #642's type-spelling
     row): `analysis.TypeString` returns `(s, missing string)`, and
     add_result refuses a function with named results ("not supported
@@ -3401,6 +3386,36 @@ candidates and the evidence for each, gathered from the friction log.
     trie-router (`targetCurNodes`, inlined into a `#children` loop) whose
     new errors name `componentCount` before its declaration, not
     reproduced in a small test yet.
+
+65. **A batch step anchored on a line an earlier step rewrote**
+    (2026-11-18, cost-history 34): in 6 of 8 routes runs, a batch held
+    `Road: $v` and `Rail: $v` with `everywhere`, both anchored on one
+    literal's line. The first step rewrote the line, so the second was
+    refused ("rewritten by step N") and resent alone. An anchor whose
+    text the earlier step left in place (`Rail: "Y7"` is still on the
+    line, and only `Road`'s element changed) could be found again by its
+    text. Or a pattern with `everywhere` could take the first match in
+    the file when its line is gone. *Done* (2026-11-18,
+    `docs/sessions/batch-anchor-by-text.md`): the first. A step with
+    `line` and `expression` but no column, on a line an earlier step
+    rewrote, gets the column of the expression's text up to its first
+    hole, when that text occurs once on the line as it was. That column
+    is then followed as a position, as a given column was before.
+
+66. **Three gaps found while merging duplicates** (2026-11-18,
+    dedupe-helpers):
+    - **fold fails on a parenthesized call.** It matched `(f(x))` and the
+      `f(x)` inside it, and failed with "overlapping edits" instead of
+      folding the outer one.
+    - **inline over-parenthesizes a call.** Inlining a wrapper whose body
+      is `return g(t, nil, ...)` wrote `!(g(t, nil, ...))` and `a &&
+      (g(...))`. A call is a primary expression and needs no parentheses.
+    - **merge_duplicate_function and the package of a name.** It refused
+      to merge `return analysis.UsesTypeParam(...)` in one package into
+      `return UsesTypeParam(...)` in analysis itself ("the bodies
+      differ"), though both name the same function.
+    Each was worked around: moving one wrapper into analysis instead of
+    inlining, and replace_expression `everywhere` instead of the merge.
 
 Parked: the Ollama loop (`refactor-agent`). It works and stays, but Claude
 through MCP is the priority.

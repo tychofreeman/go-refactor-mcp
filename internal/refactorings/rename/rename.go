@@ -124,7 +124,7 @@ func nameReceiver(ws *workspace.Workspace, file, function, new string) (plan *re
 		for id, o := range pkg.TypesInfo.Uses {
 			if id.Name == new && fd.Body.Pos() <= id.Pos() && id.Pos() < fd.Body.End() && (o.Pos() < fd.Pos() || o.Pos() >= fd.End()) {
 				return nil, true, refactor.Refusef("naming the receiver %q would hide the %s %q declared at %s, which is used at %s",
-					new, kind(o), new, site.DeclaredAt(ws, o), ws.Position(id.Pos()))
+					new, analysis.KindOf(o), new, site.DeclaredAt(ws, o), ws.Position(id.Pos()))
 			}
 		}
 	}
@@ -415,7 +415,7 @@ func (r *renamer) checkLexical() error {
 			}
 			if s2, o := s.LookupParent(r.new, rf.id.Pos()); o != nil && strictlyInside(s2, decl) {
 				return refactor.Refusef("after renaming, the reference at %s would refer to the %s %q declared at %s instead (choose another name, or rename that one first)",
-					r.ws.Position(rf.id.Pos()), kind(o), r.new, r.ws.Position(o.Pos()))
+					r.ws.Position(rf.id.Pos()), analysis.KindOf(o), r.new, r.ws.Position(o.Pos()))
 			}
 		}
 		// 3. Capture: an existing use of the new name, inside our scope,
@@ -435,7 +435,7 @@ func (r *renamer) checkLexical() error {
 				}
 				if strictlyInside(decl, o.Parent()) {
 					return refactor.Refusef("renaming to %q would hide the %s %q declared at %s, which is used at %s",
-						r.new, kind(o), r.new, site.DeclaredAt(r.ws, o), r.ws.Position(id.Pos()))
+						r.new, analysis.KindOf(o), r.new, site.DeclaredAt(r.ws, o), r.ws.Position(id.Pos()))
 				}
 			}
 		}
@@ -474,7 +474,7 @@ func (r *renamer) checkFieldOrMethod() error {
 			case keyOf(ws.Fset, sel.Obj()) == r.key:
 				if o, idx, _ := types.LookupFieldOrMethod(sel.Recv(), true, sel.Obj().Pkg(), r.new); o != nil && len(idx) <= len(sel.Index()) {
 					return refactor.Refusef("%s already has a %s named %q (declared at %s)",
-						typeString(sel.Recv()), kind(o), r.new, site.DeclaredAt(ws, o))
+						typeString(sel.Recv()), analysis.KindOf(o), r.new, site.DeclaredAt(ws, o))
 				}
 			case sel.Obj().Name() == r.new:
 				// The reverse: an existing selection of the new name would be
@@ -482,7 +482,7 @@ func (r *renamer) checkFieldOrMethod() error {
 				if o, idx, _ := types.LookupFieldOrMethod(sel.Recv(), true, obj.Pkg(), r.old); o != nil &&
 					keyOf(ws.Fset, o) == r.key && len(idx) < len(sel.Index()) {
 					return refactor.Refusef("renaming would hide the promoted %s %q of %s that is used at %s",
-						kind(sel.Obj()), r.new, typeString(sel.Recv()), site.DeclaredAt(ws, sel.Obj()))
+						analysis.KindOf(sel.Obj()), r.new, typeString(sel.Recv()), site.DeclaredAt(ws, sel.Obj()))
 				}
 			}
 		}
@@ -503,7 +503,7 @@ func (r *renamer) checkFieldOrMethod() error {
 		}
 		if named != nil {
 			if m, _, _ := types.LookupFieldOrMethod(types.NewPointer(named), false, obj.Pkg(), r.new); m != nil {
-				return refactor.Refusef("type %s already has a %s %q (at %s)", named.Obj().Name(), kind(m), r.new, site.DeclaredAt(ws, m))
+				return refactor.Refusef("type %s already has a %s %q (at %s)", named.Obj().Name(), analysis.KindOf(m), r.new, site.DeclaredAt(ws, m))
 			}
 		}
 	case *types.Func: // method
@@ -512,7 +512,7 @@ func (r *renamer) checkFieldOrMethod() error {
 			return nil
 		}
 		if m, _, _ := types.LookupFieldOrMethod(types.NewPointer(named), false, obj.Pkg(), r.new); m != nil {
-			return refactor.Refusef("type %s already has a %s %q (at %s)", named.Obj().Name(), kind(m), r.new, site.DeclaredAt(ws, m))
+			return refactor.Refusef("type %s already has a %s %q (at %s)", named.Obj().Name(), analysis.KindOf(m), r.new, site.DeclaredAt(ws, m))
 		}
 		return r.checkInterfaces(named)
 	}
@@ -570,7 +570,7 @@ func (r *renamer) checkEmbedded() error {
 		}
 		if o, idx, _ := types.LookupFieldOrMethod(pr.sel.Recv(), true, r.first.Pkg(), r.new); o != nil && len(idx) <= pr.depth {
 			return refactor.Refusef("%s already has a %s named %q (declared at %s), so %s at %s could not name the renamed field",
-				typeString(pr.sel.Recv()), kind(o), r.new, site.DeclaredAt(r.ws, o), types.ExprString(pr.expr), r.ws.Position(pr.expr.Pos()))
+				typeString(pr.sel.Recv()), analysis.KindOf(o), r.new, site.DeclaredAt(r.ws, o), types.ExprString(pr.expr), r.ws.Position(pr.expr.Pos()))
 		}
 	}
 	return r.checkPromotedMethods()
@@ -1089,7 +1089,7 @@ func (r *renamer) plan() (*refactor.Plan, error) {
 
 	plan := &refactor.Plan{
 		Summary: fmt.Sprintf("renamed %s %q to %q (%d occurrence%s in %d file%s)",
-			kind(r.first), r.old, r.new, n, textutil.Plural(n), len(fes), textutil.Plural(len(fes))),
+			analysis.KindOf(r.first), r.old, r.new, n, textutil.Plural(n), len(fes), textutil.Plural(len(fes))),
 		Edits:     fes,
 		Locations: true,
 	}
@@ -1159,36 +1159,6 @@ func (r *renamer) commentMentions(files map[string]bool, skip map[token.Pos]bool
 
 func isPackageLevel(obj types.Object) bool {
 	return obj.Pkg() != nil && obj.Parent() == obj.Pkg().Scope()
-}
-
-func kind(obj types.Object) string {
-	switch o := obj.(type) {
-	case *types.Var:
-		if o.IsField() {
-			return "field"
-		}
-		if isPackageLevel(o) {
-			return "package-level variable"
-		}
-		return "variable"
-	case *types.Const:
-		return "constant"
-	case *types.TypeName:
-		if _, ok := o.Type().(*types.TypeParam); ok {
-			return "type parameter"
-		}
-		return "type"
-	case *types.Func:
-		if o.Signature().Recv() != nil {
-			return "method"
-		}
-		return "function"
-	case *types.PkgName:
-		return "import"
-	case *types.Builtin:
-		return "builtin"
-	}
-	return "symbol"
 }
 
 func typeString(t types.Type) string {

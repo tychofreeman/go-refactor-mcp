@@ -369,27 +369,7 @@ func Reindent(text, indent string, raw bool) string {
 	if raw {
 		return indent + strings.TrimLeft(strings.Join(lines, "\n"), " \t")
 	}
-	common, first := "", true
-	for _, l := range lines {
-		if strings.TrimSpace(l) == "" {
-			continue
-		}
-		lead := textutil.Indent(l)
-		if first {
-			common, first = lead, false
-		}
-		for !strings.HasPrefix(lead, common) {
-			common = common[:len(common)-1]
-		}
-	}
-	for i, l := range lines {
-		if strings.TrimSpace(l) == "" {
-			lines[i] = ""
-			continue
-		}
-		lines[i] = indent + strings.TrimPrefix(l, common)
-	}
-	return strings.Join(lines, "\n")
+	return textutil.IndentAs(text, indent)
 }
 
 // IndentOf returns the whitespace that starts the line at offset start.

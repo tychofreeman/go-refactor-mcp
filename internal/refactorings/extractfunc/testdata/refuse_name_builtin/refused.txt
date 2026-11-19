@@ -1,1 +1,1 @@
-len is a predeclared builtin function
+len is a predeclared builtin; a package-level function

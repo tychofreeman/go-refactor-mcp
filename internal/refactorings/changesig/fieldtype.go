@@ -145,7 +145,7 @@ func (*ChangeFieldType) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 	if err != nil {
 		return nil, err
 	}
-	if containsTypeParam(field.Type()) || containsTypeParam(newT) {
+	if analysis.HasTypeParam(field.Type()) || analysis.HasTypeParam(newT) {
 		return nil, refactor.Refusef("changing a field to or from a type with type parameters is not supported")
 	}
 	if types.Identical(field.Type(), newT) {

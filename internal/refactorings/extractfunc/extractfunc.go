@@ -729,7 +729,7 @@ func (x *extraction) analyzeDataFlow() error {
 				if hoistable(obj) {
 					hoistObjs = append(hoistObjs, obj)
 				} else {
-					bad = append(bad, fmt.Sprintf("%s (%s declared at line %d)", obj.Name(), kindOf(obj), x.line(obj.Pos())))
+					bad = append(bad, fmt.Sprintf("%s (%s declared at line %d)", obj.Name(), analysis.KindOf(obj), x.line(obj.Pos())))
 				}
 			}
 			return true
@@ -945,11 +945,11 @@ func (x *extraction) decideGeneric(later []*types.Var) error {
 	f := x.flow
 	for _, list := range [][]*types.Var{f.params, f.locals, f.results, later} {
 		for _, v := range list {
-			used = used || usesTypeParam(v.Type(), set, map[types.Type]bool{})
+			used = used || analysis.UsesTypeParam(v.Type(), set, map[types.Type]bool{})
 		}
 	}
 	if _, _, sig := x.enclosingFunc(); x.mode == terminal && sig != nil {
-		used = used || usesTypeParam(sig.Results(), set, map[types.Type]bool{})
+		used = used || analysis.UsesTypeParam(sig.Results(), set, map[types.Type]bool{})
 	}
 	if !used {
 		return nil
@@ -962,80 +962,12 @@ func (x *extraction) decideGeneric(later []*types.Var) error {
 		if scope != nil {
 			if _, o := scope.LookupParent(tp.Name(), x.stmts[0].Pos()); o != tp {
 				return refactor.Refusef("the call would pass the type parameter %s, but at the call site %s refers to the %s declared at line %d; rename it first",
-					tp.Name(), tp.Name(), kindOf(o), x.line(o.Pos()))
+					tp.Name(), tp.Name(), analysis.KindOf(o), x.line(o.Pos()))
 			}
 		}
 	}
 	x.generic = true
 	return nil
-}
-
-// usesTypeParam reports whether t mentions one of the type parameters.
-func usesTypeParam(t types.Type, set map[*types.TypeName]bool, seen map[types.Type]bool) bool {
-	if t == nil || seen[t] {
-		return false
-	}
-	seen[t] = true
-	any := func(ts ...types.Type) bool {
-		for _, e := range ts {
-			if usesTypeParam(e, set, seen) {
-				return true
-			}
-		}
-		return false
-	}
-	switch t := t.(type) {
-	case *types.TypeParam:
-		return set[t.Obj()]
-	case *types.Named:
-		for i := 0; i < t.TypeArgs().Len(); i++ {
-			if any(t.TypeArgs().At(i)) {
-				return true
-			}
-		}
-		// A local type's underlying type can mention them too.
-		if o := t.Obj(); o.Pkg() != nil && o.Parent() != o.Pkg().Scope() {
-			return any(t.Underlying())
-		}
-	case *types.Alias:
-		return any(types.Unalias(t))
-	case *types.Pointer:
-		return any(t.Elem())
-	case *types.Slice:
-		return any(t.Elem())
-	case *types.Array:
-		return any(t.Elem())
-	case *types.Chan:
-		return any(t.Elem())
-	case *types.Map:
-		return any(t.Key(), t.Elem())
-	case *types.Signature:
-		return any(t.Params(), t.Results())
-	case *types.Tuple:
-		for i := 0; i < t.Len(); i++ {
-			if any(t.At(i).Type()) {
-				return true
-			}
-		}
-	case *types.Struct:
-		for i := 0; i < t.NumFields(); i++ {
-			if any(t.Field(i).Type()) {
-				return true
-			}
-		}
-	case *types.Interface:
-		for i := 0; i < t.NumMethods(); i++ {
-			if any(t.Method(i).Type()) {
-				return true
-			}
-		}
-		for i := 0; i < t.NumEmbeddeds(); i++ {
-			if any(t.EmbeddedType(i)) {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 // findReceiver makes the new function a method when the statements use the
@@ -1101,7 +1033,7 @@ func (x *extraction) checkMethodName() error {
 	}
 	if o, _, _ := types.LookupFieldOrMethod(types.NewPointer(named), false, x.Pkg.Types, x.name); o != nil {
 		return refactor.Refusef("%s already has a %s named %s (at %s); choose another name",
-			named.Obj().Name(), kindOf(o), x.name, x.WS.Position(o.Pos()))
+			named.Obj().Name(), analysis.KindOf(o), x.name, x.WS.Position(o.Pos()))
 	}
 	// An unexported method can only matter to interfaces in this package.
 	var scopes []*types.Scope
@@ -1608,7 +1540,7 @@ func (x *extraction) typeString(name string, t types.Type) (string, error) {
 	}
 	if bad := localTypeIn(t, x.nameable, map[types.Type]bool{}); bad != nil {
 		return "", refactor.Refusef("%s uses %s %s declared inside %s; it cannot be named in a new package-level function",
-			what, kindOf(bad), bad.Name(), x.enclosingName())
+			what, analysis.KindOf(types.Object(bad)), bad.Name(), x.enclosingName())
 	}
 	var refusal error
 	s := types.TypeString(t, func(p *types.Package) string {
@@ -1774,7 +1706,7 @@ func (x *extraction) checkNewName() error {
 		return x.checkMethodName()
 	}
 	if o := types.Universe.Lookup(x.name); o != nil {
-		return refactor.Refusef("%s is a predeclared %s; a package-level function with that name would hide it in the whole package. Choose another name", x.name, kindOf(o))
+		return refactor.Refusef("%s is a predeclared %s; a package-level function with that name would hide it in the whole package. Choose another name", x.name, analysis.KindOf(o))
 	}
 	for _, p := range x.WS.Pkgs {
 		if p.PkgPath != x.Pkg.PkgPath || p.Types == nil {
@@ -1782,7 +1714,7 @@ func (x *extraction) checkNewName() error {
 		}
 		if o := p.Types.Scope().Lookup(x.name); o != nil {
 			return refactor.Refusef("%s is already declared in package %s (%s at %s); choose another name",
-				x.name, p.Types.Name(), kindOf(o), x.WS.Position(o.Pos()))
+				x.name, p.Types.Name(), analysis.KindOf(o), x.WS.Position(o.Pos()))
 		}
 		for _, f := range p.Syntax {
 			if s := p.TypesInfo.Scopes[f]; s != nil {
@@ -1803,7 +1735,7 @@ func (x *extraction) checkNewName() error {
 	if scope := x.innermostScope(first.Pos()); scope != nil {
 		if s, o := scope.LookupParent(x.name, first.Pos()); o != nil && s != types.Universe && s != x.Pkg.Types.Scope() && !x.inSelectionPos(o.Pos()) {
 			return refactor.Refusef("%s is a %s declared at line %d, which would hide the new function at the call site; choose another name",
-				x.name, kindOf(o), x.line(o.Pos()))
+				x.name, analysis.KindOf(o), x.line(o.Pos()))
 		}
 	}
 	return nil
@@ -2204,7 +2136,7 @@ func (x *extraction) checkSpelledTypes() error {
 			}
 			ts, _ := x.typeString("", v.Type())
 			return refactor.Refusef("the call site would declare %s with type %s, but there %s refers to the %s declared at line %d; rename it first",
-				v.Name(), ts, q, kindOf(o), x.line(o.Pos()))
+				v.Name(), ts, q, analysis.KindOf(o), x.line(o.Pos()))
 		}
 	}
 	return nil
@@ -2400,28 +2332,4 @@ func (x *extraction) indentUnit(decl ast.Decl) string {
 		return "\t"
 	}
 	return u
-}
-
-func kindOf(o types.Object) string {
-	switch o := o.(type) {
-	case *types.Const:
-		return "constant"
-	case *types.TypeName:
-		if _, ok := o.Type().(*types.TypeParam); ok {
-			return "type parameter"
-		}
-		return "type"
-	case *types.Func:
-		return "function"
-	case *types.Builtin:
-		return "builtin function"
-	case *types.PkgName:
-		return "package name"
-	case *types.Var:
-		if o.IsField() {
-			return "field"
-		}
-		return "variable"
-	}
-	return "name"
 }

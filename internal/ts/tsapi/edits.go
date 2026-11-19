@@ -59,7 +59,7 @@ func (p *Project) ReplaceDeclaration(path, name, content string) ([]Edit, string
 			first++
 		}
 	}
-	text := indented(content, l.Indent(first))
+	text := textutil.IndentAs(content, l.Indent(first))
 	return []Edit{{File: l.File.FileName(), Start: l.Start(first), End: l.End(d.End), NewText: text}}, ""
 }
 
@@ -421,7 +421,7 @@ func (l *Lined) addClauses(sw, clause *ast.Node, where, content string) ([]Edit,
 	if len(clauses) > 0 {
 		ind = l.Indent(l.Line(l.Pos(clauses[0])))
 	}
-	text := indented(content, ind) + "\n"
+	text := textutil.IndentAs(content, ind) + "\n"
 	var at int
 	switch {
 	case clause != nil && where == "before":
@@ -473,7 +473,7 @@ func (l *Lined) addBranches(ifs *ast.Node, where, content string) ([]Edit, strin
 	}
 	hasElse := last.AsIfStatement().ElseStatement != nil
 	ind := l.Indent(l.Line(l.Pos(head)))
-	text := indented(content, ind)
+	text := textutil.IndentAs(content, ind)
 	text = strings.TrimPrefix(text, ind)
 	var after *ast.Node // the then-branch the content follows
 	switch {
@@ -509,33 +509,6 @@ func elseKeyword(l *Lined, n *ast.Node) int {
 		return then.End() + i
 	}
 	return l.Pos(n)
-}
-
-// indented returns text without its lines' common indentation, each line
-// indented with indent instead.
-func indented(text, indent string) string {
-	lines := strings.Split(strings.Trim(text, "\n"), "\n")
-	common, first := "", true
-	for _, ln := range lines {
-		if strings.TrimSpace(ln) == "" {
-			continue
-		}
-		lead := textutil.Indent(ln)
-		if first {
-			common, first = lead, false
-		}
-		for !strings.HasPrefix(lead, common) {
-			common = common[:len(common)-1]
-		}
-	}
-	for i, ln := range lines {
-		if strings.TrimSpace(ln) == "" {
-			lines[i] = ""
-		} else {
-			lines[i] = indent + strings.TrimPrefix(ln, common)
-		}
-	}
-	return strings.Join(lines, "\n")
 }
 
 // hasBody reports whether one of decls is a method with a body.

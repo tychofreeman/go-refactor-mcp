@@ -5,7 +5,6 @@ package files
 import (
 	"encoding/json"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -125,23 +124,10 @@ func filesUnder(ws *workspace.Workspace, path, given string) ([]string, error) {
 	if !ws.Contains(path) || path == ws.Root {
 		return nil, refactor.Refusef("%s is not a file or directory inside the workspace %s", given, ws.Root)
 	}
-	fi, err := os.Stat(path)
+	out, err := edit.FilesUnder(path)
 	if os.IsNotExist(err) {
 		return nil, refactor.Refusef("%s does not exist", given)
 	}
-	if err != nil {
-		return nil, err
-	}
-	if !fi.IsDir() {
-		return []string{path}, nil
-	}
-	var out []string
-	err = filepath.WalkDir(path, func(p string, d fs.DirEntry, err error) error {
-		if err == nil && d.Type().IsRegular() {
-			out = append(out, p)
-		}
-		return err
-	})
 	if err == nil && len(out) == 0 {
 		return nil, refactor.Refusef("%s has no files", given)
 	}

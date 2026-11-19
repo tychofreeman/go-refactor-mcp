@@ -10,6 +10,7 @@ import (
 
 	"golang.org/x/tools/go/packages"
 
+	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
@@ -180,7 +181,7 @@ func (t *target) checkUnused(p param) error {
 			return refactor.Refusef("the body of %s uses %s (at %s); remove that use first, or give value, the expression every call passes for it", t.obj.Name(), p.name, t.WS.Position(id.Pos()))
 		}
 	}
-	if t.obj.Signature().TypeParams().Len() > 0 && containsTypeParam(info.TypeOf(p.field.Type)) {
+	if t.obj.Signature().TypeParams().Len() > 0 && analysis.HasTypeParam(info.TypeOf(p.field.Type)) {
 		return refactor.Refusef("the type of %s mentions a type parameter of %s, which calls may infer from its argument; this is not supported yet", p.name, t.obj.Name())
 	}
 	return nil

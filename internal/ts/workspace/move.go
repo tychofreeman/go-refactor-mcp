@@ -2,7 +2,6 @@ package workspace
 
 import (
 	"context"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -12,32 +11,12 @@ import (
 	"github.com/tychofreeman/go-refactor-mcp/internal/ts/tsapi"
 )
 
-// Under returns path when it is a file, or the files under it when it is
-// a directory.
-func Under(path string) ([]string, error) {
-	fi, err := os.Stat(path)
-	if err != nil {
-		return nil, err
-	}
-	if !fi.IsDir() {
-		return []string{path}, nil
-	}
-	var out []string
-	err = filepath.WalkDir(path, func(p string, d fs.DirEntry, err error) error {
-		if err == nil && d.Type().IsRegular() {
-			out = append(out, p)
-		}
-		return err
-	})
-	return out, err
-}
-
 // MoveFile returns the edits that move the file or directory from to to:
 // each file written at its new path with the changes the language
 // service makes to it (its own relative imports), the old one deleted,
 // and the files that refer to them changed to refer to the new paths.
 func (w *Workspace) MoveFile(from, to string) ([]edit.FileEdit, error) {
-	paths, err := Under(from)
+	paths, err := edit.FilesUnder(from)
 	if err != nil {
 		return nil, err
 	}

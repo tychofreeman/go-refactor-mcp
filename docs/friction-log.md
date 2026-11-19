@@ -4944,6 +4944,29 @@ calls), a one-line replace_statements and insert_statements. The
 goldens' fixtures were made with create_file. Record:
 `docs/sessions/struct-literal-keys.md`.
 
+## Duplicated helpers merged (2026-11-18, the user's request)
+
+A subagent listed duplicated functions. Four groups went through the
+tools:
+- **analysis.KindOf:** replace_statements made it cover what the four
+  copies covered. Each copy's body became a call, then inline
+  all_calls.
+- **analysis.UsesTypeParam and HasTypeParam:** moved from extractfunc
+  and changesig. createfromusage's copy went with replace_expression
+  `everywhere`, then replace_declaration.
+- **textutil.IndentAs:** moved from tsapi. gocode.Reindent calls it.
+- **edit.FilesUnder:** moved from ts/workspace. files.filesUnder calls
+  it.
+
+What went wrong:
+- The first try inlined both type-parameter wrappers. inline wrote
+  needless parentheses, and fold of a new wrapper over them failed with
+  "overlapping edits". I undid it and moved one wrapper instead.
+- merge_duplicate_function refused the other wrapper, because one body
+  qualifies the name and the other doesn't.
+
+All three are roadmap 66. extractfunc's goldens now get KindOf's words
+("method" for a method, "builtin").
 ## A batch step found by its expression (2026-11-18, roadmap 65)
 
 Nothing by hand. The test came in with add_declaration, and textColumn
@@ -4983,3 +5006,18 @@ Left as they are: the Go and TypeScript `route`, `Inspect` and
 golden.go's `compareTrees` and workspace's `Compare` share only the
 sorted union of two maps' keys. RemoveElse and WrapElse share a
 three-statement preamble whose refusals differ.
+## Duplicated finders merged (2026-11-18, the user's request)
+
+- **fold's try and trySetter** ended in the same nine lines. Each tail
+  was extracted, then method_to_function. The merge was refused once,
+  because trySetter's copy took `why`, a variable declared before it
+  that the tail only assigns, as a parameter. remove_parameter took it
+  out, and merge_duplicate_function and function_to_method made the
+  method `folder.apply`.
+- **convertloop's and invertif's find** share a skeleton. Each finds the
+  statement whose keyword is at a line and column, and words its
+  refusals by what it looks for. By hand: `locate.AtKeyword`, generic
+  over the node type, was written with add_declaration, and each find's
+  body became a call with replace_statements. No tool makes a function
+  generic, and parameterize takes constants, not the node type and the
+  keyword's field. The refusals' wording is unchanged.

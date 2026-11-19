@@ -450,6 +450,12 @@ func (f *folder) try(p *packages.Package, file *ast.File, x ast.Expr, stack []as
 			return skip(why)
 		}
 	}
+	return f.apply(p, file, b, stack, skip, x)
+}
+
+// apply replaces x with the call to the function, its parameters bound
+// by b, or skips x with the reason the call would not do the same.
+func (f *folder) apply(p *packages.Package, file *ast.File, b map[pattern.HoleKey]ast.Expr, stack []ast.Node, skip func(why string) (bool, error), x ast.Expr) (bool, error) {
 	call, why, err := f.call(p, file, b, stack)
 	if err != nil {
 		return false, err
@@ -537,15 +543,7 @@ func (f *folder) trySetter(p *packages.Package, file *ast.File, x ast.Expr, stac
 		}
 	}
 	f.rest[lit] = rest{drop, typ}
-	call, why, err := f.call(p, file, b, stack)
-	if err != nil {
-		return false, err
-	}
-	if why != "" {
-		return skip(why)
-	}
-	f.replace(file, x, call)
-	return true, nil
+	return f.apply(p, file, b, stack, skip, x)
 }
 
 // elided is the type to write for lit, of package p inside stack, when

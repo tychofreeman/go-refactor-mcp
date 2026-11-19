@@ -25,6 +25,7 @@ import (
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
+	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/site"
 	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
@@ -97,31 +98,14 @@ func load(ws *workspace.Workspace, a args) (*inversion, *ast.IfStmt, error) {
 // find returns the if statement whose if keyword is at the line (and
 // column, if given).
 func (x *inversion) find(a args) (*ast.IfStmt, error) {
-	if a.Line > x.TF.LineCount() {
-		return nil, refactor.Refusef("line %d is past the end of %s, which has %d lines", a.Line, a.File, x.TF.LineCount())
-	}
-	var found []*ast.IfStmt
-	ast.Inspect(x.File, func(n ast.Node) bool {
-		if s, ok := n.(*ast.IfStmt); ok && x.TF.Line(s.If) == a.Line {
-			if a.Column == 0 || x.TF.Position(s.If).Column == a.Column {
-				found = append(found, s)
-			}
+	ifAt := func(n ast.Node) (*ast.IfStmt, token.Pos, bool) {
+		s, ok := n.(*ast.IfStmt)
+		if !ok {
+			return nil, token.NoPos, false
 		}
-		return true
-	})
-	switch {
-	case len(found) == 1:
-		return found[0], nil
-	case len(found) > 1:
-		var cols []string
-		for _, s := range found {
-			cols = append(cols, fmt.Sprint(x.TF.Position(s.If).Column))
-		}
-		return nil, refactor.Refusef("line %d has %d if statements (columns %s); pass column to choose one", a.Line, len(found), strings.Join(cols, ", "))
-	case a.Column != 0:
-		return nil, refactor.Refusef("no if statement starts at %s:%d:%d", a.File, a.Line, a.Column)
+		return s, s.If, true
 	}
-	return nil, refactor.Refusef("no if statement starts on line %d of %s; give the line of the if keyword%s", a.Line, a.File, x.lineHint(a.Line))
+	return locate.AtKeyword(x.TF, x.File, a.File, a.Line, a.Column, ifAt, locate.Keyword{Noun: "if statement", Plural: "if statements", Word: "if", Hint: func() string { return x.lineHint(a.Line) }})
 }
 
 func (x *inversion) plan(s *ast.IfStmt, keepElse bool) (*refactor.Plan, error) {

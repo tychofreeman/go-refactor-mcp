@@ -206,7 +206,7 @@ func (*DeleteFile) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor
 	if !ws.Contains(path) || path == ws.Root {
 		return nil, refactor.Refusef("%s is not a file or directory inside the root %s", a.File, ws.Root)
 	}
-	paths, err := workspace.Under(path)
+	paths, err := edit.FilesUnder(path)
 	if os.IsNotExist(err) {
 		return nil, refactor.Refusef("%s does not exist", a.File)
 	}

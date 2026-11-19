@@ -259,7 +259,7 @@ func (x *extraction) notConstantLike(e ast.Expr) string {
 			}
 		case *ast.Ident:
 			if o := x.Info.Uses[n]; o != nil && isLocal(o) {
-				why = fmt.Sprintf("a local %s, %s", kindOf(o), n.Name)
+				why = fmt.Sprintf("a local %s, %s", analysis.KindOf(o), n.Name)
 			}
 		}
 		return true

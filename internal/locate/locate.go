@@ -388,3 +388,44 @@ func SignatureAt(tf *token.File, file *ast.File, first, last int) *Signature {
 	}
 	return nil
 }
+
+// Keyword names what AtKeyword looks for, in its refusals: Noun ("loop"),
+// its Plural, Word (the keyword, "for"), and Hint, which adds to the
+// refusal that none starts on the line.
+type Keyword struct {
+	Noun, Plural, Word string
+	Hint               func() string
+}
+
+// AtKeyword returns the node of file whose keyword is on line of tf, at
+// column when it is not 0; at gives a node of the kind looked for with
+// its keyword's position, and ok false for other nodes. name is the
+// file's name in refusals.
+func AtKeyword[N ast.Node](tf *token.File, file *ast.File, name string, line, column int, at func(ast.Node) (n N, kw token.Pos, ok bool), what Keyword) (N, error) {
+	var zero N
+	if line > tf.LineCount() {
+		return zero, refactor.Refusef("line %d is past the end of %s, which has %d lines", line, name, tf.LineCount())
+	}
+	var found []N
+	var cols []string
+	ast.Inspect(file, func(n ast.Node) bool {
+		if s, kw, ok := at(n); ok && tf.Line(kw) == line && (column == 0 || tf.Position(kw).Column == column) {
+			found = append(found, s)
+			cols = append(cols, fmt.Sprint(tf.Position(kw).Column))
+		}
+		return true
+	})
+	switch {
+	case len(found) == 1:
+		return found[0], nil
+	case len(found) > 1:
+		return zero, refactor.Refusef("line %d has %d %s (columns %s); pass column to choose one", line, len(found), what.Plural, strings.Join(cols, ", "))
+	case column != 0:
+		return zero, refactor.Refusef("no %s starts at %s:%d:%d", what.Noun, name, line, column)
+	}
+	hint := ""
+	if what.Hint != nil {
+		hint = what.Hint()
+	}
+	return zero, refactor.Refusef("no %s starts on line %d of %s; give the line of the %s keyword%s", what.Noun, line, name, what.Word, hint)
+}
