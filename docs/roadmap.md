@@ -3440,7 +3440,9 @@ candidates and the evidence for each, gathered from the friction log.
     fold-returns): a clause using `pp` of `switch pp := p.(type)` was
     refused as not in scope, at the switch's line and at a clause's.
     Each clause declares its own `pp`; the scope check should look
-    there.
+    there. *Done* (2026-11-19, `docs/sessions/add-case-typeswitch-var.md`):
+    add_case leaves the switch's symbol out of the names it imports
+    packages for.
 
 Parked: the Ollama loop (`refactor-agent`). It works and stays, but Claude
 through MCP is the priority.
