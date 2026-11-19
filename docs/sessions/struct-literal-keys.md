@@ -111,5 +111,10 @@ transcript part: 30 requests, 3.52M input tokens (cached or not).
 - An element pattern without holes or `everywhere` still goes through
   the plain path (`locate.ExprTokens`), which doesn't parse an element.
   Routing it to planPattern is a one-line change, with a golden.
+  *Done* in the next PR: replace_expression of Plan's condition, isElement
+  added with add_declaration, golden `key_single`.
+- The A/B: done (cost-history 34). It went 8/8 at $0.27 a run, against
+  $0.39. Six refusals came from batching both fields on one line
+  (roadmap 65).
 - A merge drops a comment that sits between the deleted element and the
   one before it.

@@ -1746,7 +1746,9 @@ composite literals, the new value's elements are added after the
 existing one's and the element is deleted, since a key twice does not
 type-check: `Rail: $v` to `Routes: map[string]string{"rail": $v}` after
 `Road` makes `{Routes: map[string]string{"road": r, "rail": l}}`.
-Otherwise a key twice is refused by the type check.
+Otherwise a key twice is refused by the type check. An element with no
+hole and no `everywhere` takes the same path, replacing only the one at
+`line`.
 
 ### add_field
 

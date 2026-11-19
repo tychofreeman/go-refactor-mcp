@@ -410,3 +410,10 @@ func merged(tf *token.File, lit *ast.CompositeLit, kv *ast.KeyValueExpr, text st
 	}
 	return []edit.TextEdit{{Start: at, End: at, NewText: add}, {Start: start, End: end}}, true
 }
+
+// isElement reports whether text is a literal's element (Road: "nw").
+func isElement(text string) bool {
+	e, _ := parsePattern(text)
+	_, ok := e.(*ast.KeyValueExpr)
+	return ok
+}

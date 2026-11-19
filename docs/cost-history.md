@@ -2068,3 +2068,30 @@ the reading before the first edit (Bash, Grep and Read were about two
 thirds of the tool-call input in the last feature run), and more runs per
 task so that effects of 10% can be seen. Count waste by turns, not calls:
 parallel calls in one turn are not waste.
+
+## 34. replace_expression on a literal's elements (Nov 18)
+
+This is section 32's routes task again, with the server of #688. That
+server gives replace_expression an element pattern (`Road: $v` to
+`Routes: map[string]string{"road": $v}`), which merges into a `Routes`
+the literal already has. The run came from its branch:
+
+    go run ./cmd/refactor-ab -model sonnet -tasks eval-tasks/derivations-freight-xxl.json \
+      -only freight-xxl-routes -arms mcp -runs 8 -claude-md eval-tasks/claude-md-derivations \
+      -out eval-runs/ab-freightxxl-routes-keys-8
+
+| task | before (32): passed, cost, requests | with element patterns: passed, cost, requests |
+|---|---|---|
+| routes | 8/8 $0.391 14.2 | 8/8 $0.27 13.6 |
+
+Every run used the element pattern, with 27 element steps in 8 runs.
+Shell edits refused fell from 16 to 4, and the cost a run fell by 31%,
+though turns barely moved. 7 element steps were refused:
+- 6 were the same thing. A batch put the `Road` and `Rail` steps
+  together, anchored on the same line. The first step rewrote that line,
+  so the batch refused the second ("rewritten by step N"). Each session
+  then sent it again on its own. Roadmap 65.
+- 1 gave `new` a hole that `expression` didn't have.
+
+replace_declaration (8 calls, mostly of the accessors' bodies) is left.
+The run cost $2.16.

@@ -3357,7 +3357,20 @@ candidates and the evidence for each, gathered from the friction log.
     map[string]string{"road": $v}`), with `everywhere` across the
     module; the second field's step merges into the `Routes` the first
     made. An A/B on freight-xxl's routes would show whether sessions
-    reach for it (the user's yes first).
+    reach for it (the user's yes first). It did (cost-history 34): 8/8,
+    $0.39 to $0.27 a run, with the element pattern in every run. An
+    element without a hole or `everywhere` (`Road: "nw"` at its line)
+    takes the same path since 2026-11-18.
+
+65. **A batch step anchored on a line an earlier step rewrote**
+    (2026-11-18, cost-history 34): in 6 of 8 routes runs, a batch held
+    `Road: $v` and `Rail: $v` with `everywhere`, both anchored on one
+    literal's line. The first step rewrote the line, so the second was
+    refused ("rewritten by step N") and resent alone. An anchor whose
+    text the earlier step left in place (`Rail: "Y7"` is still on the
+    line, and only `Road`'s element changed) could be found again by its
+    text. Or a pattern with `everywhere` could take the first match in
+    the file when its line is gone.
 
 63. **add_result on named results** (2026-11-17, #642's type-spelling
     row): `analysis.TypeString` returns `(s, missing string)`, and
