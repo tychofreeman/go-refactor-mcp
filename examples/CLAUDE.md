@@ -1,10 +1,19 @@
 # <project>
 
 Work in this order, refactoring only while every test passes:
-1. Make the change easy: if it would be hard, refactor first, with the
-   gorefactor tools, until it is small and local (rename to what a thing
-   will mean, extract what you will change, add the parameter or field
-   the change needs).
+1. Make the change easy. Before the first edit, write down:
+   - **The easy change:** the few lines you wish you could write to add
+     the feature, and the one place they would go.
+   - **The places today:** every place you would have to change to add
+     it to the code as it is (inspect's `names` and `uses` find them).
+     Where it would add a branch beside branches on the same value, or a
+     copy of a block with names changed, each existing branch or copy is
+     a place.
+   - **The refactorings:** if there is more than one place, the
+     refactorings, with the gorefactor tools, that make the easy change
+     true, each keeping the tests passing. With one place, none.
+
+   Then do those refactorings.
 2. Write the next test and see it fail.
 3. Make it pass with the least code, with the edit tools
    (replace_statements, insert_statements, add_declaration, create_file).

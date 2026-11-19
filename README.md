@@ -219,10 +219,18 @@ through the tools has not yet cost less than editing by hand
 ([docs/cost-history.md](docs/cost-history.md)).
 
 **Refactor first, while the tests pass.** Make the change easy, then make
-the easy change: refactor (rename to what a thing will mean, extract what
-you will change, add the parameter or field the change needs) until the
-change is small and local; then write the failing test; then the least code
-that passes, even a copy; then refactor the duplication away. A refactoring
+the easy change. "Easy" alone did not move a model, which finds almost any
+change easy, so the example asks for three things before the first edit:
+the easy change (the lines it wishes it could write, and the one place they
+would go), the places the feature would touch in the code as it is (each
+existing branch or copy it would extend counting), and, when there is more
+than one, the refactorings that make the easy change true. With that
+routine a fresh model gave the concept a feature extends one home before
+adding it on two of three shapes, 5 of 5 runs each, against 0 of 5 without,
+and refactored nothing where nothing was needed, at 10-60% more a session
+([docs/cost-history.md](docs/cost-history.md) section 35). Then write the
+failing test; then the least code that passes, even a copy; then refactor
+the duplication away. A refactoring
 is refused while code does not compile, and a test that is red needs code,
 not a refactoring. Models extend the code that is there unless told to
 reshape it first.
