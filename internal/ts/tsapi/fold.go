@@ -49,10 +49,12 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 		}
 	}
 	sym := c.GetSymbolAtLocation(nameNode)
-	// The pattern: one expression, or the statements of a body without a
-	// result.
+	// The pattern: one expression, or the statements of a body, which
+	// end in a return if any statement returns.
 	var expr *ast.Node
 	var stmts []*ast.Node
+	returning := false // stmts end in a return
+	held := -1         // the statement declaring what stmts return, when a copy may go on after them
 	body := fn.Body()
 	switch {
 	case !ast.IsBlock(body):
@@ -60,25 +62,38 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 	case len(body.Statements()) == 1 && ast.IsReturnStatement(body.Statements()[0]) && body.Statements()[0].Expression() != nil:
 		expr = body.Statements()[0].Expression()
 	default:
-		returns := false
+		bare, returns := false, 0
 		var visit func(n *ast.Node) bool
 		visit = func(n *ast.Node) bool {
 			if ast.IsFunctionLike(n) {
 				return false
 			}
 			if ast.IsReturnStatement(n) {
-				returns = true
+				returning = true
+				returns++
+				bare = bare || n.Expression() == nil
 			}
 			n.ForEachChild(visit)
 			return false
 		}
 		body.ForEachChild(visit)
-		if returns {
-			return nil, 0, nil, fmt.Sprintf("%s returns from inside its body; only a body that is one return, or statements that do not return, is folded. To reuse it where its statements are copied, extract_function each copy of its statements, then merge_duplicate_function the result into %s", name, name)
-		}
 		stmts = body.Statements()
 		if len(stmts) == 0 {
 			return nil, 0, nil, fmt.Sprintf("%s has an empty body", name)
+		}
+		if returning && (bare || !ast.IsReturnStatement(stmts[len(stmts)-1])) {
+			return nil, 0, nil, fmt.Sprintf("%s returns without a value, or does not end in a return; only a body that is one return, statements ending in a return where every return gives a value, or statements that do not return, is folded. To reuse it where its statements are copied, extract_function each copy of its statements, then merge_duplicate_function the result into %s", name, name)
+		}
+		// A body that ends in return x, its only return, x a local it
+		// declares, also matches a copy of the statements before that
+		// return, which goes on after them using x.
+		if ret := stmts[len(stmts)-1]; returning && returns == 1 && ast.IsIdentifier(ret.Expression()) {
+			x := c.GetSymbolAtLocation(ret.Expression())
+			for k, s := range stmts[:len(stmts)-1] {
+				if d := onlyDeclaration(s); d != nil && d.Initializer() != nil && c.GetSymbolAtLocation(d.Name()) == x {
+					held = k
+				}
+			}
 		}
 	}
 	holes := map[*ast.Symbol]int{}
@@ -125,13 +140,14 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 	// One match of the pattern at x (an expression) or at the window of
 	// statements xs.
 	type found struct {
-		root  []*ast.Node
-		args  []*ast.Node
-		texts []string
-		runs  [][]*ast.Node
-		uses  [][]*ast.Node
-		where string
-		obj   bool // parameters used by their properties stand for an object of them
+		root   []*ast.Node
+		args   []*ast.Node
+		texts  []string
+		runs   [][]*ast.Node
+		uses   [][]*ast.Node
+		where  string
+		obj    bool // parameters used by their properties stand for an object of them
+		goesOn bool // a copy of the statements before the return, which goes on using what it returns
 	}
 	var matches []found
 	try := func(cl *Lined, roots []*ast.Node, pats []*ast.Node, obj bool) {
@@ -241,13 +257,26 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 			continue
 		}
 		cl.lists(func(_ *ast.Node, list []*ast.Node) {
-			for i := 0; i+len(stmts) <= len(list); i++ {
-				if list[i].Kind == stmts[0].Kind && outside(list[i]) && onLine(list[i]) {
-					before := len(matches)
+			shortest := len(stmts)
+			if held >= 0 {
+				shortest--
+			}
+			for i := 0; i+shortest <= len(list); i++ {
+				if list[i].Kind != stmts[0].Kind || !outside(list[i]) || !onLine(list[i]) {
+					continue
+				}
+				before := len(matches)
+				if i+len(stmts) <= len(list) {
 					tryBoth(cl, list[i:i+len(stmts)], stmts)
+				}
+				if len(matches) == before && held >= 0 {
+					tryBoth(cl, list[i:i+shortest], stmts[:shortest])
 					if len(matches) > before {
-						i += len(stmts) - 1
+						matches[len(matches)-1].goesOn = true
 					}
+				}
+				if len(matches) > before {
+					i += len(matches[len(matches)-1].root) - 1
 				}
 			}
 		})
@@ -336,7 +365,10 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 		if stmts != nil {
 			last := m.root[len(m.root)-1]
 			var leak string
-			for _, r := range m.root {
+			for k, r := range m.root {
+				if m.goesOn && k == held {
+					continue // what the call returns, used after it
+				}
 				for _, n := range Declared(r) {
 					s := c.GetSymbolAtLocation(n)
 					Identifiers(r.Parent, func(id *ast.Node) {
@@ -348,6 +380,23 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 			}
 			if leak != "" {
 				skip(leak)
+				continue
+			}
+		}
+		// A copy that returns becomes return f(...), where the function it
+		// is in returns what f does; one that goes on declares what f returns
+		// as the copy declared it, when that takes it.
+		if returning && !m.goesOn {
+			if why := returnsTaken(c, fn, ast.GetContainingFunction(root), name); why != "" {
+				skip(why)
+				continue
+			}
+		}
+		if m.goesOn {
+			d := onlyDeclaration(m.root[held])
+			want := c.GetReturnTypeOfSignature(c.GetSignatureFromDeclaration(fn))
+			if have := c.GetTypeAtLocation(d.Name()); !c.IsTypeAssignableTo(want, have) {
+				skip(fmt.Sprintf("%s is a %s, which the result of %s, %s, is not", d.Name().Text(), c.TypeToString(have), name, c.TypeToString(want)))
 				continue
 			}
 		}
@@ -409,7 +458,15 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 			edits = append(edits, Edit{File: cl.File.FileName(), Start: cl.Pos(root), End: root.End(), NewText: call})
 		} else {
 			last := m.root[len(m.root)-1]
-			edits = append(edits, Edit{File: cl.File.FileName(), Start: cl.Pos(root), End: last.End(), NewText: call + cl.Semi()})
+			text := call + cl.Semi()
+			switch {
+			case m.goesOn:
+				decl := m.root[held]
+				text = cl.Text[cl.Pos(decl):cl.Pos(onlyDeclaration(decl).Initializer())] + text
+			case returning:
+				text = "return " + text
+			}
+			edits = append(edits, Edit{File: cl.File.FileName(), Start: cl.Pos(root), End: last.End(), NewText: text})
 		}
 		folded++
 	}
@@ -544,4 +601,39 @@ func (p *Project) extended(c *checker.Checker, class *ast.Node) bool {
 // isArrowBody reports whether n is an arrow function's expression body.
 func isArrowBody(n *ast.Node) bool {
 	return n.Parent != nil && ast.IsArrowFunction(n.Parent) && n.Parent.Body() == n
+}
+
+// returnsTaken says why a copy of fn's statements in the function
+// enclosing cannot become return fn(...): enclosing is async or a
+// generator, or its return type does not take fn's; or "".
+func returnsTaken(c *checker.Checker, fn, enclosing *ast.Node, name string) string {
+	if enclosing == nil {
+		return "it is in no function"
+	}
+	what := "the function it is in"
+	if n := enclosing.Name(); n != nil && ast.IsIdentifier(n) {
+		what = n.Text()
+	}
+	if ast.GetFunctionFlags(enclosing)&(ast.FunctionFlagsAsync|ast.FunctionFlagsGenerator) != 0 {
+		return fmt.Sprintf("%s is async or a generator, so its return is not the value it returns", what)
+	}
+	have := c.GetReturnTypeOfSignature(c.GetSignatureFromDeclaration(enclosing))
+	want := c.GetReturnTypeOfSignature(c.GetSignatureFromDeclaration(fn))
+	if !c.IsTypeAssignableTo(want, have) {
+		return fmt.Sprintf("%s returns %s, which the result of %s, %s, is not", what, c.TypeToString(have), name, c.TypeToString(want))
+	}
+	return ""
+}
+
+// onlyDeclaration returns the declaration of the variable statement s,
+// when it declares one name; or nil.
+func onlyDeclaration(s *ast.Node) *ast.Node {
+	if !ast.IsVariableStatement(s) {
+		return nil
+	}
+	ds := s.AsVariableStatement().DeclarationList.AsVariableDeclarationList().Declarations.Nodes
+	if len(ds) != 1 || !ast.IsIdentifier(ds[0].Name()) {
+		return nil
+	}
+	return ds[0]
 }

@@ -5050,3 +5050,11 @@ replace_expression and one replace_statements.
 - **add_parameter of foldStmts' `stmts`** was refused (the value reads
   f.stmts through a pointer); extract_variable as parameter did it once
   `append(stack, n)` at the call was named first.
+## TypeScript's fold of bodies that return (2026-11-19, roadmap 67)
+
+Nothing by hand. Through a worktree's subagent, every call needed
+absolute paths: the worktree hook rewrote relative ones, and auto mode
+then asked for each call to be sent again as rewritten (one extra turn
+for the first inspect and the first batch). The test cases went in by
+add_element on TestFold's literal, their strings changed by
+replace_text.
