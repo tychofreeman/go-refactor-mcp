@@ -399,7 +399,13 @@ session plans by.
   it extends what is there (a third flag where a mode was). Asked the
   design question in a session of its own, before the feature, it made the
   reference design in 15 of 15 runs (0 of 15 without); as a clause of the
-  instructions it refactored only at the scale of a function. On small
+  instructions it refactored only at the scale of a function. A routine
+  of outputs did what the clause did not (2026-11-19, cost-history 35,
+  the user: "make the change easy" was not resonating): writing the easy
+  change, the places today and the refactorings before the first edit
+  gave the design in one session on two of three shapes (5/5 each), with
+  no false refactoring; it is step 1 of `examples/CLAUDE.md`. Pricing's
+  customer kind stayed at function level. On small
   modules the step bought design, not tokens.
 - Cost follows turns: input is about requests × 39K tokens, and about 38%
   of a session's cost is the first request's fixed context. The tools add
