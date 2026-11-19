@@ -1,0 +1,30 @@
+package m
+
+import "fmt"
+
+type Bed struct{ Heights []int }
+
+func total(b *Bed) int {
+	sum := 0
+	for _, h := range b.Heights {
+		sum += h
+	}
+	return sum
+}
+
+func Tallest(b *Bed) int {
+	fmt.Println("bed")
+	sum := 0
+	for _, h := range b.Heights {
+		sum += h
+	}
+	return sum
+}
+
+func Report(b *Bed) string {
+	sum := 0
+	for _, h := range b.Heights {
+		sum += h
+	}
+	return fmt.Sprint(sum)
+}

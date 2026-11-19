@@ -5021,3 +5021,17 @@ three-statement preamble whose refusals differ.
   body became a call with replace_statements. No tool makes a function
   generic, and parameterize takes constants, not the node type and the
   keyword's field. The refusals' wording is unchanged.
+## fold of statements that end in a return (2026-11-19, roadmap 67)
+
+- **folder.pattern's new branch** went in by replace_statements over the
+  whole if chain. add_case adds an else-if branch at a line and fit; I
+  did not think of it.
+- **The ReturnStmt case of pattern.ByKind.Stmt:** add_case refused
+  `pp`, the type switch's own variable, as not in scope, at the switch's
+  line and at a clause's. Added with `p.(*ast.ReturnStmt)` in its place,
+  then replace_expression to `pp`.
+- **A golden's fixture changed:** create_file with `overwrite` on
+  `testdata/.../in/m.go` was refused by skeleton-only, because the
+  fixture's go.mod made it a module of its own, where the testdata
+  exemption does not reach. Written with Write, which the guards allow
+  under testdata, as were the new golden's files.

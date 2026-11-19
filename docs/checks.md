@@ -1586,6 +1586,15 @@ behind can reach does:
   workspace has such a method, the move is refused, since a type
   assertion would quietly fail.
 
+## Fold: what it checks
+
+A body of statements is folded when the function has no results, or
+when its one return is its last statement (roadmap 67): a copy must end
+in the same return, and becomes `return f(...)`. That copy is left, with
+the reason, when the function it is in returns other types than f's
+(`resultsTaken`: f's results must be assignable to them, one for one).
+A return elsewhere in the body, a defer, a label or a jump is refused.
+
 ## Edits
 
 A refactoring keeps behavior; an edit changes it, on purpose: it is the
