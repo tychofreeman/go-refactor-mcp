@@ -4943,3 +4943,11 @@ add_declaration; their callers changed with replace_expression (two
 calls), a one-line replace_statements and insert_statements. The
 goldens' fixtures were made with create_file. Record:
 `docs/sessions/struct-literal-keys.md`.
+
+## A batch step found by its expression (2026-11-18, roadmap 65)
+
+Nothing by hand. The test came in with add_declaration, and textColumn
+with add_declaration and insert_statements. One insert_statements
+"before" a comment line was refused, and the retry put the block
+"after" the statement before it. Record:
+`docs/sessions/batch-anchor-by-text.md`.

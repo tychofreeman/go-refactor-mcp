@@ -1268,3 +1268,18 @@ func TestPanicIsAToolError(t *testing.T) {
 		t.Fatalf("the server stopped serving after the panic: %v", err)
 	}
 }
+
+// A step that names its expression, on a line an earlier step of the
+// batch changed, is found by the expression's text where that survived.
+func TestBatchFindsAnExpressionOnARewrittenLine(t *testing.T) {
+	cs, dir := setup(t)
+	ship := filepath.Join(dir, "calc", "ship.go")
+	os.WriteFile(ship, []byte("package calc\n\n// Ship is a shipment.\ntype Ship struct {\n\tRoad, Rail string\n\tRoutes     map[string]string\n}\n\n// Ships are the shipments.\nvar Ships = []Ship{{Road: \"nw\", Rail: \"y7\"}}\n"), 0o644)
+	out, _ := call(t, cs, "batch", map[string]any{"steps": []any{
+		map[string]any{"tool": "replace_expression", "args": map[string]any{"file": "calc/ship.go", "line": 10, "expression": "Road: $v", "new": "Routes: map[string]string{\"road\": $v}", "everywhere": true}},
+		map[string]any{"tool": "replace_expression", "args": map[string]any{"file": "calc/ship.go", "line": 10, "expression": "Rail: $v", "new": "Routes: map[string]string{\"rail\": $v}", "everywhere": true}},
+	}})
+	mustContain(t, "batch", out, "APPLIED batch: 2 steps")
+	got, _ := os.ReadFile(ship)
+	mustContain(t, "ship.go", string(got), `[]Ship{{Routes: map[string]string{"road": "nw", "rail": "y7"}}}`)
+}
