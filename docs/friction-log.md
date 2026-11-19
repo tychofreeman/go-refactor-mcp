@@ -4935,3 +4935,11 @@ replace_statements of the lines put the comment back. Before it, the
 export step on the split's branch found that rename cannot rename a type
 another struct embeds ("not supported yet"); renaming the embedded field
 to a named one first (looped.lined to l) made the rename go through.
+
+## replace_expression's element patterns (2026-11-18, roadmap 62)
+
+Nothing by hand. parsePattern, parseLit and merged came in with
+add_declaration; their callers changed with replace_expression (two
+calls), a one-line replace_statements and insert_statements. The
+goldens' fixtures were made with create_file. Record:
+`docs/sessions/struct-literal-keys.md`.

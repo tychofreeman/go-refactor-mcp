@@ -3351,7 +3351,13 @@ candidates and the evidence for each, gathered from the friction log.
     as a pattern (`Road: $v` within the literals of one type), as an
     option of replace_expression or add_element, would cover them; fold
     of a setter covers them already (derivations, "change a
-    representation") but no session chose it.
+    representation") but no session chose it. *Done* (2026-11-18,
+    `docs/sessions/struct-literal-keys.md`): replace_expression takes an
+    element as its pattern (`Road: $v` to `Routes:
+    map[string]string{"road": $v}`), with `everywhere` across the
+    module; the second field's step merges into the `Routes` the first
+    made. An A/B on freight-xxl's routes would show whether sessions
+    reach for it (the user's yes first).
 
 63. **add_result on named results** (2026-11-17, #642's type-spelling
     row): `analysis.TypeString` returns `(s, missing string)`, and
