@@ -3451,5 +3451,26 @@ candidates and the evidence for each, gathered from the friction log.
     add_case leaves the switch's symbol out of the names it imports
     packages for.
 
+69. **create_file in a golden's fixture module** (2026-11-19,
+    fold-returns and add-case-typeswitch-var): `-skeleton-only` refused
+    create_file `overwrite` of `testdata/.../in/m.go` with a function
+    body (the fixture's go.mod makes it a module of its own, outside the
+    testdata exemption), but accepted a new file with a body in another
+    fixture module. Both should be exempt, as a file under `testdata/`
+    of the main module is.
+
+70. **The session log of a worktree subagent** (2026-11-19, #697 and
+    #698): `cmd/session-log` wrote no `.claude/session-log/<branch>.jsonl`
+    for the subagents working in worktrees, so their records could not be
+    measured. Each call of a worktree's agent should be logged under its
+    worktree's branch.
+
+71. **Relative paths in a worktree cost a turn** (2026-11-19, #698):
+    `cmd/worktree-paths` rewrites a relative path to the worktree's
+    absolute one, and auto mode then asks for the call to be sent again
+    as rewritten, once for the first inspect and once for the first
+    batch. Rewriting without a resend (or a brief that says to use
+    absolute paths) would save it.
+
 Parked: the Ollama loop (`refactor-agent`). It works and stays, but Claude
 through MCP is the priority.
