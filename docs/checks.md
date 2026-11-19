@@ -1589,11 +1589,14 @@ behind can reach does:
 ## Fold: what it checks
 
 A body of statements is folded when the function has no results, or
-when its one return is its last statement (roadmap 67): a copy must end
-in the same return, and becomes `return f(...)`. That copy is left, with
+when it ends in a return and every return names all its results
+(roadmap 67): a copy must end in the same last return, and becomes
+`return f(...)`. Early returns may be anywhere in it: each returns from
+the copy's function what the call would return. A bare return with
+named results is refused. That copy is left, with
 the reason, when the function it is in returns other types than f's
 (`resultsTaken`: f's results must be assignable to them, one for one).
-A return elsewhere in the body, a defer, a label or a jump is refused.
+A defer, a label or a jump is refused.
 
 ## Edits
 

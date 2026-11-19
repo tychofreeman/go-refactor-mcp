@@ -3427,9 +3427,12 @@ candidates and the evidence for each, gathered from the friction log.
       of statements ending in the same return becomes `return f(args)`,
       where the enclosing function's results take f's. *Done*
       (2026-11-19, `docs/sessions/fold-returns.md`).
-    - Early returns in the body (`if !ok { return nil, "no " + name }`):
-      the copy becomes `if v, err := f(args); err != nil { return ... }`
-      where it does not end its function, as extract_function writes it.
+    - Early returns in the body (`if !ok { return nil, "no " + name }`).
+      Where the copy ends in the function's last return it becomes
+      `return f(args)` too. *Done* (2026-11-19,
+      `docs/sessions/fold-early-returns.md`). Where it does not, the copy
+      becomes `if v, err := f(args); err != nil { return ... }`,
+      as extract_function writes it.
 
 68. **add_case and a type switch's variable** (2026-11-19,
     fold-returns): a clause using `pp` of `switch pp := p.(type)` was
