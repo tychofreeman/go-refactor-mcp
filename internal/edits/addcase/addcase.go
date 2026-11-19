@@ -161,7 +161,16 @@ func (*AddCase) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.Pl
 		return nil, refactor.Refusef("content has no case clauses")
 	}
 	adder := imports.New(ws, pkg, file, src)
-	added, err := gocode.AddImports(ws, pkg, file, adder, body.Lbrace, code, a.Imports)
+	refs := code.PackageRefs()
+	if ts, ok := sw.(*ast.TypeSwitchStmt); ok {
+		// Each clause declares the symbol of switch v := x.(type), so the
+		// new ones do too, though it is not in scope at the switch's brace.
+		if as, ok := ts.Assign.(*ast.AssignStmt); ok {
+			sym := as.Lhs[0].(*ast.Ident).Name
+			refs = slices.DeleteFunc(refs, func(name string) bool { return name == sym })
+		}
+	}
+	added, err := gocode.ImportNames(ws, pkg, file, adder, body.Lbrace, refs, a.Imports)
 	if err != nil {
 		return nil, err
 	}

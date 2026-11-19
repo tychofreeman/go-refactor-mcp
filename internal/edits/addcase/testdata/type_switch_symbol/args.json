@@ -1,0 +1,1 @@
+{"file": "m.go", "line": 10, "content": "case *Bed:\n\treturn v.Rows"}
