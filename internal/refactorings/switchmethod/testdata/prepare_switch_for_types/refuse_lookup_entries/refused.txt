@@ -1,0 +1,1 @@
+kinds already holds "book"; its value would run Fee before this switch's case moved. Prepare every switch on the value before the first entry, or give another lookup

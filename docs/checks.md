@@ -1414,6 +1414,15 @@ refuses when a type of the module, or of a dependency for an exported
 method, already implements the interface with `m`: a value of it in
 the tag would call `m` instead of running the switch.
 
+With `lookup` (2026-11-19, roadmap 72), the tag keeps its type: the
+guard is `if k, ok := kinds[tag]; ok`, and `var kinds =
+map[T]Kind{}` is declared before the function, `T` the tag's type.
+An existing `kinds` must be a map of that key to the interface,
+declared with a literal, empty, and never assigned an entry
+(`kinds[x] = v`), so that no value runs `m` before its case moves;
+the name must not be predeclared or the interface's. Types that
+already implement the interface are not refused: none is in the map.
+
 ## Changing a method: interfaces
 
 Changing a method's signature can change which interfaces its type

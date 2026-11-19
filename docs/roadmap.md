@@ -3493,6 +3493,23 @@ candidates and the evidence for each, gathered from the friction log.
     type-per-value form (`docs/derivations.md`); if it does, the gap is
     that the model did not find it, and the fix is a recipe, not a tool.
 
+    It composes (2026-11-19, `docs/sessions/switch-homes.md`): on
+    lending-xl, change_type to `any`, prepare_switch_for_types on each
+    switch, then per switch extract_function of the case, add_parameter
+    of `b Book` and function_to_method with new_name: 6 steps, then 15
+    per kind, tests passing. But it ends with `Kind` an interface, and
+    the task keeps it a string (data: imported text, test literals);
+    the sessions' table looked the string up. The user chose two steps:
+
+    1. **A lookup in place of the assertion:** prepare_switch_for_types
+       with `lookup`, the guard `kinds[it.Kind]` and `var kinds =
+       map[string]Kind{}`; a kind moves by the same steps and one
+       add_element of its entry. *Done* (2026-11-19).
+    2. **One step to move a value's cases:** out of every prepared
+       switch on the value, into its type's methods, with its entry
+       added and the dead cases deleted, in place of about 15 steps a
+       kind. Next.
+
 73. **Copies that differ in a field into one function of it**
     (2026-11-19, cost-history 35): freight-air's sessions merged eight
     pairs of audit helpers written once for Road and once for Rail
@@ -3504,6 +3521,13 @@ candidates and the evidence for each, gathered from the friction log.
     merge_duplicate_function, over a field read, making it a parameter
     (the field's value, or a function that reads it) and the copies calls
     of the one function. An option of an existing tool before a new one.
+
+74. **Go's fold of a copy that goes on** (2026-11-19, switch-homes):
+    fold of `declStart` (`start := g.fd.Pos(); if g.fd.Doc != nil {
+    start = g.fd.Doc.Pos() }; return start`) did not match the same
+    two statements followed by more code that reads `start`. TypeScript's
+    fold makes that copy `const start = declStart()` (#698); Go's has
+    the form only for an error result (#696). Bring Go's to parity.
 
 Parked: the Ollama loop (`refactor-agent`). It works and stays, but Claude
 through MCP is the priority.
