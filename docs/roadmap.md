@@ -3435,6 +3435,13 @@ candidates and the evidence for each, gathered from the friction log.
       when fn ends in `return v, nil` and its other returns give errors
       known not to be nil. *Done* (2026-11-19,
       `docs/sessions/fold-error-returns.md`).
+    - TypeScript's fold, at parity: the first two shapes as in Go, a
+      copy in an async function or a generator left. The error form
+      has no TypeScript counterpart (failure throws, and needs no
+      check at the call); its place is taken by a copy that goes on
+      after the statements before `return x`, which becomes
+      `const x = f(args);`. *Done* (2026-11-19,
+      `docs/sessions/ts-fold-returns.md`).
 
 68. **add_case and a type switch's variable** (2026-11-19,
     fold-returns): a clause using `pp` of `switch pp := p.(type)` was

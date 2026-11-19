@@ -177,9 +177,12 @@ export function small(xs: number[]): number {
   return within(xs, [1, 2]);
 }
 `}, ""},
-		{"refuse statements that compute a result", map[string]string{"src/two.ts": `export function two(): number {
-  const x = 2;
-  return x;
+		{"refuse a bare return", map[string]string{"src/two.ts": `export function two(heights: Map<string, number>, name: string): number | undefined {
+  const h = heights.get(name);
+  if (h === undefined) {
+    return;
+  }
+  return h;
 }
 `}, NewFold(), `{"file": "src/two.ts", "name": "two"}`, nil, "extract_function each copy of its statements, then merge_duplicate_function the result into two"},
 		{"method", map[string]string{"src/bed.ts": `export class Bed {
@@ -216,6 +219,188 @@ export const x = next() + next();
   return a * b;
 }
 `}, NewFold(), `{"file": "src/n.ts", "name": "sum"}`, nil, "no code matches the body of sum"},
+		{"statements ending in a return", map[string]string{"src/bed.ts": `export const lines: string[] = [];
+
+export interface Bed {
+  heights: number[];
+}
+
+function total(b: Bed): number {
+  let sum = 0;
+  for (const h of b.heights) {
+    sum += h;
+  }
+  return sum;
+}
+
+export function tallest(b: Bed): number {
+  lines.push("bed");
+  let sum = 0;
+  for (const h of b.heights) {
+    sum += h;
+  }
+  return sum;
+}
+
+export function report(b: Bed): string {
+  let sum = 0;
+  for (const h of b.heights) {
+    sum += h;
+  }
+  return String(sum);
+}
+`}, NewFold(), `{"file": "src/bed.ts", "name": "total"}`, map[string]string{"src/bed.ts": `export const lines: string[] = [];
+
+export interface Bed {
+  heights: number[];
+}
+
+function total(b: Bed): number {
+  let sum = 0;
+  for (const h of b.heights) {
+    sum += h;
+  }
+  return sum;
+}
+
+export function tallest(b: Bed): number {
+  lines.push("bed");
+  return total(b);
+}
+
+export function report(b: Bed): string {
+  let sum = total(b);
+  return String(sum);
+}
+`}, ""},
+		{"early returns", map[string]string{"src/bed.ts": `export class Bed {
+  heights = new Map<string, number>();
+}
+
+function find(b: Bed, name: string): string {
+  const h = b.heights.get(name);
+  if (h === undefined) {
+    return "no " + name;
+  }
+  return name + ": " + h;
+}
+
+export function label(b: Bed, name: string): string {
+  const h = b.heights.get(name);
+  if (h === undefined) {
+    return "no " + name;
+  }
+  return name + ": " + h;
+}
+`}, NewFold(), `{"file": "src/bed.ts", "name": "find"}`, map[string]string{"src/bed.ts": `export class Bed {
+  heights = new Map<string, number>();
+}
+
+function find(b: Bed, name: string): string {
+  const h = b.heights.get(name);
+  if (h === undefined) {
+    return "no " + name;
+  }
+  return name + ": " + h;
+}
+
+export function label(b: Bed, name: string): string {
+  return find(b, name);
+}
+`}, ""},
+		{"refuse a copy in a function that returns another type", map[string]string{"src/p.ts": `export interface Named {
+  name: string;
+}
+
+export class Plant {
+  name = "";
+  height = 0;
+}
+
+function label(p: Plant): Named {
+  const q = p;
+  return q;
+}
+
+export function show(p: Plant): Plant {
+  const q = p;
+  return q;
+}
+`}, NewFold(), `{"file": "src/p.ts", "name": "label"}`, nil, "show returns Plant, which the result of label, Named, is not"},
+		{"refuse a copy in an async function", map[string]string{"src/t.ts": `function total(xs: number[]): number {
+  let sum = 0;
+  for (const x of xs) {
+    sum += x;
+  }
+  return sum;
+}
+
+export async function later(xs: number[]): Promise<number> {
+  let sum = 0;
+  for (const x of xs) {
+    sum += x;
+  }
+  return sum;
+}
+`}, NewFold(), `{"file": "src/t.ts", "name": "total"}`, nil, "later is async or a generator, so its return is not the value it returns"},
+		{"a copy that goes on after the function's statements", map[string]string{"src/bed.ts": `export class Bed {
+  heights = new Map<string, number>();
+}
+
+function find(b: Bed, name: string): number {
+  const h = b.heights.get(name);
+  if (h === undefined) {
+    throw new Error("no " + name);
+  }
+  return h;
+}
+
+export function label(b: Bed, name: string): string {
+  const h = b.heights.get(name);
+  if (h === undefined) {
+    throw new Error("no " + name);
+  }
+  return name + ": " + h;
+}
+`}, NewFold(), `{"file": "src/bed.ts", "name": "find"}`, map[string]string{"src/bed.ts": `export class Bed {
+  heights = new Map<string, number>();
+}
+
+function find(b: Bed, name: string): number {
+  const h = b.heights.get(name);
+  if (h === undefined) {
+    throw new Error("no " + name);
+  }
+  return h;
+}
+
+export function label(b: Bed, name: string): string {
+  const h = find(b, name);
+  return name + ": " + h;
+}
+`}, ""},
+		{"refuse a copy that goes on to use another local", map[string]string{"src/bed.ts": `export class Bed {
+  heights = new Map<string, number>();
+}
+
+function find(b: Bed, name: string): number {
+  const key = name.trim();
+  const h = b.heights.get(key);
+  if (h === undefined) {
+    throw new Error("no " + key);
+  }
+  return h;
+}
+
+export function label(b: Bed, name: string): string {
+  const key = name.trim();
+  const h = b.heights.get(key);
+  if (h === undefined) {
+    throw new Error("no " + key);
+  }
+  return key + ": " + h;
+}
+`}, NewFold(), `{"file": "src/bed.ts", "name": "find"}`, nil, "key, declared there, is used after it"},
 	})
 }
 

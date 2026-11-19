@@ -5057,3 +5057,12 @@ golden's fixture by create_file (a new file in a fixture's own module,
 with a body, was accepted here, unlike the overwrite refused in the
 fold-returns entry above), and one replace_statements. The session record was
 written with Write, as a new doc.
+
+## TypeScript's fold of bodies that return (2026-11-19, roadmap 67)
+
+Nothing by hand. Through a worktree's subagent, every call needed
+absolute paths: the worktree hook rewrote relative ones, and auto mode
+then asked for each call to be sent again as rewritten (one extra turn
+for the first inspect and the first batch). The test cases went in by
+add_element on TestFold's literal, their strings changed by
+replace_text.

@@ -1611,6 +1611,22 @@ the reason, when the function it is in returns other types than f's
 (`resultsTaken`: f's results must be assignable to them, one for one).
 A defer, a label or a jump is refused.
 
+TypeScript's fold (`tsapi.Fold`) takes the same first two shapes: a
+body of statements ending in a return, every return giving a value,
+folds a copy ending in the same return as `return f(...);`, early
+returns anywhere in it. `return;` in such a body, or a last statement
+that is not a return, is refused. A copy is left, with the reason,
+when the function it is in is async or a generator, or its return
+type, declared or inferred, does not take f's (`returnsTaken`). In
+place of Go's error form, which TypeScript has no idiom for (it
+throws), a body whose only return is its last, `return x`, x declared
+alone by one of its statements with a value (`const x = ...`), also
+folds a copy of the statements before that return: the copy's
+declaration of x becomes `const x = f(...);`, kept as the copy wrote
+it up to the `=`. It is left when f's return type is not assignable
+to x's type there, or when another local of the copy is used after
+it.
+
 ## Edits
 
 A refactoring keeps behavior; an edit changes it, on purpose: it is the
