@@ -25,6 +25,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
@@ -51,9 +52,9 @@ func (x *extraction) planHoists(objs []types.Object) error {
 		queue = queue[1:]
 		decl, spec := x.declOf(fn, o)
 		if decl == nil {
-			return refactor.Refusef("cannot find the declaration of %s %s in %s", kindOf(o), o.Name(), x.enclosingName())
+			return refactor.Refusef("cannot find the declaration of %s %s in %s", analysis.KindOf(o), o.Name(), x.enclosingName())
 		}
-		what := fmt.Sprintf("%s %s (line %d)", kindOf(o), o.Name(), x.line(o.Pos()))
+		what := fmt.Sprintf("%s %s (line %d)", analysis.KindOf(o), o.Name(), x.line(o.Pos()))
 		gd := decl.Decl.(*ast.GenDecl)
 		if len(gd.Specs) != 1 {
 			return refactor.Refusef("the selected lines need %s, declared in %s, moved to package level so both functions can use it, but it is part of a grouped declaration; move it out of the group first", what, x.enclosingName())
@@ -95,7 +96,7 @@ func (x *extraction) planHoists(objs []types.Object) error {
 				}
 				err = refactor.Refusef("the selected lines need %s moved to package level, but it uses the type parameter %s", what, u.Name())
 			default:
-				err = refactor.Refusef("the selected lines need %s moved to package level, but it uses the %s %s, which only exists in %s", what, kindOf(u), u.Name(), x.enclosingName())
+				err = refactor.Refusef("the selected lines need %s moved to package level, but it uses the %s %s, which only exists in %s", what, analysis.KindOf(u), u.Name(), x.enclosingName())
 			}
 			return err == nil
 		})
@@ -156,7 +157,7 @@ func (x *extraction) checkHoistName(o types.Object, what string) error {
 		}
 		if other := p.Types.Scope().Lookup(name); other != nil {
 			return refactor.Refusef("the selected lines need %s moved to package level, but the package already declares %s (%s at %s); rename it first",
-				what, name, kindOf(other), x.WS.Position(other.Pos()))
+				what, name, analysis.KindOf(other), x.WS.Position(other.Pos()))
 		}
 		for _, f := range p.Syntax {
 			if s := p.TypesInfo.Scopes[f]; s != nil && s.Lookup(name) != nil {
@@ -177,7 +178,7 @@ func (x *extraction) checkHoistName(o types.Object, what string) error {
 			}
 			if other := s.Lookup(name); other != nil && other.Pos() < id.Pos() {
 				return refactor.Refusef("the selected lines need %s moved to package level, but its use at line %d is also inside the scope of the %s %s declared at line %d, which would hide it; rename one first",
-					what, x.line(id.Pos()), kindOf(other), name, x.line(other.Pos()))
+					what, x.line(id.Pos()), analysis.KindOf(other), name, x.line(other.Pos()))
 			}
 		}
 	}
@@ -239,7 +240,7 @@ func (x *extraction) hoistEdits(decl ast.Decl) (file, body []edit.TextEdit) {
 func (x *extraction) hoistNote() string {
 	var parts []string
 	for _, h := range x.hoists {
-		parts = append(parts, fmt.Sprintf("%s %s", kindOf(h.obj), h.obj.Name()))
+		parts = append(parts, fmt.Sprintf("%s %s", analysis.KindOf(h.obj), h.obj.Name()))
 	}
 	return fmt.Sprintf("moved %s from %s to package level, so both functions use the same declaration",
 		strings.Join(parts, ", "), x.enclosingName())

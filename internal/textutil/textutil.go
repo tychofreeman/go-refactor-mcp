@@ -292,3 +292,30 @@ func FileExists(p string) bool {
 	fi, err := os.Stat(p)
 	return err == nil && !fi.IsDir()
 }
+
+// IndentAs returns text without its lines' common indentation, each line
+// indented with indent instead.
+func IndentAs(text, indent string) string {
+	lines := strings.Split(strings.Trim(text, "\n"), "\n")
+	common, first := "", true
+	for _, ln := range lines {
+		if strings.TrimSpace(ln) == "" {
+			continue
+		}
+		lead := Indent(ln)
+		if first {
+			common, first = lead, false
+		}
+		for !strings.HasPrefix(lead, common) {
+			common = common[:len(common)-1]
+		}
+	}
+	for i, ln := range lines {
+		if strings.TrimSpace(ln) == "" {
+			lines[i] = ""
+		} else {
+			lines[i] = indent + strings.TrimPrefix(ln, common)
+		}
+	}
+	return strings.Join(lines, "\n")
+}

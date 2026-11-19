@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edits/gocode"
 	"github.com/tychofreeman/go-refactor-mcp/internal/imports"
@@ -1491,43 +1492,10 @@ func argumentType(info *types.Info, call *ast.CallExpr, e ast.Expr) types.Type {
 	if t != nil && types.IsInterface(t) && t.Underlying().(*types.Interface).Empty() {
 		return nil // any says nothing
 	}
-	if sig.TypeParams().Len() > 0 && mentionsTypeParam(t) {
+	if sig.TypeParams().Len() > 0 && analysis.HasTypeParam(t) {
 		return nil // the call's type arguments could not be inferred: its own type parameter says nothing
 	}
 	return t
-}
-
-// mentionsTypeParam reports whether t is or contains a type parameter.
-func mentionsTypeParam(t types.Type) bool {
-	switch t := t.(type) {
-	case *types.TypeParam:
-		return true
-	case *types.Pointer:
-		return mentionsTypeParam(t.Elem())
-	case *types.Slice:
-		return mentionsTypeParam(t.Elem())
-	case *types.Array:
-		return mentionsTypeParam(t.Elem())
-	case *types.Chan:
-		return mentionsTypeParam(t.Elem())
-	case *types.Map:
-		return mentionsTypeParam(t.Key()) || mentionsTypeParam(t.Elem())
-	case *types.Named:
-		for a := range t.TypeArgs().Types() {
-			if mentionsTypeParam(a) {
-				return true
-			}
-		}
-	case *types.Signature:
-		for _, tup := range []*types.Tuple{t.Params(), t.Results()} {
-			for v := range tup.Variables() {
-				if mentionsTypeParam(v.Type()) {
-					return true
-				}
-			}
-		}
-	}
-	return false
 }
 
 // enclosingSig is the signature of the function path is in.

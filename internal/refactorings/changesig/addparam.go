@@ -405,7 +405,7 @@ func (t *target) checkValue(c call, value string, typ types.Type) error {
 		return refactor.Refusef("the value %s %s (%s), and the body would not use it, so passing it would change behavior; use a value without calls (other than known ones, like strings.ToUpper), dereferences, indexing or division",
 			value, why, types.ExprString(bad.(ast.Expr)))
 	}
-	if vt := info.Types[e].Type; !containsTypeParam(typ) && !assignable(vt, typ) {
+	if vt := info.Types[e].Type; !analysis.HasTypeParam(typ) && !assignable(vt, typ) {
 		return refactor.Refusef("the value %s (of type %s) cannot be used as %s at the call at %s", value, vt, typ, where)
 	}
 	return nil
@@ -503,44 +503,6 @@ func assignable(v, p types.Type) bool {
 		return types.AssignableTo(v, p.Underlying())
 	}
 	return false
-}
-
-func containsTypeParam(t types.Type) bool {
-	found := false
-	var walk func(types.Type)
-	walk = func(t types.Type) {
-		if found || t == nil {
-			return
-		}
-		switch t := t.(type) {
-		case *types.TypeParam:
-			found = true
-		case *types.Pointer:
-			walk(t.Elem())
-		case *types.Slice:
-			walk(t.Elem())
-		case *types.Array:
-			walk(t.Elem())
-		case *types.Map:
-			walk(t.Key())
-			walk(t.Elem())
-		case *types.Chan:
-			walk(t.Elem())
-		case *types.Named:
-			for i := 0; i < t.TypeArgs().Len(); i++ {
-				walk(t.TypeArgs().At(i))
-			}
-		case *types.Signature:
-			for i := 0; i < t.Params().Len(); i++ {
-				walk(t.Params().At(i).Type())
-			}
-			for i := 0; i < t.Results().Len(); i++ {
-				walk(t.Results().At(i).Type())
-			}
-		}
-	}
-	walk(t)
-	return found
 }
 
 // paramEdit inserts the parameter "name typ" into the parameter list at
