@@ -444,6 +444,9 @@ func (k ByKind) Stmt(a *Attempt, p ast.Stmt, x ast.Stmt) bool {
 	case *ast.EmptyStmt:
 		_, ok := x.(*ast.EmptyStmt)
 		return ok
+	case *ast.ReturnStmt:
+		xs, ok := x.(*ast.ReturnStmt)
+		return ok && exprs(pp.Results, xs.Results)
 	}
 	return false
 }

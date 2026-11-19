@@ -1,0 +1,1 @@
+show returns Plant, which the result of label, fmt.Stringer, is not

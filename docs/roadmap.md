@@ -3417,5 +3417,25 @@ candidates and the evidence for each, gathered from the friction log.
     Each was worked around: moving one wrapper into analysis instead of
     inlining, and replace_expression `everywhere` instead of the merge.
 
+67. **fold of a function that returns results after statements**
+    (2026-11-19, dedupe-helpers to dedupe-ts): 27 of 37 edit steps of
+    #691-#693 were text edits replacing a copy of a body with a call,
+    because fold takes a body of statements only when the function has no
+    results. A finder (look up, then return it or a refusal) was the usual
+    copy. Steps, each its own golden:
+    - A body of statements ending in `return E...`, no other return: a run
+      of statements ending in the same return becomes `return f(args)`,
+      where the enclosing function's results take f's. *Done*
+      (2026-11-19, `docs/sessions/fold-returns.md`).
+    - Early returns in the body (`if !ok { return nil, "no " + name }`):
+      the copy becomes `if v, err := f(args); err != nil { return ... }`
+      where it does not end its function, as extract_function writes it.
+
+68. **add_case and a type switch's variable** (2026-11-19,
+    fold-returns): a clause using `pp` of `switch pp := p.(type)` was
+    refused as not in scope, at the switch's line and at a clause's.
+    Each clause declares its own `pp`; the scope check should look
+    there.
+
 Parked: the Ollama loop (`refactor-agent`). It works and stays, but Claude
 through MCP is the priority.
