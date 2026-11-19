@@ -1141,11 +1141,17 @@ func (m *lineMap) position(line, column int) (int, int, int) {
 // translateLines rewrites a step's line arguments (line, start_line,
 // end_line), given as of the start of the batch, to where those lines are
 // now, except the keys in now, which already are. A line an earlier step
-// rewrote or removed cannot be addressed.
+// rewrote or removed cannot be addressed, except at a column, or by the
+// step's expression (textColumn), where what was there survived.
 func translateLines(args json.RawMessage, rel string, m *lineMap, now map[string]bool) (json.RawMessage, error) {
 	var a map[string]json.RawMessage
 	if err := json.Unmarshal(args, &a); err != nil {
 		return args, nil
+	}
+	// A line with no column that a step rewrote is found by the step's
+	// expression, where its text survived on it.
+	if col := textColumn(a, m, now); col > 0 {
+		a["column"], _ = json.Marshal(col)
 	}
 	// A line with a column is followed as a position, which stays
 	// addressable while what is at it does, even on a line a step changed.
@@ -1311,4 +1317,25 @@ func ArgsHelp(name string, schema json.RawMessage) string {
 // loads as code of its own, which the go tool never builds.
 func InTestdata(path string) bool {
 	return slices.Contains(strings.Split(filepath.ToSlash(path), "/"), "testdata")
+}
+
+// textColumn returns the column of a step's expression on its line as
+// the line was when the batch began: when a has a line and an expression
+// but no column, an earlier step rewrote the line, and the expression's
+// text up to its first $ hole occurs on it once. Otherwise it returns 0.
+func textColumn(a map[string]json.RawMessage, m *lineMap, now map[string]bool) int {
+	var line int
+	var expr string
+	if _, ok := a["column"]; ok || now["line"] || json.Unmarshal(a["line"], &line) != nil || json.Unmarshal(a["expression"], &expr) != nil {
+		return 0
+	}
+	if m.created || line <= 0 || line >= len(m.now) || m.now[line] != 0 {
+		return 0
+	}
+	lines := strings.Split(string(m.orig), "\n")
+	text := strings.TrimSpace(strings.SplitN(expr, "$", 2)[0])
+	if line > len(lines) || text == "" || strings.Count(lines[line-1], text) != 1 {
+		return 0
+	}
+	return strings.Index(lines[line-1], text) + 1
 }
