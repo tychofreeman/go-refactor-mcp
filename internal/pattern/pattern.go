@@ -44,6 +44,9 @@ type Attempt struct {
 	Locals map[types.Object]types.Object
 	depth  int   // how deep the comparison under way is
 	Miss   *Miss // where the last match failed, or nil
+	// Returns, if set, compares the code's return statements with the
+	// pattern's in place of their results.
+	Returns func(p, x *ast.ReturnStmt) bool
 }
 
 // At starts an attempt to match the pattern against code whose info is
@@ -446,6 +449,9 @@ func (k ByKind) Stmt(a *Attempt, p ast.Stmt, x ast.Stmt) bool {
 		return ok
 	case *ast.ReturnStmt:
 		xs, ok := x.(*ast.ReturnStmt)
+		if ok && a.Returns != nil {
+			return a.Returns(pp, xs)
+		}
 		return ok && exprs(pp.Results, xs.Results)
 	}
 	return false

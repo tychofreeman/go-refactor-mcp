@@ -1593,7 +1593,20 @@ when it ends in a return and every return names all its results
 (roadmap 67): a copy must end in the same last return, and becomes
 `return f(...)`. Early returns may be anywhere in it: each returns from
 the copy's function what the call would return. A bare return with
-named results is refused. That copy is left, with
+named results is refused.
+
+Where a copy goes on after fn's statements (roadmap 67, the error
+form): fn returns an error last and ends in `return x..., nil`, x its
+own top-level locals, and each other return gives an error known not to
+be nil (`errorForm`, `nonNil`): a call of errors.New or fmt.Errorf, or
+`e` as the only statement of `if e != nil`. A copy of all but that last
+return, whose early returns give the same error and the same other
+values at each (`errReturn`), becomes `x..., err := f(...)` and
+`if err != nil { return <those values>, err }`. It is left when those
+values use a local the copy declares, when the function it is in does
+not return an error last, or when `err` is declared in that block as
+another type (`continues`). A local of the copy other than x that is
+used after it leaves it too, as for any run. That copy is left, with
 the reason, when the function it is in returns other types than f's
 (`resultsTaken`: f's results must be assignable to them, one for one).
 A defer, a label or a jump is refused.

@@ -3431,8 +3431,10 @@ candidates and the evidence for each, gathered from the friction log.
       Where the copy ends in the function's last return it becomes
       `return f(args)` too. *Done* (2026-11-19,
       `docs/sessions/fold-early-returns.md`). Where it does not, the copy
-      becomes `if v, err := f(args); err != nil { return ... }`,
-      as extract_function writes it.
+      becomes `v, err := f(args)` and `if err != nil { return ..., err }`,
+      when fn ends in `return v, nil` and its other returns give errors
+      known not to be nil. *Done* (2026-11-19,
+      `docs/sessions/fold-error-returns.md`).
 
 68. **add_case and a type switch's variable** (2026-11-19,
     fold-returns): a clause using `pp` of `switch pp := p.(type)` was
