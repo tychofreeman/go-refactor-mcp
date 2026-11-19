@@ -14,6 +14,7 @@ import (
 	"golang.org/x/tools/go/ast/astutil"
 	"golang.org/x/tools/go/packages"
 
+	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
 	"github.com/tychofreeman/go-refactor-mcp/internal/imports"
 	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
@@ -78,7 +79,7 @@ func (*ChangeParameterType) Plan(ws *workspace.Workspace, raw json.RawMessage) (
 	if err != nil {
 		return nil, err
 	}
-	if containsTypeParam(old) || containsTypeParam(newT) {
+	if analysis.HasTypeParam(old) || analysis.HasTypeParam(newT) {
 		return nil, refactor.Refusef("changing a parameter to or from a type with type parameters is not supported")
 	}
 	if types.Identical(old, newT) {

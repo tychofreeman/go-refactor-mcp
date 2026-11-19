@@ -17,6 +17,9 @@ func ObjectKey(fset *token.FileSet, o types.Object) string {
 func KindOf(o types.Object) string {
 	switch o := o.(type) {
 	case *types.Var:
+		if o.IsField() {
+			return "field"
+		}
 		if o.Pkg() != nil && o.Parent() == o.Pkg().Scope() {
 			return "package-level variable"
 		}
@@ -24,8 +27,14 @@ func KindOf(o types.Object) string {
 	case *types.Const:
 		return "constant"
 	case *types.TypeName:
+		if _, ok := o.Type().(*types.TypeParam); ok {
+			return "type parameter"
+		}
 		return "type"
 	case *types.Func:
+		if o.Signature().Recv() != nil {
+			return "method"
+		}
 		return "function"
 	case *types.PkgName:
 		return "import"

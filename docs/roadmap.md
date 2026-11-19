@@ -3399,3 +3399,18 @@ candidates and the evidence for each, gathered from the friction log.
 
 Parked: the Ollama loop (`refactor-agent`). It works and stays, but Claude
 through MCP is the priority.
+
+66. **Three gaps found while merging duplicates** (2026-11-18,
+    dedupe-helpers):
+    - **fold fails on a parenthesized call.** It matched `(f(x))` and the
+      `f(x)` inside it, and failed with "overlapping edits" instead of
+      folding the outer one.
+    - **inline over-parenthesizes a call.** Inlining a wrapper whose body
+      is `return g(t, nil, ...)` wrote `!(g(t, nil, ...))` and `a &&
+      (g(...))`. A call is a primary expression and needs no parentheses.
+    - **merge_duplicate_function and the package of a name.** It refused
+      to merge `return analysis.UsesTypeParam(...)` in one package into
+      `return UsesTypeParam(...)` in analysis itself ("the bodies
+      differ"), though both name the same function.
+    Each was worked around: moving one wrapper into analysis instead of
+    inlining, and replace_expression `everywhere` instead of the merge.

@@ -4943,3 +4943,27 @@ add_declaration; their callers changed with replace_expression (two
 calls), a one-line replace_statements and insert_statements. The
 goldens' fixtures were made with create_file. Record:
 `docs/sessions/struct-literal-keys.md`.
+
+## Duplicated helpers merged (2026-11-18, the user's request)
+
+A subagent listed duplicated functions. Four groups went through the
+tools:
+- **analysis.KindOf:** replace_statements made it cover what the four
+  copies covered. Each copy's body became a call, then inline
+  all_calls.
+- **analysis.UsesTypeParam and HasTypeParam:** moved from extractfunc
+  and changesig. createfromusage's copy went with replace_expression
+  `everywhere`, then replace_declaration.
+- **textutil.IndentAs:** moved from tsapi. gocode.Reindent calls it.
+- **edit.FilesUnder:** moved from ts/workspace. files.filesUnder calls
+  it.
+
+What went wrong:
+- The first try inlined both type-parameter wrappers. inline wrote
+  needless parentheses, and fold of a new wrapper over them failed with
+  "overlapping edits". I undid it and moved one wrapper instead.
+- merge_duplicate_function refused the other wrapper, because one body
+  qualifies the name and the other doesn't.
+
+All three are roadmap 66. extractfunc's goldens now get KindOf's words
+("method" for a method, "builtin").

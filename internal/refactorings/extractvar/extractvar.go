@@ -503,7 +503,7 @@ func (x *extraction) checkNewName(container ast.Node, scope *types.Scope, insert
 	// Later uses of an outer x.name in this block would bind to the new one.
 	if id, o := analysis.UsedFromOutside(x.Info, container, insertPos, x.name, func(o types.Object) bool { return within(o.Parent(), scope) }); id != nil {
 		return refactor.Refusef("a new %q would hide the %s %q declared at %s, which is used at %s; choose another name",
-			x.name, kindOf(o), x.name, site.DeclaredAt(x.WS, o), x.WS.Position(id.Pos()))
+			x.name, analysis.KindOf(o), x.name, site.DeclaredAt(x.WS, o), x.WS.Position(id.Pos()))
 	}
 	return nil
 }
@@ -517,7 +517,7 @@ func (x *extraction) checkShadowAt(at ast.Expr, scope *types.Scope) error {
 	}
 	if s, o := inner.LookupParent(x.name, at.Pos()); o != nil && s != scope && within(s, scope) {
 		return refactor.Refusef("at %s, %q already refers to the %s declared at %s, so it cannot refer to the new variable there; choose another name",
-			x.WS.Position(at.Pos()), x.name, kindOf(o), site.DeclaredAt(x.WS, o))
+			x.WS.Position(at.Pos()), x.name, analysis.KindOf(o), site.DeclaredAt(x.WS, o))
 	}
 	return nil
 }
@@ -772,29 +772,6 @@ func (x *extraction) widenParens(e ast.Expr) ast.Expr {
 		out = pe
 	}
 	return out
-}
-
-func kindOf(o types.Object) string {
-	switch o := o.(type) {
-	case *types.Var:
-		if o.Pkg() != nil && o.Parent() == o.Pkg().Scope() {
-			return "package-level variable"
-		}
-		return "variable"
-	case *types.Const:
-		return "constant"
-	case *types.TypeName:
-		return "type"
-	case *types.Func:
-		return "function"
-	case *types.PkgName:
-		return "import"
-	case *types.Builtin:
-		return "builtin"
-	case *types.Nil:
-		return "predeclared"
-	}
-	return "symbol"
 }
 
 func isAre(n int) string {
