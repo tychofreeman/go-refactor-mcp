@@ -1,0 +1,1 @@
+extract_function each copy of its statements, then merge_duplicate_function the result into find

@@ -5035,3 +5035,9 @@ three-statement preamble whose refusals differ.
   fixture's go.mod made it a module of its own, where the testdata
   exemption does not reach. Written with Write, which the guards allow
   under testdata, as were the new golden's files.
+## fold of a body with early returns (2026-11-19, roadmap 67)
+
+Nothing by hand but the goldens' fixtures, written by heredoc under
+testdata (create_file refuses bodies in a fixture's own module, as in
+the entry above). The change was add_parameter, then one
+replace_expression and one replace_statements.

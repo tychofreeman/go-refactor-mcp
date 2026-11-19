@@ -41,7 +41,7 @@ What a body matches:
 - One return: s.Unit becomes s.unit() for func (s Sensor) unit() string { return s.Unit }.
 - A struct parameter used only by its fields: Feed(z, ps, ml) becomes Feed2(z, Dose{Plants: ps, Millilitres: ml}) for func Feed2(z string, d Dose) string { return Feed(z, d.Plants, d.Millilitres) }, to move callers to a parameter object.
 - A setter, which sets fields of a struct parameter and returns it: Plant{ID: id, Colour: v} becomes withColour(Plant{ID: id}, v).
-- Statements, for a function without results or one that returns only at its end (the copy must end in that return, and becomes return f(...)): the same statements in any block become one call, so near-duplicate methods become calls of one function you declare. A *p matches a field, a %s of a format matches constant text, and a string parameter matches part of a + concatenation: in func (s *Sprinkler) Run(bed, note string) { log.Printf("sprinkler on %s", bed); s.Log = append(s.Log, bed+": "+note+"!") } the two statements become record(&s.Log, "sprinkler", bed, note+"!") for func record(entries *[]string, device, bed, text string) { log.Printf("%s on %s", device, bed); *entries = append(*entries, bed+": "+text) }.
+- Statements, for a function without results or one whose every return names its results (a copy must end in its last return, and becomes return f(...)): the same statements in any block become one call, so near-duplicate methods become calls of one function you declare. A *p matches a field, a %s of a format matches constant text, and a string parameter matches part of a + concatenation: in func (s *Sprinkler) Run(bed, note string) { log.Printf("sprinkler on %s", bed); s.Log = append(s.Log, bed+": "+note+"!") } the two statements become record(&s.Log, "sprinkler", bed, note+"!") for func record(entries *[]string, device, bed, text string) { log.Printf("%s on %s", device, bed); *entries = append(*entries, bed+": "+text) }.
 Identify the function by file and name (Name or Type.Method); with line (and in), only the matches on that line are folded, to move callers over one at a time.
 A match where the call would not do the same (an argument evaluated in another order or another number of times, a call that cannot be made from there) is left, and the result says why.`
 }
@@ -135,11 +135,11 @@ func (f *folder) pattern(id *ast.Ident) error {
 		f.body, f.root = ret.Results[0], ret.Results[0]
 	} else if sig.Results().Len() == 1 && f.setter(list) {
 		f.root = f.decl.Body
-	} else if ret, ok := list[len(list)-1].(*ast.ReturnStmt); ok && len(ret.Results) == sig.Results().Len() && statementsOnly(&ast.BlockStmt{List: list[:len(list)-1]}) == "" {
+	} else if ret, ok := list[len(list)-1].(*ast.ReturnStmt); ok && len(ret.Results) == sig.Results().Len() && statementsOnly(f.decl.Body, sig.Results().Len()) == "" {
 		f.stmts, f.root = list, f.decl.Body
 	} else if sig.Results().Len() > 0 {
-		return refactor.Refusef("fold takes a function whose body is one return statement of one value, sets fields of a struct parameter and returns it, has no results, or returns only at its end; %s is none of these. To reuse it where its statements are copied, extract_function each copy of its statements, then merge_duplicate_function the result into %s", name, name)
-	} else if why := statementsOnly(f.decl.Body); why != "" {
+		return refactor.Refusef("fold takes a function whose body is one return statement of one value, sets fields of a struct parameter and returns it, has no results, or ends in a return and names every result at each return; %s is none of these. To reuse it where its statements are copied, extract_function each copy of its statements, then merge_duplicate_function the result into %s", name, name)
+	} else if why := statementsOnly(f.decl.Body, -1); why != "" {
 		return refactor.Refusef("%s %s, which a call of it would not do in place of its statements", name, why)
 	} else {
 		f.stmts, f.root = list, f.decl.Body
@@ -233,15 +233,18 @@ func (f *folder) shape() string {
 }
 
 // statementsOnly is why a body of statements does not do in place what a
-// call of it does: it returns, defers or jumps; or "".
-func statementsOnly(body *ast.BlockStmt) string {
+// call of it does: it returns (with other than results values), defers
+// or jumps; or "".
+func statementsOnly(body *ast.BlockStmt, results int) string {
 	why := ""
 	ast.Inspect(body, func(n ast.Node) bool {
 		switch n := n.(type) {
 		case *ast.FuncLit:
 			return false
 		case *ast.ReturnStmt:
-			why = "returns from inside its body"
+			if len(n.Results) != results {
+				why = "returns from inside its body"
+			}
 		case *ast.DeferStmt:
 			why = "defers a call"
 		case *ast.LabeledStmt:
