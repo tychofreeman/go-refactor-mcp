@@ -12,8 +12,19 @@ code included. The roadmap is `docs/roadmap.md`.
 ## How we work
 
 TDD, in this order; refactor only while every test passes:
-1. Green: make the change easy. If the change would be hard, refactor
-   first, before writing the test, until it is small and local.
+1. Green: make the change easy. Before the first edit, write down:
+   - **The easy change:** the few lines you wish you could write to add
+     the feature, and the one place they would go.
+   - **The places today:** every place you would have to change to add
+     it to the code as it is (inspect's `names` and `uses` find them).
+     Where it would add a branch beside branches on the same value, or a
+     copy of a block with names changed, each existing branch or copy is
+     a place.
+   - **The refactorings:** if there is more than one place, the
+     refactorings that make the easy change true, each keeping the tests
+     passing. With one place, none.
+
+   Then do those refactorings, before writing the test.
 2. Red: write the next test and see it fail.
 3. Green: make it pass with the least code, even code that duplicates
    what is there.
