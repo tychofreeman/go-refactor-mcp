@@ -41,15 +41,11 @@ func main() {
 		Cwd string `json:"cwd"`
 	}
 	json.Unmarshal(in, &h)
-	root := os.Getenv("CLAUDE_PROJECT_DIR")
-	if root == "" {
-		root = h.Cwd
-	}
-	dir := filepath.Join(root, ".claude", "session-log")
-	if os.MkdirAll(dir, 0o755) != nil {
+	path := logPath(os.Getenv("CLAUDE_PROJECT_DIR"), h.Cwd)
+	if os.MkdirAll(filepath.Dir(path), 0o755) != nil {
 		return
 	}
-	f, err := os.OpenFile(filepath.Join(dir, logName(branch(root))), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
 		return
 	}
@@ -137,4 +133,23 @@ func logName(branch string) string {
 		branch = "detached"
 	}
 	return strings.ReplaceAll(branch, "/", "-") + ".jsonl"
+}
+
+// logPath is the log of a call made in cwd by a session started in
+// project: in project's .claude/session-log (cwd's, without project),
+// named for the branch checked out in cwd, or in project when cwd has
+// none, so a subagent's calls in a worktree go to its branch's log.
+func logPath(project, cwd string) string {
+	root := project
+	if root == "" {
+		root = cwd
+	}
+	b := ""
+	if cwd != "" {
+		b = branch(cwd)
+	}
+	if b == "" {
+		b = branch(root)
+	}
+	return filepath.Join(root, ".claude", "session-log", logName(b))
 }

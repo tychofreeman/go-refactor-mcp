@@ -5067,6 +5067,13 @@ for the first inspect and the first batch). The test cases went in by
 add_element on TestFold's literal, their strings changed by
 replace_text.
 
+## The session log of a worktree subagent (2026-11-19, roadmap 70)
+
+main's path code became a call of the new logPath by replace_statements
+(five statements retyped as two). extract_function of them first was
+the derived route; I wrote the test and logPath first and did not go
+back.
+
 ## Measuring the worktree subagents' records (2026-11-19, #701)
 
 Nothing by hand in Go. refactor-tokens counted nothing a worktree
