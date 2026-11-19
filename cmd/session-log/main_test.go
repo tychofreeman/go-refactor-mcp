@@ -2,6 +2,9 @@ package main
 
 import (
 	"encoding/json"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -63,6 +66,36 @@ func TestLogName(t *testing.T) {
 	for branch, want := range map[string]string{"whats-next": "whats-next.jsonl", "a/b": "a-b.jsonl", "HEAD": "detached.jsonl", "": "detached.jsonl"} {
 		if got := logName(branch); got != want {
 			t.Errorf("logName(%q) = %q, want %q", branch, got, want)
+		}
+	}
+}
+
+func TestLogPath(t *testing.T) {
+	git := func(dir string, args ...string) {
+		if out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	repo := t.TempDir()
+	git(repo, "init", "-q", "-b", "main")
+	git(repo, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "--allow-empty", "-m", "start")
+	wt := filepath.Join(repo, ".claude", "worktrees", "agent")
+	git(repo, "worktree", "add", "-q", "-b", "item", wt)
+	sub := filepath.Join(wt, "sub")
+	if err := os.Mkdir(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	logs := filepath.Join(repo, ".claude", "session-log")
+	for _, c := range []struct{ project, cwd, want string }{
+		{repo, wt, filepath.Join(logs, "item.jsonl")},
+		{repo, sub, filepath.Join(logs, "item.jsonl")},
+		{repo, repo, filepath.Join(logs, "main.jsonl")},
+		{repo, "", filepath.Join(logs, "main.jsonl")},
+		{repo, t.TempDir(), filepath.Join(logs, "main.jsonl")},
+		{"", wt, filepath.Join(wt, ".claude", "session-log", "item.jsonl")},
+	} {
+		if got := logPath(c.project, c.cwd); got != c.want {
+			t.Errorf("logPath(%q, %q) = %q, want %q", c.project, c.cwd, got, c.want)
 		}
 	}
 }

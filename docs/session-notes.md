@@ -152,8 +152,11 @@ working patterns, with their steps, are in `docs/patterns.md`.
   shares them, with the parent's MCP roots but its own `cwd` in hooks.
   `cmd/worktree-paths` makes relative paths absolute in the caller's
   worktree and refuses paths into the main checkout from one (the user:
-  isolation is the point). Without the hook, the server asks for roots on
-  each call; roots are deprecated by SEP-2577, and the user chose to build
+  isolation is the point). `cmd/session-log` names a call's log for the
+  branch checked out in its `cwd`, in the starting checkout's
+  `.claude/session-log/` (2026-11-19, roadmap 70: before, a worktree
+  agent's calls went to the starting checkout's branch). Without
+  worktree-paths, the server asks for roots on each call; roots are deprecated by SEP-2577, and the user chose to build
   on them while they last. To try a new MCP server: `claude mcp add`, then
   restart; `/mcp` reconnects one already loaded.
 - **Stress tests with the modules' tests** (`STRESS_TESTS=1`) when a
