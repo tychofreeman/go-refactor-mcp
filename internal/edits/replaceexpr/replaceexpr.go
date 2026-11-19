@@ -57,7 +57,7 @@ func (*ReplaceExpression) Plan(ws *workspace.Workspace, raw json.RawMessage) (*r
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
-	if a.Everywhere || holeRE.MatchString(a.Expression) {
+	if a.Everywhere || holeRE.MatchString(a.Expression) || isElement(a.Expression) {
 		return planPattern(ws, a)
 	}
 	path := ws.Abs(a.File)
