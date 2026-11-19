@@ -5083,3 +5083,10 @@ subagent's own transcript, all of whose lines are sidechain. Fixed by
 edits (withoutModule, and a transcript's own lines decided by its first
 message). The split of `main.jsonl` by tool_use id was a Python script
 on the gitignored logs.
+
+## prepare_switch_for_types with a lookup (2026-11-19, roadmap 72.1)
+
+Nothing by hand in Go but the goldens' fixtures (heredoc under
+testdata). fold of the extracted `declStart` did not match its copy,
+which goes on after setting `start` (roadmap 74), so the copy became
+the call by replace_statements. Record: `docs/sessions/switch-homes.md`.

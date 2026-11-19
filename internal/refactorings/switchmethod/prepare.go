@@ -32,7 +32,7 @@ func (*PrepareForTypes) Description() string {
 becomes
   type Species interface { Water() int }
   func Water(p Plant) int { if s, ok := p.Species.(Species); ok { return s.Water() }; switch p.Species { ... }; return 0 }
-The switch's tag must be an interface (change_type to any first). The interface is declared before the function, or gets the method when it exists; a method it already has is used if its signature is the one the cases need, or if fields the cases read can be its parameters (p.Height for height, declared before the switch). The variables the cases use become the method's parameters. Every case must return, or none (then the switch goes in the else). A case of several values (case "fern", "cactus":) is split into a case for each, with a copy of the body, so that each moves alone.
+The switch's tag must be an interface (change_type to any first), or, to keep its type (a string read from data), give lookup species: the guard becomes if s, ok := species[p.Species]; ok, with var species = map[string]Species{} declared empty; a type runs its methods once its entry ("fern": Fern{}) is added. The interface is declared before the function, or gets the method when it exists; a method it already has is used if its signature is the one the cases need, or if fields the cases read can be its parameters (p.Height for height, declared before the switch). The variables the cases use become the method's parameters. Every case must return, or none (then the switch goes in the else). A case of several values (case "fern", "cactus":) is split into a case for each, with a copy of the body, so that each moves alone.
 Identify the switch by file and line, or by function when it is that function's only switch.`
 }
 
@@ -42,6 +42,7 @@ type prepareArgs struct {
 	Function  string `json:"function,omitempty" desc:"Instead of line: the function (Name or Type.Method) whose only switch it is."`
 	Interface string `json:"interface" desc:"The interface: declared before the function if the package has none of that name."`
 	Method    string `json:"method" desc:"Name of the interface's new method."`
+	Lookup    string `json:"lookup,omitempty" desc:"Optional: in place of a type assertion, a map from the value to the interface, declared empty if the package has none of that name: the value keeps its type, and a type runs its methods once its entry is added."`
 }
 
 // A preparer readies a switch on a value for its cases to move into
@@ -51,6 +52,8 @@ type preparer struct {
 	name     string      // the interface's
 	declared *types.Func // the interface's method of that name, when it has one
 	supplied []supply    // the declared method's parameters, from fields the cases read
+	lookup   string      // the map from the value to the interface, when there is one
+	table    *types.Var  // the map, when it is declared
 }
 
 // A supply is a parameter of the method the interface declares, given by
@@ -77,8 +80,8 @@ func (*PrepareForTypes) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 	if err != nil {
 		return nil, err
 	}
-	g := &preparer{switcher: s, name: a.Interface}
-	for _, check := range []func() error{g.checkTag, g.collectCases, g.checkInterface, g.checkBodies, g.checkSplit, g.checkDeclared, g.checkUnimplemented} {
+	g := &preparer{switcher: s, name: a.Interface, lookup: a.Lookup}
+	for _, check := range []func() error{g.checkTag, g.collectCases, g.checkInterface, g.checkLookup, g.checkBodies, g.checkSplit, g.checkDeclared, g.checkUnimplemented} {
 		if err := check(); err != nil {
 			return nil, err
 		}
@@ -97,7 +100,7 @@ func (g *preparer) checkTag() error {
 		return refactor.Refusef("the switch at %s has no tag, so there is no value whose cases could move into types", g.at(sw))
 	}
 	g.subject = sw.Tag
-	if t := g.Info.TypeOf(sw.Tag); !types.IsInterface(t) {
+	if t := g.Info.TypeOf(sw.Tag); g.lookup == "" && !types.IsInterface(t) {
 		return refactor.Refusef("%s is a %s, not an interface, so no value of it can implement %s; widen it first (change_type to any)", g.Text(sw.Tag), g.typeName(t), g.name)
 	}
 	return g.checkStable()
@@ -310,6 +313,9 @@ func (g *preparer) supplies() []supply {
 // interface with the method: a value of it in the tag would call the
 // method instead of running the switch.
 func (g *preparer) checkUnimplemented() error {
+	if g.lookup != "" {
+		return nil // a type runs its method only once the lookup holds it, and checkLookup found it empty
+	}
 	sig := g.methodSig()
 	var embeds []types.Type
 	if g.iface != nil {
@@ -396,7 +402,7 @@ func (g *preparer) plan() (*refactor.Plan, error) {
 			strings.Join(reads, ", "), g.name, g.method, strings.TrimPrefix(types.TypeString(g.declared.Type(), q), "func")))
 	}
 	call := v + "." + g.method + "(" + args + ")"
-	head := locals + fmt.Sprintf("if %s, %s := %s.(%s); %s {\n", v, ok, g.Text(g.subject), g.name, ok)
+	head := locals + g.guard(v, ok)
 	at, end := g.Off(g.stmt.Pos()), g.Off(g.stmt.End())
 	sw, split := g.split()
 	if g.supplied != nil {
@@ -421,15 +427,16 @@ func (g *preparer) plan() (*refactor.Plan, error) {
 	}
 	edits := []edit.TextEdit{e}
 	var fes []edit.FileEdit
+	routed := "that implements " + g.name
+	if g.lookup != "" {
+		routed = "with an entry in " + g.lookup
+	}
 	summary := fmt.Sprintf("method %s added to %s", g.method, g.name)
 	if len(split) > 0 {
 		notes = append(notes, "split into a case for each value, to move into its type alone: "+strings.Join(split, "; "))
 	}
 	if g.iface == nil {
-		start := g.fd.Pos()
-		if g.fd.Doc != nil {
-			start = g.fd.Doc.Pos()
-		}
+		start := g.declStart()
 		edits = append(edits, edit.TextEdit{Start: g.Off(start), End: g.Off(start), NewText: "type " + g.name + " interface {\n\t" + g.signature(q) + "\n}\n\n"})
 		summary = fmt.Sprintf("%s declared, with method %s", g.name, g.method)
 	} else if g.declared != nil {
@@ -448,11 +455,99 @@ func (g *preparer) plan() (*refactor.Plan, error) {
 			notes = append(notes, refactor.APINote(g.name, "adding a method to it"))
 		}
 	}
+	if g.lookup != "" && g.table == nil {
+		start := g.declStart()
+		key := types.TypeString(types.Default(g.Info.TypeOf(g.subject)), q)
+		edits = append(edits, edit.TextEdit{Start: g.Off(start), End: g.Off(start), NewText: fmt.Sprintf("// %s holds the %s of each value whose cases have moved into a type.\nvar %s = map[%s]%s{}\n\n", g.lookup, g.name, g.lookup, key, g.name)})
+	}
 	fes = append(fes, edit.FileEdit{Path: path, Edits: append(edits, adder.Edits()...)})
 	return &refactor.Plan{
-		Summary: fmt.Sprintf("prepared the switch of %s for its cases to move into types: a value of %s that implements %s runs its %s method, the switch the rest (%s); no type implements it yet",
-			locate.FuncName(g.fd), g.Text(g.subject), g.name, g.method, summary),
+		Summary: fmt.Sprintf("prepared the switch of %s for its cases to move into types: a value of %s %s runs its %s method, the switch the rest (%s); no type implements it yet",
+			locate.FuncName(g.fd), g.Text(g.subject), routed, g.method, summary),
 		Edits: edit.Merge(fes),
 		Notes: notes,
 	}, nil
+}
+
+// declStart is where the function's declaration starts, its doc comment
+// included: new declarations go before it.
+func (g *preparer) declStart() token.Pos {
+	start := g.fd.Pos()
+	if g.fd.Doc != nil {
+		start = g.fd.Doc.Pos()
+	}
+	return start
+}
+
+// guard is the if that runs the method for a value that has one, its
+// header to the opening brace.
+func (g *preparer) guard(v string, ok string) string {
+	if g.lookup != "" {
+		return fmt.Sprintf("if %s, %s := %s[%s]; %s {\n", v, ok, g.lookup, g.Text(g.subject), ok)
+	}
+	return fmt.Sprintf("if %s, %s := %s.(%s); %s {\n", v, ok, g.Text(g.subject), g.name, ok)
+}
+
+// checkLookup checks the map from the value to the interface, when the
+// switch is to have one: its name is free, or it is declared as such a
+// map, empty and never written, so that no value runs a method before
+// its case has moved.
+func (g *preparer) checkLookup() error {
+	if g.lookup == "" {
+		return nil
+	}
+	if !token.IsIdentifier(g.lookup) {
+		return refactor.Refusef("%q is not a valid Go identifier", g.lookup)
+	}
+	key := types.Default(g.Info.TypeOf(g.subject))
+	q := types.RelativeTo(g.Pkg.Types)
+	o := g.Pkg.Types.Scope().Lookup(g.lookup)
+	if o == nil {
+		if types.Universe.Lookup(g.lookup) != nil || g.lookup == g.name {
+			return refactor.Refusef("%s is predeclared or the interface's name; choose another name for the lookup", g.lookup)
+		}
+		return nil
+	}
+	v, _ := o.(*types.Var)
+	var m *types.Map
+	if v != nil {
+		m, _ = v.Type().Underlying().(*types.Map)
+	}
+	if m == nil || g.iface == nil || !types.Identical(m.Key(), key) || !types.Identical(m.Elem(), g.iface) {
+		return refactor.Refusef("%s is declared at %s, and is not a map[%s]%s; choose another name for the lookup", g.lookup, g.WS.Position(o.Pos()), types.TypeString(key, q), g.name)
+	}
+	g.table = v
+	for _, f := range g.Pkg.Syntax {
+		var refusal error
+		ast.Inspect(f, func(n ast.Node) bool {
+			switch n := n.(type) {
+			case *ast.ValueSpec:
+				for i, name := range n.Names {
+					if g.Info.Defs[name] != v || i >= len(n.Values) {
+						continue
+					}
+					lit, ok := ast.Unparen(n.Values[i]).(*ast.CompositeLit)
+					if !ok {
+						refusal = refactor.Refusef("%s is not declared with a map literal, so it may already hold values; declare it empty (map[%s]%s{}), or give another lookup", g.lookup, types.TypeString(key, q), g.name)
+					} else if len(lit.Elts) > 0 {
+						kv, _ := lit.Elts[0].(*ast.KeyValueExpr)
+						refusal = refactor.Refusef("%s already holds %s; its value would run %s before this switch's case moved. Prepare every switch on the value before the first entry, or give another lookup", g.lookup, g.Text(kv.Key), g.method)
+					}
+				}
+			case *ast.AssignStmt:
+				for _, l := range n.Lhs {
+					if ix, ok := ast.Unparen(l).(*ast.IndexExpr); ok {
+						if id, ok := ast.Unparen(ix.X).(*ast.Ident); ok && g.Info.Uses[id] == v {
+							refusal = refactor.Refusef("%s is written at %s; its values would run %s before this switch's case moved. Prepare every switch on the value before the first entry, or give another lookup", g.lookup, g.WS.Position(n.Pos()), g.method)
+						}
+					}
+				}
+			}
+			return refusal == nil
+		})
+		if refusal != nil {
+			return refusal
+		}
+	}
+	return nil
 }
