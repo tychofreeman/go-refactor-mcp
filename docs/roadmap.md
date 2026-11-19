@@ -3479,5 +3479,31 @@ candidates and the evidence for each, gathered from the friction log.
     batch. Rewriting without a resend (or a brief that says to use
     absolute paths) would save it.
 
+72. **Switches on one value into one home per value** (2026-11-19,
+    cost-history 35): with the design routine, lending-magazine's
+    sessions replaced five switches on an item's kind (`LoanDays`,
+    `DailyFee`, `Label`, `Shelf`, `Renewable`) with one table of rules
+    per kind in 5 of 5 runs, but wrote it: add_declaration of the table
+    and replace_declaration of each function, no refactoring. Pricing's
+    if-chains on the customer kind are the same shape. Wanted: an
+    operation that gathers the switches on one value into one place per
+    value (a table keyed by it, or a type per value behind an
+    interface), each switch then a lookup. Check first whether
+    prepare_switch_for_types then type_switch_to_method composes to the
+    type-per-value form (`docs/derivations.md`); if it does, the gap is
+    that the model did not find it, and the fix is a recipe, not a tool.
+
+73. **Copies that differ in a field into one function of it**
+    (2026-11-19, cost-history 35): freight-air's sessions merged eight
+    pairs of audit helpers written once for Road and once for Rail
+    (`LackingRoad`/`LackingRail`, ...) into one helper per operation
+    taking the route, in 5 of 5 runs, by add_declaration and
+    replace_declaration (one run used a refactoring). The copies differ
+    in which field they read (`s.Road` and `s.Rail`), which parameterize
+    does not take (it takes constants). Wanted: parameterize, or
+    merge_duplicate_function, over a field read, making it a parameter
+    (the field's value, or a function that reads it) and the copies calls
+    of the one function. An option of an existing tool before a new one.
+
 Parked: the Ollama loop (`refactor-agent`). It works and stays, but Claude
 through MCP is the priority.
