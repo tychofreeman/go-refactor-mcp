@@ -219,19 +219,23 @@ func moduleFiles(ws *workspace.Workspace) []string {
 // module; else the one at line) by new, its holes filled with the source
 // each matched.
 func planPattern(ws *workspace.Workspace, a args) (*refactor.Plan, error) {
-	pattern, err := parser.ParseExpr(holeRE.ReplaceAllString(a.Expression, holePrefix+"$1"))
+	pattern, err := parsePattern(holeRE.ReplaceAllString(a.Expression, holePrefix+"$1"))
 	if err != nil {
 		return nil, refactor.Refusef("expression is not a Go expression: %v", err)
 	}
 	newText := holeRE.ReplaceAllString(strings.TrimSpace(a.New), holePrefix+"$1")
-	newExpr, err := parser.ParseExpr(newText)
+	newExpr, err := parsePattern(newText)
 	if err != nil {
 		return nil, refactor.Refusef("new is not a Go expression: %v", err)
 	}
 	if holes, used := holeNames(pattern), holeNames(newExpr); !slices.Equal(holes, used) {
 		return nil, refactor.Refusef("new uses the holes %v, expression %v: each hole must appear in new once, in expression's order, so that what it stands for is evaluated as before", used, holes)
 	}
-	code, err := gocode.ParseStatements("_ = " + holeRE.ReplaceAllString(a.New, "nil")) // a hole needs no import
+	codeText := holeRE.ReplaceAllString(a.New, "nil") // a hole needs no import
+	if _, ok := newExpr.(*ast.KeyValueExpr); ok {
+		codeText = "_{" + codeText + "}"
+	}
+	code, err := gocode.ParseStatements("_ = " + codeText)
 	if err != nil {
 		return nil, err
 	}
@@ -299,6 +303,14 @@ func planPattern(ws *workspace.Workspace, a args) (*refactor.Plan, error) {
 				}
 				return "(" + s + ")"
 			})
+			if kv, ok := t.expr.(*ast.KeyValueExpr); ok {
+				if lit, ok := analysis.PathTo(opened.File, kv)[1].(*ast.CompositeLit); ok {
+					if m, ok := merged(ftf, lit, kv, text); ok {
+						es = append(es, m...)
+						continue
+					}
+				}
+			}
 			text = fitted(opened.File, t.expr, newExpr, text)
 			es = append(es, edit.TextEdit{Start: ftf.Offset(t.expr.Pos()), End: ftf.Offset(t.expr.End()), NewText: text})
 		}
@@ -322,4 +334,79 @@ func sameObject(fset *token.FileSet, oa, ob types.Object) bool {
 		return types.Identical(oa.Type(), ob.Type())
 	}
 	return analysis.ObjectKey(fset, oa) == analysis.ObjectKey(fset, ob)
+}
+
+// parsePattern parses text as an expression, or else as a literal's
+// element (Road: $v), which is not one.
+func parsePattern(text string) (ast.Expr, error) {
+	e, err := parser.ParseExpr(text)
+	if err == nil {
+		return e, nil
+	}
+	if lit, ok := parseLit("_{" + text + "}"); ok && len(lit.Elts) == 1 {
+		if kv, ok := lit.Elts[0].(*ast.KeyValueExpr); ok {
+			return kv, nil
+		}
+	}
+	return nil, err
+}
+
+// parseLit parses text as a composite literal.
+func parseLit(text string) (*ast.CompositeLit, bool) {
+	e, err := parser.ParseExpr(text)
+	if err != nil {
+		return nil, false
+	}
+	lit, ok := e.(*ast.CompositeLit)
+	return lit, ok
+}
+
+// merged returns the edits that put text, the element replacing kv, into
+// the element of the same key that kv's literal already has: the new
+// value's elements go after that value's, and kv is deleted. ok is false
+// when the literal has no such element, or either value is not a
+// composite literal.
+func merged(tf *token.File, lit *ast.CompositeLit, kv *ast.KeyValueExpr, text string) (_ []edit.TextEdit, ok bool) {
+	wrapped := "_{" + text + "}"
+	outer, ok := parseLit(wrapped)
+	if !ok || len(outer.Elts) != 1 {
+		return nil, false
+	}
+	nkv, ok := outer.Elts[0].(*ast.KeyValueExpr)
+	if !ok {
+		return nil, false
+	}
+	key, ok := nkv.Key.(*ast.Ident)
+	nv, isLit := nkv.Value.(*ast.CompositeLit)
+	if !ok || !isLit {
+		return nil, false
+	}
+	var into *ast.CompositeLit
+	for _, e := range lit.Elts {
+		if o, ok := e.(*ast.KeyValueExpr); ok && o != kv {
+			if k, ok := o.Key.(*ast.Ident); ok && k.Name == key.Name {
+				into, _ = o.Value.(*ast.CompositeLit)
+			}
+		}
+	}
+	if into == nil {
+		return nil, false
+	}
+	var elts []string
+	for _, e := range nv.Elts {
+		elts = append(elts, wrapped[e.Pos()-1:e.End()-1])
+	}
+	add, at := strings.Join(elts, ", "), tf.Offset(into.Lbrace)+1
+	if n := len(into.Elts); n > 0 {
+		add, at = ", "+add, tf.Offset(into.Elts[n-1].End())
+	}
+	// kv goes with the separator before it, or after it when it is first.
+	i := slices.Index(lit.Elts, ast.Expr(kv))
+	start, end := tf.Offset(kv.Pos()), tf.Offset(kv.End())
+	if i > 0 {
+		start = tf.Offset(lit.Elts[i-1].End())
+	} else if len(lit.Elts) > 1 {
+		end = tf.Offset(lit.Elts[1].Pos())
+	}
+	return []edit.TextEdit{{Start: at, End: at, NewText: add}, {Start: start, End: end}}, true
 }

@@ -1736,6 +1736,18 @@ than once, or in another order than `expression` (what the hole stands
 for would be evaluated another number of times, or in another order).
 A `$` inside a string literal of `expression` is read as a hole too.
 
+An element of a composite literal is a pattern too (2026-11-18, roadmap
+62): `expression` and `new` that are not expressions are parsed as a
+key-value element, so `Road: $v` matches the elements of literals whose
+key is the same field (the key resolves to the field, so another type's
+`Road` and a map key named `Road` do not match), and `new` replaces each
+element. Where the literal already has `new`'s key, and both values are
+composite literals, the new value's elements are added after the
+existing one's and the element is deleted, since a key twice does not
+type-check: `Rail: $v` to `Routes: map[string]string{"rail": $v}` after
+`Road` makes `{Routes: map[string]string{"road": r, "rail": l}}`.
+Otherwise a key twice is refused by the type check.
+
 ### add_field
 
 `add_field` adds fields to a struct type: one or more, as Go source with
