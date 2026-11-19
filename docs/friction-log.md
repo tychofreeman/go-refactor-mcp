@@ -5050,6 +5050,14 @@ replace_expression and one replace_statements.
 - **add_parameter of foldStmts' `stmts`** was refused (the value reads
   f.stmts through a pointer); extract_variable as parameter did it once
   `append(stack, n)` at the call was named first.
+## add_case and a type switch's variable (2026-11-19, roadmap 68)
+
+Nothing by hand in Go: rename (`packageRefs` to `PackageRefs`), the
+golden's fixture by create_file (a new file in a fixture's own module,
+with a body, was accepted here, unlike the overwrite refused in the
+fold-returns entry above), and one replace_statements. The session record was
+written with Write, as a new doc.
+
 ## TypeScript's fold of bodies that return (2026-11-19, roadmap 67)
 
 Nothing by hand. Through a worktree's subagent, every call needed

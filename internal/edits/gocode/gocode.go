@@ -101,9 +101,9 @@ func (c *Code) declared() map[string]bool {
 	return names
 }
 
-// packageRefs returns the names the content uses as selector operands
+// PackageRefs returns the names the content uses as selector operands
 // that it does not declare, which may be packages.
-func (c *Code) packageRefs() []string {
+func (c *Code) PackageRefs() []string {
 	declared := c.declared()
 	seen := map[string]bool{}
 	var out []string
@@ -122,7 +122,7 @@ func (c *Code) packageRefs() []string {
 // AddImports imports the packages the content names that are not visible
 // at pos, and returns their paths.
 func AddImports(ws *workspace.Workspace, pkg *packages.Package, file *ast.File, adder *imports.Adder, pos token.Pos, c *Code, chosen []string) ([]string, error) {
-	return ImportNames(ws, pkg, file, adder, pos, c.packageRefs(), chosen)
+	return ImportNames(ws, pkg, file, adder, pos, c.PackageRefs(), chosen)
 }
 
 // ImportNames imports the packages that names, used as package names at
@@ -303,7 +303,7 @@ func RemoveImports(pkg *packages.Package, file *ast.File, adder *imports.Adder, 
 		return nil
 	}
 	refs := map[string]bool{}
-	for _, n := range c.packageRefs() {
+	for _, n := range c.PackageRefs() {
 		refs[n] = true
 	}
 	var removed []string
