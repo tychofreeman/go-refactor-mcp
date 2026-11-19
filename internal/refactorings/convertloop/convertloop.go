@@ -23,6 +23,7 @@ import (
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/analysis"
 	"github.com/tychofreeman/go-refactor-mcp/internal/edit"
+	"github.com/tychofreeman/go-refactor-mcp/internal/locate"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/site"
 	"github.com/tychofreeman/go-refactor-mcp/internal/textutil"
@@ -116,39 +117,16 @@ func (*ConvertLoop) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refacto
 // find returns the for or range statement whose for keyword is at the
 // line (and column, if given).
 func (x *conversion) find(a args) (ast.Stmt, error) {
-	if a.Line > x.TF.LineCount() {
-		return nil, refactor.Refusef("line %d is past the end of %s, which has %d lines", a.Line, a.File, x.TF.LineCount())
-	}
-	var found []ast.Stmt
-	at := func(p token.Pos) bool {
-		return x.TF.Line(p) == a.Line && (a.Column == 0 || x.TF.Position(p).Column == a.Column)
-	}
-	ast.Inspect(x.File, func(n ast.Node) bool {
+	loop := func(n ast.Node) (ast.Stmt, token.Pos, bool) {
 		switch s := n.(type) {
 		case *ast.ForStmt:
-			if at(s.For) {
-				found = append(found, s)
-			}
+			return s, s.For, true
 		case *ast.RangeStmt:
-			if at(s.For) {
-				found = append(found, s)
-			}
+			return s, s.For, true
 		}
-		return true
-	})
-	switch {
-	case len(found) == 1:
-		return found[0], nil
-	case len(found) > 1:
-		var cols []string
-		for _, s := range found {
-			cols = append(cols, fmt.Sprint(x.TF.Position(s.Pos()).Column))
-		}
-		return nil, refactor.Refusef("line %d has %d loops (columns %s); pass column to choose one", a.Line, len(found), strings.Join(cols, ", "))
-	case a.Column != 0:
-		return nil, refactor.Refusef("no loop starts at %s:%d:%d", a.File, a.Line, a.Column)
+		return nil, token.NoPos, false
 	}
-	return nil, refactor.Refusef("no loop starts on line %d of %s; give the line of the for keyword", a.Line, a.File)
+	return locate.AtKeyword(x.TF, x.File, a.File, a.Line, a.Column, loop, locate.Keyword{Noun: "loop", Plural: "loops", Word: "for"})
 }
 
 // indexed is an index loop, for i := 0; i < len(xs); i++.
