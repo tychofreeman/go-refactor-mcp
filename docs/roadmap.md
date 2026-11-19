@@ -3370,7 +3370,12 @@ candidates and the evidence for each, gathered from the friction log.
     text the earlier step left in place (`Rail: "Y7"` is still on the
     line, and only `Road`'s element changed) could be found again by its
     text. Or a pattern with `everywhere` could take the first match in
-    the file when its line is gone.
+    the file when its line is gone. *Done* (2026-11-18,
+    `docs/sessions/batch-anchor-by-text.md`): the first. A step with
+    `line` and `expression` but no column, on a line an earlier step
+    rewrote, gets the column of the expression's text up to its first
+    hole, when that text occurs once on the line as it was. That column
+    is then followed as a position, as a given column was before.
 
 63. **add_result on named results** (2026-11-17, #642's type-spelling
     row): `analysis.TypeString` returns `(s, missing string)`, and
