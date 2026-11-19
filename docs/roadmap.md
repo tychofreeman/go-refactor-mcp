@@ -3463,7 +3463,11 @@ candidates and the evidence for each, gathered from the friction log.
     #698): `cmd/session-log` wrote no `.claude/session-log/<branch>.jsonl`
     for the subagents working in worktrees, so their records could not be
     measured. Each call of a worktree's agent should be logged under its
-    worktree's branch.
+    worktree's branch. *Done* (2026-11-19,
+    `docs/sessions/session-log-worktrees.md`): the log is named for the
+    branch in the hook input's `cwd`, and stays in the starting
+    checkout's `.claude/session-log/`. Their calls had gone to
+    `main.jsonl`.
 
 71. **Relative paths in a worktree cost a turn** (2026-11-19, #698):
     `cmd/worktree-paths` rewrites a relative path to the worktree's
