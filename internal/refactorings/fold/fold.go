@@ -41,7 +41,7 @@ What a body matches:
 - One return: s.Unit becomes s.unit() for func (s Sensor) unit() string { return s.Unit }.
 - A struct parameter used only by its fields: Feed(z, ps, ml) becomes Feed2(z, Dose{Plants: ps, Millilitres: ml}) for func Feed2(z string, d Dose) string { return Feed(z, d.Plants, d.Millilitres) }, to move callers to a parameter object.
 - A setter, which sets fields of a struct parameter and returns it: Plant{ID: id, Colour: v} becomes withColour(Plant{ID: id}, v).
-- Statements, for a function without results or one whose every return names its results (a copy must end in its last return, and becomes return f(...)): the same statements in any block become one call, so near-duplicate methods become calls of one function you declare. A *p matches a field, a %s of a format matches constant text, and a string parameter matches part of a + concatenation: in func (s *Sprinkler) Run(bed, note string) { log.Printf("sprinkler on %s", bed); s.Log = append(s.Log, bed+": "+note+"!") } the two statements become record(&s.Log, "sprinkler", bed, note+"!") for func record(entries *[]string, device, bed, text string) { log.Printf("%s on %s", device, bed); *entries = append(*entries, bed+": "+text) }.
+- Statements, for a function without results or one whose every return names its results (a copy ending in its last return becomes return f(...); one of all but a last return x, nil becomes x, err := f(...) and if err != nil { return ..., err }): the same statements in any block become one call, so near-duplicate methods become calls of one function you declare. A *p matches a field, a %s of a format matches constant text, and a string parameter matches part of a + concatenation: in func (s *Sprinkler) Run(bed, note string) { log.Printf("sprinkler on %s", bed); s.Log = append(s.Log, bed+": "+note+"!") } the two statements become record(&s.Log, "sprinkler", bed, note+"!") for func record(entries *[]string, device, bed, text string) { log.Printf("%s on %s", device, bed); *entries = append(*entries, bed+": "+text) }.
 Identify the function by file and name (Name or Type.Method); with line (and in), only the matches on that line are folded, to move callers over one at a time.
 A match where the call would not do the same (an argument evaluated in another order or another number of times, a call that cannot be made from there) is left, and the result says why.`
 }
@@ -81,8 +81,13 @@ type folder struct {
 	relaxer
 	fn    *types.Func
 	decl  *ast.FuncDecl
-	body  ast.Expr                // what fn returns: the pattern; or nil, and
-	stmts []ast.Stmt              // fn's statements: the pattern, for a function without results
+	body  ast.Expr   // what fn returns: the pattern; or nil, and
+	stmts []ast.Stmt // fn's statements: the pattern, for a function without results
+	// early is whether fn has the error form: a copy of all but its last
+	// return may go on after it, checking the error; outs are what that
+	// return gives before its nil error.
+	early bool
+	outs  []types.Object
 	root  ast.Node                // body or fn's block: where the pattern's names are
 	done  [][2]token.Pos          // statements folded, which a later match must not overlap
 	uses  map[pattern.HoleKey]int // how often the body uses each field of fields
@@ -213,6 +218,7 @@ func (f *folder) pattern(id *ast.Ident) error {
 	if p := f.assignedHole(); f.stmts != nil && p != "" {
 		return refactor.Refusef("%s assigns its parameter %s, which in place of the call would assign what the caller passed", name, p)
 	}
+	f.early, f.outs = f.errorForm()
 	return nil
 }
 
@@ -389,8 +395,14 @@ func (f *folder) find(in string, line int) error {
 					return false // fn itself
 				}
 				if list := stmtList(n); f.stmts != nil && list != nil {
-					if err = f.foldStmts(p, file, list, append(stack, n), line); err != nil {
+					inner := append(stack, n)
+					if err = f.foldStmts(p, file, list, inner, line, f.stmts); err != nil {
 						return false
+					}
+					if f.early {
+						if err = f.foldStmts(p, file, list, inner, line, f.stmts[:len(f.stmts)-1]); err != nil {
+							return false
+						}
 					}
 				}
 				x, isExpr := n.(ast.Expr)
@@ -1331,9 +1343,9 @@ func (f *folder) mayStop(info *types.Info, s ast.Stmt, pos token.Pos) string {
 // foldStmts folds the runs of list, statements of a block inside stack,
 // that match the pattern's statements; with line, only one starting on
 // that line.
-func (f *folder) foldStmts(p *packages.Package, file *ast.File, list []ast.Stmt, stack []ast.Node, line int) error {
+func (f *folder) foldStmts(p *packages.Package, file *ast.File, list []ast.Stmt, stack []ast.Node, line int, stmts []ast.Stmt) error {
 	info := p.TypesInfo
-	n := len(f.stmts)
+	n := len(stmts)
 	for i := 0; i+n <= len(list); i++ {
 		pos := f.ws.Fset.Position(list[i].Pos())
 		if f.inDone(list[i].Pos()) || line != 0 && pos.Line != line {
@@ -1341,9 +1353,13 @@ func (f *folder) foldStmts(p *packages.Package, file *ast.File, list []ast.Stmt,
 		}
 		a := f.m.At(info)
 		a.Locals = map[types.Object]types.Object{}
+		var others []ast.Expr
+		if n < len(f.stmts) {
+			a.Returns = func(pr, xr *ast.ReturnStmt) bool { return errReturn(a, pr, xr, &others) }
+		}
 		matched := true
-		for k := range f.stmts {
-			if !a.MatchStmt(f.stmts[k], list[i+k]) {
+		for k := range stmts {
+			if !a.MatchStmt(stmts[k], list[i+k]) {
 				f.keepNearest(a.Miss, k)
 				matched = false
 				break
@@ -1351,6 +1367,12 @@ func (f *folder) foldStmts(p *packages.Package, file *ast.File, list []ast.Stmt,
 		}
 		if !matched {
 			continue
+		}
+		keep := map[types.Object]bool{}
+		if n < len(f.stmts) {
+			for _, o := range f.outs {
+				keep[a.Locals[o]] = true
+			}
 		}
 		b := a.Bound
 		fa := analysis.FuncAround(info, stack, f.ws.Effects())
@@ -1363,12 +1385,15 @@ func (f *folder) foldStmts(p *packages.Package, file *ast.File, list []ast.Stmt,
 			}
 		}
 		if skip == "" {
-			if v := usedAfter(info, seq, stack); v != "" {
+			if v := usedAfter(info, seq, stack, keep); v != "" {
 				skip = "they declare " + v + ", which is used after them"
 			}
 		}
 		if _, ret := seq[n-1].(*ast.ReturnStmt); skip == "" && ret {
 			skip = f.resultsTaken(p, stack)
+		}
+		if skip == "" && n < len(f.stmts) {
+			skip = f.continues(p, seq, stack, others)
 		}
 		if skip == "" {
 			skip = f.movedAddress(info, seq, b, stack)
@@ -1391,6 +1416,9 @@ func (f *folder) foldStmts(p *packages.Package, file *ast.File, list []ast.Stmt,
 		}
 		if _, ok := seq[n-1].(*ast.ReturnStmt); ok {
 			call = "return " + call
+		}
+		if n < len(f.stmts) {
+			call = f.checked(a, call, others, seq[0].Pos())
 		}
 		path := f.ws.Fset.Position(file.Pos()).Filename
 		if f.by[path] == nil {
@@ -1442,15 +1470,7 @@ func (f *folder) inDone(pos token.Pos) bool {
 // resultsTaken is why the function around stack cannot return what fn
 // returns, in place of a run that ends in its return; or "".
 func (f *folder) resultsTaken(p *packages.Package, stack []ast.Node) string {
-	name, sig := "the function literal", (*types.Signature)(nil)
-	for i := len(stack) - 1; i >= 0 && sig == nil; i-- {
-		switch n := stack[i].(type) {
-		case *ast.FuncDecl:
-			name, sig = n.Name.Name, p.TypesInfo.Defs[n.Name].Type().(*types.Signature)
-		case *ast.FuncLit:
-			sig, _ = p.TypesInfo.TypeOf(n).(*types.Signature)
-		}
-	}
+	name, sig := around(stack, p)
 	want := f.fn.Signature().Results()
 	if sig == nil {
 		return "they are not in a function"
@@ -1467,9 +1487,119 @@ func (f *folder) resultsTaken(p *packages.Package, stack []ast.Node) string {
 	return fmt.Sprintf("%s returns %s, which the result of %s, %s, is not", name, results(have, q), f.fn.Name(), results(want, q))
 }
 
+// around is the name and signature of the innermost function in stack, "the
+// function literal" for a literal; or a nil signature.
+func around(stack []ast.Node, p *packages.Package) (string, *types.Signature) {
+	name, sig := "the function literal", (*types.Signature)(nil)
+	for i := len(stack) - 1; i >= 0 && sig == nil; i-- {
+		switch n := stack[i].(type) {
+		case *ast.FuncDecl:
+			name, sig = n.Name.Name, p.TypesInfo.Defs[n.Name].Type().(*types.Signature)
+		case *ast.FuncLit:
+			sig, _ = p.TypesInfo.TypeOf(n).(*types.Signature)
+		}
+	}
+	return name, sig
+}
+
+// errorForm reports whether fn's copies may go on after it: fn returns an
+// error last and ends in return x..., nil, x its own locals, and each of
+// its other returns gives an error that is not nil. outs are x.
+func (f *folder) errorForm() (bool, []types.Object) {
+	res := f.fn.Signature().Results()
+	errType := types.Universe.Lookup("error").Type()
+	if f.stmts == nil || res.Len() == 0 || !types.Identical(res.At(res.Len()-1).Type(), errType) {
+		return false, nil
+	}
+	info := f.m.Pkg.TypesInfo
+	last, ok := f.stmts[len(f.stmts)-1].(*ast.ReturnStmt)
+	if !ok || len(last.Results) != res.Len() {
+		return false, nil
+	}
+	if id, ok := last.Results[res.Len()-1].(*ast.Ident); !ok || info.Uses[id] != types.Universe.Lookup("nil") {
+		return false, nil
+	}
+	scope := info.Scopes[f.decl.Type]
+	var outs []types.Object
+	for _, e := range last.Results[:res.Len()-1] {
+		id, ok := e.(*ast.Ident)
+		if !ok {
+			return false, nil
+		}
+		o := info.Uses[id]
+		if _, hole := f.m.Holes[o]; o == nil || hole || o.Parent() != scope {
+			return false, nil
+		}
+		outs = append(outs, o)
+	}
+	early, good := 0, true
+	var stack []ast.Node
+	ast.Inspect(f.decl.Body, func(n ast.Node) bool {
+		if n == nil {
+			stack = stack[:len(stack)-1]
+			return true
+		}
+		if _, lit := n.(*ast.FuncLit); lit {
+			return false
+		}
+		if r, ok := n.(*ast.ReturnStmt); ok && r != last {
+			early++
+			good = good && nonNil(info, r.Results[len(r.Results)-1], stack)
+		}
+		stack = append(stack, n)
+		return true
+	})
+	return good && early > 0, outs
+}
+
+// continues is why seq, a copy of fn's statements but its last return,
+// inside stack, cannot become a call whose error it returns with others,
+// what its early returns give besides the error; or "".
+func (f *folder) continues(p *packages.Package, seq []ast.Stmt, stack []ast.Node, others []ast.Expr) string {
+	why := ""
+	for _, e := range others {
+		ast.Inspect(e, func(n ast.Node) bool {
+			if id, ok := n.(*ast.Ident); ok && why == "" {
+				if o := p.TypesInfo.Uses[id]; o != nil && seq[0].Pos() <= o.Pos() && o.Pos() < seq[len(seq)-1].End() {
+					why = "their early returns give " + id.Name + ", which they declare"
+				}
+			}
+			return why == ""
+		})
+	}
+	if why != "" {
+		return why
+	}
+	_, sig := around(stack, p)
+	errType := types.Universe.Lookup("error").Type()
+	if sig == nil || sig.Results().Len() == 0 || !types.AssignableTo(errType, sig.Results().At(sig.Results().Len()-1).Type()) {
+		return "the function they are in does not return an error last"
+	}
+	if o := p.Types.Scope().Innermost(seq[0].Pos()).Lookup("err"); o != nil && !types.Identical(o.Type(), errType) {
+		return "err is declared there as " + o.Type().String()
+	}
+	return ""
+}
+
+// checked is the code a copy that goes on after fn's statements becomes:
+// the call, assigning what fn's last return gives and the error, and the
+// return of the error with others.
+func (f *folder) checked(a *pattern.Attempt, call string, others []ast.Expr, pos token.Pos) string {
+	var names []string
+	for _, o := range f.outs {
+		names = append(names, a.Locals[o].Name())
+	}
+	var vals []string
+	for _, e := range others {
+		vals = append(vals, types.ExprString(e))
+	}
+	indent := strings.Repeat("\t", f.ws.Fset.Position(pos).Column-1)
+	return strings.Join(append(names, "err"), ", ") + " := " + call + "\n" + indent + "if err != nil {\n" + indent + "\treturn " + strings.Join(append(vals, "err"), ", ") + "\n" + indent + "}"
+}
+
 // usedAfter is the name of a variable seq declares at its top level that
 // the function it is in uses after it, or "".
-func usedAfter(info *types.Info, seq []ast.Stmt, stack []ast.Node) string {
+func usedAfter(info *types.Info, seq []ast.Stmt, stack []ast.Node, keep map[types.Object]bool) string {
 	declared := map[types.Object]bool{}
 	for _, s := range seq {
 		switch s := s.(type) {
@@ -1499,7 +1629,7 @@ func usedAfter(info *types.Info, seq []ast.Stmt, stack []ast.Node) string {
 	name := ""
 	if fn != nil {
 		ast.Inspect(fn, func(n ast.Node) bool {
-			if id, ok := n.(*ast.Ident); ok && id.Pos() >= end && declared[info.Uses[id]] && name == "" {
+			if id, ok := n.(*ast.Ident); ok && id.Pos() >= end && (declared[info.Uses[id]] && !keep[info.Uses[id]]) && name == "" {
 				name = id.Name
 			}
 			return name == ""
@@ -1618,4 +1748,58 @@ func results(t *types.Tuple, q types.Qualifier) string {
 		return types.TypeString(t.At(0).Type(), q)
 	}
 	return types.TypeString(t, q)
+}
+
+// nonNil reports whether e, an error a return inside stack gives, is not
+// nil: a call of errors.New or fmt.Errorf, or e of if e != nil { return
+// ..., e }.
+func nonNil(info *types.Info, e ast.Expr, stack []ast.Node) bool {
+	switch e := ast.Unparen(e).(type) {
+	case *ast.CallExpr:
+		if sel, ok := e.Fun.(*ast.SelectorExpr); ok {
+			if fn, ok := info.Uses[sel.Sel].(*types.Func); ok {
+				return fn.FullName() == "errors.New" || fn.FullName() == "fmt.Errorf"
+			}
+		}
+	case *ast.Ident:
+		if len(stack) < 2 {
+			return false
+		}
+		blk, _ := stack[len(stack)-1].(*ast.BlockStmt)
+		ifs, _ := stack[len(stack)-2].(*ast.IfStmt)
+		if blk == nil || ifs == nil || ifs.Body != blk || len(blk.List) != 1 {
+			return false
+		}
+		c, ok := ifs.Cond.(*ast.BinaryExpr)
+		if !ok || c.Op != token.NEQ {
+			return false
+		}
+		x, _ := c.X.(*ast.Ident)
+		y, _ := c.Y.(*ast.Ident)
+		return x != nil && y != nil && info.Uses[e] != nil && info.Uses[x] == info.Uses[e] && info.Uses[y] == types.Universe.Lookup("nil")
+	}
+	return false
+}
+
+// errReturn matches x, a return of a copy, against p, an early return of
+// fn, by their errors; the copy's other values must be the same at each,
+// and others keeps them.
+func errReturn(a *pattern.Attempt, p, x *ast.ReturnStmt, others *[]ast.Expr) bool {
+	if len(x.Results) == 0 || !a.Match(p.Results[len(p.Results)-1], x.Results[len(x.Results)-1]) {
+		return false
+	}
+	rest := x.Results[:len(x.Results)-1]
+	if *others == nil {
+		*others = rest
+		return true
+	}
+	if len(rest) != len(*others) {
+		return false
+	}
+	for i := range rest {
+		if types.ExprString(rest[i]) != types.ExprString((*others)[i]) {
+			return false
+		}
+	}
+	return true
 }

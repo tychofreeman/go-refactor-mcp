@@ -5041,3 +5041,12 @@ Nothing by hand but the goldens' fixtures, written by heredoc under
 testdata (create_file refuses bodies in a fixture's own module, as in
 the entry above). The change was add_parameter, then one
 replace_expression and one replace_statements.
+## fold of a copy that goes on after it (2026-11-19, roadmap 67)
+
+- **continues' signature loop:** the same loop as resultsTaken's. After
+  extract_function made `around` from resultsTaken's, the copy became a
+  call by replace_statements: fold of `around` cannot match it, since
+  the copy declares only `sig` (`var sig`), not `name, sig :=`.
+- **add_parameter of foldStmts' `stmts`** was refused (the value reads
+  f.stmts through a pointer); extract_variable as parameter did it once
+  `append(stack, n)` at the call was named first.
