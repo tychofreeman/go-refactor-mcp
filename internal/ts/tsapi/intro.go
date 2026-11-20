@@ -231,10 +231,13 @@ func (t *target) introduced(e *ast.Node, expr string, n int, name string) ([]str
 }
 
 // operand is the source of e, parenthesized unless it is a primary
-// expression that stays one operand anywhere.
+// expression that stays one operand anywhere, or a new expression with
+// an argument list, which binds before a member access.
 func operand(l *Lined, e *ast.Node) string {
 	switch {
 	case ast.IsIdentifier(e), ast.IsLiteralExpression(e), ast.IsPropertyAccessExpression(e), ast.IsParenthesizedExpression(e), e.Kind == ast.KindThisKeyword:
+		return l.Source(e)
+	case ast.IsNewExpression(e) && e.AsNewExpression().Arguments != nil:
 		return l.Source(e)
 	}
 	return "(" + l.Source(e) + ")"

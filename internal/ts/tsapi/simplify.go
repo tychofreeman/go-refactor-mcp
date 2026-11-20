@@ -418,10 +418,14 @@ func (p *Project) ExtractVariable(ctx context.Context, path string, line int, ex
 	}
 	for _, t := range targets {
 		text := name
+		start, end := l.Pos(t), t.End()
+		if p := t.Parent; p != nil && ast.IsParenthesizedExpression(p) && p.Expression() == t {
+			start, end = l.Pos(p), p.End() // the parens named the expression; the name needs none
+		}
 		if t.Parent != nil && ast.IsShorthandPropertyAssignment(t.Parent) {
 			text = t.Text() + ": " + name
 		}
-		edits = append(edits, Edit{File: l.File.FileName(), Start: l.Pos(t), End: t.End(), NewText: text})
+		edits = append(edits, Edit{File: l.File.FileName(), Start: start, End: end, NewText: text})
 	}
 	return edits, ""
 }
