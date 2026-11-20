@@ -1193,3 +1193,31 @@ console.log(b.acid(), new Bed().acid());
 `})
 	tstest.Probe(t, ws, dir, NewMoveMethod(), `{"file": "src/g.ts", "name": "Soil.acid", "to": "Bed"}`)
 }
+
+// change_type of a function, or of Class.method (routed as a property),
+// changes its return type: in place of its annotation, or added after its
+// parameters; a method with its family.
+func TestChangeReturnType(t *testing.T) {
+	ws, dir := load(t, map[string]string{"src/plant.ts": retyped, "src/hoses.ts": hoses, "src/empty.ts": `export function empty() {
+  return "";
+}
+`})
+	step := func(r refactor.RefactoringOf[*workspace.Workspace], args string) refactor.StepOf[*workspace.Workspace] {
+		return refactor.StepOf[*workspace.Workspace]{Refactoring: r, Args: json.RawMessage(args)}
+	}
+	b, err := refactor.RunBatch(ws, []refactor.StepOf[*workspace.Workspace]{
+		step(changetype.New(), `{"file": "src/plant.ts", "name": "grow", "type": "Plant | null"}`),
+		step(changetype.New(), `{"file": "src/empty.ts", "name": "empty", "type": "string[]"}`),
+		step(replacetext.New(), `{"file": "src/empty.ts", "old": "return \"\";", "new": "return [];"}`),
+		step(NewChangeFieldType(), `{"file": "src/hoses.ts", "name": "Hose.pour", "type": "NonNullable<string>"}`),
+	}, refactor.OptionsOf[*workspace.Workspace]{Unchecked: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !b.Applied {
+		t.Fatalf("not applied: %s", b)
+	}
+	mustContain(t, dir, "src/plant.ts", "grow(p: Plant, by: number): Plant | null {")
+	mustContain(t, dir, "src/empty.ts", "export function empty(): string[] {", "return [];")
+	mustContain(t, dir, "src/hoses.ts", "  pour(bed: string, liters: number): NonNullable<string>;", "  pour(bed: string, amount: number): NonNullable<string> {", "class Sprayer extends Hose {\n  pour(bed: string, liters: number): NonNullable<string> {")
+}
