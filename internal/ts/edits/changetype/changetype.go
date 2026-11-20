@@ -30,13 +30,14 @@ func (*ChangeType) Description() string {
 	return `Change a declared type; what you give says which. Types are erased, so no value changes, but the uses stay as they are: each is an edit, so run it in a batch with check "end" together with the changes the uses then need.
 - name Type.property: a property's type, of a class, an interface or an object type: with type Centimeters, height: number becomes height: Centimeters. values, narrowing, maps each old constant to the new type's value: {"fern": "FERN"} turns species: "fern" into species: FERN.
 - name (a function, or Class.method) and parameter: the parameter's type: water(bed: string, liters: number) becomes water(bed: string, liters: Liters); a method changes with its family.
-- name, an alias: what it stands for: type Liters = number to type Liters = number | string.`
+- name, an alias: what it stands for: type Liters = number to type Liters = number | string.
+- name, a function (or Class.method) without parameter: its return type: function empty(): string becomes function empty(): string[]; a method changes with its family.`
 }
 
 // changeTypeArgs are the arguments of change_type.
 type changeTypeArgs struct {
 	File      string            `json:"file" desc:"The file that declares the alias, the type or the function, relative to the root."`
-	Name      string            `json:"name" desc:"The alias's name; Type.property for a property; the function (or Class.method) with parameter."`
+	Name      string            `json:"name" desc:"The alias's name; Type.property for a property; the function (or Class.method), with parameter for a parameter's type, without for its return type."`
 	Type      string            `json:"type" desc:"What it is to stand for, as TypeScript valid in that file."`
 	Parameter string            `json:"parameter,omitempty" desc:"For a parameter: its name; name is then the function."`
 	Values    map[string]string `json:"values,omitempty" desc:"For a property, narrowing: for each old constant (\"fern\", or as written), the new type's value, e.g. {\"fern\": \"FERN\"}."`
