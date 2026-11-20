@@ -1423,6 +1423,28 @@ declared with a literal, empty, and never assigned an entry
 the name must not be predeclared or the interface's. Types that
 already implement the interface are not refused: none is in the map.
 
+With `move` and `type` (2026-11-19, roadmap 72.2), it moves a value's
+code out of every switch prepared with the lookup (`interface` and
+`lookup` name them) into methods of a new type, deletes those cases,
+and adds `value: Type{}` to the lookup, which then runs for the value
+what the cases ran. A prepared switch is a guard `if k, ok :=
+lookup[tag]; ok { return k.M(args) }` before a switch on the same
+`tag`, or with the switch in its else. With no case for the value, the
+method is the default's body, or the code after a switch whose cases
+return when that code ends the function, or empty in the else form. It
+refuses:
+- an interface method that no prepared switch calls, or that two do
+  (the type would not implement the interface, or would need two
+  methods of a name);
+- a case of several values (split it first);
+- a body that leaves other than by return (`checkLeaves`), writes a
+  parameter (`checkWrites`), or uses a variable the guard does not
+  pass;
+- a guard argument that is not a variable;
+- a type name that is declared or predeclared;
+- a lookup without a map literal, or one that holds the value;
+- a package a body names that the lookup's file would name otherwise.
+
 ## Changing a method: interfaces
 
 Changing a method's signature can change which interfaces its type

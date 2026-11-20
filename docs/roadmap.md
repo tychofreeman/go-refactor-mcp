@@ -3508,7 +3508,11 @@ candidates and the evidence for each, gathered from the friction log.
     2. **One step to move a value's cases:** out of every prepared
        switch on the value, into its type's methods, with its entry
        added and the dead cases deleted, in place of about 15 steps a
-       kind. Next.
+       kind. *Done* (2026-11-19, `docs/sessions/switch-move-case.md`):
+       prepare_switch_for_types with `move` and `type`; lending's three
+       kinds in 8 steps (5 prepares, 3 moves), `Kind` still a string.
+       Left: the emptied switches stay (`switch it.Kind {}`), and
+       TypeScript has neither option.
 
 73. **Copies that differ in a field into one function of it**
     (2026-11-19, cost-history 35): freight-air's sessions merged eight
@@ -3528,6 +3532,9 @@ candidates and the evidence for each, gathered from the friction log.
     two statements followed by more code that reads `start`. TypeScript's
     fold makes that copy `const start = declStart()` (#698); Go's has
     the form only for an error result (#696). Bring Go's to parity.
+    Nor did fold match a body whose returns are in a switch's cases
+    (`withResults`, switch-move-case): `switch len(rs) { case 0:
+    return sig; ... }; return ...` written again in another function.
 
 Parked: the Ollama loop (`refactor-agent`). It works and stays, but Claude
 through MCP is the priority.

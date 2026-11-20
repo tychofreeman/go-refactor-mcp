@@ -828,6 +828,12 @@ func (s *switcher) signature(q types.Qualifier) string {
 		rs = append(rs, types.TypeString(results.At(i).Type(), q))
 	}
 	sig := s.method + "(" + strings.Join(ps, ", ") + ")"
+	return withResults(rs, sig)
+}
+
+// withResults is a signature with its results: none, one, or several in
+// parentheses.
+func withResults(rs []string, sig string) string {
 	switch len(rs) {
 	case 0:
 		return sig

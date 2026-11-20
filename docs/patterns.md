@@ -75,9 +75,11 @@ again.
   file or written in tests), skip steps 1 and 4: prepare with
   `lookup` (`if k, ok := kinds[it.Kind]; ok`), and send a kind through
   its type with `add_element` of its entry (`"book": Book{}`) to the
-  map. Per switch, the case moves by `extract_function` (`function` +
-  `case`), `add_parameter` of the type's value, and
-  `function_to_method` with `new_name` (switch-homes, roadmap 72).
+  map. Then `prepare_switch_for_types` with `move` (`"book"`) and
+  `type` (`Book`) moves the value's case of every prepared switch into
+  `Book`'s methods, adds the entry and deletes the cases: one step a
+  kind (roadmap 72). The new kind of the feature is then a type with
+  its methods and its entry.
 - **Where:** derivations section 6, the user's; lending-kinds end to
   end through the tools (#285).
 

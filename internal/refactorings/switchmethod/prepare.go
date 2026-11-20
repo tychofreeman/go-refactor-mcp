@@ -32,7 +32,7 @@ func (*PrepareForTypes) Description() string {
 becomes
   type Species interface { Water() int }
   func Water(p Plant) int { if s, ok := p.Species.(Species); ok { return s.Water() }; switch p.Species { ... }; return 0 }
-The switch's tag must be an interface (change_type to any first), or, to keep its type (a string read from data), give lookup species: the guard becomes if s, ok := species[p.Species]; ok, with var species = map[string]Species{} declared empty; a type runs its methods once its entry ("fern": Fern{}) is added. The interface is declared before the function, or gets the method when it exists; a method it already has is used if its signature is the one the cases need, or if fields the cases read can be its parameters (p.Height for height, declared before the switch). The variables the cases use become the method's parameters. Every case must return, or none (then the switch goes in the else). A case of several values (case "fern", "cactus":) is split into a case for each, with a copy of the body, so that each moves alone.
+The switch's tag must be an interface (change_type to any first), or, to keep its type (a string read from data), give lookup species: the guard becomes if s, ok := species[p.Species]; ok, with var species = map[string]Species{} declared empty; a type runs its methods once its entry ("fern": Fern{}) is added. Then move "fern" with type Fern moves that value's case of every switch prepared with species into methods of a new Fern, adds the entry, and deletes the cases. The interface is declared before the function, or gets the method when it exists; a method it already has is used if its signature is the one the cases need, or if fields the cases read can be its parameters (p.Height for height, declared before the switch). The variables the cases use become the method's parameters. Every case must return, or none (then the switch goes in the else). A case of several values (case "fern", "cactus":) is split into a case for each, with a copy of the body, so that each moves alone.
 Identify the switch by file and line, or by function when it is that function's only switch.`
 }
 
@@ -41,7 +41,9 @@ type prepareArgs struct {
 	Line      int    `json:"line,omitempty" desc:"1-based line on which the switch statement starts."`
 	Function  string `json:"function,omitempty" desc:"Instead of line: the function (Name or Type.Method) whose only switch it is."`
 	Interface string `json:"interface" desc:"The interface: declared before the function if the package has none of that name."`
-	Method    string `json:"method" desc:"Name of the interface's new method."`
+	Method    string `json:"method,omitempty" desc:"Name of the interface's new method (not with move)."`
+	Move      string `json:"move,omitempty" desc:"Instead of preparing a switch: a value, as written in its cases (\"fern\"), whose case in every switch prepared with lookup becomes a method of type, which the lookup then holds for the value."`
+	Type      string `json:"type,omitempty" desc:"With move: the name of the new type."`
 	Lookup    string `json:"lookup,omitempty" desc:"Optional: in place of a type assertion, a map from the value to the interface, declared empty if the package has none of that name: the value keeps its type, and a type runs its methods once its entry is added."`
 }
 
@@ -70,6 +72,9 @@ func (*PrepareForTypes) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 	var a prepareArgs
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
+	}
+	if a.Move != "" {
+		return planMove(ws, a)
 	}
 	for _, n := range []string{a.Interface, a.Method} {
 		if !token.IsIdentifier(n) {
