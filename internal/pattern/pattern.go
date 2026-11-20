@@ -421,6 +421,20 @@ func (k ByKind) Stmt(a *Attempt, p ast.Stmt, x ast.Stmt) bool {
 	case *ast.RangeStmt:
 		xs, ok := x.(*ast.RangeStmt)
 		return ok && xs.Tok == pp.Tok && a.sub(pp.X, xs.X) && a.sub(pp.Key, xs.Key) && a.sub(pp.Value, xs.Value) && block(pp.Body, xs.Body)
+	case *ast.SwitchStmt:
+		xs, ok := x.(*ast.SwitchStmt)
+		return ok && a.MatchStmt(pp.Init, xs.Init) && a.sub(pp.Tag, xs.Tag) && block(pp.Body, xs.Body)
+	case *ast.CaseClause:
+		xs, ok := x.(*ast.CaseClause)
+		if !ok || (pp.List == nil) != (xs.List == nil) || !exprs(pp.List, xs.List) || len(pp.Body) != len(xs.Body) {
+			return false
+		}
+		for i := range pp.Body {
+			if !a.MatchStmt(pp.Body[i], xs.Body[i]) {
+				return false
+			}
+		}
+		return true
 	case *ast.DeclStmt:
 		xs, ok := x.(*ast.DeclStmt)
 		pg, _ := pp.Decl.(*ast.GenDecl)

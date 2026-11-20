@@ -3548,6 +3548,10 @@ candidates and the evidence for each, gathered from the friction log.
     Nor did fold match a body whose returns are in a switch's cases
     (`withResults`, switch-move-case): `switch len(rs) { case 0:
     return sig; ... }; return ...` written again in another function.
+    *Done* (2026-11-20, `docs/sessions/fold-switch.md`): the pattern
+    matcher had no case for a switch, so no body with one matched;
+    `ByKind.Stmt` now compares switches and their clauses (not type
+    switches, nor `break` or `fallthrough` in them).
 
 Parked: the Ollama loop (`refactor-agent`). It works and stays, but Claude
 through MCP is the priority.
