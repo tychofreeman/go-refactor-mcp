@@ -233,7 +233,7 @@ func (l *Language) Step(tool string, args json.RawMessage) (string, bool, error)
 		return "", false, fmt.Errorf("unknown tool %q", tool)
 	}
 	r, args = refactor.Routed(r, args, refactorings.Lookup)
-	r = l.strict(r)
+	r = l.Strict(r)
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	ws, args, intro, refused, err := l.route(args)
@@ -244,10 +244,10 @@ func (l *Language) Step(tool string, args json.RawMessage) (string, bool, error)
 	return intro + text, wasRefused, err
 }
 
-// strict returns r, or for replace_text with NoCodeByText, the
+// Strict returns r, or for replace_text with NoCodeByText, the
 // replace_text that changes Go only inside string literals and comments,
 // or for create_file with SkeletonOnly, the one that refuses bodies.
-func (l *Language) strict(r refactor.Refactoring) refactor.Refactoring {
+func (l *Language) Strict(r refactor.Refactoring) refactor.Refactoring {
 	if t, ok := r.(*replacetext.ReplaceText); ok && l.NoCodeByText {
 		return &replacetext.ReplaceText{Named: t.Named, TextOnly: true}
 	}
@@ -340,7 +340,7 @@ func (l *Language) Batch(args json.RawMessage) (string, bool, error) {
 		return intro + refused, true, nil
 	}
 	for i := range batch.Steps {
-		batch.Steps[i].Refactoring = l.strict(batch.Steps[i].Refactoring)
+		batch.Steps[i].Refactoring = l.Strict(batch.Steps[i].Refactoring)
 	}
 	b, err := refactor.RunBatch(ws, batch.Steps, refactor.Options{Compact: !l.FullDiffs, Unchecked: batch.Unchecked, Declare: refactorings.Declarer(), Imports: refactorings.Importer()})
 	if err != nil {

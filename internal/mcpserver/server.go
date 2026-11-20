@@ -236,15 +236,7 @@ func above(dir, name string) bool {
 
 // MCP builds the MCP server with all tools registered.
 func (s *Server) MCP() *mcp.Server {
-	if s.golang != nil {
-		s.golang.FullDiffs, s.golang.ReadByName = s.FullDiffs, s.ReadByName
-		s.golang.NoCodeByText = s.NoCodeByText
-		s.golang.SkeletonOnly = s.SkeletonOnly
-	}
-	if s.typescript != nil {
-		s.typescript.FullDiffs, s.typescript.ReadByName = s.FullDiffs, s.ReadByName
-		s.typescript.SkeletonOnly = s.SkeletonOnly
-	}
+	s.configure()
 	srv := mcp.NewServer(&mcp.Implementation{Name: "gorefactor", Version: Version()}, &mcp.ServerOptions{
 		Instructions: "gorefactor " + Version() + ". " + s.instructions(),
 	})
@@ -341,6 +333,19 @@ check "end" type-checks only after the last step, so edits may pass through code
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: &notDestructive},
 	}, s.handler(func(_ context.Context, args json.RawMessage) *mcp.CallToolResult { return s.batch(args) }))
 	return srv
+}
+
+// configure gives the languages the server's options.
+func (s *Server) configure() {
+	if s.golang != nil {
+		s.golang.FullDiffs, s.golang.ReadByName = s.FullDiffs, s.ReadByName
+		s.golang.NoCodeByText = s.NoCodeByText
+		s.golang.SkeletonOnly = s.SkeletonOnly
+	}
+	if s.typescript != nil {
+		s.typescript.FullDiffs, s.typescript.ReadByName = s.FullDiffs, s.ReadByName
+		s.typescript.SkeletonOnly = s.SkeletonOnly
+	}
 }
 
 // arguments are a tool call's arguments; or, when the call must first ask
