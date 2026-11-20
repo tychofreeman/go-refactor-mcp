@@ -150,6 +150,12 @@ working patterns, with their steps, are in `docs/patterns.md`.
   edits and says to log a change no tool makes and ask the user. The
   guards share `internal/hook` (the call, the denial, `Commands`, `Each`).
   What to watch: roadmap 53.
+- **Both guards cover TypeScript** (2026-11-20, the user, for the to-rpn
+  kata, whose runs are judged by whether the model worked through the
+  tools): `hook.Source` is a `.go`, `.ts`, `.tsx`, `.mts` or `.cts` file
+  outside `testdata/` and `node_modules/`. They do not see which tool a
+  change went through: a model that restates code with the edit tools
+  where a refactoring fits passes both.
 - **Worktrees** (2026-11-02, roadmap 50): the server and hooks belong to
   the session's starting checkout; a subagent with `isolation: "worktree"`
   shares them, with the parent's MCP roots but its own `cwd` in hooks.

@@ -1,9 +1,10 @@
 // Command read-guard is a Claude Code hook (PreToolUse, on Read and
-// Bash) that refuses reading Go source other than through gorefactor's
-// inspect: Read of a .go file, or a Bash command in which sed, cat, head,
-// tail, less, more, nl, awk or grep names one. Files under testdata/ are
-// fixtures, not the module's source, and may be read so. A refused call
-// is denied, and Claude Code shows the model what to use instead.
+// Bash) that refuses reading Go or TypeScript source other than through
+// gorefactor's inspect: Read of a .go or .ts file, or a Bash command in
+// which sed, cat, head, tail, less, more, nl, awk or grep names one. Files
+// under testdata/ are fixtures and those under node_modules/ are other
+// packages, not the module's source, and may be read so. A refused call is
+// denied, and Claude Code shows the model what to use instead.
 //
 // Sessions read whole files and line ranges by habit even when told to
 // read through inspect (docs/session-notes.md, 2026-10-30); a check holds
@@ -35,7 +36,7 @@ func main() {
 	hook.Deny(reason)
 }
 
-// refusal says why c reads Go source other than through inspect, or is
+// refusal says why c reads source other than through inspect, or is
 // "" when it does not.
 func refusal(c hook.Call) string {
 	switch c.ToolName {
@@ -51,7 +52,7 @@ func refusal(c hook.Call) string {
 	return ""
 }
 
-// readRefusal says why the command words reads Go source, or is "".
+// readRefusal says why the command words reads source, or is "".
 func readRefusal(words []string, at func(p string) string) string {
 	if f := readsSource(words, at); f != "" {
 		return fmt.Sprintf("%s of %s refused.", words[0], f)
@@ -66,7 +67,7 @@ var readers = map[string]bool{"sed": true, "cat": true, "head": true, "tail": tr
 // valued are grep's and rg's flags whose value is the next word.
 var valued = map[string]bool{"-e": true, "-f": true, "-A": true, "-B": true, "-C": true, "-m": true, "-g": true, "-t": true, "-T": true, "-d": true, "-D": true}
 
-// readsSource is the Go source file the command words reads, or ""; at
+// readsSource is the source file the command words reads, or ""; at
 // says where an operand points.
 func readsSource(words []string, at func(string) string) string {
 	for len(words) > 0 && strings.Contains(words[0], "=") && !strings.HasPrefix(words[0], "-") {
@@ -109,12 +110,12 @@ func readsSource(words []string, at func(string) string) string {
 	return ""
 }
 
-// adviceFor says how to read Go instead, naming the CLI when cli says it
+// adviceFor says how to read source instead, naming the CLI when cli says it
 // is installed.
 func adviceFor(cli bool) string {
-	a := `Read Go through inspect: a file's outline (inspect with file), declarations by name (names: ["F", "T.M"]), the lines that match a regular expression (pattern, with or without file), or lines (targets with file, start_line and end_line).`
+	a := `Read Go and TypeScript through inspect: a file's outline (inspect with file), declarations by name (names: ["F", "T.M"]), the lines that match a regular expression (pattern, with or without file), or lines (targets with file, start_line and end_line).`
 	if cli {
 		a += ` From the CLI: refactor inspect file=PATH, or refactor inspect '{"names":["F"]}'.`
 	}
-	return a + ` Files under testdata/ may be read directly.`
+	return a + ` Files under testdata/ and node_modules/ may be read directly.`
 }

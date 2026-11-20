@@ -31,6 +31,10 @@ func TestRefusal(t *testing.T) {
 		bash("mv plant.go garden.go"),
 		bash("rm internal/plant/plant.go"),
 		bash("cd internal/plant && echo x > plant.go"),
+		edit("Edit", "/home/u/calc/src/toRpn.ts"),
+		edit("Write", "test/toRpn.test.ts"),
+		bash("sed -i s/a/b/ src/toRpn.ts"),
+		bash("echo x > web/App.tsx"),
 	}
 	for _, c := range refused {
 		if refusal(c) == "" {
@@ -47,6 +51,9 @@ func TestRefusal(t *testing.T) {
 		bash("cp internal/plant/plant.go /tmp/plant.go.orig"),
 		bash(`echo "x > plant.go"`),
 		bash("git checkout main"),
+		edit("Write", "node_modules/left-pad/index.ts"),
+		edit("Edit", "tsconfig.json"),
+		bash("npx vitest run > /tmp/out.txt"),
 	}
 	for _, c := range allowed {
 		if why := refusal(c); why != "" {

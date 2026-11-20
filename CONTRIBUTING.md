@@ -9,8 +9,8 @@ cmd/refactor-mcp/     the MCP server (stdio), for Claude Code and other MCP clie
 cmd/refactor/         the CLI: a step, a batch, inspect, check or undo per invocation
 cmd/refactor-ab/      A/B runs: tasks with claude -p, through the tools and by hand
 cmd/refactor-tokens/  where a Claude Code session's tokens went, by tool
-cmd/read-guard/       the hook that sends Go reads through inspect
-cmd/write-guard/      the hook that sends Go writes through the tools (an experiment)
+cmd/read-guard/       the hook that sends Go and TypeScript reads through inspect
+cmd/write-guard/      the hook that sends Go and TypeScript writes through the tools (an experiment)
 cmd/worktree-paths/   the hook that sends a call made from a git worktree to it
 internal/
   refactor/           the engine: Refactoring, Edit, Refusal, Run, batch
