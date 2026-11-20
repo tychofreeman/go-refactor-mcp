@@ -763,7 +763,12 @@ own edit would have to move with it.
 Published as `extract_variable` with `as` `"parameter"` (2026-11-17,
 #634), in Go and TypeScript: its `name` is the parameter's, and
 `function` may take the place of `line`; `introduce_parameter` still runs
-by its name, with its own arguments.
+by its name, with its own arguments. Any other `as` is refused, naming
+the one it takes, and so is `function` without `as` (2026-11-20, #716,
+#715): before, an unknown `as` gave a local without a word, and a
+missing `line` was refused as "line 0 out of range", which a batch then
+renumbered to a line a step had deleted (its refusals now leave a line 0
+as it is).
 
 `introduce_parameter` replaces an expression in a function's body with a
 new parameter, and passes that expression at every call, written in terms
