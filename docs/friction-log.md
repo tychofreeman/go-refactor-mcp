@@ -5121,6 +5121,15 @@ cannot match a copy whose exits are `return false, nil` of its caller
 where the helper returns `nil, false`. Record:
 `docs/sessions/fold-value-goes-on.md`.
 
+## extract_variable's `as` and a missing line (2026-11-20, #715, #716)
+
+Nothing by hand. One refusal of mine: add_element's `type` for the
+table of `TestStartLines` was given as written,
+`[]struct{ msg, file, want string }`, and matched nothing (the tool
+names it as go/types prints it, `[]struct{msg, file, want string}`);
+without `type`, the one literal on the line was found. The Go goldens
+are files under testdata, written by the shell.
+
 ## fold of an accumulating function (2026-11-20, #727)
 
 One restructuring by edits rather than a refactoring: `unseen`, the

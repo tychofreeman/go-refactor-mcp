@@ -280,7 +280,7 @@ func (l *Lined) Assigns(body *ast.Node, s *ast.Symbol, c interface {
 		switch {
 		case ast.IsBinaryExpression(n) && ast.IsAssignmentOperator(n.AsBinaryExpression().OperatorToken.Kind):
 			target = n.AsBinaryExpression().Left
-		case ast.IsPrefixUnaryExpression(n):
+		case ast.IsPrefixUnaryExpression(n) && IsUpdate(n.AsPrefixUnaryExpression().Operator):
 			target = n.AsPrefixUnaryExpression().Operand
 		case ast.IsPostfixUnaryExpression(n):
 			target = n.AsPostfixUnaryExpression().Operand

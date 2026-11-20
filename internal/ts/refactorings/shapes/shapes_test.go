@@ -401,6 +401,27 @@ export function label(b: Bed, name: string): string {
   return key + ": " + h;
 }
 `}, NewFold(), `{"file": "src/bed.ts", "name": "find"}`, nil, "key, declared there, is used after it"},
+		{"not an assignment's target", map[string]string{"src/a.ts": `export function label(names: string): string {
+  let out = "";
+  out += names;
+  out = names;
+  return out;
+}
+
+function written(held: string): string {
+  return held;
+}
+`}, NewFold(), `{"file": "src/a.ts", "name": "written", "line": 3}`, map[string]string{"src/a.ts": `export function label(names: string): string {
+  let out = "";
+  out += written(names);
+  out = names;
+  return out;
+}
+
+function written(held: string): string {
+  return held;
+}
+`}, ""},
 		{"a parameter assigned and returned, assigned back", map[string]string{"src/a.ts": `export function label(names: string[], extra: string): string {
   let out = "";
   for (const n of names) {

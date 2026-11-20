@@ -193,6 +193,21 @@ export function tall(p: Plant, margin: number): number {
   return p.height + margin;
 }
 `, NewExtractVariable(), `{"line": 15, "expression": "p.height", "name": "margin"}`, "", "margin is already a name"},
+		{"an as it does not know", plants + `
+export function tall(p: Plant): number {
+  return p.height * 2;
+}
+`, NewExtractVariable(), `{"line": 15, "expression": "p.height * 2", "name": "twice", "as": "field"}`, "", `as is "field": it takes "parameter"`},
+		{"function without as parameter", plants + `
+export function tall(p: Plant): number {
+  return p.height * 2;
+}
+`, NewExtractVariable(), `{"function": "tall", "expression": "p.height * 2", "name": "twice"}`, "", `function takes line's place only with as "parameter"`},
+		{"no line", plants + `
+export function tall(p: Plant): number {
+  return p.height * 2;
+}
+`, NewExtractVariable(), `{"expression": "p.height * 2", "name": "twice"}`, "", "give line, the line the expression starts on"},
 	})
 }
 
@@ -313,6 +328,24 @@ export function fill(): void {
   cache[0] = n;
 }
 `, NewInlineVariable(), `{"function": "fill", "name": "n"}`, "", "reset()"},
+		{"read under a prefix operator", plants + `
+export function label(s: string, n: number): string {
+  const empty = s.length === 0;
+  const twice = n * 2;
+  if (!empty) {
+    return s + -twice;
+  }
+  return "none";
+}
+`, NewInlineVariable(), `{"line": 15, "name": "empty"}`, plants + `
+export function label(s: string, n: number): string {
+  const twice = n * 2;
+  if (!(s.length === 0)) {
+    return s + -twice;
+  }
+  return "none";
+}
+`, ""},
 	})
 }
 
@@ -866,6 +899,57 @@ export function mix(p: Plant): number {
 		{"top level", plants + `
 export const x = water();
 `, NewExtractFunction(), `{"start_line": 14, "end_line": 14, "name": "f"}`, "", "the module's top level"},
+		{"a parameter property read through this", plants + `
+export class Reader {
+  constructor(readonly s: string) {}
+  private i = 0;
+
+  next(): string {
+    const char = this.s[this.i];
+    this.i++;
+    return char;
+  }
+}
+`, NewExtractFunction(), `{"start_line": 19, "end_line": 20, "name": "readOne"}`, plants + `
+export class Reader {
+  constructor(readonly s: string) {}
+  private i = 0;
+
+  next(): string {
+    const char = this.readOne();
+    return char;
+  }
+
+  private readOne() {
+    const char = this.s[this.i];
+    this.i++;
+    return char;
+  }
+}
+`, ""},
+		{"a property written through a parameter", plants + `
+export class Bed {
+  constructor(public names: string) {}
+}
+
+export function plant(bed: Bed, name: string): string {
+  bed.names += name;
+  return bed.names;
+}
+`, NewExtractFunction(), `{"start_line": 19, "end_line": 19, "name": "add"}`, plants + `
+export class Bed {
+  constructor(public names: string) {}
+}
+
+export function plant(bed: Bed, name: string): string {
+  add(bed, name);
+  return bed.names;
+}
+
+function add(bed: Bed, name: string) {
+  bed.names += name;
+}
+`, ""},
 	})
 }
 

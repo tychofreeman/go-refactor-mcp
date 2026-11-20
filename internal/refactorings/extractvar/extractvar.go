@@ -87,8 +87,12 @@ func (*ExtractVariable) Plan(ws *workspace.Workspace, raw json.RawMessage) (*ref
 		return changesig.NewIntroduceParameter().Plan(ws, intro)
 	}
 	switch {
+	case a.As != "":
+		return nil, refactor.Refusef("as is %q: it takes \"parameter\", to make the expression a parameter of function; without as, the expression becomes a local variable", a.As)
 	case a.File == "":
 		return nil, refactor.Refusef("file is required")
+	case a.Line < 1 && a.Function != "":
+		return nil, refactor.Refusef("function takes line's place only with as \"parameter\"; for a local variable, give line, the line the expression starts on")
 	case a.Line < 1:
 		return nil, refactor.Refusef("line is required (1-based)")
 	case strings.TrimSpace(a.Expression) == "":

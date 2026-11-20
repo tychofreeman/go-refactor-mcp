@@ -763,7 +763,12 @@ own edit would have to move with it.
 Published as `extract_variable` with `as` `"parameter"` (2026-11-17,
 #634), in Go and TypeScript: its `name` is the parameter's, and
 `function` may take the place of `line`; `introduce_parameter` still runs
-by its name, with its own arguments.
+by its name, with its own arguments. Any other `as` is refused, naming
+the one it takes, and so is `function` without `as` (2026-11-20, #716,
+#715): before, an unknown `as` gave a local without a word, and a
+missing `line` was refused as "line 0 out of range", which a batch then
+renumbered to a line a step had deleted (its refusals now leave a line 0
+as it is).
 
 `introduce_parameter` replaces an expression in a function's body with a
 new parameter, and passes that expression at every call, written in terms
@@ -1861,3 +1866,16 @@ Adding a field changes the struct (its literals, its size, what reflection
 sees), so it is an edit; the type check refuses a duplicate name and an
 unkeyed literal that would no longer list every field.
 
+
+## change_type of a return type (TypeScript)
+
+`change_type` with `name` a function, or `Class.method` (which routes
+as a property), and no `parameter` changes the declared return type
+(#713, 2026-11-20): in place of its annotation, or after the
+parenthesis that closes the parameters when it has none, and in each
+method of its family, as for a parameter. It is an edit: the body's
+returns are checked with it, so a batch with check "end" carries the
+body's change too. Refused: overload signatures (they type the results
+apart), an arrow function whose parameter has no parentheses, and a
+method given `values`. Go changes a result with `add_result`
+(`change_return_type` is its alias).

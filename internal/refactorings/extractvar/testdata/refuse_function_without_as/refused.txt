@@ -1,0 +1,1 @@
+function takes line's place only with as "parameter"
