@@ -229,7 +229,7 @@ func (s Skeleton) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
-	if strings.HasSuffix(a.File, ".go") && a.Content != "" && !refactor.InTestdata(a.File) {
+	if strings.HasSuffix(a.File, ".go") && a.Content != "" && !refactor.InTestdata(filepath.Join(ws.Root, a.File)) {
 		if f, err := parser.ParseFile(token.NewFileSet(), a.File, a.Content, parser.SkipObjectResolution); err == nil {
 			for _, d := range f.Decls {
 				if fd, ok := d.(*ast.FuncDecl); ok && fd.Body != nil {

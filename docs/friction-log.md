@@ -5106,3 +5106,17 @@ refused, each for a line that ends no statement (the first line of an
 `if`, where its last was meant); `retry` with the one step changed sent
 the rest again both times. The CLI makes a `golang.Language` only for
 its `Strict`: a function of the two options would say that more plainly.
+
+## fold of a copy that goes on, without an error (2026-11-20, roadmap 74)
+
+Two hand changes. The golden `statements_return` expected `Report` left;
+the new form folds it, and create_file with `overwrite` of its `out/m.go`
+was refused by `-skeleton-only` ("not total's body"): the fixture's
+`out/` has its own go.mod, so the path the server judged had no
+`testdata/` in it and the exemption did not apply. Changed under
+testdata with a script, and fixed in the same PR: the skeleton's
+check (Go and TypeScript) joins the workspace's root on the path. And `outsOf`, the loop `errorForm` and
+`valueForm` shared, replaced each copy by replace_statements: fold
+cannot match a copy whose exits are `return false, nil` of its caller
+where the helper returns `nil, false`. Record:
+`docs/sessions/fold-value-goes-on.md`.

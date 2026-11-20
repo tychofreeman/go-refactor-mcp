@@ -257,6 +257,11 @@ func TestSkeletonOnly(t *testing.T) {
 	if text, refused, err := l.Step("create_file", []byte(`{"file": "testdata/case/in/m.go", "content": "package m\n\nfunc f() { println(1) }\n"}`)); err != nil || refused {
 		t.Errorf("a fixture under testdata/ is refused: %v\n%s", err, text)
 	}
+	// So is one in a module of its own there, whose paths start below it.
+	write(t, root, map[string]string{"testdata/case/out/go.mod": "module example.com/m\n\ngo 1.22\n", "testdata/case/out/m.go": "package m\n"})
+	if text, refused, err := l.Step("create_file", []byte(`{"file": "testdata/case/out/m.go", "overwrite": true, "content": "package m\n\nfunc f() { println(2) }\n"}`)); err != nil || refused {
+		t.Errorf("a fixture in a module under testdata/ is refused: %v\n%s", err, text)
+	}
 }
 
 // inline is published in place of inline_function, inline_variable and

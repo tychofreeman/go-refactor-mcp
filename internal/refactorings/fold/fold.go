@@ -88,9 +88,12 @@ type folder struct {
 	// return gives before its nil error.
 	early bool
 	outs  []types.Object
-	root  ast.Node                // body or fn's block: where the pattern's names are
-	done  [][2]token.Pos          // statements folded, which a later match must not overlap
-	uses  map[pattern.HoleKey]int // how often the body uses each field of fields
+	// valued is early without an error: fn has no other return, and a
+	// copy becomes outs := f(...).
+	valued bool
+	root   ast.Node                // body or fn's block: where the pattern's names are
+	done   [][2]token.Pos          // statements folded, which a later match must not overlap
+	uses   map[pattern.HoleKey]int // how often the body uses each field of fields
 	// self and sets are a setter's: the struct parameter it sets fields
 	// of and returns, and the fields with what it sets them to, in order.
 	self types.Object
@@ -219,6 +222,10 @@ func (f *folder) pattern(id *ast.Ident) error {
 		return refactor.Refusef("%s assigns its parameter %s, which in place of the call would assign what the caller passed", name, p)
 	}
 	f.early, f.outs = f.errorForm()
+	if !f.early {
+		f.early, f.outs = f.valueForm()
+		f.valued = f.early
+	}
 	return nil
 }
 
@@ -1392,7 +1399,7 @@ func (f *folder) foldStmts(p *packages.Package, file *ast.File, list []ast.Stmt,
 		if _, ret := seq[n-1].(*ast.ReturnStmt); skip == "" && ret {
 			skip = f.resultsTaken(p, stack)
 		}
-		if skip == "" && n < len(f.stmts) {
+		if skip == "" && n < len(f.stmts) && !f.valued {
 			skip = f.continues(p, seq, stack, others)
 		}
 		if skip == "" {
@@ -1519,18 +1526,9 @@ func (f *folder) errorForm() (bool, []types.Object) {
 	if id, ok := last.Results[res.Len()-1].(*ast.Ident); !ok || info.Uses[id] != types.Universe.Lookup("nil") {
 		return false, nil
 	}
-	scope := info.Scopes[f.decl.Type]
-	var outs []types.Object
-	for _, e := range last.Results[:res.Len()-1] {
-		id, ok := e.(*ast.Ident)
-		if !ok {
-			return false, nil
-		}
-		o := info.Uses[id]
-		if _, hole := f.m.Holes[o]; o == nil || hole || o.Parent() != scope {
-			return false, nil
-		}
-		outs = append(outs, o)
+	outs, ok := f.outsOf(last.Results[:res.Len()-1])
+	if !ok {
+		return false, nil
 	}
 	early, good := 0, true
 	var stack []ast.Node
@@ -1589,12 +1587,66 @@ func (f *folder) checked(a *pattern.Attempt, call string, others []ast.Expr, pos
 	for _, o := range f.outs {
 		names = append(names, a.Locals[o].Name())
 	}
+	if f.valued {
+		return strings.Join(names, ", ") + " := " + call
+	}
 	var vals []string
 	for _, e := range others {
 		vals = append(vals, types.ExprString(e))
 	}
 	indent := strings.Repeat("\t", f.ws.Fset.Position(pos).Column-1)
 	return strings.Join(append(names, "err"), ", ") + " := " + call + "\n" + indent + "if err != nil {\n" + indent + "\treturn " + strings.Join(append(vals, "err"), ", ") + "\n" + indent + "}"
+}
+
+// valueForm reports whether fn's copies may go on after it as values:
+// fn's only return is its last, return x..., x its own locals of its
+// results' types. outs are x.
+func (f *folder) valueForm() (bool, []types.Object) {
+	res := f.fn.Signature().Results()
+	if f.stmts == nil || res.Len() == 0 {
+		return false, nil
+	}
+	last, ok := f.stmts[len(f.stmts)-1].(*ast.ReturnStmt)
+	if !ok || len(last.Results) != res.Len() {
+		return false, nil
+	}
+	outs, ok := f.outsOf(last.Results)
+	if !ok {
+		return false, nil
+	}
+	only := true
+	ast.Inspect(f.decl.Body, func(n ast.Node) bool {
+		if _, lit := n.(*ast.FuncLit); lit {
+			return false
+		}
+		if r, ok := n.(*ast.ReturnStmt); ok && r != last {
+			only = false
+		}
+		return only
+	})
+	return only, outs
+}
+
+// outsOf returns what rs, the first results of fn's last return, name:
+// locals fn declares at its top level, each of the type of fn's result in
+// its place; or false when one is not.
+func (f *folder) outsOf(rs []ast.Expr) ([]types.Object, bool) {
+	info := f.m.Pkg.TypesInfo
+	res := f.fn.Signature().Results()
+	scope := info.Scopes[f.decl.Type]
+	var outs []types.Object
+	for i, e := range rs {
+		id, ok := e.(*ast.Ident)
+		if !ok {
+			return nil, false
+		}
+		o := info.Uses[id]
+		if _, hole := f.m.Holes[o]; o == nil || hole || o.Parent() != scope || o.Pos() < f.decl.Body.Pos() || !types.Identical(o.Type(), res.At(i).Type()) {
+			return nil, false
+		}
+		outs = append(outs, o)
+	}
+	return outs, true
 }
 
 // usedAfter is the name of a variable seq declares at its top level that
