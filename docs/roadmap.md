@@ -3511,8 +3511,10 @@ candidates and the evidence for each, gathered from the friction log.
        kind. *Done* (2026-11-19, `docs/sessions/switch-move-case.md`):
        prepare_switch_for_types with `move` and `type`; lending's three
        kinds in 8 steps (5 prepares, 3 moves), `Kind` still a string.
-       Left: the emptied switches stay (`switch it.Kind {}`), and
-       TypeScript has neither option.
+       The switch a move empties is deleted, or the else that held it,
+       unless its tag calls or receives (2026-11-20,
+       `docs/sessions/switch-empty-remove.md`). Left: TypeScript has
+       neither option.
 
 73. **Copies that differ in a field into one function of it**
     (2026-11-19, cost-history 35): freight-air's sessions merged eight

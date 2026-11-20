@@ -1431,8 +1431,11 @@ what the cases ran. A prepared switch is a guard `if k, ok :=
 lookup[tag]; ok { return k.M(args) }` before a switch on the same
 `tag`, or with the switch in its else. With no case for the value, the
 method is the default's body, or the code after a switch whose cases
-return when that code ends the function, or empty in the else form. It
-refuses:
+return when that code ends the function, or empty in the else form. A
+switch left with no clause is deleted, or, in the else form, the else;
+not when its tag calls a function or receives (prepare refuses such a
+tag, but a guard written by hand may have one), since that would drop
+the call. It refuses:
 - an interface method that no prepared switch calls, or that two do
   (the type would not implement the interface, or would need two
   methods of a name);
