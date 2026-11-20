@@ -422,6 +422,47 @@ function written(held: string): string {
   return held;
 }
 `}, ""},
+		{"a parameter assigned and returned, assigned back", map[string]string{"src/a.ts": `export function label(names: string[], extra: string): string {
+  let out = "";
+  for (const n of names) {
+    out += n;
+  }
+  out += extra;
+  return out;
+}
+
+function press(held: string, text: string): string {
+  held += text;
+  return held;
+}
+`}, NewFold(), `{"file": "src/a.ts", "name": "press"}`, map[string]string{"src/a.ts": `export function label(names: string[], extra: string): string {
+  let out = "";
+  for (const n of names) {
+    out = press(out, n);
+  }
+  out = press(out, extra);
+  return out;
+}
+
+function press(held: string, text: string): string {
+  held += text;
+  return held;
+}
+`}, ""},
+		{"assigned back where a catch could see it", map[string]string{"src/a.ts": `export function label(extra: string): string {
+  let out = "";
+  try {
+    out += extra;
+  } catch {
+  }
+  return out;
+}
+
+function press(held: string, text: string): string {
+  held += text;
+  return held;
+}
+`}, NewFold(), `{"file": "src/a.ts", "name": "press"}`, nil, "out could be seen while press runs"},
 	})
 }
 

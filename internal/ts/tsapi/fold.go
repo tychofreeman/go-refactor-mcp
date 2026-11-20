@@ -53,8 +53,10 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 	// end in a return if any statement returns.
 	var expr *ast.Node
 	var stmts []*ast.Node
-	returning := false // stmts end in a return
-	held := -1         // the statement declaring what stmts return, when a copy may go on after them
+	returning := false       // stmts end in a return
+	held := -1               // the statement declaring what stmts return, when a copy may go on after them
+	var returned *ast.Symbol // the name stmts' only return, their last, returns
+	back := -1               // the parameter the body assigns and returns: a copy of the statements before the return assigns the call to what stands for it
 	body := fn.Body()
 	switch {
 	case !ast.IsBlock(body):
@@ -89,6 +91,7 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 		// return, which goes on after them using x.
 		if ret := stmts[len(stmts)-1]; returning && returns == 1 && ast.IsIdentifier(ret.Expression()) {
 			x := c.GetSymbolAtLocation(ret.Expression())
+			returned = x
 			for k, s := range stmts[:len(stmts)-1] {
 				if d := onlyDeclaration(s); d != nil && d.Initializer() != nil && c.GetSymbolAtLocation(d.Name()) == x {
 					held = k
@@ -106,7 +109,10 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 		holes[s] = i
 		paramTypes = append(paramTypes, c.TypeToString(c.GetTypeAtLocation(prm.Name())))
 		if where := l.Assigns(body, s, c); where != "" {
-			return nil, 0, nil, fmt.Sprintf("%s assigns its parameter %s (%s), which code passing it could not see", name, prm.Name().Text(), where)
+			if s != returned || back >= 0 {
+				return nil, 0, nil, fmt.Sprintf("%s assigns its parameter %s (%s), which code passing it could not see", name, prm.Name().Text(), where)
+			}
+			back = i
 		}
 	}
 	nholes := len(holes)
@@ -148,6 +154,7 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 		where  string
 		obj    bool // parameters used by their properties stand for an object of them
 		goesOn bool // a copy of the statements before the return, which goes on using what it returns
+		back   bool // a copy of the statements before the return, which assigns what stands for the parameter it returns
 	}
 	var matches []found
 	try := func(cl *Lined, roots []*ast.Node, pats []*ast.Node, obj bool) {
@@ -258,7 +265,7 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 		}
 		cl.lists(func(_ *ast.Node, list []*ast.Node) {
 			shortest := len(stmts)
-			if held >= 0 {
+			if held >= 0 || back >= 0 {
 				shortest--
 			}
 			for i := 0; i+shortest <= len(list); i++ {
@@ -266,13 +273,14 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 					continue
 				}
 				before := len(matches)
-				if i+len(stmts) <= len(list) {
+				if i+len(stmts) <= len(list) && back < 0 {
 					tryBoth(cl, list[i:i+len(stmts)], stmts)
 				}
-				if len(matches) == before && held >= 0 {
+				if len(matches) == before && (held >= 0 || back >= 0) {
 					tryBoth(cl, list[i:i+shortest], stmts[:shortest])
 					if len(matches) > before {
-						matches[len(matches)-1].goesOn = true
+						matches[len(matches)-1].goesOn = held >= 0
+						matches[len(matches)-1].back = back >= 0
 					}
 				}
 				if len(matches) > before {
@@ -389,7 +397,7 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 		// A copy that returns becomes return f(...), where the function it
 		// is in returns what f does; one that goes on declares what f returns
 		// as the copy declared it, when that takes it.
-		if returning && !m.goesOn {
+		if returning && !m.goesOn && !m.back {
 			if why := returnsTaken(c, fn, ast.GetContainingFunction(root), name); why != "" {
 				skip(why)
 				continue
@@ -400,6 +408,28 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 			want := c.GetReturnTypeOfSignature(c.GetSignatureFromDeclaration(fn))
 			if have := c.GetTypeAtLocation(d.Name()); !c.IsTypeAssignableTo(want, have) {
 				skip(fmt.Sprintf("%s is a %s, which the result of %s, %s, is not", d.Name().Text(), c.TypeToString(have), name, c.TypeToString(want)))
+				continue
+			}
+		}
+		if m.back {
+			y := m.args[back]
+			pn := fn.Parameters()[back].Name().Text()
+			if y == nil || m.texts[back] != "" || !ast.IsIdentifier(y) {
+				skip(fmt.Sprintf("%s stands for %s, which %s assigns; only a variable can take the call's result back", cl.Source(root), pn, name))
+				continue
+			}
+			x := symbolOf(c, y)
+			named := false
+			for i, a := range m.args {
+				named = named || i != back && a != nil && slices.ContainsFunc(identifiersOf(a), func(id *ast.Node) bool { return symbolOf(c, id) == x })
+			}
+			if named || !unseen(c, x, root) {
+				skip(fmt.Sprintf("%s could be seen while %s runs, which writes it only at the end", y.Text(), name))
+				continue
+			}
+			want := c.GetReturnTypeOfSignature(c.GetSignatureFromDeclaration(fn))
+			if have := c.GetTypeAtLocation(y); !c.IsTypeAssignableTo(want, have) {
+				skip(fmt.Sprintf("%s is a %s, which the result of %s, %s, is not", y.Text(), c.TypeToString(have), name, c.TypeToString(want)))
 				continue
 			}
 		}
@@ -466,6 +496,8 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 			case m.goesOn:
 				decl := m.root[held]
 				text = cl.Text[cl.Pos(decl):cl.Pos(onlyDeclaration(decl).Initializer())] + text
+			case m.back:
+				text = cl.Source(m.args[back]) + " = " + text
 			case returning:
 				text = "return " + text
 			}

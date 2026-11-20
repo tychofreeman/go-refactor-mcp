@@ -1677,6 +1677,21 @@ it up to the `=`. It is left when f's return type is not assignable
 to x's type there, or when another local of the copy is used after
 it.
 
+A TypeScript body may also assign one parameter, when its only return,
+its last, returns that parameter (`held += text; return held;`, the
+form extract_function writes for a statement that assigns a local; #727,
+2026-11-20). Any other assignment of a parameter is refused. A copy of
+the statements before that return, the parameter standing for a
+variable y, becomes `y = f(...);`. It is left, with the reason, when
+what stands for the parameter is not a variable, when y could be seen
+while f runs (`unseen`: y is not a local of a function, a function in
+it captures y, or the copy is in a try, where a catch would see y
+unchanged rather than half-written; or another argument names y), or
+when f's return type is not assignable to y's. `inline` takes the same
+rule the other way (#724): `y = f(y, ...)`, whose body returns that
+parameter, writes y in place of a copy when `unseen` holds and no other
+argument names y.
+
 ## Edits
 
 A refactoring keeps behavior; an edit changes it, on purpose: it is the
