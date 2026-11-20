@@ -1661,6 +1661,17 @@ value (2026-11-20), whose clauses match with the same values in the
 same order; a type switch, or `break` or `fallthrough` in a clause,
 matches nothing.
 
+A TypeScript body so small that it matches code only looking like it
+(`slight`: a literal or a name, or one operator or index on those; a
+property read is not, since its object's type narrows it) is refused
+without `line` when it matches more than one place, listing each match
+with its code, so the model chooses the lines (#714, 2026-11-20).
+
+In TypeScript each argument's move is checked against what else the
+match runs, which includes a property read whose object is a hole:
+`a.keys += a.bump()` is not `a.press(a.bump())` when bump sets keys,
+since the read came first (#726, 2026-11-20; before, fold applied it).
+
 A TypeScript method folds unless a class of the program that extends
 its class, directly or not, declares a member of its name (`overrider`,
 #730, 2026-11-20; before, any subclass refused it), as

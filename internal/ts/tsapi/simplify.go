@@ -92,7 +92,8 @@ func (l *Lined) part(n *ast.Node) string {
 // parts returns the largest pieces of root, statements or expressions,
 // that run before the offset until and overlap none of skip: what runs
 // in root before the node there. A name that = assigns to is left out,
-// since it is not read.
+// since it is not read; a property read of a skipped object is kept
+// whole, since it reads state though its object is skipped.
 func parts(root *ast.Node, until int, skip []*ast.Node) []*ast.Node {
 	var out []*ast.Node
 	var visit func(n *ast.Node)
@@ -104,6 +105,10 @@ func parts(root *ast.Node, until int, skip []*ast.Node) []*ast.Node {
 			holds := c.End() > until || slices.ContainsFunc(skip, func(s *ast.Node) bool { return s.Pos() >= c.Pos() && s.End() <= c.End() })
 			switch {
 			case slices.Contains(skip, c):
+			case (ast.IsPropertyAccessExpression(c) || ast.IsElementAccessExpression(c)) && slices.Contains(skip, c.Expression()) && c.End() <= until &&
+				!(ast.IsBinaryExpression(n) && n.AsBinaryExpression().OperatorToken.Kind == ast.KindEqualsToken && n.AsBinaryExpression().Left == c):
+				// a read of a skipped object's property still reads state
+				out = append(out, c)
 			case holds:
 				if !ast.IsFunctionLike(c) {
 					visit(c)

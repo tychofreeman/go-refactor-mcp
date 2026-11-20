@@ -463,6 +463,32 @@ function press(held: string, text: string): string {
   return held;
 }
 `}, NewFold(), `{"file": "src/a.ts", "name": "press"}`, nil, "out could be seen while press runs"},
+		{"a small body without line", map[string]string{"src/a.ts": `export function label(first: string, last: string): string {
+  let pending = "";
+  pending = first + pending;
+  return pending + " " + last;
+}
+
+function push(held: string, operator: string): string {
+  return operator + held;
+}
+`}, NewFold(), `{"file": "src/a.ts", "name": "push"}`, nil, "push's body, operator + held, is small enough to match code unrelated to it; give line to fold the match on it (several lines: one fold each, in a batch). It matches a.ts:3 `first + pending`, a.ts:4 `pending + \" \" + last`"},
+		{"not an argument past a read of what it changes", map[string]string{"src/a.ts": `export class Calculator {
+  keys = "";
+  press(text: string): void {
+    this.keys += text;
+  }
+  bump(): string {
+    this.keys = "x";
+    return "y";
+  }
+}
+
+export function drain(calculator: Calculator): string {
+  calculator.keys += calculator.bump();
+  return calculator.keys;
+}
+`}, NewFold(), `{"file": "src/a.ts", "name": "Calculator.press"}`, nil, "calculator.bump() cannot move past what runs between"},
 		{"a method of a class whose subclass does not override it", map[string]string{"src/a.ts": `class Token {
   constructor(readonly text: string) {}
   is_minus(): boolean {
@@ -1214,10 +1240,10 @@ function next(): number {
   return calls;
 }
 function double(n: number): number {
-  return n * 2;
+  return n * 2 + 1;
 }
-const a = next() * 2;
-const b = (a + next()) * 2;
+const a = next() * 2 + 1;
+const b = (a + next()) * 2 + 1;
 console.log(a, b, double(5), calls);
 `},
 		{"a switch on a union into methods", NewUnionSwitchToMethod(), `{"function": "water", "method": "water"}`, `class Fern {
