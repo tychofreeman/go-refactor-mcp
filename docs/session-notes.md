@@ -178,6 +178,10 @@ working patterns, with their steps, are in `docs/patterns.md`.
 - **A GOROOT whose `src` is a symlink** made every golden that imports the
   standard library fail on the user's workstation until 2026-10-31 (item
   47.4): where an import of `strings` is refused, suspect that first.
+- **Make a branch in a command of its own** (2026-11-19,
+  switch-move-case): a guard that refuses one part of a Bash command
+  refuses all of it, so `git checkout -b x && grep f.go` left the work on
+  main, and its calls in `main.jsonl`.
 - **Measuring a session:** the transcript keeps only what follows the last
   compaction, so measure before one; batches sent through the CLI count as
   Bash in `refactor-tokens`.

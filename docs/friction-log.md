@@ -5090,3 +5090,11 @@ Nothing by hand in Go but the goldens' fixtures (heredoc under
 testdata). fold of the extracted `declStart` did not match its copy,
 which goes on after setting `start` (roadmap 74), so the copy became
 the call by replace_statements. Record: `docs/sessions/switch-homes.md`.
+
+## Moving a value's cases into its type (2026-11-19, roadmap 72.2)
+
+Nothing by hand in Go but the goldens' fixtures (heredoc under
+testdata). fold matched neither copy it was asked to: a body whose
+returns are in a switch's cases (roadmap 74), so mover.signature's
+copy became a call of `withResults` by replace_statements. Record:
+`docs/sessions/switch-move-case.md`.
