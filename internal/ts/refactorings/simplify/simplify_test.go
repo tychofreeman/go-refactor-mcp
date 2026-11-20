@@ -313,6 +313,24 @@ export function fill(): void {
   cache[0] = n;
 }
 `, NewInlineVariable(), `{"function": "fill", "name": "n"}`, "", "reset()"},
+		{"read under a prefix operator", plants + `
+export function label(s: string, n: number): string {
+  const empty = s.length === 0;
+  const twice = n * 2;
+  if (!empty) {
+    return s + -twice;
+  }
+  return "none";
+}
+`, NewInlineVariable(), `{"line": 15, "name": "empty"}`, plants + `
+export function label(s: string, n: number): string {
+  const twice = n * 2;
+  if (!(s.length === 0)) {
+    return s + -twice;
+  }
+  return "none";
+}
+`, ""},
 	})
 }
 
