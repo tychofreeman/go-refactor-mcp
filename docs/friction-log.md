@@ -5120,3 +5120,13 @@ check (Go and TypeScript) joins the workspace's root on the path. And `outsOf`, 
 cannot match a copy whose exits are `return false, nil` of its caller
 where the helper returns `nil, false`. Record:
 `docs/sessions/fold-value-goes-on.md`.
+
+## fold of an accumulating function (2026-11-20, #727)
+
+One restructuring by edits rather than a refactoring: `unseen`, the
+visibility rule of inline's `assignedBack`, was written with
+add_declaration and its lines replaced by a call, since they return -1
+early and extract_function would have made the `done, v` form. And
+replace_declaration cannot address a field of a type declared inside a
+function (`found.goesOn`: "no package-level found"); add_field with its
+line added the new field. Record: `docs/sessions/ts-fold-assigned-back.md`.

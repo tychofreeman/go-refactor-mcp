@@ -840,9 +840,8 @@ func (in *inliner) earlyBody(l *Lined, call, stmt *ast.Node, rs *[]repl) ([]*ast
 
 // assignedBack returns the parameter whose argument the call's statement
 // stmt assigns the result back to, x = f(x, ...), where the body returns
-// that parameter last and nothing but the body can see x while it runs:
-// x is a local of the caller that no function in it captures, the call
-// is in no try, and no other argument names x. The body may then write x
+// that parameter last and nothing but the body can see x while it runs
+// (unseen, and no other argument names x). The body may then write x
 // itself, with no copy and no assignment after. -1 if there is none.
 func (in *inliner) assignedBack(call, stmt *ast.Node) int {
 	c := in.c
@@ -854,33 +853,7 @@ func (in *inliner) assignedBack(call, stmt *ast.Node) int {
 		return -1
 	}
 	x := symbolOf(c, e.AsBinaryExpression().Left)
-	if x == nil || x.ValueDeclaration == nil || !(ast.IsVariableDeclaration(x.ValueDeclaration) || ast.IsParameterDeclaration(x.ValueDeclaration)) {
-		return -1
-	}
-	owner := x.ValueDeclaration.Parent
-	for owner != nil && !ast.IsFunctionLike(owner) {
-		owner = owner.Parent
-	}
-	if owner == nil {
-		return -1
-	}
-	for n := stmt.Parent; n != owner; n = n.Parent {
-		if n == nil || ast.IsTryStatement(n) {
-			return -1
-		}
-	}
-	captured := false
-	Identifiers(owner, func(id *ast.Node) {
-		if symbolOf(c, id) != x {
-			return
-		}
-		f := id.Parent
-		for !ast.IsFunctionLike(f) {
-			f = f.Parent
-		}
-		captured = captured || f != owner
-	})
-	if captured {
+	if !unseen(c, x, stmt) {
 		return -1
 	}
 	back := -1
@@ -894,4 +867,38 @@ func (in *inliner) assignedBack(call, stmt *ast.Node) int {
 		}
 	}
 	return back
+}
+
+// unseen reports whether only the code at stmt can see the variable x
+// while stmt runs: x is a local of a function, which no function in it
+// captures, and stmt is in no try there (a throw would leave x
+// half-written where a catch could read it).
+func unseen(c *checker.Checker, x *ast.Symbol, stmt *ast.Node) bool {
+	if x == nil || x.ValueDeclaration == nil || !(ast.IsVariableDeclaration(x.ValueDeclaration) || ast.IsParameterDeclaration(x.ValueDeclaration)) {
+		return false
+	}
+	owner := x.ValueDeclaration.Parent
+	for owner != nil && !ast.IsFunctionLike(owner) {
+		owner = owner.Parent
+	}
+	if owner == nil {
+		return false
+	}
+	for n := stmt.Parent; n != owner; n = n.Parent {
+		if n == nil || ast.IsTryStatement(n) {
+			return false
+		}
+	}
+	captured := false
+	Identifiers(owner, func(id *ast.Node) {
+		if symbolOf(c, id) != x {
+			return
+		}
+		f := id.Parent
+		for !ast.IsFunctionLike(f) {
+			f = f.Parent
+		}
+		captured = captured || f != owner
+	})
+	return !captured
 }
