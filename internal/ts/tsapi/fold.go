@@ -296,6 +296,9 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 		cl := newLined(ast.GetSourceFileOfNode(root))
 		ef := newEffects(c, cl)
 		skip := func(why string) { skipped = append(skipped, m.where+": "+why) }
+		if isAssigned(root) {
+			continue // a target is written, not a value a call could stand for
+		}
 		var holeNodes []*ast.Node
 		for i, a := range m.args {
 			switch {
