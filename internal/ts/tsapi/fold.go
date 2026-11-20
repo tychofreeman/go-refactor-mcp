@@ -44,8 +44,10 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 		if ast.IsStatic(fn) {
 			return nil, 0, nil, "a static method is not folded"
 		}
-		if fn.ModifierFlags()&ast.ModifierFlagsPrivate == 0 && !ast.IsPrivateIdentifier(fn.Name()) && p.extended(c, fn.Parent) {
-			return nil, 0, nil, fmt.Sprintf("%s is a method a subclass could override", name)
+		if fn.ModifierFlags()&ast.ModifierFlagsPrivate == 0 && !ast.IsPrivateIdentifier(fn.Name()) {
+			if by := p.overrider(c, fn.Parent, fn.Name().Text()); by != "" {
+				return nil, 0, nil, fmt.Sprintf("%s is overridden by %s, whose body a call could run instead", name, by)
+			}
 		}
 	}
 	sym := c.GetSymbolAtLocation(nameNode)
@@ -614,32 +616,60 @@ func (l *Lined) importNames(c *checker.Checker, sym *ast.Symbol) []string {
 	return out
 }
 
-// extended reports whether a class of the program extends class.
-func (p *Project) extended(c *checker.Checker, class *ast.Node) bool {
+// overrider says where a class of the program that extends class,
+// directly or not, declares a member named name: "Minus (a.ts:11)"; or
+// "" when none does. A class with no name, or one extending it, counts
+// as one, since what it declares cannot be followed by name.
+func (p *Project) overrider(c *checker.Checker, class *ast.Node, name string) string {
 	if class.Name() == nil {
-		return true
+		return "a class with no name"
 	}
-	sym := c.GetSymbolAtLocation(class.Name())
-	found := false
+	var classes []*ast.Node
 	for _, f := range p.prog.GetProgram().GetSourceFiles() {
-		var visit func(n *ast.Node) bool
-		visit = func(n *ast.Node) bool {
-			if found {
-				return true
+		Inspect(f.AsNode(), func(n *ast.Node) bool {
+			if ast.IsClassLike(n) && n != class {
+				classes = append(classes, n)
 			}
-			if ast.IsHeritageClause(n) && n.AsHeritageClause().Token == ast.KindExtendsKeyword {
-				for _, t := range n.AsHeritageClause().Types.Nodes {
-					if e := t.Expression(); e != nil && ast.IsIdentifier(e) && symbolOf(c, e) == sym {
-						found = true
-					}
+			return true
+		})
+	}
+	below := map[*ast.Symbol]bool{c.GetSymbolAtLocation(class.Name()): true}
+	extends := func(k *ast.Node) bool {
+		for _, h := range k.ClassLikeData().HeritageClauses.Nodes {
+			if h.AsHeritageClause().Token != ast.KindExtendsKeyword {
+				continue
+			}
+			for _, t := range h.AsHeritageClause().Types.Nodes {
+				if e := t.Expression(); e != nil && ast.IsIdentifier(e) && below[symbolOf(c, e)] {
+					return true
 				}
 			}
-			n.ForEachChild(visit)
-			return found
 		}
-		visit(f.AsNode())
+		return false
 	}
-	return found
+	for grew := true; grew; {
+		grew = false
+		for _, k := range classes {
+			if k.ClassLikeData().HeritageClauses == nil || !extends(k) {
+				continue
+			}
+			kl := newLined(ast.GetSourceFileOfNode(k))
+			if k.Name() == nil {
+				return "a class with no name (" + kl.Where(k) + ")"
+			}
+			ks := c.GetSymbolAtLocation(k.Name())
+			if below[ks] {
+				continue
+			}
+			for _, m := range k.Members() {
+				if m.Name() != nil && kl.Source(m.Name()) == name {
+					return k.Name().Text() + " (" + kl.Where(m) + ")"
+				}
+			}
+			below[ks], grew = true, true
+		}
+	}
+	return ""
 }
 
 // isArrowBody reports whether n is an arrow function's expression body.

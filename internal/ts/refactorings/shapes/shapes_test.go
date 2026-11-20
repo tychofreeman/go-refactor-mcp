@@ -489,6 +489,50 @@ export function drain(calculator: Calculator): string {
   return calculator.keys;
 }
 `}, NewFold(), `{"file": "src/a.ts", "name": "Calculator.press"}`, nil, "calculator.bump() cannot move past what runs between"},
+		{"a method of a class whose subclass does not override it", map[string]string{"src/a.ts": `class Token {
+  constructor(readonly text: string) {}
+  is_minus(): boolean {
+    return this.text === "-";
+  }
+}
+
+class Operator extends Token {}
+
+export function minus(token: Token, op: Operator): boolean {
+  return token.text === "-" || op.text === "-";
+}
+`}, NewFold(), `{"file": "src/a.ts", "name": "Token.is_minus"}`, map[string]string{"src/a.ts": `class Token {
+  constructor(readonly text: string) {}
+  is_minus(): boolean {
+    return this.text === "-";
+  }
+}
+
+class Operator extends Token {}
+
+export function minus(token: Token, op: Operator): boolean {
+  return token.is_minus() || op.is_minus();
+}
+`}, ""},
+		{"a method a subclass of a subclass overrides", map[string]string{"src/a.ts": `class Token {
+  constructor(readonly text: string) {}
+  is_minus(): boolean {
+    return this.text === "-";
+  }
+}
+
+class Operator extends Token {}
+
+class Minus extends Operator {
+  is_minus(): boolean {
+    return true;
+  }
+}
+
+export function minus(token: Token): boolean {
+  return token.text === "-" || new Minus("-").is_minus();
+}
+`}, NewFold(), `{"file": "src/a.ts", "name": "Token.is_minus"}`, nil, "Token.is_minus is overridden by Minus (a.ts:11)"},
 	})
 }
 

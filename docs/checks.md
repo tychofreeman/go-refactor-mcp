@@ -1672,6 +1672,12 @@ match runs, which includes a property read whose object is a hole:
 `a.keys += a.bump()` is not `a.press(a.bump())` when bump sets keys,
 since the read came first (#726, 2026-11-20; before, fold applied it).
 
+A TypeScript method folds unless a class of the program that extends
+its class, directly or not, declares a member of its name (`overrider`,
+#730, 2026-11-20; before, any subclass refused it), as
+java-refactor-mcp's fold: the call could run that body instead. A
+static method is not folded.
+
 TypeScript's fold (`tsapi.Fold`) takes the same first two shapes: a
 body of statements ending in a return, every return giving a value,
 folds a copy ending in the same return as `return f(...);`, early
