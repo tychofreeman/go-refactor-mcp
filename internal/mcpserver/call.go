@@ -30,6 +30,7 @@ func (s *Server) Undo() (string, error) { return s.langs.ForUndo().Undo(nil) }
 // in the language of the files they name, as a tool call does: its text,
 // and whether it was refused.
 func (s *Server) Call(tool string, args json.RawMessage) (string, bool, error) {
+	s.configure()
 	l, refused := s.langs.For(args)
 	if refused != "" {
 		return refused, true, nil

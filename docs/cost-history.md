@@ -2147,3 +2147,33 @@ or copies that differ in a field into one function of it.
 Next: whether the routine belongs in `examples/CLAUDE.md` (the user's
 call), and the two operations above, which would let the tools carry
 the design changes the routine now gets the model to choose.
+
+## 36. Lending-magazine with `lookup` and `move` (Nov 20)
+
+Whether a fresh model, given the design routine, uses roadmap 72's
+`prepare_switch_for_types` options (`lookup`, `move`; #707, #709) to
+carry the design it chose in section 35. Same task, arm and
+instructions as section 35's routine: Sonnet, hybrid, 5 runs,
+`level-question-2.json`'s `lending-magazine`,
+`eval-tasks/claude-md-design-routine`, the server at fb5f9a57. Run:
+`eval-runs/routine-move-lending`. $0.65 in all.
+
+| run | cost · turns · diff lines | section 35 |
+|---|---|---|
+| lending-magazine | $0.13 · 10.4 · 81 | $0.13 · 10.0 · 79 |
+
+Every session passed (5/5) and made the same design as before: one
+table of rules per kind in place of the five switches (complexity
+-10.2). None used the new options: `prepare_switch_for_types` appears
+in each transcript only in the tool list, and no session called a
+refactoring (20 edit steps, 17 of them text edits of Go; most of the
+work through Bash). The model's design is a table of values, a
+struct of fields per kind, because each case is a constant; a type
+per kind behind an interface, which 72 builds, is what it would
+choose for cases with behavior. So 72 gave the tools a design the
+model does not reach for on this shape.
+
+Next (roadmap 72): an operation for the design it does reach for,
+switches whose cases are constants into one table keyed by the value,
+each switch a lookup of one field; or, before that, whether naming the
+table form in `prepare_switch_for_types`'s description gets it used.
