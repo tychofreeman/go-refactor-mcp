@@ -26,7 +26,7 @@ func startLines(msg, file string, lines map[string]*lineMap) string {
 	back := func(rel, num string) string {
 		m := lines[rel]
 		n, err := strconv.Atoi(num)
-		if m == nil || err != nil {
+		if m == nil || err != nil || n <= 0 {
 			return num
 		}
 		if !m.created {

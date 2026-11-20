@@ -193,6 +193,21 @@ export function tall(p: Plant, margin: number): number {
   return p.height + margin;
 }
 `, NewExtractVariable(), `{"line": 15, "expression": "p.height", "name": "margin"}`, "", "margin is already a name"},
+		{"an as it does not know", plants + `
+export function tall(p: Plant): number {
+  return p.height * 2;
+}
+`, NewExtractVariable(), `{"line": 15, "expression": "p.height * 2", "name": "twice", "as": "field"}`, "", `as is "field": it takes "parameter"`},
+		{"function without as parameter", plants + `
+export function tall(p: Plant): number {
+  return p.height * 2;
+}
+`, NewExtractVariable(), `{"function": "tall", "expression": "p.height * 2", "name": "twice"}`, "", `function takes line's place only with as "parameter"`},
+		{"no line", plants + `
+export function tall(p: Plant): number {
+  return p.height * 2;
+}
+`, NewExtractVariable(), `{"expression": "p.height * 2", "name": "twice"}`, "", "give line, the line the expression starts on"},
 	})
 }
 

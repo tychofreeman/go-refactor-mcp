@@ -11,7 +11,9 @@ func TestStartLines(t *testing.T) {
 	after := []byte("a\nnew1\nnew2\nb\nc\nd\n") // a step wrote two lines after a
 	m := newLineMap(before)
 	m.follow(1, edit.LineMap(before, after))
-	lines := map[string]*lineMap{"m.go": m}
+	deleted := newLineMap(before)
+	deleted.follow(1, edit.LineMap(before, []byte("a\nc\nd\n"))) // a step deleted b
+	lines := map[string]*lineMap{"m.go": m, "d.go": deleted}
 	for _, c := range []struct{ msg, file, want string }{
 		{"the code after the switch does (line 6 on)", "m.go", "the code after the switch does (line 4 on)"},
 		{"lines 4-5 do not cover whole statements", "m.go", "lines 2-3 do not cover whole statements"},
@@ -20,6 +22,7 @@ func TestStartLines(t *testing.T) {
 		{"other.go:5: unchanged", "m.go", "other.go:5: unchanged"},
 		{"Statements near there: 4-5 `if b {...`, 6 `d`", "m.go", "Statements near there: 2-3 `if b {...`, 4 `d`"},
 		{"line 6 of a file nothing names", "", "line 6 of a file nothing names"},
+		{"line 0 out of range", "d.go", "line 0 out of range"},
 	} {
 		if got := startLines(c.msg, c.file, lines); got != c.want {
 			t.Errorf("startLines(%q, %q) =\n%q, want\n%q", c.msg, c.file, got, c.want)
