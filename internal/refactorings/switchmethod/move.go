@@ -38,9 +38,25 @@ type mover struct {
 type move struct {
 	s         *switcher
 	call      *ast.CallExpr   // the guard's call of the interface's method
+	ifs       *ast.IfStmt     // the guard
 	returning bool            // the guard returns what the call does
 	clause    *ast.CaseClause // the value's case, or the default when it has none
 	rest      []ast.Stmt      // with neither: the code after the switch, which ends the function
+}
+
+// deletion deletes the move's case, or, when it is the switch's only
+// clause, the switch: the statement after a returning guard, or the
+// guard's else that holds it. A switch whose tag calls or receives
+// stays, since deleting it would drop that.
+func (mv move) deletion() edit.TextEdit {
+	s := mv.s
+	if len(s.block.List) > 1 || !plain(s.subject) {
+		return s.deleteClause(mv.clause)
+	}
+	if mv.returning {
+		return edit.TextEdit{Start: s.Off(s.TF.LineStart(s.TF.Line(s.stmt.Pos()))), End: s.Off(s.TF.LineStart(s.TF.Line(s.stmt.End()) + 1))}
+	}
+	return edit.TextEdit{Start: s.Off(mv.ifs.Body.End()), End: s.Off(mv.ifs.Else.End())}
 }
 
 // planMove moves a's value into a's type: each prepared switch's case
@@ -253,6 +269,7 @@ func (m *mover) guarded(st *site.Site, fd *ast.FuncDecl, b *ast.BlockStmt, i int
 		return move{}, false
 	}
 	mv.s = &switcher{Site: *st, fd: fd, stmt: sw, block: sw.Body, subject: sw.Tag, method: sel.Sel.Name}
+	mv.ifs = ifs
 	return mv, true
 }
 
@@ -349,7 +366,7 @@ func (m *mover) plan() (*refactor.Plan, error) {
 		names = append(names, fn)
 		switch {
 		case mv.clause != nil && mv.clause.List != nil:
-			fes = append(fes, edit.FileEdit{Path: m.WS.Fset.Position(mv.s.fd.Pos()).Filename, Edits: []edit.TextEdit{mv.s.deleteClause(mv.clause)}})
+			fes = append(fes, edit.FileEdit{Path: m.WS.Fset.Position(mv.s.fd.Pos()).Filename, Edits: []edit.TextEdit{mv.deletion()}})
 		case mv.clause != nil:
 			notes = append(notes, fmt.Sprintf("%s has no case for %s: %s.%s is its default", fn, m.key, m.typ, f.Name()))
 		case mv.rest != nil:
@@ -461,4 +478,19 @@ func (s *switcher) deleteClause(cc *ast.CaseClause) edit.TextEdit {
 		}
 	}
 	return edit.TextEdit{Start: s.Off(s.TF.LineStart(s.TF.Line(cc.Pos()))), End: s.Off(s.TF.LineStart(s.TF.Line(end)))}
+}
+
+// plain reports whether evaluating e calls nothing and receives nothing.
+func plain(e ast.Expr) bool {
+	ok := true
+	ast.Inspect(e, func(n ast.Node) bool {
+		switch n := n.(type) {
+		case *ast.CallExpr:
+			ok = false
+		case *ast.UnaryExpr:
+			ok = ok && n.Op != token.ARROW
+		}
+		return ok
+	})
+	return ok
 }

@@ -48,19 +48,7 @@ func read(t *testing.T, dir string) string {
 
 // A call naming TypeScript files runs TypeScript's tools.
 func TestTypeScript(t *testing.T) {
-	dir := t.TempDir()
-	for name, content := range map[string]string{
-		"tsconfig.json": `{"compilerOptions": {"strict": true, "module": "ESNext", "moduleResolution": "Bundler", "noEmit": true, "types": []}, "include": ["src"]}`,
-		"src/a.ts":      "export function water(liters: number): string {\n  return liters + \" L\";\n}\n",
-	} {
-		p := filepath.Join(dir, name)
-		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
+	dir := solution(t)
 	var out strings.Builder
 	stdout = &out
 	defer func() { stdout = os.Stdout }()
@@ -92,6 +80,25 @@ func TestTypeScript(t *testing.T) {
 	if b, _ := os.ReadFile(filepath.Join(dir, "src/a.ts")); !strings.Contains(string(b), "export const pots = 3;") {
 		t.Errorf("a.ts:\n%s", b)
 	}
+}
+
+// solution writes a TypeScript solution with one file, src/a.ts, and returns
+// its directory.
+func solution(t *testing.T) string {
+	dir := t.TempDir()
+	for name, content := range map[string]string{
+		"tsconfig.json": `{"compilerOptions": {"strict": true, "module": "ESNext", "moduleResolution": "Bundler", "noEmit": true, "types": []}, "include": ["src"]}`,
+		"src/a.ts":      "export function water(liters: number): string {\n  return liters + \" L\";\n}\n",
+	} {
+		p := filepath.Join(dir, name)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return dir
 }
 
 func TestRunDeclaresWhatAnEditCalls(t *testing.T) {
@@ -364,5 +371,55 @@ func TestListAndVersion(t *testing.T) {
 	out.Reset()
 	if code := run([]string{"-version"}); code != 0 || !strings.HasPrefix(out.String(), "refactor "+mcpserver.Version()) {
 		t.Errorf("-version: exit status %d: %q", code, out.String())
+	}
+}
+
+// The server's options are flags here too: -skeleton-only refuses a new
+// file's function bodies, and -no-code-by-text a replace_text that changes
+// code, for a step and for a batch's steps.
+func TestServerOptions(t *testing.T) {
+	const src = "package p\n\nfunc f() int { return 1 }\n"
+	dir := module(t, src)
+	file := `{"file":"q.go","content":"package p\n\nfunc g() int { return 2 }\n"}`
+	text := `{"file":"p.go","old":"return 1","new":"return 3"}`
+	if code := run([]string{"-C", dir, "-skeleton-only", "create_file", file}); code != 2 {
+		t.Errorf("create_file with -skeleton-only: exit status %d, want 2", code)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "q.go")); err == nil {
+		t.Error("create_file with -skeleton-only wrote q.go")
+	}
+	if code := run([]string{"-C", dir, "-no-code-by-text", "replace_text", text}); code != 2 {
+		t.Errorf("replace_text with -no-code-by-text: exit status %d, want 2", code)
+	}
+	if code := run([]string{"-C", dir, "-no-code-by-text", "batch", `{"steps":[{"tool":"replace_text","args":` + text + `}]}`}); code != 2 {
+		t.Errorf("a batch's replace_text with -no-code-by-text: exit status %d, want 2", code)
+	}
+	if got := read(t, dir); got != src {
+		t.Errorf("p.go changed:\n%s", got)
+	}
+	// Without the flags, both go through.
+	if code := run([]string{"-C", dir, "create_file", file}); code != 0 {
+		t.Errorf("create_file: exit status %d, want 0", code)
+	}
+	if code := run([]string{"-C", dir, "replace_text", text}); code != 0 {
+		t.Errorf("replace_text: exit status %d, want 0", code)
+	}
+}
+
+// -skeleton-only reaches TypeScript's create_file too.
+func TestServerOptionsTypeScript(t *testing.T) {
+	dir := solution(t)
+	var out strings.Builder
+	stdout = &out
+	defer func() { stdout = os.Stdout }()
+	file := `{"file":"src/b.ts","content":"export function soak(liters: number): number {\n  return liters * 2;\n}\n"}`
+	if code := run([]string{"-C", dir, "-skeleton-only", "create_file", file}); code != 2 {
+		t.Errorf("create_file with -skeleton-only: exit status %d, want 2\n%s", code, out.String())
+	}
+	if _, err := os.Stat(filepath.Join(dir, "src/b.ts")); err == nil {
+		t.Error("create_file with -skeleton-only wrote src/b.ts")
+	}
+	if code := run([]string{"-C", dir, "create_file", file}); code != 0 {
+		t.Errorf("create_file: exit status %d, want 0\n%s", code, out.String())
 	}
 }

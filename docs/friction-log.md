@@ -5098,3 +5098,11 @@ testdata). fold matched neither copy it was asked to: a body whose
 returns are in a switch's cases (roadmap 74), so mover.signature's
 copy became a call of `withResults` by replace_statements. Record:
 `docs/sessions/switch-move-case.md`.
+
+## The server's options as CLI flags (2026-11-19)
+
+Nothing by hand in Go. Two insert_statements steps of the batch were
+refused, each for a line that ends no statement (the first line of an
+`if`, where its last was meant); `retry` with the one step changed sent
+the rest again both times. The CLI makes a `golang.Language` only for
+its `Strict`: a function of the two options would say that more plainly.
