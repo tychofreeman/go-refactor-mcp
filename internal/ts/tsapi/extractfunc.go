@@ -82,7 +82,7 @@ func assignedIn(c *checker.Checker, nodes []*ast.Node, s *ast.Symbol) bool {
 			case ast.IsForInOrOfStatement(x):
 				target = x.AsForInOrOfStatement().Initializer
 			}
-			if target != nil && !ast.IsVariableDeclarationList(target) && slices.Contains(symbolsOf(c, target), s) {
+			if target != nil && slices.ContainsFunc(assigned(target), func(id *ast.Node) bool { return valueSymbol(c, id) == s }) {
 				found = true
 			}
 			if !found {
@@ -338,7 +338,7 @@ func (p *Project) ExtractFunction(ctx context.Context, path string, first, last 
 				return
 			}
 			sym := symbolOf(c, id)
-			if sym == nil || len(sym.Declarations) == 0 {
+			if propertyName(id) || sym == nil || len(sym.Declarations) == 0 {
 				return
 			}
 			d := sym.ValueDeclaration
