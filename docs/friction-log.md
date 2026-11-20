@@ -5090,3 +5090,11 @@ Nothing by hand in Go but the goldens' fixtures (heredoc under
 testdata). fold of the extracted `declStart` did not match its copy,
 which goes on after setting `start` (roadmap 74), so the copy became
 the call by replace_statements. Record: `docs/sessions/switch-homes.md`.
+
+## The server's options as CLI flags (2026-11-19)
+
+Nothing by hand in Go. Two insert_statements steps of the batch were
+refused, each for a line that ends no statement (the first line of an
+`if`, where its last was meant); `retry` with the one step changed sent
+the rest again both times. The CLI makes a `golang.Language` only for
+its `Strict`: a function of the two options would say that more plainly.

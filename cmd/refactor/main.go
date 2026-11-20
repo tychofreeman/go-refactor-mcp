@@ -40,6 +40,7 @@ import (
 
 	"github.com/tychofreeman/go-refactor-mcp/internal/history"
 	"github.com/tychofreeman/go-refactor-mcp/internal/inspect"
+	"github.com/tychofreeman/go-refactor-mcp/internal/lang/golang"
 	"github.com/tychofreeman/go-refactor-mcp/internal/mcpserver"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactor"
 	"github.com/tychofreeman/go-refactor-mcp/internal/refactorings"
@@ -57,6 +58,8 @@ func run(argv []string) int {
 	dryRun := fs.Bool("n", false, "dry run: print the diff without writing")
 	asJSON := fs.Bool("json", false, "print the result as JSON (without declaring what an edit calls)")
 	version := fs.Bool("version", false, "print the version and exit")
+	noCodeByText := fs.Bool("no-code-by-text", false, "replace_text changes a Go file only inside string literals and comments; code is changed by the structured edits")
+	skeletonOnly := fs.Bool("skeleton-only", false, "an experiment: create_file refuses code with function bodies (a fixture under testdata/ excepted); types come from declaration, tests from test_for, functions from add_declaration")
 	fs.Usage = func() {
 		fmt.Fprintf(fs.Output(), "usage: refactor [flags] list [tool...]   (descriptions and arguments)\n       refactor [flags] <refactoring> key=value... | '<json>' | @file | -\n       refactor [flags] batch '<json>' | @file | -\n       refactor [flags] inspect key=value... | '<json>' | @file | -\n       refactor [flags] check [run_tests=true] [packages=./...]\n       refactor [flags] undo\n\n@file reads the JSON from a file, - from stdin; code sections may follow it there (@@name alone on a line, then the text), and a string \"@name\" in the JSON is that text, as written. content_file (new_file, ...) gives a text argument from a file, as key=value or in the JSON; content_file=- reads it from stdin (one per call), so a heredoc can give it; the heredoc's final newline is dropped, except from content.\n\nflags:\n")
 		fs.PrintDefaults()
@@ -64,6 +67,8 @@ func run(argv []string) int {
 	if err := fs.Parse(argv); err != nil {
 		return 1
 	}
+	// The server's options, for Go's steps here; TypeScript's server gets them below.
+	strict := (&golang.Language{NoCodeByText: *noCodeByText, SkeletonOnly: *skeletonOnly}).Strict
 	if *version {
 		fmt.Fprintln(stdout, "refactor", mcpserver.Version())
 		return 0
@@ -115,6 +120,7 @@ func run(argv []string) int {
 					fmt.Fprintln(os.Stderr, err)
 					return 1
 				}
+				srv.NoCodeByText, srv.SkeletonOnly = *noCodeByText, *skeletonOnly
 				text, refused, err := srv.Call(name, raw)
 				if serr := srv.SaveUndo(path); serr != nil {
 					fmt.Fprintln(os.Stderr, "the undo stack was not saved:", serr)
@@ -132,7 +138,7 @@ func run(argv []string) int {
 		}
 	}
 	if name == "batch" {
-		return runBatch(rest, *dir, *pattern, *dryRun)
+		return runBatch(rest, *dir, *pattern, *dryRun, strict)
 	}
 	if name == "inspect" {
 		return runInspect(rest, *dir, *pattern)
@@ -154,6 +160,7 @@ func run(argv []string) int {
 		return 1
 	}
 	r, args = refactor.Routed(r, args, refactorings.Lookup)
+	r = strict(r)
 
 	ws, err := workspace.Load(*dir, *pattern)
 	if err != nil {
@@ -195,7 +202,7 @@ func run(argv []string) int {
 }
 
 // runBatch runs the batch tool: argv is its arguments as one JSON object.
-func runBatch(argv []string, dir, pattern string, dryRun bool) int {
+func runBatch(argv []string, dir, pattern string, dryRun bool, strict func(refactor.Refactoring) refactor.Refactoring) int {
 	if dryRun {
 		fmt.Fprintln(os.Stderr, "-n does not apply to batch: a batch writes each step before the next")
 		return 1
@@ -223,6 +230,9 @@ func runBatch(argv []string, dir, pattern string, dryRun bool) int {
 	if refused != "" {
 		fmt.Println(refused + keep(args, true))
 		return 2
+	}
+	for i := range batch.Steps {
+		batch.Steps[i].Refactoring = strict(batch.Steps[i].Refactoring)
 	}
 	save, err := keepUndo(ws)
 	if err != nil {

@@ -343,6 +343,10 @@ refactor batch @steps.json        # several steps as one change, from a JSON fil
 refactor undo                     # undo the last step or batch
 ```
 
+The server's options `-no-code-by-text` and `-skeleton-only` are flags here
+too, before the tool's name (`refactor -skeleton-only create_file ...`), so
+a script, or a session without the MCP server, works under the same rules.
+
 Long text needs no quoting: `content_file=path` (`new_file`, any `key_file`)
 gives a text argument from a file, and `content_file=-` from stdin, one per
 call, so a heredoc can carry it (a quoted delimiter keeps it as written, and

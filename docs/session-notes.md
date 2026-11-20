@@ -122,7 +122,10 @@ working patterns, with their steps, are in `docs/patterns.md`.
   `refactor inspect` to read, `refactor check run_tests=true`, `refactor
   undo` (its stack is kept per module in the cache directory). Read
   through inspect there too, so the
-  session reads as the tools intend.
+  session reads as the tools intend. The CLI takes `-no-code-by-text` and
+  `-skeleton-only` as the server does (2026-11-19, the user asked for
+  them from a cloud session that built a TypeScript toy through the
+  CLI), so such a session can work under this repo's `.mcp.json` rules.
 - **A session started outside the checkout has no guards** (2026-11-05):
   hooks load from where the session starts, so a cloud session that clones
   the repo later can grep and sed Go files unrefused; one did, and the user
