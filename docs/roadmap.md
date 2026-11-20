@@ -3572,5 +3572,25 @@ candidates and the evidence for each, gathered from the friction log.
     constructor takes them, or a new one); or `move` of a local to
     `Class.property` of a new local. For the user to choose.
 
+76. **A value tested for undefined into classes that answer the tests**
+    (2026-11-20, #740, the to-rpn toy): `opened_at: number | undefined`,
+    passed on by `expression` and tested only in two extracted functions
+    (`if (opened_at !== undefined) throw ...`), became an interface
+    `Group` with a method per function and two classes (`TopLevel` for
+    undefined, `Parenthesized` holding the number), each call of
+    `expression` passing the case it names statically (`undefined` or a
+    value typed without it). Done as one batch of eight edits, the
+    bodies written by hand. Not covered: `add_parameter` needs one value
+    at every call; `prepare_switch_for_types` and
+    `union_switch_to_method` start from a switch or a union of types,
+    not tests against undefined; `function_to_method` needs a class
+    first. The proof is the case split at each call. Shapes to weigh: an
+    option of `union_switch_to_method` taking `T | undefined` as a union
+    of two cases (the tests read as its switch), after which
+    function_to_method and move do the rest; or a step that makes the
+    value an object first (the question of item 75, an object for a
+    value), so the existing tools apply. Related: #728 (75). For the
+    user to choose.
+
 Parked: the Ollama loop (`refactor-agent`). It works and stays, but Claude
 through MCP is the priority.
