@@ -1293,6 +1293,55 @@ export class Bed {
 export const d = new Bed().depth();
 `, NewInlineFunction(), `{"line": 20, "name": "depth"}`, "", "a subclass could override"},
 		{"early return keeps blank lines and template literals", plants + "\nfunction sign(n: number): string {\n  if (n < 0) {\n    water();\n    return \"neg\";\n  }\n  const t = `p\nos`;\n\n  return t;\n}\n\nexport function use(n: number): string {\n  const s = sign(n);\n  return s + \"!\";\n}\n", NewInlineFunction(), `{"line": 26, "name": "sign"}`, plants + "\nexport function use(n: number): string {\n  let s: string;\n  if (n < 0) {\n    water();\n    s = \"neg\";\n  } else {\n    const t = `p\nos`;\n\n    s = t;\n  }\n  return s + \"!\";\n}\n", ""},
+		{"the result assigned back to the argument", plants + `
+export function label(names: string[]): string {
+  let out = "";
+  for (const n of names) {
+    out = add(out, n);
+  }
+  return out;
+}
+
+function add(held: string, n: string): string {
+  held += n;
+  return held;
+}
+`, NewInlineFunction(), `{"line": 17, "name": "add"}`, plants + `
+export function label(names: string[]): string {
+  let out = "";
+  for (const n of names) {
+    out += n;
+  }
+  return out;
+}
+`, ""},
+		{"assigned back inside a try", plants + `
+export function label(names: string[]): string {
+  let out = "";
+  try {
+    out = add(out, names[0]);
+  } catch {
+  }
+  return out;
+}
+
+function add(held: string, n: string): string {
+  held += n;
+  return held;
+}
+`, NewInlineFunction(), `{"line": 17, "name": "add"}`, plants + `
+export function label(names: string[]): string {
+  let out = "";
+  try {
+    let held: string = out;
+    const n: string = names[0];
+    held += n;
+    out = held;
+  } catch {
+  }
+  return out;
+}
+`, ""},
 	})
 }
 
