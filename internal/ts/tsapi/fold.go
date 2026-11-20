@@ -290,6 +290,15 @@ func (p *Project) Fold(ctx context.Context, path, name string, line int, in stri
 		}
 	}
 	// Each match becomes a call, where that does the same.
+	// A body this small matches code that only looks like it: without
+	// line, the model chooses among the matches.
+	if line == 0 && expr != nil && slight(expr) && len(matches) > 1 {
+		var list []string
+		for _, m := range matches {
+			list = append(list, m.where+" `"+newLined(ast.GetSourceFileOfNode(m.root[0])).Source(m.root[0])+"`")
+		}
+		return nil, 0, nil, fmt.Sprintf("%s's body, %s, is small enough to match code unrelated to it; give line to fold the match on it (several lines: one fold each, in a batch). It matches %s", name, l.Source(expr), strings.Join(list, ", "))
+	}
 	imported := map[*ast.SourceFile]bool{}
 	for _, m := range matches {
 		root := m.root[0]
@@ -636,4 +645,30 @@ func onlyDeclaration(s *ast.Node) *ast.Node {
 		return nil
 	}
 	return ds[0]
+}
+
+// slight reports whether e, a body's expression, is small enough to match
+// code unrelated to the function: a literal or a name, or one operator or
+// index on those. A property read is not: its object's type narrows it.
+func slight(e *ast.Node) bool {
+	leaf := func(n *ast.Node) bool {
+		n = ast.SkipParentheses(n)
+		switch n.Kind {
+		case ast.KindIdentifier, ast.KindStringLiteral, ast.KindNumericLiteral, ast.KindNoSubstitutionTemplateLiteral, ast.KindTrueKeyword, ast.KindFalseKeyword, ast.KindNullKeyword, ast.KindThisKeyword:
+			return true
+		}
+		return false
+	}
+	e = ast.SkipParentheses(e)
+	switch {
+	case leaf(e):
+		return true
+	case ast.IsBinaryExpression(e):
+		return leaf(e.AsBinaryExpression().Left) && leaf(e.AsBinaryExpression().Right)
+	case ast.IsElementAccessExpression(e):
+		return leaf(e.Expression()) && leaf(e.AsElementAccessExpression().ArgumentExpression)
+	case ast.IsPrefixUnaryExpression(e):
+		return leaf(e.AsPrefixUnaryExpression().Operand)
+	}
+	return false
 }
