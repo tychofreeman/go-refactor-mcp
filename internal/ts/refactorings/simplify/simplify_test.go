@@ -86,6 +86,30 @@ export function water(): number {
 }
 `
 
+// The parentheses around a replaced expression go with it: a name needs none.
+func TestExtractVariableDropsParens(t *testing.T) {
+	check(t, []change{
+		{"parenthesized new", plants + `
+export class Reader {
+  constructor(readonly s: string) {}
+}
+
+export function first(text: string): string {
+  return (new Reader(text)).s.length;
+}
+`, NewExtractVariable(), `{"line": 19, "expression": "new Reader(text)", "name": "reader"}`, plants + `
+export class Reader {
+  constructor(readonly s: string) {}
+}
+
+export function first(text: string): string {
+  const reader = new Reader(text);
+  return reader.s.length;
+}
+`, ""},
+	})
+}
+
 func TestExtractVariable(t *testing.T) {
 	check(t, []change{
 		{"an arrow takes its parameters' types", plants + `

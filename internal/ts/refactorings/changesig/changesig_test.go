@@ -266,7 +266,7 @@ export const twice = (b: Bed) => liters(b, 1) + b.size();
 `)
 	want("src/use.ts", `import { Bed } from "./bed";
 
-export const l = (new Bed()).liters(2);
+export const l = new Bed().liters(2);
 export const twice = (b: Bed) => b.liters(1) + b.size();
 `)
 	in(NewMethodToFunction(), `{"name": "Bed.size", "new_name": "area"}`)
@@ -287,9 +287,54 @@ export function area(bed: Bed): number {
 	want("src/use.ts", `import { Bed } from "./bed";
 import { area } from "./bed";
 
-export const l = (new Bed()).liters(2);
+export const l = new Bed().liters(2);
 export const twice = (b: Bed) => b.liters(1) + area(b);
 `)
+}
+
+// A call whose argument to become this is a new expression with an
+// argument list keeps no parentheses: new Bed().head() means the same.
+func TestFunctionToMethodNewReceiver(t *testing.T) {
+	ws, dir := load(t, map[string]string{
+		"src/reader.ts": `export function first(text: string): string {
+  return head(new Reader(text));
+}
+
+export class Reader {
+  constructor(readonly s: string) {}
+}
+
+export function head(reader: Reader): string {
+  return reader.s[0];
+}
+`,
+	})
+	res, err := refactor.Run(ws, NewFunctionToMethod(), json.RawMessage(`{"file": "src/reader.ts", "name": "head"}`), refactor.OptionsOf[*workspace.Workspace]{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Applied {
+		t.Fatalf("%s", res)
+	}
+	b, err := os.ReadFile(filepath.Join(dir, "src/reader.ts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `export function first(text: string): string {
+  return new Reader(text).head();
+}
+
+export class Reader {
+  constructor(readonly s: string) {}
+
+  head(): string {
+    return this.s[0];
+  }
+}
+`
+	if string(b) != want {
+		t.Fatalf("src/reader.ts:\n%s\nwant:\n%s", b, want)
+	}
 }
 
 func TestFunctionToMethodRefusals(t *testing.T) {
