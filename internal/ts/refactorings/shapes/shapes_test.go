@@ -422,6 +422,22 @@ function written(held: string): string {
   return held;
 }
 `}, ""},
+		{"not an argument past a read of what it changes", map[string]string{"src/a.ts": `export class Calculator {
+  keys = "";
+  press(text: string): void {
+    this.keys += text;
+  }
+  bump(): string {
+    this.keys = "x";
+    return "y";
+  }
+}
+
+export function drain(calculator: Calculator): string {
+  calculator.keys += calculator.bump();
+  return calculator.keys;
+}
+`}, NewFold(), `{"file": "src/a.ts", "name": "Calculator.press"}`, nil, "calculator.bump() cannot move past what runs between"},
 	})
 }
 
