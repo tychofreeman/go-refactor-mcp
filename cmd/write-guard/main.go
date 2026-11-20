@@ -39,7 +39,7 @@ func main() {
 func refusal(c hook.Call) string {
 	switch c.ToolName {
 	case "Edit", "Write", "MultiEdit":
-		if hook.GoSource(c.ToolInput.FilePath) {
+		if hook.Source(c.ToolInput.FilePath) {
 			return c.ToolName + " of " + c.ToolInput.FilePath + " refused."
 		}
 	case "Bash":
@@ -50,15 +50,15 @@ func refusal(c hook.Call) string {
 
 // writeRefusal says why the command words writes Go source, or is "".
 func writeRefusal(words []string, at func(p string) string) string {
-	if f := writesGo(words, at); f != "" {
+	if f := writesSource(words, at); f != "" {
 		return fmt.Sprintf("%s writing %s refused.", words[0], f)
 	}
 	return ""
 }
 
-// writesGo is the Go source file the command words writes, or ""; at says
+// writesSource is the Go source file the command words writes, or ""; at says
 // where an operand points.
-func writesGo(words []string, at func(string) string) string {
+func writesSource(words []string, at func(string) string) string {
 	for len(words) > 0 && strings.Contains(words[0], "=") && !strings.HasPrefix(words[0], "-") {
 		words = words[1:] // VAR=value before the command
 	}
@@ -72,7 +72,7 @@ func writesGo(words []string, at func(string) string) string {
 		switch {
 		case strings.HasSuffix(w, ">") && i+1 < len(words): // a redirection into the next word
 			i++
-			if hook.GoSource(at(words[i])) {
+			if hook.Source(at(words[i])) {
 				return words[i]
 			}
 		case strings.Contains(w, ">"): // 2>&1
@@ -100,7 +100,7 @@ func writesGo(words []string, at func(string) string) string {
 		return ""
 	}
 	for _, o := range operands {
-		if hook.GoSource(at(o)) {
+		if hook.Source(at(o)) {
 			return o
 		}
 	}

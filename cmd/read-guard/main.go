@@ -40,7 +40,7 @@ func main() {
 func refusal(c hook.Call) string {
 	switch c.ToolName {
 	case "Read":
-		if hook.GoSource(c.ToolInput.FilePath) {
+		if hook.Source(c.ToolInput.FilePath) {
 			return "Read of " + c.ToolInput.FilePath + " refused."
 		}
 	case "Bash":
@@ -53,7 +53,7 @@ func refusal(c hook.Call) string {
 
 // readRefusal says why the command words reads Go source, or is "".
 func readRefusal(words []string, at func(p string) string) string {
-	if f := readsGo(words, at); f != "" {
+	if f := readsSource(words, at); f != "" {
 		return fmt.Sprintf("%s of %s refused.", words[0], f)
 	}
 	return ""
@@ -66,9 +66,9 @@ var readers = map[string]bool{"sed": true, "cat": true, "head": true, "tail": tr
 // valued are grep's and rg's flags whose value is the next word.
 var valued = map[string]bool{"-e": true, "-f": true, "-A": true, "-B": true, "-C": true, "-m": true, "-g": true, "-t": true, "-T": true, "-d": true, "-D": true}
 
-// readsGo is the Go source file the command words reads, or ""; at
+// readsSource is the Go source file the command words reads, or ""; at
 // says where an operand points.
-func readsGo(words []string, at func(string) string) string {
+func readsSource(words []string, at func(string) string) string {
 	for len(words) > 0 && strings.Contains(words[0], "=") && !strings.HasPrefix(words[0], "-") {
 		words = words[1:] // VAR=value before the command
 	}
@@ -102,7 +102,7 @@ func readsGo(words []string, at func(string) string) string {
 		}
 	}
 	for _, o := range operands {
-		if hook.GoSource(at(o)) {
+		if hook.Source(at(o)) {
 			return o
 		}
 	}

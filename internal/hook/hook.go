@@ -127,9 +127,9 @@ func isDescriptor(s string) bool {
 	return s == "&" || s != "" && strings.Trim(s, "0123456789") == ""
 }
 
-// GoSource reports whether path names a Go file of the module: a .go
+// Source reports whether path names a Go file of the module: a .go
 // file not under testdata/.
-func GoSource(path string) bool {
+func Source(path string) bool {
 	return strings.HasSuffix(path, ".go") && !strings.Contains("/"+filepath.ToSlash(path), "/testdata/")
 }
 
