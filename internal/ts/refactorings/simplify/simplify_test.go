@@ -899,6 +899,57 @@ export function mix(p: Plant): number {
 		{"top level", plants + `
 export const x = water();
 `, NewExtractFunction(), `{"start_line": 14, "end_line": 14, "name": "f"}`, "", "the module's top level"},
+		{"a parameter property read through this", plants + `
+export class Reader {
+  constructor(readonly s: string) {}
+  private i = 0;
+
+  next(): string {
+    const char = this.s[this.i];
+    this.i++;
+    return char;
+  }
+}
+`, NewExtractFunction(), `{"start_line": 19, "end_line": 20, "name": "readOne"}`, plants + `
+export class Reader {
+  constructor(readonly s: string) {}
+  private i = 0;
+
+  next(): string {
+    const char = this.readOne();
+    return char;
+  }
+
+  private readOne() {
+    const char = this.s[this.i];
+    this.i++;
+    return char;
+  }
+}
+`, ""},
+		{"a property written through a parameter", plants + `
+export class Bed {
+  constructor(public names: string) {}
+}
+
+export function plant(bed: Bed, name: string): string {
+  bed.names += name;
+  return bed.names;
+}
+`, NewExtractFunction(), `{"start_line": 19, "end_line": 19, "name": "add"}`, plants + `
+export class Bed {
+  constructor(public names: string) {}
+}
+
+export function plant(bed: Bed, name: string): string {
+  add(bed, name);
+  return bed.names;
+}
+
+function add(bed: Bed, name: string) {
+  bed.names += name;
+}
+`, ""},
 	})
 }
 
