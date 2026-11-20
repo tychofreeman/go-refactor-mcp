@@ -1,9 +1,10 @@
 // Command write-guard is a Claude Code hook (PreToolUse, on Edit, Write,
-// MultiEdit and Bash) that refuses changing Go source other than through
-// gorefactor's refactorings and edits: Edit, Write or MultiEdit of a .go
-// file, or a Bash command that writes one (sed -i, perl -i, tee, cp, mv,
-// rm, or a redirection into it). Files under testdata/ are fixtures and
-// may be written so; gofmt -w and git may change Go files.
+// MultiEdit and Bash) that refuses changing Go or TypeScript source other
+// than through gorefactor's refactorings and edits: Edit, Write or
+// MultiEdit of a .go or .ts file, or a Bash command that writes one
+// (sed -i, perl -i, tee, cp, mv, rm, or a redirection into it). Files under
+// testdata/ are fixtures and those under node_modules/ are other packages,
+// and may be written so; gofmt -w and git may change source files.
 //
 // It is an experiment (2026-11-05, the user): the read guard ended reading
 // Go by shell in this repo's sessions; this asks whether a check ends
@@ -34,12 +35,12 @@ func main() {
 	hook.Deny(why + "\n" + adviceFor(err == nil))
 }
 
-// refusal says why c changes Go source other than through gorefactor, or
+// refusal says why c changes source other than through gorefactor, or
 // is "" when it does not.
 func refusal(c hook.Call) string {
 	switch c.ToolName {
 	case "Edit", "Write", "MultiEdit":
-		if hook.GoSource(c.ToolInput.FilePath) {
+		if hook.Source(c.ToolInput.FilePath) {
 			return c.ToolName + " of " + c.ToolInput.FilePath + " refused."
 		}
 	case "Bash":
@@ -48,17 +49,17 @@ func refusal(c hook.Call) string {
 	return ""
 }
 
-// writeRefusal says why the command words writes Go source, or is "".
+// writeRefusal says why the command words writes source, or is "".
 func writeRefusal(words []string, at func(p string) string) string {
-	if f := writesGo(words, at); f != "" {
+	if f := writesSource(words, at); f != "" {
 		return fmt.Sprintf("%s writing %s refused.", words[0], f)
 	}
 	return ""
 }
 
-// writesGo is the Go source file the command words writes, or ""; at says
+// writesSource is the source file the command words writes, or ""; at says
 // where an operand points.
-func writesGo(words []string, at func(string) string) string {
+func writesSource(words []string, at func(string) string) string {
 	for len(words) > 0 && strings.Contains(words[0], "=") && !strings.HasPrefix(words[0], "-") {
 		words = words[1:] // VAR=value before the command
 	}
@@ -72,7 +73,7 @@ func writesGo(words []string, at func(string) string) string {
 		switch {
 		case strings.HasSuffix(w, ">") && i+1 < len(words): // a redirection into the next word
 			i++
-			if hook.GoSource(at(words[i])) {
+			if hook.Source(at(words[i])) {
 				return words[i]
 			}
 		case strings.Contains(w, ">"): // 2>&1
@@ -100,19 +101,19 @@ func writesGo(words []string, at func(string) string) string {
 		return ""
 	}
 	for _, o := range operands {
-		if hook.GoSource(at(o)) {
+		if hook.Source(at(o)) {
 			return o
 		}
 	}
 	return ""
 }
 
-// adviceFor says how to change Go instead, naming the CLI when cli says it
+// adviceFor says how to change source instead, naming the CLI when cli says it
 // is installed.
 func adviceFor(cli bool) string {
-	a := `Change Go through gorefactor: a refactoring, or an edit (add_declaration, replace_declaration, replace_statements, insert_statements, replace_expression, add_case, add_field, add_element; create_file for a new file, move and delete_file for files), several as one batch. Where no tool or sequence of tools makes the change, say so in docs/friction-log.md and ask the user.`
+	a := `Change Go and TypeScript through gorefactor: a refactoring, or an edit (add_declaration, replace_declaration, replace_statements, insert_statements, replace_expression, add_case, add_field, add_element; create_file for a new file, move and delete_file for files), several as one batch. Where no tool or sequence of tools makes the change, say so in docs/friction-log.md and ask the user.`
 	if cli {
 		a += ` From the CLI: refactor batch @steps.json.`
 	}
-	return a + ` Files under testdata/ may be written directly.`
+	return a + ` Files under testdata/ and node_modules/ may be written directly.`
 }

@@ -31,6 +31,10 @@ func TestRefusal(t *testing.T) {
 		bash("cat < plant.go"),
 		bash("git status; sed -n 5,9p a.go"),
 		bash("LC_ALL=C grep -c x plant.go"),
+		read("/home/u/calc/src/toRpn.ts"),
+		read("web/App.tsx"),
+		bash("cat src/toRpn.ts"),
+		bash("grep -n expression test/toRpn.test.ts"),
 	}
 	for _, c := range refused {
 		if refusal(c) == "" {
@@ -49,6 +53,10 @@ func TestRefusal(t *testing.T) {
 		bash("cat internal/plant/testdata/water/args.json"),
 		bash(`echo "cat plant.go"`),
 		bash("grep -c Water docs > count.go"),
+		read("node_modules/vitest/dist/index.d.ts"),
+		read("package.json"),
+		read("web/testdata/rename/in/a.ts"),
+		bash("npx tsc --noEmit"),
 	}
 	for _, c := range allowed {
 		if why := refusal(c); why != "" {

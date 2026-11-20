@@ -5139,3 +5139,11 @@ early and extract_function would have made the `done, v` form. And
 replace_declaration cannot address a field of a type declared inside a
 function (`found.goesOn`: "no package-level found"); add_field with its
 line added the new field. Record: `docs/sessions/ts-fold-assigned-back.md`.
+
+## The guards cover TypeScript (2026-11-20)
+
+Nothing by hand: three renames (`GoSource` to `Source`, `readsGo`,
+`writesGo`), the tests' cases by add_element with the literal's line (15
+steps, one batch), `Source` by replace_declaration, and the comments,
+advice strings and docs by replace_text. Sent through the CLI from a cloud
+clone, where neither guard runs.

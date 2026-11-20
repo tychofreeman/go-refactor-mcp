@@ -265,23 +265,24 @@ reference with the type checker. Address declarations by name rather than
 line, use `"check": "end"` when a test comes before the code it tests, and
 read refusals: they say what to send instead.
 
-**Guards (optional hooks, Go only).** Sessions read and wrote Go by shell
+**Guards (optional hooks).** Sessions read and wrote Go by shell
 out of habit even when asked to use the tools, in this repo's own work as in
 fresh ones. Two PreToolUse hooks turn the habit into a refusal that names
 the tool to use:
-- `read-guard` refuses Read of a `.go` file, and `sed`, `cat`, `head`,
+- `read-guard` refuses Read of a `.go` or TypeScript (`.ts`, `.tsx`,
+  `.mts`, `.cts`) file, and `sed`, `cat`, `head`,
   `tail`, `awk` or `grep` naming one, and points to `inspect`. In this
   repo it ended reading Go by shell for about 4% of turns refused; for a
   fresh model in the A/B runs it saved nothing, since reads moved to more,
   smaller `inspect` calls (`docs/cost-history.md` sections 21 and 22).
-- `write-guard` refuses Edit, Write and MultiEdit of a `.go` file, and
+- `write-guard` refuses Edit, Write and MultiEdit of such a file, and
   shell commands that write one (`sed -i`, `perl -i`, `tee`, `cp`, `mv`,
   `rm`, a redirection), and points to the edits. It is an experiment, on
   in this repo since 2026-11-05 (roadmap item 53): with it, every change
   goes through the tools, and what none can make is asked of you and
   logged.
 
-Both allow files under `testdata/`, and `gofmt -w` and git. To use them,
+Both allow files under `testdata/` and `node_modules/`, and `gofmt -w` and git. To use them,
 install them and add `examples/guards.json` to your project's
 `.claude/settings.json`:
 

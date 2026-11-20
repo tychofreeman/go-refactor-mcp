@@ -127,10 +127,19 @@ func isDescriptor(s string) bool {
 	return s == "&" || s != "" && strings.Trim(s, "0123456789") == ""
 }
 
-// GoSource reports whether path names a Go file of the module: a .go
-// file not under testdata/.
-func GoSource(path string) bool {
-	return strings.HasSuffix(path, ".go") && !strings.Contains("/"+filepath.ToSlash(path), "/testdata/")
+// Source reports whether path names source the tools read and change: a
+// .go file, or a TypeScript file (.ts, .tsx, .mts, .cts), not under
+// testdata/ or node_modules/.
+func Source(path string) bool {
+	slashed := "/" + filepath.ToSlash(path)
+	if strings.Contains(slashed, "/testdata/") || strings.Contains(slashed, "/node_modules/") {
+		return false
+	}
+	switch filepath.Ext(path) {
+	case ".go", ".ts", ".tsx", ".mts", ".cts":
+		return true
+	}
+	return false
 }
 
 // Each judges the simple commands of a Bash call c, with a function that
