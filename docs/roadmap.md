@@ -3515,6 +3515,15 @@ candidates and the evidence for each, gathered from the friction log.
        unless its tag calls or receives (2026-11-20,
        `docs/sessions/switch-empty-remove.md`). Left: TypeScript has
        neither option.
+    3. **The table form** (2026-11-20, cost-history 36): rerun with
+       `lookup` and `move`, lending-magazine's sessions made the same
+       table of values per kind in 5 of 5 runs and never called
+       prepare_switch_for_types. Its cases are constants, so the model
+       wants rows, not types. Wanted: switches on one value whose
+       cases give constants into one map from the value to a struct
+       with a field per switch, each switch a read of its field (the
+       default for a missing key). Weigh this before TypeScript's
+       `lookup` and `move`, which a fresh model did not reach for.
 
 73. **Copies that differ in a field into one function of it**
     (2026-11-19, cost-history 35): freight-air's sessions merged eight
