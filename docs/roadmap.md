@@ -3553,5 +3553,24 @@ candidates and the evidence for each, gathered from the friction log.
     `ByKind.Stmt` now compares switches and their clauses (not type
     switches, nor `break` or `fallthrough` in them).
 
+75. **A local into a property of a fresh object** (2026-11-20, #728,
+    the to-rpn toy through TypeScript's tools): `let rpn = ""; ...
+    rpn += ...; return rpn;` was to become writes of `calculator.keys`,
+    `calculator` a `Calculator` every caller passes new
+    (`new Calculator("")`). Done by deleting the declaration and
+    replace_text of `rpn` (five places), checked only by the types and
+    tests. The derivation, in two steps: (1) inside the function,
+    `const calculator = new Calculator("")` beside the local, and the
+    local's every use becomes `calculator.keys`, provable there (the
+    object is fresh, its constructor only sets `keys` from its argument,
+    which is the local's initial value, and nothing else sees it); (2)
+    `extract_variable` with `as: "parameter"` of `new Calculator("")`,
+    which passes it at every call (exists). Step 1 is missing: the
+    inverse of `inline` of a held struct. Candidates, an option before a
+    tool: `extract_type` with a function and its locals as `fields`,
+    beside the parameters form (with an existing class whose
+    constructor takes them, or a new one); or `move` of a local to
+    `Class.property` of a new local. For the user to choose.
+
 Parked: the Ollama loop (`refactor-agent`). It works and stays, but Claude
 through MCP is the priority.
