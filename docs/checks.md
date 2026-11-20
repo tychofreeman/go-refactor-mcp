@@ -1648,7 +1648,10 @@ names. A local of the copy other than x that is used after it leaves
 it. That copy is left, with
 the reason, when the function it is in returns other types than f's
 (`resultsTaken`: f's results must be assignable to them, one for one).
-A defer, a label or a jump is refused.
+A defer, a label or a jump is refused. A body may hold switches on a
+value (2026-11-20), whose clauses match with the same values in the
+same order; a type switch, or `break` or `fallthrough` in a clause,
+matches nothing.
 
 TypeScript's fold (`tsapi.Fold`) takes the same first two shapes: a
 body of statements ending in a return, every return giving a value,
