@@ -1667,6 +1667,11 @@ property read is not, since its object's type narrows it) is refused
 without `line` when it matches more than one place, listing each match
 with its code, so the model chooses the lines (#714, 2026-11-20).
 
+In TypeScript each argument's move is checked against what else the
+match runs, which includes a property read whose object is a hole:
+`a.keys += a.bump()` is not `a.press(a.bump())` when bump sets keys,
+since the read came first (#726, 2026-11-20; before, fold applied it).
+
 TypeScript's fold (`tsapi.Fold`) takes the same first two shapes: a
 body of statements ending in a return, every return giving a value,
 folds a copy ending in the same return as `return f(...);`, early
