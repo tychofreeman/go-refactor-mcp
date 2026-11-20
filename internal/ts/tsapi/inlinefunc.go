@@ -461,6 +461,10 @@ func (in *inliner) inline(l *Lined, call *ast.Node) ([]Edit, string) {
 	}
 	exprForm := in.expr != nil
 	stmt := stmtOf(call)
+	back := -1 // the parameter the body may write as the caller's variable
+	if !exprForm {
+		back = in.assignedBack(call, stmt)
+	}
 	for i, prm := range in.params {
 		b := &binding{param: prm, argL: l, text: "undefined"}
 		if i < len(args) {
@@ -505,7 +509,7 @@ func (in *inliner) inline(l *Lined, call *ast.Node) ([]Edit, string) {
 		if !exprForm {
 			// Statements: every parameter is declared first, but for a
 			// constant or the same name passed on.
-			b.bound = !(constant && !assigned) && !(b.text == prm.Name().Text() && !assigned)
+			b.bound = i != back && !(constant && !assigned) && !(b.text == prm.Name().Text() && !assigned)
 			continue
 		}
 		if assigned {
@@ -754,7 +758,7 @@ func (in *inliner) inline(l *Lined, call *ast.Node) ([]Edit, string) {
 			out.WriteString(line)
 		}
 	}
-	if in.ret != nil && !earlyMode {
+	if in.ret != nil && !earlyMode && back < 0 {
 		value := fl.substitute(fl.Pos(in.ret), in.ret.End(), rs)
 		switch {
 		case shape == "value":
@@ -832,4 +836,69 @@ func (in *inliner) earlyBody(l *Lined, call, stmt *ast.Node, rs *[]repl) ([]*ast
 		pre = append(pre, "let "+e.flag+" = false"+fl.Semi())
 	}
 	return in.fn.Body().Statements(), pre, ""
+}
+
+// assignedBack returns the parameter whose argument the call's statement
+// stmt assigns the result back to, x = f(x, ...), where the body returns
+// that parameter last and nothing but the body can see x while it runs
+// (unseen, and no other argument names x). The body may then write x
+// itself, with no copy and no assignment after. -1 if there is none.
+func (in *inliner) assignedBack(call, stmt *ast.Node) int {
+	c := in.c
+	if stmt == nil || len(in.early) > 0 || in.ret == nil || !ast.IsIdentifier(in.ret) || !ast.IsExpressionStatement(stmt) {
+		return -1
+	}
+	e := stmt.Expression()
+	if !ast.IsBinaryExpression(e) || e.AsBinaryExpression().OperatorToken.Kind != ast.KindEqualsToken || e.AsBinaryExpression().Right != call || !ast.IsIdentifier(e.AsBinaryExpression().Left) {
+		return -1
+	}
+	x := symbolOf(c, e.AsBinaryExpression().Left)
+	if !unseen(c, x, stmt) {
+		return -1
+	}
+	back := -1
+	args := call.Arguments()
+	r := c.GetSymbolAtLocation(in.ret)
+	for i, a := range args {
+		if i < len(in.params) && ast.IsIdentifier(in.params[i].Name()) && c.GetSymbolAtLocation(in.params[i].Name()) == r && ast.IsIdentifier(a) && symbolOf(c, a) == x {
+			back = i
+		} else if slices.ContainsFunc(identifiersOf(a), func(id *ast.Node) bool { return symbolOf(c, id) == x }) {
+			return -1
+		}
+	}
+	return back
+}
+
+// unseen reports whether only the code at stmt can see the variable x
+// while stmt runs: x is a local of a function, which no function in it
+// captures, and stmt is in no try there (a throw would leave x
+// half-written where a catch could read it).
+func unseen(c *checker.Checker, x *ast.Symbol, stmt *ast.Node) bool {
+	if x == nil || x.ValueDeclaration == nil || !(ast.IsVariableDeclaration(x.ValueDeclaration) || ast.IsParameterDeclaration(x.ValueDeclaration)) {
+		return false
+	}
+	owner := x.ValueDeclaration.Parent
+	for owner != nil && !ast.IsFunctionLike(owner) {
+		owner = owner.Parent
+	}
+	if owner == nil {
+		return false
+	}
+	for n := stmt.Parent; n != owner; n = n.Parent {
+		if n == nil || ast.IsTryStatement(n) {
+			return false
+		}
+	}
+	captured := false
+	Identifiers(owner, func(id *ast.Node) {
+		if symbolOf(c, id) != x {
+			return
+		}
+		f := id.Parent
+		for !ast.IsFunctionLike(f) {
+			f = f.Parent
+		}
+		captured = captured || f != owner
+	})
+	return !captured
 }

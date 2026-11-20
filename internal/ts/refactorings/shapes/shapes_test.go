@@ -422,6 +422,57 @@ function written(held: string): string {
   return held;
 }
 `}, ""},
+		{"a parameter assigned and returned, assigned back", map[string]string{"src/a.ts": `export function label(names: string[], extra: string): string {
+  let out = "";
+  for (const n of names) {
+    out += n;
+  }
+  out += extra;
+  return out;
+}
+
+function press(held: string, text: string): string {
+  held += text;
+  return held;
+}
+`}, NewFold(), `{"file": "src/a.ts", "name": "press"}`, map[string]string{"src/a.ts": `export function label(names: string[], extra: string): string {
+  let out = "";
+  for (const n of names) {
+    out = press(out, n);
+  }
+  out = press(out, extra);
+  return out;
+}
+
+function press(held: string, text: string): string {
+  held += text;
+  return held;
+}
+`}, ""},
+		{"assigned back where a catch could see it", map[string]string{"src/a.ts": `export function label(extra: string): string {
+  let out = "";
+  try {
+    out += extra;
+  } catch {
+  }
+  return out;
+}
+
+function press(held: string, text: string): string {
+  held += text;
+  return held;
+}
+`}, NewFold(), `{"file": "src/a.ts", "name": "press"}`, nil, "out could be seen while press runs"},
+		{"a small body without line", map[string]string{"src/a.ts": `export function label(first: string, last: string): string {
+  let pending = "";
+  pending = first + pending;
+  return pending + " " + last;
+}
+
+function push(held: string, operator: string): string {
+  return operator + held;
+}
+`}, NewFold(), `{"file": "src/a.ts", "name": "push"}`, nil, "push's body, operator + held, is small enough to match code unrelated to it; give line to fold the match on it (several lines: one fold each, in a batch). It matches a.ts:3 `first + pending`, a.ts:4 `pending + \" \" + last`"},
 		{"not an argument past a read of what it changes", map[string]string{"src/a.ts": `export class Calculator {
   keys = "";
   press(text: string): void {
@@ -1145,10 +1196,10 @@ function next(): number {
   return calls;
 }
 function double(n: number): number {
-  return n * 2;
+  return n * 2 + 1;
 }
-const a = next() * 2;
-const b = (a + next()) * 2;
+const a = next() * 2 + 1;
+const b = (a + next()) * 2 + 1;
 console.log(a, b, double(5), calls);
 `},
 		{"a switch on a union into methods", NewUnionSwitchToMethod(), `{"function": "water", "method": "water"}`, `class Fern {

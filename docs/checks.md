@@ -1661,6 +1661,12 @@ value (2026-11-20), whose clauses match with the same values in the
 same order; a type switch, or `break` or `fallthrough` in a clause,
 matches nothing.
 
+A TypeScript body so small that it matches code only looking like it
+(`slight`: a literal or a name, or one operator or index on those; a
+property read is not, since its object's type narrows it) is refused
+without `line` when it matches more than one place, listing each match
+with its code, so the model chooses the lines (#714, 2026-11-20).
+
 In TypeScript each argument's move is checked against what else the
 match runs, which includes a property read whose object is a hole:
 `a.keys += a.bump()` is not `a.press(a.bump())` when bump sets keys,
@@ -1681,6 +1687,21 @@ declaration of x becomes `const x = f(...);`, kept as the copy wrote
 it up to the `=`. It is left when f's return type is not assignable
 to x's type there, or when another local of the copy is used after
 it.
+
+A TypeScript body may also assign one parameter, when its only return,
+its last, returns that parameter (`held += text; return held;`, the
+form extract_function writes for a statement that assigns a local; #727,
+2026-11-20). Any other assignment of a parameter is refused. A copy of
+the statements before that return, the parameter standing for a
+variable y, becomes `y = f(...);`. It is left, with the reason, when
+what stands for the parameter is not a variable, when y could be seen
+while f runs (`unseen`: y is not a local of a function, a function in
+it captures y, or the copy is in a try, where a catch would see y
+unchanged rather than half-written; or another argument names y), or
+when f's return type is not assignable to y's. `inline` takes the same
+rule the other way (#724): `y = f(y, ...)`, whose body returns that
+parameter, writes y in place of a copy when `unseen` holds and no other
+argument names y.
 
 ## Edits
 
@@ -1856,3 +1877,16 @@ Adding a field changes the struct (its literals, its size, what reflection
 sees), so it is an edit; the type check refuses a duplicate name and an
 unkeyed literal that would no longer list every field.
 
+
+## change_type of a return type (TypeScript)
+
+`change_type` with `name` a function, or `Class.method` (which routes
+as a property), and no `parameter` changes the declared return type
+(#713, 2026-11-20): in place of its annotation, or after the
+parenthesis that closes the parameters when it has none, and in each
+method of its family, as for a parameter. It is an edit: the body's
+returns are checked with it, so a batch with check "end" carries the
+body's change too. Refused: overload signatures (they type the results
+apart), an arrow function whose parameter has no parentheses, and a
+method given `values`. Go changes a result with `add_result`
+(`change_return_type` is its alias).

@@ -5129,3 +5129,13 @@ table of `TestStartLines` was given as written,
 names it as go/types prints it, `[]struct{msg, file, want string}`);
 without `type`, the one literal on the line was found. The Go goldens
 are files under testdata, written by the shell.
+
+## fold of an accumulating function (2026-11-20, #727)
+
+One restructuring by edits rather than a refactoring: `unseen`, the
+visibility rule of inline's `assignedBack`, was written with
+add_declaration and its lines replaced by a call, since they return -1
+early and extract_function would have made the `done, v` form. And
+replace_declaration cannot address a field of a type declared inside a
+function (`found.goesOn`: "no package-level found"); add_field with its
+line added the new field. Record: `docs/sessions/ts-fold-assigned-back.md`.

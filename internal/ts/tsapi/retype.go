@@ -39,8 +39,10 @@ func (p *Project) ChangeFieldType(path, name, typ string, values map[string]stri
 	switch {
 	case len(found) == 0:
 		return nil, fmt.Sprintf("%s has no property %s", owner, prop)
+	case len(found) == 1 && (ast.IsMethodDeclaration(found[0]) || ast.IsMethodSignatureDeclaration(found[0])) && len(values) == 0:
+		return p.ChangeReturnType(path, name, typ)
 	case len(found) > 1 || !(ast.IsPropertyDeclaration(found[0]) || ast.IsPropertySignatureDeclaration(found[0])):
-		return nil, fmt.Sprintf("%s is not a property but a method or an accessor; change a method's parameter with change_parameter_type", name)
+		return nil, fmt.Sprintf("%s is not a property but a method with values, overloads or an accessor; change a method's parameter with change_parameter_type, its return type without values", name)
 	}
 	return append([]Edit{l.annotate(found[0], found[0].PostfixToken(), typ)}, p.valueEdits(found[0], values)...), ""
 }
@@ -173,7 +175,50 @@ func (p *Project) ChangeType(path, name, typ string) ([]Edit, string) {
 			return nil, fmt.Sprintf("%s is an interface or a class, not a type alias; change its members with change_type", name)
 		}
 	}
-	return nil, fmt.Sprintf("the file declares no type alias %s", name)
+	if _, _, _, why := l.function(name); why == "" {
+		return p.ChangeReturnType(path, name, typ)
+	}
+	return nil, fmt.Sprintf("the file declares no type alias or function %s", name)
+}
+
+// ChangeReturnType returns the edits that make typ the declared return
+// type of the function or method name (Class.method, or Iface.method) in
+// the file at path, and of each method of its family, as
+// ChangeParameterType does for a parameter. A function with overload
+// signatures is refused: they type its results apart.
+func (p *Project) ChangeReturnType(path, name, typ string) ([]Edit, string) {
+	l, why := p.Lined(path)
+	if why != "" {
+		return nil, why
+	}
+	fn, overloads, _, why := l.function(name)
+	if why != "" {
+		if fn = l.interfaceMethod(name); fn == nil {
+			return nil, why
+		}
+	}
+	if len(overloads) > 0 {
+		return nil, fmt.Sprintf("%s has overload signatures, which type its results apart; change their types by hand", name)
+	}
+	e, why := l.annotateResult(fn, typ)
+	if why != "" {
+		return nil, why
+	}
+	edits := []Edit{e}
+	c, done := p.prog.GetProgram().GetTypeChecker(context.Background())
+	defer done()
+	family, why := p.family(c, fn)
+	if why != "" {
+		return nil, why
+	}
+	for _, m := range family {
+		e, why := newLined(ast.GetSourceFileOfNode(m)).annotateResult(m, typ)
+		if why != "" {
+			return nil, why
+		}
+		edits = append(edits, e)
+	}
+	return edits, ""
 }
 
 // annotate returns the edit that makes typ the annotation of decl, a
@@ -207,4 +252,20 @@ func (l *Lined) members(owner string) ([]*ast.Node, string) {
 		}
 	}
 	return nil, fmt.Sprintf("the file declares no class, interface or object type %s", owner)
+}
+
+// annotateResult returns the edit that makes typ the declared return type
+// of fn: in place of its annotation, or after the parenthesis that closes
+// its parameters.
+func (l *Lined) annotateResult(fn *ast.Node, typ string) (Edit, string) {
+	if t := fn.Type(); t != nil {
+		return Edit{File: l.File.FileName(), Start: l.Pos(t), End: t.End(), NewText: typ}, ""
+	}
+	list, _ := passed(fn)
+	close := strings.IndexByte(l.Text[list.End():], ')')
+	if close < 0 || ast.IsArrowFunction(fn) && !strings.Contains(l.Text[l.Pos(fn):list.End()], "(") {
+		return Edit{}, fmt.Sprintf("the function at %s has no parentheses around its parameters to put a return type after; add them first", l.Where(fn))
+	}
+	at := list.End() + close + 1
+	return Edit{File: l.File.FileName(), Start: at, End: at, NewText: ": " + typ}, ""
 }
