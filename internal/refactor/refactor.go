@@ -1314,7 +1314,9 @@ func ArgsHelp(name string, schema json.RawMessage) string {
 }
 
 // InTestdata reports whether path has a testdata element: a fixture a test
-// loads as code of its own, which the go tool never builds.
+// loads as code of its own, which the go tool never builds. Give it the
+// path from the workspace's root joined on: a fixture with its own go.mod
+// is a workspace whose relative paths start below testdata/.
 func InTestdata(path string) bool {
 	return slices.Contains(strings.Split(filepath.ToSlash(path), "/"), "testdata")
 }

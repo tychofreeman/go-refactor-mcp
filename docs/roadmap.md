@@ -3532,6 +3532,8 @@ candidates and the evidence for each, gathered from the friction log.
     two statements followed by more code that reads `start`. TypeScript's
     fold makes that copy `const start = declStart()` (#698); Go's has
     the form only for an error result (#696). Bring Go's to parity.
+    *Done* (2026-11-20, `docs/sessions/fold-value-goes-on.md`): such a
+    copy becomes `start := declStart()`.
     Nor did fold match a body whose returns are in a switch's cases
     (`withResults`, switch-move-case): `switch len(rs) { case 0:
     return sig; ... }; return ...` written again in another function.

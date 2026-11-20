@@ -5098,3 +5098,17 @@ testdata). fold matched neither copy it was asked to: a body whose
 returns are in a switch's cases (roadmap 74), so mover.signature's
 copy became a call of `withResults` by replace_statements. Record:
 `docs/sessions/switch-move-case.md`.
+
+## fold of a copy that goes on, without an error (2026-11-20, roadmap 74)
+
+Two hand changes. The golden `statements_return` expected `Report` left;
+the new form folds it, and create_file with `overwrite` of its `out/m.go`
+was refused by `-skeleton-only` ("not total's body"): the fixture's
+`out/` has its own go.mod, so the path the server judged had no
+`testdata/` in it and the exemption did not apply. Changed under
+testdata with a script, and fixed in the same PR: the skeleton's
+check (Go and TypeScript) joins the workspace's root on the path. And `outsOf`, the loop `errorForm` and
+`valueForm` shared, replaced each copy by replace_statements: fold
+cannot match a copy whose exits are `return false, nil` of its caller
+where the helper returns `nil, false`. Record:
+`docs/sessions/fold-value-goes-on.md`.

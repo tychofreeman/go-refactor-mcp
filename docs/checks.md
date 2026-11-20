@@ -1637,7 +1637,15 @@ values at each (`errReturn`), becomes `x..., err := f(...)` and
 values use a local the copy declares, when the function it is in does
 not return an error last, or when `err` is declared in that block as
 another type (`continues`). A local of the copy other than x that is
-used after it leaves it too, as for any run. That copy is left, with
+used after it leaves it too, as for any run.
+
+The same without an error (roadmap 74, as TypeScript's): fn's only
+return is its last, `return x...`, each x a local fn declares at its
+top level with the type of fn's result in its place (`valueForm`,
+`outsOf`; the error form now checks those types too). A copy of the
+statements before that return becomes `x... := f(...)` with the copy's
+names. A local of the copy other than x that is used after it leaves
+it. That copy is left, with
 the reason, when the function it is in returns other types than f's
 (`resultsTaken`: f's results must be assignable to them, one for one).
 A defer, a label or a jump is refused.

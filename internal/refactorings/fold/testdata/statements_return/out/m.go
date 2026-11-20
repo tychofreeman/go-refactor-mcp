@@ -18,9 +18,6 @@ func Tallest(b *Bed) int {
 }
 
 func Report(b *Bed) string {
-	sum := 0
-	for _, h := range b.Heights {
-		sum += h
-	}
+	sum := total(b)
 	return fmt.Sprint(sum)
 }

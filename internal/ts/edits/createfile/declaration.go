@@ -2,6 +2,7 @@ package createfile
 
 import (
 	"encoding/json"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -59,7 +60,7 @@ func (s Skeleton) Plan(ws *workspace.Workspace, raw json.RawMessage) (*refactor.
 	if err := refactor.DecodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
-	if ws.Owns(a.File) && a.Content != "" && !refactor.InTestdata(a.File) {
+	if ws.Owns(a.File) && a.Content != "" && !refactor.InTestdata(filepath.Join(ws.Root, a.File)) {
 		if name := tsapi.Bodied(a.Content); name != "" {
 			return nil, refactor.Refusef("this server creates code by structure: content may hold classes with fields, interfaces and types, not %s's body. Make the class with declaration (implements and extends give its stubs), a test with test_for, and each function or method with add_declaration", name)
 		}
